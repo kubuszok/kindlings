@@ -1,0 +1,24 @@
+# sbt build
+project/project
+project/target
+target
+*.class
+
+# Mdocs documentation
+docs/build
+docs/__pycache__
+
+# Scala Metals and BSP
+.bloop
+.bsp
+.metals
+project/metals.sbt
+
+# IDEs
+.cursor
+.idea
+.vscode
+
+# other
+.scala-build
+*.log
