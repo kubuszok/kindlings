@@ -110,12 +110,11 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
         .Configure(
           _.settings(
             libraryDependencies += compilerPlugin("com.kubuszok" %% "hearth-cross-quotes" % versions.hearth),
-            scalacOptions ++= {
+            scalacOptions ++=
               Seq(
                 // Enable logging from cross-quotes.
                 s"-P:hearth.cross-quotes:logging=${dev.logCrossQuotes}"
               )
-            }
           )
         )
     )
@@ -274,17 +273,17 @@ val al = new {
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix"
 
   def ci(platform: String, scalaSuffix: String): String = {
-    def tasksOf(name: String): Vector[String] = projects(platform, scalaSuffix).flatMap {
-      case project => Vector(s"$project/$name")
+    def tasksOf(name: String): Vector[String] = projects(platform, scalaSuffix).flatMap { case project =>
+      Vector(s"$project/$name")
     }
 
     val clean = Vector("clean")
     val compileAndTest = tasksOf("compile") ++ tasksOf("test")
     val coverageCompileAndTest =
       if (isJVM(platform)) "coverage" +: compileAndTest :+ "coverageAggregate" :+ "coverageOff" else compileAndTest
-    //val mimaReport = tasksOf("mimaReportBinaryIssues")
+    // val mimaReport = tasksOf("mimaReportBinaryIssues")
 
-    val tasks = clean ++ coverageCompileAndTest //++ mimaReport
+    val tasks = clean ++ coverageCompileAndTest // ++ mimaReport
     tasks.mkString(" ; ")
   }
 
@@ -357,7 +356,7 @@ lazy val root = project
 
 lazy val fastShowPretty = projectMatrix
   .in(file("fast-show-pretty"))
-  .someVariations(versions.scalas, versions.platforms)(only1VersionInIDE *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(

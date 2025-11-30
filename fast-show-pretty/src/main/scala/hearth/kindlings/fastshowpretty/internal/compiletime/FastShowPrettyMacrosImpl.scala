@@ -8,6 +8,7 @@ import hearth.fp.syntax.*
 import hearth.kindlings.fastshowpretty.FastShowPretty
 import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
 
+@scala.annotation.nowarn
 private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
   // Entrypoints to the macro
@@ -106,7 +107,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   sealed trait Attempt[+A] extends Product with Serializable
   object Attempt {
     final case class Derived[A](value: Expr[A]) extends Attempt[A]
-    final case object Skipped extends Attempt[Nothing]
+    case object Skipped extends Attempt[Nothing]
 
     def derived[A](value: Expr[A]): MIO[Attempt[A]] =
       Log.info(s"Derived ${value.prettyPrint}") >> MIO.pure(Derived(value))
@@ -124,7 +125,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
     def orFail(error: => DerivationError): MIO[Expr[A]] =
       mioAttempt.flatMap {
-        case Attempt.Derived(value) => MIO.pure(value)
+        case Attempt.Derived(value) => MIO.pure(value.asInstanceOf[Expr[A]])
         case Attempt.Skipped        => MIO.fail(error)
       }
   }
@@ -166,9 +167,14 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
       ctx.cache.get0Ary[FastShowPretty[A]]("instance").flatMap {
         case Some(instance) =>
-          Attempt.derived(Expr.quote {
-            Expr.splice(instance).render(Expr.splice(ctx.sb))(Expr.splice(ctx.value))
-          })
+          // TODO: figure out why we need this workaround for Scala 3 and fix it in cross-quotes
+          def workaround[A0: Type, FSP <: FastShowPretty[A0]: Type](
+              instance: Expr[FSP],
+              value: Expr[A0]
+          ): Expr[StringBuilder] = Expr.quote {
+            Expr.splice(instance).render(Expr.splice(ctx.sb))(Expr.splice(value))
+          }
+          Attempt.derived(workaround[A, FastShowPretty[A]](instance, ctx.value))
         case None =>
           implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
 
@@ -245,7 +251,6 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
         case Some(caseClass) =>
           val name = Expr(Type[A].shortName)
 
-          @scala.annotation.nowarn
           val result = NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
             case Some(fieldValues) =>
               fieldValues
