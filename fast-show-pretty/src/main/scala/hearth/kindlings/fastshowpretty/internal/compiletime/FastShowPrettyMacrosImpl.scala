@@ -3,7 +3,6 @@ package hearth.kindlings.fastshowpretty.internal.compiletime
 import hearth.MacroCommons
 import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
-import hearth.fp.instances.*
 import hearth.fp.syntax.*
 
 import hearth.kindlings.fastshowpretty.FastShowPretty
@@ -302,7 +301,33 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
       }
     }
 
-  def handleAsEnumRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] = ??? // TODO
+  def handleAsEnumRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
+    Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
+      Enum.parse[A] match {
+        case Some(enumm) =>
+          val name = Expr(Type[A].shortName)
+          implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
+          enumm.parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
+            import matched.{value as enumCaseValue, Underlying as EnumCase}
+            Log.namedScope(s"Deriving the value ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
+              deriveResultRecursively[EnumCase](using ctx.nest(enumCaseValue)).map { enumCaseResult =>
+                Expr.quote {
+                  val _ = Expr.splice(ctx.sb).append("(")
+                  Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
+                }
+              }
+            }
+          }.flatMap {
+            case Some(result) =>
+              Attempt.derived(result)
+            case None =>
+              Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} does not have any children!")
+          }
+        case None =>
+          Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} is not considered to be an enum")
+      }
+    }
 }
 
 sealed private[compiletime] trait DerivationError extends util.control.NoStackTrace with Product with Serializable
