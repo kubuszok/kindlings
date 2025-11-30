@@ -1,7 +1,10 @@
 package hearth.kindlings.fastshowpretty.internal.compiletime
 
 import hearth.MacroCommons
+import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 
 import hearth.kindlings.fastshowpretty.FastShowPretty
 import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
@@ -11,8 +14,9 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   // Entrypoints to the macro
 
   def deriveInline[A: Type](value: Expr[A]): Expr[String] = {
-    implicit val stringBuilderType: Type[StringBuilder] = StringBuilderType
-    implicit val stringType: Type[String] = StringType
+    implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+    implicit val String: Type[String] = Types.String
+
     deriveFromCtxAndAdaptForEntrypoint[A, String] { fromCtx =>
       ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sb =>
         Expr.quote {
@@ -23,8 +27,9 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   }
 
   def deriveTypeClass[A: Type]: Expr[FastShowPretty[A]] = {
-    implicit val fastShowPrettyType: Type[FastShowPretty[A]] = FastShowPrettyType[A]
-    implicit val stringBuilderType: Type[StringBuilder] = StringBuilderType
+    implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
+    implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
     deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]] { fromCtx =>
       Expr.quote {
         new FastShowPretty[A] {
@@ -43,7 +48,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   //  - the case that returns a FastShowPretty instance.
 
   def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
-      provideCtxToGetResult: (DerivationCtx[A] => Expr[StringBuilder]) => Expr[Out]
+      provideCtxAndAdapt: (DerivationCtx[A] => Expr[StringBuilder]) => Expr[Out]
   ): Expr[Out] = MIO
     .scoped { runSafe =>
       val fromCtx: (DerivationCtx[A] => Expr[StringBuilder]) = (ctx: DerivationCtx[A]) =>
@@ -58,7 +63,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
           }
         }
 
-      provideCtxToGetResult(fromCtx)
+      provideCtxAndAdapt(fromCtx)
     }
     .runToExprOrFail("TODO", DontRender) { (errorLogs, logs) =>
       "" // TODO
@@ -125,6 +130,24 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
       }
   }
 
+  // Reusable components
+
+  private object Types {
+
+    def FastShowPretty[A: Type]: Type[FastShowPretty[A]] = Type.of[FastShowPretty[A]]
+    val StringBuilder: Type[StringBuilder] = Type.of[StringBuilder]
+
+    val Boolean: Type[Boolean] = Type.of[Boolean]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Short: Type[Short] = Type.of[Short]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Float: Type[Float] = Type.of[Float]
+    val Double: Type[Double] = Type.of[Double]
+    val Char: Type[Char] = Type.of[Char]
+    val String: Type[String] = Type.of[String]
+  }
+
   // The actual derivation logic in the form of DerivationCtx[A] ?=> MIO[Expr[StringBuilder]].
 
   // TODO: cache results for nested derivations
@@ -138,17 +161,18 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
   // Particular derivation rules - the first one that applies (succeeding OR failing) is used.
 
-  private def StringBuilderType = Type.of[StringBuilder]
   def useCachedDefWhenAvailableRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
     Log.info(s"Attempting to use cached definition for ${Type[A].prettyPrint}") >> {
-      implicit val fastShowPrettyType: Type[FastShowPretty[A]] = FastShowPrettyType[A]
+      implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
+
       ctx.cache.get0Ary[FastShowPretty[A]]("instance").flatMap {
         case Some(instance) =>
           Attempt.derived(Expr.quote {
             Expr.splice(instance).render(Expr.splice(ctx.sb))(Expr.splice(ctx.value))
           })
         case None =>
-          implicit val stringBuilderType: Type[StringBuilder] = StringBuilderType
+          implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
           ctx.cache.get1Ary[A, StringBuilder]("helper").flatMap {
             case Some(helperCall) =>
               Attempt.derived(helperCall(ctx.value))
@@ -159,10 +183,10 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     }
 
   private lazy val ignoredImplicits = Seq.empty[UntypedMethod]
-  private def FastShowPrettyType[A: Type]: Type[FastShowPretty[A]] = Type.of[FastShowPretty[A]]
   def useImplicitWhenAvailableRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
     Log.info(s"Attempting to use implicit support for ${Type[A].prettyPrint}") >> {
-      implicit val fastShowPrettyType: Type[FastShowPretty[A]] = FastShowPrettyType[A]
+      implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
+
       Type[FastShowPretty[A]].summonExprIgnoring(ignoredImplicits*).toEither match {
         case Right(instanceExpr) =>
           ctx.cache.buildCachedWith("instance", ValDefBuilder.ofVal[FastShowPretty[A]]("instance"))(_ =>
@@ -174,27 +198,17 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
           )
       }
     }
-
-  private val BooleanType = Type.of[Boolean]
-  private val ByteType = Type.of[Byte]
-  private val ShortType = Type.of[Short]
-  private val IntType = Type.of[Int]
-  private val LongType = Type.of[Long]
-  private val FloatType = Type.of[Float]
-  private val DoubleType = Type.of[Double]
-  private val CharType = Type.of[Char]
-  private val StringType = Type.of[String]
   def useBuiltInSupportRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
     Log.info(s"Attempting to use built-in support for ${Type[A].prettyPrint}") >> {
-      implicit val booleanType: Type[Boolean] = BooleanType
-      implicit val byteType: Type[Byte] = ByteType
-      implicit val shortType: Type[Short] = ShortType
-      implicit val intType: Type[Int] = IntType
-      implicit val longType: Type[Long] = LongType
-      implicit val floatType: Type[Float] = FloatType
-      implicit val doubleType: Type[Double] = DoubleType
-      implicit val charType: Type[Char] = CharType
-      implicit val stringType: Type[String] = StringType
+      implicit val Boolean: Type[Boolean] = Types.Boolean
+      implicit val Byte: Type[Byte] = Types.Byte
+      implicit val Short: Type[Short] = Types.Short
+      implicit val Int: Type[Int] = Types.Int
+      implicit val Long: Type[Long] = Types.Long
+      implicit val Float: Type[Float] = Types.Float
+      implicit val Double: Type[Double] = Types.Double
+      implicit val Char: Type[Char] = Types.Char
+      implicit val String: Type[String] = Types.String
 
       if (Type[A] <:< Type[Boolean]) Attempt.derived(Expr.quote {
         FastShowPrettyUtils.renderBoolean(Expr.splice(ctx.sb))(Expr.splice(ctx.value.upcast[Boolean]))
@@ -226,7 +240,67 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
       else Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} is not considered to be a built-in type")
     }
 
-  def handleAsCaseClassRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] = ??? // TODO
+  def handleAsCaseClassRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
+    Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
+      CaseClass.parse[A] match {
+        case Some(caseClass) =>
+          val name = Expr(Type[A].shortName)
+
+          @scala.annotation.nowarn
+          val result = NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
+            case Some(fieldValues) =>
+              fieldValues
+                .parTraverse { case (fieldName, fieldValue) =>
+                  import fieldValue.{Underlying as Field, value as fieldExpr}
+                  Log.namedScope(s"Deriving the value ${ctx.value.prettyPrint}.$fieldName: ${Field.prettyPrint}") {
+                    deriveResultRecursively[Field](using ctx.nest(fieldExpr)).map { fieldResult =>
+                      (fieldName, fieldResult)
+                    }
+                  }
+                }
+                .map { toAppend =>
+                  val renderLeftParenthesisAndHeadField = toAppend.head match {
+                    case (fieldName, fieldResult) =>
+                      Expr.quote {
+                        val _ = Expr
+                          .splice(ctx.sb)
+                          .append(Expr.splice(name))
+                          .append("(\n")
+                          .append(Expr.splice(Expr(fieldName)))
+                          .append(" = ")
+                        Expr.splice(fieldResult)
+                      }
+                  }
+                  val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
+                    case (renderPreviousFields, (fieldName, fieldResult)) =>
+                      Expr.quote {
+                        val _ = Expr
+                          .splice(renderPreviousFields)
+                          .append(",\n")
+                          .append(Expr.splice(Expr(fieldName)))
+                          .append(" = ")
+                        Expr.splice(fieldResult)
+                      }
+                  }
+                  Expr.quote {
+                    Expr
+                      .splice(renderAllFields)
+                      .append("""\n)""") // TODO: figure out this error (macro parser error when we use single quotes)
+                  }
+                }
+            case None =>
+              MIO.pure {
+                Expr.quote {
+                  Expr.splice(ctx.sb).append(Expr.splice(name)).append("()")
+                }
+              }
+          }
+
+          result.flatMap(Attempt.derived(_))
+        case None =>
+          Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} is not considered to be a case class")
+      }
+    }
 
   def handleAsEnumRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] = ??? // TODO
 }
