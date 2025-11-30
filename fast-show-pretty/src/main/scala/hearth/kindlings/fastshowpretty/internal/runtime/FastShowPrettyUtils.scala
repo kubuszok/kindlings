@@ -1,7 +1,7 @@
 package hearth.kindlings.fastshowpretty.internal.runtime
 
 object FastShowPrettyUtils {
-  
+
   def renderBoolean(sb: StringBuilder)(value: Boolean): StringBuilder =
     if (value) sb.append("true") else sb.append("false")
   def renderByte(sb: StringBuilder)(value: Byte): StringBuilder =
@@ -17,7 +17,7 @@ object FastShowPrettyUtils {
     sb.append(result)
     // Workaround for https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
     if (result.contains(".")) {
-      sb.append(".0") 
+      sb.append(".0")
     }
     sb.append('f')
   }
@@ -26,7 +26,7 @@ object FastShowPrettyUtils {
     sb.append(result)
     // Workaround for https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
     if (result.contains(".")) {
-      sb.append(".0") 
+      sb.append(".0")
     }
     sb.append('d')
   }

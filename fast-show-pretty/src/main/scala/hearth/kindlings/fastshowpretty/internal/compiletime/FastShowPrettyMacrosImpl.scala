@@ -308,22 +308,24 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
           val name = Expr(Type[A].shortName)
           implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
 
-          enumm.parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
-            import matched.{value as enumCaseValue, Underlying as EnumCase}
-            Log.namedScope(s"Deriving the value ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-              deriveResultRecursively[EnumCase](using ctx.nest(enumCaseValue)).map { enumCaseResult =>
-                Expr.quote {
-                  val _ = Expr.splice(ctx.sb).append("(")
-                  Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
+          enumm
+            .parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
+              import matched.{value as enumCaseValue, Underlying as EnumCase}
+              Log.namedScope(s"Deriving the value ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
+                deriveResultRecursively[EnumCase](using ctx.nest(enumCaseValue)).map { enumCaseResult =>
+                  Expr.quote {
+                    val _ = Expr.splice(ctx.sb).append("(")
+                    Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
+                  }
                 }
               }
             }
-          }.flatMap {
-            case Some(result) =>
-              Attempt.derived(result)
-            case None =>
-              Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} does not have any children!")
-          }
+            .flatMap {
+              case Some(result) =>
+                Attempt.derived(result)
+              case None =>
+                Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} does not have any children!")
+            }
         case None =>
           Attempt.skippedBecause(s"The type ${Type[A].prettyPrint} is not considered to be an enum")
       }
