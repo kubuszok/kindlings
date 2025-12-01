@@ -18,7 +18,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
     implicit val String: Type[String] = Types.String
 
-    deriveFromCtxAndAdaptForEntrypoint[A, String] { fromCtx =>
+    deriveFromCtxAndAdaptForEntrypoint[A, String]("FastShowPretty.render") { fromCtx =>
       ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sb =>
         Expr.quote {
           Expr.splice(fromCtx(DerivationCtx.from(sb, value))).toString
@@ -31,7 +31,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
 
-    deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]] { fromCtx =>
+    deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]]("FastShowPretty.derived") { fromCtx =>
       Expr.quote {
         new FastShowPretty[A] {
           def render(sb: StringBuilder)(value: A): StringBuilder = Expr.splice {
@@ -48,7 +48,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   //  - the case that inlines the whole logic to return a String, and
   //  - the case that returns a FastShowPretty instance.
 
-  def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+  def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (DerivationCtx[A] => Expr[StringBuilder]) => Expr[Out]
   ): Expr[Out] = MIO
     .scoped { runSafe =>
@@ -66,8 +66,16 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
       provideCtxAndAdapt(fromCtx)
     }
-    .runToExprOrFail("TODO", DontRender) { (errorLogs, logs) =>
-      "" // TODO
+    .runToExprOrFail(
+      macroName,
+      infoRendering = hearth.fp.effect.RenderFrom(hearth.fp.effect.Log.Level.Info),
+      warnRendering = hearth.fp.effect.DontRender,
+      errorRendering = hearth.fp.effect.RenderFrom(hearth.fp.effect.Log.Level.Info)
+    ) { (errorLogs, errors) =>
+      s"""Macro derivation failed with the following errors:
+         |${errors.map(e => s"  - ${e.getMessage()}").mkString("\n")}
+         |and the following logs:
+         |$errorLogs""".stripMargin
     }
 
   // Context utilities - instead of passing around multiple types, expressions, helpers,
@@ -98,7 +106,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     )
   }
 
-  def ctx[A](implicit A: DerivationCtx[A]): DerivationCtx[A] = ctx
+  def ctx[A](implicit A: DerivationCtx[A]): DerivationCtx[A] = A
 
   implicit def currentValueType[A: DerivationCtx]: Type[A] = ctx.tpe
 
@@ -118,13 +126,13 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
   implicit final class MioAttemptOps[A](private val mioAttempt: MIO[Attempt[A]]) {
 
-    def orElse(other: => MIO[Attempt[A]]): MIO[Attempt[A]] =
+    def orElseAttempt(other: => MIO[Attempt[A]]): MIO[Attempt[A]] =
       mioAttempt.flatMap {
         case Attempt.Derived(value) => Attempt.derived(value)
         case Attempt.Skipped        => other
       }
 
-    def orFail(error: => Throwable): MIO[Expr[A]] =
+    def orFailAttempt(error: => Throwable): MIO[Expr[A]] =
       mioAttempt.flatMap {
         case Attempt.Derived(value) => MIO.pure(value.asInstanceOf[Expr[A]])
         case Attempt.Skipped        => MIO.fail(error)
@@ -162,7 +170,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
 
   private object Types {
 
-    def FastShowPretty[A: Type]: Type[FastShowPretty[A]] = Type.of[FastShowPretty[A]]
+    def FastShowPretty: Type.Ctor1[FastShowPretty] = Type.Ctor1.of[FastShowPretty]
     val StringBuilder: Type[StringBuilder] = Type.of[StringBuilder]
 
     val Boolean: Type[Boolean] = Type.of[Boolean]
@@ -181,15 +189,15 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
   // TODO: cache results for nested derivations
   def deriveResultRecursively[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
     useCachedDefWhenAvailableRule[A]
-      .orElse(useImplicitWhenAvailableRule[A])
-      .orElse(useBuiltInSupportRule[A])
-      .orElse {
+      .orElseAttempt(useImplicitWhenAvailableRule[A])
+      .orElseAttempt(useBuiltInSupportRule[A])
+      .orElseAttempt {
         implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
         ctx.cache.ofDef1Attempt[A, StringBuilder]("helper", "helper") { a =>
-          handleAsCaseClassRule[A](using ctx.nest(a)).orElse(handleAsEnumRule[A](using ctx.nest(a)))
+          handleAsCaseClassRule[A](using ctx.nest(a)).orElseAttempt(handleAsEnumRule[A](using ctx.nest(a)))
         }(ctx.value)
       }
-      .orFail(DerivationError.UnsupportedType()) // TODO better error
+      .orFailAttempt(DerivationError.UnsupportedType(Type[A].prettyPrint))
 
   // Particular derivation rules - the first one that applies (succeeding OR failing) is used.
 
@@ -299,9 +307,9 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
                 .map { toAppend =>
                   val renderLeftParenthesisAndHeadField = toAppend.head match {
                     case (fieldName, fieldResult) =>
+                      // TODO: fix error in Expr.splice for Scala 2 - chaining seem to not be fixed o_0
                       Expr.quote {
-                        val _ = Expr
-                          .splice(ctx.sb)
+                        val _ = Expr.splice(ctx.sb)
                           .append(Expr.splice(name))
                           .append("(\n")
                           .append(Expr.splice(Expr(fieldName)))
@@ -311,12 +319,14 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
                   }
                   val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
                     case (renderPreviousFields, (fieldName, fieldResult)) =>
+                      // TODO
                       Expr.quote {
-                        val _ = Expr
-                          .splice(renderPreviousFields)
-                          .append(",\n")
-                          .append(Expr.splice(Expr(fieldName)))
-                          .append(" = ")
+                        val _ =
+                          Expr
+                            .splice(renderPreviousFields)
+                            .append(",\n")
+                            .append(Expr.splice(Expr(fieldName)))
+                            .append(" = ")
                         Expr.splice(fieldResult)
                       }
                   }
@@ -371,7 +381,12 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     }
 }
 
-sealed private[compiletime] trait DerivationError extends util.control.NoStackTrace with Product with Serializable
+sealed private[compiletime] trait DerivationError extends util.control.NoStackTrace with Product with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
 private[compiletime] object DerivationError {
-  final case class UnsupportedType() extends DerivationError
+  final case class UnsupportedType(tpeName: String) extends DerivationError {
+    override def message: String = s"The type $tpeName is not neither-built-in nor case-class nor enum"
+  }
 }

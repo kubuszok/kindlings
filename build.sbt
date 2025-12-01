@@ -204,6 +204,7 @@ val settings = Seq(
 
 val dependencies = Seq(
   libraryDependencies ++= Seq(
+    "com.kubuszok" %%% "hearth" % versions.hearth,
     "org.scalameta" %%% "munit" % versions.munit % Test,
     "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
   ),
@@ -362,9 +363,9 @@ lazy val fastShowPretty = projectMatrix
   .settings(
     moduleName := "kindlings-fast-show-pretty",
     name := "kindlings-fast-show-pretty",
-    description := "Fast Show Pretty type class demonstrating how to use Hearth to implement a type class derivation",
-    libraryDependencies += "com.kubuszok" %%% "hearth" % versions.hearth
+    description := "Fast Show Pretty type class demonstrating how to use Hearth to implement a type class derivation"
   )
   .settings(settings *)
+  .settings(dependencies *)
   .settings(versionSchemeSettings *)
   .settings(publishSettings *)
