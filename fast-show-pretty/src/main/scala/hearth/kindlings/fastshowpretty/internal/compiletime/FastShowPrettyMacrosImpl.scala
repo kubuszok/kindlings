@@ -3,6 +3,7 @@ package hearth.kindlings.fastshowpretty.internal.compiletime
 import hearth.MacroCommons
 import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
+import hearth.fp.instances.*
 import hearth.fp.syntax.*
 
 import hearth.kindlings.fastshowpretty.FastShowPretty
@@ -115,7 +116,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
       Log.info(s"Skipped because $reason") >> MIO.pure(Skipped)
   }
 
-  implicit class MioAttemptOps[A](private val mioAttempt: MIO[Attempt[A]]) {
+  implicit final class MioAttemptOps[A](private val mioAttempt: MIO[Attempt[A]]) {
 
     def orElse(other: => MIO[Attempt[A]]): MIO[Attempt[A]] =
       mioAttempt.flatMap {
@@ -123,11 +124,38 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
         case Attempt.Skipped        => other
       }
 
-    def orFail(error: => DerivationError): MIO[Expr[A]] =
+    def orFail(error: => Throwable): MIO[Expr[A]] =
       mioAttempt.flatMap {
         case Attempt.Derived(value) => MIO.pure(value.asInstanceOf[Expr[A]])
         case Attempt.Skipped        => MIO.fail(error)
       }
+  }
+
+  implicit final class CacheAttemptOps[A](private val cache: MLocal[ValDefsCache]) {
+
+    def ofDef1Attempt[A: Type, Out: Type](name: FreshName, key: String)(
+        body: Expr[A] => MIO[Attempt[Out]]
+    )(a: Expr[A]): MIO[Attempt[Out]] =
+      ValDefBuilder
+        .ofDef1[A, Out](name)
+        .traverse { case (_, input) =>
+          body(input)
+        }
+        .flatMap { builder =>
+          builder.traverse {
+            case Attempt.Derived(value) => Some(value.asInstanceOf[Expr[Out]])
+            case Attempt.Skipped        => None
+          } match {
+            case Some(builder) =>
+              cache.buildCached(key, builder).flatMap { _ =>
+                cache.get1Ary[A, Out](key).map {
+                  case Some(thunk) => Attempt.Derived(thunk(a))
+                  case None        => Attempt.Skipped
+                }
+              }
+            case None => MIO.pure(Attempt.Skipped)
+          }
+        }
   }
 
   // Reusable components
@@ -155,8 +183,12 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
     useCachedDefWhenAvailableRule[A]
       .orElse(useImplicitWhenAvailableRule[A])
       .orElse(useBuiltInSupportRule[A])
-      .orElse(handleAsCaseClassRule[A])
-      .orElse(handleAsEnumRule[A])
+      .orElse {
+        implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+        ctx.cache.ofDef1Attempt[A, StringBuilder]("helper", "helper") { a =>
+          handleAsCaseClassRule[A](using ctx.nest(a)).orElse(handleAsEnumRule[A](using ctx.nest(a)))
+        }(ctx.value)
+      }
       .orFail(DerivationError.UnsupportedType()) // TODO better error
 
   // Particular derivation rules - the first one that applies (succeeding OR failing) is used.
