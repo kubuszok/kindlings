@@ -6,5 +6,5 @@ private[fastshowpretty] trait FastShowPrettyCompanionCompat { this: FastShowPret
     internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]('{ value })
   }
 
-  inline def derived[A]: FastShowPretty[A] = ${ internal.compiletime.FastShowPrettyMacros.deriveTypeClassImpl[A] }
+  inline given derived[A]: FastShowPretty[A] = ${ internal.compiletime.FastShowPrettyMacros.deriveTypeClassImpl[A] }
 }

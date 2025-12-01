@@ -219,7 +219,9 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons =>
       }
     }
 
-  private lazy val ignoredImplicits = Seq.empty[UntypedMethod]
+  private lazy val ignoredImplicits = Type.of[FastShowPretty.type].methods.collect {
+    case method if method.value.name == "derived" => method.value.asUntyped
+  }
   def useImplicitWhenAvailableRule[A: DerivationCtx]: MIO[Attempt[StringBuilder]] =
     Log.info(s"Attempting to use implicit support for ${Type[A].prettyPrint}") >> {
       implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]

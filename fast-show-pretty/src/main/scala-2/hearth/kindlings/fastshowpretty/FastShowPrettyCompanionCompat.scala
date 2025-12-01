@@ -6,5 +6,5 @@ private[fastshowpretty] trait FastShowPrettyCompanionCompat { this: FastShowPret
 
   def render[A](value: A): String = macro internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]
 
-  def derived[A]: FastShowPretty[A] = macro internal.compiletime.FastShowPrettyMacros.deriveTypeClassImpl[A]
+  implicit def derived[A]: FastShowPretty[A] = macro internal.compiletime.FastShowPrettyMacros.deriveTypeClassImpl[A]
 }
