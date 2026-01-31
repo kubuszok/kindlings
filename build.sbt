@@ -24,7 +24,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.2.0"
+  val hearth = "0.2.0-142-g1a0ebb2-SNAPSHOT"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
   val scalacheck = "1.19.0"
@@ -213,7 +213,8 @@ val dependencies = Seq(
     for2_13 = Seq(
       compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
     )
-  )
+  ),
+  resolvers += mavenCentralSnapshots
 )
 
 val versionSchemeSettings = Seq(versionScheme := Some("early-semver"))
@@ -229,7 +230,7 @@ val publishSettings = Seq(
       "scm:git:git@github.com:MateuszKubuszok/hearth.git"
     )
   ),
-  startYear := Some(2025),
+  startYear := Some(2026),
   developers := List(
     Developer("MateuszKubuszok", "Mateusz Kubuszok", "", url("https://github.com/MateuszKubuszok"))
   ),

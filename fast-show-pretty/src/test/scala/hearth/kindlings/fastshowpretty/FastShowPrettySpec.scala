@@ -8,6 +8,7 @@ case class Single(value: Int)
 case class Address(street: String, city: String)
 case class PersonWithAddress(name: String, age: Int, address: Address)
 
+@scala.annotation.nowarn // TODO: unused values - we cannot suppress them with val _ = ... until we fix cross-quotes on Scala 2!!!
 final class FastShowPrettySpec extends FunSuite {
 
   // ============================================================================
@@ -199,12 +200,12 @@ final class FastShowPrettySpec extends FunSuite {
   // - Custom instance overrides derivation
   // - Custom instance can be used with render
 
-  implicit val customIntInstance: FastShowPretty[Int] = new FastShowPretty[Int] {
-    def render(sb: StringBuilder)(value: Int): StringBuilder =
-      sb.append("custom(").append(value).append(")")
-  }
-
   test("render - uses custom implicit instance") {
+    implicit val customIntInstance: FastShowPretty[Int] = new FastShowPretty[Int] {
+      def render(sb: StringBuilder)(value: Int): StringBuilder =
+        sb.append("custom(").append(value).append(")")
+    }
+
     val result = FastShowPretty.render(42)
     assertEquals(result, "custom(42)")
   }
