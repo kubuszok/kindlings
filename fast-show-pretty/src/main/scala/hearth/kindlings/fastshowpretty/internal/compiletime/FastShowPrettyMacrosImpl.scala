@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.fastshowpretty.FastShowPretty
+import hearth.kindlings.fastshowpretty.{FastShowPretty, RenderConfig}
 import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
 
 @scala.annotation.nowarn
@@ -14,14 +14,14 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
 
   // Entrypoints to the macro
 
-  def deriveInline[A: Type](value: Expr[A]): Expr[String] = {
+  def deriveInline[A: Type](value: Expr[A], config: Expr[RenderConfig], level: Expr[Int]): Expr[String] = {
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
     implicit val String: Type[String] = Types.String
 
     deriveFromCtxAndAdaptForEntrypoint[A, String]("FastShowPretty.render") { fromCtx =>
       ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sb =>
         Expr.quote {
-          Expr.splice(fromCtx(DerivationCtx.from(sb, value))).toString
+          Expr.splice(fromCtx(DerivationCtx.from(sb, value, config, level))).toString
         }
       }
     }
@@ -29,13 +29,23 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
 
   def deriveTypeClass[A: Type]: Expr[FastShowPretty[A]] = {
     implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
-    // implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+    implicit val RenderConfigType: Type[RenderConfig] = Types.RenderConfig
 
     deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]]("FastShowPretty.derived") { fromCtx =>
       Expr.quote {
         new FastShowPretty[A] {
-          def render(sb: StringBuilder)(value: A): StringBuilder = Expr.splice {
-            fromCtx(DerivationCtx.from(Expr.quote(sb), Expr.quote(value)))
+          def render(sb: StringBuilder)(value: A): StringBuilder =
+            render(sb, RenderConfig.Default, 0)(value)
+
+          def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: A): StringBuilder = Expr.splice {
+            fromCtx(
+              DerivationCtx.from(
+                Expr.quote(sb),
+                Expr.quote(value),
+                Expr.quote(config),
+                Expr.quote(level)
+              )
+            )
           }
         }
       }
@@ -85,23 +95,38 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       tpe: Type[A],
       sb: Expr[StringBuilder],
       value: Expr[A],
-      cache: MLocal[ValDefsCache]
+      cache: MLocal[ValDefsCache],
+      config: Expr[RenderConfig],
+      level: Expr[Int]
   ) {
 
     def nest[B: Type](newValue: Expr[B]): DerivationCtx[B] = DerivationCtx(
       tpe = Type[B],
       sb = sb,
       value = newValue,
-      cache = cache
+      cache = cache,
+      config = config,
+      level = level
+    )
+
+    def incrementLevel: DerivationCtx[A] = copy(
+      level = Expr.quote(Expr.splice(level) + 1)
     )
   }
   object DerivationCtx {
 
-    def from[A: Type](sb: Expr[StringBuilder], value: Expr[A]): DerivationCtx[A] = DerivationCtx(
+    def from[A: Type](
+        sb: Expr[StringBuilder],
+        value: Expr[A],
+        config: Expr[RenderConfig],
+        level: Expr[Int]
+    ): DerivationCtx[A] = DerivationCtx(
       tpe = Type[A],
       sb = sb,
       value = value,
-      cache = ValDefsCache.mlocal
+      cache = ValDefsCache.mlocal,
+      config = config,
+      level = level
     )
   }
 
@@ -120,6 +145,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
 
     def FastShowPretty: Type.Ctor1[FastShowPretty] = Type.Ctor1.of[FastShowPretty]
     val StringBuilder: Type[StringBuilder] = Type.of[StringBuilder]
+    val RenderConfig: Type[RenderConfig] = Type.of[RenderConfig]
 
     val Boolean: Type[Boolean] = Type.of[Boolean]
     val Byte: Type[Byte] = Type.of[Byte]
@@ -274,7 +300,8 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
                   .parTraverse { case (fieldName, fieldValue) =>
                     import fieldValue.{Underlying as Field, value as fieldExpr}
                     Log.namedScope(s"Deriving the value ${ctx.value.prettyPrint}.$fieldName: ${Field.prettyPrint}") {
-                      deriveResultRecursively[Field](using ctx.nest(fieldExpr)).map { fieldResult =>
+                      // Use incrementLevel so nested case classes are indented properly
+                      deriveResultRecursively[Field](using ctx.incrementLevel.nest(fieldExpr)).map { fieldResult =>
                         (fieldName, fieldResult)
                       }
                     }
@@ -289,6 +316,12 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
                             .splice(ctx.sb)
                             .append(Expr.splice(name))
                             .append("(\n")
+                          FastShowPrettyUtils
+                            .appendIndent(
+                              Expr.splice(ctx.sb),
+                              Expr.splice(ctx.config).indentString,
+                              Expr.splice(ctx.level) + 1
+                            )
                             .append(Expr.splice(Expr(fieldName)))
                             .append(" = ")
                           Expr.splice(fieldResult)
@@ -300,6 +333,12 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
                           Expr
                             .splice(renderPreviousFields)
                             .append(",\n")
+                          FastShowPrettyUtils
+                            .appendIndent(
+                              Expr.splice(ctx.sb),
+                              Expr.splice(ctx.config).indentString,
+                              Expr.splice(ctx.level) + 1
+                            )
                             .append(Expr.splice(Expr(fieldName)))
                             .append(" = ")
                           Expr.splice(fieldResult)
@@ -307,9 +346,14 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
                     }
 
                     Expr.quote {
-                      Expr
-                        .splice(renderAllFields)
-                        .append("""\n)""")
+                      Expr.splice(renderAllFields).append("\n")
+                      FastShowPrettyUtils
+                        .appendIndent(
+                          Expr.splice(ctx.sb),
+                          Expr.splice(ctx.config).indentString,
+                          Expr.splice(ctx.level)
+                        )
+                        .append(")")
                     }
                   }
               case None =>
@@ -340,7 +384,8 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
               .parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
                 import matched.{value as enumCaseValue, Underlying as EnumCase}
                 Log.namedScope(s"Deriving the value ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-                  deriveResultRecursively[EnumCase](using ctx.nest(enumCaseValue)).map { enumCaseResult =>
+                  // Use incrementLevel so nested case classes in enum cases are indented properly
+                  deriveResultRecursively[EnumCase](using ctx.incrementLevel.nest(enumCaseValue)).map { enumCaseResult =>
                     Expr.quote {
                       Expr.splice(ctx.sb).append("(")
                       Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))

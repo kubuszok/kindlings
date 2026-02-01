@@ -9,8 +9,12 @@ final private[fastshowpretty] class FastShowPrettyMacros(q: Quotes)
       FastShowPrettyMacrosImpl
 private[fastshowpretty] object FastShowPrettyMacros {
 
-  def deriveInlineImpl[A: Type](value: Expr[A])(using q: Quotes): Expr[String] =
-    new FastShowPrettyMacros(q).deriveInline[A](value)
+  def deriveInlineImpl[A: Type](
+      value: Expr[A],
+      config: Expr[RenderConfig],
+      level: Expr[Int]
+  )(using q: Quotes): Expr[String] =
+    new FastShowPrettyMacros(q).deriveInline[A](value, config, level)
 
   def deriveTypeClassImpl[A: Type](using q: Quotes): Expr[FastShowPretty[A]] =
     new FastShowPrettyMacros(q).deriveTypeClass[A]

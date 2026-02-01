@@ -2,6 +2,16 @@ package hearth.kindlings.fastshowpretty.internal.runtime
 
 object FastShowPrettyUtils {
 
+  /** Appends indentation (indentString repeated level times) to the StringBuilder. */
+  def appendIndent(sb: StringBuilder, indentString: String, level: Int): StringBuilder = {
+    var i = 0
+    while (i < level) {
+      sb.append(indentString)
+      i += 1
+    }
+    sb
+  }
+
   def renderBoolean(sb: StringBuilder)(value: Boolean): StringBuilder =
     if (value) sb.append("true") else sb.append("false")
   def renderByte(sb: StringBuilder)(value: Byte): StringBuilder =
@@ -32,6 +42,21 @@ object FastShowPrettyUtils {
   }
   def renderChar(sb: StringBuilder)(value: Char): StringBuilder =
     sb.append("'").append(value.toString).append("'")
-  def renderString(sb: StringBuilder)(value: String): StringBuilder =
-    sb.append('"').append(value.replaceAll("\"", "\\\"").replaceAll("\n", "\\n")).append('"')
+  def renderString(sb: StringBuilder)(value: String): StringBuilder = {
+    sb.append('"')
+    var i = 0
+    while (i < value.length) {
+      val c = value.charAt(i)
+      c match {
+        case '"'  => sb.append("\\\"")
+        case '\\' => sb.append("\\\\")
+        case '\n' => sb.append("\\n")
+        case '\r' => sb.append("\\r")
+        case '\t' => sb.append("\\t")
+        case _    => sb.append(c)
+      }
+      i += 1
+    }
+    sb.append('"')
+  }
 }

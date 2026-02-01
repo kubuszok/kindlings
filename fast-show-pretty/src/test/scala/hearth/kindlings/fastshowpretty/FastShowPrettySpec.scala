@@ -120,12 +120,12 @@ final class FastShowPrettySpec extends FunSuite {
 
   test("render - case class with single field") {
     val result = FastShowPretty.render(Single(42))
-    assertEquals(result, "Single(\nvalue = 42\n)")
+    assertEquals(result, "Single(\n  value = 42\n)")
   }
 
   test("render - case class with multiple fields") {
     val result = FastShowPretty.render(Person("Alice", 30))
-    assertEquals(result, "Person(\nname = \"Alice\",\nage = 30\n)")
+    assertEquals(result, "Person(\n  name = \"Alice\",\n  age = 30\n)")
   }
 
   test("render - nested case classes") {
@@ -134,7 +134,32 @@ final class FastShowPrettySpec extends FunSuite {
     val result = FastShowPretty.render(person)
     assertEquals(
       result,
-      "PersonWithAddress(\nname = \"Bob\",\nage = 25,\naddress = Address(\nstreet = \"123 Main St\",\ncity = \"New York\"\n)\n)"
+      "PersonWithAddress(\n  name = \"Bob\",\n  age = 25,\n  address = Address(\n    street = \"123 Main St\",\n    city = \"New York\"\n  )\n)"
+    )
+  }
+
+  test("renderWith - compact (no indent)") {
+    val result = FastShowPretty.renderWith(Person("Alice", 30), RenderConfig.Compact)
+    assertEquals(result, "Person(\nname = \"Alice\",\nage = 30\n)")
+  }
+
+  test("renderWith - tabs") {
+    val result = FastShowPretty.renderWith(Person("Alice", 30), RenderConfig.Tabs)
+    assertEquals(result, "Person(\n\tname = \"Alice\",\n\tage = 30\n)")
+  }
+
+  test("renderWith - four spaces") {
+    val result = FastShowPretty.renderWith(Person("Alice", 30), RenderConfig.FourSpaces)
+    assertEquals(result, "Person(\n    name = \"Alice\",\n    age = 30\n)")
+  }
+
+  test("renderWith - nested with tabs") {
+    val address = Address("123 Main St", "New York")
+    val person = PersonWithAddress("Bob", 25, address)
+    val result = FastShowPretty.renderWith(person, RenderConfig.Tabs)
+    assertEquals(
+      result,
+      "PersonWithAddress(\n\tname = \"Bob\",\n\tage = 25,\n\taddress = Address(\n\t\tstreet = \"123 Main St\",\n\t\tcity = \"New York\"\n\t)\n)"
     )
   }
 
@@ -182,7 +207,7 @@ final class FastShowPrettySpec extends FunSuite {
     val instance = implicitly[FastShowPretty[Person]]
     val sb = new StringBuilder
     val result = instance.render(sb)(Person("Alice", 30)).toString
-    assertEquals(result, "Person(\nname = \"Alice\",\nage = 30\n)")
+    assertEquals(result, "Person(\n  name = \"Alice\",\n  age = 30\n)")
   }
 
   test("derived - instance reuse StringBuilder") {
@@ -190,6 +215,21 @@ final class FastShowPrettySpec extends FunSuite {
     val sb = new StringBuilder("prefix: ")
     val result = instance.render(sb)(42).toString
     assertEquals(result, "prefix: 42")
+  }
+
+  test("derived - instance with custom config") {
+    val instance = implicitly[FastShowPretty[Person]]
+    val sb = new StringBuilder
+    val result = instance.render(sb, RenderConfig.Tabs, 0)(Person("Alice", 30)).toString
+    assertEquals(result, "Person(\n\tname = \"Alice\",\n\tage = 30\n)")
+  }
+
+  test("derived - instance with start level") {
+    val instance = implicitly[FastShowPretty[Person]]
+    val sb = new StringBuilder
+    // Starting at level 1 means the first level of fields is at level 2
+    val result = instance.render(sb, RenderConfig.Default, 1)(Person("Alice", 30)).toString
+    assertEquals(result, "Person(\n    name = \"Alice\",\n    age = 30\n  )")
   }
 
   // ----------------------------------------------------------------------------
@@ -203,6 +243,8 @@ final class FastShowPrettySpec extends FunSuite {
   test("render - uses custom implicit instance") {
     implicit val customIntInstance: FastShowPretty[Int] = new FastShowPretty[Int] {
       def render(sb: StringBuilder)(value: Int): StringBuilder =
+        sb.append("custom(").append(value).append(")")
+      def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: Int): StringBuilder =
         sb.append("custom(").append(value).append(")")
     }
 
@@ -248,6 +290,11 @@ final class FastShowPrettySpec extends FunSuite {
   test("render - special characters in string") {
     val result = FastShowPretty.render("tab\tquote\"newline\n")
     assertEquals(result, "\"tab\\tquote\\\"newline\\n\"")
+  }
+
+  test("render - backslash in string") {
+    val result = FastShowPretty.render("path\\to\\file")
+    assertEquals(result, "\"path\\\\to\\\\file\"")
   }
 
   // ----------------------------------------------------------------------------
