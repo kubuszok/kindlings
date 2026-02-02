@@ -14,9 +14,6 @@ object RenderConfig {
 
 trait FastShowPretty[A] {
 
-  /** Renders a value to a StringBuilder without indentation (backward compatible). */
-  def render(sb: StringBuilder)(value: A): StringBuilder
-
   /** Renders a value to a StringBuilder with indentation support. */
   def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: A): StringBuilder
 }

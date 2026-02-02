@@ -139,6 +139,7 @@ val settings = Seq(
       "-explain-types",
       "-feature",
       "-no-indent",
+      "-language:postfixOps", // "for >>"
       "-Wconf:msg=Unreachable case:s", // suppress fake (?) errors in internal.compiletime
       "-Wconf:msg=Missing symbol position:s", // suppress warning https://github.com/scala/scala3/issues/21672
       "-Wnonunit-statement",

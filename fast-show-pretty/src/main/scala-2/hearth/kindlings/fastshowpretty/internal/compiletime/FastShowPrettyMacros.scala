@@ -10,12 +10,6 @@ final private[fastshowpretty] class FastShowPrettyMacros(val c: blackbox.Context
 
   import c.universe.*
 
-  def deriveInlineImpl[A: c.WeakTypeTag](value: c.Expr[A]): c.Expr[String] = {
-    val configExpr = c.Expr[RenderConfig](q"_root_.hearth.kindlings.fastshowpretty.RenderConfig.Default")
-    val levelExpr = c.Expr[Int](q"0")
-    deriveInline[A](value, configExpr, levelExpr)
-  }
-
   def deriveInlineWithConfigImpl[A: c.WeakTypeTag](
       value: c.Expr[A],
       config: c.Expr[RenderConfig]

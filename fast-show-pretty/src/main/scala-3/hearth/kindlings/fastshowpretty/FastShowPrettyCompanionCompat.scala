@@ -2,13 +2,8 @@ package hearth.kindlings.fastshowpretty
 
 private[fastshowpretty] trait FastShowPrettyCompanionCompat { this: FastShowPretty.type =>
 
-  /** Renders a value to a String with default indentation (2 spaces). */
-  inline def render[A](inline value: A): String = ${
-    internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]('{ value }, '{ RenderConfig.Default }, '{ 0 })
-  }
-
   /** Renders a value to a String with custom indentation configuration. */
-  inline def renderWith[A](inline value: A, config: RenderConfig): String = ${
+  inline def render[A](inline value: A, config: RenderConfig): String = ${
     internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]('{ value }, '{ config }, '{ config.startLevel })
   }
 

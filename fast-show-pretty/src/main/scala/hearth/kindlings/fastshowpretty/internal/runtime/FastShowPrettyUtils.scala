@@ -59,4 +59,41 @@ object FastShowPrettyUtils {
     }
     sb.append('"')
   }
+
+  /** Opens a collection rendering with the collection type name and opening bracket. */
+  def openCollection(sb: StringBuilder, typeName: String): StringBuilder =
+    sb.append(typeName).append("(")
+
+  def fillCollection[A](sb: StringBuilder, iterable: Iterable[A])(renderItem: A => StringBuilder): StringBuilder = {
+    val iterator = iterable.iterator
+    while (iterator.hasNext) {
+      val item = iterator.next()
+      sb.append("\n")
+      val _ = renderItem(item)
+      if (iterator.hasNext) {
+        sb.append(", ")
+      }
+    }
+    sb
+  }
+
+  /** Appends a separator between collection elements. */
+  def appendCollectionSeparator(sb: StringBuilder): StringBuilder =
+    sb.append(", ")
+
+  /** Closes a collection rendering with the closing bracket. */
+  def closeCollection(sb: StringBuilder): StringBuilder =
+    sb.append(")")
+
+  /** Opens a map entry rendering. */
+  def openMapEntry(sb: StringBuilder): StringBuilder =
+    sb
+
+  /** Appends the arrow separator between key and value in a map entry. */
+  def appendMapArrow(sb: StringBuilder): StringBuilder =
+    sb.append(" -> ")
+
+  /** Closes a map entry rendering. */
+  def closeMapEntry(sb: StringBuilder): StringBuilder =
+    sb
 }
