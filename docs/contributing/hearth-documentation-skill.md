@@ -97,8 +97,51 @@ Expr(value)                         // Lift literal
 Expr.quote { /* code */ }           // Quote block
 Expr.splice(expr)                   // Splice expression inside quote
 expr.prettyPrint                    // String representation
-expr.upcast[B]                      // Widen type
+expr.upcast[B]                      // Widen type (A <:< B required)
+expr.as_??                          // Wrap into Expr_?? (existential)
 ```
+
+### Expr_?? (existential expressions)
+
+`Expr_??` is `Existential[Expr]` — wraps an `Expr[A]` with its `Type[A]` proof, erasing the concrete type. Use when storing heterogeneously-typed expressions in collections.
+
+```scala
+import hearth.std.*
+
+// Wrapping
+val existential: Expr_?? = someExpr.as_??
+
+// Consuming
+import existential.{Underlying as FieldType, value as expr}
+// Now in scope: implicit Type[FieldType] and expr: Expr[FieldType]
+```
+
+**Important:** `Expr.upcast[B]` only widens (`A <:< B`). It cannot narrow (e.g., `Any` → `String`). For narrowing, use `.asInstanceOf` inside `Expr.quote` or a runtime type-witness utility.
+
+### LambdaBuilder
+
+Creates runtime lambda expressions from compile-time derivation. Use inside macro rules when you need to construct typed closures.
+
+```scala
+import hearth.std.*
+
+// Build a lambda: InputType => OutputType
+LambdaBuilder
+  .of1[InputType]("argName")
+  .traverse { (inputExpr: Expr[InputType]) =>
+    deriveBody(inputExpr): MIO[Expr[OutputType]]
+  }
+  .map(_.build[OutputType])        // Expr[InputType => OutputType]
+
+// Simple (non-MIO) version
+LambdaBuilder
+  .of1[InputType]("argName")
+  .buildWith { (inputExpr: Expr[InputType]) =>
+    makeBody(inputExpr): Expr[OutputType]
+  }                                // Expr[InputType => OutputType]
+```
+
+**Caveat:** Always use `Expr.quote`/`Expr.splice` inside builder closures. Raw `'{ }` / `${ }` on Scala 3 captures the wrong `Quotes` context and causes `ScopeException`.
 
 ### ValDefsCache
 
@@ -121,11 +164,19 @@ ValDefBuilder.ofDef1[A, B](name, argName)     // def with 1 arg
 import hearth.std.*
 
 CaseClass.parse[A]                            // Option[CaseClass[A]]
-caseClass.caseFieldValuesAt(expr)             // Get field name-value pairs
+caseClass.caseFieldValuesAt(expr)             // Get field name-value pairs (ListMap[String, Expr_??])
+caseClass.primaryConstructor                  // Method.NoInstance[A] — the primary constructor
+caseClass.primaryConstructor(fieldMap)        // Either[String, Expr[A]] — construct from Map[String, Expr_??]
+caseClass.construct[F](makeArgument)          // F[Option[Expr[A]]] — construct via ConstructField callback
 
 Enum.parse[A]                                 // Option[Enum[A]]
 enumm.parMatchOn[F, R](expr)(handler)         // Pattern match on cases
 ```
+
+**Choosing a construction method:**
+- **`caseFieldValuesAt`** — for encoder-style derivation (reading fields from an existing value)
+- **`primaryConstructor(fieldMap)`** — for decoder-style derivation (constructing from decoded data). Takes `Map[String, Expr_??]`, returns `Either[String, Expr[A]]`. Avoids path-dependent type issues.
+- **`construct`** — uses `ConstructField` with dependent return type `Expr[field.tpe.Underlying]`. This has Scala 2 macro hygiene issues with path-dependent types. Prefer `primaryConstructor(fieldMap)` for cross-compiled decoder code.
 
 ### Rules
 
@@ -168,6 +219,29 @@ This project uses **sbt-projectmatrix**. Scala version is determined by project 
 - `yourModule3` = Scala 3
 
 **Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
+
+## Cross-quotes pitfalls
+
+These are common issues when writing cross-compiled macros with `Expr.quote`:
+
+| Issue | Symptom | Fix |
+|---|---|---|
+| Path-dependent types in `Expr.quote` | "not found: value param" on Scala 2 | Use `LambdaBuilder` or runtime type witness; avoid `Field` alias inside `Expr.quote` |
+| `Array.empty[T]` / `+:` in quotes | "not found: value ClassTag" on Scala 2 | Use `List.empty[T]` and `::` instead |
+| `expr.upcast[B]` for narrowing | Compile error: `A <:< B` not satisfied | Use `.asInstanceOf[B]` inside `Expr.quote` or a runtime utility |
+| Raw `'{ }` inside `LambdaBuilder` | `ScopeException` on Scala 3 | Use `Expr.quote`/`Expr.splice` or `withQuotes { }` |
+| Macro wrapper with generic `[A]` | "type A was not handled by any rule" | Call macro methods with concrete types at each call site |
+
+For detailed patterns and solutions, see `type-class-derivation-skill.md`.
+
+## Hearth source as reference
+
+The hearth library source is available at `../hearth/` (relative to the kindlings repo root). Key files:
+- `hearth/src/main/scala/hearth/typed/Classes.scala` — `CaseClass`, `Enum`, `Parameter`, `construct`
+- `hearth/src/main/scala/hearth/typed/Exprs.scala` — `Expr`, `LambdaBuilder`, `Expr_??`
+- `hearth/src/main/scala/hearth/typed/Methods.scala` — `Method.NoInstance`, `primaryConstructor`
+- `hearth/src/main/scala/hearth/typed/Existentials.scala` — `Existential`, `as_??`
+- `hearth/docs/user-guide/cross-quotes.md` — cross-quotes limitations per Scala version
 
 ## Troubleshooting
 

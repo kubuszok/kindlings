@@ -396,6 +396,150 @@ object HandleAsEnumRule extends DerivationRule("handle as enum") {
 }
 ```
 
+## Decoder-style derivation: constructing types from decoded data
+
+**Reference implementation:** `circe-derivation/src/main/scala/hearth/kindlings/circederivation/internal/compiletime/DecoderMacrosImpl.scala`
+
+Encoder-style derivation (FastShowPretty) **reads** fields from an existing value via `caseClass.caseFieldValuesAt(expr)`. Decoder-style derivation **constructs** a value from separately decoded fields. This introduces additional challenges around type safety and Scala 2 macro hygiene.
+
+### Two approaches to case class construction
+
+#### Approach 1: Recursive flatMap chain (recommended)
+
+Build nested `flatMap` calls where each level uses `LambdaBuilder.of1[Field]` to get a properly-typed expression, then pass it via `Expr_??` to the constructor.
+
+```scala
+def buildFlatMapChain(
+    fields: List[(String, Parameter, Expr[Decoder[?]])],
+    accumulatedArgs: Map[String, Expr_??]
+): MIO[Expr[Either[DecodingFailure, A]]] = fields match {
+  case Nil =>
+    // All fields decoded — construct the case class
+    caseClass.primaryConstructor(accumulatedArgs) match {
+      case Right(constructExpr) =>
+        MIO.pure(Expr.quote { Right(Expr.splice(constructExpr)): Either[DecodingFailure, A] })
+      case Left(error) => MIO.fail(...)
+    }
+  case (fieldName, param, decoderExpr) :: rest =>
+    import param.tpe.Underlying as Field
+    // LambdaBuilder.of1[Field] gives a properly-typed Expr[Field] in the closure
+    LambdaBuilder.of1[Field]("fieldValue").traverse { fieldValueExpr =>
+      // as_?? wraps it for the arguments map
+      buildFlatMapChain(rest, accumulatedArgs + (fieldName -> fieldValueExpr.as_??))
+    }.map { builder =>
+      val innerLambda = builder.build[Either[DecodingFailure, A]]
+      Expr.quote {
+        cursor.downField(config.transformMemberNames(Expr.splice(Expr(fieldName))))
+          .as(Expr.splice(decoderExpr))
+          .flatMap(Expr.splice(innerLambda))
+      }
+    }
+}
+```
+
+**Why this works:** `LambdaBuilder.of1[Field]` properly handles the path-dependent `Field` type. Inside the builder closure, `fieldValueExpr` is already `Expr[Field]`, so no casts are needed. Calling `.as_??` wraps it into an existential for the untyped field map.
+
+#### Approach 2: Collect-then-construct with runtime type witness
+
+Decode all fields into `List[Either[DecodingFailure, Any]]`, sequence them into `Either[DecodingFailure, Array[Any]]`, then use a runtime utility to recover types.
+
+```scala
+// Runtime utility — the Decoder[A] argument provides type inference for A
+@scala.annotation.nowarn("msg=unused explicit parameter")
+def unsafeCast[A](value: Any, witness: Decoder[A]): A = value.asInstanceOf[A]
+
+// In macro — decoderExpr carries the type, avoiding path-dependent references
+val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+  val typedExpr = Expr.quote {
+    CirceDerivationUtils.unsafeCast(
+      Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+      Expr.splice(decoderExpr)  // type A inferred from Decoder[A]
+    )
+  }
+  (fieldName, typedExpr.as_??)
+}
+```
+
+This approach is used in `circe-derivation/DecoderMacrosImpl.scala`. It works but is more complex than the recursive flatMap chain.
+
+### Using `primaryConstructor` directly
+
+`CaseClass` provides two ways to construct instances:
+
+1. **`caseClass.construct[F](makeArgument)`** — uses `ConstructField[F]` with a dependent return type `Expr[field.tpe.Underlying]`. This has the same path-dependent type issue on Scala 2.
+
+2. **`caseClass.primaryConstructor(fieldMap: Map[String, Expr_??])`** — takes a `Map[String, Expr_??]` and returns `Either[String, Expr[A]]`. This avoids path-dependent types entirely because `Expr_??` is an existential.
+
+**Always prefer `primaryConstructor(fieldMap)` for decoder-style derivation.** Use `construct` only when you already have properly-typed field expressions (e.g., encoder-style where `caseFieldValuesAt` gives you typed values).
+
+### Key API: `Expr_??` and `as_??`
+
+`Expr_??` is `Existential[Expr]` — it wraps an `Expr[A]` with its `Type[A]` proof, erasing the concrete type from the outer signature.
+
+```scala
+// Wrapping: any Expr[A] with Type[A] in scope can become Expr_??
+val existential: Expr_?? = someExpr.as_??
+
+// Consuming: import brings type and value back into scope
+import existential.{Underlying as FieldType, value as expr}
+// Now: implicit FieldType: Type[FieldType] and expr: Expr[FieldType]
+```
+
+Use `Expr_??` whenever you need to store heterogeneously-typed expressions in a collection (e.g., a field map for `primaryConstructor`).
+
+### Key API: `LambdaBuilder`
+
+`LambdaBuilder` creates runtime lambda expressions from compile-time derivation:
+
+```scala
+LambdaBuilder
+  .of1[InputType]("argName")
+  .traverse { (inputExpr: Expr[InputType]) =>
+    // MIO computation that produces the body
+    deriveBody(inputExpr): MIO[Expr[OutputType]]
+  }
+  .map { builder =>
+    val lambda: Expr[InputType => OutputType] = builder.build[OutputType]
+    // Use the lambda in generated code
+    Expr.quote { someResult.map(Expr.splice(lambda)) }
+  }
+```
+
+**Important:** Always use `Expr.quote`/`Expr.splice` inside builder closures, never raw `'{ }` / `${ }` — raw quotes capture the wrong `Quotes` context on Scala 3 and cause `ScopeException`.
+
+## Cross-compilation pitfalls
+
+### Path-dependent types in `Expr.quote` (Scala 2)
+
+**This is the most common pitfall.** On Scala 2, `import param.tpe.Underlying as Field` and then referencing `Field` inside `Expr.quote` generates code that references the path variable (`param`), which doesn't exist at the expansion site.
+
+```scala
+// BROKEN on Scala 2:
+import param.tpe.Underlying as Field
+Expr.quote { someExpr.asInstanceOf[Field] }  // "not found: value param"
+```
+
+This works on Scala 3 but NOT on Scala 2. The `caseFieldValuesAt` pattern in FastShowPretty avoids this because it reads from an existing value (no construction needed). Decoder-style derivation hits this when constructing new instances.
+
+**Solutions:**
+1. Use `LambdaBuilder.of1[Field]` which handles the type parameter correctly
+2. Use a runtime type-witness utility (`unsafeCast`) where a value-level argument provides type inference
+3. Use `primaryConstructor(Map[String, Expr_??])` instead of `construct` with dependent types
+
+### `Array` operations require `ClassTag` in macros
+
+`Array.empty[T]` and `+:` inside `Expr.quote` require `ClassTag[T]`, which causes "not found: value ClassTag" errors on Scala 2.
+
+**Solution:** Use `List.empty[T]` and `::` instead.
+
+### `Expr.upcast` only widens
+
+`expr.upcast[B]` requires `A <:< B` (compile-time subtype proof). It cannot narrow types (e.g., `Any` → `String`). For narrowing, use `.asInstanceOf` inside `Expr.quote` or a runtime type-witness utility.
+
+### Macro methods require concrete types at call site
+
+A generic `def helper[A](value: A)` that calls `KindlingsEncoder.encode(value)` internally won't work — the macro sees `A` as abstract, not the concrete type. Always call macro methods directly with concrete types at each call site.
+
 ## Testing
 
 When you create a type class derivation in a **new module**:
@@ -429,4 +573,6 @@ sbt --client "yourModuleJS3/test"    # Scala 3 JS
 5. **Cache definitions** using `ValDefsCache` to avoid duplication
 6. **Derive recursively** using `ctx.nest(...)` for nested types
 7. **Ignore the derivation macro** when summoning implicits
-8. **Test in your module** after MCP confirms compilation
+8. **For decoder-style derivation**, use `primaryConstructor(fieldMap)` with `Expr_??` — avoid `construct` with dependent types
+9. **Avoid path-dependent types in `Expr.quote`** — use `LambdaBuilder` or runtime type witnesses instead
+10. **Test in your module** after MCP confirms compilation

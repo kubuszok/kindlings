@@ -24,6 +24,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
+  val circe = "0.14.15"
   val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
@@ -267,7 +268,7 @@ val noPublishSettings =
 
 val al = new {
 
-  private val prodProjects = Vector("fastShowPretty")
+  private val prodProjects = Vector("fastShowPretty", "circeDerivation")
 
   private def isJVM(platform: String): Boolean = platform == "JVM"
 
@@ -314,6 +315,7 @@ lazy val root = project
   .settings(publishSettings)
   .settings(noPublishSettings)
   .aggregate(fastShowPretty.projectRefs *)
+  .aggregate(circeDerivation.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -372,3 +374,24 @@ lazy val fastShowPretty = projectMatrix
   .settings(dependencies *)
   .settings(versionSchemeSettings *)
   .settings(publishSettings *)
+
+lazy val circeDerivation = projectMatrix
+  .in(file("circe-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-circe-derivation",
+    name := "kindlings-circe-derivation",
+    description := "Circe Encoder/Decoder derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "io.circe" %%% "circe-core" % versions.circe,
+      "io.circe" %%% "circe-parser" % versions.circe % Test
+    )
+  )

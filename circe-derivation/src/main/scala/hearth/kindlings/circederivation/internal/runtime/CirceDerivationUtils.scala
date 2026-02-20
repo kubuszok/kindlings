@@ -1,0 +1,129 @@
+package hearth.kindlings.circederivation.internal.runtime
+
+import io.circe.{Decoder, DecodingFailure, HCursor, Json, JsonObject}
+
+object CirceDerivationUtils {
+
+  // --- Encoder helpers ---
+
+  def jsonFromFields(fields: List[(String, Json)]): Json =
+    Json.fromJsonObject(JsonObject.fromIterable(fields))
+
+  def wrapWithTypeName(typeName: String, inner: Json): Json =
+    Json.obj(typeName -> inner)
+
+  def addDiscriminator(discriminatorField: String, typeName: String, inner: Json): Json =
+    inner.asObject match {
+      case Some(obj) => Json.fromJsonObject((discriminatorField, Json.fromString(typeName)) +: obj)
+      case None      => Json.obj(discriminatorField -> Json.fromString(typeName), "value" -> inner)
+    }
+
+  def encodeOption[A](value: Option[A], encoder: A => Json): Json = value match {
+    case Some(a) => encoder(a)
+    case None    => Json.Null
+  }
+
+  def encodeIterable[A](items: Iterable[A], encoder: A => Json): Json =
+    Json.fromValues(items.map(encoder))
+
+  def encodeMapEntries[K, V](entries: Iterable[(K, V)], encodeKey: K => String, encodeValue: V => Json): Json =
+    Json.fromJsonObject(JsonObject.fromIterable(entries.map { case (k, v) => (encodeKey(k), encodeValue(v)) }))
+
+  def jsonFromMappedPairs[P](pairs: Iterable[P], toPair: P => (String, Json)): Json =
+    Json.fromJsonObject(JsonObject.fromIterable(pairs.map(toPair)))
+
+  // --- Decoder helpers ---
+
+  def decodeField[A](cursor: HCursor, fieldName: String, decoder: Decoder[A]): Decoder.Result[A] =
+    cursor.downField(fieldName).as[A](decoder)
+
+  def decodeFieldWithDefault[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A],
+      default: A
+  ): Decoder.Result[A] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Right(default)
+    else field.as[A](decoder)
+  }
+
+  def decodeOptionField[A](cursor: HCursor, fieldName: String, decoder: Decoder[A]): Decoder.Result[Option[A]] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Right(None)
+    else
+      field.focus match {
+        case Some(json) if json.isNull => Right(None)
+        case _                         => field.as[A](decoder).map(Some(_))
+      }
+  }
+
+  def checkStrictDecoding(cursor: HCursor, expectedFields: Set[String]): Decoder.Result[Unit] = {
+    val actualKeys = cursor.keys.map(_.toSet).getOrElse(Set.empty)
+    val unexpected = actualKeys -- expectedFields
+    if (unexpected.isEmpty) Right(())
+    else
+      Left(
+        DecodingFailure(
+          s"Unexpected field(s): ${unexpected.toList.sorted.mkString(", ")}",
+          cursor.history
+        )
+      )
+  }
+
+  def checkStrictDecodingWithDiscriminator(
+      cursor: HCursor,
+      expectedFields: Set[String],
+      discriminatorField: String
+  ): Decoder.Result[Unit] =
+    checkStrictDecoding(cursor, expectedFields + discriminatorField)
+
+  def decodeWrapped(cursor: HCursor): Decoder.Result[(String, HCursor)] =
+    cursor.keys.flatMap(_.headOption) match {
+      case Some(typeName) =>
+        Right((typeName, cursor.downField(typeName).success.getOrElse(cursor)))
+      case None =>
+        Left(
+          DecodingFailure(
+            "Expected a JSON object with a single key as type discriminator",
+            cursor.history
+          )
+        )
+    }
+
+  def decodeDiscriminator(cursor: HCursor, field: String): Decoder.Result[(String, HCursor)] =
+    cursor.downField(field).as[String] match {
+      case Right(typeName) => Right((typeName, cursor))
+      case Left(failure)   => Left(failure)
+    }
+
+  def failedToMatchSubtype(typeName: String, cursor: HCursor, knownSubtypes: List[String]): DecodingFailure =
+    DecodingFailure(
+      s"Unknown type discriminator: $typeName. Expected one of: ${knownSubtypes.mkString(", ")}",
+      cursor.history
+    )
+
+  def decodeOption[A](cursor: HCursor, decoder: Decoder[A]): Decoder.Result[Option[A]] =
+    cursor.focus match {
+      case Some(json) if json.isNull => Right(None)
+      case _                         => decoder(cursor).map(Some(_))
+    }
+
+  /** Cast an `Any` value to `A`, using a `Decoder[A]` purely for type inference. The decoder is not called - this is a
+    * compile-time trick to avoid path-dependent type aliases in Scala 2 macro-generated code.
+    */
+  @scala.annotation.nowarn("msg=unused explicit parameter")
+  def unsafeCast[A](value: Any, decoder: Decoder[A]): A = value.asInstanceOf[A]
+
+  def sequenceDecodeResults(results: List[Either[DecodingFailure, Any]]): Either[DecodingFailure, Array[Any]] = {
+    val arr = new Array[Any](results.size)
+    var i = 0
+    val iter = results.iterator
+    while (iter.hasNext)
+      iter.next() match {
+        case Right(v) => arr(i) = v; i += 1
+        case Left(e)  => return Left(e)
+      }
+    Right(arr)
+  }
+}

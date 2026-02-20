@@ -40,6 +40,10 @@ This project has Metals MCP available at `.metals/mcp.json` as **`kindlings-meta
  - **Do not modify `dev.properties`** — it's primarily used by the developer to focus on one platform
    in their IDE.
 
+ - **Do not add yourself as co-author** — when making commits, agents should not add themselves
+   (e.g. `Co-Authored-By: Claude ...`) to commit messages. Only the human author and Happy
+   attribution should appear.
+
 ### Project matrix structure
 
 This project uses **sbt-projectmatrix** (not sbt-crossproject). Scala version is determined by project name suffix, not by `++` commands.
@@ -104,6 +108,69 @@ Specifically:
  - The Scala 3 companion uses `inline def` + `${ ... }` with a `MacroCommonsScala3`-based class
  - The Scala 2 companion uses `def ... = macro` with a `MacroCommonsScala2`-based class
 
+## Cross-Compilation Pitfalls
+
+Common issues encountered when writing cross-compiled macros. See also
+`docs/contributing/type-class-derivation-skill.md` for detailed patterns and solutions.
+
+### Path-dependent types inside `Expr.quote` (Scala 2)
+
+**Problem:** Using `import param.tpe.Underlying as Field` and then referencing `Field` inside
+`Expr.quote { ... }` does NOT work on Scala 2. The generated quasiquote code references the path
+variable (e.g., `param`) which doesn't exist at the expansion site.
+
+```scala
+// BROKEN on Scala 2 — generates a reference to `param` in the output tree
+import param.tpe.Underlying as Field
+Expr.quote { someExpr.asInstanceOf[Field] }  // "not found: value param"
+```
+
+**Solutions:**
+1. **Runtime type witness** — use a runtime utility where a value-level argument provides type
+   inference, avoiding explicit path-dependent type references:
+   ```scala
+   // Runtime utility
+   def unsafeCast[A](value: Any, witness: Decoder[A]): A = value.asInstanceOf[A]
+   // In macro — decoderExpr carries the type info
+   Expr.quote { unsafeCast(arrayExpr(idx), Expr.splice(decoderExpr)) }
+   ```
+2. **Recursive flatMap chain** — build nested `flatMap` calls where each level uses
+   `LambdaBuilder.of1[Field]` to obtain a properly-typed `Expr[Field]`, then wrap it
+   via `as_??` into the arguments map for `primaryConstructor`. See the decoder skill for details.
+3. **`LambdaBuilder`** — use `LambdaBuilder.of1[Field]("name").traverse { expr => ... }` which
+   properly handles the type parameter inside the builder closure.
+
+### `Array` operations require `ClassTag` in macros
+
+**Problem:** `Array.empty[T]` and `+:` inside `Expr.quote` require `ClassTag[T]`, which may not
+be available at the expansion site on Scala 2, producing "not found: value ClassTag" errors.
+
+**Solution:** Use `List.empty[T]` and `::` instead — they don't require `ClassTag`.
+
+### `Expr.upcast` only widens
+
+`expr.upcast[B]` requires `A <:< B` (compile-time subtype proof). It cannot narrow types
+(e.g., `Any` → `String`). For narrowing, use `.asInstanceOf` inside `Expr.quote` or a runtime
+type-witness utility.
+
+### Macro methods require concrete types at call site
+
+**Problem:** A generic helper like `def roundTrip[A](value: A)` that internally calls
+`KindlingsEncoder.encode(value)` won't work — the macro sees `A` as abstract, not the concrete type.
+
+**Solution:** Call macro methods directly with concrete types at each call site. Don't wrap them
+in generic helpers.
+
+### Hearth source in neighbor directory
+
+The hearth library source is available at `../hearth/` (relative to the kindlings repo root). When
+documentation is insufficient, read the actual hearth source code — especially:
+- `hearth/src/main/scala/hearth/typed/Classes.scala` — `CaseClass`, `Enum`, `Parameter`
+- `hearth/src/main/scala/hearth/typed/Exprs.scala` — `Expr`, `LambdaBuilder`, `Expr_??`
+- `hearth/src/main/scala/hearth/typed/Methods.scala` — `Method.NoInstance`, `primaryConstructor`
+- `hearth/src/main/scala/hearth/typed/Existentials.scala` — `Existential`, `as_??`
+- `hearth/docs/user-guide/cross-quotes.md` — cross-quotes limitations per Scala version
+
 ## Hearth documentation
 
 This project depends on the `hearth` library. To find documentation:
@@ -127,12 +194,15 @@ This project depends on the `hearth` library. To find documentation:
 When implementing or modifying type class derivation macros, follow:
 **`docs/contributing/type-class-derivation-skill.md`**
 
-Use `FastShowPrettyMacrosImpl.scala` as the reference implementation. This skill covers:
+Use `FastShowPrettyMacrosImpl.scala` as the reference for **encoder-style** derivation (reading fields).
+Use `circe-derivation/DecoderMacrosImpl.scala` as the reference for **decoder-style** derivation
+(constructing types from decoded data). This skill covers:
 - Defining type classes in shared code
 - Cross-compilable macro structure
 - Context-based parameter passing
 - Rule-based derivation architecture
 - Logging, caching, and recursive derivation
+- Decoder patterns: `primaryConstructor(fieldMap)`, `LambdaBuilder`, `Expr_??`, recursive flatMap chains
 
 ### Implementing a new type class module
 
