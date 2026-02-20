@@ -9,19 +9,30 @@ import hearth.std.*
 import hearth.kindlings.fastshowpretty.{FastShowPretty, RenderConfig}
 import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
 
-@scala.annotation.nowarn
-private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
+trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
 
   // Entrypoints to the macro
 
-  def deriveInline[A: Type](value: Expr[A], config: Expr[RenderConfig], level: Expr[Int]): Expr[String] = {
+  def deriveInline[A: Type](valueExpr: Expr[A], configExpr: Expr[RenderConfig], levelExpr: Expr[Int]): Expr[String] = {
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+    implicit val RenderConfig: Type[RenderConfig] = Types.RenderConfig
     implicit val String: Type[String] = Types.String
+    implicit val Int: Type[Int] = Types.Int
 
     deriveFromCtxAndAdaptForEntrypoint[A, String]("FastShowPretty.render") { fromCtx =>
-      ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sb =>
-        Expr.quote {
-          Expr.splice(fromCtx(DerivationCtx.from(sb, value, config, level))).toString
+      ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sbVal =>
+        ValDefs.createVal[A](valueExpr).use { valueVal =>
+          ValDefs.createVal[RenderConfig](configExpr).use { configVal =>
+            ValDefs.createVal[Int](levelExpr).use { levelVal =>
+              Expr.quote {
+                val _ = Expr.splice(sbVal)
+                val _ = Expr.splice(valueVal)
+                val _ = Expr.splice(configVal)
+                val _ = Expr.splice(levelVal)
+                Expr.splice(fromCtx(DerivationCtx.from(sbVal, valueVal, configVal, levelVal))).toString
+              }
+            }
+          }
         }
       }
     }
@@ -35,15 +46,21 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       Expr.quote {
         new FastShowPretty[A] {
 
-          def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: A): StringBuilder = Expr.splice {
-            fromCtx(
-              DerivationCtx.from(
-                Expr.quote(sb),
-                Expr.quote(value),
-                Expr.quote(config),
-                Expr.quote(level)
+          def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: A): StringBuilder = {
+            val _ = sb
+            val _ = config
+            val _ = level
+            val _ = value
+            Expr.splice {
+              fromCtx(
+                DerivationCtx.from(
+                  Expr.quote(sb),
+                  Expr.quote(value),
+                  Expr.quote(config),
+                  Expr.quote(level)
+                )
               )
-            )
+            }
           }
         }
       }
@@ -80,18 +97,43 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
     }
     .runToExprOrFail(
       macroName,
-      infoRendering =
-        if (Environment.isExpandedAt("FastShowPrettySpec.scala:358"))
-          hearth.fp.effect.RenderFrom(hearth.fp.effect.Log.Level.Info)
-        else hearth.fp.effect.DontRender,
-      warnRendering = hearth.fp.effect.DontRender,
-      errorRendering = hearth.fp.effect.RenderFrom(hearth.fp.effect.Log.Level.Info)
+      infoRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
+      errorRendering = RenderFrom(Log.Level.Info)
     ) { (errorLogs, errors) =>
-      s"""Macro derivation failed with the following errors:
-         |${errors.map(e => s"  - ${e.getMessage()}").mkString("\n")}
-         |and the following logs:
-         |$errorLogs""".stripMargin
+      val errorsRendered = errors
+        .map { e =>
+          e.getMessage.split("\n").toList match {
+            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+            case _            => "  - " + e.getMessage
+          }
+        }
+        .mkString("\n")
+      if (errorLogs.nonEmpty)
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered
+           |and the following logs:
+           |$errorLogs""".stripMargin
+      else
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered""".stripMargin
     }
+
+  /** Enables logging if we either:
+    *   - import [[hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty]] in the scope
+    *   - have set scalac option `-Xmacro-settings:fastShowPretty.logDerivation=true`
+    */
+  def shouldWeLogDerivation: Boolean = {
+    implicit val LogDerivation: Type[FastShowPretty.LogDerivation] = Types.LogDerivation
+    def logDerivationImported = Expr.summonImplicit[FastShowPretty.LogDerivation].isDefined
+
+    def logDerivationSetGlobally = (for {
+      data <- Environment.typedSettings.toOption
+      fastShowPretty <- data.get("fastShowPretty")
+      shouldLog <- fastShowPretty.get("logDerivation").flatMap(_.asBoolean)
+    } yield shouldLog).getOrElse(false)
+
+    logDerivationImported || logDerivationSetGlobally
+  }
 
   // Context utilities - instead of passing around multiple types, expressions, helpers,
   // maybe some config options in the future - we can just pass around a single context object.
@@ -184,9 +226,6 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       level = level,
       cache = ValDefsCache.mlocal
     )
-
-    type Helper[B, R, V] =
-      ValDefBuilder[(Expr[StringBuilder], Expr[RenderConfig], Expr[Int], Expr[B]) => Expr[StringBuilder], R, V]
   }
 
   def ctx[A](implicit A: DerivationCtx[A]): DerivationCtx[A] = A
@@ -203,6 +242,8 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
   private object Types {
 
     def FastShowPretty: Type.Ctor1[FastShowPretty] = Type.Ctor1.of[FastShowPretty]
+    val LogDerivation: Type[hearth.kindlings.fastshowpretty.FastShowPretty.LogDerivation] =
+      Type.of[hearth.kindlings.fastshowpretty.FastShowPretty.LogDerivation]
     val StringBuilder: Type[StringBuilder] = Type.of[StringBuilder]
     val RenderConfig: Type[RenderConfig] = Type.of[RenderConfig]
 
@@ -215,36 +256,42 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
     val Double: Type[Double] = Type.of[Double]
     val Char: Type[Char] = Type.of[Char]
     val String: Type[String] = Type.of[String]
+    val Product: Type[Product] = Type.of[Product]
   }
 
   // The actual derivation logic in the form of DerivationCtx[A] ?=> MIO[Expr[StringBuilder]].
 
   def deriveResultRecursively[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
-    Log.namedScope(s"Deriving for type ${Type[A].prettyPrint}") {
-      Rules(
-        UseCachedDefWhenAvailableRule,
-        UseImplicitWhenAvailableRule,
-        UseBuiltInSupportRule,
-        HandleAsCollectionRule,
-        HandleAsCaseClassRule,
-        HandleAsEnumRule
-      )(_[A]).flatMap {
-        case Right(result) =>
-          Log.info(s"Derived result for ${Type[A].prettyPrint}: ${result.prettyPrint}") >>
-            MIO.pure(result)
-        case Left(reasons) =>
-          val reasonsStrings = reasons.toListMap
-            .removed(UseCachedDefWhenAvailableRule)
-            .view
-            .map { case (rule, reasons) =>
-              if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
-              else s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-            }
-            .toList
-          Log.info(s"Failed to derive result for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-            MIO.fail(DerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+    Log
+      .namedScope(s"Deriving for type ${Type[A].prettyPrint}") {
+        Rules(
+          UseCachedDefWhenAvailableRule,
+          UseImplicitWhenAvailableRule,
+          UseBuiltInSupportRule,
+          HandleAsValueTypeRule,
+          HandleAsMapRule,
+          HandleAsCollectionRule,
+          HandleAsNamedTupleRule,
+          HandleAsCaseClassRule,
+          HandleAsEnumRule
+        )(_[A]).flatMap {
+          case Right(result) =>
+            Log.info(s"Derived result for ${Type[A].prettyPrint}: ${result.prettyPrint}") >>
+              MIO.pure(result)
+          case Left(reasons) =>
+            val reasonsStrings = reasons.toListMap
+              .removed(UseCachedDefWhenAvailableRule)
+              .view
+              .map { case (rule, reasons) =>
+                if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
+                else
+                  s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
+              }
+              .toList
+            Log.info(s"Failed to derive result for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
+              MIO.fail(DerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+        }
       }
-    }
 
   // Particular derivation rules - the first one that applies (succeeding OR failing) is used.
 
@@ -355,6 +402,97 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       }
   }
 
+  object HandleAsValueTypeRule extends DerivationRule("handle as value type when possible") {
+    implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
+        Type[A] match {
+          case IsValueType(isValueType) =>
+            import isValueType.Underlying as Inner
+            deriveValueTypeUnwrapped[A, Inner](isValueType.value)
+
+          case _ =>
+            yieldUnsupportedType[A]
+        }
+      }
+
+    private def deriveValueTypeUnwrapped[A: DerivationCtx, Inner: Type](
+        isValueType: IsValueTypeOf[A, Inner]
+    ): MIO[Rule.Applicability[Expr[StringBuilder]]] = {
+      val unwrappedExpr = isValueType.unwrap(ctx.value)
+
+      for {
+        innerResult <- deriveResultRecursively[Inner](using ctx.nest(unwrappedExpr))
+      } yield Rule.matched(innerResult)
+    }
+
+    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a value type"))
+  }
+
+  object HandleAsMapRule extends DerivationRule("handle as map when possible") {
+    implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {
+        Type[A] match {
+          case IsMap(isMap) =>
+            import isMap.Underlying as Pair
+            deriveMapItems[A, Pair](isMap.value)
+
+          case _ =>
+            yieldUnsupportedType[A]
+        }
+      }
+
+    private def deriveMapItems[A: DerivationCtx, Pair: Type](
+        isMap: IsMapOf[A, Pair]
+    ): MIO[Rule.Applicability[Expr[StringBuilder]]] = {
+      import isMap.{Key, Value}
+      val name = Expr(Type[A].shortName)
+      val iterableExpr = isMap.asIterable(ctx.value)
+
+      LambdaBuilder
+        .of1[Pair]("pair")
+        .traverse { pairExpr =>
+          val keyExpr = isMap.key(pairExpr)
+          val valueExpr = isMap.value(pairExpr)
+          for {
+            keyResult <- deriveResultRecursively[Key](using ctx.incrementLevel.nest(keyExpr))
+            valueResult <- deriveResultRecursively[Value](using ctx.incrementLevel.nest(valueExpr))
+          } yield Expr.quote {
+            val _ = FastShowPrettyUtils.appendIndent(
+              Expr.splice(ctx.sb),
+              Expr.splice(ctx.config).indentString,
+              Expr.splice(ctx.level) + 1
+            )
+            val _ = FastShowPrettyUtils.openMapEntry(Expr.splice(ctx.sb))
+            val _ = Expr.splice(keyResult)
+            val _ = FastShowPrettyUtils.appendMapArrow(Expr.splice(ctx.sb))
+            val _ = Expr.splice(valueResult)
+            FastShowPrettyUtils.closeMapEntry(Expr.splice(ctx.sb))
+          }
+        }
+        .map { builder =>
+          val lambda = builder.build[StringBuilder]
+          Rule.matched(Expr.quote {
+            val _ = FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
+            val _ = FastShowPrettyUtils.fillCollection(
+              Expr.splice(ctx.sb),
+              Expr.splice(iterableExpr),
+              Expr.splice(ctx.config).indentString,
+              Expr.splice(ctx.level)
+            )(Expr.splice(lambda))
+            FastShowPrettyUtils.closeCollection(Expr.splice(ctx.sb))
+          })
+        }
+    }
+
+    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a map"))
+  }
+
   object HandleAsCollectionRule extends DerivationRule("handle as collection when possible") {
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
 
@@ -379,26 +517,27 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       LambdaBuilder
         .of1[Item]("item")
         .traverse { itemExpr =>
-          // TODO: possible .incrementLevel
-          deriveResultRecursively[Item](using ctx.nest(itemExpr))
+          deriveResultRecursively[Item](using ctx.incrementLevel.nest(itemExpr)).map { result =>
+            Expr.quote {
+              val _ = FastShowPrettyUtils.appendIndent(
+                Expr.splice(ctx.sb),
+                Expr.splice(ctx.config).indentString,
+                Expr.splice(ctx.level) + 1
+              )
+              Expr.splice(result)
+            }
+          }
         }
         .map { builder =>
-          // TODO: this creates error on Scala 3:
-          val lambda =
-            try
-              // the solution we want
-              builder.build[StringBuilder]
-            catch {
-              case e: Throwable =>
-                e.printStackTrace()
-                // workaround to no fight unrelated compilation errors end stuff
-                Expr.quote((_: Item) => Expr.splice(ctx.sb))
-            }
+          val lambda = builder.build[StringBuilder]
           Rule.matched(Expr.quote {
-            FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
-            FastShowPrettyUtils.fillCollection(Expr.splice(ctx.sb), Expr.splice(iterableExpr))(Expr.splice(lambda))
-            FastShowPrettyUtils
-              .appendIndent(Expr.splice(ctx.sb), Expr.splice(ctx.config).indentString, Expr.splice(ctx.level))
+            val _ = FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
+            val _ = FastShowPrettyUtils.fillCollection(
+              Expr.splice(ctx.sb),
+              Expr.splice(iterableExpr),
+              Expr.splice(ctx.config).indentString,
+              Expr.splice(ctx.level)
+            )(Expr.splice(lambda))
             FastShowPrettyUtils.closeCollection(Expr.splice(ctx.sb))
           })
         }
@@ -406,6 +545,119 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
 
     private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a collection"))
+  }
+
+  object HandleAsNamedTupleRule extends DerivationRule("handle as named tuple when possible") {
+
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple) yieldUnsupportedType[A]
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- ctx.setHelper[A] { (sb, config, level, value) =>
+                  deriveNamedTupleFields[A](constructor)(using ctx.nestInCache(sb, value, config, level))
+                }
+                result <- ctx.getHelper[A].flatMap {
+                  case Some(helperCall) =>
+                    MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
+                  case None => yieldUnsupportedType[A]
+                }
+              } yield result
+
+            case None => yieldUnsupportedType[A]
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveNamedTupleFields[A: DerivationCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[StringBuilder]] = {
+      implicit val IntType: Type[Int] = Types.Int
+      implicit val ProductType: Type[Product] = Types.Product
+
+      val fields = constructor.parameters.flatten.toList
+
+      NonEmptyList.fromList(fields) match {
+        case Some(fieldValues) =>
+          fieldValues
+            .parTraverse { case (fieldName, param) =>
+              import param.tpe.Underlying as Field
+              val fieldExpr: Expr[Field] = Expr.quote {
+                Expr
+                  .splice(ctx.value)
+                  .asInstanceOf[Product]
+                  .productElement(Expr.splice(Expr(param.index)))
+                  .asInstanceOf[Field]
+              }
+              Log.namedScope(
+                s"Deriving the value ${ctx.value.prettyPrint}.$fieldName: ${Type[Field].prettyPrint}"
+              ) {
+                deriveResultRecursively[Field](using ctx.incrementLevel.nest(fieldExpr)).map { fieldResult =>
+                  (fieldName, fieldResult)
+                }
+              }
+            }
+            .map { toAppend =>
+              // Render without a type name prefix — just "(\n  name = ...,\n  age = ...\n)"
+              val renderLeftParenthesisAndHeadField = toAppend.head match {
+                case (fieldName, fieldResult) =>
+                  Expr.quote {
+                    val _ = Expr
+                      .splice(ctx.sb)
+                      .append("(\n")
+                    val _ = FastShowPrettyUtils
+                      .appendIndent(
+                        Expr.splice(ctx.sb),
+                        Expr.splice(ctx.config).indentString,
+                        Expr.splice(ctx.level) + 1
+                      )
+                      .append(Expr.splice(Expr(fieldName)))
+                      .append(" = ")
+                    Expr.splice(fieldResult)
+                  }
+              }
+              val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
+                case (renderPreviousFields, (fieldName, fieldResult)) =>
+                  Expr.quote {
+                    val _ = Expr
+                      .splice(renderPreviousFields)
+                      .append(",\n")
+                    val _ = FastShowPrettyUtils
+                      .appendIndent(
+                        Expr.splice(ctx.sb),
+                        Expr.splice(ctx.config).indentString,
+                        Expr.splice(ctx.level) + 1
+                      )
+                      .append(Expr.splice(Expr(fieldName)))
+                      .append(" = ")
+                    Expr.splice(fieldResult)
+                  }
+              }
+
+              Expr.quote {
+                val _ = Expr.splice(renderAllFields).append("\n")
+                FastShowPrettyUtils
+                  .appendIndent(
+                    Expr.splice(ctx.sb),
+                    Expr.splice(ctx.config).indentString,
+                    Expr.splice(ctx.level)
+                  )
+                  .append(")")
+              }
+            }
+        case None =>
+          MIO.pure {
+            Expr.quote {
+              Expr.splice(ctx.sb).append("()")
+            }
+          }
+      }
+    }
+
+    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a named tuple"))
   }
 
   object HandleAsCaseClassRule extends DerivationRule("handle as case class when possible") {
@@ -449,14 +701,12 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
             .map { toAppend =>
               val renderLeftParenthesisAndHeadField = toAppend.head match {
                 case (fieldName, fieldResult) =>
-                  // TODO: fix in cross-quotes on Scala 2!!!
-                  // private[this] val x$$4 - is generated by val _ = ... !!!
                   Expr.quote {
-                    Expr
+                    val _ = Expr
                       .splice(ctx.sb)
                       .append(Expr.splice(name))
                       .append("(\n")
-                    FastShowPrettyUtils
+                    val _ = FastShowPrettyUtils
                       .appendIndent(
                         Expr.splice(ctx.sb),
                         Expr.splice(ctx.config).indentString,
@@ -470,10 +720,10 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
               val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
                 case (renderPreviousFields, (fieldName, fieldResult)) =>
                   Expr.quote {
-                    Expr
+                    val _ = Expr
                       .splice(renderPreviousFields)
                       .append(",\n")
-                    FastShowPrettyUtils
+                    val _ = FastShowPrettyUtils
                       .appendIndent(
                         Expr.splice(ctx.sb),
                         Expr.splice(ctx.config).indentString,
@@ -486,7 +736,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
               }
 
               Expr.quote {
-                Expr.splice(renderAllFields).append("\n")
+                val _ = Expr.splice(renderAllFields).append("\n")
                 FastShowPrettyUtils
                   .appendIndent(
                     Expr.splice(ctx.sb),
@@ -543,7 +793,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
             // Use incrementLevel so nested case classes in enum cases are indented properly
             deriveResultRecursively[EnumCase](using ctx.incrementLevel.nest(enumCaseValue)).map { enumCaseResult =>
               Expr.quote {
-                Expr.splice(ctx.sb).append("(")
+                val _ = Expr.splice(ctx.sb).append("(")
                 Expr.splice(enumCaseResult).append("): ").append(Expr.splice(name))
               }
             }
@@ -568,6 +818,7 @@ sealed private[compiletime] trait DerivationError extends util.control.NoStackTr
 }
 private[compiletime] object DerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends DerivationError {
-    override def message: String = s"The type $tpeName was "
+    override def message: String =
+      s"The type $tpeName was not handled by any derivation rule:\n${reasons.mkString("\n")}"
   }
 }

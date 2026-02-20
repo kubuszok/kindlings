@@ -4,7 +4,7 @@ private[fastshowpretty] trait FastShowPrettyCompanionCompat { this: FastShowPret
 
   /** Renders a value to a String with custom indentation configuration. */
   inline def render[A](inline value: A, config: RenderConfig): String = ${
-    internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]('{ value }, '{ config }, '{ config.startLevel })
+    internal.compiletime.FastShowPrettyMacros.deriveInlineImpl[A]('value, 'config, '{ config.startLevel })
   }
 
   inline given derived[A]: FastShowPretty[A] = ${ internal.compiletime.FastShowPrettyMacros.deriveTypeClassImpl[A] }

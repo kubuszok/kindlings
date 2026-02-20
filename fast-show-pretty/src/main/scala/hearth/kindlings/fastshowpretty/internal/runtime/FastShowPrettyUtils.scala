@@ -26,7 +26,7 @@ object FastShowPrettyUtils {
     val result = value.toString
     sb.append(result)
     // Workaround for https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
-    if (result.contains(".")) {
+    if (!result.contains(".")) {
       sb.append(".0")
     }
     sb.append('f')
@@ -35,7 +35,7 @@ object FastShowPrettyUtils {
     val result = value.toString
     sb.append(result)
     // Workaround for https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
-    if (result.contains(".")) {
+    if (!result.contains(".")) {
       sb.append(".0")
     }
     sb.append('d')
@@ -64,14 +64,19 @@ object FastShowPrettyUtils {
   def openCollection(sb: StringBuilder, typeName: String): StringBuilder =
     sb.append(typeName).append("(")
 
-  def fillCollection[A](sb: StringBuilder, iterable: Iterable[A])(renderItem: A => StringBuilder): StringBuilder = {
+  def fillCollection[A](sb: StringBuilder, iterable: Iterable[A], indentString: String, level: Int)(
+      renderItem: A => StringBuilder
+  ): StringBuilder = {
     val iterator = iterable.iterator
     while (iterator.hasNext) {
       val item = iterator.next()
       sb.append("\n")
       val _ = renderItem(item)
       if (iterator.hasNext) {
-        sb.append(", ")
+        sb.append(",")
+      } else {
+        sb.append("\n")
+        appendIndent(sb, indentString, level): Unit
       }
     }
     sb
@@ -87,13 +92,13 @@ object FastShowPrettyUtils {
 
   /** Opens a map entry rendering. */
   def openMapEntry(sb: StringBuilder): StringBuilder =
-    sb
+    sb.append("(")
 
-  /** Appends the arrow separator between key and value in a map entry. */
+  /** Appends the separator between key and value in a map entry. */
   def appendMapArrow(sb: StringBuilder): StringBuilder =
-    sb.append(" -> ")
+    sb.append(", ")
 
   /** Closes a map entry rendering. */
   def closeMapEntry(sb: StringBuilder): StringBuilder =
-    sb
+    sb.append(")")
 }

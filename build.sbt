@@ -24,7 +24,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.2.0-145-gfca8da7-SNAPSHOT"
+  val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
   val scalacheck = "1.19.0"
@@ -206,6 +206,7 @@ val settings = Seq(
 val dependencies = Seq(
   libraryDependencies ++= Seq(
     "com.kubuszok" %%% "hearth" % versions.hearth,
+    "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test,
     "org.scalameta" %%% "munit" % versions.munit % Test,
     "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
   ),
