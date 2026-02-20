@@ -81,7 +81,7 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
     .runToExprOrFail(
       macroName,
       infoRendering =
-        if (Environment.isExpandedAt("FastShowPrettySpec.scala:134"))
+        if (Environment.isExpandedAt("FastShowPrettySpec.scala:358"))
           hearth.fp.effect.RenderFrom(hearth.fp.effect.Log.Level.Info)
         else hearth.fp.effect.DontRender,
       warnRendering = hearth.fp.effect.DontRender,
@@ -154,7 +154,6 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       implicit val StringBuilderT: Type[StringBuilder] = Types.StringBuilder
       implicit val RenderConfigT: Type[RenderConfig] = Types.RenderConfig
       implicit val IntT: Type[Int] = Types.Int
-      println(s"Setting helper for ${Type[B].shortName}")
       val defBuilder =
         ValDefBuilder.ofDef4[StringBuilder, RenderConfig, Int, B, StringBuilder](s"render_${Type[B].shortName}")
       for {
@@ -164,9 +163,6 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
             runSafe(helper(sb, config, level, value))
           })
         }
-        _ <- cache.get.flatTap(value =>
-          MIO(println(s"Cached definitions: ${value.toValDefs.use(_ => Expr(())).prettyPrint}"))
-        )
       } yield ()
     }
 
@@ -383,10 +379,21 @@ private[compiletime] trait FastShowPrettyMacrosImpl { this: MacroCommons & StdEx
       LambdaBuilder
         .of1[Item]("item")
         .traverse { itemExpr =>
+          // TODO: possible .incrementLevel
           deriveResultRecursively[Item](using ctx.nest(itemExpr))
         }
         .map { builder =>
-          val lambda = builder.build[StringBuilder]
+          // TODO: this creates error on Scala 3:
+          val lambda =
+            try
+              // the solution we want
+              builder.build[StringBuilder]
+            catch {
+              case e: Throwable =>
+                e.printStackTrace()
+                // workaround to no fight unrelated compilation errors end stuff
+                Expr.quote((_: Item) => Expr.splice(ctx.sb))
+            }
           Rule.matched(Expr.quote {
             FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
             FastShowPrettyUtils.fillCollection(Expr.splice(ctx.sb), Expr.splice(iterableExpr))(Expr.splice(lambda))

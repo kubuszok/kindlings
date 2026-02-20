@@ -128,16 +128,15 @@ final class FastShowPrettySpec extends FunSuite {
     assertEquals(result, "Person(\n    name = \"Alice\",\n    age = 30\n)")
   }
 
-  // FIXME
-  // test("render - nested with tabs") {
-  //   val address = Address("123 Main St", "New York")
-  //   val person = PersonWithAddress("Bob", 25, address)
-  //   val result = FastShowPretty.render(person, RenderConfig.Tabs)
-  //   assertEquals(
-  //     result,
-  //     "PersonWithAddress(\n\tname = \"Bob\",\n\tage = 25,\n\taddress = Address(\n\t\tstreet = \"123 Main St\",\n\t\tcity = \"New York\"\n\t)\n)"
-  //   )
-  // }
+  test("render - nested with tabs") {
+    val address = Address("123 Main St", "New York")
+    val person = PersonWithAddress("Bob", 25, address)
+    val result = FastShowPretty.render(person, RenderConfig.Tabs)
+    assertEquals(
+      result,
+      "PersonWithAddress(\n\tname = \"Bob\",\n\tage = 25,\n\taddress = Address(\n\t\tstreet = \"123 Main St\",\n\t\tcity = \"New York\"\n\t)\n)"
+    )
+  }
 
   // ----------------------------------------------------------------------------
   // 3. ENUMS (Scala 3) - Testing automatic derivation
@@ -355,10 +354,10 @@ final class FastShowPrettySpec extends FunSuite {
 
   // FIXME: these are broken
 
-  // test("render - List of Ints") {
-  //   val result = FastShowPretty.render(List(1, 2, 3), RenderConfig.Default)
-  //   assertEquals(result, "List(1, 2, 3)")
-  // }
+  test("render - List of Ints") {
+    val result = FastShowPretty.render(List(1, 2, 3), RenderConfig.Default)
+    assertEquals(result, "List(1, 2, 3)")
+  }
 
   // test("render - empty List") {
   //   val result = FastShowPretty.render(List.empty[Int], RenderConfig.Default)
