@@ -1,0 +1,56 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ '*' ]
+  pull_request:
+    branches: [ master ]
+    types: [ opened, reopened, labeled, synchronize ]
+
+jobs:
+  check-formatting:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled' # run for 'opened', 'reopened' and 'synchronize'
+
+    name: Check formatting
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: coursier/setup-action@v2.0.2
+        with:
+          apps: scalafmt
+      - name: Check code formatting
+        run: scalafmt --check
+
+  build:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled' # run for 'opened', 'reopened' and 'synchronize'
+
+    strategy:
+      matrix:
+        scala: ['2_13', '3']
+        platform: ['jvm', 'js', 'native']
+        jvm: ['temurin:1.11.0.28', 'temurin:1.17.0.15']
+      fail-fast: false
+
+    name: "Scala: ${{ matrix.scala == '2_13' && '2.13' || '3' }} / Platform: ${{ matrix.platform }} / JVM: ${{ matrix.jvm }}"
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@v8
+      - uses: coursier/setup-action@v2.0.2
+        with:
+          jvm: ${{ matrix.jvm }}
+          apps: sbt
+      - name: "Clean, compile, test${{matrix.platform == 'jvm' && ', generate coverage report' || ''}}"
+        run: sbt ci-${{ matrix.platform }}-${{ matrix.scala }}
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
