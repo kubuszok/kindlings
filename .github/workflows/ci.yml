@@ -35,7 +35,7 @@ jobs:
       matrix:
         scala: ['2_13', '3']
         platform: ['jvm', 'js', 'native']
-        jvm: ['temurin:1.11.0.28', 'temurin:1.17.0.15']
+        jvm: ['temurin:1.17.0.15']
       fail-fast: false
 
     name: "Scala: ${{ matrix.scala == '2_13' && '2.13' || '3' }} / Platform: ${{ matrix.platform }} / JVM: ${{ matrix.jvm }}"
