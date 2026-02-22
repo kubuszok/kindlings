@@ -40,6 +40,8 @@ Example workflow:
 
 ## Common hearth APIs used in this project
 
+> **Quick reference:** See [`hearth-api-knowledge.md`](hearth-api-knowledge.md) for a comprehensive table of all hearth API signatures used in kindlings.
+
 These are the main APIs used for type class derivation. **Always verify with MCP that they exist and have the expected signatures.**
 
 ### MIO (Macro IO effect)
@@ -231,6 +233,7 @@ These are common issues when writing cross-compiled macros with `Expr.quote`:
 | `expr.upcast[B]` for narrowing | Compile error: `A <:< B` not satisfied | Use `.asInstanceOf[B]` inside `Expr.quote` or a runtime utility |
 | Raw `'{ }` inside `LambdaBuilder` | `ScopeException` on Scala 3 | Use `Expr.quote`/`Expr.splice` or `withQuotes { }` |
 | Macro wrapper with generic `[A]` | "type A was not handled by any rule" | Call macro methods with concrete types at each call site |
+| Macro-internal types (`??`, `Expr_??`) in `Expr.quote` | Reification captures path-dependent refs on Scala 2 | Extract to `val` before `Expr.quote` block |
 
 For detailed patterns and solutions, see `type-class-derivation-skill.md`.
 

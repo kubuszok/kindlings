@@ -12,6 +12,74 @@ This module demonstrates how to derive type classes using hearth. When creating 
 2. **Read the reference implementation** - Study `FastShowPrettyMacrosImpl.scala` to understand the patterns
 3. **Check hearth documentation** - See `hearth-documentation-skill.md` for how to find the right docs version
 
+## Implementing a new module
+
+When adding a new type class module (like `fast-show-pretty`), follow these steps:
+
+### 1. Build configuration
+
+Add a new `projectMatrix` in `build.sbt`, add it to the `root` aggregate, and add it to the `al` command generator.
+
+### 2. File structure (3-layer pattern)
+
+Each type class follows a 3-layer pattern:
+
+```
+my-type-class/src/main/
+├── scala/hearth/kindlings/mytypeclass/
+│   ├── MyTypeClass.scala                          # Public API: trait + companion
+│   ├── debug/package.scala                        # LogDerivation import for debugging
+│   └── internal/
+│       ├── compiletime/
+│       │   └── MyTypeClassMacrosImpl.scala         # Core macro logic (shared)
+│       └── runtime/
+│           └── MyTypeClassUtils.scala              # Runtime helpers (no macros)
+├── scala-2/hearth/kindlings/mytypeclass/
+│   ├── MyTypeClassCompanionCompat.scala            # Scala 2 companion (macro defs)
+│   └── internal/compiletime/
+│       └── MyTypeClassMacros.scala                 # Scala 2 macro bridge
+└── scala-3/hearth/kindlings/mytypeclass/
+    ├── MyTypeClassCompanionCompat.scala            # Scala 3 companion (inline defs)
+    └── internal/compiletime/
+        └── MyTypeClassMacros.scala                 # Scala 3 macro bridge
+```
+
+### 3. Testing
+
+Tests extend `MacroSuite` (from `hearth-munit`) and use `group()` / nested `test()`:
+
+```scala
+import hearth.MacroSuite
+
+final class MyTypeClassSpec extends MacroSuite {
+  group("MyTypeClass") {
+    group("render") {
+      test("some test") { ... }
+    }
+  }
+}
+```
+
+Use `compileErrors("...").check(...)` for testing compile-time error messages.
+
+Scala 3-only tests go in `src/test/scala-3/`.
+
+## Debugging derivation
+
+To see how a macro derivation unfolds:
+
+1. **Import the debug logger** in the scope of the macro call:
+   ```scala
+   import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty
+   ```
+
+2. **Or set a scalac option** globally:
+   ```
+   -Xmacro-settings:fastShowPretty.logDerivation=true
+   ```
+
+This will print the derivation log at compile time, showing which rules matched or were skipped.
+
 ## Core architecture
 
 ### Context-based parameter passing
@@ -1002,6 +1070,17 @@ sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"
 ```
 
 **Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
+
+## Syncing from Hearth
+
+When syncing changes from hearth's `hearth-tests` demo modules back to kindlings:
+
+1. **Package adaptation**: `hearth.demo.allfeatures` -> `hearth.kindlings.<module>`
+2. **Scope modifier**: `private[allfeatures]` -> `private[<module>]`
+3. **FQN references**: Update fully-qualified names in `Types` object
+4. **Test imports**: `hearth.examples.ExampleValueClass` -> define locally in test file
+5. **Test base class**: Use `MacroSuite` (from `hearth-munit`)
+6. **Source set dirs**: hearth uses `scala-newest` / `scala-newest-2` / `scala-newest-3`; kindlings uses `scala` / `scala-2` / `scala-3`
 
 ## Workflow summary
 
