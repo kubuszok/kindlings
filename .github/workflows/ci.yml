@@ -51,6 +51,6 @@ jobs:
           apps: sbt
       - name: "Clean, compile, test${{matrix.platform == 'jvm' && ', generate coverage report' || ''}}"
         run: sbt ci-${{ matrix.platform }}-${{ matrix.scala }}
-      # - uses: codecov/codecov-action@v5
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
