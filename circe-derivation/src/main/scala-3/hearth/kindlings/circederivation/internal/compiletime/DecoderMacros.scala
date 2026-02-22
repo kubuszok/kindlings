@@ -2,7 +2,7 @@ package hearth.kindlings.circederivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala3
-import io.circe.{Decoder, DecodingFailure, HCursor}
+import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 import scala.quoted.*
 
 final private[circederivation] class DecoderMacros(q: Quotes) extends MacroCommonsScala3(using q), DecoderMacrosImpl
@@ -19,8 +19,8 @@ private[circederivation] object DecoderMacros {
     new DecoderMacros(q).deriveDecoderTypeClass[A](config)
 
   def deriveInlineDecodeImpl[A: Type](
-      cursor: Expr[HCursor],
+      json: Expr[Json],
       config: Expr[Configuration]
   )(using q: Quotes): Expr[Either[DecodingFailure, A]] =
-    new DecoderMacros(q).deriveInlineDecode[A](cursor, config)
+    new DecoderMacros(q).deriveInlineDecode[A](json, config)
 }

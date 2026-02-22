@@ -1017,6 +1017,21 @@ final class MyTypeClassScala3Spec extends MacroSuite {
 }
 ```
 
+### REQ-12: Suppress compiler warnings in generated code
+
+The macro-generated code must not produce compiler warnings (e.g., "is never used") at the
+expansion site. Users should never need `@nowarn` annotations to silence warnings from derived
+code.
+
+**How to implement:** After implementing all derivation logic, compile tests WITHOUT any
+`@nowarn` annotations. If warnings appear, fix them in the macro — either by adjusting
+the code generation pattern or by attaching `@nowarn` annotations to generated definitions.
+
+**Verification:**
+- All test files must compile without `@nowarn` annotations
+- Run `sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"` and
+  verify zero warnings from macro-expanded code
+
 ### Test file organization
 
 Tests go in the module's test directories following this structure:
@@ -1093,5 +1108,5 @@ When syncing changes from hearth's `hearth-tests` demo modules back to kindlings
 7. **Ignore the derivation macro** when summoning implicits
 8. **For decoder-style derivation**, use `primaryConstructor(fieldMap)` with `Expr_??` — avoid `construct` with dependent types
 9. **Avoid path-dependent types in `Expr.quote`** — use `LambdaBuilder` or runtime type witnesses instead
-10. **Validate against the implementation requirements checklist** (REQ-1 through REQ-11) — ensure every requirement is met before considering the implementation complete
+10. **Validate against the implementation requirements checklist** (REQ-1 through REQ-12) — ensure every requirement is met before considering the implementation complete
 11. **Test in your module** after MCP confirms compilation — use the test plan from REQ-11

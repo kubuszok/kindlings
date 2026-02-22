@@ -8,7 +8,7 @@ import hearth.std.*
 
 import hearth.kindlings.circederivation.{Configuration, KindlingsDecoder}
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
-import io.circe.{Decoder, DecodingFailure, HCursor}
+import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 
 trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
@@ -16,21 +16,25 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveInlineDecode[A: Type](
-      cursorExpr: Expr[HCursor],
+      jsonExpr: Expr[Json],
       configExpr: Expr[Configuration]
   ): Expr[Either[DecodingFailure, A]] = {
     implicit val EitherT: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+    implicit val JsonT: Type[Json] = DTypes.Json
     implicit val HCursorT: Type[HCursor] = DTypes.HCursor
     implicit val ConfigT: Type[Configuration] = DTypes.Configuration
     implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[DecodingFailure, A]]("KindlingsDecoder.decode") { fromCtx =>
-      ValDefs.createVal[HCursor](cursorExpr).use { cursorVal =>
+      ValDefs.createVal[Json](jsonExpr).use { jsonVal =>
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
           Expr.quote {
-            val _ = Expr.splice(cursorVal)
+            val _ = Expr.splice(jsonVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(DecoderCtx.from(cursorVal, configVal, derivedType = None)))
+            Expr.splice {
+              val cursorExpr: Expr[HCursor] = Expr.quote(Expr.splice(jsonVal).hcursor)
+              fromCtx(DecoderCtx.from(cursorExpr, configVal, derivedType = None))
+            }
           }
         }
       }
@@ -807,6 +811,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
     def KindlingsDecoder: Type.Ctor1[KindlingsDecoder] = Type.Ctor1.of[KindlingsDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation]
+    val Json: Type[Json] = Type.of[Json]
     val HCursor: Type[HCursor] = Type.of[HCursor]
     val DecodingFailure: Type[DecodingFailure] = Type.of[DecodingFailure]
     val Configuration: Type[Configuration] = Type.of[Configuration]

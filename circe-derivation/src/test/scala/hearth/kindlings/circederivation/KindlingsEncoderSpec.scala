@@ -20,7 +20,6 @@ sealed trait Animal
 case class Dog(name: String, breed: String) extends Animal
 case class Cat(name: String, indoor: Boolean) extends Animal
 
-@scala.annotation.nowarn("msg=is never used")
 final class KindlingsEncoderSpec extends MacroSuite {
 
   group("KindlingsEncoder") {

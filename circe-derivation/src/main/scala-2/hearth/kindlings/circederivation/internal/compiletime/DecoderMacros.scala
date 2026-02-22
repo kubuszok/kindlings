@@ -2,7 +2,7 @@ package hearth.kindlings.circederivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala2
-import io.circe.{Decoder, DecodingFailure, HCursor}
+import io.circe.{Decoder, DecodingFailure, Json}
 import scala.reflect.macros.blackbox
 
 final private[circederivation] class DecoderMacros(val c: blackbox.Context)
@@ -18,6 +18,6 @@ final private[circederivation] class DecoderMacros(val c: blackbox.Context)
   ): c.Expr[KindlingsDecoder[A]] = deriveDecoderTypeClass[A](config)
 
   def deriveInlineDecodeImpl[A: c.WeakTypeTag](
-      cursor: c.Expr[HCursor]
-  )(config: c.Expr[Configuration]): c.Expr[Either[DecodingFailure, A]] = deriveInlineDecode[A](cursor, config)
+      json: c.Expr[Json]
+  )(config: c.Expr[Configuration]): c.Expr[Either[DecodingFailure, A]] = deriveInlineDecode[A](json, config)
 }

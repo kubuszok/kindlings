@@ -9,7 +9,6 @@ enum Fruit {
   case Banana(length: Double)
 }
 
-@scala.annotation.nowarn("msg=is never used")
 final class CirceScala3Spec extends MacroSuite {
 
   group("Scala 3 enums") {
@@ -50,12 +49,12 @@ final class CirceScala3Spec extends MacroSuite {
 
       test("enum variant with fields (wrapper-style)") {
         val json = Json.obj("Banana" -> Json.obj("length" -> Json.fromDoubleOrNull(20.0)))
-        assertEquals(KindlingsDecoder.decode[Fruit](json.hcursor), Right(Fruit.Banana(20.0)))
+        assertEquals(KindlingsDecoder.decode[Fruit](json), Right(Fruit.Banana(20.0)))
       }
 
       test("second enum variant (wrapper-style)") {
         val json = Json.obj("Apple" -> Json.obj("weight" -> Json.fromDoubleOrNull(1.5)))
-        assertEquals(KindlingsDecoder.decode[Fruit](json.hcursor), Right(Fruit.Apple(1.5)))
+        assertEquals(KindlingsDecoder.decode[Fruit](json), Right(Fruit.Apple(1.5)))
       }
 
       test("enum with discriminator") {
@@ -64,14 +63,14 @@ final class CirceScala3Spec extends MacroSuite {
           "type" -> Json.fromString("Apple"),
           "weight" -> Json.fromDoubleOrNull(1.5)
         )
-        assertEquals(KindlingsDecoder.decode[Fruit](json.hcursor), Right(Fruit.Apple(1.5)))
+        assertEquals(KindlingsDecoder.decode[Fruit](json), Right(Fruit.Apple(1.5)))
       }
 
       test("enum with custom constructor name transform") {
         implicit val config: Configuration =
           Configuration(transformConstructorNames = _.toLowerCase)
         val json = Json.obj("banana" -> Json.obj("length" -> Json.fromDoubleOrNull(20.0)))
-        assertEquals(KindlingsDecoder.decode[Fruit](json.hcursor), Right(Fruit.Banana(20.0)))
+        assertEquals(KindlingsDecoder.decode[Fruit](json), Right(Fruit.Banana(20.0)))
       }
     }
   }
@@ -105,7 +104,7 @@ final class CirceScala3Spec extends MacroSuite {
           Configuration(transformConstructorNames = _.toLowerCase)
         val json = Json.obj("circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
         // If circe's auto-derivation were used, it would look for "Circle" not "circle"
-        assertEquals(KindlingsDecoder.decode[Shape](json.hcursor), Right(Circle(5.0): Shape))
+        assertEquals(KindlingsDecoder.decode[Shape](json), Right(Circle(5.0): Shape))
       }
     }
   }
