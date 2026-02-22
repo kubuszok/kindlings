@@ -48,8 +48,58 @@ final class KindlingsDecoderSpec extends MacroSuite {
         assertEquals(KindlingsDecoder.decode[SingleField](json.hcursor), Right(SingleField(42)))
       }
 
-      // Note: nested case class test requires recursive field derivation (TODO)
-      // For now, nested case classes work when an implicit Decoder is provided
+      test("nested case class with explicit inner decoder") {
+        // Derive Address decoder first (no implicit Decoder[Address] in scope here),
+        // then make it implicit in a nested scope for PersonWithAddress derivation.
+        val addressDec: Decoder[Address] = KindlingsDecoder.derived[Address]
+        val personDec: Decoder[PersonWithAddress] = {
+          implicit val ad: Decoder[Address] = addressDec
+          KindlingsDecoder.derived[PersonWithAddress]
+        }
+        val json = Json.obj(
+          "name" -> Json.fromString("Bob"),
+          "age" -> Json.fromInt(25),
+          "address" -> Json.obj(
+            "street" -> Json.fromString("123 Main St"),
+            "city" -> Json.fromString("Springfield")
+          )
+        )
+        assertEquals(
+          personDec.decodeJson(json),
+          Right(PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield")))
+        )
+      }
+    }
+
+    group("options") {
+
+      test("Some value") {
+        val json = Json.fromInt(42)
+        assertEquals(KindlingsDecoder.decode[Option[Int]](json.hcursor), Right(Some(42)))
+      }
+
+      test("None from null") {
+        val json = Json.Null
+        assertEquals(KindlingsDecoder.decode[Option[Int]](json.hcursor), Right(None))
+      }
+    }
+
+    group("collections") {
+
+      test("List of ints") {
+        val json = Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
+        assertEquals(KindlingsDecoder.decode[List[Int]](json.hcursor), Right(List(1, 2, 3)))
+      }
+
+      test("empty list") {
+        val json = Json.arr()
+        assertEquals(KindlingsDecoder.decode[List[Int]](json.hcursor), Right(List.empty[Int]))
+      }
+
+      test("Vector of strings") {
+        val json = Json.arr(Json.fromString("a"), Json.fromString("b"))
+        assertEquals(KindlingsDecoder.decode[Vector[String]](json.hcursor), Right(Vector("a", "b")))
+      }
     }
 
     group("value classes") {
@@ -114,6 +164,17 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("derived provides KindlingsDecoder") {
         val decoder: KindlingsDecoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
+      }
+    }
+
+    group("custom implicit priority") {
+
+      test("user-provided implicit Decoder works with derived") {
+        // Verifies that derived skips the self type during implicit search,
+        // preventing infinite recursion when assigned to an implicit val.
+        implicit val decoder: Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
         assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
       }

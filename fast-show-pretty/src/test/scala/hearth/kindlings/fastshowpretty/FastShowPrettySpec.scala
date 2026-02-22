@@ -264,6 +264,45 @@ final class FastShowPrettySpec extends MacroSuite {
         }
       }
 
+      group("options") {
+
+        test("Some(Int)") {
+          val result = FastShowPretty.render(Option(42), RenderConfig.Default)
+          assertEquals(result, "Some(42)")
+        }
+
+        test("None") {
+          val result = FastShowPretty.render(Option.empty[Int], RenderConfig.Default)
+          assertEquals(result, "None")
+        }
+
+        test("Some(case class)") {
+          val result = FastShowPretty.render(Option(Person("Alice", 30)), RenderConfig.Default)
+          assertEquals(
+            result,
+            """Some(Person(
+              |  name = "Alice",
+              |  age = 30
+              |))""".stripMargin
+          )
+        }
+
+        test("nested Some(Some(Int))") {
+          val result = FastShowPretty.render(Option(Option(42)), RenderConfig.Default)
+          assertEquals(result, "Some(Some(42))")
+        }
+
+        test("Some(None)") {
+          val result = FastShowPretty.render(Option(Option.empty[Int]), RenderConfig.Default)
+          assertEquals(result, "Some(None)")
+        }
+
+        test("None of nested Option") {
+          val result = FastShowPretty.render(Option.empty[Option[Int]], RenderConfig.Default)
+          assertEquals(result, "None")
+        }
+      }
+
       group("custom implicit instances") {
 
         test("uses custom implicit instance") {
@@ -412,11 +451,13 @@ final class FastShowPrettySpec extends MacroSuite {
           "    - The rule use implicit when available was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType does not have an implicit FastShowPretty instance: No implicit value of type hearth.kindlings.fastshowpretty.FastShowPretty[hearth.kindlings.fastshowpretty.NotAHandledType] found",
           "    - The rule use built-in support when handling primitive types was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a built-in type",
           "    - The rule handle as value type when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a value type",
+          "    - The rule handle as Option when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not an Option",
           "    - The rule handle as map when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a map",
           "    - The rule handle as collection when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a collection",
           "    - The rule handle as named tuple when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a named tuple",
           "    - The rule handle as case class when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a case class",
-          "    - The rule handle as enum when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be an enum"
+          "    - The rule handle as enum when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be an enum",
+          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
         )
       }
     }

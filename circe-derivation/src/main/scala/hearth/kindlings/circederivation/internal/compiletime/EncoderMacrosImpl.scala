@@ -24,7 +24,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal)))
+            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None)))
           }
         }
       }
@@ -37,6 +37,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
     implicit val KindlingsEncoderA: Type[KindlingsEncoder[A]] = Types.KindlingsEncoder[A]
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
+    val selfType: Option[??] = Some(Type[A].as_??)
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoder[A]]("KindlingsEncoder.derived") { fromCtx =>
       ValDefs.createVal[Configuration](configExpr).use { configVal =>
@@ -46,7 +47,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
             def apply(a: A): Json = {
               val _ = a
               Expr.splice {
-                fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg)))
+                fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
               }
             }
           }
@@ -92,14 +93,18 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
         .mkString("\n")
+      val hint =
+        "Enable debug logging with: import hearth.kindlings.circederivation.debug.logDerivationForKindlingsEncoder or scalac option -Xmacro-settings:circeDerivation.logDerivation=true"
       if (errorLogs.nonEmpty)
         s"""Macro derivation failed with the following errors:
            |$errorsRendered
            |and the following logs:
-           |$errorLogs""".stripMargin
+           |$errorLogs
+           |$hint""".stripMargin
       else
         s"""Macro derivation failed with the following errors:
-           |$errorsRendered""".stripMargin
+           |$errorsRendered
+           |$hint""".stripMargin
     }
 
   def shouldWeLogEncoderDerivation: Boolean = {
@@ -121,7 +126,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
       tpe: Type[A],
       value: Expr[A],
       config: Expr[Configuration],
-      cache: MLocal[ValDefsCache]
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -178,12 +184,14 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def from[A: Type](
         value: Expr[A],
-        config: Expr[Configuration]
+        config: Expr[Configuration],
+        derivedType: Option[??]
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       config = config,
-      cache = ValDefsCache.mlocal
+      cache = ValDefsCache.mlocal,
+      derivedType = derivedType
     )
   }
 
@@ -275,10 +283,18 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
       Log.info(s"Attempting to use implicit Encoder for ${Type[A].prettyPrint}") >> {
-        Types.Encoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-          case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
-          case Left(reason)        => yieldUnsupported[A](reason)
-        }
+        // Skip implicit search for the self type being derived to prevent self-referential loops
+        // (e.g., `implicit val enc: Encoder[X] = KindlingsEncoder.derived[X]` would otherwise
+        // find `enc` itself during macro expansion, generating code that calls itself infinitely).
+        if (ectx.derivedType.exists(_.Underlying =:= Type[A]))
+          MIO.pure(
+            Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
+          )
+        else
+          Types.Encoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
+            case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
+            case Left(reason)        => yieldUnsupported[A](reason)
+          }
       }
 
     private def cacheAndUse[A: EncoderCtx](

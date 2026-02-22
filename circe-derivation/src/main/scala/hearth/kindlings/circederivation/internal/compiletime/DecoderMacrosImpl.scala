@@ -30,7 +30,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           Expr.quote {
             val _ = Expr.splice(cursorVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(DecoderCtx.from(cursorVal, configVal)))
+            Expr.splice(fromCtx(DecoderCtx.from(cursorVal, configVal, derivedType = None)))
           }
         }
       }
@@ -45,6 +45,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
     implicit val HCursorT: Type[HCursor] = DTypes.HCursor
     implicit val ConfigT: Type[Configuration] = DTypes.Configuration
     implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
+    val selfType: Option[??] = Some(Type[A].as_??)
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, KindlingsDecoder[A]]("KindlingsDecoder.derived") { fromCtx =>
       ValDefs.createVal[Configuration](configExpr).use { configVal =>
@@ -54,7 +55,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
             def apply(c: HCursor): Decoder.Result[A] = {
               val _ = c
               Expr.splice {
-                fromCtx(DecoderCtx.from(Expr.quote(c), Expr.quote(cfg)))
+                fromCtx(DecoderCtx.from(Expr.quote(c), Expr.quote(cfg), derivedType = selfType))
               }
             }
           }
@@ -101,14 +102,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
         .mkString("\n")
+      val hint =
+        "Enable debug logging with: import hearth.kindlings.circederivation.debug.logDerivationForKindlingsDecoder or scalac option -Xmacro-settings:circeDerivation.logDerivation=true"
       if (errorLogs.nonEmpty)
         s"""Macro derivation failed with the following errors:
            |$errorsRendered
            |and the following logs:
-           |$errorLogs""".stripMargin
+           |$errorLogs
+           |$hint""".stripMargin
       else
         s"""Macro derivation failed with the following errors:
-           |$errorsRendered""".stripMargin
+           |$errorsRendered
+           |$hint""".stripMargin
     }
 
   def shouldWeLogDecoderDerivation: Boolean = {
@@ -130,7 +135,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
       tpe: Type[A],
       cursor: Expr[HCursor],
       config: Expr[Configuration],
-      cache: MLocal[ValDefsCache]
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
   ) {
 
     def nest[B: Type](newCursor: Expr[HCursor]): DecoderCtx[B] = copy[B](
@@ -189,12 +195,14 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def from[A: Type](
         cursor: Expr[HCursor],
-        config: Expr[Configuration]
+        config: Expr[Configuration],
+        derivedType: Option[??]
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       cursor = cursor,
       config = config,
-      cache = ValDefsCache.mlocal
+      cache = ValDefsCache.mlocal,
+      derivedType = derivedType
     )
   }
 
@@ -285,10 +293,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to use implicit Decoder for ${Type[A].prettyPrint}") >> {
-        DTypes.Decoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-          case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
-          case Left(reason)        => yieldUnsupported[A](reason)
-        }
+        // Skip implicit search for the self type being derived to prevent self-referential loops
+        // (e.g., `implicit val dec: Decoder[X] = KindlingsDecoder.derived[X]` would otherwise
+        // find `dec` itself during macro expansion, generating code that calls itself infinitely).
+        if (dctx.derivedType.exists(_.Underlying =:= Type[A]))
+          MIO.pure(
+            Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
+          )
+        else
+          DTypes.Decoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
+            case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
+            case Left(reason)        => yieldUnsupported[A](reason)
+          }
       }
 
     private def cacheAndUse[A: DecoderCtx](

@@ -25,9 +25,10 @@ final case class DerivationCtx[A](
     tpe: Type[A],
     sb: Expr[StringBuilder],
     value: Expr[A],
-    cache: MLocal[ValDefsCache],
     config: Expr[RenderConfig],
-    level: Expr[Int]
+    level: Expr[Int],
+    cache: MLocal[ValDefsCache],
+    derivedType: Option[??]    // None for inline, Some for derived (see "Self-type skip" below)
 ) {
 
   def nest[B: Type](newValue: Expr[B]): DerivationCtx[B] = DerivationCtx(
@@ -290,6 +291,82 @@ object UseImplicitWhenAvailableRule extends DerivationRule("use implicit when av
 - Use `Type[TC[A]].summonExprIgnoring(symbols*)` to summon while skipping specific methods
 - This prevents `derived` from summoning itself, allowing the rule-based logic to handle derivation instead
 
+### Self-type skip in `derived` entrypoint (Chimney-style pattern)
+
+When the user writes `implicit val tc: MyTypeClass[X] = MyTypeClass.derived[X]`, the macro expansion of `derived[X]` might find `tc` itself during implicit search (via `UseImplicitWhenAvailableRule`), generating code that calls itself infinitely.
+
+The `ignoredImplicits` mechanism (REQ-3b above) ignores the `derived` **method** itself, but cannot prevent finding user-defined `implicit val`s that happen to be the value being defined.
+
+**Solution:** Track the type being derived in the context and skip implicit search when the current type matches the derived type.
+
+```scala
+final case class DerivationCtx[A](
+    tpe: Type[A],
+    // ... other fields ...
+    cache: MLocal[ValDefsCache],
+    derivedType: Option[??]   // None for inline, Some for derived
+)
+```
+
+In the **`derived`** entrypoint, set `derivedType = Some(Type[A].as_??)`:
+
+```scala
+def deriveTypeClass[A: Type]: Expr[MyTypeClass[A]] = {
+  val selfType: Option[??] = Some(Type[A].as_??)
+  // ... use selfType when creating the context
+  fromCtx(DerivationCtx.from(..., derivedType = selfType))
+}
+```
+
+In the **inline** entrypoint (e.g., `encode`, `decode`, `render`), set `derivedType = None` — we're not creating an implicit, so existing user-provided implicits should be found normally.
+
+In the implicit rule, check before searching:
+
+```scala
+object UseImplicitWhenAvailableRule extends DerivationRule("use implicit when available") {
+  def apply[A: DerivationCtx]: MIO[Rule.Applicability[...]] =
+    Log.info(s"Attempting to use implicit for ${Type[A].prettyPrint}") >> {
+      // Skip self type to prevent infinite recursion
+      if (ctx.derivedType.exists(_.Underlying =:= Type[A]))
+        MIO.pure(Rule.yielded(s"Skipping implicit search for self type ${Type[A].prettyPrint}"))
+      else
+        Type[TC[A]].summonExprIgnoring(ignoredImplicits*).toEither match {
+          case Right(instanceExpr) => ...
+          case Left(reason)        => ...
+        }
+    }
+}
+```
+
+**Scala 2 cross-compilation pitfall:** The expression `Some(Type[A].as_??)` must be extracted to a local `val` **before** the `Expr.quote` block. On Scala 2, expressions inside `Expr.quote` (even inside `Expr.splice`) have their types captured by reification. If `Option[??]` appears inside the quote body, the reified tree includes path-dependent type references (e.g., `FastShowPrettyMacrosImpl.??`) that cannot be resolved at the expansion site.
+
+```scala
+// CORRECT — selfType computed outside Expr.quote:
+val selfType: Option[??] = Some(Type[A].as_??)
+Expr.quote {
+  new MyTypeClass[A] {
+    def apply(...) = {
+      Expr.splice {
+        fromCtx(DerivationCtx.from(..., derivedType = selfType))
+      }
+    }
+  }
+}
+
+// BROKEN on Scala 2 — Some(Type[A].as_??) inside quote body:
+Expr.quote {
+  new MyTypeClass[A] {
+    def apply(...) = {
+      Expr.splice {
+        fromCtx(DerivationCtx.from(..., derivedType = Some(Type[A].as_??)))
+      }
+    }
+  }
+}
+```
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` (lines 43-70), `EncoderMacrosImpl.scala` (lines 35-57), `DecoderMacrosImpl.scala` (lines 41-64).
+
 ### Handling built-in types
 
 Check types using `<:<` (subtype check) and generate appropriate code.
@@ -525,6 +602,30 @@ This works on Scala 3 but NOT on Scala 2. The `caseFieldValuesAt` pattern in Fas
 1. Use `LambdaBuilder.of1[Field]` which handles the type parameter correctly
 2. Use a runtime type-witness utility (`unsafeCast`) where a value-level argument provides type inference
 3. Use `primaryConstructor(Map[String, Expr_??])` instead of `construct` with dependent types
+
+### Macro-internal types inside `Expr.quote` leak on Scala 2
+
+On Scala 2, expressions inside `Expr.quote` have their types captured by reification — even inside `Expr.splice` blocks. If an expression has a type involving macro-internal type aliases (like `??`, `Expr_??`, `UntypedType`), the reified tree includes path-dependent references (e.g., `MyMacroImpl.??`) that fail at the expansion site.
+
+```scala
+// BROKEN — Some(Type[A].as_??) has type Option[MyMacroImpl.this.??]
+Expr.quote {
+  Expr.splice {
+    val opt: Option[??] = Some(Type[A].as_??)  // leaks into reified tree
+    doSomethingWith(opt)
+  }
+}
+
+// CORRECT — compute outside Expr.quote, reference by variable name
+val opt: Option[??] = Some(Type[A].as_??)
+Expr.quote {
+  Expr.splice {
+    doSomethingWith(opt)  // only the variable name appears in the reified tree
+  }
+}
+```
+
+**Rule of thumb:** Extract any expression involving macro-internal types to a `val` before the `Expr.quote` block.
 
 ### `Array` operations require `ClassTag` in macros
 

@@ -140,6 +140,23 @@ Expr.quote { someExpr.asInstanceOf[Field] }  // "not found: value param"
 3. **`LambdaBuilder`** — use `LambdaBuilder.of1[Field]("name").traverse { expr => ... }` which
    properly handles the type parameter inside the builder closure.
 
+### Macro-internal types inside `Expr.quote` leak on Scala 2
+
+**Problem:** On Scala 2, expressions inside `Expr.quote` have their types captured by reification —
+even inside `Expr.splice` blocks. If an expression involves macro-internal type aliases (like `??`,
+`Expr_??`, `UntypedType`), the reified tree includes path-dependent references that fail at the
+expansion site.
+
+**Solution:** Extract expressions with macro-internal types to a `val` **before** the `Expr.quote` block:
+```scala
+// CORRECT — computed outside Expr.quote
+val selfType: Option[??] = Some(Type[A].as_??)
+Expr.quote { Expr.splice { doSomethingWith(selfType) } }
+
+// BROKEN — type leaks into reified tree
+Expr.quote { Expr.splice { doSomethingWith(Some(Type[A].as_??)) } }
+```
+
 ### `Array` operations require `ClassTag` in macros
 
 **Problem:** `Array.empty[T]` and `+:` inside `Expr.quote` require `ClassTag[T]`, which may not

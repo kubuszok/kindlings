@@ -29,7 +29,9 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
                 val _ = Expr.splice(valueVal)
                 val _ = Expr.splice(configVal)
                 val _ = Expr.splice(levelVal)
-                Expr.splice(fromCtx(DerivationCtx.from(sbVal, valueVal, configVal, levelVal))).toString
+                Expr
+                  .splice(fromCtx(DerivationCtx.from(sbVal, valueVal, configVal, levelVal, derivedType = None)))
+                  .toString
               }
             }
           }
@@ -41,6 +43,7 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
   def deriveTypeClass[A: Type]: Expr[FastShowPretty[A]] = {
     implicit val FastShowPretty: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
     implicit val RenderConfigType: Type[RenderConfig] = Types.RenderConfig
+    val selfType: Option[??] = Some(Type[A].as_??)
 
     deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]]("FastShowPretty.derived") { fromCtx =>
       Expr.quote {
@@ -57,7 +60,8 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
                   Expr.quote(sb),
                   Expr.quote(value),
                   Expr.quote(config),
-                  Expr.quote(level)
+                  Expr.quote(level),
+                  derivedType = selfType
                 )
               )
             }
@@ -108,14 +112,18 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
         .mkString("\n")
+      val hint =
+        "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
       if (errorLogs.nonEmpty)
         s"""Macro derivation failed with the following errors:
            |$errorsRendered
            |and the following logs:
-           |$errorLogs""".stripMargin
+           |$errorLogs
+           |$hint""".stripMargin
       else
         s"""Macro derivation failed with the following errors:
-           |$errorsRendered""".stripMargin
+           |$errorsRendered
+           |$hint""".stripMargin
     }
 
   /** Enables logging if we either:
@@ -145,7 +153,8 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
       value: Expr[A],
       config: Expr[RenderConfig],
       level: Expr[Int],
-      cache: MLocal[ValDefsCache]
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
   ) {
 
     def nest[B: Type](newValue: Expr[B]): DerivationCtx[B] = copy[B](
@@ -217,14 +226,16 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
         sb: Expr[StringBuilder],
         value: Expr[A],
         config: Expr[RenderConfig],
-        level: Expr[Int]
+        level: Expr[Int],
+        derivedType: Option[??]
     ): DerivationCtx[A] = DerivationCtx(
       tpe = Type[A],
       sb = sb,
       value = value,
       config = config,
       level = level,
-      cache = ValDefsCache.mlocal
+      cache = ValDefsCache.mlocal,
+      derivedType = derivedType
     )
   }
 
@@ -269,6 +280,7 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
           UseImplicitWhenAvailableRule,
           UseBuiltInSupportRule,
           HandleAsValueTypeRule,
+          HandleAsOptionRule,
           HandleAsMapRule,
           HandleAsCollectionRule,
           HandleAsNamedTupleRule,
@@ -337,10 +349,18 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to use implicit support for ${Type[A].prettyPrint}") >> {
-        Types.FastShowPretty[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-          case Right(instanceExpr) => cacheImplicitAndUseIt[A](instanceExpr)
-          case Left(reason)        => yieldUnsupportedType[A](reason)
-        }
+        // Skip implicit search for the self type being derived to prevent self-referential loops
+        // (e.g., `implicit val fsp: FastShowPretty[X] = FastShowPretty.derived[X]` would otherwise
+        // find `fsp` itself during macro expansion, generating code that calls itself infinitely).
+        if (ctx.derivedType.exists(_.Underlying =:= Type[A]))
+          MIO.pure(
+            Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
+          )
+        else
+          Types.FastShowPretty[A].summonExprIgnoring(ignoredImplicits*).toEither match {
+            case Right(instanceExpr) => cacheImplicitAndUseIt[A](instanceExpr)
+            case Left(reason)        => yieldUnsupportedType[A](reason)
+          }
       }
 
     private def cacheImplicitAndUseIt[A: DerivationCtx](
@@ -429,6 +449,40 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a value type"))
+  }
+
+  object HandleAsOptionRule extends DerivationRule("handle as Option when possible") {
+    implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
+
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as Option") >> {
+        Type[A] match {
+          case IsOption(isOption) =>
+            import isOption.Underlying as Inner
+            LambdaBuilder
+              .of1[Inner]("inner")
+              .traverse { innerExpr =>
+                deriveResultRecursively[Inner](using ctx.nest(innerExpr))
+              }
+              .map { builder =>
+                val lambda = builder.build[StringBuilder]
+                Rule.matched(
+                  isOption.value.fold[StringBuilder](ctx.value)(
+                    onEmpty = Expr.quote(Expr.splice(ctx.sb).append("None")),
+                    onSome = innerExpr =>
+                      Expr.quote {
+                        val _ = Expr.splice(ctx.sb).append("Some(")
+                        val _ = Expr.splice(lambda).apply(Expr.splice(innerExpr))
+                        Expr.splice(ctx.sb).append(")")
+                      }
+                  )
+                )
+              }
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
+        }
+      }
   }
 
   object HandleAsMapRule extends DerivationRule("handle as map when possible") {
