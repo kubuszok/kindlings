@@ -540,26 +540,364 @@ This works on Scala 3 but NOT on Scala 2. The `caseFieldValuesAt` pattern in Fas
 
 A generic `def helper[A](value: A)` that calls `KindlingsEncoder.encode(value)` internally won't work — the macro sees `A` as abstract, not the concrete type. Always call macro methods directly with concrete types at each call site.
 
-## Testing
+## Implementation requirements checklist
 
-When you create a type class derivation in a **new module**:
+Every type class derivation must satisfy all requirements below. Use this checklist when implementing a new derivation and when verifying that an existing one is complete. Each item includes what to implement, where to look for a reference, and how to verify it.
 
-1. Create tests in that module's test directory
-2. Test built-in types, collections, case classes, and enums
-3. Test recursive types and error cases
+### REQ-1: Dual entry points — type class instance AND inlined body
 
-Use `fast-show-pretty` tests as a reference for test structure, but write tests in your own module.
+The macro must provide **two** entry points:
 
-**Only run tests after MCP shows no compilation issues.**
+1. **`deriveTypeClass[A]`** — returns `Expr[MyTypeClass[A]]`, creating a new instance of the type class
+2. **`deriveInline[A]`** — returns the result type directly (e.g., `Expr[String]`, `Expr[Either[Error, A]]`), embedding the derivation logic inline without allocating a type class instance
 
-This project uses **sbt-projectmatrix**. Scala version is determined by project suffix, not `++` commands.
+Both entry points should delegate to the same core derivation logic (e.g., `deriveFromCtxAndAdaptForEntrypoint`). The difference is only in how the result is wrapped.
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 16-68 (`deriveInline` and `deriveTypeClass`), `DecoderMacrosImpl.scala` lines 17-64.
+
+**Verification:**
+- Confirm both `deriveTypeClass` and `deriveInline` methods exist in the macro impl
+- Confirm the Scala 2 and Scala 3 bridge files expose both entry points
+- Confirm the public companion object has both `derived` (type class) and an inline method (e.g., `render`, `decode`)
+- Write a test that calls the inline method directly and another that uses the derived type class instance
+
+### REQ-2: Recursive derivation with caching
+
+The macro must handle nested structures **recursively**, inlining the derivation logic rather than allocating intermediate type class instances where possible.
+
+#### REQ-2a: Case class and enum derivation cached as defs
+
+Derived logic for case classes and enums must be **cached as local `def`s** (not inlined at every use site). This:
+- Keeps generated code compact (avoids exceeding JVM method size limits)
+- Improves compilation speed (derive once, call many times)
+- Improves runtime performance (no redundant allocations)
+- Handles recursive data types automatically (the def can reference itself before it is fully derived)
+
+**How to implement:**
+1. In the context class, provide `getHelper[B]` and `setHelper[B]` methods that wrap `cache.getNAry` / `cache.buildCachedWith` with `ValDefBuilder.ofDefN[...]`
+2. At the start of case class / enum rules, call `ctx.setHelper[A]` to forward-declare the def, then derive the body, then return the cached call
+3. Use `MIO.scoped { runSafe => ... }` inside the builder to convert `MIO[Expr[...]]` to `Expr[...]`
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 172-209 (`getHelper`/`setHelper`), lines 663-670 (case class rule calling `setHelper`), lines 762-770 (enum rule calling `setHelper`).
+
+**Verification:**
+- Define a recursive data type (e.g., `case class Tree(children: List[Tree])`) and verify it compiles and works at runtime
+- Verify the generated code does not grow exponentially with nesting depth — check that derivation of a deeply nested type completes quickly
+- Write a test with a recursive ADT that would stack-overflow or fail compilation without caching
+
+### REQ-3: Implicit resolution
+
+#### REQ-3a: Always prefer user-provided implicits
+
+Before deriving from scratch, check if the user has provided an implicit instance of the type class for the current type. If one exists, use it.
+
+**How to implement:** The `UseImplicitWhenAvailableRule` must appear in the rule chain **before** built-in, case class, and enum rules (but after the cache rule).
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 330-370 (`UseImplicitWhenAvailableRule`).
+
+**Verification:**
+- Define a type with a manually-provided implicit instance
+- Verify the macro uses the manual instance rather than deriving one
+- Test that nested types also pick up manual instances for their fields
+
+#### REQ-3b: Ignore self-summoning implicits
+
+When looking for implicits, **exclude** the method(s) that trigger this macro. Otherwise the macro would summon itself, causing infinite recursion.
+
+**How to implement:** Collect the method symbols to ignore (e.g., the `derived` method on the companion object) and pass them to `Type[TC[A]].summonExprIgnoring(ignoredImplicits*)`.
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 334-336 (`ignoredImplicits`), line 340 (`summonExprIgnoring`).
+
+**Verification:**
+- Verify the macro does not loop infinitely — if `derived` were not ignored, calling `MyTypeClass.derived[SomeCaseClass]` would recursively try to summon `MyTypeClass[SomeCaseClass]`, hitting `derived` again
+- A basic compilation test of any case class already validates this; if it compiles, self-summoning is properly ignored
+
+#### REQ-3c: Subtype derivation — look for parent type implicits
+
+When implementing a type class that is a **subtype** of an existing type class (e.g., `KindlingsDecoder <: circe.Decoder`):
+
+1. **Summon implicits of the parent type** (e.g., look for `Decoder[A]`), not just the subtype (`KindlingsDecoder[A]`)
+2. **Ignore automatic derivation methods from the parent** — e.g., `Decoder.derived` should be in `ignoredImplicits` alongside your own `KindlingsDecoder.derived`
+3. **Ignore companion-provided built-in instances from the parent** — if the parent type class provides instances for primitives via its companion object (e.g., `Decoder.decodeInt`), and your macro handles those primitives via a built-in rule, add those companion methods to `ignoredImplicits` as well to avoid summoning them when you can handle the type directly
+
+**Reference:** `DecoderMacrosImpl.scala` lines 276-284 — ignores both `KindlingsDecoder.derived` and `Decoder.derived`.
+
+**Verification:**
+- Test that a user-provided `Decoder[MyType]` (parent type) is picked up by the macro
+- Test that the macro does not summon `Decoder.derived` for types it should derive itself
+- If ignoring parent companion built-ins: test that the macro handles primitives without summoning parent companion instances
+
+#### REQ-3d: Cache resolved implicits as lazy vals
+
+Every successfully resolved implicit must be **cached as a `lazy val`**. Do not summon or allocate the same implicit multiple times in the generated code.
+
+**How to implement:** When `summonExprIgnoring` succeeds, immediately store the result via `ctx.cache.buildCachedWith("instance", ValDefBuilder.ofLazy[TC[A]]("instance"))`, then use the cached reference everywhere.
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 342-344 — after summoning, the implicit is stored in cache and then `UseCachedDefWhenAvailableRule` retrieves it.
+
+**Verification:**
+- Test a type that uses the same nested type in multiple fields (e.g., `case class Pair(a: String, b: String)`) — verify compilation succeeds and the implicit is only resolved once
+- Inspect derivation logs (see REQ-8) to confirm caching messages appear
+
+### REQ-4: Handle built-in/primitive types without allocation
+
+Built-in types (Boolean, Byte, Short, Int, Long, Float, Double, Char, String, and any others appropriate to the type class) must be handled **directly** — either by generating an expression inline or by delegating to a non-allocating runtime utility. Do not create a type class instance for these.
+
+**How to implement:**
+1. Create a `UseBuiltInSupportRule` that checks `Type[A] <:< Type[X]` for each supported type
+2. For each match, generate an expression that calls a runtime utility method or produces the result inline
+3. Runtime utilities go in `internal/runtime/MyTypeClassUtils.scala`
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 379-514 (`UseBuiltInSupportRule`), `FastShowPrettyUtils.scala` for runtime helpers.
+
+**Verification:**
+- Write tests that exercise each built-in type individually
+- Verify the built-in rule fires (check derivation logs) rather than falling through to implicit resolution
+
+### REQ-5: Handle value types via std extensions
+
+If the type class should support value types (classes extending `AnyVal`), handle them using hearth's `IsValueType` std extension.
+
+**How to implement:**
+1. Create a `HandleAsValueTypeRule` that pattern-matches `Type[A]` against `IsValueType`
+2. Unwrap the value type via `isValueType.unwrap(ctx.value)` to get the underlying value
+3. Recurse on the underlying type
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 516-546 (`HandleAsValueTypeRule`).
+
+**Verification:**
+- Define a value class (e.g., `case class UserId(value: Int) extends AnyVal`)
+- Write a test that derives and uses the type class for it
+- Verify it works on both Scala 2.13 and Scala 3
+
+### REQ-6: Handle optional types via std extensions
+
+If the type class should support `Option` and similar optional types, handle them using hearth's `IsOption` std extension.
+
+**How to implement:**
+1. Create a `HandleAsOptionRule` (or incorporate into built-in support) that pattern-matches against `IsOption`
+2. Generate code that checks for `None`/`Some` and recurses on the inner type
+
+**Reference:** Check `FastShowPrettyMacrosImpl.scala` for how optional-like types are handled. Use `IsOption` from hearth's std extensions.
+
+**Verification:**
+- Write tests for `Option[A]` where `A` is a primitive and where `A` is a case class
+- Test `None` and `Some(...)` cases
+- Test nested optionals (`Option[Option[Int]]`)
+
+### REQ-7: Handle collection types via std extensions
+
+If the type class should support collections and maps, handle them using hearth's `IsCollection` and `IsMap` std extensions.
+
+**How to implement:**
+1. Create `HandleAsCollectionRule` that pattern-matches `Type[A]` against `IsCollection`
+2. Create `HandleAsMapRule` that pattern-matches against `IsMap`
+3. Cache the item/key/value derivation as a def (just like case classes) to avoid code duplication when the collection has many elements
+4. Use `LambdaBuilder` for generating iteration callbacks
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 548-662 (`HandleAsMapRule`, `HandleAsCollectionRule`).
+
+**Verification:**
+- Test `List[A]`, `Vector[A]`, `Set[A]` for collections
+- Test `Map[K, V]` for maps
+- Test nested collections (`List[List[Int]]`)
+- Test collections of case classes
+
+### REQ-8: Log all derivation steps in MIO
+
+Every rule attempt, match, failure, cache hit, cache miss, and recursive descent must be logged via `Log.info(...)` or `Log.namedScope(...)`. This is critical for debugging macro expansion issues.
+
+**How to implement:**
+1. Wrap each `deriveResultRecursively` call in `Log.namedScope(s"Deriving for type ${Type[A].prettyPrint}")`
+2. At the start of each rule, log that the rule is being attempted
+3. On rule match, log what was matched
+4. On rule yield, log the reason
+5. On cache hit/miss, log accordingly
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` — every rule object starts with `Log.info(...)` and logs on match/yield.
+
+**Verification:** Logging correctness cannot be tested by unit tests directly — it is verified by manual inspection during development. However, the logging infrastructure (the `debug` package and scalac option check) should be implemented and can be tested for existence.
+
+### REQ-9: Configurable logging
+
+Provide the user with **two** ways to enable derivation logging:
+
+#### REQ-9a: Import-based logging
+
+Create a `debug/package.scala` in the module that defines an implicit value. When the user imports it in the scope of the macro call, logging is enabled for that scope.
+
+```scala
+package hearth.kindlings.mymodule
+
+package object debug {
+  implicit val logDerivationForMyTypeClass: hearth.LogDerivation = hearth.LogDerivation.Enabled
+}
+```
+
+#### REQ-9b: Scalac option logging
+
+Check for a scalac macro setting at macro expansion time:
+
+```
+-Xmacro-settings:myModule.logDerivation=true
+```
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 121-136 (how both mechanisms are checked).
+
+**Verification:** Logging configuration cannot be tested by unit tests. Verify by confirming the `debug/package.scala` file exists and the scalac option check is present in the macro bridge code.
+
+### REQ-10: Error aggregation and reporting
+
+When derivation fails, **all** rule failure reasons must be collected and reported together in a single error message. Do not fail on the first error — try all rules and aggregate.
+
+The error message must include:
+1. The type that failed to derive
+2. Why each rule was not applicable
+3. A hint telling the user how to enable debug logging (both the import and the scalac option)
+
+**How to implement:**
+1. The `Rules(...)` combinator already collects `Left(reasons)` from all rules
+2. Format the reasons into a readable error message
+3. Append a line like: `"Enable debug logging with: import hearth.kindlings.mymodule.debug.logDerivationForMyTypeClass or -Xmacro-settings:myModule.logDerivation=true"`
+
+**Reference:** `FastShowPrettyMacrosImpl.scala` lines 77-119 (`DerivationError` and error formatting).
+
+**Verification:**
+- Write a test using `compileErrors("MyTypeClass.derived[UnsupportedType]").check(...)` to verify that:
+  - The error message is produced (not a crash or infinite loop)
+  - The error mentions the type that failed
+  - The error includes the debug logging hint
+- Test with multiple unsupported nested types to ensure all errors are aggregated
+
+### REQ-11: Comprehensive test coverage
+
+Every requirement above (except logging, REQ-8/REQ-9) must be covered by unit tests. Use the following test plan as a minimum:
+
+| Test category | What to test | Validates |
+|---|---|---|
+| **Built-in types** | Boolean, Byte, Short, Int, Long, Float, Double, Char, String | REQ-4 |
+| **Value types** | `case class Wrapper(value: Int) extends AnyVal` | REQ-5 |
+| **Optionals** | `Option[Int]`, `Option[CaseClass]`, `None`, `Some`, nested | REQ-6 |
+| **Collections** | `List[Int]`, `Vector[String]`, `Set[CaseClass]`, nested | REQ-7 |
+| **Maps** | `Map[String, Int]`, `Map[String, CaseClass]` | REQ-7 |
+| **Case classes** | Zero-field, single-field, multi-field, nested | REQ-2 |
+| **Enums / sealed traits** | With case objects, case classes, nested | REQ-2 |
+| **Recursive types** | `case class Tree(children: List[Tree])` — must work without special user-side tricks | REQ-2a |
+| **User-provided implicits** | Manual instance overrides derived one | REQ-3a |
+| **Inline entry point** | Call the inline method directly | REQ-1 |
+| **Type class entry point** | Use `derived` or summon the type class | REQ-1 |
+| **Error messages** | `compileErrors(...)` on unsupported types | REQ-10 |
+| **Subtype implicits** | (If applicable) parent type implicit is picked up | REQ-3c |
+| **Parent auto-derivation ignored** | (If applicable) parent's automatic derivation does not interfere — see REQ-11b | REQ-3c |
+| **Scala 3-only types** | Named tuples, Scala 3 enums — in `src/test/scala-3/` | REQ-11c |
+
+#### REQ-11a: Recursive types must work without additional tricks
+
+Recursive data types must compile and work correctly **without** the user needing to do anything special (no manual forward-declarations, no lazy val workarounds, no special imports). The caching-as-defs strategy (REQ-2a) should handle this transparently.
+
+**Test:**
+```scala
+// This must just work — no lazy val, no manual instance, no tricks
+case class Tree(value: Int, children: List[Tree])
+test("recursive data type works transparently") {
+  val tree = Tree(1, List(Tree(2, Nil), Tree(3, List(Tree(4, Nil)))))
+  val result = MyTypeClass.someMethod(tree)
+  assertEquals(result, /* expected */)
+}
+```
+
+**Verification:** If the test compiles and passes, recursive types are handled. If it fails with a stack overflow or compilation error, the caching strategy is broken.
+
+#### REQ-11b: Parent automatic derivation is ignored (subtype type classes only)
+
+When the type class is a subtype of an existing type class that has its own automatic derivation (e.g., `KindlingsDecoder <: circe.Decoder` where `Decoder` has `Decoder.derived`), write tests proving that the parent's automatic derivation does **not** interfere with ours.
+
+**Why this matters:** If the parent's `derived` is not ignored during implicit summoning, the macro might pick up a parent-derived instance instead of doing its own optimized derivation. This would defeat the purpose of the custom macro (no inlining, no caching, potentially different behavior).
+
+**How to test:**
+1. Derive a type that both our macro and the parent's auto-derivation can handle
+2. Verify the result is produced by **our** derivation (e.g., check for our specific behavior, configuration support, or optimization characteristics)
+3. If the parent library provides auto-derivation via different mechanisms per Scala version, test each Scala version separately using Scala-version-specific test source directories (`src/test/scala-2/` and `src/test/scala-3/`)
+
+**Verification:** The test should confirm that our macro's behavior (e.g., configuration transforms, inlined rendering, custom error formatting) is present in the output — not the parent's default behavior.
+
+#### REQ-11c: Scala 3-only types tested in Scala 3-only tests
+
+Types that only exist in Scala 3 (e.g., Scala 3 `enum` declarations, named tuples) must be tested in `src/test/scala-3/` so they don't break Scala 2.13 compilation.
+
+**Example:**
+```scala
+// In src/test/scala-3/hearth/kindlings/mymodule/MyTypeClassScala3Spec.scala
+import hearth.MacroSuite
+
+final class MyTypeClassScala3Spec extends MacroSuite {
+  group("Scala 3 enums") {
+    enum Color { case Red, Green, Blue }
+    test("handles Scala 3 enum") {
+      val result = MyTypeClass.someMethod(Color.Red)
+      assertEquals(result, /* expected */)
+    }
+  }
+  group("named tuples") {
+    test("handles named tuple") {
+      val tuple: (name: String, age: Int) = (name = "Alice", age = 30)
+      val result = MyTypeClass.someMethod(tuple)
+      assertEquals(result, /* expected */)
+    }
+  }
+}
+```
+
+### Test file organization
+
+Tests go in the module's test directories following this structure:
+
+```
+my-type-class/src/test/
+├── scala/hearth/kindlings/mytypeclass/
+│   └── MyTypeClassSpec.scala              # Cross-compiled tests (Scala 2 + 3)
+├── scala-2/hearth/kindlings/mytypeclass/
+│   └── MyTypeClassScala2Spec.scala        # Scala 2-only tests (if needed)
+└── scala-3/hearth/kindlings/mytypeclass/
+    └── MyTypeClassScala3Spec.scala         # Scala 3 enums, named tuples, etc.
+```
+
+Tests extend `MacroSuite` and use `group()` / nested `test()`.
+
+```scala
+import hearth.MacroSuite
+
+final class MyTypeClassSpec extends MacroSuite {
+  group("MyTypeClass") {
+    group("built-in types") {
+      test("handles Int") { /* ... */ }
+      test("handles String") { /* ... */ }
+      // ...
+    }
+    group("case classes") {
+      test("zero-field case class") { /* ... */ }
+      test("nested case class") { /* ... */ }
+      test("recursive case class") { /* ... */ }
+    }
+    group("user-provided implicits") {
+      test("uses manual instance over derived") { /* ... */ }
+    }
+    group("error messages") {
+      test("unsupported type reports all reasons") {
+        compileErrors("MyTypeClass.derived[UnsupportedType]").check(
+          "..." -> "expected error fragment"
+        )
+      }
+    }
+  }
+}
+```
+
+**Run tests with:**
 
 ```bash
-# For your module (replace 'yourModule' with actual name)
-sbt --client "yourModule/test"       # Scala 2.13 JVM
-sbt --client "yourModule3/test"      # Scala 3 JVM
-sbt --client "yourModuleJS/test"     # Scala 2.13 JS
-sbt --client "yourModuleJS3/test"    # Scala 3 JS
+# Clean first (macros require clean after changes)
+sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"
 ```
 
 **Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
@@ -575,4 +913,5 @@ sbt --client "yourModuleJS3/test"    # Scala 3 JS
 7. **Ignore the derivation macro** when summoning implicits
 8. **For decoder-style derivation**, use `primaryConstructor(fieldMap)` with `Expr_??` — avoid `construct` with dependent types
 9. **Avoid path-dependent types in `Expr.quote`** — use `LambdaBuilder` or runtime type witnesses instead
-10. **Test in your module** after MCP confirms compilation
+10. **Validate against the implementation requirements checklist** (REQ-1 through REQ-11) — ensure every requirement is met before considering the implementation complete
+11. **Test in your module** after MCP confirms compilation — use the test plan from REQ-11
