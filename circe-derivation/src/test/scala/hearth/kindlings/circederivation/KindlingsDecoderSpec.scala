@@ -48,14 +48,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
         assertEquals(KindlingsDecoder.decode[SingleField](json.hcursor), Right(SingleField(42)))
       }
 
-      test("nested case class with explicit inner decoder") {
-        // Derive Address decoder first (no implicit Decoder[Address] in scope here),
-        // then make it implicit in a nested scope for PersonWithAddress derivation.
-        val addressDec: Decoder[Address] = KindlingsDecoder.derived[Address]
-        val personDec: Decoder[PersonWithAddress] = {
-          implicit val ad: Decoder[Address] = addressDec
-          KindlingsDecoder.derived[PersonWithAddress]
-        }
+      test("nested case class (auto-derived)") {
         val json = Json.obj(
           "name" -> Json.fromString("Bob"),
           "age" -> Json.fromInt(25),
@@ -65,8 +58,22 @@ final class KindlingsDecoderSpec extends MacroSuite {
           )
         )
         assertEquals(
-          personDec.decodeJson(json),
+          KindlingsDecoder.decode[PersonWithAddress](json.hcursor),
           Right(PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield")))
+        )
+      }
+
+      test("case class with List of case classes") {
+        val json = Json.obj(
+          "name" -> Json.fromString("Dev"),
+          "members" -> Json.arr(
+            Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30)),
+            Json.obj("name" -> Json.fromString("Bob"), "age" -> Json.fromInt(25))
+          )
+        )
+        assertEquals(
+          KindlingsDecoder.decode[TeamWithMembers](json.hcursor),
+          Right(TeamWithMembers("Dev", List(SimplePerson("Alice", 30), SimplePerson("Bob", 25))))
         )
       }
     }
@@ -177,6 +184,40 @@ final class KindlingsDecoderSpec extends MacroSuite {
         implicit val decoder: Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
         assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
+      }
+    }
+
+    group("maps") {
+
+      test("Map[String, Int]") {
+        val json = Json.obj("a" -> Json.fromInt(1), "b" -> Json.fromInt(2))
+        assertEquals(KindlingsDecoder.decode[Map[String, Int]](json.hcursor), Right(Map("a" -> 1, "b" -> 2)))
+      }
+
+      test("empty map") {
+        assertEquals(KindlingsDecoder.decode[Map[String, Int]](Json.obj().hcursor), Right(Map.empty[String, Int]))
+      }
+    }
+
+    group("recursive types") {
+
+      test("recursive tree") {
+        val json = Json.obj(
+          "value" -> Json.fromInt(1),
+          "children" -> Json.arr(
+            Json.obj("value" -> Json.fromInt(2), "children" -> Json.arr()),
+            Json.obj(
+              "value" -> Json.fromInt(3),
+              "children" -> Json.arr(
+                Json.obj("value" -> Json.fromInt(4), "children" -> Json.arr())
+              )
+            )
+          )
+        )
+        assertEquals(
+          KindlingsDecoder.decode[RecursiveTree](json.hcursor),
+          Right(RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil))))))
+        )
       }
     }
 

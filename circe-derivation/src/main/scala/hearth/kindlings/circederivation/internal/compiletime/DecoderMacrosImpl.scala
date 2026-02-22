@@ -223,6 +223,9 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           DecUseCachedDefWhenAvailableRule,
           DecUseImplicitWhenAvailableRule,
           DecHandleAsValueTypeRule,
+          DecHandleAsOptionRule,
+          DecHandleAsMapRule,
+          DecHandleAsCollectionRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -358,6 +361,124 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
       }
   }
 
+  object DecHandleAsOptionRule extends DecoderDerivationRule("handle as Option when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as Option") >> {
+        Type[A] match {
+          case IsOption(isOption) =>
+            import isOption.Underlying as Inner
+            implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+            implicit val EitherDFInner: Type[Either[DecodingFailure, Inner]] = DTypes.DecoderResult[Inner]
+
+            LambdaBuilder
+              .of1[HCursor]("innerCursor")
+              .traverse { innerCursorExpr =>
+                deriveDecoderRecursively[Inner](using dctx.nest[Inner](innerCursorExpr))
+              }
+              .map { builder =>
+                val decodeFn = builder.build[Either[DecodingFailure, Inner]]
+                Rule.matched(Expr.quote {
+                  CirceDerivationUtils
+                    .decodeOptionFromFn(
+                      Expr.splice(dctx.cursor),
+                      Expr.splice(decodeFn)
+                    )
+                    .asInstanceOf[Either[DecodingFailure, A]]
+                })
+              }
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
+        }
+      }
+  }
+
+  @scala.annotation.nowarn("msg=Infinite loop")
+  object DecHandleAsMapRule extends DecoderDerivationRule("handle as map when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {
+        Type[A] match {
+          case IsMap(isMap) =>
+            import isMap.Underlying as Pair
+            decodeMapEntries[A, Pair](isMap.value)
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a map"))
+        }
+      }
+
+    private def decodeMapEntries[A: DecoderCtx, Pair: Type](
+        isMap: IsMapOf[A, Pair]
+    ): MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] = {
+      import isMap.{Key, Value, CtorResult}
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val EitherDFValue: Type[Either[DecodingFailure, Value]] = DTypes.DecoderResult[Value]
+
+      if (!(Key <:< Type[String]))
+        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
+      else {
+        LambdaBuilder
+          .of1[HCursor]("valueCursor")
+          .traverse { valueCursorExpr =>
+            deriveDecoderRecursively[Value](using dctx.nest[Value](valueCursorExpr))
+          }
+          .map { builder =>
+            val decodeFn = builder.build[Either[DecodingFailure, Value]]
+            val factoryExpr = isMap.factory
+            Rule.matched(Expr.quote {
+              CirceDerivationUtils
+                .decodeMapWith(
+                  Expr.splice(dctx.cursor),
+                  CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)),
+                  Expr
+                    .splice(factoryExpr)
+                    .asInstanceOf[scala.collection.Factory[(String, Value), A]]
+                )
+                .asInstanceOf[Either[DecodingFailure, A]]
+            })
+          }
+      }
+    }
+  }
+
+  object DecHandleAsCollectionRule extends DecoderDerivationRule("handle as collection when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection") >> {
+        Type[A] match {
+          case IsCollection(isCollection) =>
+            import isCollection.Underlying as Item
+            import isCollection.value.CtorResult
+            implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+            implicit val EitherDFItem: Type[Either[DecodingFailure, Item]] = DTypes.DecoderResult[Item]
+
+            LambdaBuilder
+              .of1[HCursor]("itemCursor")
+              .traverse { itemCursorExpr =>
+                deriveDecoderRecursively[Item](using dctx.nest[Item](itemCursorExpr))
+              }
+              .map { builder =>
+                val decodeFn = builder.build[Either[DecodingFailure, Item]]
+                val factoryExpr = isCollection.value.factory
+                Rule.matched(Expr.quote {
+                  CirceDerivationUtils
+                    .decodeCollectionWith(
+                      Expr.splice(dctx.cursor),
+                      CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)),
+                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[Item, A]]
+                    )
+                    .asInstanceOf[Either[DecodingFailure, A]]
+                })
+              }
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
+        }
+      }
+  }
+
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
@@ -415,50 +536,31 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
           implicit val ListEitherT: Type[List[Either[DecodingFailure, Any]]] = DTypes.ListEitherDFAny
 
-          // Step 1: For each field, derive a decode expression AND capture the decoder
-          // expression for later use in type-safe construction. We use CirceDerivationUtils.unsafeCast
-          // with the decoder expression as a type witness to avoid path-dependent type aliases
-          // (like param.tpe.Underlying) inside Expr.quote blocks, which cause Scala 2 macro
-          // hygiene issues ("not found: value param/field").
+          // Step 1: For each field, derive a decoder (implicit or recursive) and build
+          // decode + accessor expressions. Uses unsafeCast with the decoder as type witness
+          // to avoid path-dependent type aliases in Expr.quote (Scala 2 compatibility).
           fields
             .parTraverse { case (fieldName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Finding decoder for field $fieldName: ${Type[Field].prettyPrint}") {
-                // Summon Decoder[Field] for both decoding and type inference in construction
-                DTypes
-                  .Decoder[Field]
-                  .summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*)
-                  .toEither match {
-                  case Right(decoderExpr) =>
-                    // Build decode expression
-                    val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
-                      Expr
-                        .splice(dctx.cursor)
-                        .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fieldName))))
-                        .as(Expr.splice(decoderExpr))
-                        .asInstanceOf[Either[DecodingFailure, Any]]
-                    }
-                    // Build a compile-time function that creates typed cast expressions.
-                    // Uses unsafeCast(value, decoder) where the decoder provides type inference
-                    // for A, avoiding path-dependent type aliases in Expr.quote.
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      val typedExpr = Expr.quote {
-                        CirceDerivationUtils.unsafeCast(
-                          Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
-                          Expr.splice(decoderExpr)
-                        )
-                      }
-                      (fieldName, typedExpr.as_??)
-                    }
-                    MIO.pure((decodeExpr, makeAccessor))
-
-                  case Left(reason) =>
-                    MIO.fail(
-                      DecoderDerivationError.UnsupportedType(
-                        Type[Field].prettyPrint,
-                        List(s"No implicit Decoder found for field $fieldName: $reason")
+              Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
+                deriveFieldDecoder[Field].map { decoderExpr =>
+                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
+                    Expr
+                      .splice(dctx.cursor)
+                      .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fieldName))))
+                      .as(Expr.splice(decoderExpr))
+                      .asInstanceOf[Either[DecodingFailure, Any]]
+                  }
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    val typedExpr = Expr.quote {
+                      CirceDerivationUtils.unsafeCast(
+                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                        Expr.splice(decoderExpr)
                       )
-                    )
+                    }
+                    (fieldName, typedExpr.as_??)
+                  }
+                  (decodeExpr, makeAccessor)
                 }
               }
             }
@@ -476,10 +578,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  // Apply each accessor closure with the array expression to get typed Expr_?? values
                   val fieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
-                  // Call the primary constructor directly with the typed field map
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
@@ -495,6 +595,31 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                   }
                 }
             }
+      }
+    }
+
+    /** Derive a Decoder[Field] for a case class field. Tries implicit summoning first, falls back to recursive
+      * derivation via the full rule chain.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[Decoder[Field]]] = {
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val EitherDFField: Type[Either[DecodingFailure, Field]] = DTypes.DecoderResult[Field]
+
+      DTypes.Decoder[Field].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+        case Right(decoderExpr) =>
+          Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+        case Left(_) =>
+          Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+            LambdaBuilder
+              .of1[HCursor]("fieldCursor")
+              .traverse { fieldCursorExpr =>
+                deriveDecoderRecursively[Field](using ctx.nest[Field](fieldCursorExpr))
+              }
+              .map { builder =>
+                val decodeFn = builder.build[Either[DecodingFailure, Field]]
+                Expr.quote(CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
+              }
       }
     }
 

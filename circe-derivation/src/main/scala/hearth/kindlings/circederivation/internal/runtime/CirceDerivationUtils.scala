@@ -126,4 +126,58 @@ object CirceDerivationUtils {
       }
     Right(arr)
   }
+
+  /** Creates a Decoder[A] from a decode function. Type A inferred from the function. */
+  def decoderFromFn[A](decode: HCursor => Either[DecodingFailure, A]): Decoder[A] =
+    new Decoder[A] { def apply(c: HCursor): Decoder.Result[A] = decode(c) }
+
+  /** Decodes Option[A] from cursor using a decode function. Returns Right(None) for null. */
+  def decodeOptionFromFn[A](
+      cursor: HCursor,
+      decode: HCursor => Either[DecodingFailure, A]
+  ): Either[DecodingFailure, Option[A]] =
+    cursor.focus match {
+      case Some(json) if json.isNull => Right(None)
+      case _                         => decode(cursor).map(Some(_))
+    }
+
+  /** Decodes a collection using an item decoder and factory. */
+  def decodeCollectionWith[Item, Coll](
+      cursor: HCursor,
+      itemDecoder: Decoder[Item],
+      factory: scala.collection.Factory[Item, Coll]
+  ): Either[DecodingFailure, Coll] =
+    cursor.values match {
+      case None             => Left(DecodingFailure("Expected JSON array", cursor.history))
+      case Some(jsonValues) =>
+        val builder = factory.newBuilder
+        val iter = jsonValues.iterator
+        while (iter.hasNext)
+          itemDecoder.decodeJson(iter.next()) match {
+            case Right(item) => builder += item
+            case Left(err)   => return Left(err)
+          }
+        Right(builder.result())
+    }
+
+  /** Decodes a Map[String, V] using a value decoder and factory. */
+  def decodeMapWith[V, M](
+      cursor: HCursor,
+      valueDecoder: Decoder[V],
+      factory: scala.collection.Factory[(String, V), M]
+  ): Either[DecodingFailure, M] =
+    cursor.keys match {
+      case None       => Left(DecodingFailure("Expected JSON object", cursor.history))
+      case Some(keys) =>
+        val builder = factory.newBuilder
+        val iter = keys.iterator
+        while (iter.hasNext) {
+          val key = iter.next()
+          cursor.downField(key).as(valueDecoder) match {
+            case Right(value) => builder += ((key, value))
+            case Left(err)    => return Left(err)
+          }
+        }
+        Right(builder.result())
+    }
 }
