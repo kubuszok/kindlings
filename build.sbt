@@ -27,6 +27,7 @@ val versions = new {
   val circe = "0.14.15"
   val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
   val jsoniterScala = "2.38.9"
+  val scalaYaml = "0.3.1"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
   val scalacheck = "1.19.0"
@@ -269,7 +270,8 @@ val noPublishSettings =
 
 val al = new {
 
-  private val prodProjects = Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson")
+  private val prodProjects =
+    Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson", "yamlDerivation")
 
   private def isJVM(platform: String): Boolean = platform == "JVM"
 
@@ -319,6 +321,7 @@ lazy val root = project
   .aggregate(circeDerivation.projectRefs *)
   .aggregate(jsoniterDerivation.projectRefs *)
   .aggregate(jsoniterJson.projectRefs *)
+  .aggregate(yamlDerivation.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -445,4 +448,24 @@ lazy val jsoniterJson = projectMatrix
       )
     ),
     resolvers += mavenCentralSnapshots
+  )
+
+lazy val yamlDerivation = projectMatrix
+  .in(file("yaml-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-yaml-derivation",
+    name := "kindlings-yaml-derivation",
+    description := "Scala-YAML YamlEncoder/YamlDecoder derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml
+    )
   )
