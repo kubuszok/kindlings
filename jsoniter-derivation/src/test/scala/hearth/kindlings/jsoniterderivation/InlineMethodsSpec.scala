@@ -1,0 +1,167 @@
+package hearth.kindlings.jsoniterderivation
+
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
+import hearth.MacroSuite
+
+class NotAJsonType
+
+final class InlineMethodsSpec extends MacroSuite {
+
+  group("KindlingsJsonValueCodec.writeToString") {
+
+    test("simple case class") {
+      val json = KindlingsJsonValueCodec.writeToString(SimplePerson("Alice", 30))
+      assertEquals(json, """{"name":"Alice","age":30}""")
+    }
+
+    test("uses implicit codec when available") {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val customIntCodec: JsonValueCodec[Int] = new JsonValueCodec[Int] {
+        def nullValue: Int = 0
+        def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: Int): Int =
+          in.readInt()
+        def encodeValue(x: Int, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+          out.writeVal(x * 100)
+      }
+      val json = KindlingsJsonValueCodec.writeToString(42)
+      assertEquals(json, "4200")
+    }
+
+    test("with custom config") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
+      val json = KindlingsJsonValueCodec.writeToString(CamelCasePerson("Alice", "Smith"))
+      assert(json.contains("\"first-name\""))
+      assert(json.contains("\"last-name\""))
+    }
+  }
+
+  group("KindlingsJsonValueCodec.readFromString") {
+
+    test("simple case class success") {
+      val result = KindlingsJsonValueCodec.readFromString[SimplePerson]("""{"name":"Alice","age":30}""")
+      assertEquals(result, Right(SimplePerson("Alice", 30)))
+    }
+
+    test("invalid JSON returns Left") {
+      val result = KindlingsJsonValueCodec.readFromString[SimplePerson]("not valid json")
+      assert(result.isLeft)
+      assert(result.left.exists(_.isInstanceOf[JsonReaderException]))
+    }
+
+    test("with custom config") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
+      val result = KindlingsJsonValueCodec.readFromString[CamelCasePerson](
+        """{"first-name":"Alice","last-name":"Smith"}"""
+      )
+      assertEquals(result, Right(CamelCasePerson("Alice", "Smith")))
+    }
+
+    test("uses implicit codec when available") {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val customIntCodec: JsonValueCodec[Int] = new JsonValueCodec[Int] {
+        def nullValue: Int = 0
+        def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: Int): Int =
+          in.readInt() * 10
+        def encodeValue(x: Int, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+          out.writeVal(x)
+      }
+      val result = KindlingsJsonValueCodec.readFromString[Int]("5")
+      assertEquals(result, Right(50))
+    }
+  }
+
+  group("syntax.toJsonString") {
+
+    test("simple case class") {
+      import syntax.*
+      val json = SimplePerson("Alice", 30).toJsonString
+      assertEquals(json, """{"name":"Alice","age":30}""")
+    }
+
+    test("with custom config") {
+      import syntax.*
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
+      val json = CamelCasePerson("Alice", "Smith").toJsonString
+      assert(json.contains("\"first-name\""))
+      assert(json.contains("\"last-name\""))
+    }
+  }
+
+  group("syntax.fromJsonString") {
+
+    test("simple case class success") {
+      import syntax.*
+      val result = """{"name":"Alice","age":30}""".fromJsonString[SimplePerson]
+      assertEquals(result, Right(SimplePerson("Alice", 30)))
+    }
+
+    test("invalid JSON returns Left") {
+      import syntax.*
+      val result = "not valid json".fromJsonString[SimplePerson]
+      assert(result.isLeft)
+      assert(result.left.exists(_.isInstanceOf[JsonReaderException]))
+    }
+  }
+
+  group("round-trip") {
+
+    test("writeToString then readFromString") {
+      val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
+      val json = KindlingsJsonValueCodec.writeToString(value)
+      val result = KindlingsJsonValueCodec.readFromString[PersonWithAddress](json)
+      assertEquals(result, Right(value))
+    }
+
+    test("toJsonString then fromJsonString") {
+      import syntax.*
+      val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
+      val json = value.toJsonString
+      val result = json.fromJsonString[PersonWithAddress]
+      assertEquals(result, Right(value))
+    }
+
+    test("sealed trait round-trip") {
+      val value: Shape = Circle(5.0)
+      val json = KindlingsJsonValueCodec.writeToString(value)
+      val result = KindlingsJsonValueCodec.readFromString[Shape](json)
+      assertEquals(result, Right(value))
+    }
+
+    test("sealed trait with discriminator round-trip") {
+      implicit val config: JsoniterConfig = JsoniterConfig(discriminatorFieldName = Some("type"))
+      val value: Animal = Dog("Rex", "Labrador")
+      val json = KindlingsJsonValueCodec.writeToString(value)
+      val result = KindlingsJsonValueCodec.readFromString[Animal](json)
+      assertEquals(result, Right(value))
+    }
+  }
+
+  group("compile-time errors") {
+
+    test("writeToString with unhandled type produces error message") {
+      compileErrors(
+        """
+        import hearth.kindlings.jsoniterderivation.{KindlingsJsonValueCodec, NotAJsonType}
+        KindlingsJsonValueCodec.writeToString(new NotAJsonType)
+        """
+      ).check(
+        "Macro derivation failed with the following errors:",
+        "  - The type hearth.kindlings.jsoniterderivation.NotAJsonType was not handled by any codec derivation rule:",
+        "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+      )
+    }
+
+    test("readFromString with unhandled type produces error message") {
+      compileErrors(
+        """
+        import hearth.kindlings.jsoniterderivation.{KindlingsJsonValueCodec, NotAJsonType}
+        KindlingsJsonValueCodec.readFromString[NotAJsonType]("{}")
+        """
+      ).check(
+        "Macro derivation failed with the following errors:",
+        "  - The type hearth.kindlings.jsoniterderivation.NotAJsonType was not handled by any codec derivation rule:",
+        "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+      )
+    }
+  }
+}

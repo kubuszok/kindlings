@@ -8,7 +8,14 @@ import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  writeToString,
+  JsonReader,
+  JsonReaderException,
+  JsonValueCodec,
+  JsonWriter
+}
 
 trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
 
@@ -45,7 +52,235 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
     }
   }
 
+  // Inline encode/decode entrypoints
+
+  /** Derive an inline writeToString expression for type A.
+    *
+    * Checks for a user-provided implicit JsonValueCodec[A] first. If found, uses it directly. Otherwise derives only
+    * the encoder and creates a stub codec.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveInlineWriteToString[A: Type](valueExpr: Expr[A], configExpr: Expr[JsoniterConfig]): Expr[String] = {
+    implicit val StringT: Type[String] = CTypes.String
+    implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+    implicit val UnitT: Type[Unit] = CTypes.Unit
+
+    CTypes.JsonValueCodec[A].summonExprIgnoring(EncUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+      case Right(codecExpr) =>
+        Expr.quote {
+          writeToString[A](Expr.splice(valueExpr))(Expr.splice(codecExpr))
+        }
+      case Left(_) =>
+        deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A, String]("KindlingsJsonValueCodec.writeToString") { encodeFn =>
+          Expr.quote {
+            writeToString[A](Expr.splice(valueExpr))(new JsonValueCodec[A] {
+              def nullValue: A = null.asInstanceOf[A]
+              def decodeValue(in: JsonReader, default: A): A =
+                throw new UnsupportedOperationException("encode-only codec")
+              def encodeValue(x: A, out: JsonWriter): Unit =
+                Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
+            })
+          }
+        }
+    }
+  }
+
+  /** Derive an inline readFromString expression for type A.
+    *
+    * Checks for a user-provided implicit JsonValueCodec[A] first. If found, uses it directly. Otherwise derives only
+    * the decoder and nullValue, creating a stub codec.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveInlineReadFromString[A: Type](
+      jsonExpr: Expr[String],
+      configExpr: Expr[JsoniterConfig]
+  ): Expr[Either[JsonReaderException, A]] = {
+    implicit val StringT: Type[String] = CTypes.String
+    implicit val CodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+    implicit val UnitT: Type[Unit] = CTypes.Unit
+    implicit val EitherT: Type[Either[JsonReaderException, A]] = CTypes.EitherJsonReaderException[A]
+    implicit val JsonReaderExceptionT: Type[JsonReaderException] = CTypes.JsonReaderException
+
+    CTypes.JsonValueCodec[A].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+      case Right(codecExpr) =>
+        Expr.quote {
+          try Right(readFromString[A](Expr.splice(jsonExpr))(Expr.splice(codecExpr)))
+          catch { case e: JsonReaderException => Left(e) }
+        }
+      case Left(_) =>
+        deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A, Either[JsonReaderException, A]](
+          "KindlingsJsonValueCodec.readFromString"
+        ) { case (decodeFn, nullValueExpr) =>
+          Expr.quote {
+            try
+              Right(readFromString[A](Expr.splice(jsonExpr))(new JsonValueCodec[A] {
+                def nullValue: A = Expr.splice(nullValueExpr)
+                def decodeValue(in: JsonReader, default: A): A = {
+                  val _ = default
+                  Expr.splice(decodeFn(Expr.quote(in), configExpr))
+                }
+                def encodeValue(x: A, out: JsonWriter): Unit =
+                  throw new UnsupportedOperationException("decode-only codec")
+              }))
+            catch { case e: JsonReaderException => Left(e) }
+          }
+        }
+    }
+  }
+
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
+
+  def deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+      provideCtxAndAdapt: (
+          (Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]
+      ) => Expr[Out]
+  ): Expr[Out] = Log
+    .namedScope(
+      s"Deriving encoder-only for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+    ) {
+      implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+      implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+      implicit val UnitT: Type[Unit] = CTypes.Unit
+
+      MIO.scoped { runSafe =>
+        val cache = ValDefsCache.mlocal
+        val selfType: Option[??] = None
+
+        val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
+          val defBuilder =
+            ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
+          for {
+            _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
+            _ <- MIO.scoped { rs =>
+              rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
+                rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+              })
+            }
+            fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
+          } yield fn.get
+        }
+
+        val encFn = runSafe {
+          for {
+            _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+            result <- encMIO
+          } yield result
+        }
+
+        val vals = runSafe(cache.get)
+        val resultExpr = provideCtxAndAdapt(encFn)
+        vals.toValDefs.use(_ => resultExpr)
+      }
+    }
+    .flatTap { result =>
+      Log.info(s"Derived final encoder-only result: ${result.prettyPrint}")
+    }
+    .runToExprOrFail(
+      macroName,
+      infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+      errorRendering = RenderFrom(Log.Level.Info)
+    ) { (errorLogs, errors) =>
+      val errorsRendered = errors
+        .map { e =>
+          e.getMessage.split("\n").toList match {
+            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+            case _            => "  - " + e.getMessage
+          }
+        }
+        .mkString("\n")
+      val hint =
+        "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+      if (errorLogs.nonEmpty)
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered
+           |and the following logs:
+           |$errorLogs
+           |$hint""".stripMargin
+      else
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered
+           |$hint""".stripMargin
+    }
+
+  def deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+      provideCtxAndAdapt: (
+          (Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A],
+          Expr[A]
+      ) => Expr[Out]
+  ): Expr[Out] = Log
+    .namedScope(
+      s"Deriving decoder-only for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+    ) {
+      implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+
+      MIO.scoped { runSafe =>
+        val cache = ValDefsCache.mlocal
+        val selfType: Option[??] = None
+
+        val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
+          val defBuilder =
+            ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
+          for {
+            _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
+            _ <- MIO.scoped { rs =>
+              rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
+                rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+              })
+            }
+            fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
+          } yield fn.get
+        }
+
+        val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+
+        val (decFn, nullVal) = runSafe {
+          for {
+            _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+            result <- decMIO.parTuple(nullMIO)
+          } yield result
+        }
+
+        val vals = runSafe(cache.get)
+        val resultExpr = provideCtxAndAdapt(decFn, nullVal)
+        vals.toValDefs.use(_ => resultExpr)
+      }
+    }
+    .flatTap { result =>
+      Log.info(s"Derived final decoder-only result: ${result.prettyPrint}")
+    }
+    .runToExprOrFail(
+      macroName,
+      infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+      errorRendering = RenderFrom(Log.Level.Info)
+    ) { (errorLogs, errors) =>
+      val errorsRendered = errors
+        .map { e =>
+          e.getMessage.split("\n").toList match {
+            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+            case _            => "  - " + e.getMessage
+          }
+        }
+        .mkString("\n")
+      val hint =
+        "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+      if (errorLogs.nonEmpty)
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered
+           |and the following logs:
+           |$errorLogs
+           |$hint""".stripMargin
+      else
+        s"""Macro derivation failed with the following errors:
+           |$errorsRendered
+           |$hint""".stripMargin
+    }
 
   def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (
@@ -1564,6 +1799,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
     val ListString: Type[List[String]] = Type.of[List[String]]
+    val JsonReaderException: Type[JsonReaderException] = Type.of[JsonReaderException]
+    def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
+      Type.of[Either[JsonReaderException, A]]
   }
 }
 
