@@ -25,6 +25,10 @@ case class CamelCasePerson(firstName: String, lastName: String)
 
 final class KindlingsYamlEncoderSpec extends MacroSuite {
 
+  // On Scala.js, whole-number doubles like 5.0 print as "5" instead of "5.0"
+  // See https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
+  private def doubleStr(d: Double): String = d.toString
+
   private def scalarNode(value: String): Node = ScalarNode(value)
 
   private def mappingOf(entries: (String, Node)*): Node =
@@ -54,7 +58,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("Double") {
         val node = KindlingsYamlEncoder.encode(3.14)
-        assertEquals(node, scalarNode("3.14"))
+        assertEquals(node, scalarNode(doubleStr(3.14)))
       }
 
       test("Long") {
@@ -177,7 +181,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
         assertEquals(
           node,
-          mappingOf("Circle" -> mappingOf("radius" -> scalarNode("5.0")))
+          mappingOf("Circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
         )
       }
 
@@ -187,8 +191,8 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
           node,
           mappingOf(
             "Rectangle" -> mappingOf(
-              "width" -> scalarNode("3.0"),
-              "height" -> scalarNode("4.0")
+              "width" -> scalarNode(doubleStr(3.0)),
+              "height" -> scalarNode(doubleStr(4.0))
             )
           )
         )
@@ -247,7 +251,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
         assertEquals(
           node,
-          mappingOf("circle" -> mappingOf("radius" -> scalarNode("5.0")))
+          mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
         )
       }
 

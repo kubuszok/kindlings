@@ -11,6 +11,10 @@ enum Fruit {
 
 final class YamlScala3Spec extends MacroSuite {
 
+  // On Scala.js, whole-number doubles like 5.0 print as "5" instead of "5.0"
+  // See https://www.scala-js.org/doc/semantics.html#tostring-of-float-double-and-unit
+  private def doubleStr(d: Double): String = d.toString
+
   private def scalarNode(value: String): Node = ScalarNode(value)
 
   private def mappingOf(entries: (String, Node)*): Node =
@@ -22,12 +26,12 @@ final class YamlScala3Spec extends MacroSuite {
 
       test("enum variant with fields (wrapper-style)") {
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Apple(1.5))
-        assertEquals(node, mappingOf("Apple" -> mappingOf("weight" -> scalarNode("1.5"))))
+        assertEquals(node, mappingOf("Apple" -> mappingOf("weight" -> scalarNode(doubleStr(1.5)))))
       }
 
       test("second enum variant (wrapper-style)") {
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Banana(20.0))
-        assertEquals(node, mappingOf("Banana" -> mappingOf("length" -> scalarNode("20.0"))))
+        assertEquals(node, mappingOf("Banana" -> mappingOf("length" -> scalarNode(doubleStr(20.0)))))
       }
 
       test("enum with discriminator") {
@@ -40,7 +44,7 @@ final class YamlScala3Spec extends MacroSuite {
               case _                                    => false
             })
             assert(mappings.exists {
-              case (ScalarNode(k, _), ScalarNode(v, _)) => k == "length" && v == "20.0"
+              case (ScalarNode(k, _), ScalarNode(v, _)) => k == "length" && v == doubleStr(20.0)
               case _                                    => false
             })
           case other => fail(s"Expected MappingNode but got $other")
@@ -51,7 +55,7 @@ final class YamlScala3Spec extends MacroSuite {
         implicit val config: YamlConfig =
           YamlConfig(transformConstructorNames = _.toLowerCase)
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Apple(1.5))
-        assertEquals(node, mappingOf("apple" -> mappingOf("weight" -> scalarNode("1.5"))))
+        assertEquals(node, mappingOf("apple" -> mappingOf("weight" -> scalarNode(doubleStr(1.5)))))
       }
     }
 
@@ -93,7 +97,7 @@ final class YamlScala3Spec extends MacroSuite {
         implicit val config: YamlConfig =
           YamlConfig(transformConstructorNames = _.toLowerCase)
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
-        assertEquals(node, mappingOf("circle" -> mappingOf("radius" -> scalarNode("5.0"))))
+        assertEquals(node, mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0)))))
       }
 
       test("member name transforms are applied") {
