@@ -701,13 +701,183 @@ Expr.quote {
 
 **Solution:** Use `List.empty[T]` and `::` instead.
 
-### `Expr.upcast` only widens
+### `Expr.upcast` only widens (and needs source `Type` in scope)
 
 `expr.upcast[B]` requires `A <:< B` (compile-time subtype proof). It cannot narrow types (e.g., `Any` → `String`). For narrowing, use `.asInstanceOf` inside `Expr.quote` or a runtime type-witness utility.
+
+**Additional constraint:** `upcast` also requires `Type[A]` (the source type) to be in scope. If you're trying to upcast an expression whose type comes from a pattern matcher (e.g., `isMap.CtorResult`), you must first import the path-dependent type to bring its `Type` into scope — but that's the same problem you're trying to solve. Use `.asInstanceOf` inside `Expr.quote` instead.
 
 ### Macro methods require concrete types at call site
 
 A generic `def helper[A](value: A)` that calls `KindlingsEncoder.encode(value)` internally won't work — the macro sees `A` as abstract, not the concrete type. Always call macro methods directly with concrete types at each call site.
+
+### Sibling `Expr.splice` blocks have isolated `Quotes` contexts (Scala 3)
+
+**This is a critical constraint for combined codec derivation.** On Scala 3, Hearth's `hearth-cross-quotes` compiler plugin transforms `Expr.splice` calls inside `Expr.quote` into `${ CrossQuotes.nestedCtx { ... } }`. Each splice gets its **own separate nested `Quotes` context**. Expressions (including `Type` instances) created in one splice **cannot be used in a sibling splice** within the same `Expr.quote`.
+
+```scala
+// BROKEN on Scala 3 — `myType` created in first splice, used in second:
+Expr.quote {
+  val encResult = Expr.splice {
+    val myType = Type.of[Either[String, Int]]  // created here
+    deriveEncoder[A]  // uses myType internally
+  }
+  val decResult = Expr.splice {
+    deriveDecoder[A]  // also uses myType — ERROR: "Expression created in a splice was used outside of that splice"
+  }
+}
+```
+
+This affects any scenario where derivation logic in sibling splices shares state — even indirectly through `MIO` computations, `Environment.loadStandardExtensions()`, or `ValDefsCache`. Standard library types like `Either`, `Nothing`, `Option` etc. are commonly loaded by `loadStandardExtensions()` and stored globally; if the first splice triggers loading, the resulting `Type` instances belong to that splice's context.
+
+**Solution — pre-derive with `LambdaBuilder`:**
+
+Perform all derivation in a **single `MIO.scoped`/`runSafe` call** before the `Expr.quote`, producing pre-built function expressions via `LambdaBuilder`. Then splice only the finished function references into the quote:
+
+```scala
+MIO.scoped { runSafe =>
+  val cache = ValDefsCache.mlocal
+  val selfType: Option[??] = Some(Type[A].as_??)
+
+  val (encLambdaRaw, decLambdaRaw, nullVal, vals) = runSafe {
+    for {
+      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+      // Derive encoder as (A, Writer, Config) => Unit
+      encLambdaRaw <- LambdaBuilder
+        .of3[A, Writer, Config]("value", "writer", "config")
+        .traverse { case (v, w, c) => deriveEncoder[A](using EncoderCtx.from(v, w, c, cache, selfType)) }
+        .map(_.build[Unit])
+      // Derive decoder as (Reader, Config) => A
+      decLambdaRaw <- LambdaBuilder
+        .of2[Reader, Config]("reader", "config")
+        .traverse { case (r, c) => deriveDecoder[A](using DecoderCtx.from(r, c, cache, selfType)) }
+        .map(_.build[A])
+      nullVal <- deriveNullValue[A]
+      vals <- cache.get
+    } yield (encLambdaRaw, decLambdaRaw, nullVal, vals)
+  }
+
+  // Wrap val defs around the ENTIRE result, not individual lambdas
+  val resultExpr = Expr.quote {
+    new MyCodec[A] {
+      private val _encode = Expr.splice(encLambdaRaw)
+      private val _decode = Expr.splice(decLambdaRaw)
+      def nullValue: A = Expr.splice(nullVal)
+      def encode(x: A, out: Writer): Unit = _encode(x, out, Expr.splice(configExpr))
+      def decode(in: Reader): A = _decode(in, Expr.splice(configExpr))
+    }
+  }
+  vals.toValDefs.use(_ => resultExpr)
+}
+```
+
+**Key principles:**
+1. All derivation (encoder, decoder, null value) happens in one `runSafe` scope
+2. `LambdaBuilder` packages each derivation as a function `Expr` before the quote
+3. Inside the `Expr.quote`, splices only reference pre-built `Expr` values — no derivation logic runs inside splices
+4. `vals.toValDefs.use` wraps the entire result expression (see next pitfall)
+
+**Reference:** `jsoniter-derivation/CodecMacrosImpl.scala` — `deriveCodecFromCtxAndAdaptForEntrypoint` method.
+
+### `ValDefsCache` wrapping scope for multi-function derivation
+
+When a single derivation produces multiple function expressions (e.g., encoder + decoder for a combined codec), **do not** wrap cached val defs around each function individually. This causes duplicate definitions and unused-method warnings (fatal with `-Xfatal-warnings`).
+
+```scala
+// BROKEN — each lambda gets ALL cached defs, including the other side's unused methods:
+vals <- cache.get
+encodeFn = vals.toValDefs.use(_ => encLambdaRaw)  // has decode_X (unused!)
+decodeFn = vals.toValDefs.use(_ => decLambdaRaw)  // has encode_X (unused!)
+
+// CORRECT — wrap the outermost expression containing both lambdas:
+vals <- cache.get
+val resultExpr = provideCtxAndAdapt(encLambdaRaw, decLambdaRaw, nullVal)
+vals.toValDefs.use(_ => resultExpr)  // all defs in scope for both lambdas
+```
+
+**When using a shared `ValDefsCache` for encoder and decoder:** This works correctly because they use different cache keys (`"cached-encode-method"` vs `"cached-decode-method"`) and different arity types. The shared `"cached-codec-instance"` key is intentionally shared — both sides reference the same cached codec instance for recursive types.
+
+**Reference:** `jsoniter-derivation/CodecMacrosImpl.scala` — see how `vals.toValDefs.use` wraps the entire `provideCtxAndAdapt` result.
+
+### Path-dependent types from `IsMap`/`IsCollection` need explicit import
+
+When using pattern matchers like `IsMap` or `IsCollection`, the matched type exposes path-dependent types (e.g., `isMap.Key`, `isMap.Value`, `isMap.CtorResult`). These must be **explicitly imported** to bring their `Type` instances into scope, otherwise Scala 3 will fail with missing `scala.quoted.Type` errors when those types appear inside `Expr.quote`.
+
+```scala
+// BROKEN on Scala 3 — CtorResult has no Type in scope:
+Type[A] match {
+  case IsMap(isMap) =>
+    val factoryExpr = isMap.factory  // Expr[Factory[..., isMap.CtorResult]]
+    Expr.quote { ... Expr.splice(factoryExpr) ... }  // error: no Type[isMap.CtorResult]
+}
+
+// CORRECT — import brings Type instances into scope:
+Type[A] match {
+  case IsMap(isMap) =>
+    import isMap.{Key, Value, CtorResult}  // brings Type[Key], Type[Value], Type[CtorResult]
+    val factoryExpr = isMap.factory
+    Expr.quote { ... Expr.splice(factoryExpr) ... }  // works!
+}
+```
+
+The same pattern applies to `IsCollection` (`import isCollection.Underlying as Item`), `IsOption`, and `IsValueType`.
+
+**Reference:** `circe-derivation/DecoderMacrosImpl.scala` — map and collection rules.
+
+### Discriminator-style enum decoding in streaming codecs
+
+When implementing a combined codec for a streaming JSON library (like jsoniter-scala), the discriminator-style enum decoder has a fundamental constraint: after reading the discriminator field from the JSON object, the remaining fields must be read **from the same already-opened object**, not as a separate nested object.
+
+```json
+// Wrapper-style: each child is a separate object under a key
+{"Dog": {"name": "Rex", "breed": "Labrador"}}
+
+// Discriminator-style: discriminator + fields are in the SAME object
+{"type": "Dog", "name": "Rex", "breed": "Labrador"}
+```
+
+For wrapper-style, the child decoder reads a complete standalone object (starting with `{`). For discriminator-style, the outer object is already open — the child decoder must read the **remaining fields** without expecting an opening `{`.
+
+**Solution:** Implement two variants:
+1. `decodeCaseClassFields` — reads a full object (with `{` ... `}`)
+2. `decodeCaseClassFieldsInline` — reads remaining fields from an already-opened object
+
+The enum decoder rule must build **two dispatch functions** — one for wrapper mode and one for inline/discriminator mode — and select between them based on the config:
+
+```scala
+children.parTraverse { case (childName, child) =>
+  for {
+    wrapper <- deriveChildDecoder[A, ChildType](childName)        // full object
+    inline  <- deriveChildDecoderInline[A, ChildType](childName)  // fields only
+  } yield (wrapper, inline)
+}.flatMap { allDispatchers =>
+  for {
+    wrapperFn <- buildDispatchLambda(allDispatchers.map(_._1))
+    inlineFn  <- buildDispatchLambda(allDispatchers.map(_._2))
+  } yield Expr.quote {
+    config.discriminatorFieldName match {
+      case Some(field) => readWithDiscriminator(reader, field)(Expr.splice(inlineFn))
+      case None        => readWrapped(reader)(Expr.splice(wrapperFn))
+    }
+  }
+}
+```
+
+This issue does not arise in cursor-based libraries (like circe) where the decoder receives a `HCursor` that can navigate freely.
+
+**Reference:** `jsoniter-derivation/CodecMacrosImpl.scala` — `decodeEnumCases`, `deriveChildDecoderInline`, `decodeCaseClassFieldsInline`. `jsoniter-derivation/runtime/JsoniterDerivationUtils.scala` — `readWithDiscriminator`, `readObjectInline`.
+
+### Built-in type rule is mandatory when the library lacks implicit instances
+
+Some libraries (like circe) provide implicit instances for primitive types (e.g., `Encoder[Int]`, `Decoder[String]`). Others (like jsoniter-scala) do **not** provide standalone `JsonValueCodec[Int]` instances — the macro must generate direct read/write calls.
+
+If you skip the built-in type rule, primitive fields inside case classes will fall through to the collection rule (e.g., `String` matches `IsCollection[Char]`), causing cascading failures.
+
+**Always implement a built-in type rule** that handles at minimum: `Boolean`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `Char`, `String`. For value types (`extends AnyVal`), the value type rule unwraps to the underlying type, which then needs the built-in rule.
+
+### `group()` is from `MacroSuite`, not plain `FunSuite`
+
+Tests that need `group("...")` blocks must extend `MacroSuite` (from `hearth-munit`), which in turn depends on hearth. Modules that do NOT depend on hearth (e.g., a standalone JSON AST module) cannot use `MacroSuite`. In that case, extend plain `munit.FunSuite` and use flat test names instead of nested `group()` blocks.
 
 ## Implementation requirements checklist
 

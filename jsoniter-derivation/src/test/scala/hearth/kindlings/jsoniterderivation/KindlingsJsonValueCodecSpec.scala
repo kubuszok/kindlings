@@ -1,8 +1,9 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReaderException, JsonValueCodec}
 import hearth.MacroSuite
 
+case class CamelCasePerson(firstName: String, lastName: String)
 case class SimplePerson(name: String, age: Int)
 case class EmptyClass()
 case class SingleField(value: Int)
@@ -182,6 +183,36 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("auto-derivation") {
+
+      test("derived is available as implicit") {
+        val codec = implicitly[KindlingsJsonValueCodec[SimplePerson]]
+        val value = SimplePerson("Alice", 30)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[SimplePerson](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("nested types derived automatically") {
+        val codec = implicitly[KindlingsJsonValueCodec[PersonWithAddress]]
+        val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[PersonWithAddress](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("auto-derivation uses custom implicit config") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
+        val codec = implicitly[KindlingsJsonValueCodec[CamelCasePerson]]
+        val value = CamelCasePerson("Alice", "Smith")
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"first-name\""))
+        assert(json.contains("\"last-name\""))
+        val decoded = readFromString[CamelCasePerson](json)(codec)
+        assertEquals(decoded, value)
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {
@@ -194,6 +225,70 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         assertEquals(decoded, value)
       }
 
+      test("kebab-case field names") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
+        val codec = KindlingsJsonValueCodec.derive[CamelCasePerson]
+        val value = CamelCasePerson("Alice", "Smith")
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"first-name\""))
+        assert(json.contains("\"last-name\""))
+        val decoded = readFromString[CamelCasePerson](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("PascalCase field names") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withPascalCaseFieldNames
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val value = SimplePerson("Alice", 30)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"Name\""))
+        assert(json.contains("\"Age\""))
+        val decoded = readFromString[SimplePerson](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("SCREAMING_SNAKE_CASE field names") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withScreamingSnakeCaseFieldNames
+        val codec = KindlingsJsonValueCodec.derive[CamelCasePerson]
+        val value = CamelCasePerson("Alice", "Smith")
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"FIRST_NAME\""))
+        assert(json.contains("\"LAST_NAME\""))
+        val decoded = readFromString[CamelCasePerson](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("snake_case ADT leaf class names") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withSnakeCaseAdtLeafClassNames
+        val codec = KindlingsJsonValueCodec.derive[Shape]
+        val value: Shape = Circle(5.0)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"circle\""))
+        val decoded = readFromString[Shape](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("kebab-case ADT leaf class names") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseAdtLeafClassNames
+        val codec = KindlingsJsonValueCodec.derive[Shape]
+        val value: Shape = Circle(5.0)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"circle\""))
+        val decoded = readFromString[Shape](json)(codec)
+        assertEquals(decoded, value)
+      }
+
+      test("discriminator with ADT name mapper") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withDiscriminator("type").withSnakeCaseAdtLeafClassNames
+        val codec = KindlingsJsonValueCodec.derive[Animal]
+        val value: Animal = Dog("Rex", "Labrador")
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"type\":\"dog\""))
+        val decoded = readFromString[Animal](json)(codec)
+        assertEquals(decoded, value)
+      }
+
       test("custom constructor name transform") {
         implicit val config: JsoniterConfig =
           JsoniterConfig(adtLeafClassNameMapper = _.toLowerCase)
@@ -203,6 +298,22 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         assert(json.contains("\"circle\""))
         val decoded = readFromString[Shape](json)(codec)
         assertEquals(decoded, value)
+      }
+
+      test("skipUnexpectedFields=true (default) ignores extra fields") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice","extraField":"ignored","age":30}"""
+        val decoded = readFromString[SimplePerson](json)(codec)
+        assertEquals(decoded, SimplePerson("Alice", 30))
+      }
+
+      test("skipUnexpectedFields=false rejects extra fields") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withSkipUnexpectedFields(false)
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice","extraField":"boom","age":30}"""
+        intercept[JsonReaderException] {
+          readFromString[SimplePerson](json)(codec)
+        }
       }
     }
 

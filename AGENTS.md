@@ -108,8 +108,11 @@ Common issues when writing cross-compiled macros — one-line summaries below, f
 - **Path-dependent types in `Expr.quote`** — fails on Scala 2; use `LambdaBuilder` or runtime type witness
 - **Macro-internal types leak** — `??`, `Expr_??` inside `Expr.quote` cause reification failures; extract to `val` before quote
 - **`Array` needs `ClassTag`** — use `List` and `::` instead of `Array` in `Expr.quote`
-- **`Expr.upcast` only widens** — use `.asInstanceOf` inside `Expr.quote` for narrowing
+- **`Expr.upcast` only widens** — use `.asInstanceOf` inside `Expr.quote` for narrowing; also needs `Type[A]` in scope for the source type
 - **Macro methods need concrete types** — don't wrap macro calls in generic helpers
+- **Sibling `Expr.splice` isolation (Scala 3)** — each `Expr.splice` in an `Expr.quote` gets its own `Quotes` context; types/exprs can't be shared between sibling splices. For combined codecs, pre-derive with `LambdaBuilder` in one `runSafe` call
+- **`IsMap`/`IsCollection` path-dependent types** — `import isMap.{Key, Value, CtorResult}` before `Expr.quote` to bring `Type` instances into scope
+- **`ValDefsCache` wrapping scope** — `vals.toValDefs.use` must wrap the outermost expression containing all references, not individual sub-expressions
 
 Hearth source is at `../hearth/` when documentation is insufficient. See
 `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.
@@ -130,6 +133,8 @@ When implementing or modifying type class derivation macros, follow:
 Use `FastShowPrettyMacrosImpl.scala` as the reference for **encoder-style** derivation (reading fields).
 Use `circe-derivation/DecoderMacrosImpl.scala` as the reference for **decoder-style** derivation
 (constructing types from decoded data).
+Use `jsoniter-derivation/CodecMacrosImpl.scala` as the reference for **combined codec derivation**
+(encoder + decoder in one type class, `LambdaBuilder` pattern for Scala 3 cross-splice safety).
 
 ### Other guides in `type-class-derivation-skill.md`
 

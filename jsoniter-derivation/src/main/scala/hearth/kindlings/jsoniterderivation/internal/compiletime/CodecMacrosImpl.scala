@@ -30,17 +30,16 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
     deriveCodecFromCtxAndAdaptForEntrypoint[A, KindlingsJsonValueCodec[A]]("KindlingsJsonValueCodec.derived") {
-      case (encodeFnExpr, decodeFnExpr, nullValueExpr) =>
+      case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
           new KindlingsJsonValueCodec[A] {
-            private val _encode = Expr.splice(encodeFnExpr)
-            private val _decode = Expr.splice(decodeFnExpr)
             def nullValue: A = Expr.splice(nullValueExpr)
             def decodeValue(in: JsonReader, default: A): A = {
               val _ = default
-              _decode(in, Expr.splice(configExpr))
+              Expr.splice(decodeFn(Expr.quote(in), configExpr))
             }
-            def encodeValue(x: A, out: JsonWriter): Unit = _encode(x, out, Expr.splice(configExpr))
+            def encodeValue(x: A, out: JsonWriter): Unit =
+              Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
           }
         }
     }
@@ -50,8 +49,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
 
   def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (
-          Expr[(A, JsonWriter, JsoniterConfig) => Unit],
-          Expr[(JsonReader, JsoniterConfig) => A],
+          (Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit],
+          (Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A],
           Expr[A]
       ) => Expr[Out]
   ): Expr[Out] = Log
@@ -63,47 +62,58 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val UnitT: Type[Unit] = CTypes.Unit
 
-      // All derivation in a single MIO.scoped / runSafe to avoid cross-splice issues in Scala 3.
-      // The cross-quotes plugin gives each Expr.splice within an Expr.quote its own nested Quotes
-      // context. Expressions created in one splice can't be used in a sibling splice.
-      // By deriving encode, decode, and nullValue as pre-built Expr values in a single runSafe call,
-      // we ensure no expressions leak between splices in the final Expr.quote.
+      // Three separate MIO values for encoder, decoder and null value, combined with parTuple
+      // for parallel error aggregation. Each derivation uses ValDefBuilder to cache its body
+      // as a def in the shared ValDefsCache. The returned Scala-level functions generate
+      // method-call expressions that are safe to use in any Expr.splice context (no cross-splice
+      // staging issues on Scala 3).
       MIO.scoped { runSafe =>
         val cache = ValDefsCache.mlocal
         val selfType: Option[??] = Some(Type[A].as_??)
 
-        val (encLambdaRaw, decLambdaRaw, nullValueExpr, vals) = runSafe {
+        // Encoder: cache as def, derive body inside, extract function from cache
+        val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
+          val defBuilder =
+            ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
           for {
-            _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-
-            // Derive encoder as (A, JsonWriter, JsoniterConfig) => Unit via LambdaBuilder
-            encLambdaRaw <- LambdaBuilder
-              .of3[A, JsonWriter, JsoniterConfig]("value", "writer", "config")
-              .traverse { case (valueExpr, writerExpr, cfgExpr) =>
-                deriveEncoderRecursively[A](using EncoderCtx.from(valueExpr, writerExpr, cfgExpr, cache, selfType))
-              }
-              .map(_.build[Unit])
-
-            // Derive decoder as (JsonReader, JsoniterConfig) => A via LambdaBuilder
-            decLambdaRaw <- LambdaBuilder
-              .of2[JsonReader, JsoniterConfig]("reader", "config")
-              .traverse { case (readerExpr, cfgExpr) =>
-                deriveDecoderRecursively[A](using DecoderCtx.from(readerExpr, cfgExpr, cache, selfType))
-              }
-              .map(_.build[A])
-
-            // Derive null value
-            nullVal <- deriveNullValue[A]
-
-            // Extract all cached val defs (encoder + decoder share the same cache,
-            // using different keys: "cached-encode-method" vs "cached-decode-method")
-            vals <- cache.get
-          } yield (encLambdaRaw, decLambdaRaw, nullVal, vals)
+            _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
+            _ <- MIO.scoped { rs =>
+              rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
+                rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+              })
+            }
+            fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
+          } yield fn.get
         }
 
-        // Wrap cached val defs around the entire result expression, so both lambdas
-        // share the same definitions without duplication or unused-method warnings.
-        val resultExpr = provideCtxAndAdapt(encLambdaRaw, decLambdaRaw, nullValueExpr)
+        // Decoder: same pattern with ofDef2
+        val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
+          val defBuilder =
+            ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
+          for {
+            _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
+            _ <- MIO.scoped { rs =>
+              rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
+                rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+              })
+            }
+            fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
+          } yield fn.get
+        }
+
+        // Null value
+        val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+
+        // Combine with parTuple (parallel error aggregation)
+        val ((encFn, decFn), nullVal) = runSafe {
+          for {
+            _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+            result <- encMIO.parTuple(decMIO).parTuple(nullMIO)
+          } yield result
+        }
+
+        val vals = runSafe(cache.get)
+        val resultExpr = provideCtxAndAdapt(encFn, decFn, nullVal)
         vals.toValDefs.use(_ => resultExpr)
       }
     }
