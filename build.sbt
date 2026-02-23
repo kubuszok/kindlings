@@ -26,6 +26,7 @@ val versions = new {
   // Dependencies.
   val circe = "0.14.15"
   val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
+  val jsoniterScala = "2.30.2"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
   val scalacheck = "1.19.0"
@@ -268,7 +269,7 @@ val noPublishSettings =
 
 val al = new {
 
-  private val prodProjects = Vector("fastShowPretty", "circeDerivation")
+  private val prodProjects = Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson")
 
   private def isJVM(platform: String): Boolean = platform == "JVM"
 
@@ -316,6 +317,8 @@ lazy val root = project
   .settings(noPublishSettings)
   .aggregate(fastShowPretty.projectRefs *)
   .aggregate(circeDerivation.projectRefs *)
+  .aggregate(jsoniterDerivation.projectRefs *)
+  .aggregate(jsoniterJson.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -394,4 +397,52 @@ lazy val circeDerivation = projectMatrix
       "io.circe" %%% "circe-core" % versions.circe,
       "io.circe" %%% "circe-parser" % versions.circe % Test
     )
+  )
+
+lazy val jsoniterDerivation = projectMatrix
+  .in(file("jsoniter-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-jsoniter-derivation",
+    name := "kindlings-jsoniter-derivation",
+    description := "Jsoniter Scala JsonValueCodec derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala
+    )
+  )
+
+lazy val jsoniterJson = projectMatrix
+  .in(file("jsoniter-json"))
+  .someVariations(versions.scalas, versions.platforms)(only1VersionInIDE *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-jsoniter-json",
+    name := "kindlings-jsoniter-json",
+    description := "Minimal JSON AST with optics and JsonValueCodec for jsoniter-scala"
+  )
+  .settings(settings *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
+      "org.scalameta" %%% "munit" % versions.munit % Test,
+      "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
+    ),
+    libraryDependencies ++= versions.fold(scalaVersion.value)(
+      for3 = Seq.empty,
+      for2_13 = Seq(
+        compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
+      )
+    ),
+    resolvers += mavenCentralSnapshots
   )
