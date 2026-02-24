@@ -4,7 +4,7 @@ package internal.compiletime
 import hearth.MacroCommonsScala2
 
 trait AnnotationSupportScala2 extends AnnotationSupport { this: MacroCommonsScala2 =>
-  import c.universe._
+  import c.universe.*
 
   // Access annotations directly from the symbol to preserve type information.
   // Hearth's param.asUntyped.annotations strips types via c.untypecheck,

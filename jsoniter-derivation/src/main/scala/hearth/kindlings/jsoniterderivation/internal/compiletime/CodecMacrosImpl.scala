@@ -185,7 +185,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -259,7 +259,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -359,7 +359,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -532,8 +532,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }
               .toList
-            Log.info(s"Failed to derive encoder for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-              MIO.fail(CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+            val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            Log.error(err.message) >> MIO.fail(err)
         }
       }
 
@@ -816,11 +816,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
-          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
       } match {
-        case Some(msg) => MIO.fail(new RuntimeException(msg))
-        case None      =>
+        case Some(name) =>
+          val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
+        case None =>
           val nonTransientFields = allFields.filter { case (name, _) =>
             paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
           }
@@ -985,7 +986,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
         .flatMap {
           case Some(result) => MIO.pure(result)
           case None         =>
-            MIO.fail(new RuntimeException(s"The type ${Type[A].prettyPrint} does not have any children!"))
+            val err = CodecDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
         }
     }
   }
@@ -1103,8 +1105,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }
               .toList
-            Log.info(s"Failed to derive decoder for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-              MIO.fail(CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+            val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            Log.error(err.message) >> MIO.fail(err)
         }
       }
 
@@ -1416,8 +1418,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       if (caseClass.isSingleton) {
         return caseClass
           .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-              MIO.fail(new RuntimeException(s"Unexpected parameter in singleton ${Type[A].prettyPrint}"))
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+              val err = CodecDerivationError
+                .UnexpectedParameterInSingleton(Type[A].prettyPrint, "Unexpected parameter in singleton")
+              Log.error(err.message) >> MIO.fail(err)
+            }
           })
           .flatMap {
             case Some(expr) =>
@@ -1426,7 +1431,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 Expr.splice(expr)
               })
             case None =>
-              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+              val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
+              Log.error(err.message) >> MIO.fail(err)
           }
       }
 
@@ -1436,10 +1442,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
-            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
         }
-        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+        .foreach { name =>
+          val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          return Log.error(err.message) >> MIO.fail(err)
+        }
 
       // Separate transient from non-transient fields
       val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
@@ -1449,10 +1457,14 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           // Zero non-transient fields (either zero-param or all-transient): construct directly
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                MIO.fail(
-                  new RuntimeException(s"Unexpected parameter in zero-argument case class ${Type[A].prettyPrint}")
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+                val err = CodecDerivationError.CannotConstructType(
+                  Type[A].prettyPrint,
+                  isSingleton = false,
+                  Some("Unexpected parameter in zero-argument case class")
                 )
+                Log.error(err.message) >> MIO.fail(err)
+              }
             })
             .flatMap {
               case Some(expr) =>
@@ -1462,7 +1474,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   Expr.splice(expr)
                 })
               case None =>
-                MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+                val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
+                Log.error(err.message) >> MIO.fail(err)
             }
 
         case Some(fields) =>
@@ -1527,7 +1540,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err =
+                        CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
                 .map { builder =>
@@ -1587,8 +1602,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       if (caseClass.isSingleton) {
         return caseClass
           .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-              MIO.fail(new RuntimeException(s"Unexpected field in singleton ${Type[A].prettyPrint}"))
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+              val err = CodecDerivationError
+                .UnexpectedParameterInSingleton(Type[A].prettyPrint, "Unexpected field in singleton")
+              Log.error(err.message) >> MIO.fail(err)
+            }
           })
           .flatMap {
             case Some(expr) =>
@@ -1606,7 +1624,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 Expr.splice(expr)
               })
             case None =>
-              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+              val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
+              Log.error(err.message) >> MIO.fail(err)
           }
       }
 
@@ -1616,10 +1635,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       // Validate: @transientField on fields without defaults
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
-            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
         }
-        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+        .foreach { name =>
+          val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          return Log.error(err.message) >> MIO.fail(err)
+        }
 
       val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
 
@@ -1628,8 +1649,14 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           // Zero non-transient fields: just read closing `}`
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                MIO.fail(new RuntimeException(s"Unexpected field in zero-arg case class"))
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+                val err = CodecDerivationError.CannotConstructType(
+                  Type[A].prettyPrint,
+                  isSingleton = false,
+                  Some("Unexpected field in zero-arg case class")
+                )
+                Log.error(err.message) >> MIO.fail(err)
+              }
             })
             .flatMap {
               case Some(expr) =>
@@ -1647,7 +1674,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   Expr.splice(expr)
                 })
               case None =>
-                MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+                val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
+                Log.error(err.message) >> MIO.fail(err)
             }
 
         case Some(fields) =>
@@ -1707,7 +1735,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err =
+                        CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
                 .map { builder =>
@@ -2012,10 +2042,13 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           // which properly handles singleton references (unlike primaryConstructor which may call private ctors)
           val constructMIO: MIO[Option[Expr[ChildType]]] =
             cc.construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                MIO.fail(
-                  new RuntimeException(s"Unexpected parameter in singleton ${Type[ChildType].prettyPrint}")
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+                val err = CodecDerivationError.UnexpectedParameterInSingleton(
+                  Type[ChildType].prettyPrint,
+                  "Unexpected parameter in singleton"
                 )
+                Log.error(err.message) >> MIO.fail(err)
+              }
             })
           constructMIO.flatMap {
             case Some(instanceExpr) =>
@@ -2031,18 +2064,17 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 }
               }
             case None =>
-              MIO.fail(
-                new RuntimeException(s"Cannot construct singleton ${Type[ChildType].prettyPrint}")
-              )
+              val err = CodecDerivationError.CannotConstructType(Type[ChildType].prettyPrint, isSingleton = true)
+              Log.error(err.message) >> MIO.fail(err)
           }
 
         case _ =>
           // Not a zero-param case class — shouldn't happen when allCaseObjects is true
-          MIO.fail(
-            new RuntimeException(
-              s"Expected singleton/case object for string enum but got ${Type[ChildType].prettyPrint}"
-            )
+          val err = CodecDerivationError.UnexpectedParameterInSingleton(
+            Type[ChildType].prettyPrint,
+            "Expected singleton/case object for string enum but got"
           )
+          Log.error(err.message) >> MIO.fail(err)
       }
     }
   }
@@ -2083,5 +2115,24 @@ private[compiletime] object CodecDerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends CodecDerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any codec derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends CodecDerivationError {
+    override def message: String =
+      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+  }
+  final case class NoChildrenInSealedTrait(tpeName: String) extends CodecDerivationError {
+    override def message: String =
+      s"The type $tpeName does not have any children!"
+  }
+  final case class CannotConstructType(tpeName: String, isSingleton: Boolean, constructorError: Option[String] = None)
+      extends CodecDerivationError {
+    override def message: String = {
+      val prefix =
+        if (isSingleton) s"Cannot construct singleton $tpeName" else s"Cannot construct $tpeName"
+      constructorError.fold(prefix)(err => s"$prefix: $err")
+    }
+  }
+  final case class UnexpectedParameterInSingleton(tpeName: String, context: String) extends CodecDerivationError {
+    override def message: String = s"$context: $tpeName"
   }
 }

@@ -97,7 +97,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -247,8 +247,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }
               .toList
-            Log.info(s"Failed to derive decoder for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-              MIO.fail(DecoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+            val err = DecoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            Log.error(err.message) >> MIO.fail(err)
         }
       }
 
@@ -527,8 +527,14 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       if (caseClass.isSingleton) {
         return caseClass
           .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-              MIO.fail(new RuntimeException(s"Unexpected parameter in singleton ${Type[A].prettyPrint}"))
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+              val err = DecoderDerivationError.CannotConstructType(
+                Type[A].prettyPrint,
+                isSingleton = true,
+                Some(s"Unexpected parameter in singleton")
+              )
+              Log.error(err.message) >> MIO.fail(err)
+            }
           })
           .flatMap {
             case Some(expr) =>
@@ -542,7 +548,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   Right(Expr.splice(expr)): Either[DecodingFailure, A]
               })
             case None =>
-              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+              val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
+              Log.error(err.message) >> MIO.fail(err)
           }
       }
 
@@ -552,10 +559,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
-            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
         }
-        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+        .foreach { name =>
+          val err = DecoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          return Log.error(err.message) >> MIO.fail(err)
+        }
 
       // Build a List[String] expression of the field names (accounting for @fieldName overrides)
       // for strict decoding — only non-transient fields
@@ -580,10 +589,14 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           // Zero-parameter case class: construct directly, but check strictDecoding
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                MIO.fail(
-                  new RuntimeException(s"Unexpected parameter in zero-argument case class ${Type[A].prettyPrint}")
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+                val err = DecoderDerivationError.CannotConstructType(
+                  Type[A].prettyPrint,
+                  isSingleton = false,
+                  Some(s"Unexpected parameter in zero-argument case class")
                 )
+                Log.error(err.message) >> MIO.fail(err)
+              }
             })
             .flatMap {
               case Some(expr) =>
@@ -597,7 +610,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                     Right(Expr.splice(expr)): Either[DecodingFailure, A]
                 })
               case None =>
-                MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+                val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
+                Log.error(err.message) >> MIO.fail(err)
             }
 
         case Some(fields) =>
@@ -742,7 +756,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err = DecoderDerivationError.CannotConstructType(
+                        Type[A].prettyPrint,
+                        isSingleton = false,
+                        Some(error)
+                      )
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
                 .map { builder =>
@@ -1069,5 +1088,17 @@ private[compiletime] object DecoderDerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends DecoderDerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any decoder derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends DecoderDerivationError {
+    override def message: String =
+      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+  }
+  final case class CannotConstructType(tpeName: String, isSingleton: Boolean, constructorError: Option[String] = None)
+      extends DecoderDerivationError {
+    override def message: String = {
+      val prefix =
+        if (isSingleton) s"Cannot construct singleton $tpeName" else s"Cannot construct $tpeName"
+      constructorError.fold(prefix)(err => s"$prefix: $err")
+    }
   }
 }

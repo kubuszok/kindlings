@@ -4,7 +4,7 @@ package internal.compiletime
 import hearth.MacroCommonsScala2
 
 trait AnnotationSupportScala2 extends AnnotationSupport { this: MacroCommonsScala2 =>
-  import c.universe._
+  import c.universe.*
 
   override protected def findAnnotationOfType[Ann: Type](param: Parameter): Option[UntypedExpr] = {
     val annTpe = UntypedType.fromTyped[Ann]

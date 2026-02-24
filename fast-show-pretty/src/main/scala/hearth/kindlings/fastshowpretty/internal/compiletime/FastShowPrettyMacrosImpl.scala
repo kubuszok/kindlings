@@ -102,7 +102,7 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -300,8 +300,8 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }
               .toList
-            Log.info(s"Failed to derive result for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-              MIO.fail(DerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+            val err = DerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            Log.error(err.message) >> MIO.fail(err)
         }
       }
 
@@ -857,7 +857,8 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
           case Some(result) =>
             MIO.pure(result)
           case None =>
-            MIO.fail(new RuntimeException(s"The type ${Type[A].prettyPrint} does not have any children!"))
+            val err = DerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
         }
     }
 
@@ -874,5 +875,9 @@ private[compiletime] object DerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends DerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class NoChildrenInSealedTrait(tpeName: String) extends DerivationError {
+    override def message: String =
+      s"The type $tpeName does not have any children!"
   }
 }

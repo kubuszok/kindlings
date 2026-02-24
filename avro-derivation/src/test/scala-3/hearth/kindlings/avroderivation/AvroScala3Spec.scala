@@ -4,25 +4,6 @@ import hearth.MacroSuite
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord}
 
-enum Fruit {
-  case Apple, Banana, Cherry
-}
-
-enum Vehicle {
-  case Car(make: String, year: Int)
-  case Bike(gears: Int)
-}
-
-object AvroOpaqueTypes {
-  opaque type UserId = Int
-  object UserId {
-    def apply(value: Int): UserId = value
-    extension (id: UserId) def value: Int = id
-  }
-}
-
-case class AvroUserWithOpaque(id: AvroOpaqueTypes.UserId, name: String)
-
 final class AvroScala3Spec extends MacroSuite {
 
   group("Scala 3 enums") {

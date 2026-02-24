@@ -1209,10 +1209,12 @@ Tests go in the module's test directories following this structure:
 ```
 my-type-class/src/test/
 ├── scala/hearth/kindlings/mytypeclass/
+│   ├── examples.scala                     # Test data types (case classes, sealed traits, etc.)
 │   └── MyTypeClassSpec.scala              # Cross-compiled tests (Scala 2 + 3)
 ├── scala-2/hearth/kindlings/mytypeclass/
 │   └── MyTypeClassScala2Spec.scala        # Scala 2-only tests (if needed)
 └── scala-3/hearth/kindlings/mytypeclass/
+    ├── scala3examples.scala               # Scala 3-only test types (enums, opaque types)
     └── MyTypeClassScala3Spec.scala         # Scala 3 enums, named tuples, etc.
 ```
 
@@ -1289,6 +1291,66 @@ When syncing changes from hearth's `hearth-tests` demo modules back to kindlings
 4. **Test imports**: `hearth.examples.ExampleValueClass` -> define locally in test file
 5. **Test base class**: Use `MacroSuite` (from `hearth-munit`)
 6. **Source set dirs**: hearth uses `scala-newest` / `scala-newest-2` / `scala-newest-3`; kindlings uses `scala` / `scala-2` / `scala-3`
+
+## Error types
+
+Each module defines a sealed error trait hierarchy at the bottom of its `MacrosImpl.scala` file(s). All error traits extend `util.control.NoStackTrace` and have a `message` field used for error reporting.
+
+### Error trait hierarchy per module
+
+| Module | File | Sealed Trait | Case Classes |
+|--------|------|-------------|--------------|
+| fast-show-pretty | `FastShowPrettyMacrosImpl.scala` | `DerivationError` | `UnsupportedType`, `NoChildrenInSealedTrait` |
+| circe encoder | `EncoderMacrosImpl.scala` | `EncoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
+| circe decoder | `DecoderMacrosImpl.scala` | `DecoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `CannotConstructType` |
+| yaml encoder | `EncoderMacrosImpl.scala` | `EncoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
+| yaml decoder | `DecoderMacrosImpl.scala` | `DecoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `CannotConstructType` |
+| avro schema | `SchemaForMacrosImpl.scala` | `SchemaDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
+| avro encoder | `EncoderMacrosImpl.scala` | `EncoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
+| avro decoder | `DecoderMacrosImpl.scala` | `DecoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `CannotConstructType`, `NoChildrenInSealedTrait`, `EnumChildError` |
+| jsoniter codec | `CodecMacrosImpl.scala` | `CodecDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait`, `CannotConstructType`, `UnexpectedParameterInSingleton` |
+
+### Error fail pattern
+
+All error sites follow the `Log.error >> MIO.fail` pattern — the error is logged before failing:
+
+```scala
+val err = XxxDerivationError.SomeCase(...)
+Log.error(err.message) >> MIO.fail(err)
+```
+
+For `return` sites (e.g., transientField validation):
+
+```scala
+val err = XxxDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+return Log.error(err.message) >> MIO.fail(err)
+```
+
+### Conditional errorRendering
+
+The `errorRendering` parameter in `runToExprOrFail` is conditional on whether logging is enabled:
+
+```scala
+errorRendering = if (shouldWeLogXxx) RenderFrom(Log.Level.Info) else DontRender
+```
+
+This prevents error log trees from being rendered when debug logging is disabled, reducing noise in compilation output.
+
+## Test data organization
+
+Test data types (case classes, sealed traits, enums, etc.) are defined in separate `examples.scala` files, not inline in spec files:
+
+```
+my-type-class/src/test/
+├── scala/hearth/kindlings/mytypeclass/
+│   ├── examples.scala                    # Shared test data types (Scala 2 + 3)
+│   └── MyTypeClassSpec.scala             # Tests reference types from examples.scala
+└── scala-3/hearth/kindlings/mytypeclass/
+    ├── scala3examples.scala              # Scala 3-only types (enums, opaque types)
+    └── MyTypeClassScala3Spec.scala       # Scala 3-only tests
+```
+
+Since the examples file shares the same package as the spec, no imports are needed. Annotation types (`@fieldName`, `@transientField`) are imported in the examples file.
 
 ## Workflow summary
 

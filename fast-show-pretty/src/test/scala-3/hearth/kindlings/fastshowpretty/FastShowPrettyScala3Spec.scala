@@ -2,11 +2,6 @@ package hearth.kindlings.fastshowpretty
 
 import hearth.MacroSuite
 
-enum Fruit {
-  case Apple(weight: Double)
-  case Banana(length: Double)
-}
-
 final class FastShowPrettyScala3Spec extends MacroSuite {
 
   group("FastShowPretty") {

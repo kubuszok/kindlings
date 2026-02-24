@@ -84,7 +84,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     .runToExprOrFail(
       macroName,
       infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = RenderFrom(Log.Level.Info)
+      errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
     ) { (errorLogs, errors) =>
       val errorsRendered = errors
         .map { e =>
@@ -232,8 +232,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }
               .toList
-            Log.info(s"Failed to derive encoder for ${Type[A].prettyPrint}:\n${reasonsStrings.mkString("\n")}") >>
-              MIO.fail(EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+            val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            Log.error(err.message) >> MIO.fail(err)
         }
       }
 
@@ -484,11 +484,12 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
-          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
       } match {
-        case Some(msg) => MIO.fail(new RuntimeException(msg))
-        case None      =>
+        case Some(name) =>
+          val err = EncoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
+        case None =>
           val nonTransientFields = allFields.filter { case (name, _) =>
             paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
           }
@@ -611,7 +612,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         .flatMap {
           case Some(result) => MIO.pure(result)
           case None         =>
-            MIO.fail(new RuntimeException(s"The type ${Type[A].prettyPrint} does not have any children!"))
+            val err = EncoderDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
         }
     }
   }
@@ -643,5 +645,13 @@ private[compiletime] object EncoderDerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends EncoderDerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any encoder derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends EncoderDerivationError {
+    override def message: String =
+      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+  }
+  final case class NoChildrenInSealedTrait(tpeName: String) extends EncoderDerivationError {
+    override def message: String =
+      s"The type $tpeName does not have any children!"
   }
 }
