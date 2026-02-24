@@ -17,7 +17,7 @@ val mavenCentralSnapshots = "Maven Central Snapshots" at "https://central.sonaty
 val versions = new {
   // Versions we are publishing for.
   val scala213 = "2.13.18"
-  val scala3 = "3.7.4"
+  val scala3 = "3.8.2"
 
   // Which versions should be cross-compiled for publishing.
   val scalas = List(scala213, scala3)
@@ -26,7 +26,7 @@ val versions = new {
   // Dependencies.
   val hearth = "0.2.0-231-gca4c6ac-SNAPSHOT"
   val kindProjector = "0.13.4"
-  val avro = "1.12.0"
+  val avro = "1.12.1"
   val circe = "0.14.15"
   val jsoniterScala = "2.38.9"
   val scalaYaml = "0.3.1"
@@ -130,7 +130,7 @@ val settings = Seq(
     for3 = Seq(
       // format: off
       "-encoding", "UTF-8",
-      "-release", "11",
+      "-release", "17",
       "-rewrite",
       "-source", "3.3-migration",
       // format: on
@@ -144,6 +144,7 @@ val settings = Seq(
       "-language:postfixOps", // "for >>"
       "-Wconf:msg=Unreachable case:s", // suppress fake (?) errors in internal.compiletime
       "-Wconf:msg=Missing symbol position:s", // suppress warning https://github.com/scala/scala3/issues/21672
+      "-Werror",
       "-Wnonunit-statement",
       // "-Wunused:imports", // import x.Underlying as X is marked as unused even though it is! probably one of https://github.com/scala/scala3/issues/: #18564, #19252, #19657, #19912
       "-Wunused:privates",
@@ -152,7 +153,6 @@ val settings = Seq(
       "-Wunused:implicits",
       "-Wunused:params",
       "-Wvalue-discard",
-      "-Xfatal-warnings",
       "-Xcheck-macros",
       "-Xkind-projector:underscores"
     ),
