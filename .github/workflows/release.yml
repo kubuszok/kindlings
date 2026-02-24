@@ -2,8 +2,8 @@ name: Sonatype Release
 
 on:
   push:
-    branches: [ master ]
-    tags: [ '*' ]
+    branches: [master]
+    tags: ["*"]
 
 jobs:
   release-tag:
@@ -23,10 +23,10 @@ jobs:
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
       - uses: coursier/setup-action@v2.0.3
         with:
-          jvm: 'temurin:1.11.0.28'
+          jvm: "temurin:1.17.0.15"
           apps: sbt
       - name: Publish all projects
-        run:  sbt ci-release
+        run: sbt ci-release
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
