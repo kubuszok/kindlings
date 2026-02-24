@@ -27,6 +27,7 @@ val versions = new {
   val circe = "0.14.15"
   val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
   val jsoniterScala = "2.38.9"
+  val avro = "1.12.0"
   val scalaYaml = "0.3.1"
   val kindProjector = "0.13.4"
   val munit = "1.2.1"
@@ -273,12 +274,17 @@ val al = new {
   private val prodProjects =
     Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson", "yamlDerivation")
 
+  private val jvmOnlyProdProjects = Vector("avroDerivation")
+
   private def isJVM(platform: String): Boolean = platform == "JVM"
 
-  private def projects(platform: String, scalaSuffix: String): Vector[String] =
-    for {
+  private def projects(platform: String, scalaSuffix: String): Vector[String] = {
+    val crossPlatformProjects = for {
       name <- prodProjects
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix"
+    val jvmOnly = if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix") else Vector.empty
+    crossPlatformProjects ++ jvmOnly
+  }
 
   def ci(platform: String, scalaSuffix: String): String = {
     def tasksOf(name: String): Vector[String] = projects(platform, scalaSuffix).flatMap { case project =>
@@ -301,10 +307,14 @@ val al = new {
   def release(tag: Seq[String]): String =
     if (tag.nonEmpty) "publishSigned ; sonaRelease" else "publishSigned"
 
-  def publishLocal(platform: String, scalaSuffix: String): Vector[String] =
-    for {
+  def publishLocal(platform: String, scalaSuffix: String): Vector[String] = {
+    val crossPlatform = for {
       name <- prodProjects
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix/publishLocal"
+    val jvmOnly =
+      if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix/publishLocal") else Vector.empty
+    crossPlatform ++ jvmOnly
+  }
 
   val publishLocalForTests = (publishLocal("JVM", "") ++ publishLocal("JVM", "3")).mkString(" ; ")
 }
@@ -322,6 +332,7 @@ lazy val root = project
   .aggregate(jsoniterDerivation.projectRefs *)
   .aggregate(jsoniterJson.projectRefs *)
   .aggregate(yamlDerivation.projectRefs *)
+  .aggregate(avroDerivation.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -467,5 +478,25 @@ lazy val yamlDerivation = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml
+    )
+  )
+
+lazy val avroDerivation = projectMatrix
+  .in(file("avro-derivation"))
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-avro-derivation",
+    name := "kindlings-avro-derivation",
+    description := "Apache Avro AvroSchemaFor/AvroEncoder/AvroDecoder derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.apache.avro" % "avro" % versions.avro
     )
   )
