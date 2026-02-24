@@ -32,7 +32,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = SimplePerson("Alice", 30)
         val json = writeToString(value)(codec)
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("empty case class round-trip") {
@@ -40,7 +40,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = EmptyClass()
         val json = writeToString(value)(codec)
         val decoded = readFromString[EmptyClass](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("single field case class round-trip") {
@@ -48,7 +48,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = SingleField(42)
         val json = writeToString(value)(codec)
         val decoded = readFromString[SingleField](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("nested case class round-trip") {
@@ -56,7 +56,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
         val json = writeToString(value)(codec)
         val decoded = readFromString[PersonWithAddress](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("case class with collection field round-trip") {
@@ -64,7 +64,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = TeamWithMembers("Dev", List(SimplePerson("Alice", 30), SimplePerson("Bob", 25)))
         val json = writeToString(value)(codec)
         val decoded = readFromString[TeamWithMembers](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -75,7 +75,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = WrappedInt(42)
         val json = writeToString(value)(codec)
         val decoded = readFromString[WrappedInt](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -86,7 +86,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value: Option[Int] = Some(42)
         val json = writeToString(value)(codec)
         val decoded = readFromString[Option[Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("None round-trip") {
@@ -94,7 +94,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value: Option[Int] = None
         val json = writeToString(value)(codec)
         val decoded = readFromString[Option[Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -105,7 +105,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = List(1, 2, 3)
         val json = writeToString(value)(codec)
         val decoded = readFromString[List[Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("Vector of strings round-trip") {
@@ -113,7 +113,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = Vector("a", "b", "c")
         val json = writeToString(value)(codec)
         val decoded = readFromString[Vector[String]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("empty list round-trip") {
@@ -121,7 +121,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = List.empty[Int]
         val json = writeToString(value)(codec)
         val decoded = readFromString[List[Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -132,7 +132,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = Map("a" -> 1, "b" -> 2)
         val json = writeToString(value)(codec)
         val decoded = readFromString[Map[String, Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("empty map round-trip") {
@@ -140,7 +140,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = Map.empty[String, Int]
         val json = writeToString(value)(codec)
         val decoded = readFromString[Map[String, Int]](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -151,7 +151,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value: Shape = Circle(5.0)
         val json = writeToString(value)(codec)
         val decoded = readFromString[Shape](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("wrapper-style second case round-trip") {
@@ -159,7 +159,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value: Shape = Rectangle(3.0, 4.0)
         val json = writeToString(value)(codec)
         val decoded = readFromString[Shape](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("discriminator-style round-trip") {
@@ -168,7 +168,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value: Animal = Dog("Rex", "Labrador")
         val json = writeToString(value)(codec)
         val decoded = readFromString[Animal](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -179,7 +179,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil)))))
         val json = writeToString(value)(codec)
         val decoded = readFromString[RecursiveTree](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -190,7 +190,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = SimplePerson("Alice", 30)
         val json = writeToString(value)(codec)
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("nested types derived automatically") {
@@ -198,7 +198,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
         val json = writeToString(value)(codec)
         val decoded = readFromString[PersonWithAddress](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("auto-derivation uses custom implicit config") {
@@ -206,10 +206,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = implicitly[KindlingsJsonValueCodec[CamelCasePerson]]
         val value = CamelCasePerson("Alice", "Smith")
         val json = writeToString(value)(codec)
-        assert(json.contains("\"first-name\""))
-        assert(json.contains("\"last-name\""))
+        json.contains("\"first-name\"") ==> true
+        json.contains("\"last-name\"") ==> true
         val decoded = readFromString[CamelCasePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -220,9 +220,9 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[PersonWithAddress]
         val value = PersonWithAddress("Bob", 25, Address("123 Main", "SF"))
         val json = writeToString(value)(codec)
-        assert(json.contains("\"person_with_address\"") || json.contains("\"name\""))
+        (json.contains("\"person_with_address\"") || json.contains("\"name\"")) ==> true
         val decoded = readFromString[PersonWithAddress](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("kebab-case field names") {
@@ -230,10 +230,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[CamelCasePerson]
         val value = CamelCasePerson("Alice", "Smith")
         val json = writeToString(value)(codec)
-        assert(json.contains("\"first-name\""))
-        assert(json.contains("\"last-name\""))
+        json.contains("\"first-name\"") ==> true
+        json.contains("\"last-name\"") ==> true
         val decoded = readFromString[CamelCasePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("PascalCase field names") {
@@ -241,10 +241,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[SimplePerson]
         val value = SimplePerson("Alice", 30)
         val json = writeToString(value)(codec)
-        assert(json.contains("\"Name\""))
-        assert(json.contains("\"Age\""))
+        json.contains("\"Name\"") ==> true
+        json.contains("\"Age\"") ==> true
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("SCREAMING_SNAKE_CASE field names") {
@@ -252,10 +252,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[CamelCasePerson]
         val value = CamelCasePerson("Alice", "Smith")
         val json = writeToString(value)(codec)
-        assert(json.contains("\"FIRST_NAME\""))
-        assert(json.contains("\"LAST_NAME\""))
+        json.contains("\"FIRST_NAME\"") ==> true
+        json.contains("\"LAST_NAME\"") ==> true
         val decoded = readFromString[CamelCasePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("snake_case ADT leaf class names") {
@@ -263,9 +263,9 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[Shape]
         val value: Shape = Circle(5.0)
         val json = writeToString(value)(codec)
-        assert(json.contains("\"circle\""))
+        json.contains("\"circle\"") ==> true
         val decoded = readFromString[Shape](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("kebab-case ADT leaf class names") {
@@ -273,9 +273,9 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[Shape]
         val value: Shape = Circle(5.0)
         val json = writeToString(value)(codec)
-        assert(json.contains("\"circle\""))
+        json.contains("\"circle\"") ==> true
         val decoded = readFromString[Shape](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("discriminator with ADT name mapper") {
@@ -284,9 +284,9 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[Animal]
         val value: Animal = Dog("Rex", "Labrador")
         val json = writeToString(value)(codec)
-        assert(json.contains("\"type\":\"dog\""))
+        json.contains("\"type\":\"dog\"") ==> true
         val decoded = readFromString[Animal](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("custom constructor name transform") {
@@ -295,16 +295,16 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derive[Shape]
         val value: Shape = Circle(5.0)
         val json = writeToString(value)(codec)
-        assert(json.contains("\"circle\""))
+        json.contains("\"circle\"") ==> true
         val decoded = readFromString[Shape](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("skipUnexpectedFields=true (default) ignores extra fields") {
         val codec = KindlingsJsonValueCodec.derive[SimplePerson]
         val json = """{"name":"Alice","extraField":"ignored","age":30}"""
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, SimplePerson("Alice", 30))
+        decoded ==> SimplePerson("Alice", 30)
       }
 
       test("skipUnexpectedFields=false rejects extra fields") {
@@ -317,6 +317,35 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("sets") {
+
+      test("Set of ints round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Set[Int]]
+        val value = Set(1, 2, 3)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Set[Int]](json)(codec)
+        decoded ==> value
+      }
+
+      test("empty set round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Set[Int]]
+        val value = Set.empty[Int]
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Set[Int]](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("error handling") {
+
+      test("missing field uses null/default value") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice"}"""
+        val decoded = readFromString[SimplePerson](json)(codec)
+        decoded ==> SimplePerson("Alice", 0)
+      }
+    }
+
     group("derive and derived") {
 
       test("explicit derive returns JsonValueCodec") {
@@ -324,7 +353,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = SimplePerson("Alice", 30)
         val json = writeToString(value)(codec)
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
 
       test("derived provides KindlingsJsonValueCodec") {
@@ -332,7 +361,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = SimplePerson("Alice", 30)
         val json = writeToString(value)(codec)
         val decoded = readFromString[SimplePerson](json)(codec)
-        assertEquals(decoded, value)
+        decoded ==> value
       }
     }
 
@@ -350,9 +379,9 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         }
         val codec = KindlingsJsonValueCodec.derive[SingleField]
         val json = writeToString(SingleField(5))(codec)
-        assertEquals(json, """{"value":50}""")
+        json ==> """{"value":50}"""
         val decoded = readFromString[SingleField](json)(codec)
-        assertEquals(decoded, SingleField(500))
+        decoded ==> SingleField(500)
       }
     }
   }
@@ -365,7 +394,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       val stringCodec = intCodec.map[String](sf => sf.value.toString)(s => SingleField(s.toInt))
       val json = writeToString("42")(stringCodec)
       val decoded = readFromString[String](json)(stringCodec)
-      assertEquals(decoded, "42")
+      decoded ==> "42"
     }
 
     test("mapDecode with Right") {
@@ -377,7 +406,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         )
       val json = writeToString(42)(positiveCodec)
       val decoded = readFromString[Int](json)(positiveCodec)
-      assertEquals(decoded, 42)
+      decoded ==> 42
     }
   }
 }

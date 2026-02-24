@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(tee:*)",
+      "Bash(xargs sed:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(java -version:*)",
+      "Bash(sbt --client:*)",
+      "Bash(scala-cli:*)",
+      "WebSearch",
+      "WebFetch(domain:scala-hearth.readthedocs.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:circe.github.io)",
+      "WebFetch(domain:virtuslab.github.io)",
+      "WebFetch(domain:index.scala-lang.org)",
+      "WebFetch(domain:app.codecov.io)",
+      "Bash(tail:*)",
+      "WebFetch(domain:scalameta.org)"
+    ]
+  }
+}

@@ -11,7 +11,7 @@ final class InlineMethodsSpec extends MacroSuite {
 
     test("simple case class") {
       val json = KindlingsJsonValueCodec.writeToString(SimplePerson("Alice", 30))
-      assertEquals(json, """{"name":"Alice","age":30}""")
+      json ==> """{"name":"Alice","age":30}"""
     }
 
     test("uses implicit codec when available") {
@@ -24,14 +24,14 @@ final class InlineMethodsSpec extends MacroSuite {
           out.writeVal(x * 100)
       }
       val json = KindlingsJsonValueCodec.writeToString(42)
-      assertEquals(json, "4200")
+      json ==> "4200"
     }
 
     test("with custom config") {
       implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
       val json = KindlingsJsonValueCodec.writeToString(CamelCasePerson("Alice", "Smith"))
-      assert(json.contains("\"first-name\""))
-      assert(json.contains("\"last-name\""))
+      json.contains("\"first-name\"") ==> true
+      json.contains("\"last-name\"") ==> true
     }
   }
 
@@ -39,13 +39,13 @@ final class InlineMethodsSpec extends MacroSuite {
 
     test("simple case class success") {
       val result = KindlingsJsonValueCodec.readFromString[SimplePerson]("""{"name":"Alice","age":30}""")
-      assertEquals(result, Right(SimplePerson("Alice", 30)))
+      result ==> Right(SimplePerson("Alice", 30))
     }
 
     test("invalid JSON returns Left") {
       val result = KindlingsJsonValueCodec.readFromString[SimplePerson]("not valid json")
-      assert(result.isLeft)
-      assert(result.left.exists(_.isInstanceOf[JsonReaderException]))
+      result.isLeft ==> true
+      result.left.exists(_.isInstanceOf[JsonReaderException]) ==> true
     }
 
     test("with custom config") {
@@ -53,7 +53,7 @@ final class InlineMethodsSpec extends MacroSuite {
       val result = KindlingsJsonValueCodec.readFromString[CamelCasePerson](
         """{"first-name":"Alice","last-name":"Smith"}"""
       )
-      assertEquals(result, Right(CamelCasePerson("Alice", "Smith")))
+      result ==> Right(CamelCasePerson("Alice", "Smith"))
     }
 
     test("uses implicit codec when available") {
@@ -66,7 +66,7 @@ final class InlineMethodsSpec extends MacroSuite {
           out.writeVal(x)
       }
       val result = KindlingsJsonValueCodec.readFromString[Int]("5")
-      assertEquals(result, Right(50))
+      result ==> Right(50)
     }
   }
 
@@ -75,15 +75,15 @@ final class InlineMethodsSpec extends MacroSuite {
     test("simple case class") {
       import syntax.*
       val json = SimplePerson("Alice", 30).toJsonString
-      assertEquals(json, """{"name":"Alice","age":30}""")
+      json ==> """{"name":"Alice","age":30}"""
     }
 
     test("with custom config") {
       import syntax.*
       implicit val config: JsoniterConfig = JsoniterConfig.default.withKebabCaseFieldNames
       val json = CamelCasePerson("Alice", "Smith").toJsonString
-      assert(json.contains("\"first-name\""))
-      assert(json.contains("\"last-name\""))
+      json.contains("\"first-name\"") ==> true
+      json.contains("\"last-name\"") ==> true
     }
   }
 
@@ -92,14 +92,14 @@ final class InlineMethodsSpec extends MacroSuite {
     test("simple case class success") {
       import syntax.*
       val result = """{"name":"Alice","age":30}""".fromJsonString[SimplePerson]
-      assertEquals(result, Right(SimplePerson("Alice", 30)))
+      result ==> Right(SimplePerson("Alice", 30))
     }
 
     test("invalid JSON returns Left") {
       import syntax.*
       val result = "not valid json".fromJsonString[SimplePerson]
-      assert(result.isLeft)
-      assert(result.left.exists(_.isInstanceOf[JsonReaderException]))
+      result.isLeft ==> true
+      result.left.exists(_.isInstanceOf[JsonReaderException]) ==> true
     }
   }
 
@@ -109,7 +109,7 @@ final class InlineMethodsSpec extends MacroSuite {
       val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
       val json = KindlingsJsonValueCodec.writeToString(value)
       val result = KindlingsJsonValueCodec.readFromString[PersonWithAddress](json)
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
 
     test("toJsonString then fromJsonString") {
@@ -117,14 +117,14 @@ final class InlineMethodsSpec extends MacroSuite {
       val value = PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield"))
       val json = value.toJsonString
       val result = json.fromJsonString[PersonWithAddress]
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
 
     test("sealed trait round-trip") {
       val value: Shape = Circle(5.0)
       val json = KindlingsJsonValueCodec.writeToString(value)
       val result = KindlingsJsonValueCodec.readFromString[Shape](json)
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
 
     test("sealed trait with discriminator round-trip") {
@@ -132,7 +132,7 @@ final class InlineMethodsSpec extends MacroSuite {
       val value: Animal = Dog("Rex", "Labrador")
       val json = KindlingsJsonValueCodec.writeToString(value)
       val result = KindlingsJsonValueCodec.readFromString[Animal](json)
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
   }
 

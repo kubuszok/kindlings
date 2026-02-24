@@ -12,21 +12,21 @@ final class RoundTripSpec extends MacroSuite {
         val value = SimplePerson("Alice", 30)
         val node = KindlingsYamlEncoder.encode(value)
         val decoded = KindlingsYamlDecoder.decode[SimplePerson](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
 
       test("empty case class") {
         val value = EmptyClass()
         val node = KindlingsYamlEncoder.encode(value)
         val decoded = KindlingsYamlDecoder.decode[EmptyClass](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
 
       test("single field case class") {
         val value = SingleField(42)
         val node = KindlingsYamlEncoder.encode(value)
         val decoded = KindlingsYamlDecoder.decode[SingleField](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
     }
 
@@ -36,7 +36,7 @@ final class RoundTripSpec extends MacroSuite {
         val value = WrappedInt(99)
         val node = KindlingsYamlEncoder.encode(value)
         val decoded = KindlingsYamlDecoder.decode[WrappedInt](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
     }
 
@@ -46,14 +46,14 @@ final class RoundTripSpec extends MacroSuite {
         val value: Shape = Circle(5.0)
         val node = KindlingsYamlEncoder.encode[Shape](value)
         val decoded = KindlingsYamlDecoder.decode[Shape](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
 
       test("Rectangle roundtrip") {
         val value: Shape = Rectangle(3.0, 4.0)
         val node = KindlingsYamlEncoder.encode[Shape](value)
         val decoded = KindlingsYamlDecoder.decode[Shape](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
 
       test("Dog roundtrip with discriminator") {
@@ -61,7 +61,7 @@ final class RoundTripSpec extends MacroSuite {
         val value: Animal = Dog("Rex", "Labrador")
         val node = KindlingsYamlEncoder.encode[Animal](value)
         val decoded = KindlingsYamlDecoder.decode[Animal](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
       }
 
       test("Cat roundtrip with discriminator") {
@@ -69,7 +69,17 @@ final class RoundTripSpec extends MacroSuite {
         val value: Animal = Cat("Whiskers", true)
         val node = KindlingsYamlEncoder.encode[Animal](value)
         val decoded = KindlingsYamlDecoder.decode[Animal](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
+      }
+    }
+
+    group("sets") {
+
+      test("Set roundtrip") {
+        val value = Set(1, 2, 3)
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[Set[Int]](node)
+        decoded ==> Right(value)
       }
     }
 
@@ -81,7 +91,15 @@ final class RoundTripSpec extends MacroSuite {
         val value: Shape = Circle(2.5)
         val node = KindlingsYamlEncoder.encode[Shape](value)
         val decoded = KindlingsYamlDecoder.decode[Shape](node)
-        assertEquals(decoded, Right(value))
+        decoded ==> Right(value)
+      }
+
+      test("snake_case member name roundtrip") {
+        implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
+        val value = CamelCasePerson("Alice", "Smith")
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[CamelCasePerson](node)
+        decoded ==> Right(value)
       }
     }
   }

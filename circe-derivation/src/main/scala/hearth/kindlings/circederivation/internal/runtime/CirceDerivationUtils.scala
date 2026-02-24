@@ -109,6 +109,20 @@ object CirceDerivationUtils {
       case _                         => decoder(cursor).map(Some(_))
     }
 
+  /** Like `decodeFieldWithDefault` but uses `Any` for the default value to avoid path-dependent type issues in macros.
+    * The decoder's type parameter `A` serves as the type witness. Returns `Decoder.Result[Any]`.
+    */
+  def decodeFieldWithUnsafeDefault[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A],
+      default: Any
+  ): Decoder.Result[Any] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Right(default)
+    else field.as[A](decoder).asInstanceOf[Decoder.Result[Any]]
+  }
+
   /** Cast an `Any` value to `A`, using a `Decoder[A]` purely for type inference. The decoder is not called - this is a
     * compile-time trick to avoid path-dependent type aliases in Scala 2 macro-generated code.
     */

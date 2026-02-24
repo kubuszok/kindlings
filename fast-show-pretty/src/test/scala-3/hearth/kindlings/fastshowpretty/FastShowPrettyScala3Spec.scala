@@ -2,7 +2,12 @@ package hearth.kindlings.fastshowpretty
 
 import hearth.MacroSuite
 
-final class FastShowPrettyNamedTupleSpec extends MacroSuite {
+enum Fruit {
+  case Apple(weight: Double)
+  case Banana(length: Double)
+}
+
+final class FastShowPrettyScala3Spec extends MacroSuite {
 
   group("FastShowPretty") {
 
@@ -11,32 +16,27 @@ final class FastShowPrettyNamedTupleSpec extends MacroSuite {
       test("simple named tuple") {
         val nt: (name: String, age: Int) = ("Alice", 42)
         val result = FastShowPretty.render(nt, RenderConfig.Default)
-        assertEquals(
-          result,
+        result ==>
           """(
             |  name = "Alice",
             |  age = 42
             |)""".stripMargin
-        )
       }
 
       test("compact (no indent)") {
         val nt: (name: String, age: Int) = ("Alice", 42)
         val result = FastShowPretty.render(nt, RenderConfig.Compact)
-        assertEquals(
-          result,
+        result ==>
           """(
             |name = "Alice",
             |age = 42
             |)""".stripMargin
-        )
       }
 
       test("nested named tuple with case class") {
         val nt: (person: Person, score: Int) = (Person("Bob", 25), 100)
         val result = FastShowPretty.render(nt, RenderConfig.Default)
-        assertEquals(
-          result,
+        result ==>
           """(
             |  person = Person(
             |    name = "Bob",
@@ -44,7 +44,17 @@ final class FastShowPrettyNamedTupleSpec extends MacroSuite {
             |  ),
             |  score = 100
             |)""".stripMargin
-        )
+      }
+    }
+
+    group("Scala 3 enums") {
+
+      test("parameterized enum") {
+        val result = FastShowPretty.render[Fruit](Fruit.Apple(1.5), RenderConfig.Default)
+        result ==>
+          """(Apple(
+            |    weight = 1.5d
+            |  )): Fruit""".stripMargin
       }
     }
   }

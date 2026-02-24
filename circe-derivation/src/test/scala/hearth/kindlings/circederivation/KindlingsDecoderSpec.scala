@@ -10,23 +10,23 @@ final class KindlingsDecoderSpec extends MacroSuite {
     group("primitive types via implicit summoning") {
 
       test("Int") {
-        assertEquals(KindlingsDecoder.decode[Int](Json.fromInt(42)), Right(42))
+        KindlingsDecoder.decode[Int](Json.fromInt(42)) ==> Right(42)
       }
 
       test("String") {
-        assertEquals(KindlingsDecoder.decode[String](Json.fromString("hello")), Right("hello"))
+        KindlingsDecoder.decode[String](Json.fromString("hello")) ==> Right("hello")
       }
 
       test("Boolean") {
-        assertEquals(KindlingsDecoder.decode[Boolean](Json.True), Right(true))
+        KindlingsDecoder.decode[Boolean](Json.True) ==> Right(true)
       }
 
       test("Double") {
-        assertEquals(KindlingsDecoder.decode[Double](Json.fromDoubleOrNull(3.14)), Right(3.14))
+        KindlingsDecoder.decode[Double](Json.fromDoubleOrNull(3.14)) ==> Right(3.14)
       }
 
       test("Long") {
-        assertEquals(KindlingsDecoder.decode[Long](Json.fromLong(42L)), Right(42L))
+        KindlingsDecoder.decode[Long](Json.fromLong(42L)) ==> Right(42L)
       }
     }
 
@@ -34,17 +34,16 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("simple case class") {
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
-        assertEquals(KindlingsDecoder.decode[SimplePerson](json), Right(SimplePerson("Alice", 30)))
+        KindlingsDecoder.decode[SimplePerson](json) ==> Right(SimplePerson("Alice", 30))
       }
 
       test("empty case class") {
-        val json = Json.obj()
-        assertEquals(KindlingsDecoder.decode[EmptyClass](json), Right(EmptyClass()))
+        KindlingsDecoder.decode[EmptyClass](Json.obj()) ==> Right(EmptyClass())
       }
 
       test("single field case class") {
         val json = Json.obj("value" -> Json.fromInt(42))
-        assertEquals(KindlingsDecoder.decode[SingleField](json), Right(SingleField(42)))
+        KindlingsDecoder.decode[SingleField](json) ==> Right(SingleField(42))
       }
 
       test("nested case class (auto-derived)") {
@@ -56,10 +55,8 @@ final class KindlingsDecoderSpec extends MacroSuite {
             "city" -> Json.fromString("Springfield")
           )
         )
-        assertEquals(
-          KindlingsDecoder.decode[PersonWithAddress](json),
+        KindlingsDecoder.decode[PersonWithAddress](json) ==>
           Right(PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield")))
-        )
       }
 
       test("case class with List of case classes") {
@@ -70,23 +67,19 @@ final class KindlingsDecoderSpec extends MacroSuite {
             Json.obj("name" -> Json.fromString("Bob"), "age" -> Json.fromInt(25))
           )
         )
-        assertEquals(
-          KindlingsDecoder.decode[TeamWithMembers](json),
+        KindlingsDecoder.decode[TeamWithMembers](json) ==>
           Right(TeamWithMembers("Dev", List(SimplePerson("Alice", 30), SimplePerson("Bob", 25))))
-        )
       }
     }
 
     group("options") {
 
       test("Some value") {
-        val json = Json.fromInt(42)
-        assertEquals(KindlingsDecoder.decode[Option[Int]](json), Right(Some(42)))
+        KindlingsDecoder.decode[Option[Int]](Json.fromInt(42)) ==> Right(Some(42))
       }
 
       test("None from null") {
-        val json = Json.Null
-        assertEquals(KindlingsDecoder.decode[Option[Int]](json), Right(None))
+        KindlingsDecoder.decode[Option[Int]](Json.Null) ==> Right(None)
       }
     }
 
@@ -94,25 +87,23 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("List of ints") {
         val json = Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
-        assertEquals(KindlingsDecoder.decode[List[Int]](json), Right(List(1, 2, 3)))
+        KindlingsDecoder.decode[List[Int]](json) ==> Right(List(1, 2, 3))
       }
 
       test("empty list") {
-        val json = Json.arr()
-        assertEquals(KindlingsDecoder.decode[List[Int]](json), Right(List.empty[Int]))
+        KindlingsDecoder.decode[List[Int]](Json.arr()) ==> Right(List.empty[Int])
       }
 
       test("Vector of strings") {
         val json = Json.arr(Json.fromString("a"), Json.fromString("b"))
-        assertEquals(KindlingsDecoder.decode[Vector[String]](json), Right(Vector("a", "b")))
+        KindlingsDecoder.decode[Vector[String]](json) ==> Right(Vector("a", "b"))
       }
     }
 
     group("value classes") {
 
       test("value class is unwrapped") {
-        val json = Json.fromInt(42)
-        assertEquals(KindlingsDecoder.decode[WrappedInt](json), Right(WrappedInt(42)))
+        KindlingsDecoder.decode[WrappedInt](Json.fromInt(42)) ==> Right(WrappedInt(42))
       }
     }
 
@@ -120,7 +111,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("wrapper-style decoding (default)") {
         val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
-        assertEquals(KindlingsDecoder.decode[Shape](json), Right(Circle(5.0): Shape))
+        KindlingsDecoder.decode[Shape](json) ==> Right(Circle(5.0): Shape)
       }
 
       test("wrapper-style decoding for second case") {
@@ -130,7 +121,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
             "height" -> Json.fromDoubleOrNull(4.0)
           )
         )
-        assertEquals(KindlingsDecoder.decode[Shape](json), Right(Rectangle(3.0, 4.0): Shape))
+        KindlingsDecoder.decode[Shape](json) ==> Right(Rectangle(3.0, 4.0): Shape)
       }
 
       test("discriminator-style decoding") {
@@ -140,13 +131,26 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "name" -> Json.fromString("Rex"),
           "breed" -> Json.fromString("Labrador")
         )
-        assertEquals(KindlingsDecoder.decode[Animal](json), Right(Dog("Rex", "Labrador"): Animal))
+        KindlingsDecoder.decode[Animal](json) ==> Right(Dog("Rex", "Labrador"): Animal)
       }
 
       test("unknown discriminator produces error") {
         val json = Json.obj("Unknown" -> Json.obj())
-        val result = KindlingsDecoder.decode[Shape](json)
-        assert(result.isLeft)
+        val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .Unknown: Unknown type discriminator: Unknown. Expected one of: Circle, Rectangle"
+      }
+    }
+
+    group("sealed traits with case object singletons") {
+
+      test("decode case object singleton (wrapper-style)") {
+        val json = Json.obj("Yes" -> Json.obj())
+        KindlingsDecoder.decode[SimpleEnumCirce](json) ==> Right(Yes: SimpleEnumCirce)
+      }
+
+      test("decode second case object singleton") {
+        val json = Json.obj("No" -> Json.obj())
+        KindlingsDecoder.decode[SimpleEnumCirce](json) ==> Right(No: SimpleEnumCirce)
       }
     }
 
@@ -156,7 +160,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
         implicit val config: Configuration =
           Configuration(transformConstructorNames = _.toLowerCase)
         val json = Json.obj("circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
-        assertEquals(KindlingsDecoder.decode[Shape](json), Right(Circle(5.0): Shape))
+        KindlingsDecoder.decode[Shape](json) ==> Right(Circle(5.0): Shape)
       }
     }
 
@@ -165,13 +169,13 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("explicit derive returns Decoder") {
         val decoder: Decoder[SimplePerson] = KindlingsDecoder.derive[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
-        assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
+        decoder.decodeJson(json) ==> Right(SimplePerson("Alice", 30))
       }
 
       test("derived provides KindlingsDecoder") {
         val decoder: KindlingsDecoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
-        assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
+        decoder.decodeJson(json) ==> Right(SimplePerson("Alice", 30))
       }
     }
 
@@ -182,7 +186,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
         // preventing infinite recursion when assigned to an implicit val.
         implicit val decoder: Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
-        assertEquals(decoder.decodeJson(json), Right(SimplePerson("Alice", 30)))
+        decoder.decodeJson(json) ==> Right(SimplePerson("Alice", 30))
       }
     }
 
@@ -190,11 +194,11 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("Map[String, Int]") {
         val json = Json.obj("a" -> Json.fromInt(1), "b" -> Json.fromInt(2))
-        assertEquals(KindlingsDecoder.decode[Map[String, Int]](json), Right(Map("a" -> 1, "b" -> 2)))
+        KindlingsDecoder.decode[Map[String, Int]](json) ==> Right(Map("a" -> 1, "b" -> 2))
       }
 
       test("empty map") {
-        assertEquals(KindlingsDecoder.decode[Map[String, Int]](Json.obj()), Right(Map.empty[String, Int]))
+        KindlingsDecoder.decode[Map[String, Int]](Json.obj()) ==> Right(Map.empty[String, Int])
       }
     }
 
@@ -213,10 +217,128 @@ final class KindlingsDecoderSpec extends MacroSuite {
             )
           )
         )
-        assertEquals(
-          KindlingsDecoder.decode[RecursiveTree](json),
+        KindlingsDecoder.decode[RecursiveTree](json) ==>
           Right(RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil))))))
+      }
+    }
+
+    group("sets") {
+
+      test("Set of ints") {
+        val json = Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
+        KindlingsDecoder.decode[Set[Int]](json) ==> Right(Set(1, 2, 3))
+      }
+
+      test("empty set") {
+        KindlingsDecoder.decode[Set[Int]](Json.arr()) ==> Right(Set.empty[Int])
+      }
+    }
+
+    group("configuration — member name transforms") {
+
+      test("snake_case member names") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val json = Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+
+      test("kebab-case member names") {
+        implicit val config: Configuration = Configuration.default.withKebabCaseMemberNames
+        val json = Json.obj("first-name" -> Json.fromString("Alice"), "last-name" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+
+      test("PascalCase member names") {
+        implicit val config: Configuration = Configuration.default.withPascalCaseMemberNames
+        val json = Json.obj("FirstName" -> Json.fromString("Alice"), "LastName" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+
+      test("SCREAMING_SNAKE_CASE member names") {
+        implicit val config: Configuration = Configuration.default.withScreamingSnakeCaseMemberNames
+        val json = Json.obj("FIRST_NAME" -> Json.fromString("Alice"), "LAST_NAME" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+    }
+
+    group("strictDecoding") {
+
+      test("passes with exact fields") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        KindlingsDecoder.decode[SimplePerson](json) ==> Right(SimplePerson("Alice", 30))
+      }
+
+      test("fails with unexpected fields") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj(
+          "name" -> Json.fromString("Alice"),
+          "age" -> Json.fromInt(30),
+          "extra" -> Json.fromString("unexpected")
         )
+        val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
+        error.message ==> "Unexpected field(s): extra"
+      }
+
+      test("passes without strictDecoding even with extra fields") {
+        val json = Json.obj(
+          "name" -> Json.fromString("Alice"),
+          "age" -> Json.fromInt(30),
+          "extra" -> Json.fromString("ignored")
+        )
+        KindlingsDecoder.decode[SimplePerson](json) ==> Right(SimplePerson("Alice", 30))
+      }
+
+      test("empty case class strict rejects any fields") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj("foo" -> Json.fromInt(1))
+        val Left(error) = KindlingsDecoder.decode[EmptyClass](json): @unchecked
+        error.message ==> "Unexpected field(s): foo"
+      }
+
+      test("strictDecoding with name transform") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding.withSnakeCaseMemberNames
+        val json = Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+    }
+
+    group("useDefaults") {
+
+      test("uses default when field missing and useDefaults=true") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 25))
+      }
+
+      test("uses provided value even with useDefaults=true") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 30))
+      }
+
+      test("fails when field missing and useDefaults=false") {
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        val Left(error) = KindlingsDecoder.decode[PersonWithDefaults](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .age: Missing required field"
+      }
+
+      test("all defaults used when JSON is empty object") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        KindlingsDecoder.decode[AllDefaults](Json.obj()) ==> Right(AllDefaults())
+      }
+
+      test("field without default still required when useDefaults=true") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("age" -> Json.fromInt(30))
+        val Left(error) = KindlingsDecoder.decode[PersonWithDefaults](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .name: Missing required field"
+      }
+
+      test("strictDecoding combined with useDefaults") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 25))
       }
     }
 
@@ -224,14 +346,37 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("missing required field") {
         val json = Json.obj("name" -> Json.fromString("Alice"))
-        val result = KindlingsDecoder.decode[SimplePerson](json)
-        assert(result.isLeft)
+        val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .age: Missing required field"
       }
 
       test("wrong type for field") {
         val json = Json.obj("name" -> Json.fromInt(42), "age" -> Json.fromInt(30))
-        val result = KindlingsDecoder.decode[SimplePerson](json)
-        assert(result.isLeft)
+        val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .name: Got value '42' with wrong type, expecting string"
+      }
+
+      test("unknown discriminator in wrapper-style") {
+        val json = Json.obj("Unknown" -> Json.obj())
+        val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .Unknown: Unknown type discriminator: Unknown. Expected one of: Circle, Rectangle"
+      }
+    }
+
+    group("compile-time errors") {
+
+      test("decode with unhandled type produces error message") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{KindlingsDecoder, NotACirceType}
+          import io.circe.Json
+          KindlingsDecoder.decode[NotACirceType](Json.obj())
+          """
+        ).check(
+          "Macro derivation failed with the following errors:",
+          "  - The type hearth.kindlings.circederivation.NotACirceType was not handled by any decoder derivation rule:",
+          "Enable debug logging with: import hearth.kindlings.circederivation.debug.logDerivationForKindlingsDecoder or scalac option -Xmacro-settings:circeDerivation.logDerivation=true"
+        )
       }
     }
   }

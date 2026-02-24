@@ -10,7 +10,16 @@ case class PersonWithAddress(name: String, age: Int, address: Address)
 case class Team(name: String, members: List[Person])
 case class Tree(value: Int, children: List[Tree])
 final case class ExampleValueClass(a: Int) extends AnyVal
+final case class WrappedString(s: String) extends AnyVal
 class NotAHandledType
+
+sealed trait Shape
+case class Circle(radius: Double) extends Shape
+case class Rectangle(width: Double, height: Double) extends Shape
+
+sealed trait SimpleEnum
+case object Yes extends SimpleEnum
+case object No extends SimpleEnum
 
 final class FastShowPrettySpec extends MacroSuite {
 
@@ -22,62 +31,62 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("Boolean true") {
           val result = FastShowPretty.render(true, RenderConfig.Default)
-          assertEquals(result, "true")
+          result ==> "true"
         }
 
         test("Boolean false") {
           val result = FastShowPretty.render(false, RenderConfig.Default)
-          assertEquals(result, "false")
+          result ==> "false"
         }
 
         test("Byte") {
           val result = FastShowPretty.render(42.toByte, RenderConfig.Default)
-          assertEquals(result, "42.toByte")
+          result ==> "42.toByte"
         }
 
         test("Short") {
           val result = FastShowPretty.render(42.toShort, RenderConfig.Default)
-          assertEquals(result, "42.toShort")
+          result ==> "42.toShort"
         }
 
         test("Int") {
           val result = FastShowPretty.render(42, RenderConfig.Default)
-          assertEquals(result, "42")
+          result ==> "42"
         }
 
         test("Long") {
           val result = FastShowPretty.render(42L, RenderConfig.Default)
-          assertEquals(result, "42L")
+          result ==> "42L"
         }
 
         test("Float") {
           val result = FastShowPretty.render(42.5f, RenderConfig.Default)
-          assertEquals(result, "42.5f")
+          result ==> "42.5f"
         }
 
         test("Double") {
           val result = FastShowPretty.render(42.5, RenderConfig.Default)
-          assertEquals(result, "42.5d")
+          result ==> "42.5d"
         }
 
         test("Char") {
           val result = FastShowPretty.render('a', RenderConfig.Default)
-          assertEquals(result, "'a'")
+          result ==> "'a'"
         }
 
         test("String") {
           val result = FastShowPretty.render("hello", RenderConfig.Default)
-          assertEquals(result, "\"hello\"")
+          result ==> "\"hello\""
         }
 
         test("String with quotes") {
           val result = FastShowPretty.render("say \"hello\"", RenderConfig.Default)
-          assertEquals(result, "\"say \\\"hello\\\"\"")
+          result ==> "\"say \\\"hello\\\"\""
         }
 
         test("String with newlines") {
           val result = FastShowPretty.render("line1\nline2", RenderConfig.Default)
-          assertEquals(result, "\"line1\\nline2\"")
+          result ==> "\"line1\\nline2\""
         }
       }
 
@@ -85,14 +94,14 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("ExampleValueClass") {
           val result = FastShowPretty.render(ExampleValueClass(42), RenderConfig.Default)
-          assertEquals(result, "42")
+          result ==> "42"
         }
 
         test("ExampleValueClass with derived") {
           import FastShowPretty.derived
           val instance = implicitly[FastShowPretty[ExampleValueClass]]
           val result = instance.render(new StringBuilder, RenderConfig.Default, 0)(ExampleValueClass(99)).toString
-          assertEquals(result, "99")
+          result ==> "99"
         }
       }
 
@@ -100,43 +109,36 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("compact (no indent)") {
           val result = FastShowPretty.render(Person("Alice", 30), RenderConfig.Compact)
-          assertEquals(
-            result,
+          result ==>
             """Person(
               |name = "Alice",
               |age = 30
               |)""".stripMargin
-          )
         }
 
         test("tabs") {
           val result = FastShowPretty.render(Person("Alice", 30), RenderConfig.Tabs)
-          assertEquals(
-            result,
+          result ==>
             s"""Person(
                |\tname = "Alice",
                |\tage = 30
                |)""".stripMargin
-          )
         }
 
         test("four spaces") {
           val result = FastShowPretty.render(Person("Alice", 30), RenderConfig.FourSpaces)
-          assertEquals(
-            result,
+          result ==>
             """Person(
               |    name = "Alice",
               |    age = 30
               |)""".stripMargin
-          )
         }
 
         test("nested with tabs") {
           val address = Address("123 Main St", "New York")
           val person = PersonWithAddress("Bob", 25, address)
           val result = FastShowPretty.render(person, RenderConfig.Tabs)
-          assertEquals(
-            result,
+          result ==>
             s"""PersonWithAddress(
                |\tname = "Bob",
                |\tage = 25,
@@ -145,7 +147,6 @@ final class FastShowPrettySpec extends MacroSuite {
                |\t\tcity = "New York"
                |\t)
                |)""".stripMargin
-          )
         }
 
         test("case class with collection field") {
@@ -153,8 +154,7 @@ final class FastShowPrettySpec extends MacroSuite {
             Team("Engineering", List(Person("Alice", 30), Person("Bob", 25))),
             RenderConfig.Default
           )
-          assertEquals(
-            result,
+          result ==>
             """Team(
               |  name = "Engineering",
               |  members = List(
@@ -168,7 +168,6 @@ final class FastShowPrettySpec extends MacroSuite {
               |    )
               |  )
               |)""".stripMargin
-          )
         }
       }
 
@@ -176,41 +175,35 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("List of Ints") {
           val result = FastShowPretty.render(List(1, 2, 3), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """List(
               |  1,
               |  2,
               |  3
               |)""".stripMargin
-          )
         }
 
         test("empty List") {
           val result = FastShowPretty.render(List.empty[Int], RenderConfig.Default)
-          assertEquals(result, "List()")
+          result ==> "List()"
         }
 
         test("Vector of Strings") {
           val result = FastShowPretty.render(Vector("a", "b", "c"), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """Vector(
               |  "a",
               |  "b",
               |  "c"
               |)""".stripMargin
-          )
         }
 
         test("Set of Ints") {
           val result = FastShowPretty.render(Set(1), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """Set(
               |  1
               |)""".stripMargin
-          )
         }
 
         test("List of case classes") {
@@ -218,8 +211,7 @@ final class FastShowPrettySpec extends MacroSuite {
             List(PersonWithAddress("Bob", 25, Address("123 Main St", "New York"))),
             RenderConfig.Default
           )
-          assertEquals(
-            result,
+          result ==>
             """List(
               |  PersonWithAddress(
               |    name = "Bob",
@@ -230,7 +222,6 @@ final class FastShowPrettySpec extends MacroSuite {
               |    )
               |  )
               |)""".stripMargin
-          )
         }
       }
 
@@ -238,29 +229,25 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("Map of String to Int") {
           val result = FastShowPretty.render(Map("a" -> 1), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """Map(
               |  ("a", 1)
               |)""".stripMargin
-          )
         }
 
         test("empty Map") {
           val result = FastShowPretty.render(Map.empty[String, Int], RenderConfig.Default)
-          assertEquals(result, "Map()")
+          result ==> "Map()"
         }
 
         test("Map with multiple entries") {
           val result =
             FastShowPretty.render(scala.collection.immutable.ListMap("x" -> 10, "y" -> 20), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """ListMap(
               |  ("x", 10),
               |  ("y", 20)
               |)""".stripMargin
-          )
         }
       }
 
@@ -268,38 +255,36 @@ final class FastShowPrettySpec extends MacroSuite {
 
         test("Some(Int)") {
           val result = FastShowPretty.render(Option(42), RenderConfig.Default)
-          assertEquals(result, "Some(42)")
+          result ==> "Some(42)"
         }
 
         test("None") {
           val result = FastShowPretty.render(Option.empty[Int], RenderConfig.Default)
-          assertEquals(result, "None")
+          result ==> "None"
         }
 
         test("Some(case class)") {
           val result = FastShowPretty.render(Option(Person("Alice", 30)), RenderConfig.Default)
-          assertEquals(
-            result,
+          result ==>
             """Some(Person(
               |  name = "Alice",
               |  age = 30
               |))""".stripMargin
-          )
         }
 
         test("nested Some(Some(Int))") {
           val result = FastShowPretty.render(Option(Option(42)), RenderConfig.Default)
-          assertEquals(result, "Some(Some(42))")
+          result ==> "Some(Some(42))"
         }
 
         test("Some(None)") {
           val result = FastShowPretty.render(Option(Option.empty[Int]), RenderConfig.Default)
-          assertEquals(result, "Some(None)")
+          result ==> "Some(None)"
         }
 
         test("None of nested Option") {
           val result = FastShowPretty.render(Option.empty[Option[Int]], RenderConfig.Default)
-          assertEquals(result, "None")
+          result ==> "None"
         }
       }
 
@@ -312,41 +297,41 @@ final class FastShowPrettySpec extends MacroSuite {
           }
 
           val result = FastShowPretty.render(42, RenderConfig.Default)
-          assertEquals(result, "custom(42)")
+          result ==> "custom(42)"
         }
       }
 
       group("edge cases") {
 
         test("zero values") {
-          assertEquals(FastShowPretty.render(0, RenderConfig.Default), "0")
-          assertEquals(FastShowPretty.render(0L, RenderConfig.Default), "0L")
-          assertEquals(FastShowPretty.render(0.0f, RenderConfig.Default), "0.0f")
-          assertEquals(FastShowPretty.render(0.0, RenderConfig.Default), "0.0d")
+          FastShowPretty.render(0, RenderConfig.Default) ==> "0"
+          FastShowPretty.render(0L, RenderConfig.Default) ==> "0L"
+          FastShowPretty.render(0.0f, RenderConfig.Default) ==> "0.0f"
+          FastShowPretty.render(0.0, RenderConfig.Default) ==> "0.0d"
         }
 
         test("negative numbers") {
-          assertEquals(FastShowPretty.render(-42, RenderConfig.Default), "-42")
-          assertEquals(FastShowPretty.render(-42L, RenderConfig.Default), "-42L")
+          FastShowPretty.render(-42, RenderConfig.Default) ==> "-42"
+          FastShowPretty.render(-42L, RenderConfig.Default) ==> "-42L"
         }
 
         test("empty string") {
-          assertEquals(FastShowPretty.render("", RenderConfig.Default), "\"\"")
+          FastShowPretty.render("", RenderConfig.Default) ==> "\"\""
         }
 
         test("unicode characters") {
           val result = FastShowPretty.render("Hello 世界", RenderConfig.Default)
-          assertEquals(result, "\"Hello 世界\"")
+          result ==> "\"Hello 世界\""
         }
 
         test("special characters in string") {
           val result = FastShowPretty.render("tab\tquote\"newline\n", RenderConfig.Default)
-          assertEquals(result, "\"tab\\tquote\\\"newline\\n\"")
+          result ==> "\"tab\\tquote\\\"newline\\n\""
         }
 
         test("backslash in string") {
           val result = FastShowPretty.render("path\\to\\file", RenderConfig.Default)
-          assertEquals(result, "\"path\\\\to\\\\file\"")
+          result ==> "\"path\\\\to\\\\file\""
         }
       }
     }
@@ -357,53 +342,47 @@ final class FastShowPrettySpec extends MacroSuite {
         val instance = implicitly[FastShowPretty[Int]]
         val sb = new StringBuilder
         val result = instance.render(sb, RenderConfig.Default, 0)(42).toString
-        assertEquals(result, "42")
+        result ==> "42"
       }
 
       test("case class instance") {
         val instance = implicitly[FastShowPretty[Person]]
         val sb = new StringBuilder
         val result = instance.render(sb, RenderConfig.Default, 0)(Person("Alice", 30)).toString
-        assertEquals(
-          result,
+        result ==>
           """Person(
             |  name = "Alice",
             |  age = 30
             |)""".stripMargin
-        )
       }
 
       test("instance reuse StringBuilder") {
         val instance = implicitly[FastShowPretty[Int]]
         val sb = new StringBuilder("prefix: ")
         val result = instance.render(sb, RenderConfig.Default, 0)(42).toString
-        assertEquals(result, "prefix: 42")
+        result ==> "prefix: 42"
       }
 
       test("instance with custom config") {
         val instance = implicitly[FastShowPretty[Person]]
         val sb = new StringBuilder
         val result = instance.render(sb, RenderConfig.Tabs, 0)(Person("Alice", 30)).toString
-        assertEquals(
-          result,
+        result ==>
           s"""Person(
              |\tname = "Alice",
              |\tage = 30
              |)""".stripMargin
-        )
       }
 
       test("instance with start level") {
         val instance = implicitly[FastShowPretty[Person]]
         val sb = new StringBuilder
         val result = instance.render(sb, RenderConfig.Default, 1)(Person("Alice", 30)).toString
-        assertEquals(
-          result,
+        result ==>
           """Person(
             |    name = "Alice",
             |    age = 30
             |  )""".stripMargin
-        )
       }
     }
 
@@ -413,13 +392,11 @@ final class FastShowPrettySpec extends MacroSuite {
         val _: String = FastShowPretty.render(42, RenderConfig.Default)
         val _: String = FastShowPretty.render("test", RenderConfig.Default)
         val _: String = FastShowPretty.render(Person("Alice", 30), RenderConfig.Default)
-        assert(true)
       }
 
       test("derived compiles for supported types") {
         val _: FastShowPretty[Int] = implicitly[FastShowPretty[Int]]
         val _: FastShowPretty[Person] = implicitly[FastShowPretty[Person]]
-        assert(true)
       }
     }
 
@@ -433,7 +410,7 @@ final class FastShowPrettySpec extends MacroSuite {
         val _ = instance.render(sb, RenderConfig.Default, 0)(2)
         sb.append(", ")
         val _ = instance.render(sb, RenderConfig.Default, 0)(3)
-        assertEquals(sb.toString, "start: 1, 2, 3")
+        sb.toString ==> "start: 1, 2, 3"
       }
     }
 
@@ -462,24 +439,115 @@ final class FastShowPrettySpec extends MacroSuite {
       }
     }
 
+    group("sealed traits") {
+
+      test("sealed trait with case class subtypes") {
+        val result = FastShowPretty.render[Shape](Circle(3.14), RenderConfig.Default)
+        result ==>
+          """(Circle(
+            |    radius = 3.14d
+            |  )): Shape""".stripMargin
+      }
+
+      test("sealed trait second case") {
+        val result = FastShowPretty.render[Shape](Rectangle(3.0, 4.0), RenderConfig.Default)
+        result ==>
+          """(Rectangle(
+            |    width = 3.0d,
+            |    height = 4.0d
+            |  )): Shape""".stripMargin
+      }
+
+      test("sealed trait with case object singletons") {
+        val result = FastShowPretty.render[SimpleEnum](Yes, RenderConfig.Default)
+        result ==> "(Yes()): SimpleEnum"
+      }
+
+      test("sealed trait second case object") {
+        val result = FastShowPretty.render[SimpleEnum](No, RenderConfig.Default)
+        result ==> "(No()): SimpleEnum"
+      }
+    }
+
+    group("tuples") {
+
+      test("Tuple2") {
+        val result = FastShowPretty.render((42, "hello"), RenderConfig.Default)
+        result ==>
+          """Tuple2(
+            |  _1 = 42,
+            |  _2 = "hello"
+            |)""".stripMargin
+      }
+
+      test("Tuple3") {
+        val result = FastShowPretty.render((1, "two", true), RenderConfig.Default)
+        result ==>
+          """Tuple3(
+            |  _1 = 1,
+            |  _2 = "two",
+            |  _3 = true
+            |)""".stripMargin
+      }
+    }
+
+    group("more collections") {
+
+      test("Seq of ints") {
+        val result = FastShowPretty.render(Seq(1, 2, 3), RenderConfig.Default)
+        result ==>
+          """Seq(
+            |  1,
+            |  2,
+            |  3
+            |)""".stripMargin
+      }
+    }
+
+    group("more maps") {
+
+      test("Map with non-string keys") {
+        val result = FastShowPretty.render(Map(1 -> "one"), RenderConfig.Default)
+        result ==>
+          """Map(
+            |  (1, "one")
+            |)""".stripMargin
+      }
+
+      test("SortedMap") {
+        import scala.collection.immutable.SortedMap
+        val result = FastShowPretty.render(SortedMap("a" -> 1, "b" -> 2), RenderConfig.Default)
+        result ==>
+          """SortedMap(
+            |  ("a", 1),
+            |  ("b", 2)
+            |)""".stripMargin
+      }
+    }
+
+    group("more value types") {
+
+      test("WrappedString") {
+        val result = FastShowPretty.render(WrappedString("hello"), RenderConfig.Default)
+        result ==> "\"hello\""
+      }
+    }
+
     group("recursive data structures") {
 
       test("leaf node") {
         val result = FastShowPretty.render(Tree(1, List.empty[Tree]), RenderConfig.Default)
-        assertEquals(
-          result,
+        result ==>
           """Tree(
             |  value = 1,
             |  children = List()
             |)""".stripMargin
-        )
       }
 
       test("nested tree") {
         val tree = Tree(1, List(Tree(2, List.empty[Tree]), Tree(3, List(Tree(4, List.empty[Tree])))))
         val result = FastShowPretty.render(tree, RenderConfig.Default)
-        assertEquals(
-          result,
+        result ==>
           """Tree(
             |  value = 1,
             |  children = List(
@@ -498,7 +566,6 @@ final class FastShowPrettySpec extends MacroSuite {
             |    )
             |  )
             |)""".stripMargin
-        )
       }
     }
   }

@@ -1256,6 +1256,29 @@ sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"
 
 **Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
 
+## Test coverage checklist
+
+When implementing a new module, ensure tests cover:
+
+- [ ] Primitive types (Boolean, Byte, Short, Int, Long, Float, Double, Char, String)
+- [ ] Case classes (empty, single field, nested, with collections)
+- [ ] Value classes (AnyVal) — unwrapped
+- [ ] Options (Some, None)
+- [ ] Collections (List, Vector, Set, Array, Seq)
+- [ ] Maps (Map[String, V], empty map)
+- [ ] Sealed traits / enums — wrapper-style and discriminator-style
+- [ ] Sealed traits with case object singletons
+- [ ] Tuples (Tuple2, Tuple3)
+- [ ] Recursive data structures
+- [ ] Opaque types (Scala 3 only)
+- [ ] Named tuples (Scala 3 only)
+- [ ] Scala 3 enums (parameterless + parameterized)
+- [ ] All configuration options with all name transform variants
+- [ ] Custom implicit priority (user-provided instances override derivation)
+- [ ] Compile-time error messages for unsupported types
+- [ ] Error messages enriched with diagnostics (why implicit not found, why not a case class, etc.)
+- [ ] Behavior parity with original library (if reimplementing)
+
 ## Syncing from Hearth
 
 When syncing changes from hearth's `hearth-tests` demo modules back to kindlings:

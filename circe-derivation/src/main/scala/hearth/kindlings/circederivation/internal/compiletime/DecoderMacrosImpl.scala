@@ -513,13 +513,48 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
       implicit val StringT: Type[String] = DTypes.String
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
+      implicit val UnitT: Type[Unit] = DTypes.Unit
+      implicit val EitherDFUnitT: Type[Either[DecodingFailure, Unit]] = DTypes.EitherDFUnit
+      implicit val SetStringT: Type[Set[String]] = DTypes.SetString
+      implicit val ConfigT: Type[Configuration] = DTypes.Configuration
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+
+      // Singletons (case objects, parameterless enum cases) have no primary constructor.
+      // Use construct directly, which returns the singleton reference via Expr.singletonOf.
+      if (caseClass.isSingleton) {
+        return caseClass
+          .construct[MIO](new CaseClass.ConstructField[MIO] {
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+              MIO.fail(new RuntimeException(s"Unexpected parameter in singleton ${Type[A].prettyPrint}"))
+          })
+          .flatMap {
+            case Some(expr) =>
+              MIO.pure(Expr.quote {
+                val config = Expr.splice(dctx.config)
+                if (config.strictDecoding) {
+                  CirceDerivationUtils
+                    .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                    .map(_ => Expr.splice(expr))
+                } else
+                  Right(Expr.splice(expr)): Either[DecodingFailure, A]
+              })
+            case None =>
+              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+          }
+      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
 
+      // Build a List[String] expression of the raw field names (before name transform)
+      val fieldNamesListExpr: Expr[List[String]] =
+        fieldsList.map(_._1).foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
+          Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
+        }
+
       NonEmptyList.fromList(fieldsList) match {
         case None =>
-          // Zero-parameter case class: construct directly
+          // Zero-parameter case class: construct directly, but check strictDecoding
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -529,7 +564,15 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
             })
             .flatMap {
               case Some(expr) =>
-                MIO.pure(Expr.quote(Right(Expr.splice(expr)): Either[DecodingFailure, A]))
+                MIO.pure(Expr.quote {
+                  val config = Expr.splice(dctx.config)
+                  if (config.strictDecoding) {
+                    CirceDerivationUtils
+                      .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                      .map(_ => Expr.splice(expr))
+                  } else
+                    Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                })
               case None =>
                 MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
             }
@@ -543,18 +586,56 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           // Step 1: For each field, derive a decoder (implicit or recursive) and build
           // decode + accessor expressions. Uses unsafeCast with the decoder as type witness
           // to avoid path-dependent type aliases in Expr.quote (Scala 2 compatibility).
+          // Also resolves default values for useDefaults support.
           fields
             .parTraverse { case (fieldName, param) =>
               import param.tpe.Underlying as Field
               Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
-                    Expr
-                      .splice(dctx.cursor)
-                      .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fieldName))))
-                      .as(Expr.splice(decoderExpr))
-                      .asInstanceOf[Either[DecodingFailure, Any]]
+                  // Try to get the default value expression for useDefaults support.
+                  val defaultAsAnyOpt: Option[Expr[Any]] =
+                    if (param.hasDefault)
+                      param.defaultValue.flatMap { existentialOuter =>
+                        val methodOf = existentialOuter.value
+                        methodOf.value match {
+                          case noInstance: Method.NoInstance[?] =>
+                            import noInstance.Returned
+                            noInstance(Map.empty).toOption.map(_.upcast[Any])
+                          case _ => None
+                        }
+                      }
+                    else None
+
+                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = defaultAsAnyOpt match {
+                    case Some(defaultAnyExpr) =>
+                      // Field has a default value: generate runtime check for useDefaults
+                      Expr.quote {
+                        val config = Expr.splice(dctx.config)
+                        val fn = config.transformMemberNames(Expr.splice(Expr(fieldName)))
+                        if (config.useDefaults) {
+                          val field = Expr.splice(dctx.cursor).downField(fn)
+                          if (field.failed)
+                            Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
+                          else
+                            field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
+                        } else
+                          Expr
+                            .splice(dctx.cursor)
+                            .downField(fn)
+                            .as(Expr.splice(decoderExpr))
+                            .asInstanceOf[Either[DecodingFailure, Any]]
+                      }
+                    case None =>
+                      // No default value: standard decode
+                      Expr.quote {
+                        Expr
+                          .splice(dctx.cursor)
+                          .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fieldName))))
+                          .as(Expr.splice(decoderExpr))
+                          .asInstanceOf[Either[DecodingFailure, Any]]
+                      }
                   }
+
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       CirceDerivationUtils.unsafeCast(
@@ -592,10 +673,19 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
+                  // Step 4: Wrap with strictDecoding check if configured
                   Expr.quote {
-                    CirceDerivationUtils
+                    val config = Expr.splice(dctx.config)
+                    val decoded = CirceDerivationUtils
                       .sequenceDecodeResults(Expr.splice(listExpr))
                       .map(Expr.splice(constructLambda))
+                    if (config.strictDecoding) {
+                      val expectedFields =
+                        Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                      CirceDerivationUtils
+                        .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
+                        .flatMap(_ => decoded)
+                    } else decoded
                   }
                 }
             }
@@ -816,12 +906,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
     val DecodingFailure: Type[DecodingFailure] = Type.of[DecodingFailure]
     val Configuration: Type[Configuration] = Type.of[Configuration]
     val String: Type[String] = Type.of[String]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
     val Any: Type[Any] = Type.of[Any]
+    val Unit: Type[Unit] = Type.of[Unit]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
     val EitherDFAny: Type[Either[DecodingFailure, Any]] = Type.of[Either[DecodingFailure, Any]]
+    val EitherDFUnit: Type[Either[DecodingFailure, Unit]] = Type.of[Either[DecodingFailure, Unit]]
     val ListEitherDFAny: Type[List[Either[DecodingFailure, Any]]] =
       Type.of[List[Either[DecodingFailure, Any]]]
     val ListString: Type[List[String]] = Type.of[List[String]]
+    val SetString: Type[Set[String]] = Type.of[Set[String]]
     val StringHCursorTuple: Type[(String, HCursor)] = Type.of[(String, HCursor)]
 
     def DecoderResult[A: Type]: Type[Either[DecodingFailure, A]] =

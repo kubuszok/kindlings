@@ -14,7 +14,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = SimplePerson("Alice", 30)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[SimplePerson](bytes)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
 
       test("empty case class") {
@@ -23,7 +23,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = EmptyClass()
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[EmptyClass](bytes)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
 
       test("nested case class") {
@@ -32,7 +32,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = PersonWithAddress("Bob", 25, Address("Main St", "NYC"))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[PersonWithAddress](bytes)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
 
       test("case class with collection") {
@@ -41,7 +41,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = TeamWithMembers("Team A", List(SimplePerson("A", 1), SimplePerson("B", 2)))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[TeamWithMembers](bytes)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
 
       test("value class") {
@@ -50,7 +50,19 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = WrappedInt(42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WrappedInt](bytes)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
+      }
+    }
+
+    group("sets") {
+
+      test("Set of ints round-trip") {
+        val encoder: AvroEncoder[Set[Int]] = AvroEncoder.derive[Set[Int]]
+        val decoder: AvroDecoder[Set[Int]] = AvroDecoder.derive[Set[Int]]
+        val original = Set(1, 2, 3)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Set[Int]](bytes)(decoder)
+        decoded ==> original
       }
     }
 
@@ -62,7 +74,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = SimplePerson("Alice", 30)
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[SimplePerson](json)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
 
       test("nested case class") {
@@ -71,7 +83,7 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = PersonWithAddress("Bob", 25, Address("Main St", "NYC"))
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[PersonWithAddress](json)(decoder)
-        assertEquals(decoded, original)
+        decoded ==> original
       }
     }
   }

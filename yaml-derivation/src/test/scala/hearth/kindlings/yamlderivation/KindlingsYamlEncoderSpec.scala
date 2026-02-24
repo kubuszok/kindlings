@@ -43,27 +43,27 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("Int") {
         val node = KindlingsYamlEncoder.encode(42)
-        assertEquals(node, scalarNode("42"))
+        node ==> scalarNode("42")
       }
 
       test("String") {
         val node = KindlingsYamlEncoder.encode("hello")
-        assertEquals(node, scalarNode("hello"))
+        node ==> scalarNode("hello")
       }
 
       test("Boolean") {
         val node = KindlingsYamlEncoder.encode(true)
-        assertEquals(node, scalarNode("true"))
+        node ==> scalarNode("true")
       }
 
       test("Double") {
         val node = KindlingsYamlEncoder.encode(3.14)
-        assertEquals(node, scalarNode(doubleStr(3.14)))
+        node ==> scalarNode(doubleStr(3.14))
       }
 
       test("Long") {
         val node = KindlingsYamlEncoder.encode(42L)
-        assertEquals(node, scalarNode("42"))
+        node ==> scalarNode("42")
       }
     }
 
@@ -71,30 +71,27 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("simple case class") {
         val node = KindlingsYamlEncoder.encode(SimplePerson("Alice", 30))
-        assertEquals(node, mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")))
+        node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
       }
 
       test("empty case class") {
         val node = KindlingsYamlEncoder.encode(EmptyClass())
-        assertEquals(node, mappingOf())
+        node ==> mappingOf()
       }
 
       test("single field case class") {
         val node = KindlingsYamlEncoder.encode(SingleField(42))
-        assertEquals(node, mappingOf("value" -> scalarNode("42")))
+        node ==> mappingOf("value" -> scalarNode("42"))
       }
 
       test("nested case class") {
         val node = KindlingsYamlEncoder.encode(PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield")))
-        assertEquals(
-          node,
-          mappingOf(
-            "name" -> scalarNode("Bob"),
-            "age" -> scalarNode("25"),
-            "address" -> mappingOf(
-              "street" -> scalarNode("123 Main St"),
-              "city" -> scalarNode("Springfield")
-            )
+        node ==> mappingOf(
+          "name" -> scalarNode("Bob"),
+          "age" -> scalarNode("25"),
+          "address" -> mappingOf(
+            "street" -> scalarNode("123 Main St"),
+            "city" -> scalarNode("Springfield")
           )
         )
       }
@@ -104,7 +101,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("value class is unwrapped") {
         val node = KindlingsYamlEncoder.encode(WrappedInt(42))
-        assertEquals(node, scalarNode("42"))
+        node ==> scalarNode("42")
       }
     }
 
@@ -112,12 +109,12 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("Some value") {
         val node = KindlingsYamlEncoder.encode(Option(42))
-        assertEquals(node, scalarNode("42"))
+        node ==> scalarNode("42")
       }
 
       test("None") {
         val node = KindlingsYamlEncoder.encode(Option.empty[Int])
-        assertEquals(node, hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils.nodeNull)
+        node ==> hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils.nodeNull
       }
     }
 
@@ -125,31 +122,28 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("List of ints") {
         val node = KindlingsYamlEncoder.encode(List(1, 2, 3))
-        assertEquals(node, seqOf(scalarNode("1"), scalarNode("2"), scalarNode("3")))
+        node ==> seqOf(scalarNode("1"), scalarNode("2"), scalarNode("3"))
       }
 
       test("empty list") {
         val node = KindlingsYamlEncoder.encode(List.empty[Int])
-        assertEquals(node, seqOf())
+        node ==> seqOf()
       }
 
       test("Vector of strings") {
         val node = KindlingsYamlEncoder.encode(Vector("a", "b"))
-        assertEquals(node, seqOf(scalarNode("a"), scalarNode("b")))
+        node ==> seqOf(scalarNode("a"), scalarNode("b"))
       }
 
       test("List of case classes") {
         val node = KindlingsYamlEncoder.encode(
           TeamWithMembers("Dev", List(SimplePerson("Alice", 30), SimplePerson("Bob", 25)))
         )
-        assertEquals(
-          node,
-          mappingOf(
-            "name" -> scalarNode("Dev"),
-            "members" -> seqOf(
-              mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")),
-              mappingOf("name" -> scalarNode("Bob"), "age" -> scalarNode("25"))
-            )
+        node ==> mappingOf(
+          "name" -> scalarNode("Dev"),
+          "members" -> seqOf(
+            mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")),
+            mappingOf("name" -> scalarNode("Bob"), "age" -> scalarNode("25"))
           )
         )
       }
@@ -161,17 +155,17 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode(Map("a" -> 1))
         node match {
           case MappingNode(mappings, _) =>
-            assert(mappings.exists {
+            mappings.exists {
               case (ScalarNode(k, _), ScalarNode(v, _)) => k == "a" && v == "1"
               case _                                    => false
-            })
+            } ==> true
           case other => fail(s"Expected MappingNode but got $other")
         }
       }
 
       test("empty map") {
         val node = KindlingsYamlEncoder.encode(Map.empty[String, Int])
-        assertEquals(node, mappingOf())
+        node ==> mappingOf()
       }
     }
 
@@ -179,21 +173,15 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("wrapper-style encoding (default)") {
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
-        assertEquals(
-          node,
-          mappingOf("Circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
-        )
+        node ==> mappingOf("Circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
       }
 
       test("wrapper-style encoding for second case") {
         val node = KindlingsYamlEncoder.encode[Shape](Rectangle(3.0, 4.0))
-        assertEquals(
-          node,
-          mappingOf(
-            "Rectangle" -> mappingOf(
-              "width" -> scalarNode(doubleStr(3.0)),
-              "height" -> scalarNode(doubleStr(4.0))
-            )
+        node ==> mappingOf(
+          "Rectangle" -> mappingOf(
+            "width" -> scalarNode(doubleStr(3.0)),
+            "height" -> scalarNode(doubleStr(4.0))
           )
         )
       }
@@ -203,18 +191,18 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode[Animal](Dog("Rex", "Labrador"))
         node match {
           case MappingNode(mappings, _) =>
-            assert(mappings.exists {
+            mappings.exists {
               case (ScalarNode(k, _), ScalarNode(v, _)) => k == "type" && v == "Dog"
               case _                                    => false
-            })
-            assert(mappings.exists {
+            } ==> true
+            mappings.exists {
               case (ScalarNode(k, _), ScalarNode(v, _)) => k == "name" && v == "Rex"
               case _                                    => false
-            })
-            assert(mappings.exists {
+            } ==> true
+            mappings.exists {
               case (ScalarNode(k, _), ScalarNode(v, _)) => k == "breed" && v == "Labrador"
               case _                                    => false
-            })
+            } ==> true
           case other => fail(s"Expected MappingNode but got $other")
         }
       }
@@ -225,21 +213,31 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       test("recursive tree") {
         val tree = RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil)))))
         val node = KindlingsYamlEncoder.encode(tree)
-        assertEquals(
-          node,
-          mappingOf(
-            "value" -> scalarNode("1"),
-            "children" -> seqOf(
-              mappingOf("value" -> scalarNode("2"), "children" -> seqOf()),
-              mappingOf(
-                "value" -> scalarNode("3"),
-                "children" -> seqOf(
-                  mappingOf("value" -> scalarNode("4"), "children" -> seqOf())
-                )
+        node ==> mappingOf(
+          "value" -> scalarNode("1"),
+          "children" -> seqOf(
+            mappingOf("value" -> scalarNode("2"), "children" -> seqOf()),
+            mappingOf(
+              "value" -> scalarNode("3"),
+              "children" -> seqOf(
+                mappingOf("value" -> scalarNode("4"), "children" -> seqOf())
               )
             )
           )
         )
+      }
+    }
+
+    group("sets") {
+
+      test("Set of ints") {
+        val node = KindlingsYamlEncoder.encode(Set(1))
+        node ==> seqOf(scalarNode("1"))
+      }
+
+      test("empty set") {
+        val node = KindlingsYamlEncoder.encode(Set.empty[Int])
+        node ==> seqOf()
       }
     }
 
@@ -249,10 +247,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         implicit val config: YamlConfig =
           YamlConfig(transformConstructorNames = _.toLowerCase)
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
-        assertEquals(
-          node,
-          mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
-        )
+        node ==> mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
       }
 
       test("snake_case member names") {
@@ -261,8 +256,44 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         node match {
           case MappingNode(mappings, _) =>
             val keys = mappings.keys.collect { case ScalarNode(k, _) => k }.toSet
-            assert(keys.contains("first_name"), s"Expected 'first_name' in keys: $keys")
-            assert(keys.contains("last_name"), s"Expected 'last_name' in keys: $keys")
+            keys.contains("first_name") ==> true
+            keys.contains("last_name") ==> true
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+
+      test("kebab-case member names") {
+        implicit val config: YamlConfig = YamlConfig.default.withKebabCaseMemberNames
+        val node = KindlingsYamlEncoder.encode(CamelCasePerson("Alice", "Smith"))
+        node match {
+          case MappingNode(mappings, _) =>
+            val keys = mappings.keys.collect { case ScalarNode(k, _) => k }.toSet
+            keys.contains("first-name") ==> true
+            keys.contains("last-name") ==> true
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+
+      test("PascalCase member names") {
+        implicit val config: YamlConfig = YamlConfig.default.withPascalCaseMemberNames
+        val node = KindlingsYamlEncoder.encode(CamelCasePerson("Alice", "Smith"))
+        node match {
+          case MappingNode(mappings, _) =>
+            val keys = mappings.keys.collect { case ScalarNode(k, _) => k }.toSet
+            keys.contains("FirstName") ==> true
+            keys.contains("LastName") ==> true
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+
+      test("SCREAMING_SNAKE_CASE member names") {
+        implicit val config: YamlConfig = YamlConfig.default.withScreamingSnakeCaseMemberNames
+        val node = KindlingsYamlEncoder.encode(CamelCasePerson("Alice", "Smith"))
+        node match {
+          case MappingNode(mappings, _) =>
+            val keys = mappings.keys.collect { case ScalarNode(k, _) => k }.toSet
+            keys.contains("FIRST_NAME") ==> true
+            keys.contains("LAST_NAME") ==> true
           case other => fail(s"Expected MappingNode but got $other")
         }
       }
@@ -273,13 +304,13 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       test("explicit derive returns YamlEncoder") {
         val encoder: YamlEncoder[SimplePerson] = KindlingsYamlEncoder.derive[SimplePerson]
         val node = encoder.asNode(SimplePerson("Alice", 30))
-        assertEquals(node, mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")))
+        node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
       }
 
       test("derived provides KindlingsYamlEncoder") {
         val encoder: KindlingsYamlEncoder[SimplePerson] = KindlingsYamlEncoder.derived[SimplePerson]
         val node = encoder.asNode(SimplePerson("Alice", 30))
-        assertEquals(node, mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")))
+        node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
       }
     }
 
@@ -290,7 +321,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
           def asNode(obj: SingleField): Node = ScalarNode((obj.value * 10).toString)
         }
         val node = KindlingsYamlEncoder.encode(SingleField(5))
-        assertEquals(node, scalarNode("50"))
+        node ==> scalarNode("50")
       }
     }
   }

@@ -24,14 +24,12 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val circe = "0.14.15"
-  val hearth = "0.2.0-229-g36ee579-SNAPSHOT"
-  val jsoniterScala = "2.38.9"
-  val avro = "1.12.0"
-  val scalaYaml = "0.3.1"
+  val hearth = "0.2.0-231-gca4c6ac-SNAPSHOT"
   val kindProjector = "0.13.4"
-  val munit = "1.2.1"
-  val scalacheck = "1.19.0"
+  val avro = "1.12.0"
+  val circe = "0.14.15"
+  val jsoniterScala = "2.38.9"
+  val scalaYaml = "0.3.1"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -210,9 +208,7 @@ val settings = Seq(
 val dependencies = Seq(
   libraryDependencies ++= Seq(
     "com.kubuszok" %%% "hearth" % versions.hearth,
-    "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test,
-    "org.scalameta" %%% "munit" % versions.munit % Test,
-    "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
+    "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test
   ),
   libraryDependencies ++= versions.fold(scalaVersion.value)(
     for3 = Seq.empty,
@@ -449,8 +445,7 @@ lazy val jsoniterJson = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
-      "org.scalameta" %%% "munit" % versions.munit % Test,
-      "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
+      "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for3 = Seq.empty,

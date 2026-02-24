@@ -13,62 +13,62 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("Int") {
         val result = AvroEncoder.encode(42)
-        assertEquals(result, 42)
+        result ==> 42
       }
 
       test("Long") {
         val result = AvroEncoder.encode(42L)
-        assertEquals(result, 42L)
+        result ==> 42L
       }
 
       test("Double") {
         val result = AvroEncoder.encode(3.14)
-        assertEquals(result, 3.14)
+        result ==> 3.14
       }
 
       test("Float") {
         val result = AvroEncoder.encode(1.5f)
-        assertEquals(result, 1.5f)
+        result ==> 1.5f
       }
 
       test("Boolean") {
         val result = AvroEncoder.encode(true)
-        assertEquals(result, true)
+        result ==> true
       }
 
       test("String") {
         val result = AvroEncoder.encode("hello")
-        assertEquals(result, "hello")
+        result ==> "hello"
       }
 
       test("Byte maps to Int") {
         val result = AvroEncoder.encode(42.toByte)
-        assertEquals(result, 42)
+        result ==> 42
       }
 
       test("Short maps to Int") {
         val result = AvroEncoder.encode(42.toShort)
-        assertEquals(result, 42)
+        result ==> 42
       }
 
       test("Char maps to String") {
         val result = AvroEncoder.encode('x')
-        assertEquals(result, "x")
+        result ==> "x"
       }
 
       test("Array[Byte] maps to ByteBuffer") {
         val bytes = Array[Byte](1, 2, 3)
         val result = AvroEncoder.encode(bytes)
-        assert(result.isInstanceOf[ByteBuffer])
+        result.isInstanceOf[ByteBuffer] ==> true
         val bb = result.asInstanceOf[ByteBuffer]
         val arr = new Array[Byte](bb.remaining())
         bb.get(arr)
-        assertEquals(arr.toList, bytes.toList)
+        arr.toList ==> bytes.toList
       }
 
       test("BigDecimal maps to String") {
         val result = AvroEncoder.encode(BigDecimal("3.14"))
-        assertEquals(result, "3.14")
+        result ==> "3.14"
       }
     }
 
@@ -76,25 +76,25 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("simple case class encodes to GenericRecord") {
         val result = AvroEncoder.encode(SimplePerson("Alice", 30))
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
         val record = result.asInstanceOf[GenericRecord]
-        assertEquals(record.get("name").toString, "Alice")
-        assertEquals(record.get("age").asInstanceOf[Int], 30)
+        record.get("name").toString ==> "Alice"
+        record.get("age").asInstanceOf[Int] ==> 30
       }
 
       test("empty case class") {
         val result = AvroEncoder.encode(EmptyClass())
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
       }
 
       test("nested case class") {
         val result = AvroEncoder.encode(PersonWithAddress("Bob", 25, Address("Main St", "NYC")))
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
         val record = result.asInstanceOf[GenericRecord]
-        assertEquals(record.get("name").toString, "Bob")
+        record.get("name").toString ==> "Bob"
         val addressRecord = record.get("address").asInstanceOf[GenericRecord]
-        assertEquals(addressRecord.get("street").toString, "Main St")
-        assertEquals(addressRecord.get("city").toString, "NYC")
+        addressRecord.get("street").toString ==> "Main St"
+        addressRecord.get("city").toString ==> "NYC"
       }
     }
 
@@ -102,7 +102,7 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("value class encodes underlying") {
         val result = AvroEncoder.encode(WrappedInt(42))
-        assertEquals(result, 42)
+        result ==> 42
       }
     }
 
@@ -110,12 +110,12 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("Some encodes inner value") {
         val result = AvroEncoder.encode(Option(42))
-        assertEquals(result, 42)
+        result ==> 42
       }
 
       test("None encodes to null") {
         val result = AvroEncoder.encode(Option.empty[Int])
-        assertEquals(result, null)
+        result ==> null
       }
     }
 
@@ -123,20 +123,20 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("List encodes to java ArrayList") {
         val result = AvroEncoder.encode(List(1, 2, 3))
-        assert(result.isInstanceOf[java.util.ArrayList[?]])
+        result.isInstanceOf[java.util.ArrayList[?]] ==> true
         val list = result.asInstanceOf[java.util.ArrayList[Int]]
-        assertEquals(list.size(), 3)
-        assertEquals(list.get(0), 1)
-        assertEquals(list.get(1), 2)
-        assertEquals(list.get(2), 3)
+        list.size() ==> 3
+        list.get(0) ==> 1
+        list.get(1) ==> 2
+        list.get(2) ==> 3
       }
 
       test("List of case classes") {
         val result = AvroEncoder.encode(List(SimplePerson("A", 1), SimplePerson("B", 2)))
-        assert(result.isInstanceOf[java.util.ArrayList[?]])
+        result.isInstanceOf[java.util.ArrayList[?]] ==> true
         val list = result.asInstanceOf[java.util.ArrayList[GenericRecord]]
-        assertEquals(list.size(), 2)
-        assertEquals(list.get(0).get("name").toString, "A")
+        list.size() ==> 2
+        list.get(0).get("name").toString ==> "A"
       }
     }
 
@@ -144,10 +144,10 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("Map[String, V] encodes to java HashMap") {
         val result = AvroEncoder.encode(Map("a" -> 1, "b" -> 2))
-        assert(result.isInstanceOf[java.util.HashMap[?, ?]])
+        result.isInstanceOf[java.util.HashMap[?, ?]] ==> true
         val map = result.asInstanceOf[java.util.HashMap[String, Int]]
-        assertEquals(map.get("a"), 1)
-        assertEquals(map.get("b"), 2)
+        map.get("a") ==> 1
+        map.get("b") ==> 2
       }
     }
 
@@ -155,8 +155,8 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("case object encodes to EnumSymbol") {
         val result = AvroEncoder.encode[Color](Red)
-        assert(result.isInstanceOf[GenericData.EnumSymbol])
-        assertEquals(result.toString, "Red")
+        result.isInstanceOf[GenericData.EnumSymbol] ==> true
+        result.toString ==> "Red"
       }
     }
 
@@ -164,10 +164,10 @@ final class AvroEncoderSpec extends MacroSuite {
 
       test("case class subtype encodes to GenericRecord") {
         val result = AvroEncoder.encode[Shape](Circle(5.0))
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
         val record = result.asInstanceOf[GenericRecord]
-        assertEquals(record.getSchema.getName, "Circle")
-        assertEquals(record.get("radius").asInstanceOf[Double], 5.0)
+        record.getSchema.getName ==> "Circle"
+        record.get("radius").asInstanceOf[Double] ==> 5.0
       }
     }
 
@@ -176,10 +176,10 @@ final class AvroEncoderSpec extends MacroSuite {
       test("derive creates AvroEncoder instance") {
         val encoder = AvroEncoder.derive[SimplePerson]
         val result = encoder.encode(SimplePerson("Test", 99))
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
         val record = result.asInstanceOf[GenericRecord]
-        assertEquals(record.get("name").toString, "Test")
-        assertEquals(record.get("age").asInstanceOf[Int], 99)
+        record.get("name").toString ==> "Test"
+        record.get("age").asInstanceOf[Int] ==> 99
       }
     }
 
@@ -188,10 +188,10 @@ final class AvroEncoderSpec extends MacroSuite {
       test("snake_case field names") {
         implicit val config: AvroConfig = AvroConfig().withSnakeCaseFieldNames
         val result = AvroEncoder.encode(PersonWithAddress("Bob", 25, Address("Main St", "NYC")))
-        assert(result.isInstanceOf[GenericRecord])
+        result.isInstanceOf[GenericRecord] ==> true
         // Fields should still be accessible (by their transformed names)
         val record = result.asInstanceOf[GenericRecord]
-        assertEquals(record.getSchema.getField("name").schema().getType, org.apache.avro.Schema.Type.STRING)
+        record.getSchema.getField("name").schema().getType ==> org.apache.avro.Schema.Type.STRING
       }
     }
   }

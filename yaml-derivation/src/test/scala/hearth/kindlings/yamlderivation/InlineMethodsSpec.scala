@@ -10,15 +10,15 @@ final class InlineMethodsSpec extends MacroSuite {
 
     test("simple case class") {
       val yaml = KindlingsYamlEncoder.toYamlString(SimplePerson("Alice", 30))
-      assert(yaml.contains("Alice"), s"Expected 'Alice' in: $yaml")
-      assert(yaml.contains("30"), s"Expected '30' in: $yaml")
+      yaml.contains("Alice") ==> true
+      yaml.contains("30") ==> true
     }
 
     test("with custom config") {
       implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
       val yaml = KindlingsYamlEncoder.toYamlString(CamelCasePerson("Alice", "Smith"))
-      assert(yaml.contains("first_name"), s"Expected 'first_name' in: $yaml")
-      assert(yaml.contains("last_name"), s"Expected 'last_name' in: $yaml")
+      yaml.contains("first_name") ==> true
+      yaml.contains("last_name") ==> true
     }
   }
 
@@ -27,12 +27,12 @@ final class InlineMethodsSpec extends MacroSuite {
     test("simple case class success") {
       val yaml = "name: Alice\nage: 30\n"
       val result = KindlingsYamlDecoder.fromYamlString[SimplePerson](yaml)
-      assertEquals(result, Right(SimplePerson("Alice", 30)))
+      result ==> Right(SimplePerson("Alice", 30))
     }
 
     test("invalid YAML returns Left") {
       val result = KindlingsYamlDecoder.fromYamlString[SimplePerson]("not: [valid: yaml: {")
-      assert(result.isLeft)
+      result.isLeft ==> true
     }
   }
 
@@ -41,16 +41,16 @@ final class InlineMethodsSpec extends MacroSuite {
     test("simple case class") {
       import syntax.*
       val yaml = SimplePerson("Alice", 30).toYamlString
-      assert(yaml.contains("Alice"), s"Expected 'Alice' in: $yaml")
-      assert(yaml.contains("30"), s"Expected '30' in: $yaml")
+      yaml.contains("Alice") ==> true
+      yaml.contains("30") ==> true
     }
 
     test("with custom config") {
       import syntax.*
       implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
       val yaml = CamelCasePerson("Alice", "Smith").toYamlString
-      assert(yaml.contains("first_name"), s"Expected 'first_name' in: $yaml")
-      assert(yaml.contains("last_name"), s"Expected 'last_name' in: $yaml")
+      yaml.contains("first_name") ==> true
+      yaml.contains("last_name") ==> true
     }
   }
 
@@ -59,13 +59,13 @@ final class InlineMethodsSpec extends MacroSuite {
     test("simple case class success") {
       import syntax.*
       val result = "name: Alice\nage: 30\n".fromYamlString[SimplePerson]
-      assertEquals(result, Right(SimplePerson("Alice", 30)))
+      result ==> Right(SimplePerson("Alice", 30))
     }
 
     test("invalid YAML returns Left") {
       import syntax.*
       val result = "not: [valid: yaml: {".fromYamlString[SimplePerson]
-      assert(result.isLeft)
+      result.isLeft ==> true
     }
   }
 
@@ -75,7 +75,7 @@ final class InlineMethodsSpec extends MacroSuite {
       val value = SimplePerson("Bob", 25)
       val yaml = KindlingsYamlEncoder.toYamlString(value)
       val result = KindlingsYamlDecoder.fromYamlString[SimplePerson](yaml)
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
 
     test("syntax toYamlString then fromYamlString") {
@@ -83,7 +83,7 @@ final class InlineMethodsSpec extends MacroSuite {
       val value = SimplePerson("Bob", 25)
       val yaml = value.toYamlString
       val result = yaml.fromYamlString[SimplePerson]
-      assertEquals(result, Right(value))
+      result ==> Right(value)
     }
   }
 

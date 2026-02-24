@@ -16,18 +16,18 @@ final class JsoniterScala3Spec extends MacroSuite {
       val codec = KindlingsJsonValueCodec.derive[Fruit]
       val value: Fruit = Fruit.Apple(1.5)
       val json = writeToString(value)(codec)
-      assert(json.contains("\"Apple\""))
+      json.contains("\"Apple\"") ==> true
       val decoded = readFromString[Fruit](json)(codec)
-      assertEquals(decoded, value)
+      decoded ==> value
     }
 
     test("second variant wrapper-style round-trip") {
       val codec = KindlingsJsonValueCodec.derive[Fruit]
       val value: Fruit = Fruit.Banana(20.0)
       val json = writeToString(value)(codec)
-      assert(json.contains("\"Banana\""))
+      json.contains("\"Banana\"") ==> true
       val decoded = readFromString[Fruit](json)(codec)
-      assertEquals(decoded, value)
+      decoded ==> value
     }
 
     test("discriminator-style round-trip") {
@@ -35,9 +35,9 @@ final class JsoniterScala3Spec extends MacroSuite {
       val codec = KindlingsJsonValueCodec.derive[Fruit]
       val value: Fruit = Fruit.Banana(20.0)
       val json = writeToString(value)(codec)
-      assert(json.contains("\"type\":\"Banana\""))
+      json.contains("\"type\":\"Banana\"") ==> true
       val decoded = readFromString[Fruit](json)(codec)
-      assertEquals(decoded, value)
+      decoded ==> value
     }
 
     test("custom name transform round-trip") {
@@ -46,9 +46,9 @@ final class JsoniterScala3Spec extends MacroSuite {
       val codec = KindlingsJsonValueCodec.derive[Fruit]
       val value: Fruit = Fruit.Apple(1.5)
       val json = writeToString(value)(codec)
-      assert(json.contains("\"apple\""))
+      json.contains("\"apple\"") ==> true
       val decoded = readFromString[Fruit](json)(codec)
-      assertEquals(decoded, value)
+      decoded ==> value
     }
   }
 
