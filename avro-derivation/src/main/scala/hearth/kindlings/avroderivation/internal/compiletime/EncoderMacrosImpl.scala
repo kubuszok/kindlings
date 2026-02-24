@@ -319,11 +319,10 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
   object EncUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroEncoder.type].methods.collect {
         case method if method.value.name == "derived" => method.value.asUntyped
       }
-    }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
       Log.info(s"Attempting to use implicit AvroEncoder for ${Type[A].prettyPrint}") >> {
@@ -630,7 +629,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
       val allCaseObjects = childrenList.forall { case (_, child) =>
         Type.isVal(using child.Underlying) ||
-          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
       }
 
       if (allCaseObjects) {
@@ -647,7 +646,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
             }
             .flatMap {
               case Some(result) => MIO.pure(result)
-              case None =>
+              case None         =>
                 MIO.fail(new RuntimeException(s"The type ${Type[A].prettyPrint} does not have any children!"))
             }
         }
@@ -662,7 +661,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           }
           .flatMap {
             case Some(result) => MIO.pure(result)
-            case None =>
+            case None         =>
               MIO.fail(new RuntimeException(s"The type ${Type[A].prettyPrint} does not have any children!"))
           }
       }

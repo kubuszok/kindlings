@@ -20,7 +20,7 @@ object AvroDerivationUtils {
     new Schema.Field(name, schema)
 
   def createUnion(schemas: Schema*): Schema =
-    Schema.createUnion(schemas: _*)
+    Schema.createUnion(schemas*)
 
   def nullSchema: Schema = Schema.create(Schema.Type.NULL)
 

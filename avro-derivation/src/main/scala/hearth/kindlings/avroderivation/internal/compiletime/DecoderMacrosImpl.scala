@@ -323,11 +323,10 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
   object DecUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroDecoder.type].methods.collect {
         case method if method.value.name == "derived" => method.value.asUntyped
       }
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to use implicit AvroDecoder for ${Type[A].prettyPrint}") >> {
@@ -624,16 +623,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
                     makeAccessors.map(_(decodedValuesExpr)).toMap
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error) =>
+                    case Left(error)          =>
                       MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
                   }
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
                   Expr.quote {
-                    Expr.splice(constructLambda).apply(
-                      AvroDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr))
-                    )
+                    Expr
+                      .splice(constructLambda)
+                      .apply(
+                        AvroDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr))
+                      )
                   }
                 }
             }
@@ -709,7 +710,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         case Some(children) =>
           val allCaseObjects = children.toList.forall { case (_, child) =>
             Type.isVal(using child.Underlying) ||
-              CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+            CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
           }
 
           if (allCaseObjects) {
@@ -729,15 +730,14 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
                       CaseClass.parse[ChildType] match {
                         case Some(cc) =>
                           cc.construct[MIO](new CaseClass.ConstructField[MIO] {
-                              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                                MIO.fail(
-                                  new RuntimeException(s"Unexpected parameter in case object $childName")
-                                )
-                            })
-                            .flatMap {
-                              case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[A]]))
-                              case None => MIO.fail(new RuntimeException(s"Cannot construct $childName"))
-                            }
+                            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+                              MIO.fail(
+                                new RuntimeException(s"Unexpected parameter in case object $childName")
+                              )
+                          }).flatMap {
+                            case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[A]]))
+                            case None       => MIO.fail(new RuntimeException(s"Cannot construct $childName"))
+                          }
                         case None =>
                           MIO.fail(new RuntimeException(s"$childName is not parseable as a case class"))
                       }
@@ -774,25 +774,27 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
                     dctx.getHelper[ChildType].map {
                       case Some(helper) =>
                         (
-                            childName,
-                            (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                              Expr.quote {
-                                val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                val recordName = record.getSchema.getName
-                                if (
-                                  Expr.splice(dctx.config).transformConstructorNames(
+                          childName,
+                          (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
+                            Expr.quote {
+                              val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                              val recordName = record.getSchema.getName
+                              if (
+                                Expr
+                                  .splice(dctx.config)
+                                  .transformConstructorNames(
                                     Expr.splice(Expr(childName))
                                   ) == recordName
-                                )
-                                  Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
-                                else
-                                  Expr.splice(elseExpr)
-                              }
+                              )
+                                Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
+                              else
+                                Expr.splice(elseExpr)
+                            }
                         )
                       case None =>
                         (
-                            childName,
-                            (_: Expr[Any], elseExpr: Expr[A]) => elseExpr
+                          childName,
+                          (_: Expr[Any], elseExpr: Expr[A]) => elseExpr
                         )
                     }
                   }

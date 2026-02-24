@@ -173,9 +173,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
     deriveSchemaRecursively[B]
   }
 
-  /** Derives schema with its own local cache, returning a self-contained expression.
-    * Use this instead of deriveInlineSchema when calling from within an encoder/decoder MIO chain
-    * to avoid Scala 3 splice isolation issues.
+  /** Derives schema with its own local cache, returning a self-contained expression. Use this instead of
+    * deriveInlineSchema when calling from within an encoder/decoder MIO chain to avoid Scala 3 splice isolation issues.
     */
   def deriveSelfContainedSchema[B: Type](config: Expr[AvroConfig]): MIO[Expr[Schema]] = {
     val localCache = ValDefsCache.mlocal
@@ -240,11 +239,10 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
 
   object SfUseImplicitWhenAvailableRule extends SchemaDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroSchemaFor.type].methods.collect {
         case method if method.value.name == "derived" => method.value.asUntyped
       }
-    }
 
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
       Log.info(s"Attempting to use implicit AvroSchemaFor for ${Type[A].prettyPrint}") >> {
@@ -416,7 +414,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
               _ <- sfctx.setCachedSchema[A](schemaExpr)
               result <- sfctx.getCachedSchema[A].flatMap {
                 case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
-                case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
 
@@ -494,7 +492,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
               _ <- sfctx.setCachedSchema[A](schemaExpr)
               result <- sfctx.getCachedSchema[A].flatMap {
                 case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
-                case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
           case None =>
@@ -518,7 +516,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
         case Some(children) =>
           val allCaseObjects = children.toList.forall { case (_, child) =>
             Type.isVal(using child.Underlying) ||
-              CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+            CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
           }
 
           if (allCaseObjects) {
