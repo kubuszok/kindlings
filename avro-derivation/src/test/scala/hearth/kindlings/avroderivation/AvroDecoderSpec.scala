@@ -271,6 +271,35 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("per-field annotations") {
+
+      test("@fieldName decodes from custom field name") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithFieldName]
+        val record = new GenericData.Record(schema)
+        record.put("user_name", "Alice")
+        record.put("age", 30)
+        val result = AvroDecoder.decode[AvroWithFieldName](record: Any)
+        result ==> AvroWithFieldName("Alice", 30)
+      }
+
+      test("@transientField uses default value during decoding") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithTransient]
+        val record = new GenericData.Record(schema)
+        record.put("name", "Alice")
+        val result = AvroDecoder.decode[AvroWithTransient](record: Any)
+        result ==> AvroWithTransient("Alice", None)
+      }
+
+      test("@fieldName and @transientField combined") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithBothAnnotations]
+        val record = new GenericData.Record(schema)
+        record.put("display_name", "Alice")
+        record.put("active", true)
+        val result = AvroDecoder.decode[AvroWithBothAnnotations](record: Any)
+        result ==> AvroWithBothAnnotations("Alice", 0, true)
+      }
+    }
+
     group("derived instance") {
 
       test("derive creates AvroDecoder instance") {

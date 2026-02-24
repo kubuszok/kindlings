@@ -478,6 +478,56 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("per-field annotations") {
+
+      test("@fieldName overrides field name in decoding") {
+        val json = Json.obj("user_name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        KindlingsDecoder.decode[CirceWithFieldName](json) ==> Right(CirceWithFieldName("Alice", 30))
+      }
+
+      test("@fieldName takes precedence over config transform") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val json = Json.obj("user_name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        KindlingsDecoder.decode[CirceWithFieldName](json) ==> Right(CirceWithFieldName("Alice", 30))
+      }
+
+      test("@transientField uses default value during decoding") {
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[CirceWithTransient](json) ==> Right(CirceWithTransient("Alice", None))
+      }
+
+      test("@transientField ignores field even if present in JSON") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "cache" -> Json.fromString("cached"))
+        KindlingsDecoder.decode[CirceWithTransient](json) ==> Right(CirceWithTransient("Alice", None))
+      }
+
+      test("both annotations combined") {
+        val json = Json.obj("display_name" -> Json.fromString("Alice"), "active" -> Json.True)
+        KindlingsDecoder.decode[CirceWithBothAnnotations](json) ==>
+          Right(CirceWithBothAnnotations("Alice", 0, true))
+      }
+
+      test("@transientField round-trip preserves non-transient fields") {
+        val original = CirceWithTransient("Alice", Some("cached"))
+        val json = KindlingsEncoder.encode(original)
+        KindlingsDecoder.decode[CirceWithTransient](json) ==> Right(CirceWithTransient("Alice", None))
+      }
+
+      test("@transientField without default is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{KindlingsDecoder, annotations}
+          import io.circe.Json
+          case class BadTransient(@annotations.transientField x: Int)
+          KindlingsDecoder.decode[BadTransient](Json.obj())
+          """
+        ).check(
+          "@transientField on field 'x'",
+          "requires a default value"
+        )
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {

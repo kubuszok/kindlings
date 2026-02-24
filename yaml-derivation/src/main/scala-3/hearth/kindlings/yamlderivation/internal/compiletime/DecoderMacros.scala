@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 import scala.quoted.*
 
-final private[yamlderivation] class DecoderMacros(q: Quotes) extends MacroCommonsScala3(using q), DecoderMacrosImpl
+final private[yamlderivation] class DecoderMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      DecoderMacrosImpl
 private[yamlderivation] object DecoderMacros {
 
   def deriveDecoderImpl[A: Type](

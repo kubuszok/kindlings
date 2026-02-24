@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import org.apache.avro.Schema
 import scala.quoted.*
 
-final private[avroderivation] class SchemaForMacros(q: Quotes) extends MacroCommonsScala3(using q), SchemaForMacrosImpl
+final private[avroderivation] class SchemaForMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      SchemaForMacrosImpl
 private[avroderivation] object SchemaForMacros {
 
   def deriveSchemaForImpl[A: Type](

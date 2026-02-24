@@ -2,6 +2,7 @@ package hearth.kindlings.jsoniterderivation
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReaderException, JsonValueCodec}
 import hearth.MacroSuite
+import hearth.kindlings.jsoniterderivation.annotations.{fieldName, transientField}
 
 case class CamelCasePerson(firstName: String, lastName: String)
 case class SimplePerson(name: String, age: Int)
@@ -41,6 +42,15 @@ object JsoniterAliases {
   type Name = String
 }
 case class WithAlias(name: JsoniterAliases.Name, age: Int)
+
+// Per-field annotation test types
+case class JsoniterWithFieldName(@fieldName("user_name") userName: String, age: Int)
+case class JsoniterWithTransient(name: String, @transientField cache: Option[String] = None)
+case class JsoniterWithBothAnnotations(
+    @fieldName("display_name") displayName: String,
+    @transientField internal: Int = 0,
+    active: Boolean
+)
 
 final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
@@ -514,6 +524,68 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       json.contains("\"type\":\"dog\"") ==> true
       val decoded = readFromString[Animal](json)(codec)
       decoded ==> value
+    }
+  }
+
+  group("KindlingsJsonValueCodec") {
+    group("per-field annotations") {
+
+      test("@fieldName encodes with custom name") {
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithFieldName]
+        val json = writeToString(JsoniterWithFieldName("Alice", 30))(codec)
+        json.contains("\"user_name\"") ==> true
+        json.contains("\"userName\"") ==> false
+      }
+
+      test("@fieldName decodes with custom name") {
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithFieldName]
+        val decoded = readFromString[JsoniterWithFieldName]("""{"user_name":"Alice","age":30}""")(codec)
+        decoded ==> JsoniterWithFieldName("Alice", 30)
+      }
+
+      test("@fieldName overrides config fieldNameMapper") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withSnakeCaseFieldNames
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithFieldName]
+        val json = writeToString(JsoniterWithFieldName("Alice", 30))(codec)
+        // @fieldName("user_name") takes precedence, age uses snake_case from config (already snake_case)
+        json.contains("\"user_name\"") ==> true
+      }
+
+      test("@transientField excludes field from encoding") {
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithTransient]
+        val json = writeToString(JsoniterWithTransient("Alice", Some("cached")))(codec)
+        json.contains("\"cache\"") ==> false
+        json.contains("\"name\"") ==> true
+      }
+
+      test("@transientField decodes without the field") {
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithTransient]
+        val decoded = readFromString[JsoniterWithTransient]("""{"name":"Alice"}""")(codec)
+        decoded ==> JsoniterWithTransient("Alice", None)
+      }
+
+      test("both annotations combined") {
+        val codec = KindlingsJsonValueCodec.derive[JsoniterWithBothAnnotations]
+        val value = JsoniterWithBothAnnotations("Alice", 42, active = true)
+        val json = writeToString(value)(codec)
+        json.contains("\"display_name\"") ==> true
+        json.contains("\"internal\"") ==> false
+        json.contains("\"active\"") ==> true
+        val decoded = readFromString[JsoniterWithBothAnnotations]("""{"display_name":"Alice","active":true}""")(codec)
+        decoded ==> JsoniterWithBothAnnotations("Alice", 0, active = true)
+      }
+
+      test("@transientField without default is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.jsoniterderivation.annotations.transientField
+          case class BadTransient(name: String, @transientField noDefault: Int)
+          hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derive[BadTransient]
+          """
+        ).check(
+          "@transientField on field 'noDefault'"
+        )
+      }
     }
   }
 

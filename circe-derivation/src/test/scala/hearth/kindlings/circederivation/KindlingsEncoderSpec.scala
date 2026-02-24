@@ -52,6 +52,21 @@ case class WithAlias(name: CirceAliases.Name, age: Int)
 
 class NotACirceType
 
+// Annotation test types
+case class CirceWithFieldName(
+    @annotations.fieldName("user_name") userName: String,
+    age: Int
+)
+case class CirceWithTransient(
+    name: String,
+    @annotations.transientField cache: Option[String] = None
+)
+case class CirceWithBothAnnotations(
+    @annotations.fieldName("display_name") displayName: String,
+    @annotations.transientField internal: Int = 0,
+    active: Boolean
+)
+
 final class KindlingsEncoderSpec extends MacroSuite {
 
   group("KindlingsEncoder") {
@@ -396,6 +411,43 @@ final class KindlingsEncoderSpec extends MacroSuite {
             "name" -> Json.fromString("Rex"),
             "breed" -> Json.fromString("Labrador")
           )
+      }
+    }
+
+    group("per-field annotations") {
+
+      test("@fieldName overrides field name in encoding") {
+        KindlingsEncoder.encode(CirceWithFieldName("Alice", 30)) ==>
+          Json.obj("user_name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+      }
+
+      test("@fieldName takes precedence over config transform") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        KindlingsEncoder.encode(CirceWithFieldName("Alice", 30)) ==>
+          Json.obj("user_name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+      }
+
+      test("@transientField excludes field from encoding") {
+        KindlingsEncoder.encode(CirceWithTransient("Alice", Some("cached"))) ==>
+          Json.obj("name" -> Json.fromString("Alice"))
+      }
+
+      test("both annotations combined") {
+        KindlingsEncoder.encode(CirceWithBothAnnotations("Alice", 42, true)) ==>
+          Json.obj("display_name" -> Json.fromString("Alice"), "active" -> Json.True)
+      }
+
+      test("@transientField without default is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{KindlingsEncoder, annotations}
+          case class BadTransient(@annotations.transientField x: Int)
+          KindlingsEncoder.encode(BadTransient(1))
+          """
+        ).check(
+          "@transientField on field 'x'",
+          "requires a default value"
+        )
       }
     }
 

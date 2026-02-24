@@ -7,11 +7,12 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroEncoder}
+import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
 
-trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosImpl =>
+trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
   // Entrypoints
 
@@ -565,48 +566,80 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       implicit val AnyT: Type[Any] = EncTypes.Any
       implicit val StringT: Type[String] = EncTypes.String
       implicit val SchemaT: Type[Schema] = EncTypes.Schema
+      implicit val fieldNameT: Type[fieldName] = EncTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = EncTypes.TransientField
 
-      NonEmptyList.fromList(caseClass.caseFieldValuesAt(ectx.value).toList) match {
-        case Some(fields) =>
-          fields
-            .parTraverse { case (fieldName, fieldValue) =>
-              import fieldValue.{Underlying as Field, value as fieldExpr}
-              Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fieldName: ${Type[Field].prettyPrint}") {
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEncoded =>
-                  (fieldName, fieldEncoded)
-                }
-              }
-            }
-            .flatMap { fieldPairs =>
-              val fieldsListExpr = fieldPairs.toList.foldRight(
-                Expr.quote(List.empty[(String, Any)])
-              ) { case ((fieldName, fieldEncoded), acc) =>
-                Expr.quote {
-                  (
-                    Expr.splice(ectx.config).transformFieldNames(Expr.splice(Expr(fieldName))),
-                    Expr.splice(fieldEncoded)
-                  ) :: Expr.splice(acc)
-                }
-              }
+      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
 
+      // Singletons (case objects, parameterless enum cases) have no primary constructor.
+      // Only access primaryConstructor when there are actual fields to process.
+      val paramsByName: Map[String, Parameter] =
+        if (allFields.isEmpty) Map.empty
+        else caseClass.primaryConstructor.parameters.flatten.toMap
+
+      // Validate: @transientField on fields without defaults is a compile error
+      paramsByName.collectFirst {
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+      } match {
+        case Some(msg) => MIO.fail(new RuntimeException(msg))
+        case None      =>
+          val nonTransientFields = allFields.filter { case (name, _) =>
+            paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
+          }
+
+          NonEmptyList.fromList(nonTransientFields) match {
+            case Some(fields) =>
+              fields
+                .parTraverse { case (fName, fieldValue) =>
+                  import fieldValue.{Underlying as Field, value as fieldExpr}
+                  Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
+                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEncoded =>
+                      val nameOverride =
+                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
+                      (fName, fieldEncoded, nameOverride)
+                    }
+                  }
+                }
+                .flatMap { fieldPairs =>
+                  val fieldsListExpr = fieldPairs.toList.foldRight(
+                    Expr.quote(List.empty[(String, Any)])
+                  ) {
+                    case ((fName, fieldEncoded, Some(customName)), acc) =>
+                      Expr.quote {
+                        (
+                          Expr.splice(Expr(customName)),
+                          Expr.splice(fieldEncoded)
+                        ) :: Expr.splice(acc)
+                      }
+                    case ((fName, fieldEncoded, None), acc) =>
+                      Expr.quote {
+                        (
+                          Expr.splice(ectx.config).transformFieldNames(Expr.splice(Expr(fName))),
+                          Expr.splice(fieldEncoded)
+                        ) :: Expr.splice(acc)
+                      }
+                  }
+
+                  deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
+                    Expr.quote {
+                      val schema = Expr.splice(schemaExpr)
+                      val fields = Expr.splice(fieldsListExpr)
+                      val record = new GenericData.Record(schema)
+                      fields.foreach { case (name, value) =>
+                        record.put(name, value)
+                      }
+                      record: Any
+                    }
+                  }
+                }
+            case None =>
               deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
                 Expr.quote {
-                  val schema = Expr.splice(schemaExpr)
-                  val fields = Expr.splice(fieldsListExpr)
-                  val record = new GenericData.Record(schema)
-                  fields.foreach { case (name, value) =>
-                    record.put(name, value)
-                  }
+                  val record = new GenericData.Record(Expr.splice(schemaExpr))
                   record: Any
                 }
               }
-            }
-        case None =>
-          deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
-            Expr.quote {
-              val record = new GenericData.Record(Expr.splice(schemaExpr))
-              record: Any
-            }
           }
       }
     }
@@ -693,6 +726,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
     val String: Type[String] = Type.of[String]
     val Any: Type[Any] = Type.of[Any]
+    val FieldName: Type[fieldName] = Type.of[fieldName]
+    val TransientField: Type[transientField] = Type.of[transientField]
   }
 }
 

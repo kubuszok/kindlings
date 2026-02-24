@@ -7,11 +7,12 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder}
+import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 
-trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosImpl =>
+trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
   // Entrypoints
 
@@ -566,19 +567,69 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     ): MIO[Expr[A]] = {
       implicit val StringT: Type[String] = DecTypes.String
       implicit val AnyT: Type[Any] = DecTypes.Any
+      implicit val fieldNameT: Type[fieldName] = DecTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = DecTypes.TransientField
+
+      // Singletons (case objects, parameterless enum cases) have no primary constructor
+      if (caseClass.isSingleton) {
+        return caseClass
+          .construct[MIO](new CaseClass.ConstructField[MIO] {
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+              MIO.fail(
+                new RuntimeException(s"Unexpected parameter in singleton ${Type[A].prettyPrint}")
+              )
+          })
+          .flatMap {
+            case Some(expr) => MIO.pure(expr)
+            case None       => MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+          }
+      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
 
-      NonEmptyList.fromList(fieldsList) match {
+      // Validate: @transientField on fields without defaults is a compile error
+      fieldsList.collectFirst {
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+      } match {
+        case Some(msg) => return MIO.fail(new RuntimeException(msg))
+        case None      => // OK
+      }
+
+      // Separate transient and non-transient fields
+      val transientFields = fieldsList.filter { case (_, param) => hasAnnotationType[transientField](param) }
+      val nonTransientFields = fieldsList.filter { case (_, param) => !hasAnnotationType[transientField](param) }
+
+      // Build transient defaults map
+      val transientDefaults: Map[String, Expr_??] = transientFields.flatMap { case (fName, param) =>
+        param.defaultValue.flatMap { existentialOuter =>
+          val methodOf = existentialOuter.value
+          methodOf.value match {
+            case noInstance: Method.NoInstance[?] =>
+              import noInstance.Returned
+              noInstance(Map.empty).toOption.map { defaultExpr =>
+                (fName, defaultExpr.as_??)
+              }
+            case _ => None
+          }
+        }
+      }.toMap
+
+      NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // Zero-parameter case class
+          // All fields are transient or there are no fields — construct with defaults
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                MIO.fail(
-                  new RuntimeException(s"Unexpected parameter in zero-argument case class ${Type[A].prettyPrint}")
-                )
+                transientDefaults.get(field.name) match {
+                  case Some(defaultExpr) =>
+                    MIO.pure(defaultExpr.value.asInstanceOf[Expr[field.tpe.Underlying]])
+                  case None =>
+                    MIO.fail(
+                      new RuntimeException(s"Unexpected parameter in zero-argument case class ${Type[A].prettyPrint}")
+                    )
+                }
             })
             .flatMap {
               case Some(expr) => MIO.pure(expr)
@@ -588,28 +639,45 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         case Some(fields) =>
           implicit val ArrayAnyT: Type[Array[Any]] = DecTypes.ArrayAny
 
-          // Step 1: For each field, derive a decode expression and build accessor
-          fields
-            .parTraverse { case (fieldName, param) =>
+          val indexedFields = fields.toList.zipWithIndex
+
+          // Step 1: For each non-transient field, derive a decode expression and build accessor
+          NonEmptyList
+            .fromList(indexedFields)
+            .get
+            .parTraverse { case ((fName, param), reindex) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
+              val nameOverride = getAnnotationStringArg[fieldName](param)
+              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Any] = Expr.quote {
-                    val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                    val fieldValue = AvroDerivationUtils.decodeRecord(
-                      record,
-                      Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fieldName)))
-                    )
-                    Expr.splice(decoderExpr).decode(fieldValue): Any
+                  val decodeExpr: Expr[Any] = nameOverride match {
+                    case Some(customName) =>
+                      Expr.quote {
+                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                        val fieldValue = AvroDerivationUtils.decodeRecord(
+                          record,
+                          Expr.splice(Expr(customName))
+                        )
+                        Expr.splice(decoderExpr).decode(fieldValue): Any
+                      }
+                    case None =>
+                      Expr.quote {
+                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                        val fieldValue = AvroDerivationUtils.decodeRecord(
+                          record,
+                          Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                        )
+                        Expr.splice(decoderExpr).decode(fieldValue): Any
+                      }
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       AvroDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
                         Expr.splice(decoderExpr)
                       )
                     }
-                    (fieldName, typedExpr.as_??)
+                    (fName, typedExpr.as_??)
                   }
                   (decodeExpr, makeAccessor)
                 }
@@ -629,8 +697,9 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  val fieldMap: Map[String, Expr_??] =
+                  val nonTransientFieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
+                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
@@ -840,6 +909,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     val String: Type[String] = Type.of[String]
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
+    val FieldName: Type[fieldName] = Type.of[fieldName]
+    val TransientField: Type[transientField] = Type.of[transientField]
   }
 }
 

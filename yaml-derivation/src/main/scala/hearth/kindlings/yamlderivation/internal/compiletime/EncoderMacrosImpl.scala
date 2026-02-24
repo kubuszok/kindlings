@@ -7,10 +7,11 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.yamlderivation.{KindlingsYamlEncoder, YamlConfig}
+import hearth.kindlings.yamlderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{Node, YamlEncoder}
 
-trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
+trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
   // Entrypoints
 
@@ -483,40 +484,71 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
     ): MIO[Expr[Node]] = {
       implicit val NodeT: Type[Node] = Types.Node
       implicit val StringT: Type[String] = Types.String
+      implicit val fieldNameT: Type[fieldName] = Types.FieldName
+      implicit val transientFieldT: Type[transientField] = Types.TransientField
 
-      NonEmptyList.fromList(caseClass.caseFieldValuesAt(ectx.value).toList) match {
-        case Some(fields) =>
-          fields
-            .parTraverse { case (fieldName, fieldValue) =>
-              import fieldValue.{Underlying as Field, value as fieldExpr}
-              Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fieldName: ${Type[Field].prettyPrint}") {
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldNode =>
-                  (fieldName, fieldNode)
-                }
-              }
-            }
-            .map { fieldPairs =>
-              fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) {
-                case ((fieldName, fieldNode), acc) =>
-                  Expr.quote {
-                    (
-                      Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fieldName))),
-                      Expr
-                        .splice(fieldNode)
-                    ) ::
-                      Expr.splice(acc)
+      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+
+      // Singletons (case objects, parameterless enum cases) have no primary constructor.
+      // Only access primaryConstructor when there are actual fields to process.
+      val paramsByName: Map[String, Parameter] =
+        if (allFields.isEmpty) Map.empty
+        else caseClass.primaryConstructor.parameters.flatten.toMap
+
+      // Validate: @transientField on fields without defaults is a compile error
+      paramsByName.collectFirst {
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+      } match {
+        case Some(msg) => MIO.fail(new RuntimeException(msg))
+        case None      =>
+          val nonTransientFields = allFields.filter { case (name, _) =>
+            paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
+          }
+
+          NonEmptyList.fromList(nonTransientFields) match {
+            case Some(fields) =>
+              fields
+                .parTraverse { case (fName, fieldValue) =>
+                  import fieldValue.{Underlying as Field, value as fieldExpr}
+                  Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
+                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldNode =>
+                      val nameOverride =
+                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
+                      (fName, fieldNode, nameOverride)
+                    }
                   }
-              }
-            }
-            .map { fieldsListExpr =>
-              Expr.quote {
-                YamlDerivationUtils.nodeFromFields(Expr.splice(fieldsListExpr))
-              }
-            }
-        case None =>
-          MIO.pure(Expr.quote {
-            YamlDerivationUtils.nodeFromFields(Nil)
-          })
+                }
+                .map { fieldPairs =>
+                  fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) {
+                    case ((fName, fieldNode, Some(customName)), acc) =>
+                      Expr.quote {
+                        (
+                          Expr.splice(Expr(customName)),
+                          Expr.splice(fieldNode)
+                        ) ::
+                          Expr.splice(acc)
+                      }
+                    case ((fName, fieldNode, None), acc) =>
+                      Expr.quote {
+                        (
+                          Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                          Expr.splice(fieldNode)
+                        ) ::
+                          Expr.splice(acc)
+                      }
+                  }
+                }
+                .map { fieldsListExpr =>
+                  Expr.quote {
+                    YamlDerivationUtils.nodeFromFields(Expr.splice(fieldsListExpr))
+                  }
+                }
+            case None =>
+              MIO.pure(Expr.quote {
+                YamlDerivationUtils.nodeFromFields(Nil)
+              })
+          }
       }
     }
   }
@@ -608,6 +640,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
     val Node: Type[Node] = Type.of[Node]
     val YamlConfig: Type[YamlConfig] = Type.of[YamlConfig]
     val String: Type[String] = Type.of[String]
+    val FieldName: Type[fieldName] = Type.of[fieldName]
+    val TransientField: Type[transientField] = Type.of[transientField]
   }
 }
 

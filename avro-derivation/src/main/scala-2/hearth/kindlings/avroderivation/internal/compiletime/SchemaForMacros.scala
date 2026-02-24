@@ -7,6 +7,7 @@ import scala.reflect.macros.blackbox
 
 final private[avroderivation] class SchemaForMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
+    with AnnotationSupportScala2
     with SchemaForMacrosImpl {
 
   def deriveSchemaForImpl[A: c.WeakTypeTag](

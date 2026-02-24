@@ -261,6 +261,42 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("per-field annotations") {
+
+      test("@fieldName encodes with custom field name") {
+        val result = AvroEncoder.encode(AvroWithFieldName("Alice", 30))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("user_name").toString ==> "Alice"
+        record.get("age").asInstanceOf[Int] ==> 30
+      }
+
+      test("@transientField excludes field from encoding") {
+        val result = AvroEncoder.encode(AvroWithTransient("Alice", Some("cached")))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("name").toString ==> "Alice"
+        record.getSchema.getField("cache") ==> null
+      }
+
+      test("@fieldName and @transientField combined") {
+        val result = AvroEncoder.encode(AvroWithBothAnnotations("Alice", 42, true))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("display_name").toString ==> "Alice"
+        record.get("active").asInstanceOf[Boolean] ==> true
+        record.getSchema.getField("internal") ==> null
+      }
+
+      test("@fieldName overrides config transform") {
+        implicit val config: AvroConfig = AvroConfig().withSnakeCaseFieldNames
+        val result = AvroEncoder.encode(AvroWithFieldName("Alice", 30))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("user_name").toString ==> "Alice"
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

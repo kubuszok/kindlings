@@ -7,6 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
+import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, transientField}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
@@ -17,7 +18,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
   JsonWriter
 }
 
-trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
+trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
   // Entrypoints
 
@@ -802,40 +803,70 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val UnitT: Type[Unit] = CTypes.Unit
+      implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = CTypes.TransientField
 
-      val fields = caseClass.caseFieldValuesAt(ectx.value).toList
+      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
 
-      NonEmptyList.fromList(fields) match {
-        case Some(nonEmptyFields) =>
-          nonEmptyFields
-            .parTraverse { case (fieldName, fieldValue) =>
-              import fieldValue.{Underlying as Field, value as fieldExpr}
-              Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fieldName: ${Type[Field].prettyPrint}") {
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEnc =>
-                  (fieldName, fieldEnc)
-                }
-              }
-            }
-            .map { fieldPairs =>
-              fieldPairs.toList
-                .map { case (fieldName, fieldEnc) =>
-                  Expr.quote {
-                    Expr
-                      .splice(ectx.writer)
-                      .writeKey(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fieldName))))
-                    Expr.splice(fieldEnc)
+      // Singletons (case objects, parameterless enum cases) have no primary constructor.
+      // Only access primaryConstructor when there are actual fields to process.
+      val paramsByName: Map[String, Parameter] =
+        if (allFields.isEmpty) Map.empty
+        else caseClass.primaryConstructor.parameters.flatten.toMap
+
+      // Validate: @transientField on fields without defaults is a compile error
+      paramsByName.collectFirst {
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+      } match {
+        case Some(msg) => MIO.fail(new RuntimeException(msg))
+        case None      =>
+          val nonTransientFields = allFields.filter { case (name, _) =>
+            paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
+          }
+
+          NonEmptyList.fromList(nonTransientFields) match {
+            case Some(nonEmptyFields) =>
+              nonEmptyFields
+                .parTraverse { case (fName, fieldValue) =>
+                  import fieldValue.{Underlying as Field, value as fieldExpr}
+                  Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
+                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEnc =>
+                      val nameOverride =
+                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
+                      (fName, fieldEnc, nameOverride)
+                    }
                   }
                 }
-                .foldLeft(Expr.quote(()): Expr[Unit]) { (acc, field) =>
-                  Expr.quote {
-                    Expr.splice(acc)
-                    Expr.splice(field)
-                  }
+                .map { fieldPairs =>
+                  fieldPairs.toList
+                    .map {
+                      case (fName, fieldEnc, Some(customName)) =>
+                        Expr.quote {
+                          Expr
+                            .splice(ectx.writer)
+                            .writeKey(Expr.splice(Expr(customName)))
+                          Expr.splice(fieldEnc)
+                        }
+                      case (fName, fieldEnc, None) =>
+                        Expr.quote {
+                          Expr
+                            .splice(ectx.writer)
+                            .writeKey(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
+                          Expr.splice(fieldEnc)
+                        }
+                    }
+                    .foldLeft(Expr.quote(()): Expr[Unit]) { (acc, field) =>
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(field)
+                      }
+                    }
                 }
-            }
 
-        case None =>
-          MIO.pure(Expr.quote(()): Expr[Unit])
+            case None =>
+              MIO.pure(Expr.quote(()): Expr[Unit])
+          }
       }
     }
 
@@ -1372,19 +1403,50 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
         }
       }
 
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private def decodeCaseClassFields[A: DecoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[A]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = CTypes.TransientField
+
+      // Singletons (case objects, parameterless enum cases) have no primary constructor.
+      if (caseClass.isSingleton) {
+        return caseClass
+          .construct[MIO](new CaseClass.ConstructField[MIO] {
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+              MIO.fail(new RuntimeException(s"Unexpected parameter in singleton ${Type[A].prettyPrint}"))
+          })
+          .flatMap {
+            case Some(expr) =>
+              MIO.pure(Expr.quote {
+                JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
+                Expr.splice(expr)
+              })
+            case None =>
+              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+          }
+      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
 
-      NonEmptyList.fromList(fieldsList) match {
+      // Validate: @transientField on fields without defaults is a compile error
+      fieldsList
+        .collectFirst {
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+        }
+        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+
+      // Separate transient from non-transient fields
+      val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+
+      NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // Zero-parameter case class: construct directly
+          // Zero non-transient fields (either zero-param or all-transient): construct directly
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -1407,28 +1469,46 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
           implicit val AnyT: Type[Any] = CTypes.Any
           implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
 
-          // Step 1: For each field, derive a decoder (implicit or recursive) and build
-          // decode + accessor expressions. Uses unsafeCast with the decoder as type witness
-          // to avoid path-dependent type aliases in Expr.quote (Scala 2 compatibility).
+          // Build transient field default values for the constructor
+          val transientDefaults: Map[String, Expr_??] = fieldsList
+            .filter { case (_, p) => hasAnnotationType[transientField](p) }
+            .flatMap { case (fName, param) =>
+              param.defaultValue.flatMap { existentialOuter =>
+                val methodOf = existentialOuter.value
+                methodOf.value match {
+                  case noInstance: Method.NoInstance[?] =>
+                    import noInstance.Returned
+                    noInstance(Map.empty).toOption.map(expr => (fName, expr.as_??))
+                  case _ => None
+                }
+              }
+            }
+            .toMap
+
+          // Re-index non-transient fields for the array (0, 1, 2, ...)
+          val nonTransientWithIndex = nonTransientFields.zipWithIndex
+
+          // Step 1: For each non-transient field, derive a decoder and build dispatch/accessor.
           fields
-            .parTraverse { case (fieldName, param) =>
+            .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
+              val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
+              val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
+              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decodeFn =>
-                  // Build an erased version of the decode function for the dispatch
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
                     Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       JsoniterDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                        Expr.splice(arrExpr)(Expr.splice(Expr(arrayIndex))),
                         Expr.splice(decodeFn)
                       )
                     }
-                    (fieldName, typedExpr.as_??)
+                    (fName, typedExpr.as_??)
                   }
-                  (fieldName, param.index, decodeFnErased, makeAccessor)
+                  (fName, arrayIndex, decodeFnErased, makeAccessor, nameOverride)
                 }
               }
             }
@@ -1439,8 +1519,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  val fieldMap: Map[String, Expr_??] =
+                  // Non-transient fields read from the array
+                  val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
+                  // Merge with transient defaults
+                  val fieldMap = nonTransientFieldMap ++ transientDefaults
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
@@ -1451,9 +1534,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                   val constructLambda = builder.build[A]
 
                   // Step 3: Build the field dispatch - if-else chain matching mapped field names.
-                  // Uses the erased decode functions (JsonReader => Any) to avoid path-dependent types.
-                  val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _) =>
-                    (name, index, decodeFnErased)
+                  val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _, nameOverride) =>
+                    (name, index, decodeFnErased, nameOverride)
                   }
 
                   Expr.quote {
@@ -1466,12 +1548,19 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                         fieldMappings.foldRight(Expr.quote {
                           if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
                           else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) { case ((name, index, decodeFnErased), elseExpr) =>
-                          Expr.quote {
-                            if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
-                              arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
-                            } else Expr.splice(elseExpr)
-                          }
+                        }: Expr[Unit]) {
+                          case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
+                            Expr.quote {
+                              if (fieldName == Expr.splice(Expr(customName))) {
+                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                              } else Expr.splice(elseExpr)
+                            }
+                          case ((name, index, decodeFnErased, None), elseExpr) =>
+                            Expr.quote {
+                              if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                              } else Expr.splice(elseExpr)
+                            }
                         }
                       }
                     }
@@ -1485,19 +1574,58 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
       * discriminator key-value have already been read. Returns Expr[A] that reads remaining fields via
       * readObjectInline.
       */
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private[compiletime] def decodeCaseClassFieldsInline[A: DecoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[A]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = CTypes.TransientField
+
+      // Singletons have no primary constructor.
+      if (caseClass.isSingleton) {
+        return caseClass
+          .construct[MIO](new CaseClass.ConstructField[MIO] {
+            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+              MIO.fail(new RuntimeException(s"Unexpected field in singleton ${Type[A].prettyPrint}"))
+          })
+          .flatMap {
+            case Some(expr) =>
+              MIO.pure(Expr.quote {
+                val reader = Expr.splice(dctx.reader)
+                if (!reader.isNextToken('}'.toByte)) {
+                  if (reader.isCurrentToken(','.toByte)) {
+                    reader.rollbackToken()
+                    while (reader.isNextToken(','.toByte)) {
+                      val _ = reader.readKeyAsString()
+                      reader.skip()
+                    }
+                  }
+                }
+                Expr.splice(expr)
+              })
+            case None =>
+              MIO.fail(new RuntimeException(s"Cannot construct singleton ${Type[A].prettyPrint}"))
+          }
+      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
 
-      NonEmptyList.fromList(fieldsList) match {
+      // Validate: @transientField on fields without defaults
+      fieldsList
+        .collectFirst {
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+        }
+        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+
+      val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+
+      NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // Zero-parameter case class: just read closing `}`
+          // Zero non-transient fields: just read closing `}`
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -1505,14 +1633,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
             })
             .flatMap {
               case Some(expr) =>
-                // Read just the `}` — object was already opened, discriminator already consumed
                 MIO.pure(Expr.quote {
-                  // After discriminator, if next token is `}`, there are no more fields
-                  // If next token is `,`, there are unexpected extra fields — just skip to `}`
                   val reader = Expr.splice(dctx.reader)
                   if (!reader.isNextToken('}'.toByte)) {
                     if (reader.isCurrentToken(','.toByte)) {
-                      // skip remaining fields
                       reader.rollbackToken()
                       while (reader.isNextToken(','.toByte)) {
                         val _ = reader.readKeyAsString()
@@ -1530,10 +1654,30 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
           implicit val AnyT: Type[Any] = CTypes.Any
           implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
 
+          // Build transient field default values
+          val transientDefaults: Map[String, Expr_??] = fieldsList
+            .filter { case (_, p) => hasAnnotationType[transientField](p) }
+            .flatMap { case (fName, param) =>
+              param.defaultValue.flatMap { existentialOuter =>
+                val methodOf = existentialOuter.value
+                methodOf.value match {
+                  case noInstance: Method.NoInstance[?] =>
+                    import noInstance.Returned
+                    noInstance(Map.empty).toOption.map(expr => (fName, expr.as_??))
+                  case _ => None
+                }
+              }
+            }
+            .toMap
+
+          val nonTransientWithIndex = nonTransientFields.zipWithIndex
+
           fields
-            .parTraverse { case (fieldName, param) =>
+            .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
+              val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
+              val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
+              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
                     Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
@@ -1541,13 +1685,13 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       JsoniterDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                        Expr.splice(arrExpr)(Expr.splice(Expr(arrayIndex))),
                         Expr.splice(decodeFn)
                       )
                     }
-                    (fieldName, typedExpr.as_??)
+                    (fName, typedExpr.as_??)
                   }
-                  (fieldName, param.index, decodeFnErased, makeAccessor)
+                  (fName, arrayIndex, decodeFnErased, makeAccessor, nameOverride)
                 }
               }
             }
@@ -1557,8 +1701,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  val fieldMap: Map[String, Expr_??] =
+                  val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
+                  val fieldMap = nonTransientFieldMap ++ transientDefaults
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
                     case Left(error)          =>
@@ -1568,8 +1713,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                 .map { builder =>
                   val constructLambda = builder.build[A]
 
-                  val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _) =>
-                    (name, index, decodeFnErased)
+                  val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _, nameOverride) =>
+                    (name, index, decodeFnErased, nameOverride)
                   }
 
                   Expr.quote {
@@ -1582,12 +1727,19 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                         fieldMappings.foldRight(Expr.quote {
                           if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
                           else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) { case ((name, index, decodeFnErased), elseExpr) =>
-                          Expr.quote {
-                            if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
-                              arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
-                            } else Expr.splice(elseExpr)
-                          }
+                        }: Expr[Unit]) {
+                          case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
+                            Expr.quote {
+                              if (fieldName == Expr.splice(Expr(customName))) {
+                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                              } else Expr.splice(elseExpr)
+                            }
+                          case ((name, index, decodeFnErased, None), elseExpr) =>
+                            Expr.quote {
+                              if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                              } else Expr.splice(elseExpr)
+                            }
                         }
                       }
                     }
@@ -1915,6 +2067,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
     val JsonReaderException: Type[JsonReaderException] = Type.of[JsonReaderException]
     def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
       Type.of[Either[JsonReaderException, A]]
+    val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
+    val TransientField: Type[transientField] = Type.of[transientField]
   }
 }
 

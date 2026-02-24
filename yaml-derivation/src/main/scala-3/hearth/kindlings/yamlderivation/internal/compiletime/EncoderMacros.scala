@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import org.virtuslab.yaml.{Node, YamlEncoder}
 import scala.quoted.*
 
-final private[yamlderivation] class EncoderMacros(q: Quotes) extends MacroCommonsScala3(using q), EncoderMacrosImpl
+final private[yamlderivation] class EncoderMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      EncoderMacrosImpl
 private[yamlderivation] object EncoderMacros {
 
   def deriveEncoderImpl[A: Type](

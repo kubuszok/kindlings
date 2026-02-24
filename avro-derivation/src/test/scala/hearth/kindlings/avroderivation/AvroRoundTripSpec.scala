@@ -174,6 +174,38 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("per-field annotations") {
+
+      test("@fieldName round-trip") {
+        val encoder: AvroEncoder[AvroWithFieldName] = AvroEncoder.derive[AvroWithFieldName]
+        val decoder: AvroDecoder[AvroWithFieldName] = AvroDecoder.derive[AvroWithFieldName]
+        val original = AvroWithFieldName("Alice", 30)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[AvroWithFieldName](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("@transientField round-trip preserves non-transient fields") {
+        val encoder: AvroEncoder[AvroWithTransient] = AvroEncoder.derive[AvroWithTransient]
+        val decoder: AvroDecoder[AvroWithTransient] = AvroDecoder.derive[AvroWithTransient]
+        val original = AvroWithTransient("Alice", Some("cached"))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[AvroWithTransient](bytes)(decoder)
+        // Transient field defaults to None after round-trip
+        decoded ==> AvroWithTransient("Alice", None)
+      }
+
+      test("@fieldName and @transientField combined round-trip") {
+        val encoder: AvroEncoder[AvroWithBothAnnotations] = AvroEncoder.derive[AvroWithBothAnnotations]
+        val decoder: AvroDecoder[AvroWithBothAnnotations] = AvroDecoder.derive[AvroWithBothAnnotations]
+        val original = AvroWithBothAnnotations("Alice", 42, true)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[AvroWithBothAnnotations](bytes)(decoder)
+        // Transient field defaults to 0 after round-trip
+        decoded ==> AvroWithBothAnnotations("Alice", 0, true)
+      }
+    }
+
     group("JSON") {
 
       test("simple case class") {

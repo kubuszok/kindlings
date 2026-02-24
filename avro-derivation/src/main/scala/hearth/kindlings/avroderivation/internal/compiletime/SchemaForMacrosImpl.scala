@@ -7,10 +7,11 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor}
+import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
-trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
+trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
   // Entrypoints
 
@@ -439,12 +440,38 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
     ): MIO[Expr[Schema]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val StringT: Type[String] = SfTypes.String
+      implicit val fieldNameT: Type[fieldName] = SfTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = SfTypes.TransientField
+
+      // Singletons (case objects, parameterless enum cases) have no primary constructor
+      if (caseClass.isSingleton) {
+        val typeName = Type[A].shortName
+        return MIO.pure(Expr.quote {
+          AvroDerivationUtils.createRecord(
+            Expr.splice(Expr(typeName)),
+            Expr.splice(sfctx.config).namespace.getOrElse(""),
+            java.util.Collections.emptyList[Schema.Field]()
+          )
+        })
+      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
       val typeName = Type[A].shortName
 
-      NonEmptyList.fromList(fieldsList) match {
+      // Validate: @transientField on fields without defaults is a compile error
+      fieldsList.collectFirst {
+        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+          s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
+      } match {
+        case Some(msg) => return MIO.fail(new RuntimeException(msg))
+        case None      => // OK
+      }
+
+      // Filter out transient fields
+      val nonTransientFields = fieldsList.filter { case (_, param) => !hasAnnotationType[transientField](param) }
+
+      NonEmptyList.fromList(nonTransientFields) match {
         case None =>
           MIO.pure(Expr.quote {
             AvroDerivationUtils.createRecord(
@@ -455,24 +482,33 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
           })
         case Some(fields) =>
           fields
-            .parTraverse { case (fieldName, param) =>
+            .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving schema for field $fieldName: ${Type[Field].prettyPrint}") {
+              val nameOverride = getAnnotationStringArg[fieldName](param)
+              Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
                 deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
-                  (fieldName, fieldSchema)
+                  (fName, fieldSchema, nameOverride)
                 }
               }
             }
             .map { fieldPairs =>
               val fieldsListExpr = fieldPairs.toList.foldRight(
                 Expr.quote(List.empty[(String, Schema)])
-              ) { case ((fieldName, fieldSchema), acc) =>
-                Expr.quote {
-                  (
-                    Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fieldName))),
-                    Expr.splice(fieldSchema)
-                  ) :: Expr.splice(acc)
-                }
+              ) {
+                case ((fName, fieldSchema, Some(customName)), acc) =>
+                  Expr.quote {
+                    (
+                      Expr.splice(Expr(customName)),
+                      Expr.splice(fieldSchema)
+                    ) :: Expr.splice(acc)
+                  }
+                case ((fName, fieldSchema, None), acc) =>
+                  Expr.quote {
+                    (
+                      Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName))),
+                      Expr.splice(fieldSchema)
+                    ) :: Expr.splice(acc)
+                  }
               }
               Expr.quote {
                 val fields = Expr.splice(fieldsListExpr)
@@ -587,6 +623,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
     val Schema: Type[Schema] = Type.of[Schema]
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
     val String: Type[String] = Type.of[String]
+    val FieldName: Type[fieldName] = Type.of[fieldName]
+    val TransientField: Type[transientField] = Type.of[transientField]
   }
 }
 

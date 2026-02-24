@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 import scala.quoted.*
 
-final private[circederivation] class DecoderMacros(q: Quotes) extends MacroCommonsScala3(using q), DecoderMacrosImpl
+final private[circederivation] class DecoderMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      DecoderMacrosImpl
 private[circederivation] object DecoderMacros {
 
   def deriveDecoderImpl[A: Type](

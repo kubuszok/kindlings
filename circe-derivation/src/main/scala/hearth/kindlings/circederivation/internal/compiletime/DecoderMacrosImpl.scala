@@ -7,10 +7,11 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.circederivation.{Configuration, KindlingsDecoder}
+import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 
-trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
+trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
   // Entrypoints
 
@@ -506,7 +507,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
         }
       }
 
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private def decodeCaseClassFields[A: DecoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[Either[DecodingFailure, A]]] = {
@@ -518,6 +519,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
       implicit val SetStringT: Type[Set[String]] = DTypes.SetString
       implicit val ConfigT: Type[Configuration] = DTypes.Configuration
       implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
+      implicit val transientFieldT: Type[transientField] = DTypes.TransientField
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor.
       // Use construct directly, which returns the singleton reference via Expr.singletonOf.
@@ -546,11 +549,31 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
 
-      // Build a List[String] expression of the raw field names (before name transform)
-      val fieldNamesListExpr: Expr[List[String]] =
-        fieldsList.map(_._1).foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
-          Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
+      // Validate: @transientField on fields without defaults is a compile error
+      fieldsList
+        .collectFirst {
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault =>
+            s"@transientField on field '$name' of ${Type[A].prettyPrint} requires a default value"
         }
+        .foreach(msg => return MIO.fail(new RuntimeException(msg)))
+
+      // Build a List[String] expression of the field names (accounting for @fieldName overrides)
+      // for strict decoding — only non-transient fields
+      val fieldNamesListExpr: Expr[List[String]] =
+        fieldsList
+          .filterNot { case (_, param) => hasAnnotationType[transientField](param) }
+          .map { case (name, param) =>
+            getAnnotationStringArg[fieldName](param).getOrElse(name)
+          }
+          .foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
+            Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
+          }
+
+      // For strict decoding with @fieldName, the names are already resolved at compile time
+      // so we need a version that doesn't apply config.transformMemberNames for those
+      val hasAnyFieldNameAnnotation = fieldsList.exists { case (_, param) =>
+        getAnnotationStringArg[fieldName](param).isDefined
+      }
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
@@ -587,12 +610,15 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
           // decode + accessor expressions. Uses unsafeCast with the decoder as type witness
           // to avoid path-dependent type aliases in Expr.quote (Scala 2 compatibility).
           // Also resolves default values for useDefaults support.
+          // For @transientField fields, use the default value directly without decoding.
           fields
-            .parTraverse { case (fieldName, param) =>
+            .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for field $fieldName: ${Type[Field].prettyPrint}") {
+              val isTransient = hasAnnotationType[transientField](param)
+              val nameOverride = getAnnotationStringArg[fieldName](param)
+              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
-                  // Try to get the default value expression for useDefaults support.
+                  // Try to get the default value expression for useDefaults / transientField support.
                   val defaultAsAnyOpt: Option[Expr[Any]] =
                     if (param.hasDefault)
                       param.defaultValue.flatMap { existentialOuter =>
@@ -606,35 +632,83 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                       }
                     else None
 
-                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = defaultAsAnyOpt match {
-                    case Some(defaultAnyExpr) =>
-                      // Field has a default value: generate runtime check for useDefaults
-                      Expr.quote {
-                        val config = Expr.splice(dctx.config)
-                        val fn = config.transformMemberNames(Expr.splice(Expr(fieldName)))
-                        if (config.useDefaults) {
-                          val field = Expr.splice(dctx.cursor).downField(fn)
-                          if (field.failed)
+                  val decodeExpr: Expr[Either[DecodingFailure, Any]] =
+                    if (isTransient) {
+                      // Transient field: always use default value (validated above that default exists)
+                      defaultAsAnyOpt match {
+                        case Some(defaultAnyExpr) =>
+                          Expr.quote {
                             Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
-                          else
-                            field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
-                        } else
-                          Expr
-                            .splice(dctx.cursor)
-                            .downField(fn)
-                            .as(Expr.splice(decoderExpr))
-                            .asInstanceOf[Either[DecodingFailure, Any]]
+                          }
+                        case None =>
+                          // Should not happen due to validation above, but be safe
+                          Expr.quote {
+                            Right(null): Either[DecodingFailure, Any]
+                          }
                       }
-                    case None =>
-                      // No default value: standard decode
-                      Expr.quote {
-                        Expr
-                          .splice(dctx.cursor)
-                          .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fieldName))))
-                          .as(Expr.splice(decoderExpr))
-                          .asInstanceOf[Either[DecodingFailure, Any]]
+                    } else {
+                      nameOverride match {
+                        case Some(customName) =>
+                          // @fieldName override: use the custom name directly, ignoring config transform
+                          defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) =>
+                              Expr.quote {
+                                val config = Expr.splice(dctx.config)
+                                if (config.useDefaults) {
+                                  val field = Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                  if (field.failed)
+                                    Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
+                                  else
+                                    field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
+                                } else
+                                  Expr
+                                    .splice(dctx.cursor)
+                                    .downField(Expr.splice(Expr(customName)))
+                                    .as(Expr.splice(decoderExpr))
+                                    .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                            case None =>
+                              Expr.quote {
+                                Expr
+                                  .splice(dctx.cursor)
+                                  .downField(Expr.splice(Expr(customName)))
+                                  .as(Expr.splice(decoderExpr))
+                                  .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                          }
+                        case None =>
+                          // Standard field: use config.transformMemberNames
+                          defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) =>
+                              Expr.quote {
+                                val config = Expr.splice(dctx.config)
+                                val fn = config.transformMemberNames(Expr.splice(Expr(fName)))
+                                if (config.useDefaults) {
+                                  val field = Expr.splice(dctx.cursor).downField(fn)
+                                  if (field.failed)
+                                    Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
+                                  else
+                                    field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
+                                } else
+                                  Expr
+                                    .splice(dctx.cursor)
+                                    .downField(fn)
+                                    .as(Expr.splice(decoderExpr))
+                                    .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                            case None =>
+                              Expr.quote {
+                                Expr
+                                  .splice(dctx.cursor)
+                                  .downField(
+                                    Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
+                                  )
+                                  .as(Expr.splice(decoderExpr))
+                                  .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                          }
                       }
-                  }
+                    }
 
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
@@ -643,7 +717,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                         Expr.splice(decoderExpr)
                       )
                     }
-                    (fieldName, typedExpr.as_??)
+                    (fName, typedExpr.as_??)
                   }
                   (decodeExpr, makeAccessor)
                 }
@@ -674,18 +748,56 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                 .map { builder =>
                   val constructLambda = builder.build[A]
                   // Step 4: Wrap with strictDecoding check if configured
-                  Expr.quote {
-                    val config = Expr.splice(dctx.config)
-                    val decoded = CirceDerivationUtils
-                      .sequenceDecodeResults(Expr.splice(listExpr))
-                      .map(Expr.splice(constructLambda))
-                    if (config.strictDecoding) {
-                      val expectedFields =
-                        Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
-                      CirceDerivationUtils
-                        .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
-                        .flatMap(_ => decoded)
-                    } else decoded
+                  // For strict decoding, field names that have @fieldName are already resolved
+                  // and names without @fieldName still need config.transformMemberNames
+                  if (hasAnyFieldNameAnnotation) {
+                    // Mixed: some names are already resolved, some need transform
+                    // Build the expected fields set accounting for both
+                    val resolvedFieldNames: Expr[Set[String]] = {
+                      val nameExprs = fieldsList
+                        .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+                        .map { case (name, p) =>
+                          getAnnotationStringArg[fieldName](p) match {
+                            case Some(custom) => (custom, true) // already resolved
+                            case None         => (name, false) // needs transform
+                          }
+                        }
+                      val resolvedList = nameExprs.foldRight(Expr.quote(List.empty[String])) {
+                        case ((name, true), acc) =>
+                          Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
+                        case ((name, false), acc) =>
+                          Expr.quote {
+                            Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(name))) ::
+                              Expr.splice(acc)
+                          }
+                      }
+                      Expr.quote(Expr.splice(resolvedList).toSet)
+                    }
+                    Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      val decoded = CirceDerivationUtils
+                        .sequenceDecodeResults(Expr.splice(listExpr))
+                        .map(Expr.splice(constructLambda))
+                      if (config.strictDecoding) {
+                        CirceDerivationUtils
+                          .checkStrictDecoding(Expr.splice(dctx.cursor), Expr.splice(resolvedFieldNames))
+                          .flatMap(_ => decoded)
+                      } else decoded
+                    }
+                  } else {
+                    Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      val decoded = CirceDerivationUtils
+                        .sequenceDecodeResults(Expr.splice(listExpr))
+                        .map(Expr.splice(constructLambda))
+                      if (config.strictDecoding) {
+                        val expectedFields =
+                          Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                        CirceDerivationUtils
+                          .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
+                          .flatMap(_ => decoded)
+                      } else decoded
+                    }
                   }
                 }
             }
@@ -938,6 +1050,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
     val ListString: Type[List[String]] = Type.of[List[String]]
     val SetString: Type[Set[String]] = Type.of[Set[String]]
     val StringHCursorTuple: Type[(String, HCursor)] = Type.of[(String, HCursor)]
+    val FieldName: Type[fieldName] = Type.of[fieldName]
+    val TransientField: Type[transientField] = Type.of[transientField]
 
     def DecoderResult[A: Type]: Type[Either[DecodingFailure, A]] =
       Type.of[Either[DecodingFailure, A]]

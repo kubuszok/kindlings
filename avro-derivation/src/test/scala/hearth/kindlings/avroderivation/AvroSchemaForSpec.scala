@@ -40,6 +40,16 @@ object AvroAliases {
 }
 case class WithAlias(name: AvroAliases.Name, age: Int)
 
+// Per-field annotation test types
+import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
+case class AvroWithFieldName(@fieldName("user_name") userName: String, age: Int)
+case class AvroWithTransient(name: String, @transientField cache: Option[String] = None)
+case class AvroWithBothAnnotations(
+    @fieldName("display_name") displayName: String,
+    @transientField internal: Int = 0,
+    active: Boolean
+)
+
 // Case class with logical types
 case class EventRecord(
     id: java.util.UUID,
@@ -330,6 +340,40 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getField("date").schema().getLogicalType.getName ==> "date"
         schema.getField("time").schema().getLogicalType.getName ==> "time-micros"
         schema.getField("localTimestamp").schema().getLogicalType.getName ==> "timestamp-millis"
+      }
+    }
+
+    group("per-field annotations") {
+
+      test("@fieldName overrides schema field name") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithFieldName]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 2
+        (schema.getField("user_name") != null) ==> true
+        (schema.getField("age") != null) ==> true
+      }
+
+      test("@transientField excludes field from schema") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithTransient]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 1
+        (schema.getField("name") != null) ==> true
+      }
+
+      test("@fieldName and @transientField combined") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithBothAnnotations]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 2
+        (schema.getField("display_name") != null) ==> true
+        (schema.getField("active") != null) ==> true
+      }
+
+      test("@fieldName overrides config transform") {
+        implicit val config: AvroConfig = AvroConfig().withSnakeCaseFieldNames
+        val schema = AvroSchemaFor.schemaOf[AvroWithFieldName]
+        // @fieldName("user_name") should take precedence over config snake_case
+        (schema.getField("user_name") != null) ==> true
+        (schema.getField("age") != null) ==> true
       }
     }
 

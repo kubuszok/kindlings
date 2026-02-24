@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import io.circe.{Encoder, Json}
 import scala.quoted.*
 
-final private[circederivation] class EncoderMacros(q: Quotes) extends MacroCommonsScala3(using q), EncoderMacrosImpl
+final private[circederivation] class EncoderMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      EncoderMacrosImpl
 private[circederivation] object EncoderMacros {
 
   def deriveEncoderImpl[A: Type](

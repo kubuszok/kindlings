@@ -1,6 +1,7 @@
 package hearth.kindlings.yamlderivation
 
 import hearth.MacroSuite
+import hearth.kindlings.yamlderivation.annotations.{fieldName, transientField}
 import org.virtuslab.yaml.{Node, YamlEncoder}
 import org.virtuslab.yaml.Node.{MappingNode, ScalarNode, SequenceNode}
 
@@ -43,6 +44,14 @@ object YamlAliases {
   type Name = String
 }
 case class WithAlias(name: YamlAliases.Name, age: Int)
+
+case class YamlWithFieldName(@fieldName("user_name") userName: String, age: Int)
+case class YamlWithTransient(name: String, @transientField cache: Option[String] = None)
+case class YamlWithBothAnnotations(
+    @fieldName("display_name") displayName: String,
+    @transientField internal: Int = 0,
+    active: Boolean
+)
 
 final class KindlingsYamlEncoderSpec extends MacroSuite {
 
@@ -454,6 +463,37 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         }
         val node = KindlingsYamlEncoder.encode(SingleField(5))
         node ==> scalarNode("50")
+      }
+    }
+
+    group("per-field annotations") {
+
+      test("@fieldName overrides field name in encoding") {
+        val node = KindlingsYamlEncoder.encode(YamlWithFieldName("Alice", 30))
+        node ==> mappingOf("user_name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+      }
+
+      test("@fieldName overrides config transform") {
+        implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
+        val node = KindlingsYamlEncoder.encode(YamlWithFieldName("Alice", 30))
+        node ==> mappingOf("user_name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+      }
+
+      test("@transientField excludes field from encoding") {
+        val node = KindlingsYamlEncoder.encode(YamlWithTransient("Alice", Some("cached")))
+        node ==> mappingOf("name" -> scalarNode("Alice"))
+      }
+
+      test("both annotations combined") {
+        val node = KindlingsYamlEncoder.encode(YamlWithBothAnnotations("Alice", 42, true))
+        node ==> mappingOf("display_name" -> scalarNode("Alice"), "active" -> scalarNode("true"))
+      }
+
+      test("@transientField round-trip preserves non-transient fields") {
+        val original = YamlWithTransient("Alice", Some("should-be-dropped"))
+        val node = KindlingsYamlEncoder.encode(original)
+        val decoded = KindlingsYamlDecoder.decode[YamlWithTransient](node)
+        decoded ==> Right(YamlWithTransient("Alice", None))
       }
     }
   }

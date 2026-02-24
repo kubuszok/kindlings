@@ -5,7 +5,10 @@ import hearth.MacroCommonsScala3
 import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
 import scala.quoted.*
 
-final private[jsoniterderivation] class CodecMacros(q: Quotes) extends MacroCommonsScala3(using q), CodecMacrosImpl
+final private[jsoniterderivation] class CodecMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      AnnotationSupportScala3,
+      CodecMacrosImpl
 private[jsoniterderivation] object CodecMacros {
 
   def deriveCodecImpl[A: Type](

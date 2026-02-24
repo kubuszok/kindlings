@@ -22,7 +22,9 @@
       "WebFetch(domain:index.scala-lang.org)",
       "WebFetch(domain:app.codecov.io)",
       "Bash(tail:*)",
-      "WebFetch(domain:scalameta.org)"
+      "WebFetch(domain:scalameta.org)",
+      "Bash(fi)",
+      "Bash(done)"
     ]
   }
 }

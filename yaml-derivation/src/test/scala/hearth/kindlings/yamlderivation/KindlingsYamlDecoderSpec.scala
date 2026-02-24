@@ -370,5 +370,35 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         result.isLeft ==> true
       }
     }
+
+    group("per-field annotations") {
+
+      test("@fieldName decodes from custom field name") {
+        val node = mappingOf("user_name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+        KindlingsYamlDecoder.decode[YamlWithFieldName](node) ==> Right(YamlWithFieldName("Alice", 30))
+      }
+
+      test("@fieldName overrides config transform in decoding") {
+        implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
+        val node = mappingOf("user_name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+        KindlingsYamlDecoder.decode[YamlWithFieldName](node) ==> Right(YamlWithFieldName("Alice", 30))
+      }
+
+      test("@transientField uses default value during decoding") {
+        val node = mappingOf("name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[YamlWithTransient](node) ==> Right(YamlWithTransient("Alice", None))
+      }
+
+      test("@transientField ignores field even if present in input") {
+        val node = mappingOf("name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[YamlWithTransient](node) ==> Right(YamlWithTransient("Alice", None))
+      }
+
+      test("both annotations combined in decoding") {
+        val node = mappingOf("display_name" -> scalarNode("Alice"), "active" -> scalarNode("true"))
+        KindlingsYamlDecoder.decode[YamlWithBothAnnotations](node) ==>
+          Right(YamlWithBothAnnotations("Alice", 0, true))
+      }
+    }
   }
 }
