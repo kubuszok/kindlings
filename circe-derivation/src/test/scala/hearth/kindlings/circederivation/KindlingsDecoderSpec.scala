@@ -154,6 +154,37 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("string enum decoding (enumAsStrings)") {
+
+      test("decode case-object-only sealed trait from string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[CardinalDirection](Json.fromString("North")) ==> Right(North: CardinalDirection)
+      }
+
+      test("decode all cases from strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[CardinalDirection](Json.fromString("South")) ==> Right(South: CardinalDirection)
+        KindlingsDecoder.decode[CardinalDirection](Json.fromString("East")) ==> Right(East: CardinalDirection)
+        KindlingsDecoder.decode[CardinalDirection](Json.fromString("West")) ==> Right(West: CardinalDirection)
+      }
+
+      test("enum as string with constructor name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsDecoder.decode[CardinalDirection](Json.fromString("north")) ==> Right(North: CardinalDirection)
+      }
+
+      test("non-string input fails with enumAsStrings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        assert(KindlingsDecoder.decode[CardinalDirection](Json.obj("North" -> Json.obj())).isLeft)
+      }
+
+      test("unknown string value fails") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        assert(KindlingsDecoder.decode[CardinalDirection](Json.fromString("NorthWest")).isLeft)
+      }
+    }
+
     group("configuration") {
 
       test("custom constructor name transform") {
@@ -339,6 +370,90 @@ final class KindlingsDecoderSpec extends MacroSuite {
         implicit val config: Configuration = Configuration.default.withStrictDecoding.withDefaults
         val json = Json.obj("name" -> Json.fromString("Alice"))
         KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 25))
+      }
+    }
+
+    group("tuples") {
+
+      test("decode (Int, String) from JSON array") {
+        val json = Json.arr(Json.fromInt(42), Json.fromString("hello"))
+        KindlingsDecoder.decode[(Int, String)](json) ==> Right((42, "hello"))
+      }
+
+      test("decode (Int, String, Boolean) from JSON array") {
+        val json = Json.arr(Json.fromInt(42), Json.fromString("hello"), Json.True)
+        KindlingsDecoder.decode[(Int, String, Boolean)](json) ==> Right((42, "hello", true))
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int]") {
+        val json = Json.obj("value" -> Json.fromInt(42))
+        KindlingsDecoder.decode[Box[Int]](json) ==> Right(Box(42))
+      }
+
+      test("Pair[String, Int]") {
+        val json = Json.obj("first" -> Json.fromString("hello"), "second" -> Json.fromInt(42))
+        KindlingsDecoder.decode[Pair[String, Int]](json) ==> Right(Pair("hello", 42))
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val json = Json.obj(
+          "name" -> Json.fromString("Alice"),
+          "address" -> Json.obj(
+            "street" -> Json.fromString("123 Main"),
+            "city" -> Json.fromString("NYC"),
+            "geo" -> Json.obj(
+              "lat" -> Json.fromDoubleOrNull(40.7),
+              "lon" -> Json.fromDoubleOrNull(-74.0)
+            )
+          )
+        )
+        KindlingsDecoder.decode[PersonFull](json) ==>
+          Right(PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0))))
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias decodes type alias field") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        KindlingsDecoder.decode[WithAlias](json) ==> Right(WithAlias("Alice", 30))
+      }
+    }
+
+    group("combined configuration") {
+
+      test("snake_case + discriminator + constructor transform") {
+        implicit val config: Configuration = Configuration(
+          transformMemberNames = Configuration.snakeCase,
+          transformConstructorNames = _.toLowerCase,
+          discriminator = Some("type")
+        )
+        val json = Json.obj(
+          "type" -> Json.fromString("dog"),
+          "name" -> Json.fromString("Rex"),
+          "breed" -> Json.fromString("Labrador")
+        )
+        KindlingsDecoder.decode[Animal](json) ==> Right(Dog("Rex", "Labrador"): Animal)
+      }
+
+      test("useDefaults + strictDecoding + snake_case") {
+        implicit val config: Configuration =
+          Configuration.default.withDefaults.withStrictDecoding.withSnakeCaseMemberNames
+        val json = Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(CamelCaseFields("Alice", "Smith"))
+      }
+    }
+
+    group("empty class with non-object input") {
+
+      test("decode Int as EmptyClass succeeds (no fields to validate)") {
+        KindlingsDecoder.decode[EmptyClass](Json.fromInt(42)) ==> Right(EmptyClass())
       }
     }
 

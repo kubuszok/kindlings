@@ -175,6 +175,102 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("generic case classes") {
+
+      test("Box[Int] from GenericRecord") {
+        val schema = AvroSchemaFor.schemaOf[Box[Int]]
+        val record = new GenericData.Record(schema)
+        record.put("value", 42)
+        val result = AvroDecoder.decode[Box[Int]](record: Any)
+        result ==> Box(42)
+      }
+
+      test("Pair[String, Int] from GenericRecord") {
+        val schema = AvroSchemaFor.schemaOf[Pair[String, Int]]
+        val record = new GenericData.Record(schema)
+        record.put("first", "hello")
+        record.put("second", 42)
+        val result = AvroDecoder.decode[Pair[String, Int]](record: Any)
+        result ==> Pair("hello", 42)
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val personSchema = AvroSchemaFor.schemaOf[PersonFull]
+        val addressSchema = personSchema.getField("address").schema()
+        val geoSchema = addressSchema.getField("geo").schema()
+
+        val geoRecord = new GenericData.Record(geoSchema)
+        geoRecord.put("lat", 40.7)
+        geoRecord.put("lon", -74.0)
+
+        val addressRecord = new GenericData.Record(addressSchema)
+        addressRecord.put("street", "123 Main")
+        addressRecord.put("city", "NYC")
+        addressRecord.put("geo", geoRecord)
+
+        val personRecord = new GenericData.Record(personSchema)
+        personRecord.put("name", "Alice")
+        personRecord.put("address", addressRecord)
+
+        val result = AvroDecoder.decode[PersonFull](personRecord: Any)
+        result ==> PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias from GenericRecord") {
+        val schema = AvroSchemaFor.schemaOf[WithAlias]
+        val record = new GenericData.Record(schema)
+        record.put("name", "Alice")
+        record.put("age", 30)
+        val result = AvroDecoder.decode[WithAlias](record: Any)
+        result ==> WithAlias("Alice", 30)
+      }
+    }
+
+    group("logical types") {
+
+      test("UUID from String") {
+        val result = AvroDecoder.decode[java.util.UUID]("550e8400-e29b-41d4-a716-446655440000": Any)
+        result ==> java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+      }
+
+      test("UUID from Utf8") {
+        val result =
+          AvroDecoder.decode[java.util.UUID](new org.apache.avro.util.Utf8("550e8400-e29b-41d4-a716-446655440000"): Any)
+        result ==> java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+      }
+
+      test("Instant from Long") {
+        val result = AvroDecoder.decode[java.time.Instant](1700000000000L: Any)
+        result ==> java.time.Instant.ofEpochMilli(1700000000000L)
+      }
+
+      test("LocalDate from Int") {
+        val epochDay = java.time.LocalDate.of(2024, 1, 15).toEpochDay.toInt
+        val result = AvroDecoder.decode[java.time.LocalDate](epochDay: Any)
+        result ==> java.time.LocalDate.of(2024, 1, 15)
+      }
+
+      test("LocalTime from Long (micros)") {
+        val time = java.time.LocalTime.of(14, 30, 0)
+        val micros = time.toNanoOfDay / 1000
+        val result = AvroDecoder.decode[java.time.LocalTime](micros: Any)
+        result ==> time
+      }
+
+      test("LocalDateTime from Long (epoch millis)") {
+        val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
+        val millis = dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
+        val result = AvroDecoder.decode[java.time.LocalDateTime](millis: Any)
+        result ==> dt
+      }
+    }
+
     group("derived instance") {
 
       test("derive creates AvroDecoder instance") {

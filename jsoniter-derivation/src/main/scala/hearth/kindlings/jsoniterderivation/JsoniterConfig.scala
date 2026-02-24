@@ -4,7 +4,8 @@ final case class JsoniterConfig(
     fieldNameMapper: String => String = identity,
     adtLeafClassNameMapper: String => String = identity,
     discriminatorFieldName: Option[String] = None,
-    skipUnexpectedFields: Boolean = true
+    skipUnexpectedFields: Boolean = true,
+    enumAsStrings: Boolean = false
 ) {
 
   def withFieldNameMapper(f: String => String): JsoniterConfig = copy(fieldNameMapper = f)
@@ -20,6 +21,7 @@ final case class JsoniterConfig(
     copy(adtLeafClassNameMapper = JsoniterConfig.kebabCase)
   def withDiscriminator(field: String): JsoniterConfig = copy(discriminatorFieldName = Some(field))
   def withSkipUnexpectedFields(skip: Boolean): JsoniterConfig = copy(skipUnexpectedFields = skip)
+  def withEnumAsStrings: JsoniterConfig = copy(enumAsStrings = true)
 }
 object JsoniterConfig {
 

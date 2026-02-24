@@ -3,7 +3,8 @@ package hearth.kindlings.yamlderivation
 final case class YamlConfig(
     transformMemberNames: String => String = identity,
     transformConstructorNames: String => String = identity,
-    discriminator: Option[String] = None
+    discriminator: Option[String] = None,
+    enumAsStrings: Boolean = false
 ) {
 
   def withTransformMemberNames(f: String => String): YamlConfig = copy(transformMemberNames = f)
@@ -16,6 +17,7 @@ final case class YamlConfig(
   def withSnakeCaseConstructorNames: YamlConfig = copy(transformConstructorNames = YamlConfig.snakeCase)
   def withKebabCaseConstructorNames: YamlConfig = copy(transformConstructorNames = YamlConfig.kebabCase)
   def withDiscriminator(field: String): YamlConfig = copy(discriminator = Some(field))
+  def withEnumAsStrings: YamlConfig = copy(enumAsStrings = true)
 }
 object YamlConfig {
 

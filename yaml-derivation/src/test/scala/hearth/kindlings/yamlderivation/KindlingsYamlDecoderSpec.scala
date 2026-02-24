@@ -155,6 +155,39 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("string enum decoding (enumAsStrings)") {
+
+      test("decode case-object-only sealed trait from string") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("North")) ==> Right(North: CardinalDirection)
+      }
+
+      test("decode all cases from strings") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("South")) ==> Right(South: CardinalDirection)
+        KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("East")) ==> Right(East: CardinalDirection)
+        KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("West")) ==> Right(West: CardinalDirection)
+      }
+
+      test("enum as string with constructor name transform") {
+        implicit val config: YamlConfig =
+          YamlConfig(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("north")) ==> Right(North: CardinalDirection)
+      }
+
+      test("non-scalar input fails with enumAsStrings") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        val result = KindlingsYamlDecoder.decode[CardinalDirection](mappingOf("North" -> mappingOf()))
+        result.isLeft ==> true
+      }
+
+      test("unknown string value fails") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        val result = KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("NorthWest"))
+        result.isLeft ==> true
+      }
+    }
+
     group("sets") {
 
       test("Set of ints") {
@@ -242,6 +275,84 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         )
         KindlingsYamlDecoder.decode[RecursiveTree](node) ==>
           Right(RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil))))))
+      }
+    }
+
+    group("tuples") {
+
+      test("decode (Int, String) from YAML mapping") {
+        val node = mappingOf("_1" -> scalarNode("42"), "_2" -> scalarNode("hello"))
+        KindlingsYamlDecoder.decode[(Int, String)](node) ==> Right((42, "hello"))
+      }
+
+      test("decode (Int, String, Boolean) from YAML mapping") {
+        val node = mappingOf("_1" -> scalarNode("42"), "_2" -> scalarNode("hello"), "_3" -> scalarNode("true"))
+        KindlingsYamlDecoder.decode[(Int, String, Boolean)](node) ==> Right((42, "hello", true))
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int]") {
+        val node = mappingOf("value" -> scalarNode("42"))
+        KindlingsYamlDecoder.decode[Box[Int]](node) ==> Right(Box(42))
+      }
+
+      test("Pair[String, Int]") {
+        val node = mappingOf("first" -> scalarNode("hello"), "second" -> scalarNode("42"))
+        KindlingsYamlDecoder.decode[Pair[String, Int]](node) ==> Right(Pair("hello", 42))
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val node = mappingOf(
+          "name" -> scalarNode("Alice"),
+          "address" -> mappingOf(
+            "street" -> scalarNode("123 Main"),
+            "city" -> scalarNode("NYC"),
+            "geo" -> mappingOf(
+              "lat" -> scalarNode("40.7"),
+              "lon" -> scalarNode("-74.0")
+            )
+          )
+        )
+        KindlingsYamlDecoder.decode[PersonFull](node) ==>
+          Right(PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0))))
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias decodes type alias field") {
+        val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+        KindlingsYamlDecoder.decode[WithAlias](node) ==> Right(WithAlias("Alice", 30))
+      }
+    }
+
+    group("combined configuration") {
+
+      test("snake_case + discriminator + constructor transform") {
+        implicit val config: YamlConfig = YamlConfig(
+          transformMemberNames = YamlConfig.snakeCase,
+          transformConstructorNames = _.toLowerCase,
+          discriminator = Some("type")
+        )
+        val node = mappingOf(
+          "type" -> scalarNode("dog"),
+          "name" -> scalarNode("Rex"),
+          "breed" -> scalarNode("Labrador")
+        )
+        KindlingsYamlDecoder.decode[Animal](node) ==> Right(Dog("Rex", "Labrador"): Animal)
+      }
+    }
+
+    group("empty class with non-mapping input") {
+
+      test("decode scalar as EmptyClass succeeds (no fields to validate)") {
+        val node = scalarNode("42")
+        KindlingsYamlDecoder.decode[EmptyClass](node) ==> Right(EmptyClass())
       }
     }
 

@@ -390,6 +390,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         Some(Expr.quote(AvroDerivationUtils.decodeByteBuffer(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote(BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value))).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.util.UUID])
+        Some(Expr.quote(AvroDerivationUtils.decodeUUID(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.time.Instant])
+        Some(Expr.quote(AvroDerivationUtils.decodeInstant(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.time.LocalDate])
+        Some(Expr.quote(AvroDerivationUtils.decodeLocalDate(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.time.LocalTime])
+        Some(Expr.quote(AvroDerivationUtils.decodeLocalTime(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.time.LocalDateTime])
+        Some(Expr.quote(AvroDerivationUtils.decodeLocalDateTime(Expr.splice(value)).asInstanceOf[A]))
       else
         None
     }

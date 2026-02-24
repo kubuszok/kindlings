@@ -25,6 +25,30 @@ sealed trait Animal
 case class Dog(name: String, breed: String) extends Animal
 case class Cat(name: String, indoor: Boolean) extends Animal
 
+// Generic case classes
+case class Box[A](value: A)
+case class Pair[A, B](first: A, second: B)
+
+// Deeply nested (3 levels)
+case class GeoCoordinates(lat: Double, lon: Double)
+case class FullAddress(street: String, city: String, geo: GeoCoordinates)
+case class PersonFull(name: String, address: FullAddress)
+
+// Type alias
+object AvroAliases {
+  type Name = String
+}
+case class WithAlias(name: AvroAliases.Name, age: Int)
+
+// Case class with logical types
+case class EventRecord(
+    id: java.util.UUID,
+    timestamp: java.time.Instant,
+    date: java.time.LocalDate,
+    time: java.time.LocalTime,
+    localTimestamp: java.time.LocalDateTime
+)
+
 final class AvroSchemaForSpec extends MacroSuite {
 
   group("AvroSchemaFor") {
@@ -221,6 +245,91 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[SimplePerson]
         (schema.getField("name") != null) ==> true
         (schema.getField("age") != null) ==> true
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int] schema") {
+        val schema = AvroSchemaFor.schemaOf[Box[Int]]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 1
+        schema.getField("value").schema().getType ==> Schema.Type.INT
+      }
+
+      test("Pair[String, Int] schema") {
+        val schema = AvroSchemaFor.schemaOf[Pair[String, Int]]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 2
+        schema.getField("first").schema().getType ==> Schema.Type.STRING
+        schema.getField("second").schema().getType ==> Schema.Type.INT
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val schema = AvroSchemaFor.schemaOf[PersonFull]
+        schema.getType ==> Schema.Type.RECORD
+        val addressField = schema.getField("address")
+        addressField.schema().getType ==> Schema.Type.RECORD
+        val geoField = addressField.schema().getField("geo")
+        geoField.schema().getType ==> Schema.Type.RECORD
+        geoField.schema().getField("lat").schema().getType ==> Schema.Type.DOUBLE
+        geoField.schema().getField("lon").schema().getType ==> Schema.Type.DOUBLE
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias schema") {
+        val schema = AvroSchemaFor.schemaOf[WithAlias]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getField("name").schema().getType ==> Schema.Type.STRING
+        schema.getField("age").schema().getType ==> Schema.Type.INT
+      }
+    }
+
+    group("logical types") {
+
+      test("UUID schema is STRING with uuid logical type") {
+        val schema = AvroSchemaFor.schemaOf[java.util.UUID]
+        schema.getType ==> Schema.Type.STRING
+        schema.getLogicalType.getName ==> "uuid"
+      }
+
+      test("Instant schema is LONG with timestamp-millis logical type") {
+        val schema = AvroSchemaFor.schemaOf[java.time.Instant]
+        schema.getType ==> Schema.Type.LONG
+        schema.getLogicalType.getName ==> "timestamp-millis"
+      }
+
+      test("LocalDate schema is INT with date logical type") {
+        val schema = AvroSchemaFor.schemaOf[java.time.LocalDate]
+        schema.getType ==> Schema.Type.INT
+        schema.getLogicalType.getName ==> "date"
+      }
+
+      test("LocalTime schema is LONG with time-micros logical type") {
+        val schema = AvroSchemaFor.schemaOf[java.time.LocalTime]
+        schema.getType ==> Schema.Type.LONG
+        schema.getLogicalType.getName ==> "time-micros"
+      }
+
+      test("LocalDateTime schema is LONG with timestamp-millis logical type") {
+        val schema = AvroSchemaFor.schemaOf[java.time.LocalDateTime]
+        schema.getType ==> Schema.Type.LONG
+        schema.getLogicalType.getName ==> "timestamp-millis"
+      }
+
+      test("case class with logical type fields") {
+        val schema = AvroSchemaFor.schemaOf[EventRecord]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getField("id").schema().getLogicalType.getName ==> "uuid"
+        schema.getField("timestamp").schema().getLogicalType.getName ==> "timestamp-millis"
+        schema.getField("date").schema().getLogicalType.getName ==> "date"
+        schema.getField("time").schema().getLogicalType.getName ==> "time-micros"
+        schema.getField("localTimestamp").schema().getLogicalType.getName ==> "timestamp-millis"
       }
     }
 

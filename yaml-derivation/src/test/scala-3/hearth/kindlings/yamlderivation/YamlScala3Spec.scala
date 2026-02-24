@@ -9,6 +9,16 @@ enum Fruit {
   case Banana(length: Double)
 }
 
+object YamlOpaqueTypes {
+  opaque type UserId = Int
+  object UserId {
+    def apply(value: Int): UserId = value
+    extension (id: UserId) def value: Int = id
+  }
+}
+
+case class YamlUserWithOpaque(id: YamlOpaqueTypes.UserId, name: String)
+
 final class YamlScala3Spec extends MacroSuite {
 
   // On Scala.js, whole-number doubles like 5.0 print as "5" instead of "5.0"
@@ -86,6 +96,31 @@ final class YamlScala3Spec extends MacroSuite {
         val node = mappingOf("banana" -> mappingOf("length" -> scalarNode("20.0")))
         KindlingsYamlDecoder.decode[Fruit](node) ==> Right(Fruit.Banana(20.0))
       }
+    }
+  }
+
+  group("opaque types") {
+
+    test("encode standalone opaque type") {
+      import YamlOpaqueTypes.*
+      KindlingsYamlEncoder.encode(UserId(42)) ==> scalarNode("42")
+    }
+
+    test("decode standalone opaque type") {
+      import YamlOpaqueTypes.*
+      KindlingsYamlDecoder.decode[UserId](scalarNode("42")) ==> Right(UserId(42))
+    }
+
+    test("encode case class with opaque type field") {
+      import YamlOpaqueTypes.*
+      val node = KindlingsYamlEncoder.encode(YamlUserWithOpaque(UserId(42), "Alice"))
+      node ==> mappingOf("id" -> scalarNode("42"), "name" -> scalarNode("Alice"))
+    }
+
+    test("decode case class with opaque type field") {
+      import YamlOpaqueTypes.*
+      val node = mappingOf("id" -> scalarNode("42"), "name" -> scalarNode("Alice"))
+      KindlingsYamlDecoder.decode[YamlUserWithOpaque](node) ==> Right(YamlUserWithOpaque(UserId(42), "Alice"))
     }
   }
 

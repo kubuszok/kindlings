@@ -83,6 +83,54 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("(Int, String) roundtrip") {
+        val value = (42, "hello")
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[(Int, String)](node) ==> Right(value)
+      }
+
+      test("(Int, String, Boolean) roundtrip") {
+        val value = (42, "hello", true)
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[(Int, String, Boolean)](node) ==> Right(value)
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int] roundtrip") {
+        val value = Box(42)
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[Box[Int]](node) ==> Right(value)
+      }
+
+      test("Pair[String, Int] roundtrip") {
+        val value = Pair("hello", 42)
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[Pair[String, Int]](node) ==> Right(value)
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull roundtrip") {
+        val value = PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[PersonFull](node) ==> Right(value)
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias roundtrip") {
+        val value = WithAlias("Alice", 30)
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[WithAlias](node) ==> Right(value)
+      }
+    }
+
     group("with configuration") {
 
       test("custom constructor name transform roundtrip") {

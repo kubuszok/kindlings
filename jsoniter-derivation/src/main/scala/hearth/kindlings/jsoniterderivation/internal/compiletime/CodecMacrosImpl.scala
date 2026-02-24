@@ -881,6 +881,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val StringT: Type[String] = CTypes.String
 
+      // Check at compile time if all children are singletons (case objects with no fields)
+      val allCaseObjects = enumm.directChildren.toList.forall { case (_, child) =>
+        Type.isVal(using child.Underlying) ||
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+      }
+
       enumm
         .parMatchOn[MIO, Unit](ectx.value) { matched =>
           import matched.{value as enumCaseValue, Underlying as EnumCase}
@@ -904,21 +910,45 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
             for {
               fieldsOnly <- fieldsOnlyMIO
               fullEnc <- fullEncMIO
-            } yield Expr.quote {
-              val name = Expr.splice(ectx.config).adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-              Expr.splice(ectx.config).discriminatorFieldName match {
-                case Some(discriminatorField) =>
-                  Expr.splice(ectx.writer).writeObjectStart()
-                  Expr.splice(ectx.writer).writeKey(discriminatorField)
-                  Expr.splice(ectx.writer).writeVal(name)
-                  Expr.splice(fieldsOnly)
-                  Expr.splice(ectx.writer).writeObjectEnd()
-                case None =>
-                  JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
-                    Expr.splice(fullEnc)
+            } yield
+              if (allCaseObjects) {
+                Expr.quote {
+                  val config = Expr.splice(ectx.config)
+                  val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                  if (config.enumAsStrings) {
+                    JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                  } else {
+                    config.discriminatorFieldName match {
+                      case Some(discriminatorField) =>
+                        Expr.splice(ectx.writer).writeObjectStart()
+                        Expr.splice(ectx.writer).writeKey(discriminatorField)
+                        Expr.splice(ectx.writer).writeVal(name)
+                        Expr.splice(fieldsOnly)
+                        Expr.splice(ectx.writer).writeObjectEnd()
+                      case None =>
+                        JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                          Expr.splice(fullEnc)
+                        }
+                    }
                   }
+                }
+              } else {
+                Expr.quote {
+                  val name = Expr.splice(ectx.config).adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                  Expr.splice(ectx.config).discriminatorFieldName match {
+                    case Some(discriminatorField) =>
+                      Expr.splice(ectx.writer).writeObjectStart()
+                      Expr.splice(ectx.writer).writeKey(discriminatorField)
+                      Expr.splice(ectx.writer).writeVal(name)
+                      Expr.splice(fieldsOnly)
+                      Expr.splice(ectx.writer).writeObjectEnd()
+                    case None =>
+                      JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                        Expr.splice(fullEnc)
+                      }
+                  }
+                }
               }
-            }
           }
         }
         .flatMap {
@@ -1630,6 +1660,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
 
       val childrenList = enumm.directChildren.toList
 
+      // Check at compile time if all children are singletons (case objects with no fields)
+      val allCaseObjects = childrenList.forall { case (_, child) =>
+        Type.isVal(using child.Underlying) ||
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+      }
+
       NonEmptyList.fromList(childrenList) match {
         case None =>
           MIO.pure(Expr.quote {
@@ -1643,7 +1679,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
         case Some(children) =>
           val knownNames: List[String] = children.toList.map(_._1)
 
-          // For each child, derive BOTH wrapper-mode and inline (discriminator-mode) decoders
+          // For each child, derive BOTH wrapper-mode and inline (discriminator-mode) decoders,
+          // and optionally string-enum dispatchers for all-case-objects enums
           children
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
@@ -1651,7 +1688,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
                 for {
                   wrapper <- deriveChildDecoder[A, ChildType](childName)
                   inline <- deriveChildDecoderInline[A, ChildType](childName)
-                } yield (wrapper, inline)
+                  stringEnum <-
+                    if (allCaseObjects) deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
+                    else MIO.pure(None)
+                } yield (wrapper, inline, stringEnum)
               }
             }
             .flatMap { allDispatchers =>
@@ -1682,18 +1722,42 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
               for {
                 wrapperDispatchFn <- buildDispatchLambda(wrapperDispatchers)
                 inlineDispatchFn <- buildDispatchLambda(inlineDispatchers)
-              } yield Expr.quote {
-                val config = Expr.splice(dctx.config)
-                val reader = Expr.splice(dctx.reader)
-                config.discriminatorFieldName match {
-                  case Some(field) =>
-                    JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                      Expr.splice(inlineDispatchFn)
-                    )
-                  case None =>
-                    JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                }
-              }
+                result <-
+                  if (allCaseObjects) {
+                    val stringEnumDispatchers = allDispatchers.toList.flatMap(_._3)
+                    buildDispatchLambda(stringEnumDispatchers).map { stringEnumDispatchFn =>
+                      Expr.quote {
+                        val config = Expr.splice(dctx.config)
+                        val reader = Expr.splice(dctx.reader)
+                        if (config.enumAsStrings) {
+                          JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(stringEnumDispatchFn))
+                        } else {
+                          config.discriminatorFieldName match {
+                            case Some(field) =>
+                              JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                                Expr.splice(inlineDispatchFn)
+                              )
+                            case None =>
+                              JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                          }
+                        }
+                      }
+                    }
+                  } else {
+                    MIO.pure(Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      val reader = Expr.splice(dctx.reader)
+                      config.discriminatorFieldName match {
+                        case Some(field) =>
+                          JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                            Expr.splice(inlineDispatchFn)
+                          )
+                        case None =>
+                          JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                      }
+                    })
+                  }
+              } yield result
             }
       }
     }
@@ -1778,6 +1842,55 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions =>
         case None =>
           // Not a case class (e.g., case object) — fall back to wrapper-style decoder
           deriveChildDecoder[A, ChildType](childName)
+      }
+    }
+
+    /** Derive a string-enum child decoder that returns the singleton instance directly without reading from the reader.
+      * Used when all enum children are case objects and enumAsStrings is enabled.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def deriveChildDecoderStringEnum[A: DecoderCtx, ChildType: Type](
+        childName: String
+    ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+
+      CaseClass.parse[ChildType] match {
+        case Some(cc) if cc.primaryConstructor.parameters.flatten.isEmpty =>
+          // Zero-param case class / case object — construct instance using CaseClass.construct
+          // which properly handles singleton references (unlike primaryConstructor which may call private ctors)
+          val constructMIO: MIO[Option[Expr[ChildType]]] =
+            cc.construct[MIO](new CaseClass.ConstructField[MIO] {
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+                MIO.fail(
+                  new RuntimeException(s"Unexpected parameter in singleton ${Type[ChildType].prettyPrint}")
+                )
+            })
+          constructMIO.flatMap {
+            case Some(instanceExpr) =>
+              MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+                Expr.quote {
+                  if (
+                    Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                      .splice(typeNameExpr)
+                  )
+                    Expr.splice(instanceExpr).asInstanceOf[A]
+                  else
+                    Expr.splice(elseExpr)
+                }
+              }
+            case None =>
+              MIO.fail(
+                new RuntimeException(s"Cannot construct singleton ${Type[ChildType].prettyPrint}")
+              )
+          }
+
+        case _ =>
+          // Not a zero-param case class — shouldn't happen when allCaseObjects is true
+          MIO.fail(
+            new RuntimeException(
+              s"Expected singleton/case object for string enum but got ${Type[ChildType].prettyPrint}"
+            )
+          )
       }
     }
   }

@@ -18,6 +18,23 @@ object CirceDerivationUtils {
       case None      => Json.obj(discriminatorField -> Json.fromString(typeName), "value" -> inner)
     }
 
+  def encodeEnumAsString(typeName: String): Json =
+    Json.fromString(typeName)
+
+  def decodeEnumFromString[A](cursor: HCursor, knownSubtypes: List[String])(
+      dispatch: String => Either[DecodingFailure, A]
+  ): Either[DecodingFailure, A] =
+    cursor.as[String] match {
+      case Right(typeName) => dispatch(typeName)
+      case Left(_)         =>
+        Left(
+          DecodingFailure(
+            s"Expected a JSON string for enum value. Known values: ${knownSubtypes.mkString(", ")}",
+            cursor.history
+          )
+        )
+    }
+
   def encodeOption[A](value: Option[A], encoder: A => Json): Json = value match {
     case Some(a) => encoder(a)
     case None    => Json.Null

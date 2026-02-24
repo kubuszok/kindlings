@@ -74,6 +74,54 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("(Int, String) roundtrip") {
+        val value = (42, "hello")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[(Int, String)](json) ==> Right(value)
+      }
+
+      test("(Int, String, Boolean) roundtrip") {
+        val value = (42, "hello", true)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[(Int, String, Boolean)](json) ==> Right(value)
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int] roundtrip") {
+        val value = Box(42)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Box[Int]](json) ==> Right(value)
+      }
+
+      test("Pair[String, Int] roundtrip") {
+        val value = Pair("hello", 42)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Pair[String, Int]](json) ==> Right(value)
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull roundtrip") {
+        val value = PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[PersonFull](json) ==> Right(value)
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias roundtrip") {
+        val value = WithAlias("Alice", 30)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithAlias](json) ==> Right(value)
+      }
+    }
+
     group("with configuration") {
 
       test("custom constructor name transform roundtrip") {

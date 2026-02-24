@@ -5,7 +5,8 @@ final case class Configuration(
     transformConstructorNames: String => String = identity,
     useDefaults: Boolean = false,
     discriminator: Option[String] = None,
-    strictDecoding: Boolean = false
+    strictDecoding: Boolean = false,
+    enumAsStrings: Boolean = false
 ) {
 
   def withTransformMemberNames(f: String => String): Configuration = copy(transformMemberNames = f)
@@ -20,6 +21,7 @@ final case class Configuration(
   def withDefaults: Configuration = copy(useDefaults = true)
   def withDiscriminator(field: String): Configuration = copy(discriminator = Some(field))
   def withStrictDecoding: Configuration = copy(strictDecoding = true)
+  def withEnumAsStrings: Configuration = copy(enumAsStrings = true)
 }
 object Configuration {
 

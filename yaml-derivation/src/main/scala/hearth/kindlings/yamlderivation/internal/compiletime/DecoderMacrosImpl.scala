@@ -695,6 +695,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
       val childrenList = enumm.directChildren.toList
 
+      // Check at compile time if all children are singletons (case objects with no fields)
+      val allCaseObjects = childrenList.forall { case (_, child) =>
+        Type.isVal(using child.Underlying) ||
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+      }
+
       NonEmptyList.fromList(childrenList) match {
         case None =>
           MIO.pure(Expr.quote {
@@ -741,12 +747,19 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                   Expr.quote {
                     val config = Expr.splice(dctx.config)
                     val node = Expr.splice(dctx.node)
-                    val readResult: Either[ConstructError, (String, Node)] =
-                      config.discriminator match {
-                        case Some(field) => YamlDerivationUtils.decodeDiscriminator(node, field)
-                        case None        => YamlDerivationUtils.decodeWrapped(node)
+                    if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings) {
+                      // String enum decode path: read scalar string, dispatch on name
+                      YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) { typeName =>
+                        Expr.splice(dispatchFn)((typeName, node))
                       }
-                    readResult.flatMap(Expr.splice(dispatchFn))
+                    } else {
+                      val readResult: Either[ConstructError, (String, Node)] =
+                        config.discriminator match {
+                          case Some(field) => YamlDerivationUtils.decodeDiscriminator(node, field)
+                          case None        => YamlDerivationUtils.decodeWrapped(node)
+                        }
+                      readResult.flatMap(Expr.splice(dispatchFn))
+                    }
                   }
                 }
             }

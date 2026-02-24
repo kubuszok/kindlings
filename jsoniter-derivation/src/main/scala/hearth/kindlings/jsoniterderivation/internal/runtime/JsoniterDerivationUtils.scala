@@ -44,6 +44,14 @@ object JsoniterDerivationUtils {
     out.writeObjectEnd()
   }
 
+  def writeEnumAsString(out: JsonWriter, typeName: String): Unit =
+    out.writeVal(typeName)
+
+  def readEnumAsString[A](in: JsonReader)(dispatch: String => A): A = {
+    val typeName = in.readString(null)
+    dispatch(typeName)
+  }
+
   def writeWrapped(out: JsonWriter, typeName: String)(encodeInner: => Unit): Unit = {
     out.writeObjectStart()
     out.writeKey(typeName)

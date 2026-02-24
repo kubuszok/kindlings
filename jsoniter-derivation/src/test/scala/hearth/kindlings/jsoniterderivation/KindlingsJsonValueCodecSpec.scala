@@ -21,6 +21,27 @@ sealed trait Animal
 case class Dog(name: String, breed: String) extends Animal
 case class Cat(name: String, indoor: Boolean) extends Animal
 
+sealed trait CardinalDirection
+case object North extends CardinalDirection
+case object South extends CardinalDirection
+case object East extends CardinalDirection
+case object West extends CardinalDirection
+
+// Generic case classes
+case class Box[A](value: A)
+case class Pair[A, B](first: A, second: B)
+
+// Deeply nested (3 levels)
+case class GeoCoordinates(lat: Double, lon: Double)
+case class FullAddress(street: String, city: String, geo: GeoCoordinates)
+case class PersonFull(name: String, address: FullAddress)
+
+// Type alias
+object JsoniterAliases {
+  type Name = String
+}
+case class WithAlias(name: JsoniterAliases.Name, age: Int)
+
 final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
   group("KindlingsJsonValueCodec") {
@@ -169,6 +190,41 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val json = writeToString(value)(codec)
         val decoded = readFromString[Animal](json)(codec)
         decoded ==> value
+      }
+    }
+
+    group("string enum encoding (enumAsStrings)") {
+
+      test("encode case-object-only sealed trait as string") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[CardinalDirection]
+        writeToString[CardinalDirection](North)(codec) ==> "\"North\""
+      }
+
+      test("round-trip all cases as strings") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[CardinalDirection]
+        List[CardinalDirection](North, South, East, West).foreach { dir =>
+          val json = writeToString[CardinalDirection](dir)(codec)
+          val decoded = readFromString[CardinalDirection](json)(codec)
+          decoded ==> dir
+        }
+      }
+
+      test("enum as string with constructor name transform") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toLowerCase)
+        val codec = KindlingsJsonValueCodec.derive[CardinalDirection]
+        writeToString[CardinalDirection](North)(codec) ==> "\"north\""
+        readFromString[CardinalDirection]("\"north\"")(codec) ==> (North: CardinalDirection)
+      }
+
+      test("enumAsStrings=false still uses wrapper-style") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = false)
+        val codec = KindlingsJsonValueCodec.derive[CardinalDirection]
+        val json = writeToString[CardinalDirection](North)(codec)
+        assert(json.contains("\"North\""))
+        assert(json.contains("{"))
       }
     }
 
@@ -383,6 +439,81 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val decoded = readFromString[SingleField](json)(codec)
         decoded ==> SingleField(500)
       }
+    }
+  }
+
+  group("tuples") {
+
+    test("(Int, String) round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(Int, String)]
+      val value = (42, "hello")
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[(Int, String)](json)(codec)
+      decoded ==> value
+    }
+
+    test("(Int, String, Boolean) round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(Int, String, Boolean)]
+      val value = (42, "hello", true)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[(Int, String, Boolean)](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("generic case classes") {
+
+    test("Box[Int] round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[Box[Int]]
+      val value = Box(42)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[Box[Int]](json)(codec)
+      decoded ==> value
+    }
+
+    test("Pair[String, Int] round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[Pair[String, Int]]
+      val value = Pair("hello", 42)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[Pair[String, Int]](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("deeply nested") {
+
+    test("PersonFull with 3-level nesting round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[PersonFull]
+      val value = PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[PersonFull](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("type aliases") {
+
+    test("WithAlias round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[WithAlias]
+      val value = WithAlias("Alice", 30)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[WithAlias](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("combined configuration") {
+
+    test("snake_case + discriminator + constructor transform") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withSnakeCaseFieldNames
+        .withDiscriminator("type")
+        .withSnakeCaseAdtLeafClassNames
+      val codec = KindlingsJsonValueCodec.derive[Animal]
+      val value: Animal = Dog("Rex", "Labrador")
+      val json = writeToString(value)(codec)
+      json.contains("\"type\":\"dog\"") ==> true
+      val decoded = readFromString[Animal](json)(codec)
+      decoded ==> value
     }
   }
 

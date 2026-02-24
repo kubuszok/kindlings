@@ -54,6 +54,51 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("generic case classes") {
+
+      test("Box[Int] binary round-trip") {
+        val encoder: AvroEncoder[Box[Int]] = AvroEncoder.derive[Box[Int]]
+        val decoder: AvroDecoder[Box[Int]] = AvroDecoder.derive[Box[Int]]
+        val original = Box(42)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Box[Int]](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("Pair[String, Int] binary round-trip") {
+        val encoder: AvroEncoder[Pair[String, Int]] = AvroEncoder.derive[Pair[String, Int]]
+        val decoder: AvroDecoder[Pair[String, Int]] = AvroDecoder.derive[Pair[String, Int]]
+        val original = Pair("hello", 42)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Pair[String, Int]](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull binary round-trip") {
+        val encoder: AvroEncoder[PersonFull] = AvroEncoder.derive[PersonFull]
+        val decoder: AvroDecoder[PersonFull] = AvroDecoder.derive[PersonFull]
+        val original = PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[PersonFull](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias binary round-trip") {
+        val encoder: AvroEncoder[WithAlias] = AvroEncoder.derive[WithAlias]
+        val decoder: AvroDecoder[WithAlias] = AvroDecoder.derive[WithAlias]
+        val original = WithAlias("Alice", 30)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithAlias](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
     group("sets") {
 
       test("Set of ints round-trip") {
@@ -62,6 +107,69 @@ final class AvroRoundTripSpec extends MacroSuite {
         val original = Set(1, 2, 3)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Set[Int]](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
+    group("logical types") {
+
+      test("UUID binary round-trip") {
+        val encoder: AvroEncoder[java.util.UUID] = AvroEncoder.derive[java.util.UUID]
+        val decoder: AvroDecoder[java.util.UUID] = AvroDecoder.derive[java.util.UUID]
+        val original = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[java.util.UUID](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("Instant binary round-trip") {
+        val encoder: AvroEncoder[java.time.Instant] = AvroEncoder.derive[java.time.Instant]
+        val decoder: AvroDecoder[java.time.Instant] = AvroDecoder.derive[java.time.Instant]
+        val original = java.time.Instant.ofEpochMilli(1700000000000L)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[java.time.Instant](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("LocalDate binary round-trip") {
+        val encoder: AvroEncoder[java.time.LocalDate] = AvroEncoder.derive[java.time.LocalDate]
+        val decoder: AvroDecoder[java.time.LocalDate] = AvroDecoder.derive[java.time.LocalDate]
+        val original = java.time.LocalDate.of(2024, 1, 15)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[java.time.LocalDate](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("LocalTime binary round-trip") {
+        val encoder: AvroEncoder[java.time.LocalTime] = AvroEncoder.derive[java.time.LocalTime]
+        val decoder: AvroDecoder[java.time.LocalTime] = AvroDecoder.derive[java.time.LocalTime]
+        val original = java.time.LocalTime.of(14, 30, 0)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[java.time.LocalTime](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("LocalDateTime binary round-trip") {
+        val encoder: AvroEncoder[java.time.LocalDateTime] = AvroEncoder.derive[java.time.LocalDateTime]
+        val decoder: AvroDecoder[java.time.LocalDateTime] = AvroDecoder.derive[java.time.LocalDateTime]
+        val original = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[java.time.LocalDateTime](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("EventRecord with all logical types binary round-trip") {
+        val encoder: AvroEncoder[EventRecord] = AvroEncoder.derive[EventRecord]
+        val decoder: AvroDecoder[EventRecord] = AvroDecoder.derive[EventRecord]
+        val original = EventRecord(
+          id = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
+          timestamp = java.time.Instant.ofEpochMilli(1700000000000L),
+          date = java.time.LocalDate.of(2024, 1, 15),
+          time = java.time.LocalTime.of(14, 30, 0),
+          localTimestamp = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[EventRecord](bytes)(decoder)
         decoded ==> original
       }
     }

@@ -21,7 +21,28 @@ sealed trait Animal
 case class Dog(name: String, breed: String) extends Animal
 case class Cat(name: String, indoor: Boolean) extends Animal
 
+sealed trait CardinalDirection
+case object North extends CardinalDirection
+case object South extends CardinalDirection
+case object East extends CardinalDirection
+case object West extends CardinalDirection
+
 case class CamelCasePerson(firstName: String, lastName: String)
+
+// Generic case classes
+case class Box[A](value: A)
+case class Pair[A, B](first: A, second: B)
+
+// Deeply nested (3 levels)
+case class GeoCoordinates(lat: Double, lon: Double)
+case class FullAddress(street: String, city: String, geo: GeoCoordinates)
+case class PersonFull(name: String, address: FullAddress)
+
+// Type alias
+object YamlAliases {
+  type Name = String
+}
+case class WithAlias(name: YamlAliases.Name, age: Int)
 
 final class KindlingsYamlEncoderSpec extends MacroSuite {
 
@@ -208,6 +229,39 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("string enum encoding (enumAsStrings)") {
+
+      test("encode case-object-only sealed trait as string") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlEncoder.encode[CardinalDirection](North) ==> ScalarNode("North")
+      }
+
+      test("encode all cases as strings") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlEncoder.encode[CardinalDirection](South) ==> ScalarNode("South")
+        KindlingsYamlEncoder.encode[CardinalDirection](East) ==> ScalarNode("East")
+        KindlingsYamlEncoder.encode[CardinalDirection](West) ==> ScalarNode("West")
+      }
+
+      test("enum as string with constructor name transform") {
+        implicit val config: YamlConfig =
+          YamlConfig(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsYamlEncoder.encode[CardinalDirection](North) ==> ScalarNode("north")
+      }
+
+      test("enumAsStrings=false still uses wrapper-style") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = false)
+        KindlingsYamlEncoder.encode[CardinalDirection](North) match {
+          case MappingNode(mappings, _) =>
+            mappings.exists {
+              case (ScalarNode(k, _), _) => k == "North"
+              case _                     => false
+            } ==> true
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+    }
+
     group("recursive types") {
 
       test("recursive tree") {
@@ -294,6 +348,84 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
             val keys = mappings.keys.collect { case ScalarNode(k, _) => k }.toSet
             keys.contains("FIRST_NAME") ==> true
             keys.contains("LAST_NAME") ==> true
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+    }
+
+    group("tuples") {
+
+      test("encode (Int, String) as YAML mapping") {
+        val node = KindlingsYamlEncoder.encode((42, "hello"))
+        node ==> mappingOf("_1" -> scalarNode("42"), "_2" -> scalarNode("hello"))
+      }
+
+      test("encode (Int, String, Boolean) as YAML mapping") {
+        val node = KindlingsYamlEncoder.encode((42, "hello", true))
+        node ==> mappingOf("_1" -> scalarNode("42"), "_2" -> scalarNode("hello"), "_3" -> scalarNode("true"))
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int]") {
+        val node = KindlingsYamlEncoder.encode(Box(42))
+        node ==> mappingOf("value" -> scalarNode("42"))
+      }
+
+      test("Pair[String, Int]") {
+        val node = KindlingsYamlEncoder.encode(Pair("hello", 42))
+        node ==> mappingOf("first" -> scalarNode("hello"), "second" -> scalarNode("42"))
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val node = KindlingsYamlEncoder.encode(
+          PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
+        )
+        node ==> mappingOf(
+          "name" -> scalarNode("Alice"),
+          "address" -> mappingOf(
+            "street" -> scalarNode("123 Main"),
+            "city" -> scalarNode("NYC"),
+            "geo" -> mappingOf(
+              "lat" -> scalarNode(doubleStr(40.7)),
+              "lon" -> scalarNode(doubleStr(-74.0))
+            )
+          )
+        )
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias encodes type alias field") {
+        val node = KindlingsYamlEncoder.encode(WithAlias("Alice", 30))
+        node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+      }
+    }
+
+    group("combined configuration") {
+
+      test("snake_case members + discriminator + constructor transform") {
+        implicit val config: YamlConfig = YamlConfig(
+          transformMemberNames = YamlConfig.snakeCase,
+          transformConstructorNames = _.toLowerCase,
+          discriminator = Some("type")
+        )
+        val node = KindlingsYamlEncoder.encode[Animal](Dog("Rex", "Labrador"))
+        node match {
+          case MappingNode(mappings, _) =>
+            mappings.exists {
+              case (ScalarNode(k, _), ScalarNode(v, _)) => k == "type" && v == "dog"
+              case _                                    => false
+            } ==> true
+            mappings.exists {
+              case (ScalarNode(k, _), ScalarNode(v, _)) => k == "name" && v == "Rex"
+              case _                                    => false
+            } ==> true
           case other => fail(s"Expected MappingNode but got $other")
         }
       }

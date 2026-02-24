@@ -33,6 +33,31 @@ object AvroDerivationUtils {
   def stringSchema: Schema = Schema.create(Schema.Type.STRING)
   def bytesSchema: Schema = Schema.create(Schema.Type.BYTES)
 
+  // Logical type schemas
+  def uuidSchema: Schema = {
+    val schema = Schema.create(Schema.Type.STRING)
+    org.apache.avro.LogicalTypes.uuid().addToSchema(schema)
+    schema
+  }
+
+  def timestampMillisSchema: Schema = {
+    val schema = Schema.create(Schema.Type.LONG)
+    org.apache.avro.LogicalTypes.timestampMillis().addToSchema(schema)
+    schema
+  }
+
+  def dateSchema: Schema = {
+    val schema = Schema.create(Schema.Type.INT)
+    org.apache.avro.LogicalTypes.date().addToSchema(schema)
+    schema
+  }
+
+  def timeMicrosSchema: Schema = {
+    val schema = Schema.create(Schema.Type.LONG)
+    org.apache.avro.LogicalTypes.timeMicros().addToSchema(schema)
+    schema
+  }
+
   def createEnum(name: String, namespace: String, symbols: util.List[String]): Schema =
     Schema.createEnum(name, null, namespace, symbols)
 
@@ -69,6 +94,14 @@ object AvroDerivationUtils {
     new GenericData.EnumSymbol(schema, name)
 
   def wrapByteArray(bytes: Array[Byte]): ByteBuffer = ByteBuffer.wrap(bytes)
+
+  // Logical type encoders
+  def encodeUUID(uuid: java.util.UUID): Any = uuid.toString
+  def encodeInstant(instant: java.time.Instant): Any = instant.toEpochMilli
+  def encodeLocalDate(date: java.time.LocalDate): Any = date.toEpochDay.toInt
+  def encodeLocalTime(time: java.time.LocalTime): Any = time.toNanoOfDay / 1000
+  def encodeLocalDateTime(dt: java.time.LocalDateTime): Any =
+    dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
 
   // --- Decoder helpers ---
 
@@ -122,6 +155,17 @@ object AvroDerivationUtils {
 
   def decodeCharSequence(value: Any): String =
     value.toString
+
+  // Logical type decoders
+  def decodeUUID(value: Any): java.util.UUID = java.util.UUID.fromString(value.toString)
+  def decodeInstant(value: Any): java.time.Instant = java.time.Instant.ofEpochMilli(value.asInstanceOf[Long])
+  def decodeLocalDate(value: Any): java.time.LocalDate =
+    java.time.LocalDate.ofEpochDay(value.asInstanceOf[Int].toLong)
+  def decodeLocalTime(value: Any): java.time.LocalTime =
+    java.time.LocalTime.ofNanoOfDay(value.asInstanceOf[Long] * 1000)
+  def decodeLocalDateTime(value: Any): java.time.LocalDateTime =
+    java.time.LocalDateTime
+      .ofInstant(java.time.Instant.ofEpochMilli(value.asInstanceOf[Long]), java.time.ZoneOffset.UTC)
 
   def sequenceDecodeResults(fieldValues: List[Any]): Array[Any] =
     fieldValues.toArray

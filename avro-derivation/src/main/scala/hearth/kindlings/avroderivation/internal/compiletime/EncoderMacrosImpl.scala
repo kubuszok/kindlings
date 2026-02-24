@@ -386,6 +386,20 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         Some(Expr.quote(AvroDerivationUtils.wrapByteArray(Expr.splice(value).asInstanceOf[Array[Byte]]): Any))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote(Expr.splice(value).asInstanceOf[BigDecimal].toString: Any))
+      else if (tpe =:= Type.of[java.util.UUID])
+        Some(Expr.quote(AvroDerivationUtils.encodeUUID(Expr.splice(value).asInstanceOf[java.util.UUID]): Any))
+      else if (tpe =:= Type.of[java.time.Instant])
+        Some(Expr.quote(AvroDerivationUtils.encodeInstant(Expr.splice(value).asInstanceOf[java.time.Instant]): Any))
+      else if (tpe =:= Type.of[java.time.LocalDate])
+        Some(Expr.quote(AvroDerivationUtils.encodeLocalDate(Expr.splice(value).asInstanceOf[java.time.LocalDate]): Any))
+      else if (tpe =:= Type.of[java.time.LocalTime])
+        Some(Expr.quote(AvroDerivationUtils.encodeLocalTime(Expr.splice(value).asInstanceOf[java.time.LocalTime]): Any))
+      else if (tpe =:= Type.of[java.time.LocalDateTime])
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.encodeLocalDateTime(Expr.splice(value).asInstanceOf[java.time.LocalDateTime]): Any
+          )
+        )
       else
         None
     }

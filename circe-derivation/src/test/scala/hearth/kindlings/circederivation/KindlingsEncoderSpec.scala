@@ -24,10 +24,31 @@ sealed trait SimpleEnumCirce
 case object Yes extends SimpleEnumCirce
 case object No extends SimpleEnumCirce
 
+sealed trait CardinalDirection
+case object North extends CardinalDirection
+case object South extends CardinalDirection
+case object East extends CardinalDirection
+case object West extends CardinalDirection
+
 case class CamelCaseFields(firstName: String, lastName: String)
 
 case class PersonWithDefaults(name: String, age: Int = 25)
 case class AllDefaults(x: Int = 1, y: String = "hello")
+
+// Generic case classes
+case class Box[A](value: A)
+case class Pair[A, B](first: A, second: B)
+
+// Deeply nested (3 levels)
+case class GeoCoordinates(lat: Double, lon: Double)
+case class FullAddress(street: String, city: String, geo: GeoCoordinates)
+case class PersonFull(name: String, address: FullAddress)
+
+// Type alias
+object CirceAliases {
+  type Name = String
+}
+case class WithAlias(name: CirceAliases.Name, age: Int)
 
 class NotACirceType
 
@@ -218,6 +239,32 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("string enum encoding (enumAsStrings)") {
+
+      test("encode case-object-only sealed trait as string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[CardinalDirection](North) ==> Json.fromString("North")
+      }
+
+      test("encode all cases as strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[CardinalDirection](South) ==> Json.fromString("South")
+        KindlingsEncoder.encode[CardinalDirection](East) ==> Json.fromString("East")
+        KindlingsEncoder.encode[CardinalDirection](West) ==> Json.fromString("West")
+      }
+
+      test("enum as string with constructor name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsEncoder.encode[CardinalDirection](North) ==> Json.fromString("north")
+      }
+
+      test("enumAsStrings=false still uses wrapper-style") {
+        implicit val config: Configuration = Configuration(enumAsStrings = false)
+        KindlingsEncoder.encode[CardinalDirection](North) ==> Json.obj("North" -> Json.obj())
+      }
+    }
+
     group("configuration") {
 
       test("snake_case member names") {
@@ -281,6 +328,74 @@ final class KindlingsEncoderSpec extends MacroSuite {
           Json.fromInt(sf.value * 10)
         }
         KindlingsEncoder.encode(SingleField(5)) ==> Json.fromInt(50)
+      }
+    }
+
+    group("tuples") {
+
+      test("encode (Int, String) as JSON array") {
+        KindlingsEncoder.encode((42, "hello")) ==>
+          Json.arr(Json.fromInt(42), Json.fromString("hello"))
+      }
+
+      test("encode (Int, String, Boolean) as JSON array") {
+        KindlingsEncoder.encode((42, "hello", true)) ==>
+          Json.arr(Json.fromInt(42), Json.fromString("hello"), Json.True)
+      }
+    }
+
+    group("generic case classes") {
+
+      test("Box[Int]") {
+        KindlingsEncoder.encode(Box(42)) ==> Json.obj("value" -> Json.fromInt(42))
+      }
+
+      test("Pair[String, Int]") {
+        KindlingsEncoder.encode(Pair("hello", 42)) ==>
+          Json.obj("first" -> Json.fromString("hello"), "second" -> Json.fromInt(42))
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        KindlingsEncoder.encode(PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))) ==>
+          Json.obj(
+            "name" -> Json.fromString("Alice"),
+            "address" -> Json.obj(
+              "street" -> Json.fromString("123 Main"),
+              "city" -> Json.fromString("NYC"),
+              "geo" -> Json.obj(
+                "lat" -> Json.fromDoubleOrNull(40.7),
+                "lon" -> Json.fromDoubleOrNull(-74.0)
+              )
+            )
+          )
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias round-trips type alias field") {
+        KindlingsEncoder.encode(WithAlias("Alice", 30)) ==>
+          Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+      }
+    }
+
+    group("combined configuration") {
+
+      test("snake_case members + discriminator + constructor transform") {
+        implicit val config: Configuration = Configuration(
+          transformMemberNames = Configuration.snakeCase,
+          transformConstructorNames = _.toLowerCase,
+          discriminator = Some("type")
+        )
+        KindlingsEncoder.encode[Animal](Dog("Rex", "Labrador")) ==>
+          Json.obj(
+            "type" -> Json.fromString("dog"),
+            "name" -> Json.fromString("Rex"),
+            "breed" -> Json.fromString("Labrador")
+          )
       }
     }
 

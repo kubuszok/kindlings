@@ -183,6 +183,84 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("generic case classes") {
+
+      test("Box[Int] encodes to GenericRecord") {
+        val result = AvroEncoder.encode(Box(42))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("value").asInstanceOf[Int] ==> 42
+      }
+
+      test("Pair[String, Int] encodes to GenericRecord") {
+        val result = AvroEncoder.encode(Pair("hello", 42))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("first").toString ==> "hello"
+        record.get("second").asInstanceOf[Int] ==> 42
+      }
+    }
+
+    group("deeply nested") {
+
+      test("PersonFull with 3-level nesting") {
+        val result =
+          AvroEncoder.encode(PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0))))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("name").toString ==> "Alice"
+        val addressRecord = record.get("address").asInstanceOf[GenericRecord]
+        addressRecord.get("street").toString ==> "123 Main"
+        val geoRecord = addressRecord.get("geo").asInstanceOf[GenericRecord]
+        geoRecord.get("lat").asInstanceOf[Double] ==> 40.7
+        geoRecord.get("lon").asInstanceOf[Double] ==> -74.0
+      }
+    }
+
+    group("type aliases") {
+
+      test("WithAlias encodes to GenericRecord") {
+        val result = AvroEncoder.encode(WithAlias("Alice", 30))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("name").toString ==> "Alice"
+        record.get("age").asInstanceOf[Int] ==> 30
+      }
+    }
+
+    group("logical types") {
+
+      test("UUID encodes to String") {
+        val uuid = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+        val result = AvroEncoder.encode(uuid)
+        result ==> "550e8400-e29b-41d4-a716-446655440000"
+      }
+
+      test("Instant encodes to Long (epoch millis)") {
+        val instant = java.time.Instant.ofEpochMilli(1700000000000L)
+        val result = AvroEncoder.encode(instant)
+        result ==> 1700000000000L
+      }
+
+      test("LocalDate encodes to Int (epoch day)") {
+        val date = java.time.LocalDate.of(2024, 1, 15)
+        val result = AvroEncoder.encode(date)
+        result ==> date.toEpochDay.toInt
+      }
+
+      test("LocalTime encodes to Long (micros)") {
+        val time = java.time.LocalTime.of(14, 30, 0)
+        val result = AvroEncoder.encode(time)
+        result ==> (time.toNanoOfDay / 1000)
+      }
+
+      test("LocalDateTime encodes to Long (epoch millis UTC)") {
+        val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
+        val result = AvroEncoder.encode(dt)
+        result ==> dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

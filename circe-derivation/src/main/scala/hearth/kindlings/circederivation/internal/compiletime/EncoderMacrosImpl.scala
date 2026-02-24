@@ -533,20 +533,44 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions =>
     ): MIO[Expr[Json]] = {
       implicit val JsonT: Type[Json] = Types.Json
 
+      // Check at compile time if all children are singletons (case objects with no fields)
+      val allCaseObjects = enumm.directChildren.toList.forall { case (_, child) =>
+        Type.isVal(using child.Underlying) ||
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+      }
+
       enumm
         .parMatchOn[MIO, Json](ectx.value) { matched =>
           import matched.{value as enumCaseValue, Underlying as EnumCase}
           Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
             deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue)).map { caseJson =>
               val caseName = Type[EnumCase].shortName
-              Expr.quote {
-                val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
-                val json = Expr.splice(caseJson)
-                Expr.splice(ectx.config).discriminator match {
-                  case Some(discriminatorField) =>
-                    CirceDerivationUtils.addDiscriminator(discriminatorField, name, json)
-                  case None =>
-                    CirceDerivationUtils.wrapWithTypeName(name, json)
+              if (allCaseObjects) {
+                Expr.quote {
+                  val config = Expr.splice(ectx.config)
+                  val name = config.transformConstructorNames(Expr.splice(Expr(caseName)))
+                  if (config.enumAsStrings) {
+                    CirceDerivationUtils.encodeEnumAsString(name)
+                  } else {
+                    val json = Expr.splice(caseJson)
+                    config.discriminator match {
+                      case Some(discriminatorField) =>
+                        CirceDerivationUtils.addDiscriminator(discriminatorField, name, json)
+                      case None =>
+                        CirceDerivationUtils.wrapWithTypeName(name, json)
+                    }
+                  }
+                }
+              } else {
+                Expr.quote {
+                  val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
+                  val json = Expr.splice(caseJson)
+                  Expr.splice(ectx.config).discriminator match {
+                    case Some(discriminatorField) =>
+                      CirceDerivationUtils.addDiscriminator(discriminatorField, name, json)
+                    case None =>
+                      CirceDerivationUtils.wrapWithTypeName(name, json)
+                  }
                 }
               }
             }

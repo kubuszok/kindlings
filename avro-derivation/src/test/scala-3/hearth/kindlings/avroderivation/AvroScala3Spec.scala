@@ -13,6 +13,16 @@ enum Vehicle {
   case Bike(gears: Int)
 }
 
+object AvroOpaqueTypes {
+  opaque type UserId = Int
+  object UserId {
+    def apply(value: Int): UserId = value
+    extension (id: UserId) def value: Int = id
+  }
+}
+
+case class AvroUserWithOpaque(id: AvroOpaqueTypes.UserId, name: String)
+
 final class AvroScala3Spec extends MacroSuite {
 
   group("Scala 3 enums") {
@@ -88,6 +98,48 @@ final class AvroScala3Spec extends MacroSuite {
         val decoded = AvroIO.fromBinary[Vehicle](bytes)
         decoded ==> original
       }
+    }
+  }
+
+  group("opaque types") {
+
+    test("encode standalone opaque type") {
+      import AvroOpaqueTypes.*
+      val result = AvroEncoder.encode(UserId(42))
+      result ==> 42
+    }
+
+    test("decode standalone opaque type") {
+      import AvroOpaqueTypes.*
+      val result = AvroDecoder.decode[UserId](42: Any)
+      result ==> UserId(42)
+    }
+
+    test("schema for case class with opaque type field") {
+      import AvroOpaqueTypes.*
+      val schema = AvroSchemaFor.schemaOf[AvroUserWithOpaque]
+      schema.getType ==> Schema.Type.RECORD
+      schema.getField("id").schema().getType ==> Schema.Type.INT
+      schema.getField("name").schema().getType ==> Schema.Type.STRING
+    }
+
+    test("encode case class with opaque type field") {
+      import AvroOpaqueTypes.*
+      val result = AvroEncoder.encode(AvroUserWithOpaque(UserId(42), "Alice"))
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.get("id").asInstanceOf[Int] ==> 42
+      record.get("name").toString ==> "Alice"
+    }
+
+    test("round-trip case class with opaque type") {
+      import AvroOpaqueTypes.*
+      implicit val encoder: AvroEncoder[AvroUserWithOpaque] = AvroEncoder.derive[AvroUserWithOpaque]
+      implicit val decoder: AvroDecoder[AvroUserWithOpaque] = AvroDecoder.derive[AvroUserWithOpaque]
+      val original = AvroUserWithOpaque(UserId(42), "Alice")
+      val bytes = AvroIO.toBinary(original)
+      val decoded = AvroIO.fromBinary[AvroUserWithOpaque](bytes)
+      decoded ==> original
     }
   }
 }

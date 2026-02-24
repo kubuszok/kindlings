@@ -305,6 +305,16 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions =>
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote(AvroDerivationUtils.stringSchema))
+      else if (tpe =:= Type.of[java.util.UUID])
+        Some(Expr.quote(AvroDerivationUtils.uuidSchema))
+      else if (tpe =:= Type.of[java.time.Instant])
+        Some(Expr.quote(AvroDerivationUtils.timestampMillisSchema))
+      else if (tpe =:= Type.of[java.time.LocalDate])
+        Some(Expr.quote(AvroDerivationUtils.dateSchema))
+      else if (tpe =:= Type.of[java.time.LocalTime])
+        Some(Expr.quote(AvroDerivationUtils.timeMicrosSchema))
+      else if (tpe =:= Type.of[java.time.LocalDateTime])
+        Some(Expr.quote(AvroDerivationUtils.timestampMillisSchema))
       else
         None
     }

@@ -754,6 +754,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
 
       val childrenList = enumm.directChildren.toList
 
+      // Check at compile time if all children are singletons (case objects with no fields)
+      val allCaseObjects = childrenList.forall { case (_, child) =>
+        Type.isVal(using child.Underlying) ||
+        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+      }
+
       NonEmptyList.fromList(childrenList) match {
         case None =>
           MIO.pure(Expr.quote {
@@ -806,12 +812,27 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions =>
                   Expr.quote {
                     val config = Expr.splice(dctx.config)
                     val cursor = Expr.splice(dctx.cursor)
-                    val readResult: Either[DecodingFailure, (String, HCursor)] =
-                      config.discriminator match {
-                        case Some(field) => CirceDerivationUtils.decodeDiscriminator(cursor, field)
-                        case None        => CirceDerivationUtils.decodeWrapped(cursor)
+                    if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings) {
+                      // String enum decode path: read plain string, dispatch on name
+                      cursor.as[String](io.circe.Decoder.decodeString) match {
+                        case Right(typeName) =>
+                          Expr.splice(dispatchFn)((typeName, cursor))
+                        case Left(_) =>
+                          Left(
+                            DecodingFailure(
+                              "Expected a JSON string for enum value",
+                              cursor.history
+                            )
+                          ): Either[DecodingFailure, A]
                       }
-                    readResult.flatMap(Expr.splice(dispatchFn))
+                    } else {
+                      val readResult: Either[DecodingFailure, (String, HCursor)] =
+                        config.discriminator match {
+                          case Some(field) => CirceDerivationUtils.decodeDiscriminator(cursor, field)
+                          case None        => CirceDerivationUtils.decodeWrapped(cursor)
+                        }
+                      readResult.flatMap(Expr.splice(dispatchFn))
+                    }
                   }
                 }
             }

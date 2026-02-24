@@ -8,6 +8,16 @@ enum Fruit {
   case Banana(length: Double)
 }
 
+object JsoniterOpaqueTypes {
+  opaque type UserId = Int
+  object UserId {
+    def apply(value: Int): UserId = value
+    extension (id: UserId) def value: Int = id
+  }
+}
+
+case class JsoniterUserWithOpaque(id: JsoniterOpaqueTypes.UserId, name: String)
+
 final class JsoniterScala3Spec extends MacroSuite {
 
   group("Scala 3 enums") {
@@ -48,6 +58,27 @@ final class JsoniterScala3Spec extends MacroSuite {
       val json = writeToString(value)(codec)
       json.contains("\"apple\"") ==> true
       val decoded = readFromString[Fruit](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("opaque types") {
+
+    test("standalone opaque type round-trip") {
+      import JsoniterOpaqueTypes.*
+      val codec = KindlingsJsonValueCodec.derive[UserId]
+      val value = UserId(42)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[UserId](json)(codec)
+      decoded ==> value
+    }
+
+    test("case class with opaque type field round-trip") {
+      import JsoniterOpaqueTypes.*
+      val codec = KindlingsJsonValueCodec.derive[JsoniterUserWithOpaque]
+      val value = JsoniterUserWithOpaque(UserId(42), "Alice")
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[JsoniterUserWithOpaque](json)(codec)
       decoded ==> value
     }
   }

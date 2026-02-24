@@ -30,6 +30,23 @@ object YamlDerivationUtils {
         )
     }
 
+  def encodeEnumAsString(typeName: String): Node =
+    ScalarNode(typeName)
+
+  def decodeEnumFromString[A](node: Node, knownSubtypes: List[String])(
+      dispatch: String => Either[ConstructError, A]
+  ): Either[ConstructError, A] =
+    node match {
+      case ScalarNode(value, _) => dispatch(value)
+      case other                =>
+        Left(
+          ConstructError.from(
+            s"Expected a scalar node for enum value. Known values: ${knownSubtypes.mkString(", ")}",
+            other
+          )
+        )
+    }
+
   def encodeIterable[A](items: Iterable[A], encoder: A => Node): Node = {
     val nodes = items.map(encoder).toSeq
     SequenceNode(nodes*)
