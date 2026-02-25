@@ -6,7 +6,7 @@ Compared test coverage across:
 - **Circe**: `circe-generic` + `circe-generic-extras` (derivation modules)
 - **Jsoniter Scala**: `jsoniter-scala-macros` (codec derivation)
 - **Avro4s**: `avro4s-core` (schema/encoder/decoder derivation)
-- **Kindlings**: All 6 modules (446 tests at time of initial analysis, 1416 at last update)
+- **Kindlings**: All 6 modules (446 tests at time of initial analysis, 1454 at last update)
 
 Focus is on **derivation-relevant** functionality — what types/patterns can be derived and how configuration affects them — not on core parsing/serialization (that's the underlying library's job, not Kindlings').
 
@@ -112,7 +112,7 @@ Hearth's `IsCollectionProviderForScalaCollection` handles any `Iterable` subtype
 
 Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. Encoder and decoder both work. Tested in **circe-derivation** Scala 3 spec: encode, decode, and round-trip.
 
-**Workaround applied**: `IArray` is an opaque type in Scala 3, so Hearth's `IsValueTypeProviderForOpaque` matches it before `IsCollectionProviderForIArray`. This crashes with `key not found: n` during `CtorLikes` resolution (extension method parameter parsing issue in `UntypedMethodsScala3.scala`). All 9 `IsValueType` match sites across all modules now have a `case _ if Type[A].isIArray =>` guard that skips the value type rule, allowing the collection rule to handle it correctly. The underlying Hearth bug (extension method parameter parsing + opaque type priority) should still be fixed in Hearth.
+**Workaround applied**: `IArray` is an opaque type in Scala 3, so Hearth's `IsValueTypeProviderForOpaque` matches it before `IsCollectionProviderForIArray`. All 9 `IsValueType` match sites across all modules have a `case _ if Type[A].isIArray =>` guard that skips the value type rule, allowing the collection rule to handle it correctly. The underlying Hearth bug should still be fixed in Hearth.
 
 ### ~~`IntMap`/`LongMap`/`BitSet`~~ — RESOLVED (already works)
 
@@ -126,42 +126,166 @@ Runtime helpers added to `CirceDerivationUtils`: `sequenceDecodeResultsAccumulat
 
 Tested in **circe-derivation** (6 tests): multi-field error accumulation, valid input, nested case classes, single-field error, `derived` implicit with override, empty case class. Works on both Scala 2.13 and 3.
 
+### ~~18. Recursive Types~~ — RESOLVED
+
+Always allowed by design. Kindlings has no `allowRecursiveTypes` configuration — recursion is always permitted. Jsoniter Scala requires explicit opt-in (`withAllowRecursiveTypes(true)`) and produces a compile-time error when not enabled; Kindlings intentionally does not impose this restriction.
+
+### ~~Higher-kinded types `F[_]`~~ — RESOLVED (already works)
+
+Higher-kinded type case classes like `case class HigherKindedType[F[_]](value: F[Int])` work out of the box with all derivation modules. When instantiated with a concrete type constructor (e.g., `HigherKindedType[List]`, `HigherKindedType[Option]`), the macro sees fully applied types and derives normally. Tested in **circe** (encoder + decoder), **jsoniter** (round-trip), and **yaml** (encoder + decoder). Works on both Scala 2.13 and 3.
+
+### ~~Sized, Partial/Patch decoding~~ — NOT APPLICABLE
+
+`Sized[List[Int], Nat._4]` (circe-shapes) and partial/patch decoding (circe-generic-extras) are Shapeless-specific features with no equivalent in Hearth's macro-agnostic API.
+
+### ~~Whitespace/Indentation (Jsoniter)~~ — NOT APPLICABLE
+
+Writer configuration is handled by the jsoniter-scala library itself, not by derivation macros.
+
+### ~~Kafka integration, Stream tests (Avro4s)~~ — OUT OF SCOPE
+
+Not derivation-related.
+
 ---
 
-## REMAINING MEDIUM PRIORITY GAPS
-
-### 18. Recursive Types — compile-time error for non-opted-in
-
-**What jsoniter tests**: Requires explicit opt-in (`withAllowRecursiveTypes(true)`) and tests compile-time error when not enabled.
-
-**Kindlings status**: Tests recursive types work (always allowed in Kindlings) but doesn't test that directly self-referential types (without `List` indirection) produce useful compile-time errors.
-
-**Action**: N/A — Kindlings always allows recursion. Dropped per design decision.
-
 ---
 
----
+## REMAINING LOWER PRIORITY GAPS
 
-## LOWER PRIORITY GAPS
+### Literal types — **Medium** (was estimated Low)
 
-| Gap | Tested By | Notes |
-|-----|-----------|-------|
-| Literal types | Jsoniter | `"VVV"`, `true`, `42` as types |
-| Union types (Scala 3) | Jsoniter | `String \| Int` — needs custom codec, not derivable |
-| Higher-kinded types `F[_]` | Jsoniter, Circe | `HigherKindedType[F[_]]` — advanced use case |
-| `@stringified` (numbers as strings) | Jsoniter | Jsoniter-specific performance feature |
-| Map as array encoding | Jsoniter | `[[k,v],[k,v]]` format — jsoniter-specific |
-| Whitespace/indentation | Jsoniter | Writer config — not derivation-related |
-| UTF-8/special chars in field names | Jsoniter | Edge case |
-| `Sized[List[Int], Nat._4]` | Circe-shapes | Shapeless-specific — not applicable |
-| Partial/patch decoding | Circe-extras | Scala 2 shapeless-specific — not applicable |
-| `@AvroFixed`, `@AvroProp`, `@AvroError` | Avro4s | Avro-specific annotations — lower priority |
-| `@AvroAlias` for schema evolution | Avro4s | Avro-specific |
-| ByteBuffer encoding | Avro4s | Avro-specific |
-| String as Fixed encoding | Avro4s | Avro-specific |
-| `@AvroSortPriority` | Avro4s | Union/enum ordering |
-| Kafka integration | Avro4s | Out of scope |
-| Stream tests | Avro4s | Out of scope |
+**Source:** Jsoniter Scala supports `"VVV"`, `true`, `42` as literal types in codecs.
+
+**Analysis:** Literal type fields (e.g., `case class Tagged(tag: "hello", count: 42)`) do NOT work today. The derivation pipeline tries to summon `Encoder["hello"]` / `Decoder[42]` — these don't exist as implicits in circe or yaml. Jsoniter-scala's `JsonCodecMaker.make` handles them internally but those codecs aren't exposed as standalone implicits for Kindlings to summon.
+
+**What's needed:**
+- New derivation rule `HandleAsLiteralTypeRule` (or per-primitive variants) in each module
+- Use Hearth's `TypeCodec` API to extract the constant value at compile time (`Type.valueOfConstant[A]`)
+- Encoder: emit the constant value directly (ignore the runtime value — it's always the same)
+- Decoder: read the value, validate it matches the literal, reject otherwise
+- Scala 3 only (`LiteralCodec` is Scala 3; Scala 2 has no literal type syntax for case class fields)
+
+**Difficulty revised to Medium:** Requires a new derivation rule (not just tests), and the rule needs cross-module implementation. Encoder is simple but decoder needs validation logic.
+
+### Union types (Scala 3) — **Hard** (blocked on Hearth)
+
+**Source:** Jsoniter Scala supports `String | Int` union type codecs.
+
+**Analysis:** Hearth exposes NO union type introspection APIs — no `isUnion`, no `unionMembers`. Scala 3's `OrType` pattern match on `TypeRepr` is internal `scala.tasty.reflect` API, not the public `scala.quoted` API.
+
+**What's needed:**
+1. **Hearth upstream:** Add `isUnion[A: Type]: Boolean` and `unionMembers[A: Type]: List[Type[?]]`
+2. **Kindlings:** New `HandleAsUnionRule` similar to sealed trait dispatch but without discriminator (try each member type, first success wins)
+3. Scala 2: no-op (no union syntax)
+
+**Blockers:** Requires Hearth changes first. Runtime erasure means no `Class`-based dispatch — would need try-parse fallback. Recommend filing Hearth issue before attempting.
+
+### `@stringified` (numbers as strings) — **Medium**
+
+**Source:** Jsoniter Scala's `withIsStringified(true)`.
+
+**Analysis:** Would encode numeric fields as JSON strings (`42` → `"42"`) and decode strings back to numbers. Useful for APIs that transmit numbers as strings for precision.
+
+**What's needed:**
+- New annotation: `@stringified` (field-level, jsoniter-derivation only)
+- Modify `EncHandleAsBuiltInRule` in `CodecMacrosImpl.scala`: when `@stringified` present on a numeric field, write via `writeVal(number.toString)` instead of `writeVal(number)`
+- Modify corresponding decoder rule: read as string, parse to numeric type
+- Add runtime helpers in `JsoniterDerivationUtils.scala`
+- Read annotation via existing `AnnotationSupport.getAnnotationStringArg` pattern (but as marker, no args)
+
+### Map as array encoding — **Medium**
+
+**Source:** Jsoniter Scala's `withMapAsArray(true)`.
+
+**Analysis:** Encode maps as `[[k1,v1],[k2,v2]]` instead of `{"k1":v1,"k2":v2}`. Useful for non-string keys (JSON objects require string keys).
+
+**What's needed:**
+- Config option: `JsoniterConfig.mapAsArray: Boolean`
+- Modify `EncHandleAsMapRule` (~L720): conditional `writeArrayStart` + nested `[key, value]` arrays instead of `writeObjectStart`
+- Modify `DecHandleAsMapRule` (~L1429): detect array input, parse pairs
+- New runtime helpers in `JsoniterDerivationUtils.scala`
+
+### UTF-8/special chars in field names — **Low** (just tests)
+
+**Source:** Jsoniter Scala edge case testing.
+
+**Analysis:** Almost certainly works already. Field names pass through `JsonWriter.writeKey(String)` which handles UTF-8 transparently. `JsonReader.readKeyAsString()` also handles UTF-8. The `@fieldName` annotation extracts string literals at compile time with no character restrictions.
+
+**What's needed:** Just add tests with Unicode field names, emoji, CJK characters via `@fieldName`. No code changes expected.
+
+### `@AvroFixed` — **High**
+
+**Source:** Avro4s `@AvroFixed(size)`.
+
+**Analysis:** Changes schema type from `BYTES` to `FIXED(size)`. Unlike other Avro annotations that mutate schema properties after construction, this changes which **type rule** is selected. Requires intercepting the type derivation logic itself.
+
+**What's needed:**
+- New annotation with integer parameter (extends `AnnotationSupport` to extract int literals, not just strings)
+- Schema: `Schema.createFixed(name, doc, namespace, size)` instead of `Schema.create(Schema.Type.BYTES)`
+- Encoder: validate byte array length matches fixed size
+- Decoder: read fixed-size bytes
+- Affects all 3 avro macro impls
+
+### `@AvroProp` — **Medium**
+
+**Source:** Avro4s `@AvroProp(key, value)`.
+
+**Analysis:** Adds custom key-value metadata to schema or field. Pure schema mutation — no type rules affected.
+
+**What's needed:**
+- Annotation with two string parameters
+- Extend `AnnotationSupport` to extract string pairs
+- Call `schema.addProp(key, value)` / `field.addProp(key, value)` after construction
+- Support both class-level and field-level
+- Schema-only change (no encoder/decoder modifications)
+
+### `@AvroError` — **Low**
+
+**Source:** Avro4s `@AvroError`.
+
+**Analysis:** Marker annotation that sets `isError=true` on RECORD schema (for Avro RPC protocol error types). One branch point in schema generation.
+
+**What's needed:**
+- Marker annotation (no parameters)
+- Check `hasAnnotationType[avroError]` on the type
+- Pass `isError=true` to `Schema.createRecord(name, doc, namespace, isError)` — currently hardcoded to `false`
+- Schema-only change
+
+### `@AvroAlias` — **Medium**
+
+**Source:** Avro4s `@AvroAlias(aliases*)`.
+
+**Analysis:** Adds old names as aliases for schema evolution (readers using old field/record names can still read new schemas). Needs varargs extraction.
+
+**What's needed:**
+- Annotation with varargs string parameter
+- Extend `AnnotationSupport` to extract string arrays/varargs (currently only extracts single strings)
+- Call `field.addAlias(alias)` / `schema.addAlias(alias)` after construction
+- Support both field-level and type-level
+- Schema-only change
+
+### `@AvroSortPriority` — **Low**
+
+**Source:** Avro4s `@AvroSortPriority(priority)`.
+
+**Analysis:** Controls ordering of types in union schemas. Just a sort key.
+
+**What's needed:**
+- Annotation with integer parameter (same `AnnotationSupport` extension as `@AvroFixed`)
+- Read priority from sealed trait children annotations
+- Sort children by priority before creating union schema
+- Schema-only change
+
+### ByteBuffer encoding — **Low**
+
+**Source:** Avro4s supports `java.nio.ByteBuffer` as a built-in type mapping to Avro BYTES.
+
+**What's needed:**
+- Add `java.nio.ByteBuffer` type check to the 3 avro type rule files (schema, encoder, decoder)
+- Schema: `Schema.create(Schema.Type.BYTES)`
+- Encoder: `ByteBuffer.array()` → bytes
+- Decoder: bytes → `ByteBuffer.wrap(bytes)`
+- Pure type rule extension, no annotations
 
 ---
 
@@ -259,4 +383,4 @@ Tested in **circe-derivation** (6 tests): multi-field error accumulation, valid 
 - Avro4s: https://github.com/sksamuel/avro4s (avro4s-core/)
 
 Initial analysis: 2026-02-24
-Last updated: 2026-02-25 — Java enum and Scala Enumeration fully resolved (encoder + decoder + round-trip) across all 4 modules, both Scala versions. Required Hearth 0.2.0-233+ for isJavaEnum/singletonOf/shortName fixes. Mutable collections, IntMap/LongMap/BitSet confirmed working. IArray encoder works (decoder has Hearth bug).
+Last updated: 2026-02-25 — Higher-kinded types confirmed working (all modules). Cache operation logging added. Error testing strengthened (avro compile-time, yaml/jsoniter runtime message validation). Gap #18 (recursive types) resolved. Difficulty estimates added for remaining low-priority gaps. IArray workaround still needed (Hearth bug not yet fully fixed).

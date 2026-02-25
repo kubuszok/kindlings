@@ -529,6 +529,19 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("higher-kinded types") {
+
+      test("HigherKindedType[List] decodes correctly") {
+        val json = Json.obj("value" -> Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3)))
+        KindlingsDecoder.decode[HigherKindedType[List]](json) ==> Right(HigherKindedType[List](List(1, 2, 3)))
+      }
+
+      test("HigherKindedType[Option] decodes correctly") {
+        val json = Json.obj("value" -> Json.fromInt(42))
+        KindlingsDecoder.decode[HigherKindedType[Option]](json) ==> Right(HigherKindedType[Option](Some(42)))
+      }
+    }
+
     group("empty class with non-object input") {
 
       test("decode Int as EmptyClass fails with Expected JSON object") {
@@ -723,6 +736,18 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "Macro derivation failed with the following errors:",
           "  - The type hearth.kindlings.circederivation.NotACirceType was not handled by any decoder derivation rule:",
           "Enable debug logging with: import hearth.kindlings.circederivation.debug.logDerivationForKindlingsDecoder or scalac option -Xmacro-settings:circeDerivation.logDerivation=true"
+        )
+      }
+
+      test("decode with Nothing type parameter produces clear error") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.KindlingsDecoder
+          import io.circe.Json
+          val result = KindlingsDecoder.decode(Json.obj())
+          """
+        ).check(
+          "type parameter was inferred as"
         )
       }
     }

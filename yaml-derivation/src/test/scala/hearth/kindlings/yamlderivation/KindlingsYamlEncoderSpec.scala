@@ -407,6 +407,14 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("higher-kinded types") {
+
+      test("HigherKindedType[List] encodes correctly") {
+        val node = KindlingsYamlEncoder.encode(HigherKindedType[List](List(1, 2, 3)))
+        node ==> mappingOf("value" -> seqOf(scalarNode("1"), scalarNode("2"), scalarNode("3")))
+      }
+    }
+
     group("combined configuration") {
 
       test("snake_case members + discriminator + constructor transform") {

@@ -114,5 +114,16 @@ final class InlineMethodsSpec extends MacroSuite {
         "Enable debug logging with: import hearth.kindlings.yamlderivation.debug.logDerivationForKindlingsYamlDecoder or scalac option -Xmacro-settings:yamlDerivation.logDerivation=true"
       )
     }
+
+    test("fromYamlString with Nothing type parameter produces clear error") {
+      compileErrors(
+        """
+        import hearth.kindlings.yamlderivation.KindlingsYamlDecoder
+        val result = KindlingsYamlDecoder.fromYamlString("foo: bar")
+        """
+      ).check(
+        "type parameter was inferred as"
+      )
+    }
   }
 }

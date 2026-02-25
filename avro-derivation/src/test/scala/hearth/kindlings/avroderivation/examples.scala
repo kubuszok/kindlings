@@ -99,3 +99,6 @@ case class WithEitherRecord(value: Either[String, SimplePerson])
 // Collection test types
 case class WithMutableBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
 case class WithVector(items: Vector[String])
+
+// Unhandled type for compile-time error tests
+class NotAnAvroType

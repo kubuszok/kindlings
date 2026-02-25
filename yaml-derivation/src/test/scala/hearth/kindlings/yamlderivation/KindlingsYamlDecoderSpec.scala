@@ -150,8 +150,10 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
       test("unknown discriminator produces error") {
         val node = mappingOf("Unknown" -> mappingOf())
-        val result = KindlingsYamlDecoder.decode[Shape](node)
-        result.isLeft ==> true
+        val Left(error) = KindlingsYamlDecoder.decode[Shape](node): @unchecked
+        assert(error.getMessage.contains("Unknown type discriminator: Unknown"))
+        assert(error.getMessage.contains("Circle"))
+        assert(error.getMessage.contains("Rectangle"))
       }
     }
 
@@ -177,14 +179,14 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
       test("non-scalar input fails with enumAsStrings") {
         implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
-        val result = KindlingsYamlDecoder.decode[CardinalDirection](mappingOf("North" -> mappingOf()))
-        result.isLeft ==> true
+        val Left(error) = KindlingsYamlDecoder.decode[CardinalDirection](mappingOf("North" -> mappingOf())): @unchecked
+        assert(error.getMessage.contains("Expected a scalar node for enum value"))
       }
 
       test("unknown string value fails") {
         implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
-        val result = KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("NorthWest"))
-        result.isLeft ==> true
+        val Left(error) = KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("NorthWest")): @unchecked
+        assert(error.getMessage.contains("NorthWest"))
       }
     }
 
@@ -392,8 +394,8 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
       test("decode scalar as EmptyClass fails with Expected mapping node") {
         val node = scalarNode("42")
-        val result = KindlingsYamlDecoder.decode[EmptyClass](node)
-        assert(result.isLeft)
+        val Left(error) = KindlingsYamlDecoder.decode[EmptyClass](node): @unchecked
+        assert(error.getMessage.contains("Expected mapping node"))
       }
 
       test("decode empty mapping as EmptyClass succeeds") {
@@ -406,14 +408,27 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
       test("missing required field") {
         val node = mappingOf("name" -> scalarNode("Alice"))
-        val result = KindlingsYamlDecoder.decode[SimplePerson](node)
-        result.isLeft ==> true
+        val Left(error) = KindlingsYamlDecoder.decode[SimplePerson](node): @unchecked
+        assert(error.getMessage.contains("Missing field: age"))
       }
 
       test("wrong type for field") {
         val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("not-a-number"))
-        val result = KindlingsYamlDecoder.decode[SimplePerson](node)
-        result.isLeft ==> true
+        val Left(error) = KindlingsYamlDecoder.decode[SimplePerson](node): @unchecked
+        assert(error.getMessage.contains("not-a-number") || error.getMessage.contains("Int"))
+      }
+    }
+
+    group("higher-kinded types") {
+
+      test("HigherKindedType[List] decodes correctly") {
+        val node = mappingOf("value" -> seqOf(scalarNode("1"), scalarNode("2"), scalarNode("3")))
+        KindlingsYamlDecoder.decode[HigherKindedType[List]](node) ==> Right(HigherKindedType[List](List(1, 2, 3)))
+      }
+
+      test("HigherKindedType[Option] decodes correctly") {
+        val node = mappingOf("value" -> scalarNode("42"))
+        KindlingsYamlDecoder.decode[HigherKindedType[Option]](node) ==> Right(HigherKindedType[Option](Some(42)))
       }
     }
 

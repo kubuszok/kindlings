@@ -111,53 +111,61 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
   def deriveDecoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (DecoderCtx[A] => Expr[Either[ConstructError, A]]) => Expr[Out]
-  ): Expr[Out] = Log
-    .namedScope(
-      s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-    ) {
-      MIO.scoped { runSafe =>
-        val fromCtx: (DecoderCtx[A] => Expr[Either[ConstructError, A]]) =
-          (ctx: DecoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveDecoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
+  ): Expr[Out] = {
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+    Log
+      .namedScope(
+        s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val fromCtx: (DecoderCtx[A] => Expr[Either[ConstructError, A]]) =
+            (ctx: DecoderCtx[A]) =>
+              runSafe {
+                for {
+                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                  result <- deriveDecoderRecursively[A](using ctx)
+                  cache <- ctx.cache.get
+                } yield cache.toValDefs.use(_ => result)
+              }
 
-        provideCtxAndAdapt(fromCtx)
-      }
-    }
-    .flatTap { result =>
-      Log.info(s"Derived final decoder result: ${result.prettyPrint}")
-    }
-    .runToExprOrFail(
-      macroName,
-      infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
-    ) { (errorLogs, errors) =>
-      val errorsRendered = errors
-        .map { e =>
-          e.getMessage.split("\n").toList match {
-            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-            case _            => "  - " + e.getMessage
-          }
+          provideCtxAndAdapt(fromCtx)
         }
-        .mkString("\n")
-      val hint =
-        "Enable debug logging with: import hearth.kindlings.yamlderivation.debug.logDerivationForKindlingsYamlDecoder or scalac option -Xmacro-settings:yamlDerivation.logDerivation=true"
-      if (errorLogs.nonEmpty)
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |and the following logs:
-           |$errorLogs
-           |$hint""".stripMargin
-      else
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |$hint""".stripMargin
-    }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final decoder result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.yamlderivation.debug.logDerivationForKindlingsYamlDecoder or scalac option -Xmacro-settings:yamlDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
+  }
 
   def shouldWeLogDecoderDerivation: Boolean = {
     implicit val LogDerivation: Type[KindlingsYamlDecoder.LogDerivation] = DTypes.DecoderLogDerivation
@@ -201,10 +209,11 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     }
     def setInstance[B: Type](instance: Expr[YamlDecoder[B]]): MIO[Unit] = {
       implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]
-      cache.buildCachedWith(
-        "cached-decoder-instance",
-        ValDefBuilder.ofLazy[YamlDecoder[B]](s"decoder_${Type[B].shortName}")
-      )(_ => instance)
+      Log.info(s"Caching YamlDecoder instance for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          "cached-decoder-instance",
+          ValDefBuilder.ofLazy[YamlDecoder[B]](s"decoder_${Type[B].shortName}")
+        )(_ => instance)
     }
 
     def getHelper[B: Type]: MIO[Option[(Expr[Node], Expr[YamlConfig]) => Expr[Either[ConstructError, B]]]] = {
@@ -222,12 +231,14 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       val defBuilder =
         ValDefBuilder.ofDef2[Node, YamlConfig, Either[ConstructError, B]](s"decode_${Type[B].shortName}")
       for {
+        _ <- Log.info(s"Forward-declaring decode helper for ${Type[B].prettyPrint}")
         _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
         _ <- MIO.scoped { runSafe =>
           runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (node, config)) =>
             runSafe(helper(node, config))
           })
         }
+        _ <- Log.info(s"Defined decode helper for ${Type[B].prettyPrint}")
       } yield ()
     }
 

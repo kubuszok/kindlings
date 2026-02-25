@@ -92,3 +92,6 @@ case class CirceWithBothAnnotations(
 // Collection test types
 case class WithMutableBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
 case class WithVector(items: Vector[String])
+
+// Higher-kinded type test
+case class HigherKindedType[F[_]](value: F[Int])

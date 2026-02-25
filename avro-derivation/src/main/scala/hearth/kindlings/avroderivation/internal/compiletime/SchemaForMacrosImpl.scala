@@ -54,52 +54,60 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
 
   def deriveSchemaFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (SchemaForCtx[A] => Expr[Schema]) => Expr[Out]
-  ): Expr[Out] = Log
-    .namedScope(
-      s"Deriving schema for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-    ) {
-      MIO.scoped { runSafe =>
-        val fromCtx: (SchemaForCtx[A] => Expr[Schema]) = (ctx: SchemaForCtx[A]) =>
-          runSafe {
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveSchemaRecursively[A](using ctx)
-              cache <- ctx.cache.get
-            } yield cache.toValDefs.use(_ => result)
-          }
+  ): Expr[Out] = {
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+    Log
+      .namedScope(
+        s"Deriving schema for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val fromCtx: (SchemaForCtx[A] => Expr[Schema]) = (ctx: SchemaForCtx[A]) =>
+            runSafe {
+              for {
+                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                result <- deriveSchemaRecursively[A](using ctx)
+                cache <- ctx.cache.get
+              } yield cache.toValDefs.use(_ => result)
+            }
 
-        provideCtxAndAdapt(fromCtx)
-      }
-    }
-    .flatTap { result =>
-      Log.info(s"Derived final schema result: ${result.prettyPrint}")
-    }
-    .runToExprOrFail(
-      macroName,
-      infoRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender
-    ) { (errorLogs, errors) =>
-      val errorsRendered = errors
-        .map { e =>
-          e.getMessage.split("\n").toList match {
-            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-            case _            => "  - " + e.getMessage
-          }
+          provideCtxAndAdapt(fromCtx)
         }
-        .mkString("\n")
-      val hint =
-        "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroSchemaFor or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
-      if (errorLogs.nonEmpty)
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |and the following logs:
-           |$errorLogs
-           |$hint""".stripMargin
-      else
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |$hint""".stripMargin
-    }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final schema result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroSchemaFor or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
+  }
 
   def shouldWeLogSchemaDerivation: Boolean = {
     implicit val LogDerivation: Type[AvroSchemaFor.LogDerivation] = SfTypes.SchemaForLogDerivation
@@ -133,10 +141,11 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     }
     def setCachedSchema[B: Type](instance: Expr[Schema]): MIO[Unit] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      cache.buildCachedWith(
-        s"cached-schema-for-${Type[B].shortName}",
-        ValDefBuilder.ofLazy[Schema](s"schema_${Type[B].shortName}")
-      )(_ => instance)
+      Log.info(s"Caching schema for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          s"cached-schema-for-${Type[B].shortName}",
+          ValDefBuilder.ofLazy[Schema](s"schema_${Type[B].shortName}")
+        )(_ => instance)
     }
 
     override def toString: String =

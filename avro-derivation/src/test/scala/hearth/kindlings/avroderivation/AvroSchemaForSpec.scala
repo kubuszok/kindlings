@@ -507,5 +507,32 @@ final class AvroSchemaForSpec extends MacroSuite {
         assert(!readerSchema.getField("name").hasDefaultValue)
       }
     }
+
+    group("compile-time errors") {
+
+      test("schemaOf with unhandled type produces error message") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.{AvroSchemaFor, NotAnAvroType}
+          AvroSchemaFor.schemaOf[NotAnAvroType]
+          """
+        ).check(
+          "Macro derivation failed with the following errors:",
+          "  - The type hearth.kindlings.avroderivation.NotAnAvroType was not handled by any schema derivation rule:",
+          "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroSchemaFor or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
+        )
+      }
+
+      test("schemaOf with Nothing type parameter produces clear error") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.AvroSchemaFor
+          val result = AvroSchemaFor.schemaOf
+          """
+        ).check(
+          "type parameter was inferred as"
+        )
+      }
+    }
   }
 }

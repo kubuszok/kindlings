@@ -41,6 +41,13 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     implicit val ConfigT: Type[AvroConfig] = EncTypes.AvroConfig
     val selfType: Option[??] = Some(Type[A].as_??)
 
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"AvroEncoder.derived: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          "Provide an explicit type parameter, e.g.: AvroEncoder.derived[MyType]\n" +
+          "or add a type ascription to the result variable."
+      )
+
     // Schema and encoder are derived in the same MIO.scoped block to avoid Scala 3 splice isolation issues.
     Log
       .namedScope(
@@ -116,52 +123,60 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
   def deriveEncoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (EncoderCtx[A] => Expr[Any]) => Expr[Out]
-  ): Expr[Out] = Log
-    .namedScope(
-      s"Deriving encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-    ) {
-      MIO.scoped { runSafe =>
-        val fromCtx: (EncoderCtx[A] => Expr[Any]) = (ctx: EncoderCtx[A]) =>
-          runSafe {
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveEncoderRecursively[A](using ctx)
-              cache <- ctx.cache.get
-            } yield cache.toValDefs.use(_ => result)
-          }
+  ): Expr[Out] = {
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+    Log
+      .namedScope(
+        s"Deriving encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val fromCtx: (EncoderCtx[A] => Expr[Any]) = (ctx: EncoderCtx[A]) =>
+            runSafe {
+              for {
+                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                result <- deriveEncoderRecursively[A](using ctx)
+                cache <- ctx.cache.get
+              } yield cache.toValDefs.use(_ => result)
+            }
 
-        provideCtxAndAdapt(fromCtx)
-      }
-    }
-    .flatTap { result =>
-      Log.info(s"Derived final encoder result: ${result.prettyPrint}")
-    }
-    .runToExprOrFail(
-      macroName,
-      infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
-    ) { (errorLogs, errors) =>
-      val errorsRendered = errors
-        .map { e =>
-          e.getMessage.split("\n").toList match {
-            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-            case _            => "  - " + e.getMessage
-          }
+          provideCtxAndAdapt(fromCtx)
         }
-        .mkString("\n")
-      val hint =
-        "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroEncoder or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
-      if (errorLogs.nonEmpty)
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |and the following logs:
-           |$errorLogs
-           |$hint""".stripMargin
-      else
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |$hint""".stripMargin
-    }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final encoder result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroEncoder or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
+  }
 
   def shouldWeLogEncoderDerivation: Boolean = {
     implicit val LogDerivation: Type[AvroEncoder.LogDerivation] = EncTypes.EncoderLogDerivation
@@ -205,10 +220,11 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     }
     def setInstance[B: Type](instance: Expr[AvroEncoder[B]]): MIO[Unit] = {
       implicit val EncoderB: Type[AvroEncoder[B]] = EncTypes.AvroEncoder[B]
-      cache.buildCachedWith(
-        "cached-encoder-instance",
-        ValDefBuilder.ofLazy[AvroEncoder[B]](s"encoder_${Type[B].shortName}")
-      )(_ => instance)
+      Log.info(s"Caching AvroEncoder instance for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          "cached-encoder-instance",
+          ValDefBuilder.ofLazy[AvroEncoder[B]](s"encoder_${Type[B].shortName}")
+        )(_ => instance)
     }
 
     def getHelper[B: Type]: MIO[Option[(Expr[B], Expr[AvroConfig]) => Expr[Any]]] = {
@@ -224,12 +240,14 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       val defBuilder =
         ValDefBuilder.ofDef2[B, AvroConfig, Any](s"encode_${Type[B].shortName}")
       for {
+        _ <- Log.info(s"Forward-declaring encode helper for ${Type[B].prettyPrint}")
         _ <- cache.forwardDeclare("cached-encode-method", defBuilder)
         _ <- MIO.scoped { runSafe =>
           runSafe(cache.buildCachedWith("cached-encode-method", defBuilder) { case (_, (value, config)) =>
             runSafe(helper(value, config))
           })
         }
+        _ <- Log.info(s"Defined encode helper for ${Type[B].prettyPrint}")
       } yield ()
     }
 

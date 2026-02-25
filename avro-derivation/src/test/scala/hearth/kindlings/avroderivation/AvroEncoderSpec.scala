@@ -393,5 +393,21 @@ final class AvroEncoderSpec extends MacroSuite {
         record.getSchema.getField("name").schema().getType ==> org.apache.avro.Schema.Type.STRING
       }
     }
+
+    group("compile-time errors") {
+
+      test("encode with unhandled type produces error message") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.{AvroEncoder, NotAnAvroType}
+          AvroEncoder.encode(new NotAnAvroType)
+          """
+        ).check(
+          "Macro derivation failed with the following errors:",
+          "  - The type hearth.kindlings.avroderivation.NotAnAvroType was not handled by any encoder derivation rule:",
+          "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroEncoder or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
+        )
+      }
+    }
   }
 }

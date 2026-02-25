@@ -54,3 +54,6 @@ case class JsoniterWithBothAnnotations(
     @transientField internal: Int = 0,
     active: Boolean
 )
+
+// Higher-kinded type test
+case class HigherKindedType[F[_]](value: F[Int])

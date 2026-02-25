@@ -408,5 +408,32 @@ final class AvroDecoderSpec extends MacroSuite {
         result ==> SimplePerson("Test", 99)
       }
     }
+
+    group("compile-time errors") {
+
+      test("decode with unhandled type produces error message") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.{AvroDecoder, NotAnAvroType}
+          AvroDecoder.decode[NotAnAvroType]("anything": Any)
+          """
+        ).check(
+          "Macro derivation failed with the following errors:",
+          "  - The type hearth.kindlings.avroderivation.NotAnAvroType was not handled by any decoder derivation rule:",
+          "Enable debug logging with: import hearth.kindlings.avroderivation.debug.logDerivationForAvroDecoder or scalac option -Xmacro-settings:avroDerivation.logDerivation=true"
+        )
+      }
+
+      test("decode with Nothing type parameter produces clear error") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.AvroDecoder
+          val result = AvroDecoder.decode("anything": Any)
+          """
+        ).check(
+          "type parameter was inferred as"
+        )
+      }
+    }
   }
 }

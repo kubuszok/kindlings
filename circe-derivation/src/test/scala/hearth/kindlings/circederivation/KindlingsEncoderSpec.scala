@@ -454,6 +454,19 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("higher-kinded types") {
+
+      test("HigherKindedType[List] encodes correctly") {
+        KindlingsEncoder.encode(HigherKindedType[List](List(1, 2, 3))) ==>
+          Json.obj("value" -> Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3)))
+      }
+
+      test("HigherKindedType[Option] encodes correctly") {
+        KindlingsEncoder.encode(HigherKindedType[Option](Some(42))) ==>
+          Json.obj("value" -> Json.fromInt(42))
+      }
+    }
+
     group("compile-time errors") {
 
       test("encode with unhandled type produces error message") {

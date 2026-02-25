@@ -78,53 +78,61 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
 
   def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (DerivationCtx[A] => Expr[StringBuilder]) => Expr[Out]
-  ): Expr[Out] = Log
-    .namedScope(
-      s"Deriving the value ${Type[A].prettyPrint} for ${Type[Out].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-    ) {
-      MIO.scoped { runSafe =>
-        val fromCtx: (DerivationCtx[A] => Expr[StringBuilder]) = (ctx: DerivationCtx[A]) =>
-          runSafe {
-            for {
-              // Enables usage of IsCollection, IsMap, etc.
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveResultRecursively[A](using ctx)
-              cache <- ctx.cache.get
-            } yield cache.toValDefs.use(_ => result)
-          }
+  ): Expr[Out] = {
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+    Log
+      .namedScope(
+        s"Deriving the value ${Type[A].prettyPrint} for ${Type[Out].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val fromCtx: (DerivationCtx[A] => Expr[StringBuilder]) = (ctx: DerivationCtx[A]) =>
+            runSafe {
+              for {
+                // Enables usage of IsCollection, IsMap, etc.
+                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                result <- deriveResultRecursively[A](using ctx)
+                cache <- ctx.cache.get
+              } yield cache.toValDefs.use(_ => result)
+            }
 
-        provideCtxAndAdapt(fromCtx)
-      }
-    }
-    .flatTap { result =>
-      Log.info(s"Derived final result for: ${result.prettyPrint}")
-    }
-    .runToExprOrFail(
-      macroName,
-      infoRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
-      errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender
-    ) { (errorLogs, errors) =>
-      val errorsRendered = errors
-        .map { e =>
-          e.getMessage.split("\n").toList match {
-            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-            case _            => "  - " + e.getMessage
-          }
+          provideCtxAndAdapt(fromCtx)
         }
-        .mkString("\n")
-      val hint =
-        "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
-      if (errorLogs.nonEmpty)
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |and the following logs:
-           |$errorLogs
-           |$hint""".stripMargin
-      else
-        s"""Macro derivation failed with the following errors:
-           |$errorsRendered
-           |$hint""".stripMargin
-    }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final result for: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
+  }
 
   /** Enables logging if we either:
     *   - import [[hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty]] in the scope
@@ -185,10 +193,11 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
     }
     def setInstance[B: Type](instance: Expr[FastShowPretty[B]]): MIO[Unit] = {
       implicit val FastShowPrettyB: Type[FastShowPretty[B]] = Types.FastShowPretty[B]
-      cache.buildCachedWith(
-        "cached-fast-show-pretty-instance",
-        ValDefBuilder.ofLazy[FastShowPretty[B]](s"instance_${Type[B].shortName}")
-      )(_ => instance)
+      Log.info(s"Caching FastShowPretty instance for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          "cached-fast-show-pretty-instance",
+          ValDefBuilder.ofLazy[FastShowPretty[B]](s"instance_${Type[B].shortName}")
+        )(_ => instance)
     }
 
     // Let us reuse code derived for some type, by putting all: case class handling or enum handling into a local def.
@@ -208,12 +217,14 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
       val defBuilder =
         ValDefBuilder.ofDef4[StringBuilder, RenderConfig, Int, B, StringBuilder](s"render_${Type[B].shortName}")
       for {
+        _ <- Log.info(s"Forward-declaring render helper for ${Type[B].prettyPrint}")
         _ <- cache.forwardDeclare("cached-render-method", defBuilder)
         _ <- MIO.scoped { runSafe =>
           runSafe(cache.buildCachedWith("cached-render-method", defBuilder) { case (_, (sb, config, level, value)) =>
             runSafe(helper(sb, config, level, value))
           })
         }
+        _ <- Log.info(s"Defined render helper for ${Type[B].prettyPrint}")
       } yield ()
     }
 

@@ -42,10 +42,12 @@ final class InlineMethodsSpec extends MacroSuite {
       result ==> Right(SimplePerson("Alice", 30))
     }
 
-    test("invalid JSON returns Left") {
+    test("invalid JSON returns Left with error message") {
       val result = KindlingsJsonValueCodec.readFromString[SimplePerson]("not valid json")
       result.isLeft ==> true
-      result.left.exists(_.isInstanceOf[JsonReaderException]) ==> true
+      val Left(error) = result: @unchecked
+      assert(error.isInstanceOf[JsonReaderException])
+      assert(error.getMessage.contains("expected"))
     }
 
     test("with custom config") {
@@ -95,11 +97,11 @@ final class InlineMethodsSpec extends MacroSuite {
       result ==> Right(SimplePerson("Alice", 30))
     }
 
-    test("invalid JSON returns Left") {
+    test("invalid JSON returns Left with error message") {
       import syntax.*
-      val result = "not valid json".fromJsonString[SimplePerson]
-      result.isLeft ==> true
-      result.left.exists(_.isInstanceOf[JsonReaderException]) ==> true
+      val Left(error) = "not valid json".fromJsonString[SimplePerson]: @unchecked
+      assert(error.isInstanceOf[JsonReaderException])
+      assert(error.getMessage.contains("expected"))
     }
   }
 
@@ -161,6 +163,17 @@ final class InlineMethodsSpec extends MacroSuite {
         "Macro derivation failed with the following errors:",
         "  - The type hearth.kindlings.jsoniterderivation.NotAJsonType was not handled by any codec derivation rule:",
         "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+      )
+    }
+
+    test("readFromString with Nothing type parameter produces clear error") {
+      compileErrors(
+        """
+        import hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec
+        val result = KindlingsJsonValueCodec.readFromString("{}")
+        """
+      ).check(
+        "type parameter was inferred as"
       )
     }
   }

@@ -366,9 +366,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withSkipUnexpectedFields(false)
         val codec = KindlingsJsonValueCodec.derive[SimplePerson]
         val json = """{"name":"Alice","extraField":"boom","age":30}"""
-        intercept[JsonReaderException] {
+        val error = intercept[JsonReaderException] {
           readFromString[SimplePerson](json)(codec)
         }
+        assert(error.getMessage.contains("extraField"))
       }
     }
 
@@ -497,6 +498,25 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       val value = WithAlias("Alice", 30)
       val json = writeToString(value)(codec)
       val decoded = readFromString[WithAlias](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("higher-kinded types") {
+
+    test("HigherKindedType[List] round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[HigherKindedType[List]]
+      val value = HigherKindedType[List](List(1, 2, 3))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[HigherKindedType[List]](json)(codec)
+      decoded ==> value
+    }
+
+    test("HigherKindedType[Option] round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[HigherKindedType[Option]]
+      val value = HigherKindedType[Option](Some(42))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[HigherKindedType[Option]](json)(codec)
       decoded ==> value
     }
   }
