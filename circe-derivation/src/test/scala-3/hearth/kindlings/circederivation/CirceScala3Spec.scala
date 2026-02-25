@@ -161,8 +161,20 @@ final class CirceScala3Spec extends MacroSuite {
       json ==> Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
     }
 
-    // Note: IArray decoder derivation fails with "key not found: n" — a Hearth bug
-    // in IsCollectionProviderForIArray's decoder path. Encoder works fine.
+    test("IArray[Int] decodes from JSON array") {
+      val json = Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
+      val decoded = KindlingsDecoder.decode[IArray[Int]](json)
+      assert(decoded.isRight)
+      assert(decoded.toOption.get.toSeq == Seq(1, 2, 3))
+    }
+
+    test("IArray[Int] round-trip") {
+      val original: IArray[Int] = IArray(1, 2, 3)
+      val json = KindlingsEncoder.encode(original)
+      val decoded = KindlingsDecoder.decode[IArray[Int]](json)
+      assert(decoded.isRight)
+      assert(decoded.toOption.get.toSeq == original.toSeq)
+    }
   }
 
   group("auto-derivation isolation") {

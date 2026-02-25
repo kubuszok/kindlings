@@ -108,9 +108,11 @@ Required Hearth `0.2.0-233+` for `singletonOf` fix for Enumeration values on Sca
 
 Hearth's `IsCollectionProviderForScalaCollection` handles any `Iterable` subtype with a `Factory` implicit, including `mutable.ArrayBuffer`, `mutable.HashMap`, etc. Tested in **circe-derivation** with `mutable.ArrayBuffer[Int]` round-trip (standalone and as case class field). Works on both Scala 2.13 and 3.
 
-### ~~`IArray` (Scala 3)~~ — PARTIALLY RESOLVED (encoder only)
+### ~~`IArray` (Scala 3)~~ — RESOLVED
 
-Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. **Encoder works**: tested in **circe-derivation** Scala 3 spec. **Decoder has a Hearth bug**: fails with "key not found: n" at macro expansion time. Filed as a Hearth issue to investigate.
+Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. Encoder and decoder both work. Tested in **circe-derivation** Scala 3 spec: encode, decode, and round-trip.
+
+**Workaround applied**: `IArray` is an opaque type in Scala 3, so Hearth's `IsValueTypeProviderForOpaque` matches it before `IsCollectionProviderForIArray`. This crashes with `key not found: n` during `CtorLikes` resolution (extension method parameter parsing issue in `UntypedMethodsScala3.scala`). All 9 `IsValueType` match sites across all modules now have a `case _ if Type[A].isIArray =>` guard that skips the value type rule, allowing the collection rule to handle it correctly. The underlying Hearth bug (extension method parameter parsing + opaque type priority) should still be fixed in Hearth.
 
 ### ~~`IntMap`/`LongMap`/`BitSet`~~ — RESOLVED (already works)
 
