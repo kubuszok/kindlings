@@ -67,8 +67,7 @@ class PlainLeaf(val x: Int) extends MixedADT {
   override def hashCode(): Int = x.hashCode()
 }
 
-// java.time field test type
-case class WithInstant(name: String, ts: java.time.Instant)
+// WithInstant is in src/test/scalajvm (uses java.time, JVM-only)
 
 // Option field test types
 case class WithOptionalField(name: String, opt: Option[String])

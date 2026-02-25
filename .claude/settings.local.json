@@ -27,7 +27,8 @@
       "Bash(done)",
       "Bash(jar tf:*)",
       "WebFetch(domain:meta.plasm.us)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(find /Users/dev/Workspaces/GitHub/kindlings/.claude/worktrees/typed-finding-raccoon -name \"build.sbt\" -o -name \"*.sbt\" | xargs ls -la 2>/dev/null)"
     ]
   }
 }

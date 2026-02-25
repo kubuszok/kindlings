@@ -75,15 +75,7 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
-    group("Java enum roundtrip") {
-
-      test("Java enum roundtrip with enumAsStrings") {
-        implicit val config: Configuration = Configuration(enumAsStrings = true)
-        val value: JavaColor = JavaColor.BLUE
-        val json = KindlingsEncoder.encode[JavaColor](value)
-        KindlingsDecoder.decode[JavaColor](json) ==> Right(value)
-      }
-    }
+    // Java enum roundtrip tests are in RoundTripJvmSpec (src/test/scalajvm)
 
     group("sets") {
 
