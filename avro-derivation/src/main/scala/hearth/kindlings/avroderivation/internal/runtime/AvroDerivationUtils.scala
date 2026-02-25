@@ -16,8 +16,39 @@ object AvroDerivationUtils {
     schema
   }
 
+  def createRecordWithDoc(
+      name: String,
+      namespace: String,
+      doc: String,
+      fields: util.List[Schema.Field]
+  ): Schema = {
+    val schema = Schema.createRecord(name, doc, namespace, false)
+    schema.setFields(fields)
+    schema
+  }
+
   def createField(name: String, schema: Schema): Schema.Field =
     new Schema.Field(name, schema)
+
+  def createFieldWithDoc(name: String, schema: Schema, doc: String): Schema.Field =
+    new Schema.Field(name, schema, doc)
+
+  def createFieldWithDefault(name: String, schema: Schema, defaultJson: String): Schema.Field = {
+    val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+    val defaultValue = mapper.readTree(defaultJson)
+    new Schema.Field(name, schema, null, defaultValue)
+  }
+
+  def createFieldWithDocAndDefault(
+      name: String,
+      schema: Schema,
+      doc: String,
+      defaultJson: String
+  ): Schema.Field = {
+    val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+    val defaultValue = mapper.readTree(defaultJson)
+    new Schema.Field(name, schema, doc, defaultValue)
+  }
 
   def createUnion(schemas: Schema*): Schema =
     Schema.createUnion(schemas*)
@@ -104,6 +135,15 @@ object AvroDerivationUtils {
     dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
 
   // --- Decoder helpers ---
+
+  def checkIsRecord(value: Any): GenericRecord =
+    value match {
+      case r: GenericRecord => r
+      case other            =>
+        throw new org.apache.avro.AvroTypeException(
+          s"Expected GenericRecord but got ${if (other == null) "null" else other.getClass.getSimpleName}"
+        )
+    }
 
   def decodeRecord(record: GenericRecord, fieldName: String): Any =
     record.get(fieldName)

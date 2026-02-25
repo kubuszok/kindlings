@@ -610,6 +610,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       NonEmptyList.fromList(nonTransientFields) match {
         case None =>
           // All fields are transient or there are no fields — construct with defaults
+          // Validate that input is a mapping node
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -627,7 +628,9 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             })
             .flatMap {
               case Some(expr) =>
-                MIO.pure(Expr.quote(Right(Expr.splice(expr)): Either[ConstructError, A]))
+                MIO.pure(Expr.quote {
+                  YamlDerivationUtils.checkIsMapping(Expr.splice(dctx.node)).map(_ => Expr.splice(expr))
+                })
               case None =>
                 val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
                 Log.error(err.message) >> MIO.fail(err)

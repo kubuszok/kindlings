@@ -625,7 +625,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
       NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // All fields are transient or there are no fields — construct with defaults
+          // All fields are transient or there are no fields — validate input and construct with defaults
           caseClass
             .construct[MIO](new CaseClass.ConstructField[MIO] {
               def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -642,8 +642,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
                 }
             })
             .flatMap {
-              case Some(expr) => MIO.pure(expr)
-              case None       =>
+              case Some(expr) =>
+                MIO.pure(Expr.quote {
+                  val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
+                  Expr.splice(expr)
+                })
+              case None =>
                 val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
                 Log.error(err.message) >> MIO.fail(err)
             }

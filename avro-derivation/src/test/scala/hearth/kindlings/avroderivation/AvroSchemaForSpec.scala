@@ -321,6 +321,26 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("Tuple2 schema is RECORD with _1, _2 fields") {
+        val schema = AvroSchemaFor.schemaOf[(String, Int)]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 2
+        schema.getField("_1").schema().getType ==> Schema.Type.STRING
+        schema.getField("_2").schema().getType ==> Schema.Type.INT
+      }
+
+      test("Tuple3 schema is RECORD with _1, _2, _3 fields") {
+        val schema = AvroSchemaFor.schemaOf[(Int, String, Boolean)]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getFields.size() ==> 3
+        schema.getField("_1").schema().getType ==> Schema.Type.INT
+        schema.getField("_2").schema().getType ==> Schema.Type.STRING
+        schema.getField("_3").schema().getType ==> Schema.Type.BOOLEAN
+      }
+    }
+
     group("collections of case classes") {
 
       test("List of case classes creates array of records") {
@@ -330,6 +350,81 @@ final class AvroSchemaForSpec extends MacroSuite {
         membersField.schema().getType ==> Schema.Type.ARRAY
         membersField.schema().getElementType.getType ==> Schema.Type.RECORD
         membersField.schema().getElementType.getName ==> "SimplePerson"
+      }
+    }
+
+    group("@avroDoc annotation") {
+
+      test("class-level @avroDoc sets record doc") {
+        val schema = AvroSchemaFor.schemaOf[DocumentedPerson]
+        schema.getDoc ==> "A documented person record"
+      }
+
+      test("field-level @avroDoc sets field doc") {
+        val schema = AvroSchemaFor.schemaOf[DocumentedPerson]
+        schema.getField("name").doc() ==> "The person's full name"
+        schema.getField("age").doc() ==> "Age in years"
+      }
+
+      test("undocumented fields have null doc") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        assert(schema.getField("name").doc() == null)
+      }
+    }
+
+    group("@avroNamespace annotation") {
+
+      test("@avroNamespace overrides config namespace") {
+        val schema = AvroSchemaFor.schemaOf[CustomNamespacePerson]
+        schema.getNamespace ==> "com.example.custom"
+      }
+
+      test("@avroNamespace with config namespace uses annotation") {
+        implicit val config: AvroConfig = AvroConfig(namespace = Some("com.example.config"))
+        val schema = AvroSchemaFor.schemaOf[CustomNamespacePerson]
+        schema.getNamespace ==> "com.example.custom"
+      }
+    }
+
+    group("combined @avroDoc and @avroNamespace") {
+
+      test("both annotations on same class") {
+        val schema = AvroSchemaFor.schemaOf[FullyAnnotatedRecord]
+        schema.getDoc ==> "A record with custom namespace"
+        schema.getNamespace ==> "com.example.docs"
+        schema.getField("id").doc() ==> "The identifier"
+        assert(schema.getField("value").doc() == null)
+      }
+    }
+
+    group("@avroDefault annotation") {
+
+      test("field with @avroDefault has default value in schema") {
+        val schema = AvroSchemaFor.schemaOf[WithDefaults]
+        assert(!schema.getField("name").hasDefaultValue)
+        assert(schema.getField("age").hasDefaultValue)
+        schema.getField("age").defaultVal() ==> 0
+        assert(schema.getField("role").hasDefaultValue)
+        schema.getField("role").defaultVal() ==> "unknown"
+      }
+
+      test("Option field with @avroDefault(\"null\") has null default") {
+        val schema = AvroSchemaFor.schemaOf[WithOptionalDefault]
+        assert(!schema.getField("name").hasDefaultValue)
+        assert(schema.getField("nickname").hasDefaultValue)
+        assert(schema.getField("nickname").defaultVal() == com.fasterxml.jackson.databind.node.NullNode.getInstance())
+      }
+    }
+
+    group("schema evolution with defaults") {
+
+      test("schema with defaults enables forward compatibility") {
+        val readerSchema = AvroSchemaFor.schemaOf[WithDefaults]
+        // Fields with @avroDefault enable schema evolution:
+        // a reader with these defaults can read data that omits these fields
+        assert(readerSchema.getField("age").hasDefaultValue)
+        assert(readerSchema.getField("role").hasDefaultValue)
+        assert(!readerSchema.getField("name").hasDefaultValue)
       }
     }
   }

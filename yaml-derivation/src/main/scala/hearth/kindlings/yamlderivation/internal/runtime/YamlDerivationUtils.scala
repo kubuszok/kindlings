@@ -73,6 +73,12 @@ object YamlDerivationUtils {
         decode(node)
     }
 
+  def checkIsMapping(node: Node): Either[ConstructError, Unit] =
+    node match {
+      case _: MappingNode => Right(())
+      case other => Left(ConstructError.from(s"Expected mapping node but got ${other.getClass.getSimpleName}", other))
+    }
+
   def getField(node: Node, fieldName: String): Either[ConstructError, Node] =
     node match {
       case MappingNode(mappings, _) =>

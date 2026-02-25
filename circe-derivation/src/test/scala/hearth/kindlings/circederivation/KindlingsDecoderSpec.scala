@@ -450,10 +450,52 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("Option null vs absent key") {
+
+      test("Option field present with null decodes to None") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "opt" -> Json.Null)
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", None))
+      }
+
+      test("Option field present with value decodes to Some") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "opt" -> Json.fromString("value"))
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", Some("value")))
+      }
+
+      test("Option field absent (no default) decodes to None") {
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", None))
+      }
+
+      test("Option field absent with useDefaults uses default") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[WithOptionalAndDefault](json) ==> Right(
+          WithOptionalAndDefault("Alice", Some("default"))
+        )
+      }
+
+      test("Option field present null with useDefaults decodes to None (not default)") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"), "opt" -> Json.Null)
+        KindlingsDecoder.decode[WithOptionalAndDefault](json) ==> Right(WithOptionalAndDefault("Alice", None))
+      }
+
+      test("Option field absent without useDefaults still decodes to None") {
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[WithOptionalAndDefault](json) ==> Right(WithOptionalAndDefault("Alice", None))
+      }
+    }
+
     group("empty class with non-object input") {
 
-      test("decode Int as EmptyClass succeeds (no fields to validate)") {
-        KindlingsDecoder.decode[EmptyClass](Json.fromInt(42)) ==> Right(EmptyClass())
+      test("decode Int as EmptyClass fails with Expected JSON object") {
+        val Left(error) = KindlingsDecoder.decode[EmptyClass](Json.fromInt(42)): @unchecked
+        error.message ==> "Expected JSON object"
+      }
+
+      test("decode empty object as EmptyClass succeeds") {
+        KindlingsDecoder.decode[EmptyClass](Json.obj()) ==> Right(EmptyClass())
       }
     }
 
@@ -524,6 +566,35 @@ final class KindlingsDecoderSpec extends MacroSuite {
         ).check(
           "@transientField on field 'x'",
           "requires a default value"
+        )
+      }
+    }
+
+    group("non-case-class sealed trait leaves") {
+
+      test("sealed trait with non-case-class leaf using user-provided implicit") {
+        implicit val plainLeafDecoder: Decoder[PlainLeaf] =
+          Decoder.instance(c => c.downField("x").as[Int].map(new PlainLeaf(_)))
+        val json = Json.obj("PlainLeaf" -> Json.obj("x" -> Json.fromInt(42)))
+        KindlingsDecoder.decode[MixedADT](json) ==> Right(new PlainLeaf(42): MixedADT)
+      }
+
+      test("sealed trait case class leaf still derives normally") {
+        implicit val plainLeafDecoder: Decoder[PlainLeaf] =
+          Decoder.instance(c => c.downField("x").as[Int].map(new PlainLeaf(_)))
+        val json = Json.obj("CaseLeaf" -> Json.obj("x" -> Json.fromInt(7)))
+        KindlingsDecoder.decode[MixedADT](json) ==> Right(CaseLeaf(7): MixedADT)
+      }
+    }
+
+    group("java.time as fields (user-provided implicits)") {
+
+      test("case class with Instant field using user-provided decoder") {
+        implicit val instantDecoder: Decoder[java.time.Instant] =
+          Decoder.decodeLong.map(java.time.Instant.ofEpochMilli)
+        val json = Json.obj("name" -> Json.fromString("event"), "ts" -> Json.fromLong(1700000000000L))
+        KindlingsDecoder.decode[WithInstant](json) ==> Right(
+          WithInstant("event", java.time.Instant.ofEpochMilli(1700000000000L))
         )
       }
     }

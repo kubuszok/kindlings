@@ -350,8 +350,14 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
     group("empty class with non-mapping input") {
 
-      test("decode scalar as EmptyClass succeeds (no fields to validate)") {
+      test("decode scalar as EmptyClass fails with Expected mapping node") {
         val node = scalarNode("42")
+        val result = KindlingsYamlDecoder.decode[EmptyClass](node)
+        assert(result.isLeft)
+      }
+
+      test("decode empty mapping as EmptyClass succeeds") {
+        val node = mappingOf()
         KindlingsYamlDecoder.decode[EmptyClass](node) ==> Right(EmptyClass())
       }
     }

@@ -297,6 +297,26 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("Tuple2 encodes to GenericRecord") {
+        val result = AvroEncoder.encode(("hello", 42))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("_1").toString ==> "hello"
+        record.get("_2").asInstanceOf[Int] ==> 42
+      }
+
+      test("Tuple3 encodes to GenericRecord") {
+        val result = AvroEncoder.encode((1, "world", true))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("_1").asInstanceOf[Int] ==> 1
+        record.get("_2").toString ==> "world"
+        record.get("_3").asInstanceOf[Boolean] ==> true
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

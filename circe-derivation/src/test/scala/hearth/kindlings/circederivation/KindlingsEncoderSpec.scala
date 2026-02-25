@@ -387,6 +387,33 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("non-case-class sealed trait leaves") {
+
+      test("sealed trait with non-case-class leaf using user-provided implicit") {
+        implicit val plainLeafEncoder: Encoder[PlainLeaf] =
+          Encoder.instance(leaf => Json.obj("x" -> Json.fromInt(leaf.x)))
+        KindlingsEncoder.encode[MixedADT](new PlainLeaf(42)) ==>
+          Json.obj("PlainLeaf" -> Json.obj("x" -> Json.fromInt(42)))
+      }
+
+      test("sealed trait case class leaf still derives normally") {
+        implicit val plainLeafEncoder: Encoder[PlainLeaf] =
+          Encoder.instance(leaf => Json.obj("x" -> Json.fromInt(leaf.x)))
+        KindlingsEncoder.encode[MixedADT](CaseLeaf(7)) ==>
+          Json.obj("CaseLeaf" -> Json.obj("x" -> Json.fromInt(7)))
+      }
+    }
+
+    group("java.time as fields (user-provided implicits)") {
+
+      test("case class with Instant field using user-provided encoder") {
+        implicit val instantEncoder: Encoder[java.time.Instant] =
+          Encoder.encodeLong.contramap(_.toEpochMilli)
+        KindlingsEncoder.encode(WithInstant("event", java.time.Instant.ofEpochMilli(1700000000000L))) ==>
+          Json.obj("name" -> Json.fromString("event"), "ts" -> Json.fromLong(1700000000000L))
+      }
+    }
+
     group("compile-time errors") {
 
       test("encode with unhandled type produces error message") {

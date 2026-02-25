@@ -13,6 +13,14 @@ trait AnnotationSupportScala2 extends AnnotationSupport { this: MacroCommonsScal
     }
   }
 
+  override protected def findTypeAnnotationOfType[Ann: Type, A: Type]: Option[UntypedExpr] = {
+    val annTpe = UntypedType.fromTyped[Ann]
+    val aTpe = UntypedType.fromTyped[A]
+    aTpe.typeSymbol.annotations.collectFirst {
+      case ann if ann.tree.tpe =:= annTpe => c.untypecheck(ann.tree)
+    }
+  }
+
   override protected def extractStringLiteralFromAnnotation(annotation: UntypedExpr): Option[String] =
     annotation match {
       case Apply(_, List(Literal(Constant(value: String)))) => Some(value)

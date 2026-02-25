@@ -146,6 +146,10 @@ object CirceDerivationUtils {
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decoder: Decoder[A]): A = value.asInstanceOf[A]
 
+  def checkIsObject(cursor: HCursor): Either[DecodingFailure, Unit] =
+    if (cursor.value.isObject) Right(())
+    else Left(DecodingFailure("Expected JSON object", cursor.history))
+
   def sequenceDecodeResults(results: List[Either[DecodingFailure, Any]]): Either[DecodingFailure, Array[Any]] = {
     val arr = new Array[Any](results.size)
     var i = 0

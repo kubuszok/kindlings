@@ -1,6 +1,6 @@
 package hearth.kindlings.avroderivation
 
-import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroDefault, avroDoc, avroNamespace, fieldName, transientField}
 
 case class SimplePerson(name: String, age: Int)
 case class EmptyClass()
@@ -46,6 +46,35 @@ case class AvroWithBothAnnotations(
     @fieldName("display_name") displayName: String,
     @transientField internal: Int = 0,
     active: Boolean
+)
+
+// Avro-specific annotation test types
+@avroDoc("A documented person record")
+case class DocumentedPerson(
+    @avroDoc("The person's full name") name: String,
+    @avroDoc("Age in years") age: Int
+)
+
+@avroNamespace("com.example.custom")
+case class CustomNamespacePerson(name: String, age: Int)
+
+@avroDoc("A record with custom namespace")
+@avroNamespace("com.example.docs")
+case class FullyAnnotatedRecord(
+    @avroDoc("The identifier") id: String,
+    value: Int
+)
+
+// Default value annotation test types
+case class WithDefaults(
+    name: String,
+    @avroDefault("0") age: Int = 0,
+    @avroDefault("\"unknown\"") role: String = "unknown"
+)
+
+case class WithOptionalDefault(
+    name: String,
+    @avroDefault("null") nickname: Option[String] = None
 )
 
 // Case class with logical types

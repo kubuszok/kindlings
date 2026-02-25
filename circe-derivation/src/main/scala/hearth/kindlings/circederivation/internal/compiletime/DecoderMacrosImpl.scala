@@ -601,13 +601,15 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             .flatMap {
               case Some(expr) =>
                 MIO.pure(Expr.quote {
-                  val config = Expr.splice(dctx.config)
-                  if (config.strictDecoding) {
-                    CirceDerivationUtils
-                      .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
-                      .map(_ => Expr.splice(expr))
-                  } else
-                    Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                  CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).flatMap { _ =>
+                    val config = Expr.splice(dctx.config)
+                    if (config.strictDecoding) {
+                      CirceDerivationUtils
+                        .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                        .map(_ => Expr.splice(expr))
+                    } else
+                      Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                  }
                 })
               case None =>
                 val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)

@@ -206,6 +206,27 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("Tuple2 binary round-trip") {
+        val encoder: AvroEncoder[(String, Int)] = AvroEncoder.derive[(String, Int)]
+        val decoder: AvroDecoder[(String, Int)] = AvroDecoder.derive[(String, Int)]
+        val original = ("hello", 42)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[(String, Int)](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("Tuple3 binary round-trip") {
+        val encoder: AvroEncoder[(Int, String, Boolean)] = AvroEncoder.derive[(Int, String, Boolean)]
+        val decoder: AvroDecoder[(Int, String, Boolean)] = AvroDecoder.derive[(Int, String, Boolean)]
+        val original = (1, "world", true)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[(Int, String, Boolean)](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
     group("JSON") {
 
       test("simple case class") {

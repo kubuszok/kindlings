@@ -51,6 +51,24 @@ case class WithAlias(name: CirceAliases.Name, age: Int)
 
 class NotACirceType
 
+// Non-case-class sealed trait leaves (Gap #11)
+sealed trait MixedADT
+case class CaseLeaf(x: Int) extends MixedADT
+class PlainLeaf(val x: Int) extends MixedADT {
+  override def equals(obj: Any): Boolean = obj match {
+    case other: PlainLeaf => x == other.x
+    case _                => false
+  }
+  override def hashCode(): Int = x.hashCode()
+}
+
+// java.time field test type
+case class WithInstant(name: String, ts: java.time.Instant)
+
+// Option field test types
+case class WithOptionalField(name: String, opt: Option[String])
+case class WithOptionalAndDefault(name: String, opt: Option[String] = Some("default"))
+
 // Annotation test types
 case class CirceWithFieldName(
     @fieldName("user_name") userName: String,

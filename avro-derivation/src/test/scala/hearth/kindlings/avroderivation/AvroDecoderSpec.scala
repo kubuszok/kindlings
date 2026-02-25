@@ -300,6 +300,28 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("tuples") {
+
+      test("Tuple2 from GenericRecord") {
+        val schema = AvroSchemaFor.schemaOf[(String, Int)]
+        val record = new GenericData.Record(schema)
+        record.put("_1", "hello")
+        record.put("_2", 42)
+        val result = AvroDecoder.decode[(String, Int)](record: Any)
+        result ==> ("hello", 42)
+      }
+
+      test("Tuple3 from GenericRecord") {
+        val schema = AvroSchemaFor.schemaOf[(Int, String, Boolean)]
+        val record = new GenericData.Record(schema)
+        record.put("_1", 1)
+        record.put("_2", "world")
+        record.put("_3", true)
+        val result = AvroDecoder.decode[(Int, String, Boolean)](record: Any)
+        result ==> (1, "world", true)
+      }
+    }
+
     group("derived instance") {
 
       test("derive creates AvroDecoder instance") {
