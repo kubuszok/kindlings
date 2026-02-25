@@ -818,6 +818,40 @@ Expr.quote {
 
 **Additional constraint:** `upcast` also requires `Type[A]` (the source type) to be in scope. If you're trying to upcast an expression whose type comes from a pattern matcher (e.g., `isMap.CtorResult`), you must first import the path-dependent type to bring its `Type` into scope — but that's the same problem you're trying to solve. Use `.asInstanceOf` inside `Expr.quote` instead.
 
+### Phantom type parameter inference differs between Scala 2 and 3
+
+For methods where the type parameter `A` doesn't appear in the parameter or return types (only in the macro body), the compiler has no constraint to infer `A` from. Scala 2 and 3 resolve this differently:
+
+- **Scala 2** infers `A = Nothing` (bottom type)
+- **Scala 3** infers `A = Any` (top type)
+
+This affects entry points like `schemaOf[A](using config): Schema` where `A` is only used inside the `inline` / macro body.
+
+```scala
+// User writes:
+val schema = AvroSchemaFor.schemaOf  // no type parameter
+
+// Scala 2 sees: AvroSchemaFor.schemaOf[Nothing]
+// Scala 3 sees: AvroSchemaFor.schemaOf[Any]
+```
+
+If you add pre-derivation guards (e.g., to detect unintended type inference), you must check for **both** `Nothing` and `Any`:
+
+```scala
+if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+  Environment.reportErrorAndAbort(
+    s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+      s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+      "or add a type ascription to the result variable."
+  )
+```
+
+The `.asInstanceOf[Type[A]]` cast is needed because `Type[Nothing]` has no `=:=` extension method (bottom type); the underlying comparison is structural and correctly detects Nothing/Any.
+
+`Environment.reportErrorAndAbort` aborts compilation immediately — use it for guards that should fire *before* the MIO derivation chain starts.
+
+**Reference:** All `derive*FromCtxAndAdaptForEntrypoint` methods in every module.
+
 ### `.asInstanceOf` is NOT fully erased for outer types on the JVM
 
 When using `.asInstanceOf` inside `Expr.quote` to cast between types, the JVM checks the **outer type constructor** at runtime. Only inner type parameters are erased.

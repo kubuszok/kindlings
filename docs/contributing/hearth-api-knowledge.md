@@ -18,6 +18,7 @@ Living cache of hearth API signatures used in kindlings. **Always verify with `k
 | `Log.info` | `(msg: => String): MIO[Unit]` | Log at info level |
 | `Log.debug` | `(msg: => String): MIO[Unit]` | Log at debug level |
 | `Log.namedScope` | `[A](name: String)(body: MIO[A]): MIO[A]` | Hierarchical log scope |
+| `Environment.reportErrorAndAbort` | `(msg: String): Nothing` | Abort compilation with error (outside MIO chain) |
 
 ## Type representations
 
@@ -122,4 +123,5 @@ Living cache of hearth API signatures used in kindlings. **Always verify with `k
 | `toValDefs.use` wrapping scope | Wrapping individual lambdas with all cached defs causes unused-method warnings | Wrap the outermost expression that contains all references |
 | ValDefsCache key is composite | Cache key = `(String name, Seq[UntypedType] args, UntypedType returned)`. `hashCode` uses only the string; `equals` checks all three. Using `Any` as return type for all types causes cache collisions — different types sharing the same string key will overwrite each other | Use type-specific string keys (e.g., `s"cached-decode-method:${Type[B].prettyPrint}"`) when the return type must be `Any`, OR use a type-specific return type (e.g., `Either[Err, B]`) in the `ValDefBuilder` |
 | `.asInstanceOf` not erased for outer types | `validated.asInstanceOf[Either[E, A]]` fails at runtime — JVM checks the outer type (`Either` vs `Validated`). Only inner type parameters are erased: `Left[E, String].asInstanceOf[Either[E, Int]]` succeeds | Don't rely on `.asInstanceOf` to cross between different outer types like `Either` and `Validated`; use `Any` as the declared type and cast at call sites where you know the actual type |
+| Phantom type param inference | `schemaOf[A]: Schema` (A not in signature) infers `Nothing` on Scala 2, `Any` on Scala 3 | Guard against both: `Type[A] =:= Type.of[Nothing]... \|\| Type[A] =:= Type.of[Any]...` |
 | Scala 2 reification of refined types | `DecodingFailure("msg", Nil): Either[DecodingFailure, A]` inside nested `Expr.quote` fails on Scala 2 with `scala.reflect.api.Trees` errors. Even `.asInstanceOf` doesn't help — the reifier captures refined type trees | Avoid constructing such expressions in nested quotes. Use runtime helper methods or `LambdaBuilder` + fresh derivation to build the expression outside the problematic quote scope |

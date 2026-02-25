@@ -56,6 +56,7 @@ Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-com
 - **`Array` needs `ClassTag`** — Hearth's `IsCollectionProviderForArray` summons `ClassTag[T]` via `Expr.summonImplicit[ClassTag[T]]` at macro expansion time. If the ClassTag is available in the user's implicit scope, `Array[T]` works automatically. If not, the `IsCollection` match silently skips and derivation fails. For macro-internal arrays (e.g., building `Array` inside `Expr.quote`), use `List` and `::` instead
 - **`Expr.upcast` only widens** — use `.asInstanceOf` inside `Expr.quote` for narrowing; also needs `Type[A]` in scope
 - **Macro methods need concrete types** — don't wrap macro calls in generic helpers
+- **Phantom type param inference** — unconstrained `A` (not in params/return type) infers `Nothing` on Scala 2, `Any` on Scala 3; guard against both
 - **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; pre-derive with `LambdaBuilder` in one `runSafe` call
 - **`IsMap`/`IsCollection` path-dependent types** — `import isMap.{Key, Value, CtorResult}` before `Expr.quote`
 - **`ValDefsCache` wrapping scope** — `vals.toValDefs.use` must wrap the outermost expression containing all references
