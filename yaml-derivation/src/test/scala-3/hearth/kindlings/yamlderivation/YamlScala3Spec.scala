@@ -109,6 +109,56 @@ final class YamlScala3Spec extends MacroSuite {
     }
   }
 
+  group("named tuples (Scala 3.7+)") {
+
+    group("encoding") {
+
+      test("simple named tuple") {
+        val nt: (name: String, age: Int) = ("Alice", 42)
+        val node = KindlingsYamlEncoder.encode(nt)
+        node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("42"))
+      }
+
+      test("named tuple with nested case class") {
+        val nt: (person: SimplePerson, score: Int) = (SimplePerson("Alice", 30), 100)
+        val node = KindlingsYamlEncoder.encode(nt)
+        node ==> mappingOf(
+          "person" -> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")),
+          "score" -> scalarNode("100")
+        )
+      }
+
+      test("named tuple with member name transform") {
+        implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
+        val nt: (firstName: String, lastName: String) = ("Alice", "Smith")
+        val node = KindlingsYamlEncoder.encode(nt)
+        node ==> mappingOf("first_name" -> scalarNode("Alice"), "last_name" -> scalarNode("Smith"))
+      }
+    }
+
+    group("decoding") {
+
+      test("simple named tuple") {
+        val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("42"))
+        KindlingsYamlDecoder.decode[(name: String, age: Int)](node) ==> Right(("Alice", 42))
+      }
+
+      test("named tuple with nested case class") {
+        val node = mappingOf(
+          "person" -> mappingOf("name" -> scalarNode("Bob"), "age" -> scalarNode("25")),
+          "score" -> scalarNode("100")
+        )
+        KindlingsYamlDecoder.decode[(person: SimplePerson, score: Int)](node) ==> Right((SimplePerson("Bob", 25), 100))
+      }
+
+      test("named tuple with member name transform") {
+        implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
+        val node = mappingOf("first_name" -> scalarNode("Alice"), "last_name" -> scalarNode("Smith"))
+        KindlingsYamlDecoder.decode[(firstName: String, lastName: String)](node) ==> Right(("Alice", "Smith"))
+      }
+    }
+  }
+
   group("auto-derivation isolation") {
 
     group("encoder uses kindlings derivation") {

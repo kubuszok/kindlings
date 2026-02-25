@@ -276,6 +276,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           DecHandleAsOptionRule,
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
+          DecHandleAsNamedTupleRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -538,6 +539,127 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       }
   }
 
+  object DecHandleAsNamedTupleRule extends DecoderDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- dctx.setHelper[A] { (value, config) =>
+                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(value, config))
+                }
+                result <- dctx.getHelper[A].flatMap {
+                  case Some(helperCall) =>
+                    MIO.pure(Rule.matched(helperCall(dctx.avroValue, dctx.config)))
+                  case None =>
+                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def decodeNamedTupleFields[A: DecoderCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[A]] = {
+      implicit val StringT: Type[String] = DecTypes.String
+      implicit val AnyT: Type[Any] = DecTypes.Any
+      implicit val ArrayAnyT: Type[Array[Any]] = DecTypes.ArrayAny
+
+      val fieldsList = constructor.parameters.flatten.toList
+
+      NonEmptyList.fromList(fieldsList) match {
+        case None =>
+          // Empty named tuple — validate input is a record and construct
+          constructor(Map.empty) match {
+            case Right(constructExpr) =>
+              MIO.pure(Expr.quote {
+                val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
+                Expr.splice(constructExpr)
+              })
+            case Left(error) =>
+              val err =
+                DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+              Log.error(err.message) >> MIO.fail(err)
+          }
+
+        case Some(fields) =>
+          val indexedFields = fields.toList.zipWithIndex
+
+          NonEmptyList
+            .fromList(indexedFields)
+            .get
+            .parTraverse { case ((fName, param), reindex) =>
+              import param.tpe.Underlying as Field
+              Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveFieldDecoder[Field].map { decoderExpr =>
+                  val decodeExpr: Expr[Any] = Expr.quote {
+                    val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                    val fieldValue = AvroDerivationUtils.decodeRecord(
+                      record,
+                      Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                    )
+                    Expr.splice(decoderExpr).decode(fieldValue): Any
+                  }
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    val typedExpr = Expr.quote {
+                      AvroDerivationUtils.unsafeCast(
+                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
+                        Expr.splice(decoderExpr)
+                      )
+                    }
+                    (fName, typedExpr.as_??)
+                  }
+                  (decodeExpr, makeAccessor)
+                }
+              }
+            }
+            .flatMap { fieldData =>
+              val decodeExprs = fieldData.toList.map(_._1)
+              val makeAccessors = fieldData.toList.map(_._2)
+
+              val listExpr: Expr[List[Any]] =
+                decodeExprs.foldRight(Expr.quote(List.empty[Any])) { (elem, acc) =>
+                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+                }
+
+              LambdaBuilder
+                .of1[Array[Any]]("decodedValues")
+                .traverse { decodedValuesExpr =>
+                  val fieldMap: Map[String, Expr_??] =
+                    makeAccessors.map(_(decodedValuesExpr)).toMap
+                  constructor(fieldMap) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr)
+                    case Left(error)          =>
+                      val err = DecoderDerivationError.CannotConstructType(
+                        Type[A].prettyPrint,
+                        isSingleton = false,
+                        Some(error)
+                      )
+                      Log.error(err.message) >> MIO.fail(err)
+                  }
+                }
+                .map { builder =>
+                  val constructLambda = builder.build[A]
+                  Expr.quote {
+                    Expr
+                      .splice(constructLambda)
+                      .apply(
+                        AvroDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr))
+                      )
+                  }
+                }
+            }
+      }
+    }
+  }
+
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
@@ -741,34 +863,35 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       }
     }
 
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[AvroDecoder[Field]]] = {
-      implicit val AnyT: Type[Any] = DecTypes.Any
+  }
 
-      DecTypes.AvroDecoder[Field].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
-        case Right(decoderExpr) =>
-          Log.info(s"Found implicit AvroDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
-        case Left(_) =>
-          Log.info(s"Building AvroDecoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-            LambdaBuilder
-              .of1[Any]("fieldValue")
-              .traverse { fieldValueExpr =>
-                deriveDecoderRecursively[Field](using ctx.nest[Field](fieldValueExpr))
-              }
-              .flatMap { builder =>
-                val decodeFn = builder.build[Field]
-                deriveSelfContainedSchema[Field](ctx.config).map { schemaExpr =>
-                  Expr.quote {
-                    val sch = Expr.splice(schemaExpr)
-                    val fn = Expr.splice(decodeFn)
-                    new AvroDecoder[Field] {
-                      val schema: Schema = sch
-                      def decode(value: Any): Field = fn(value)
-                    }
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[AvroDecoder[Field]]] = {
+    implicit val AnyT: Type[Any] = DecTypes.Any
+
+    DecTypes.AvroDecoder[Field].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+      case Right(decoderExpr) =>
+        Log.info(s"Found implicit AvroDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+      case Left(_) =>
+        Log.info(s"Building AvroDecoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+          LambdaBuilder
+            .of1[Any]("fieldValue")
+            .traverse { fieldValueExpr =>
+              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldValueExpr))
+            }
+            .flatMap { builder =>
+              val decodeFn = builder.build[Field]
+              deriveSelfContainedSchema[Field](ctx.config).map { schemaExpr =>
+                Expr.quote {
+                  val sch = Expr.splice(schemaExpr)
+                  val fn = Expr.splice(decodeFn)
+                  new AvroDecoder[Field] {
+                    val schema: Schema = sch
+                    def decode(value: Any): Field = fn(value)
                   }
                 }
               }
-      }
+            }
     }
   }
 

@@ -516,6 +516,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           EncHandleAsOptionRule,
           EncHandleAsMapRule,
           EncHandleAsCollectionRule,
+          EncHandleAsNamedTupleRule,
           EncHandleAsCaseClassRule,
           EncHandleAsEnumRule
         )(_[A]).flatMap {
@@ -772,6 +773,90 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
         }
       }
+  }
+
+  object EncHandleAsNamedTupleRule extends EncoderDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- ectx.setHelper[A] { (value, writer, config) =>
+                  encodeNamedTupleFields[A](constructor)(using ectx.nestInCache(value, writer, config))
+                }
+                result <- ectx.getHelper[A].flatMap {
+                  case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.writer, ectx.config)))
+                  case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def encodeNamedTupleFields[A: EncoderCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[Unit]] = {
+      implicit val StringT: Type[String] = CTypes.String
+      implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+      implicit val UnitT: Type[Unit] = CTypes.Unit
+      implicit val ProductType: Type[Product] = CTypes.Product
+      implicit val IntType: Type[Int] = CTypes.Int
+
+      val fields = constructor.parameters.flatten.toList
+
+      val fieldsEnc = NonEmptyList.fromList(fields) match {
+        case Some(fieldValues) =>
+          fieldValues
+            .parTraverse { case (fName, param) =>
+              import param.tpe.Underlying as Field
+              val fieldExpr: Expr[Field] = Expr.quote {
+                Expr
+                  .splice(ectx.value)
+                  .asInstanceOf[Product]
+                  .productElement(Expr.splice(Expr(param.index)))
+                  .asInstanceOf[Field]
+              }
+              Log.namedScope(s"Encoding named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEnc =>
+                  (fName, fieldEnc)
+                }
+              }
+            }
+            .map { fieldPairs =>
+              fieldPairs.toList
+                .map { case (fName, fieldEnc) =>
+                  Expr.quote {
+                    Expr
+                      .splice(ectx.writer)
+                      .writeKey(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
+                    Expr.splice(fieldEnc)
+                  }
+                }
+                .foldLeft(Expr.quote(()): Expr[Unit]) { (acc, field) =>
+                  Expr.quote {
+                    Expr.splice(acc)
+                    Expr.splice(field)
+                  }
+                }
+            }
+        case None =>
+          MIO.pure(Expr.quote(()): Expr[Unit])
+      }
+
+      fieldsEnc.map { innerExpr =>
+        Expr.quote {
+          Expr.splice(ectx.writer).writeObjectStart()
+          Expr.splice(innerExpr)
+          Expr.splice(ectx.writer).writeObjectEnd()
+        }
+      }
+    }
   }
 
   object EncHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
@@ -1089,6 +1174,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           DecHandleAsOptionRule,
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
+          DecHandleAsNamedTupleRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -1380,6 +1466,130 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
         }
       }
+  }
+
+  object DecHandleAsNamedTupleRule extends DecoderDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- dctx.setHelper[A] { (reader, config) =>
+                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(reader, config))
+                }
+                result <- dctx.getHelper[A].flatMap {
+                  case Some(helperCall) =>
+                    MIO.pure(Rule.matched(helperCall(dctx.reader, dctx.config)))
+                  case None =>
+                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def decodeNamedTupleFields[A: DecoderCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[A]] = {
+      implicit val StringT: Type[String] = CTypes.String
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      implicit val AnyT: Type[Any] = CTypes.Any
+      implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
+
+      val fieldsList = constructor.parameters.flatten.toList
+      val indexedFields = fieldsList.zipWithIndex
+
+      NonEmptyList.fromList(indexedFields) match {
+        case None =>
+          constructor(Map.empty) match {
+            case Right(constructExpr) =>
+              MIO.pure(Expr.quote {
+                JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
+                Expr.splice(constructExpr)
+              })
+            case Left(error) =>
+              val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+              Log.error(err.message) >> MIO.fail(err)
+          }
+
+        case Some(fields) =>
+          fields
+            .parTraverse { case ((fName, param), index) =>
+              import param.tpe.Underlying as Field
+              Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveFieldDecoder[Field].map { decodeFn =>
+                  val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
+                    Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
+                  }
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    val typedExpr = Expr.quote {
+                      JsoniterDerivationUtils.unsafeCast(
+                        Expr.splice(arrExpr)(Expr.splice(Expr(index))),
+                        Expr.splice(decodeFn)
+                      )
+                    }
+                    (fName, typedExpr.as_??)
+                  }
+                  (fName, index, decodeFnErased, makeAccessor)
+                }
+              }
+            }
+            .flatMap { fieldData =>
+              val fieldDataList = fieldData.toList
+
+              LambdaBuilder
+                .of1[Array[Any]]("decodedValues")
+                .traverse { decodedValuesExpr =>
+                  val fieldMap: Map[String, Expr_??] =
+                    fieldDataList.map(_._4(decodedValuesExpr)).toMap
+                  constructor(fieldMap) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr)
+                    case Left(error)          =>
+                      val err = CodecDerivationError.CannotConstructType(
+                        Type[A].prettyPrint,
+                        isSingleton = false,
+                        Some(error)
+                      )
+                      Log.error(err.message) >> MIO.fail(err)
+                  }
+                }
+                .map { builder =>
+                  val constructLambda = builder.build[A]
+
+                  val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _) =>
+                    (name, index, decodeFnErased)
+                  }
+
+                  Expr.quote {
+                    JsoniterDerivationUtils.readObject[A](
+                      Expr.splice(dctx.reader),
+                      Expr.splice(Expr(fieldMappings.size)),
+                      Expr.splice(constructLambda)
+                    ) { case (fieldName, arr, reader) =>
+                      Expr.splice {
+                        fieldMappings.foldRight(Expr.quote {
+                          if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
+                          else reader.decodeError("unexpected field: " + fieldName)
+                        }: Expr[Unit]) { case ((name, index, decodeFnErased), elseExpr) =>
+                          Expr.quote {
+                            if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                              arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                            } else Expr.splice(elseExpr)
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+            }
+      }
+    }
   }
 
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
@@ -1779,34 +1989,35 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       }
     }
 
-    /** Derive a decode function for a case class field. Tries implicit summoning first, falls back to recursive
-      * derivation via the full rule chain.
-      */
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[JsonReader => Field]] = {
-      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+  }
 
-      CTypes
-        .JsonValueCodec[Field]
-        .summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*)
-        .toEither match {
-        case Right(codecExpr) =>
-          Log.info(s"Found implicit JsonValueCodec[${Type[Field].prettyPrint}]") >> MIO.pure(
-            Expr.quote { (r: JsonReader) =>
-              Expr.splice(codecExpr).decodeValue(r, Expr.splice(codecExpr).nullValue)
+  /** Derive a decode function for a case class field. Tries implicit summoning first, falls back to recursive
+    * derivation via the full rule chain.
+    */
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[JsonReader => Field]] = {
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+
+    CTypes
+      .JsonValueCodec[Field]
+      .summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*)
+      .toEither match {
+      case Right(codecExpr) =>
+        Log.info(s"Found implicit JsonValueCodec[${Type[Field].prettyPrint}]") >> MIO.pure(
+          Expr.quote { (r: JsonReader) =>
+            Expr.splice(codecExpr).decodeValue(r, Expr.splice(codecExpr).nullValue)
+          }
+        )
+      case Left(_) =>
+        Log.info(s"Building decoder for ${Type[Field].prettyPrint} via recursive derivation") >>
+          LambdaBuilder
+            .of1[JsonReader]("fieldReader")
+            .traverse { fieldReaderExpr =>
+              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldReaderExpr))
             }
-          )
-        case Left(_) =>
-          Log.info(s"Building decoder for ${Type[Field].prettyPrint} via recursive derivation") >>
-            LambdaBuilder
-              .of1[JsonReader]("fieldReader")
-              .traverse { fieldReaderExpr =>
-                deriveDecoderRecursively[Field](using ctx.nest[Field](fieldReaderExpr))
-              }
-              .map { builder =>
-                builder.build[Field]
-              }
-      }
+            .map { builder =>
+              builder.build[Field]
+            }
     }
   }
 
@@ -2101,6 +2312,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       Type.of[Either[JsonReaderException, A]]
     val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
     val TransientField: Type[transientField] = Type.of[transientField]
+    val Int: Type[Int] = Type.of[Int]
+    val Product: Type[Product] = Type.of[Product]
   }
 }
 

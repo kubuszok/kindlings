@@ -82,6 +82,55 @@ final class AvroScala3Spec extends MacroSuite {
     }
   }
 
+  group("named tuples (Scala 3.7+)") {
+
+    test("schema is RECORD with named fields") {
+      val schema = AvroSchemaFor.schemaOf[(name: String, age: Int)]
+      schema.getType ==> Schema.Type.RECORD
+      schema.getFields.size() ==> 2
+      schema.getField("name").schema().getType ==> Schema.Type.STRING
+      schema.getField("age").schema().getType ==> Schema.Type.INT
+    }
+
+    test("encode named tuple to GenericRecord") {
+      val nt: (name: String, age: Int) = ("Alice", 42)
+      val result = AvroEncoder.encode(nt)
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.get("name").toString ==> "Alice"
+      record.get("age").asInstanceOf[Int] ==> 42
+    }
+
+    test("decode GenericRecord to named tuple") {
+      val schema = AvroSchemaFor.schemaOf[(name: String, age: Int)]
+      val record = new GenericData.Record(schema)
+      record.put("name", "Bob")
+      record.put("age", 25)
+      val result = AvroDecoder.decode[(name: String, age: Int)](record: Any)
+      result ==> ("Bob", 25)
+    }
+
+    test("named tuple with nested case class") {
+      val nt: (person: SimplePerson, score: Int) = (SimplePerson("Alice", 30), 100)
+      val result = AvroEncoder.encode(nt)
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.get("score").asInstanceOf[Int] ==> 100
+      val personRecord = record.get("person").asInstanceOf[GenericRecord]
+      personRecord.get("name").toString ==> "Alice"
+      personRecord.get("age").asInstanceOf[Int] ==> 30
+    }
+
+    test("round-trip via binary") {
+      implicit val encoder: AvroEncoder[(name: String, age: Int)] = AvroEncoder.derive[(name: String, age: Int)]
+      implicit val decoder: AvroDecoder[(name: String, age: Int)] = AvroDecoder.derive[(name: String, age: Int)]
+      val original: (name: String, age: Int) = ("Alice", 42)
+      val bytes = AvroIO.toBinary(original)
+      val decoded = AvroIO.fromBinary[(name: String, age: Int)](bytes)
+      decoded ==> original
+    }
+  }
+
   group("opaque types") {
 
     test("encode standalone opaque type") {

@@ -76,6 +76,14 @@ Tested in **circe** with `sealed trait MixedADT` containing both `case class Cas
 
 Implemented `@avroDoc` and `@avroNamespace` annotations in the avro-derivation module. `@avroDoc` works at both class level (sets record schema doc) and field level (sets field doc). `@avroNamespace` overrides the config namespace at the class level. Added `findTypeAnnotationOfType` to the `AnnotationSupport` trait for reading class-level annotations, with Scala 2 and Scala 3 implementations. 6 tests covering class doc, field doc, namespace override, combined annotations.
 
+### ~~9. Avro-specific: Default Values in Schema & Schema Evolution~~ — RESOLVED
+
+Implemented `@avroDefault(json)` annotation for specifying default values in Avro schemas. The annotation takes a JSON string which is parsed at runtime via Jackson `ObjectMapper` and converted to native Java objects for Avro's `Schema.Field` constructor. Supports all JSON types: null, boolean, int, long, float, double, string, arrays, objects. Works in combination with `@avroDoc` for field documentation. 3 tests: integer/string defaults, Option with null default, schema evolution forward compatibility.
+
+### ~~14. Named Tuples (Scala 3.7+)~~ — RESOLVED
+
+Implemented `HandleAsNamedTupleRule` in **all 4 derivation modules** (circe, jsoniter, yaml, avro). Named tuples encode with their actual field names (not `_1`, `_2`) as JSON objects / YAML mappings / Avro records. Uses Hearth's `Type[A].isNamedTuple`, `primaryConstructor`, and `productElement(i)` APIs. Rule naturally no-ops on Scala 2 (`isNamedTuple` returns `false`). Tests in each module's Scala 3 spec: simple named tuple, nested with case class, member name transforms, and binary round-trip (avro).
+
 ---
 
 ## REMAINING HIGH PRIORITY GAPS
@@ -88,14 +96,6 @@ Implemented `@avroDoc` and `@avroNamespace` annotations in the avro-derivation m
 
 **Action**: Implementation work needed for BigDecimal as Avro decimal logical type (bytes + scale/precision). Either-as-union is a separate design decision.
 
-### 9. Avro-specific: Default Values in Schema & Schema Evolution
-
-**What avro4s tests**: Default values in Avro schema (so consumers with the schema can handle missing fields). Schema evolution tests (missing field uses Scala default or schema default).
-
-**Kindlings status**: **No default value support in schema generation, no schema evolution tests.**
-
-**Action**: Implementation work needed in AvroSchemaFor macro to emit default values. Then add tests.
-
 ---
 
 ## REMAINING MEDIUM PRIORITY GAPS
@@ -107,12 +107,6 @@ Implemented `@avroDoc` and `@avroNamespace` annotations in the avro-derivation m
 **Kindlings status**: No error accumulation tests. May not be in scope if Kindlings doesn't add this API.
 
 **Action**: Evaluate whether this is in scope. If circe's `decodeAccumulating` works with Kindlings-derived decoders, add a test verifying it.
-
-### 14. Named Tuples (Scala 3) — JSON/YAML/Avro modules
-
-**Kindlings status**: FastShowPretty tests named tuples. **No named tuple tests in circe, jsoniter, yaml, or avro modules.**
-
-**Action**: Add named tuple tests to Scala 3 spec files for all derivation modules.
 
 ### 18. Recursive Types — compile-time error for non-opted-in
 
@@ -246,4 +240,4 @@ Implemented `@avroDoc` and `@avroNamespace` annotations in the avro-derivation m
 - Avro4s: https://github.com/sksamuel/avro4s (avro4s-core/)
 
 Initial analysis: 2026-02-24
-Last updated: 2026-02-25 — gaps #12 (empty class validation) and #20 (non-case-class leaves) resolved
+Last updated: 2026-02-25 — gaps #9 (Avro defaults), #10 (Avro annotations), #12 (empty class validation), #14 (named tuples), #20 (non-case-class leaves) resolved

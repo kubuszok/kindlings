@@ -103,6 +103,56 @@ final class CirceScala3Spec extends MacroSuite {
     }
   }
 
+  group("named tuples (Scala 3.7+)") {
+
+    group("encoding") {
+
+      test("simple named tuple") {
+        val nt: (name: String, age: Int) = ("Alice", 42)
+        KindlingsEncoder.encode(nt) ==>
+          Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(42))
+      }
+
+      test("named tuple with nested case class") {
+        val nt: (person: SimplePerson, score: Int) = (SimplePerson("Bob", 25), 100)
+        KindlingsEncoder.encode(nt) ==>
+          Json.obj(
+            "person" -> Json.obj("name" -> Json.fromString("Bob"), "age" -> Json.fromInt(25)),
+            "score" -> Json.fromInt(100)
+          )
+      }
+
+      test("named tuple with member name transform") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val nt: (firstName: String, lastName: String) = ("Alice", "Smith")
+        KindlingsEncoder.encode(nt) ==>
+          Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
+      }
+    }
+
+    group("decoding") {
+
+      test("simple named tuple") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(42))
+        KindlingsDecoder.decode[(name: String, age: Int)](json) ==> Right(("Alice", 42))
+      }
+
+      test("named tuple with nested case class") {
+        val json = Json.obj(
+          "person" -> Json.obj("name" -> Json.fromString("Bob"), "age" -> Json.fromInt(25)),
+          "score" -> Json.fromInt(100)
+        )
+        KindlingsDecoder.decode[(person: SimplePerson, score: Int)](json) ==> Right((SimplePerson("Bob", 25), 100))
+      }
+
+      test("named tuple with member name transform") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val json = Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
+        KindlingsDecoder.decode[(firstName: String, lastName: String)](json) ==> Right(("Alice", "Smith"))
+      }
+    }
+  }
+
   group("auto-derivation isolation") {
 
     group("encoder uses kindlings derivation, not circe auto-derivation") {

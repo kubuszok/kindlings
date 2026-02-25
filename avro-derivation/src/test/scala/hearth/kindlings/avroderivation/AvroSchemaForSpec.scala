@@ -412,7 +412,7 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[WithOptionalDefault]
         assert(!schema.getField("name").hasDefaultValue)
         assert(schema.getField("nickname").hasDefaultValue)
-        assert(schema.getField("nickname").defaultVal() == com.fasterxml.jackson.databind.node.NullNode.getInstance())
+        assert(schema.getField("nickname").defaultVal() == org.apache.avro.JsonProperties.NULL_VALUE)
       }
     }
 

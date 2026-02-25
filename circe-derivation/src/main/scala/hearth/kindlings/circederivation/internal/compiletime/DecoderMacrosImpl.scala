@@ -231,6 +231,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           DecHandleAsOptionRule,
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
+          DecHandleAsNamedTupleRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -482,6 +483,129 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
         }
       }
+  }
+
+  object DecHandleAsNamedTupleRule extends DecoderDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- dctx.setHelper[A] { (cursor, config) =>
+                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(cursor, config))
+                }
+                result <- dctx.getHelper[A].flatMap {
+                  case Some(helperCall) =>
+                    MIO.pure(Rule.matched(helperCall(dctx.cursor, dctx.config)))
+                  case None =>
+                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def decodeNamedTupleFields[A: DecoderCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[Either[DecodingFailure, A]]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val EitherDFAnyT: Type[Either[DecodingFailure, Any]] = DTypes.EitherDFAny
+      implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
+      implicit val ListEitherT: Type[List[Either[DecodingFailure, Any]]] = DTypes.ListEitherDFAny
+
+      val fieldsList = constructor.parameters.flatten.toList
+
+      NonEmptyList.fromList(fieldsList) match {
+        case None =>
+          // Empty named tuple: return Right(empty tuple)
+          constructor(Map.empty) match {
+            case Right(constructExpr) =>
+              MIO.pure(Expr.quote {
+                Right(Expr.splice(constructExpr)): Either[DecodingFailure, A]
+              })
+            case Left(error) =>
+              val err =
+                DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+              Log.error(err.message) >> MIO.fail(err)
+          }
+
+        case Some(fields) =>
+          // Step 1: For each field, derive a decoder and build decode + accessor expressions
+          fields
+            .parTraverse { case (fName, param) =>
+              import param.tpe.Underlying as Field
+              Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveFieldDecoder[Field].map { decoderExpr =>
+                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
+                    Expr
+                      .splice(dctx.cursor)
+                      .downField(
+                        Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
+                      )
+                      .as(Expr.splice(decoderExpr))
+                      .asInstanceOf[Either[DecodingFailure, Any]]
+                  }
+
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    val typedExpr = Expr.quote {
+                      CirceDerivationUtils.unsafeCast(
+                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                        Expr.splice(decoderExpr)
+                      )
+                    }
+                    (fName, typedExpr.as_??)
+                  }
+                  (decodeExpr, makeAccessor)
+                }
+              }
+            }
+            .flatMap { fieldData =>
+              val decodeExprs = fieldData.toList.map(_._1)
+              val makeAccessors = fieldData.toList.map(_._2)
+
+              // Step 2: Build List literal from the decode expressions
+              val listExpr: Expr[List[Either[DecodingFailure, Any]]] =
+                decodeExprs.foldRight(Expr.quote(List.empty[Either[DecodingFailure, Any]])) { (elem, acc) =>
+                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+                }
+
+              // Step 3: Build the constructor lambda using LambdaBuilder + primaryConstructor
+              LambdaBuilder
+                .of1[Array[Any]]("decodedValues")
+                .traverse { decodedValuesExpr =>
+                  val fieldMap: Map[String, Expr_??] =
+                    makeAccessors.map(_(decodedValuesExpr)).toMap
+                  constructor(fieldMap) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr)
+                    case Left(error)          =>
+                      val err = DecoderDerivationError.CannotConstructType(
+                        Type[A].prettyPrint,
+                        isSingleton = false,
+                        Some(error)
+                      )
+                      Log.error(err.message) >> MIO.fail(err)
+                  }
+                }
+                .map { builder =>
+                  val constructLambda = builder.build[A]
+                  Expr.quote {
+                    CirceDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr)).map { arr =>
+                      Expr.splice(constructLambda).apply(arr)
+                    }
+                  }
+                }
+            }
+      }
+    }
   }
 
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
@@ -825,31 +949,31 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       }
     }
 
-    /** Derive a Decoder[Field] for a case class field. Tries implicit summoning first, falls back to recursive
-      * derivation via the full rule chain.
-      */
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[Decoder[Field]]] = {
-      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
-      implicit val EitherDFField: Type[Either[DecodingFailure, Field]] = DTypes.DecoderResult[Field]
+  }
 
-      DTypes.Decoder[Field].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
-        case Right(decoderExpr) =>
-          Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
-        case Left(_) =>
-          Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-            LambdaBuilder
-              .of1[HCursor]("fieldCursor")
-              .traverse { fieldCursorExpr =>
-                deriveDecoderRecursively[Field](using ctx.nest[Field](fieldCursorExpr))
-              }
-              .map { builder =>
-                val decodeFn = builder.build[Either[DecodingFailure, Field]]
-                Expr.quote(CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
-              }
-      }
+  /** Derive a Decoder[Field] for a case class field. Tries implicit summoning first, falls back to recursive derivation
+    * via the full rule chain.
+    */
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[Decoder[Field]]] = {
+    implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+    implicit val EitherDFField: Type[Either[DecodingFailure, Field]] = DTypes.DecoderResult[Field]
+
+    DTypes.Decoder[Field].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+      case Right(decoderExpr) =>
+        Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+      case Left(_) =>
+        Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+          LambdaBuilder
+            .of1[HCursor]("fieldCursor")
+            .traverse { fieldCursorExpr =>
+              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldCursorExpr))
+            }
+            .map { builder =>
+              val decodeFn = builder.build[Either[DecodingFailure, Field]]
+              Expr.quote(CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
+            }
     }
-
   }
 
   object DecHandleAsEnumRule extends DecoderDerivationRule("handle as enum when possible") {

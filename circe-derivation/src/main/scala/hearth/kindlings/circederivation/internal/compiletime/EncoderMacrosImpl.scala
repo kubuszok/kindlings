@@ -216,6 +216,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           EncHandleAsOptionRule,
           EncHandleAsMapRule,
           EncHandleAsCollectionRule,
+          EncHandleAsNamedTupleRule,
           EncHandleAsCaseClassRule,
           EncHandleAsEnumRule
         )(_[A]).flatMap {
@@ -444,6 +445,81 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       }
   }
 
+  object EncHandleAsNamedTupleRule extends EncoderDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                _ <- ectx.setHelper[A] { (value, config) =>
+                  encodeNamedTupleFields[A](constructor)(using ectx.nestInCache(value, config))
+                }
+                result <- ectx.getHelper[A].flatMap {
+                  case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.config)))
+                  case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def encodeNamedTupleFields[A: EncoderCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[Json]] = {
+      implicit val JsonT: Type[Json] = Types.Json
+      implicit val StringT: Type[String] = Types.String
+      implicit val ProductType: Type[Product] = Types.Product
+      implicit val IntType: Type[Int] = Types.Int
+
+      val fields = constructor.parameters.flatten.toList
+
+      NonEmptyList.fromList(fields) match {
+        case Some(fieldValues) =>
+          fieldValues
+            .parTraverse { case (fName, param) =>
+              import param.tpe.Underlying as Field
+              val fieldExpr: Expr[Field] = Expr.quote {
+                Expr
+                  .splice(ectx.value)
+                  .asInstanceOf[Product]
+                  .productElement(Expr.splice(Expr(param.index)))
+                  .asInstanceOf[Field]
+              }
+              Log.namedScope(s"Encoding named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldJson =>
+                  (fName, fieldJson)
+                }
+              }
+            }
+            .map { fieldPairs =>
+              fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) { case ((fName, fieldJson), acc) =>
+                Expr.quote {
+                  (
+                    Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                    Expr.splice(fieldJson)
+                  ) :: Expr.splice(acc)
+                }
+              }
+            }
+            .map { fieldsListExpr =>
+              Expr.quote {
+                CirceDerivationUtils.jsonFromFields(Expr.splice(fieldsListExpr))
+              }
+            }
+        case None =>
+          MIO.pure(Expr.quote {
+            CirceDerivationUtils.jsonFromFields(Nil)
+          })
+      }
+    }
+  }
+
   object EncHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
@@ -631,6 +707,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     val String: Type[String] = Type.of[String]
     val FieldName: Type[fieldName] = Type.of[fieldName]
     val TransientField: Type[transientField] = Type.of[transientField]
+    val Int: Type[Int] = Type.of[Int]
+    val Product: Type[Product] = Type.of[Product]
   }
 }
 

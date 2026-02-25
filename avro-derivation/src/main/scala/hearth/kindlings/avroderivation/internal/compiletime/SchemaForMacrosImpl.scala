@@ -200,6 +200,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
           SfHandleAsOptionRule,
           SfHandleAsMapRule,
           SfHandleAsCollectionRule,
+          SfHandleAsNamedTupleRule,
           SfHandleAsCaseClassRule,
           SfHandleAsEnumRule
         )(_[A]).flatMap {
@@ -410,6 +411,91 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
         }
       }
+  }
+
+  object SfHandleAsNamedTupleRule extends SchemaDerivationRule("handle as named tuple when possible") {
+
+    def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
+        if (!Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
+        else
+          Type[A].primaryConstructor match {
+            case Some(constructor) =>
+              for {
+                schemaExpr <- deriveNamedTupleSchema[A](constructor)
+                _ <- sfctx.setCachedSchema[A](schemaExpr)
+                result <- sfctx.getCachedSchema[A].flatMap {
+                  case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
+                  case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                }
+              } yield result
+            case None =>
+              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
+          }
+      }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveNamedTupleSchema[A: SchemaForCtx](
+        constructor: Method.NoInstance[A]
+    ): MIO[Expr[Schema]] = {
+      implicit val SchemaT: Type[Schema] = SfTypes.Schema
+      implicit val StringT: Type[String] = SfTypes.String
+      implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+
+      val fields = constructor.parameters.flatten.toList
+      val typeName = Type[A].shortName
+
+      NonEmptyList.fromList(fields) match {
+        case None =>
+          MIO.pure(Expr.quote {
+            AvroDerivationUtils.createRecord(
+              Expr.splice(Expr(typeName)),
+              Expr.splice(sfctx.config).namespace.getOrElse(""),
+              java.util.Collections.emptyList[Schema.Field]()
+            )
+          })
+        case Some(fieldValues) =>
+          fieldValues
+            .parTraverse { case (fName, param) =>
+              import param.tpe.Underlying as Field
+              Log.namedScope(s"Deriving schema for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
+                  (fName, fieldSchema)
+                }
+              }
+            }
+            .map { fieldPairs =>
+              val javaFieldsExpr = fieldPairs.toList.foldRight(
+                Expr.quote(List.empty[Schema.Field])
+              ) { case ((fName, fieldSchema), acc) =>
+                val nameExpr: Expr[String] = Expr.quote {
+                  Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                }
+                val fieldExpr: Expr[Schema.Field] = Expr.quote {
+                  AvroDerivationUtils.createField(
+                    Expr.splice(nameExpr),
+                    Expr.splice(fieldSchema)
+                  )
+                }
+                Expr.quote(Expr.splice(fieldExpr) :: Expr.splice(acc))
+              }
+              val fieldsExpr = Expr.quote {
+                val fieldsList = Expr.splice(javaFieldsExpr)
+                val javaFields = new java.util.ArrayList[Schema.Field](fieldsList.size)
+                fieldsList.foreach(javaFields.add)
+                (javaFields: java.util.List[Schema.Field])
+              }
+              Expr.quote {
+                AvroDerivationUtils.createRecord(
+                  Expr.splice(Expr(typeName)),
+                  Expr.splice(sfctx.config).namespace.getOrElse(""),
+                  Expr.splice(fieldsExpr)
+                )
+              }
+            }
+      }
+    }
   }
 
   object SfHandleAsCaseClassRule extends SchemaDerivationRule("handle as case class when possible") {

@@ -34,8 +34,7 @@ object AvroDerivationUtils {
     new Schema.Field(name, schema, doc)
 
   def createFieldWithDefault(name: String, schema: Schema, defaultJson: String): Schema.Field = {
-    val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-    val defaultValue = mapper.readTree(defaultJson)
+    val defaultValue = parseJsonDefault(defaultJson)
     new Schema.Field(name, schema, null, defaultValue)
   }
 
@@ -45,9 +44,42 @@ object AvroDerivationUtils {
       doc: String,
       defaultJson: String
   ): Schema.Field = {
-    val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-    val defaultValue = mapper.readTree(defaultJson)
+    val defaultValue = parseJsonDefault(defaultJson)
     new Schema.Field(name, schema, doc, defaultValue)
+  }
+
+  private def parseJsonDefault(json: String): Any = {
+    val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+    val node = mapper.readTree(json)
+    jsonNodeToObject(node)
+  }
+
+  private def jsonNodeToObject(node: com.fasterxml.jackson.databind.JsonNode): Any = {
+    import com.fasterxml.jackson.databind.node.*
+    node match {
+      case _: NullNode                                        => org.apache.avro.Schema.Field.NULL_DEFAULT_VALUE
+      case n: BooleanNode                                     => java.lang.Boolean.valueOf(n.booleanValue())
+      case n: IntNode                                         => java.lang.Integer.valueOf(n.intValue())
+      case n: LongNode                                        => java.lang.Long.valueOf(n.longValue())
+      case n: FloatNode                                       => java.lang.Float.valueOf(n.floatValue())
+      case n: DoubleNode                                      => java.lang.Double.valueOf(n.doubleValue())
+      case n: com.fasterxml.jackson.databind.node.DecimalNode => java.lang.Double.valueOf(n.doubleValue())
+      case n: TextNode                                        => n.textValue()
+      case n: ArrayNode                                       =>
+        val list = new java.util.ArrayList[Any](n.size())
+        val iter = n.elements()
+        while (iter.hasNext) { val _ = list.add(jsonNodeToObject(iter.next())) }
+        list
+      case n: ObjectNode =>
+        val map = new java.util.LinkedHashMap[String, Any]()
+        val iter = n.properties().iterator()
+        while (iter.hasNext) {
+          val entry = iter.next()
+          val _ = map.put(entry.getKey, jsonNodeToObject(entry.getValue))
+        }
+        map
+      case _ => node.asText()
+    }
   }
 
   def createUnion(schemas: Schema*): Schema =

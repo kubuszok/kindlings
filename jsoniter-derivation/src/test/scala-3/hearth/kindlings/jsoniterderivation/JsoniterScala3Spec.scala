@@ -68,4 +68,36 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
   }
 
+  group("named tuples (Scala 3.7+)") {
+
+    test("simple named tuple round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(name: String, age: Int)]
+      val value: (name: String, age: Int) = ("Alice", 42)
+      val json = writeToString(value)(codec)
+      json.contains("\"name\"") ==> true
+      json.contains("\"age\"") ==> true
+      val decoded = readFromString[(name: String, age: Int)](json)(codec)
+      decoded ==> value
+    }
+
+    test("named tuple with nested case class round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(person: SimplePerson, score: Int)]
+      val value: (person: SimplePerson, score: Int) = (SimplePerson("Bob", 25), 100)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[(person: SimplePerson, score: Int)](json)(codec)
+      decoded ==> value
+    }
+
+    test("named tuple with field name transform") {
+      implicit val config: JsoniterConfig =
+        JsoniterConfig(fieldNameMapper = JsoniterConfig.default.withSnakeCaseFieldNames.fieldNameMapper)
+      val codec = KindlingsJsonValueCodec.derive[(firstName: String, lastName: String)]
+      val value: (firstName: String, lastName: String) = ("Alice", "Smith")
+      val json = writeToString(value)(codec)
+      json.contains("\"first_name\"") ==> true
+      json.contains("\"last_name\"") ==> true
+      val decoded = readFromString[(firstName: String, lastName: String)](json)(codec)
+      decoded ==> value
+    }
+  }
 }
