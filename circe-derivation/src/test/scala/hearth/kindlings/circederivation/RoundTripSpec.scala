@@ -122,6 +122,29 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("specialized collections") {
+
+      test("mutable.ArrayBuffer round-trip") {
+        val value = scala.collection.mutable.ArrayBuffer(1, 2, 3)
+        val json = KindlingsEncoder.encode(value)
+        val decoded = KindlingsDecoder.decode[scala.collection.mutable.ArrayBuffer[Int]](json)
+        decoded ==> Right(value)
+      }
+
+      test("case class with mutable.ArrayBuffer round-trip") {
+        val value = WithMutableBuffer(scala.collection.mutable.ArrayBuffer(10, 20, 30))
+        val json = KindlingsEncoder.encode(value)
+        val decoded = KindlingsDecoder.decode[WithMutableBuffer](json)
+        decoded.map(_.items.toList) ==> Right(value.items.toList)
+      }
+
+      test("Vector round-trip") {
+        val value = WithVector(Vector("a", "b", "c"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithVector](json) ==> Right(value)
+      }
+    }
+
     group("with configuration") {
 
       test("custom constructor name transform roundtrip") {

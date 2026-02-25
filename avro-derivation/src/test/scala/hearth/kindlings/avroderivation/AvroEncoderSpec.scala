@@ -352,6 +352,21 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("Java enums") {
+
+      test("Java enum encodes to EnumSymbol") {
+        val result = AvroEncoder.encode[JavaColor](JavaColor.RED)
+        result.isInstanceOf[GenericData.EnumSymbol] ==> true
+        result.toString ==> "RED"
+      }
+
+      test("encode all Java enum values") {
+        AvroEncoder.encode[JavaColor](JavaColor.RED).toString ==> "RED"
+        AvroEncoder.encode[JavaColor](JavaColor.GREEN).toString ==> "GREEN"
+        AvroEncoder.encode[JavaColor](JavaColor.BLUE).toString ==> "BLUE"
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

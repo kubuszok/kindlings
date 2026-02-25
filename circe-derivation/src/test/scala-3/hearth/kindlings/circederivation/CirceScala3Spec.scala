@@ -153,6 +153,18 @@ final class CirceScala3Spec extends MacroSuite {
     }
   }
 
+  group("IArray (Scala 3)") {
+
+    test("IArray[Int] encodes as JSON array") {
+      val value: IArray[Int] = IArray(1, 2, 3)
+      val json = KindlingsEncoder.encode(value)
+      json ==> Json.arr(Json.fromInt(1), Json.fromInt(2), Json.fromInt(3))
+    }
+
+    // Note: IArray decoder derivation fails with "key not found: n" — a Hearth bug
+    // in IsCollectionProviderForIArray's decoder path. Encoder works fine.
+  }
+
   group("auto-derivation isolation") {
 
     group("encoder uses kindlings derivation, not circe auto-derivation") {

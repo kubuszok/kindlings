@@ -280,6 +280,9 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    // Note: Java enum round-trip not possible yet — AvroDecoder does not support Java enums.
+    // See AvroDecoderSpec for details.
+
     group("JSON") {
 
       test("simple case class") {

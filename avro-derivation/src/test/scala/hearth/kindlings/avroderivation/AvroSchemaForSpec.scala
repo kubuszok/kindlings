@@ -472,6 +472,18 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("Java enums") {
+
+      test("Java enum produces ENUM schema") {
+        val schema = AvroSchemaFor.schemaOf[JavaColor]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getEnumSymbols.size() ==> 3
+        schema.getEnumSymbols.contains("RED") ==> true
+        schema.getEnumSymbols.contains("GREEN") ==> true
+        schema.getEnumSymbols.contains("BLUE") ==> true
+      }
+    }
+
     group("schema evolution with defaults") {
 
       test("schema with defaults enables forward compatibility") {

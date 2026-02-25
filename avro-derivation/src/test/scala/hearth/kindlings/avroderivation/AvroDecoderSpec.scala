@@ -271,6 +271,11 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    // Note: Java enum AvroDecoder derivation is not yet supported.
+    // AvroDecoder treats Java enum values as case classes (not vals/objects),
+    // so the enum-as-strings decoder path is not triggered.
+    // AvroSchemaFor and AvroEncoder work correctly for Java enums.
+
     group("BigDecimal decimal decoding") {
 
       test("BigDecimal with decimalConfig decodes from ByteBuffer") {

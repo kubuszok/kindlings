@@ -83,3 +83,7 @@ case class CirceWithBothAnnotations(
     @transientField internal: Int = 0,
     active: Boolean
 )
+
+// Collection test types
+case class WithMutableBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
+case class WithVector(items: Vector[String])

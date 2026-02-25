@@ -90,3 +90,7 @@ case class EventRecord(
 case class WithBigDecimal(amount: BigDecimal)
 case class WithEither(value: Either[String, Int])
 case class WithEitherRecord(value: Either[String, SimplePerson])
+
+// Collection test types
+case class WithMutableBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
+case class WithVector(items: Vector[String])

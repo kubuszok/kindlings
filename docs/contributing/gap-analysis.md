@@ -84,17 +84,21 @@ Implemented `@avroDefault(json)` annotation for specifying default values in Avr
 
 Implemented `HandleAsNamedTupleRule` in **all 4 derivation modules** (circe, jsoniter, yaml, avro). Named tuples encode with their actual field names (not `_1`, `_2`) as JSON objects / YAML mappings / Avro records. Uses Hearth's `Type[A].isNamedTuple`, `primaryConstructor`, and `productElement(i)` APIs. Rule naturally no-ops on Scala 2 (`isNamedTuple` returns `false`). Tests in each module's Scala 3 spec: simple named tuple, nested with case class, member name transforms, and binary round-trip (avro).
 
----
+### ~~8. Avro-specific: BigDecimal as Decimal Logical Type, Either as Union~~ — RESOLVED
 
-## REMAINING HIGH PRIORITY GAPS
+Implemented `AvroConfig.withDecimalConfig(precision, scale)` for BigDecimal as Avro decimal logical type (BYTES with decimal logical type annotation). Without config, BigDecimal defaults to STRING. Implemented `Either[A, B]` as Avro UNION(A, B). Tested in **avro-derivation**: schema, encode, decode, binary round-trip for both BigDecimal decimal and Either union.
 
-### 8. Avro-specific: BigDecimal as Decimal Logical Type
+### ~~Mutable collections~~ — RESOLVED (already works)
 
-**What avro4s tests**: BigDecimal as decimal logical type (encoded as bytes, not string). Either as union type.
+Hearth's `IsCollectionProviderForScalaCollection` handles any `Iterable` subtype with a `Factory` implicit, including `mutable.ArrayBuffer`, `mutable.HashMap`, etc. Tested in **circe-derivation** with `mutable.ArrayBuffer[Int]` round-trip (standalone and as case class field). Works on both Scala 2.13 and 3.
 
-**Kindlings status**: UUID and java.time logical types are now **fully implemented and tested** (UUID, Instant, LocalDate, LocalTime, LocalDateTime — schema, encode, decode, round-trip, plus `EventRecord` integration). BigDecimal is mapped to STRING. **No BigDecimal-as-decimal-bytes, no Either-as-union.**
+### ~~`IArray` (Scala 3)~~ — PARTIALLY RESOLVED (encoder only)
 
-**Action**: Implementation work needed for BigDecimal as Avro decimal logical type (bytes + scale/precision). Either-as-union is a separate design decision.
+Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. **Encoder works**: tested in **circe-derivation** Scala 3 spec. **Decoder has a Hearth bug**: fails with "key not found: n" at macro expansion time. Filed as a Hearth issue to investigate.
+
+### ~~`IntMap`/`LongMap`/`BitSet`~~ — RESOLVED (already works)
+
+`IntMap` and `LongMap` are `Map` subtypes handled by Hearth's `IsMap` providers. `BitSet` is an `Iterable[Int]` handled by `IsCollection`. No additional Kindlings work needed.
 
 ---
 
@@ -118,17 +122,35 @@ Implemented `HandleAsNamedTupleRule` in **all 4 derivation modules** (circe, jso
 
 ---
 
+## KNOWN LIMITATIONS (investigated, not fixable in Kindlings)
+
+### Java enums — partial support (Avro schema + encoder only)
+
+**Investigation findings**: Hearth's `Enum.parse` correctly identifies Java enums via `isJavaEnum` and returns `directChildren`. However, the `allCaseObjects` guard in Kindlings' enum derivation rules works inconsistently:
+
+- **Avro `AvroSchemaFor`**: Works — produces ENUM schema with correct symbols. Tested.
+- **Avro `AvroEncoder`**: Works — encodes to `GenericData.EnumSymbol`. Tested.
+- **Avro `AvroDecoder`**: Fails — treats each Java enum value as a case class (not a val/object), so the mixed-ADT path fires and fails with "is not parseable as a case class".
+- **Circe/Jsoniter/YAML encoder/decoder**: Fails on Scala 2.13 — each child type (e.g., `JavaColor.RED.type`) is not recognized by any derivation rule (not a case class, not a val, not an enum). Hearth's `Type.isVal` on Scala 2 checks `isObject && isStatic && isFinal`, which Java enum values don't satisfy.
+
+**Root cause**: The `allCaseObjects` guard passes when `Type.isVal` returns `true` for each child. On Scala 2, `isVal` requires the Scala `isObject` flag which Java enum values lack. On Scala 3, `isVal` requires `Flags.Enum` which Java enum values do have, but the downstream derivation rules still fail because individual enum value types aren't handled (they're not case classes, value types, or anything else the rules know about).
+
+**Status**: Hearth-level limitation. Fixing this requires changes to how enum derivation handles children that are neither case objects nor case classes.
+
+### Scala `Enumeration` — not supported
+
+**Investigation findings**: Hearth's `Enum.parse` has an `isEnumeration` branch that detects `scala.Enumeration` subtypes. However, Scala Enumeration values are instances of the inner `Value` class — they are NOT case objects (don't pass `Type.isVal`) and NOT zero-parameter case classes (don't pass `CaseClass.parse`). The `allCaseObjects` guard therefore fails, and derivation does not proceed.
+
+**Status**: Hearth-level limitation. Supporting Scala Enumeration would require either special-casing it in the `allCaseObjects` guard or adding a dedicated derivation rule.
+
+---
+
 ## LOWER PRIORITY GAPS
 
 | Gap | Tested By | Notes |
 |-----|-----------|-------|
-| Java enums | Jsoniter, Avro4s | JVM-only; may not be in scope for cross-compiled library |
-| Scala `Enumeration` | Jsoniter | Legacy type; low priority |
-| Mutable collections | Jsoniter | `mutable.HashMap`, `ArrayBuffer`, etc. — usually not used in data models |
-| `IntMap`/`LongMap`/`BitSet` | Jsoniter | Specialized collections |
 | Literal types | Jsoniter | `"VVV"`, `true`, `42` as types |
 | Union types (Scala 3) | Jsoniter | `String \| Int` — needs custom codec, not derivable |
-| `IArray` (Scala 3) | Jsoniter | Immutable array |
 | Higher-kinded types `F[_]` | Jsoniter, Circe | `HigherKindedType[F[_]]` — advanced use case |
 | `@stringified` (numbers as strings) | Jsoniter | Jsoniter-specific performance feature |
 | Map as array encoding | Jsoniter | `[[k,v],[k,v]]` format — jsoniter-specific |
@@ -240,4 +262,4 @@ Implemented `HandleAsNamedTupleRule` in **all 4 derivation modules** (circe, jso
 - Avro4s: https://github.com/sksamuel/avro4s (avro4s-core/)
 
 Initial analysis: 2026-02-24
-Last updated: 2026-02-25 — gaps #9 (Avro defaults), #10 (Avro annotations), #12 (empty class validation), #14 (named tuples), #20 (non-case-class leaves) resolved
+Last updated: 2026-02-25 — gap #8 (BigDecimal decimal + Either union) resolved; mutable collections and IntMap/LongMap/BitSet confirmed working; IArray encoder works (decoder has Hearth bug); Java enums partially work (Avro schema+encoder only); Scala Enumeration not supported (Hearth limitation)
