@@ -185,6 +185,48 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration decoder (enumAsStrings)") {
+
+      test("decode Scala Enumeration value from string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[ScalaColor.Value](Json.fromString("Red")) ==> Right(ScalaColor.Red: ScalaColor.Value)
+      }
+
+      test("decode all Scala Enumeration values from strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[ScalaColor.Value](Json.fromString("Green")) ==> Right(
+          ScalaColor.Green: ScalaColor.Value
+        )
+        KindlingsDecoder.decode[ScalaColor.Value](Json.fromString("Blue")) ==> Right(ScalaColor.Blue: ScalaColor.Value)
+      }
+
+      test("Scala Enumeration with name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsDecoder.decode[ScalaColor.Value](Json.fromString("red")) ==> Right(ScalaColor.Red: ScalaColor.Value)
+      }
+    }
+
+    group("Java enum decoder (enumAsStrings)") {
+
+      test("decode Java enum value from string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[JavaColor](Json.fromString("RED")) ==> Right(JavaColor.RED: JavaColor)
+      }
+
+      test("decode all Java enum values from strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsDecoder.decode[JavaColor](Json.fromString("GREEN")) ==> Right(JavaColor.GREEN: JavaColor)
+        KindlingsDecoder.decode[JavaColor](Json.fromString("BLUE")) ==> Right(JavaColor.BLUE: JavaColor)
+      }
+
+      test("Java enum with name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsDecoder.decode[JavaColor](Json.fromString("red")) ==> Right(JavaColor.RED: JavaColor)
+      }
+    }
+
     group("configuration") {
 
       test("custom constructor name transform") {

@@ -188,6 +188,46 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration decoder (enumAsStrings)") {
+
+      test("decode Scala Enumeration value from string") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[ScalaColor.Value](ScalarNode("Red")) ==> Right(ScalaColor.Red: ScalaColor.Value)
+      }
+
+      test("decode all Scala Enumeration values from strings") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[ScalaColor.Value](ScalarNode("Green")) ==> Right(ScalaColor.Green: ScalaColor.Value)
+        KindlingsYamlDecoder.decode[ScalaColor.Value](ScalarNode("Blue")) ==> Right(ScalaColor.Blue: ScalaColor.Value)
+      }
+
+      test("Scala Enumeration with name transform") {
+        implicit val config: YamlConfig =
+          YamlConfig(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsYamlDecoder.decode[ScalaColor.Value](ScalarNode("red")) ==> Right(ScalaColor.Red: ScalaColor.Value)
+      }
+    }
+
+    group("Java enum decoder (enumAsStrings)") {
+
+      test("decode Java enum value from string") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[JavaColor](ScalarNode("RED")) ==> Right(JavaColor.RED: JavaColor)
+      }
+
+      test("decode all Java enum values from strings") {
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        KindlingsYamlDecoder.decode[JavaColor](ScalarNode("GREEN")) ==> Right(JavaColor.GREEN: JavaColor)
+        KindlingsYamlDecoder.decode[JavaColor](ScalarNode("BLUE")) ==> Right(JavaColor.BLUE: JavaColor)
+      }
+
+      test("Java enum with name transform") {
+        implicit val config: YamlConfig =
+          YamlConfig(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsYamlDecoder.decode[JavaColor](ScalarNode("red")) ==> Right(JavaColor.RED: JavaColor)
+      }
+    }
+
     group("sets") {
 
       test("Set of ints") {

@@ -1012,10 +1012,11 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       val childrenList = enumm.directChildren.toList
 
       // Check at compile time if all children are singletons (case objects with no fields)
-      val allCaseObjects = childrenList.forall { case (_, child) =>
-        Type.isVal(using child.Underlying) ||
-        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
-      }
+      val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
+        childrenList.forall { case (_, child) =>
+          Type.isVal(using child.Underlying) ||
+          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+        }
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
@@ -1136,36 +1137,58 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             }
 
         case Left(_) =>
-          // No implicit - derive via full rules chain (this sets up a helper in cache)
-          deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.cursor)).flatMap { _ =>
-            dctx.getHelper[ChildType].map {
-              case Some(helper) =>
-                (
-                    typeNameExpr: Expr[String],
-                    innerCursorExpr: Expr[HCursor],
-                    elseExpr: Expr[Either[DecodingFailure, A]]
-                ) => {
-                  val helperCallExpr = helper(innerCursorExpr, dctx.config)
-                  Expr.quote {
-                    if (
-                      Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                        .splice(typeNameExpr)
-                    )
-                      Expr.splice(helperCallExpr).asInstanceOf[Either[DecodingFailure, A]]
-                    else
-                      Expr.splice(elseExpr)
-                  }
+          // Try singletonOf first — handles Enumeration values, Java enum values, case objects
+          Expr.singletonOf[ChildType] match {
+            case Some(singleton) =>
+              Log.info(s"Using singleton for $childName") >>
+                MIO.pure {
+                  (
+                      typeNameExpr: Expr[String],
+                      _: Expr[HCursor],
+                      elseExpr: Expr[Either[DecodingFailure, A]]
+                  ) =>
+                    Expr.quote {
+                      if (
+                        Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                          .splice(typeNameExpr)
+                      )
+                        Right(Expr.splice(singleton).asInstanceOf[A]): Either[DecodingFailure, A]
+                      else
+                        Expr.splice(elseExpr)
+                    }
                 }
+            case None =>
+              // No singleton - derive via full rules chain (this sets up a helper in cache)
+              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.cursor)).flatMap { _ =>
+                dctx.getHelper[ChildType].map {
+                  case Some(helper) =>
+                    (
+                        typeNameExpr: Expr[String],
+                        innerCursorExpr: Expr[HCursor],
+                        elseExpr: Expr[Either[DecodingFailure, A]]
+                    ) => {
+                      val helperCallExpr = helper(innerCursorExpr, dctx.config)
+                      Expr.quote {
+                        if (
+                          Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                            .splice(typeNameExpr)
+                        )
+                          Expr.splice(helperCallExpr).asInstanceOf[Either[DecodingFailure, A]]
+                        else
+                          Expr.splice(elseExpr)
+                      }
+                    }
 
-              case None =>
-                // No helper - the child was handled by implicit or value type rule
-                // This shouldn't normally happen since we checked implicit above
-                (
-                    typeNameExpr: Expr[String],
-                    innerCursorExpr: Expr[HCursor],
-                    elseExpr: Expr[Either[DecodingFailure, A]]
-                ) => elseExpr
-            }
+                  case None =>
+                    // No helper - the child was handled by implicit or value type rule
+                    // This shouldn't normally happen since we checked implicit above
+                    (
+                        typeNameExpr: Expr[String],
+                        innerCursorExpr: Expr[HCursor],
+                        elseExpr: Expr[Either[DecodingFailure, A]]
+                    ) => elseExpr
+                }
+              }
           }
       }
     }

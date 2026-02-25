@@ -764,10 +764,11 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
           Log.error(err.message) >> MIO.fail(err)
 
         case Some(children) =>
-          val allCaseObjects = children.toList.forall { case (_, child) =>
-            Type.isVal(using child.Underlying) ||
-            CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
-          }
+          val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
+            children.toList.forall { case (_, child) =>
+              Type.isVal(using child.Underlying) ||
+              CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+            }
 
           if (allCaseObjects) {
             // Pure enum of case objects → Avro ENUM schema

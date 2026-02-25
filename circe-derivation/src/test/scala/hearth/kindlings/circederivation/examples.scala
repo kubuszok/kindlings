@@ -34,6 +34,11 @@ case class CamelCaseFields(firstName: String, lastName: String)
 case class PersonWithDefaults(name: String, age: Int = 25)
 case class AllDefaults(x: Int = 1, y: String = "hello")
 
+// Scala Enumeration
+object ScalaColor extends Enumeration {
+  val Red, Green, Blue = Value
+}
+
 // Generic case classes
 case class Box[A](value: A)
 case class Pair[A, B](first: A, second: B)

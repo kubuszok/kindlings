@@ -984,10 +984,11 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           Log.error(err.message) >> MIO.fail(err)
 
         case Some(children) =>
-          val allCaseObjects = children.toList.forall { case (_, child) =>
-            Type.isVal(using child.Underlying) ||
-            CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
-          }
+          val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
+            children.toList.forall { case (_, child) =>
+              Type.isVal(using child.Underlying) ||
+              CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+            }
 
           if (allCaseObjects) {
             // Pure enum → decode from GenericData.EnumSymbol string

@@ -6,7 +6,7 @@ Compared test coverage across:
 - **Circe**: `circe-generic` + `circe-generic-extras` (derivation modules)
 - **Jsoniter Scala**: `jsoniter-scala-macros` (codec derivation)
 - **Avro4s**: `avro4s-core` (schema/encoder/decoder derivation)
-- **Kindlings**: All 6 modules (446 tests at time of initial analysis)
+- **Kindlings**: All 6 modules (446 tests at time of initial analysis, 1416 at last update)
 
 Focus is on **derivation-relevant** functionality — what types/patterns can be derived and how configuration affects them — not on core parsing/serialization (that's the underlying library's job, not Kindlings').
 
@@ -88,6 +88,22 @@ Implemented `HandleAsNamedTupleRule` in **all 4 derivation modules** (circe, jso
 
 Implemented `AvroConfig.withDecimalConfig(precision, scale)` for BigDecimal as Avro decimal logical type (BYTES with decimal logical type annotation). Without config, BigDecimal defaults to STRING. Implemented `Either[A, B]` as Avro UNION(A, B). Tested in **avro-derivation**: schema, encode, decode, binary round-trip for both BigDecimal decimal and Either union.
 
+### ~~Java enums~~ — RESOLVED
+
+Java enum types are now fully supported across all 4 derivation modules. Hearth's `Enum.parse` identifies Java enums via `isJavaEnum` and returns `directChildren`. The `allCaseObjects` guard includes `Type[A].isJavaEnum`. Encoder skips recursive derivation for Java enum children. Decoder uses `singletonOf` to construct enum values.
+
+Tested in **all 4 modules** (circe, yaml, jsoniter, avro): encoder (3 tests each), decoder (3 tests each for circe/yaml/avro), codec round-trip (jsoniter), binary round-trip (avro). Works on both Scala 2.13 and 3.
+
+Required Hearth `0.2.0-233+` for `isJavaEnum` fix on Scala 3 and `singletonOf` fix for Java enum values on Scala 2.
+
+### ~~Scala `Enumeration`~~ — RESOLVED
+
+Scala `Enumeration` types (`object Foo extends Enumeration`) are now fully supported across all 4 derivation modules. The `allCaseObjects` guard includes `Type[A].isEnumeration`. Encoder skips recursive derivation for Enumeration children. A `Type[EnumCase].shortName` issue (returns "Value" instead of "Red") is worked around by looking up child names from `Enum.directChildren` via subtype checks.
+
+Tested in **all 4 modules** (circe, yaml, jsoniter, avro): encoder (3 tests each), decoder (3 tests each for circe/yaml/avro), codec round-trip (jsoniter), binary round-trip (avro). Constructor name transforms work. Works on both Scala 2.13 and 3.
+
+Required Hearth `0.2.0-233+` for `singletonOf` fix for Enumeration values on Scala 2 and `shortName` fix on both Scala versions.
+
 ### ~~Mutable collections~~ — RESOLVED (already works)
 
 Hearth's `IsCollectionProviderForScalaCollection` handles any `Iterable` subtype with a `Factory` implicit, including `mutable.ArrayBuffer`, `mutable.HashMap`, etc. Tested in **circe-derivation** with `mutable.ArrayBuffer[Int]` round-trip (standalone and as case class field). Works on both Scala 2.13 and 3.
@@ -121,27 +137,6 @@ Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. **Encod
 **Action**: N/A — Kindlings always allows recursion. Dropped per design decision.
 
 ---
-
-## KNOWN LIMITATIONS (investigated, not fixable in Kindlings)
-
-### Java enums — partial support (Avro schema + encoder only)
-
-**Investigation findings**: Hearth's `Enum.parse` correctly identifies Java enums via `isJavaEnum` and returns `directChildren`. However, the `allCaseObjects` guard in Kindlings' enum derivation rules works inconsistently:
-
-- **Avro `AvroSchemaFor`**: Works — produces ENUM schema with correct symbols. Tested.
-- **Avro `AvroEncoder`**: Works — encodes to `GenericData.EnumSymbol`. Tested.
-- **Avro `AvroDecoder`**: Fails — treats each Java enum value as a case class (not a val/object), so the mixed-ADT path fires and fails with "is not parseable as a case class".
-- **Circe/Jsoniter/YAML encoder/decoder**: Fails on Scala 2.13 — each child type (e.g., `JavaColor.RED.type`) is not recognized by any derivation rule (not a case class, not a val, not an enum). Hearth's `Type.isVal` on Scala 2 checks `isObject && isStatic && isFinal`, which Java enum values don't satisfy.
-
-**Root cause**: The `allCaseObjects` guard passes when `Type.isVal` returns `true` for each child. On Scala 2, `isVal` requires the Scala `isObject` flag which Java enum values lack. On Scala 3, `isVal` requires `Flags.Enum` which Java enum values do have, but the downstream derivation rules still fail because individual enum value types aren't handled (they're not case classes, value types, or anything else the rules know about).
-
-**Status**: Hearth-level limitation. Fixing this requires changes to how enum derivation handles children that are neither case objects nor case classes.
-
-### Scala `Enumeration` — not supported
-
-**Investigation findings**: Hearth's `Enum.parse` has an `isEnumeration` branch that detects `scala.Enumeration` subtypes. However, Scala Enumeration values are instances of the inner `Value` class — they are NOT case objects (don't pass `Type.isVal`) and NOT zero-parameter case classes (don't pass `CaseClass.parse`). The `allCaseObjects` guard therefore fails, and derivation does not proceed.
-
-**Status**: Hearth-level limitation. Supporting Scala Enumeration would require either special-casing it in the `allCaseObjects` guard or adding a dedicated derivation rule.
 
 ---
 
@@ -262,4 +257,4 @@ Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. **Encod
 - Avro4s: https://github.com/sksamuel/avro4s (avro4s-core/)
 
 Initial analysis: 2026-02-24
-Last updated: 2026-02-25 — gap #8 (BigDecimal decimal + Either union) resolved; mutable collections and IntMap/LongMap/BitSet confirmed working; IArray encoder works (decoder has Hearth bug); Java enums partially work (Avro schema+encoder only); Scala Enumeration not supported (Hearth limitation)
+Last updated: 2026-02-25 — Java enum and Scala Enumeration fully resolved (encoder + decoder + round-trip) across all 4 modules, both Scala versions. Required Hearth 0.2.0-233+ for isJavaEnum/singletonOf/shortName fixes. Mutable collections, IntMap/LongMap/BitSet confirmed working. IArray encoder works (decoder has Hearth bug).

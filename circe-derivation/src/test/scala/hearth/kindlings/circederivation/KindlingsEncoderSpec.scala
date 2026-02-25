@@ -216,6 +216,46 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration (enumAsStrings)") {
+
+      test("encode Scala Enumeration value as string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[ScalaColor.Value](ScalaColor.Red) ==> Json.fromString("Red")
+      }
+
+      test("encode all Scala Enumeration values as strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[ScalaColor.Value](ScalaColor.Green) ==> Json.fromString("Green")
+        KindlingsEncoder.encode[ScalaColor.Value](ScalaColor.Blue) ==> Json.fromString("Blue")
+      }
+
+      test("Scala Enumeration with name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsEncoder.encode[ScalaColor.Value](ScalaColor.Red) ==> Json.fromString("red")
+      }
+    }
+
+    group("Java enum (enumAsStrings)") {
+
+      test("encode Java enum value as string") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[JavaColor](JavaColor.RED) ==> Json.fromString("RED")
+      }
+
+      test("encode all Java enum values as strings") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        KindlingsEncoder.encode[JavaColor](JavaColor.GREEN) ==> Json.fromString("GREEN")
+        KindlingsEncoder.encode[JavaColor](JavaColor.BLUE) ==> Json.fromString("BLUE")
+      }
+
+      test("Java enum with name transform") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, transformConstructorNames = _.toLowerCase)
+        KindlingsEncoder.encode[JavaColor](JavaColor.RED) ==> Json.fromString("red")
+      }
+    }
+
     group("configuration") {
 
       test("snake_case member names") {

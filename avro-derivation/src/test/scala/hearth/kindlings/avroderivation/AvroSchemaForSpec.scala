@@ -484,6 +484,18 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration") {
+
+      test("Scala Enumeration produces ENUM schema") {
+        val schema = AvroSchemaFor.schemaOf[ScalaColor.Value]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getEnumSymbols.size() ==> 3
+        schema.getEnumSymbols.contains("Red") ==> true
+        schema.getEnumSymbols.contains("Green") ==> true
+        schema.getEnumSymbols.contains("Blue") ==> true
+      }
+    }
+
     group("schema evolution with defaults") {
 
       test("schema with defaults enables forward compatibility") {

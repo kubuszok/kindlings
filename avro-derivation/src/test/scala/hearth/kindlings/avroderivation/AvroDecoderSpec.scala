@@ -271,10 +271,49 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
-    // Note: Java enum AvroDecoder derivation is not yet supported.
-    // AvroDecoder treats Java enum values as case classes (not vals/objects),
-    // so the enum-as-strings decoder path is not triggered.
-    // AvroSchemaFor and AvroEncoder work correctly for Java enums.
+    group("Java enum decoding") {
+
+      test("Java enum decodes from EnumSymbol") {
+        val schema = AvroSchemaFor.schemaOf[JavaColor]
+        val symbol = new org.apache.avro.generic.GenericData.EnumSymbol(schema, "RED")
+        AvroDecoder.decode[JavaColor](symbol: Any) ==> JavaColor.RED
+      }
+
+      test("decode all Java enum values") {
+        val schema = AvroSchemaFor.schemaOf[JavaColor]
+        AvroDecoder.decode[JavaColor](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "RED"): Any
+        ) ==> JavaColor.RED
+        AvroDecoder.decode[JavaColor](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "GREEN"): Any
+        ) ==> JavaColor.GREEN
+        AvroDecoder.decode[JavaColor](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "BLUE"): Any
+        ) ==> JavaColor.BLUE
+      }
+    }
+
+    group("Scala Enumeration decoding") {
+
+      test("Scala Enumeration decodes from EnumSymbol") {
+        val schema = AvroSchemaFor.schemaOf[ScalaColor.Value]
+        val symbol = new org.apache.avro.generic.GenericData.EnumSymbol(schema, "Red")
+        AvroDecoder.decode[ScalaColor.Value](symbol: Any) ==> ScalaColor.Red
+      }
+
+      test("decode all Scala Enumeration values") {
+        val schema = AvroSchemaFor.schemaOf[ScalaColor.Value]
+        AvroDecoder.decode[ScalaColor.Value](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "Red"): Any
+        ) ==> ScalaColor.Red
+        AvroDecoder.decode[ScalaColor.Value](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "Green"): Any
+        ) ==> ScalaColor.Green
+        AvroDecoder.decode[ScalaColor.Value](
+          new org.apache.avro.generic.GenericData.EnumSymbol(schema, "Blue"): Any
+        ) ==> ScalaColor.Blue
+      }
+    }
 
     group("BigDecimal decimal decoding") {
 

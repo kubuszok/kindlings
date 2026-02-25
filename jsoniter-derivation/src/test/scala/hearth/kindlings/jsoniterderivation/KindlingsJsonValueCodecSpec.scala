@@ -189,6 +189,44 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration (enumAsStrings)") {
+
+      test("Scala Enumeration round-trip") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[ScalaColor.Value]
+        val json = writeToString[ScalaColor.Value](ScalaColor.Red)(codec)
+        json ==> "\"Red\""
+        readFromString[ScalaColor.Value](json)(codec) ==> ScalaColor.Red
+      }
+
+      test("all Scala Enumeration values round-trip") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[ScalaColor.Value]
+        Seq(ScalaColor.Red, ScalaColor.Green, ScalaColor.Blue).foreach { v =>
+          readFromString[ScalaColor.Value](writeToString[ScalaColor.Value](v)(codec))(codec) ==> v
+        }
+      }
+    }
+
+    group("Java enum (enumAsStrings)") {
+
+      test("Java enum round-trip") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[JavaColor]
+        val json = writeToString[JavaColor](JavaColor.RED)(codec)
+        json ==> "\"RED\""
+        readFromString[JavaColor](json)(codec) ==> JavaColor.RED
+      }
+
+      test("all Java enum values round-trip") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
+        val codec = KindlingsJsonValueCodec.derive[JavaColor]
+        Seq(JavaColor.RED, JavaColor.GREEN, JavaColor.BLUE).foreach { v =>
+          readFromString[JavaColor](writeToString[JavaColor](v)(codec))(codec) ==> v
+        }
+      }
+    }
+
     group("recursive types") {
 
       test("recursive tree round-trip") {

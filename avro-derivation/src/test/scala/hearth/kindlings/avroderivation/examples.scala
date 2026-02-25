@@ -86,6 +86,11 @@ case class EventRecord(
     localTimestamp: java.time.LocalDateTime
 )
 
+// Scala Enumeration
+object ScalaColor extends Enumeration {
+  val Red, Green, Blue = Value
+}
+
 // BigDecimal and Either test types
 case class WithBigDecimal(amount: BigDecimal)
 case class WithEither(value: Either[String, Int])

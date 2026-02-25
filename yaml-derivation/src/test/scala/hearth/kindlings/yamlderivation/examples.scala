@@ -25,6 +25,11 @@ case object South extends CardinalDirection
 case object East extends CardinalDirection
 case object West extends CardinalDirection
 
+// Scala Enumeration
+object ScalaColor extends Enumeration {
+  val Red, Green, Blue = Value
+}
+
 case class CamelCasePerson(firstName: String, lastName: String)
 
 // Generic case classes

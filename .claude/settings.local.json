@@ -24,7 +24,8 @@
       "Bash(tail:*)",
       "WebFetch(domain:scalameta.org)",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(jar tf:*)"
     ]
   }
 }

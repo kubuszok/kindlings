@@ -815,10 +815,11 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
       val childrenList = enumm.directChildren.toList
 
-      val allCaseObjects = childrenList.forall { case (_, child) =>
-        Type.isVal(using child.Underlying) ||
-        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
-      }
+      val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
+        childrenList.forall { case (_, child) =>
+          Type.isVal(using child.Underlying) ||
+          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+        }
 
       if (allCaseObjects) {
         // Pure enum → encode as GenericData.EnumSymbol
@@ -826,7 +827,13 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           enumm
             .parMatchOn[MIO, Any](ectx.value) { matched =>
               import matched.Underlying as EnumCase
-              val caseName = Type[EnumCase].shortName
+              val caseName: String = childrenList
+                .find { case (_, child) =>
+                  import child.Underlying as ChildType
+                  Type[EnumCase] <:< Type[ChildType]
+                }
+                .map(_._1)
+                .getOrElse(Type[EnumCase].shortName)
               MIO.pure(Expr.quote {
                 val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
                 AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), name): Any

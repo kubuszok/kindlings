@@ -367,6 +367,21 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("Scala Enumeration") {
+
+      test("Scala Enumeration encodes to EnumSymbol") {
+        val result = AvroEncoder.encode[ScalaColor.Value](ScalaColor.Red)
+        result.isInstanceOf[GenericData.EnumSymbol] ==> true
+        result.toString ==> "Red"
+      }
+
+      test("encode all Scala Enumeration values") {
+        AvroEncoder.encode[ScalaColor.Value](ScalaColor.Red).toString ==> "Red"
+        AvroEncoder.encode[ScalaColor.Value](ScalaColor.Green).toString ==> "Green"
+        AvroEncoder.encode[ScalaColor.Value](ScalaColor.Blue).toString ==> "Blue"
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

@@ -656,7 +656,9 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       implicit val NodeT: Type[Node] = Types.Node
 
       // Check at compile time if all children are singletons (case objects with no fields)
-      val allCaseObjects = enumm.directChildren.toList.forall { case (_, child) =>
+      val childrenList = enumm.directChildren.toList
+      val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
+      val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
         Type.isVal(using child.Underlying) ||
         CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
       }
@@ -665,8 +667,17 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         .parMatchOn[MIO, Node](ectx.value) { matched =>
           import matched.{value as enumCaseValue, Underlying as EnumCase}
           Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-            deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue)).map { caseNode =>
-              val caseName = Type[EnumCase].shortName
+            val caseNodeMIO: MIO[Expr[Node]] =
+              if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(YamlDerivationUtils.nodeFromFields(Nil): Node))
+              else deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
+            caseNodeMIO.map { caseNode =>
+              val caseName: String = childrenList
+                .find { case (_, child) =>
+                  import child.Underlying as ChildType
+                  Type[EnumCase] <:< Type[ChildType]
+                }
+                .map(_._1)
+                .getOrElse(Type[EnumCase].shortName)
               if (allCaseObjects) {
                 Expr.quote {
                   val config = Expr.splice(ectx.config)

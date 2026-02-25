@@ -280,8 +280,29 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
-    // Note: Java enum round-trip not possible yet — AvroDecoder does not support Java enums.
-    // See AvroDecoderSpec for details.
+    group("Java enum round-trip") {
+
+      test("Java enum binary round-trip") {
+        val encoder: AvroEncoder[JavaColor] = AvroEncoder.derive[JavaColor]
+        val decoder: AvroDecoder[JavaColor] = AvroDecoder.derive[JavaColor]
+        val original = JavaColor.GREEN
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[JavaColor](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
+    group("Scala Enumeration round-trip") {
+
+      test("Scala Enumeration binary round-trip") {
+        val encoder: AvroEncoder[ScalaColor.Value] = AvroEncoder.derive[ScalaColor.Value]
+        val decoder: AvroDecoder[ScalaColor.Value] = AvroDecoder.derive[ScalaColor.Value]
+        val original: ScalaColor.Value = ScalaColor.Blue
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[ScalaColor.Value](bytes)(decoder)
+        decoded ==> original
+      }
+    }
 
     group("JSON") {
 
