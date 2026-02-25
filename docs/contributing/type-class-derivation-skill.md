@@ -652,6 +652,117 @@ LambdaBuilder
 
 **Important:** Always use `Expr.quote`/`Expr.splice` inside builder closures, never raw `'{ }` / `${ }` — raw quotes capture the wrong `Quotes` context on Scala 3 and cause `ScopeException`.
 
+## Advanced decoder patterns
+
+These patterns were discovered during the `decodeAccumulating` implementation in circe-derivation. They apply to any decoder-style derivation that needs to produce multiple output types from a single derivation pass.
+
+### `nest` vs `nestInCache` semantics
+
+The decoder context provides two methods for creating sub-contexts:
+
+- **`nest[B](newCursor)`** — used in `deriveFieldDecoder`, `HandleAsOptionRule`, etc. to create contexts for building `Decoder[Field]` instances via `LambdaBuilder`. The resulting decoder's `apply` method ALWAYS returns `Either` (fail-fast), so `nest` must hardcode any mode-specific state. For example, if the context has a `failFast: Boolean` parameter, `nest` should force `failFast = Expr.quote(true)`.
+
+- **`nestInCache(newCursor, newConfig, newFailFast)`** — used inside `setHelper` bodies where the cursor/config/failFast come from the cached def's formal parameters. This preserves all parameters as-is since the cached def handles both modes at runtime.
+
+**Why this matters:** If `nest` propagates the parent's `failFast` parameter, field decoders created via `LambdaBuilder` would capture `failFast=false` when called from the accumulating path. Their `apply()` would then return `ValidatedNel` instead of `Either`, causing `ClassCastException` at runtime.
+
+```scala
+// CORRECT — nest forces fail-fast for sub-decoders
+def nest[B: Type](newCursor: Expr[HCursor]): DecoderCtx[B] = copy[B](
+  tpe = Type[B],
+  cursor = newCursor,
+  failFast = Expr.quote(true)  // always fail-fast in sub-derivations
+)
+
+// CORRECT — nestInCache preserves the def's parameters
+def nestInCache(newCursor: Expr[HCursor], newConfig: Expr[Configuration], newFailFast: Expr[Boolean]): DecoderCtx[A] =
+  copy(cursor = newCursor, config = newConfig, failFast = newFailFast)
+```
+
+**Reference:** `DecoderMacrosImpl.scala` lines 262-275.
+
+### Dual-path derivation with a runtime boolean parameter
+
+When a single derivation must produce two different output types (e.g., `Either[E, A]` for fail-fast and `ValidatedNel[E, A]` for error accumulation), avoid duplicating the entire derivation pipeline. Instead, add a runtime boolean parameter to the cached def:
+
+```scala
+// Single cached def handles both paths:
+// def decode_MyType(cursor: HCursor, config: Configuration, failFast: Boolean): Any
+dctx.setHelper[A] { (cursor, config, failFast) =>
+  decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(cursor, config, failFast))
+    .map { (ffExpr, accExpr) =>
+      Expr.quote {
+        (if (Expr.splice(failFast)) Expr.splice(ffExpr) else Expr.splice(accExpr)): Any
+      }
+    }
+}
+
+// Callers pass true/false:
+// In apply():        helper(cursor, config, true).asInstanceOf[Either[E, A]]
+// In decodeAccumulating(): helper(cursor, config, false).asInstanceOf[ValidatedNel[E, A]]
+```
+
+**Why not two cached defs?** Two separate defs (one per path) would double the generated code size and duplicate all field decoder derivations. The `failFast` parameter avoids this with a single runtime branch.
+
+**Why not `LambdaBuilder` to package both paths?** `LambdaBuilder` creates a lambda at runtime, adding allocation overhead. The `failFast` boolean avoids this.
+
+**Why not two `Expr.splice` blocks?** On Scala 3, sibling `Expr.splice` blocks have isolated `Quotes` contexts (see "Sibling splice isolation" pitfall). Deriving in both splices would require duplicating `Environment.loadStandardExtensions()` and all type registrations. The single-pass approach avoids this entirely.
+
+### ValDefsCache key collisions with `Any` return type
+
+When changing a cached def's return type to `Any` (e.g., to support both `Either` and `ValidatedNel`), beware that `ValDefsCache` uses a composite key: `(String name, Seq[UntypedType] args, UntypedType returned)`. If the return type is `Any` for ALL types, the string key alone must disambiguate.
+
+```scala
+// BROKEN — all types share the same cache key ("cached-decode-method", [HCursor, Config, Boolean], Any):
+val defBuilder = ValDefBuilder.ofDef3[HCursor, Configuration, Boolean, Any](s"decode_${Type[B].shortName}")
+cache.forwardDeclare("cached-decode-method", defBuilder)
+
+// When deriving PersonWithAddress → address: Address, the Address helper OVERWRITES
+// the PersonWithAddress helper because the key is identical!
+
+// CORRECT — type-specific string key prevents collisions:
+private def helperCacheKey[B: Type]: String = s"cached-decode-method:${Type[B].prettyPrint}"
+cache.forwardDeclare(helperCacheKey[B], defBuilder)
+```
+
+This issue does NOT arise when the return type is type-specific (e.g., `Either[E, B]` where `B` varies), because the return type component of the key differs between types.
+
+**Reference:** `DecoderMacrosImpl.scala` — `helperCacheKey`, `getHelper`, `setHelper` methods.
+
+### `directDecoderOpt` pattern for types without cached helpers
+
+In `deriveDecoderTypeClass`, the entry point needs to build a `KindlingsDecoder[A]` that delegates to the cached helper. But some types (value types, options, collections, maps) are handled by rules that DON'T create cached helpers — they produce inline expressions.
+
+For these types, build a `Decoder[A]` via `LambdaBuilder` with a fresh derivation context, then delegate both `apply` and `decodeAccumulating` to it:
+
+```scala
+val directDecoderOpt: Option[Expr[Decoder[A]]] =
+  if (helperOpt.isDefined) None
+  else {
+    Some(runSafe {
+      LambdaBuilder.of1[HCursor]("directCursor").traverse { cursorExpr =>
+        val freshCtx = DecoderCtx.from[A](cursorExpr, configExpr, Expr.quote(true), derivedType = selfType)
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          result <- deriveDecoderRecursively[A](using freshCtx)
+          freshCache <- freshCtx.cache.get
+        } yield freshCache.toValDefs.use(_ => result)
+      }.map { builder =>
+        val decodeFn = builder.build[Either[DecodingFailure, A]]
+        Expr.quote(CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
+      }
+    })
+  }
+
+// In the KindlingsDecoder body:
+// apply:             directDecoderOpt.get.apply(c)
+// decodeAccumulating: directDecoderOpt.get.decodeAccumulating(c)
+```
+
+**Why not just inline the expression?** The entry point must splice an expression into `Expr.quote { new KindlingsDecoder[A] { def apply(...) = ... } }`. Constructing a fallback error expression like `Left(DecodingFailure("...", Nil))` inside nested quotes fails on Scala 2 with reification errors. The `LambdaBuilder` approach builds the expression in a clean scope, avoiding this issue.
+
+**Reference:** `DecoderMacrosImpl.scala` lines 84-103.
+
 ## Cross-compilation pitfalls
 
 ### Path-dependent types in `Expr.quote` (Scala 2)
@@ -706,6 +817,47 @@ Expr.quote {
 `expr.upcast[B]` requires `A <:< B` (compile-time subtype proof). It cannot narrow types (e.g., `Any` → `String`). For narrowing, use `.asInstanceOf` inside `Expr.quote` or a runtime type-witness utility.
 
 **Additional constraint:** `upcast` also requires `Type[A]` (the source type) to be in scope. If you're trying to upcast an expression whose type comes from a pattern matcher (e.g., `isMap.CtorResult`), you must first import the path-dependent type to bring its `Type` into scope — but that's the same problem you're trying to solve. Use `.asInstanceOf` inside `Expr.quote` instead.
+
+### `.asInstanceOf` is NOT fully erased for outer types on the JVM
+
+When using `.asInstanceOf` inside `Expr.quote` to cast between types, the JVM checks the **outer type constructor** at runtime. Only inner type parameters are erased.
+
+```scala
+// FAILS at runtime — Validated is NOT Either:
+val result: Validated[Nel[E], A] = ...
+result.asInstanceOf[Either[E, A]]  // ClassCastException!
+
+// SUCCEEDS — both are Either, only inner type differs:
+val result: Either[E, String] = ...
+result.asInstanceOf[Either[E, Int]]  // OK (inner types erased)
+```
+
+This matters when a cached def returns different concrete types based on a runtime parameter (e.g., `Either` when `failFast=true`, `ValidatedNel` when `failFast=false`). The def's declared return type must be `Any` (or another common supertype), with casts happening at the call site where the actual type is known.
+
+### Scala 2 reification failure with refined types in nested quotes
+
+Certain runtime type constructions inside nested `Expr.quote` blocks fail on Scala 2 with `object Trees is not a member of package scala.reflect.api` errors. This happens when the reifier encounters refined type trees it can't resolve.
+
+```scala
+// BROKEN on Scala 2 — refined type tree from type ascription:
+Expr.quote {
+  new MyTypeClass[A] {
+    def apply(c: HCursor) = Expr.splice {
+      // This nested quote creates a refined type that can't be reified:
+      Expr.quote { Left(DecodingFailure("error", Nil)): Either[DecodingFailure, A] }
+    }
+  }
+}
+
+// Also BROKEN — .asInstanceOf doesn't help:
+Expr.quote { Left(DecodingFailure("error", Nil)).asInstanceOf[Either[DecodingFailure, A]] }
+```
+
+**Solution:** Avoid constructing such expressions in nested quotes. Instead, use one of:
+1. A runtime helper method: `CirceDerivationUtils.decoderFromFn(decodeFn)` — move the expression construction to a runtime utility
+2. `LambdaBuilder` with fresh derivation: build the expression in a clean `MIO.scoped` context outside the problematic quote (the `directDecoderOpt` pattern)
+
+**Reference:** `DecoderMacrosImpl.scala` — `directDecoderOpt` in `deriveDecoderTypeClass`.
 
 ### Macro methods require concrete types at call site
 

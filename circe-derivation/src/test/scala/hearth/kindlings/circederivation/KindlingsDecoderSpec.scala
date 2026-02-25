@@ -641,6 +641,75 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("error accumulation (decodeAccumulating)") {
+
+      test("accumulates errors across multiple fields") {
+        val json = Json.obj("name" -> Json.fromInt(42), "age" -> Json.fromString("nope"))
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors => assert(errors.size >= 2),
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("returns Valid on correct input") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          person => person ==> SimplePerson("Alice", 30)
+        )
+      }
+
+      test("accumulates errors in nested case classes") {
+        val json = Json.obj(
+          "name" -> Json.fromInt(42),
+          "age" -> Json.fromString("nope"),
+          "address" -> Json.obj("street" -> Json.fromInt(0), "city" -> Json.fromInt(0))
+        )
+        val decoder = KindlingsDecoder.derive[PersonWithAddress]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors =>
+            assert(errors.size >= 3), // name, age, address (nested inline-derived types use default decodeAccumulating)
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("single field error gives one error") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromString("nope"))
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors => errors.size ==> 1,
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("derived (implicit) decoder has decodeAccumulating override") {
+        val decoder: KindlingsDecoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
+        val json = Json.obj("name" -> Json.fromInt(42), "age" -> Json.fromString("nope"))
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors => assert(errors.size >= 2),
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("empty case class accumulating returns Valid") {
+        val decoder = KindlingsDecoder.derive[EmptyClass]
+        val result = decoder.decodeAccumulating(Json.obj().hcursor)
+        assert(result.isValid)
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {

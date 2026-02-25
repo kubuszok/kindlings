@@ -25,7 +25,9 @@
       "WebFetch(domain:scalameta.org)",
       "Bash(fi)",
       "Bash(done)",
-      "Bash(jar tf:*)"
+      "Bash(jar tf:*)",
+      "WebFetch(domain:meta.plasm.us)",
+      "Bash(head:*)"
     ]
   }
 }

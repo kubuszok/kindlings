@@ -9,6 +9,7 @@ import hearth.std.*
 import hearth.kindlings.circederivation.{Configuration, KindlingsDecoder}
 import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
+import cats.data.{Validated, ValidatedNel}
 import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 
 trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
@@ -34,7 +35,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             val _ = Expr.splice(configVal)
             Expr.splice {
               val cursorExpr: Expr[HCursor] = Expr.quote(Expr.splice(jsonVal).hcursor)
-              fromCtx(DecoderCtx.from(cursorExpr, configVal, derivedType = None))
+              fromCtx(DecoderCtx.from(cursorExpr, configVal, Expr.quote(true), derivedType = None))
             }
           }
         }
@@ -50,23 +51,136 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     implicit val HCursorT: Type[HCursor] = DTypes.HCursor
     implicit val ConfigT: Type[Configuration] = DTypes.Configuration
     implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
+    implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+    implicit val AnyT: Type[Any] = DTypes.Any
+    implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
     val selfType: Option[??] = Some(Type[A].as_??)
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, KindlingsDecoder[A]]("KindlingsDecoder.derived") { fromCtx =>
-      ValDefs.createVal[Configuration](configExpr).use { configVal =>
-        Expr.quote {
-          val cfg = Expr.splice(configVal)
-          new KindlingsDecoder[A] {
-            def apply(c: HCursor): Decoder.Result[A] = {
-              val _ = c
-              Expr.splice {
-                fromCtx(DecoderCtx.from(Expr.quote(c), Expr.quote(cfg), derivedType = selfType))
+    Log
+      .namedScope(
+        s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          // Step 1: Run derivation once (populates cache with the cached def)
+          val ctx = DecoderCtx.from[A](
+            cursor = Expr.quote(null.asInstanceOf[HCursor]), // placeholder — real cursor comes from cached def params
+            config = Expr.quote(null.asInstanceOf[Configuration]), // placeholder
+            failFast = Expr.quote(true), // placeholder
+            derivedType = selfType
+          )
+          runSafe {
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- deriveDecoderRecursively[A](using ctx)
+            } yield ()
+          }
+
+          // Step 2: Get the cached helper reference and cache
+          val helperOpt = runSafe(ctx.getHelper[A])
+          val cache = runSafe(ctx.cache.get)
+
+          // Step 2b: For types handled without a cached helper (value types, options, collections, maps),
+          // build a direct Decoder[A] that we can delegate to in the KindlingsDecoder body.
+          val directDecoderOpt: Option[Expr[Decoder[A]]] =
+            if (helperOpt.isDefined) None
+            else {
+              Some(runSafe {
+                LambdaBuilder
+                  .of1[HCursor]("directCursor")
+                  .traverse { cursorExpr =>
+                    val freshCtx = DecoderCtx.from[A](cursorExpr, configExpr, Expr.quote(true), derivedType = selfType)
+                    for {
+                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                      result <- deriveDecoderRecursively[A](using freshCtx)
+                      freshCache <- freshCtx.cache.get
+                    } yield freshCache.toValDefs.use(_ => result)
+                  }
+                  .map { builder =>
+                    val decodeFn = builder.build[Either[DecodingFailure, A]]
+                    Expr.quote(CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
+                  }
+              })
+            }
+
+          // Step 3: Wrap cached defs around the entire KindlingsDecoder block
+          // Both apply and decodeAccumulating call the same cached def with different failFast values
+          cache.toValDefs.use { _ =>
+            ValDefs.createVal[Configuration](configExpr).use { configVal =>
+              Expr.quote {
+                val cfg = Expr.splice(configVal)
+                new KindlingsDecoder[A] {
+                  def apply(c: HCursor): Decoder.Result[A] = {
+                    val _ = c
+                    Expr.splice {
+                      helperOpt match {
+                        case Some(helper) =>
+                          Expr.quote {
+                            Expr
+                              .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
+                              .asInstanceOf[Either[DecodingFailure, A]]
+                          }
+                        case None =>
+                          // Fallback for types handled without a cached helper (value types,
+                          // options, collections, maps). Delegate to a direct decoder.
+                          Expr.quote {
+                            Expr.splice(directDecoderOpt.get).apply(c)
+                          }
+                      }
+                    }
+                  }
+                  override def decodeAccumulating(c: HCursor): Decoder.AccumulatingResult[A] = {
+                    val _ = c
+                    Expr.splice {
+                      helperOpt match {
+                        case Some(helper) =>
+                          Expr.quote {
+                            Expr
+                              .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
+                              .asInstanceOf[ValidatedNel[DecodingFailure, A]]
+                          }
+                        case None =>
+                          // Fallback: delegate to the direct decoder's decodeAccumulating
+                          Expr.quote {
+                            Expr.splice(directDecoderOpt.get).decodeAccumulating(c)
+                          }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
         }
       }
-    }
+      .flatTap { result =>
+        Log.info(s"Derived final decoder result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        "KindlingsDecoder.derived",
+        infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.circederivation.debug.logDerivationForKindlingsDecoder or scalac option -Xmacro-settings:circeDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
   }
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
@@ -140,21 +254,25 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       tpe: Type[A],
       cursor: Expr[HCursor],
       config: Expr[Configuration],
+      failFast: Expr[Boolean],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??]
   ) {
 
     def nest[B: Type](newCursor: Expr[HCursor]): DecoderCtx[B] = copy[B](
       tpe = Type[B],
-      cursor = newCursor
+      cursor = newCursor,
+      failFast = Expr.quote(true)
     )
 
     def nestInCache(
         newCursor: Expr[HCursor],
-        newConfig: Expr[Configuration]
+        newConfig: Expr[Configuration],
+        newFailFast: Expr[Boolean]
     ): DecoderCtx[A] = copy(
       cursor = newCursor,
-      config = newConfig
+      config = newConfig,
+      failFast = newFailFast
     )
 
     def getInstance[B: Type]: MIO[Option[Expr[Decoder[B]]]] = {
@@ -169,25 +287,47 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       )(_ => instance)
     }
 
-    def getHelper[B: Type]: MIO[Option[(Expr[HCursor], Expr[Configuration]) => Expr[Either[DecodingFailure, B]]]] = {
-      implicit val ResultB: Type[Either[DecodingFailure, B]] = DTypes.DecoderResult[B]
+    // The cached decode helper returns `Any` because the actual return type depends on `failFast`:
+    //   - failFast=true  → Either[DecodingFailure, B]
+    //   - failFast=false → ValidatedNel[DecodingFailure, B]
+    //
+    // Ideally we'd express this as a match type:
+    //   type Result[FailFast <: Boolean] = FailFast match {
+    //     case true  => [A] =>> Either[DecodingFailure, A]
+    //     case false => [A] =>> ValidatedNel[DecodingFailure, A]
+    //   }
+    //   def decode_Foo(cursor: HCursor, config: Configuration, failFast: Boolean): Result[failFast.type][Foo]
+    //
+    // but writing a reusable macro utility (ValDefBuilder, ValDefsCache) that works with
+    // match types would be very difficult — even without Scala 2.13 support. So we use `Any`
+    // as the return type and cast at each call site where the actual type is known.
+    //
+    // The cache key includes Type[B].prettyPrint to prevent collisions: ValDefsCache keys by
+    // (String, arg types, return type), and since the return type is always `Any`, the string
+    // must disambiguate different types.
+    private def helperCacheKey[B: Type]: String = s"cached-decode-method:${Type[B].prettyPrint}"
+
+    def getHelper[B: Type]: MIO[Option[(Expr[HCursor], Expr[Configuration], Expr[Boolean]) => Expr[Any]]] = {
+      implicit val AnyT: Type[Any] = DTypes.Any
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val ConfigT: Type[Configuration] = DTypes.Configuration
-      cache.get2Ary[HCursor, Configuration, Either[DecodingFailure, B]]("cached-decode-method")
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      cache.get3Ary[HCursor, Configuration, Boolean, Any](helperCacheKey[B])
     }
     def setHelper[B: Type](
-        helper: (Expr[HCursor], Expr[Configuration]) => MIO[Expr[Either[DecodingFailure, B]]]
+        helper: (Expr[HCursor], Expr[Configuration], Expr[Boolean]) => MIO[Expr[Any]]
     ): MIO[Unit] = {
-      implicit val ResultB: Type[Either[DecodingFailure, B]] = DTypes.DecoderResult[B]
+      implicit val AnyT: Type[Any] = DTypes.Any
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val ConfigT: Type[Configuration] = DTypes.Configuration
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
       val defBuilder =
-        ValDefBuilder.ofDef2[HCursor, Configuration, Either[DecodingFailure, B]](s"decode_${Type[B].shortName}")
+        ValDefBuilder.ofDef3[HCursor, Configuration, Boolean, Any](s"decode_${Type[B].shortName}")
       for {
-        _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
+        _ <- cache.forwardDeclare(helperCacheKey[B], defBuilder)
         _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (cursor, config)) =>
-            runSafe(helper(cursor, config))
+          runSafe(cache.buildCachedWith(helperCacheKey[B], defBuilder) { case (_, (cursor, config, failFast)) =>
+            runSafe(helper(cursor, config, failFast))
           })
         }
       } yield ()
@@ -201,11 +341,13 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     def from[A: Type](
         cursor: Expr[HCursor],
         config: Expr[Configuration],
+        failFast: Expr[Boolean],
         derivedType: Option[??]
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       cursor = cursor,
       config = config,
+      failFast = failFast,
       cache = ValDefsCache.mlocal,
       derivedType = derivedType
     )
@@ -278,11 +420,15 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       )
 
     private def callCachedHelper[A: DecoderCtx](
-        helperCall: (Expr[HCursor], Expr[Configuration]) => Expr[Either[DecodingFailure, A]]
-    ): MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+        helperCall: (Expr[HCursor], Expr[Configuration], Expr[Boolean]) => Expr[Any]
+    ): MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] = {
+      implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
       Log.info(s"Found cached decoder helper for ${Type[A].prettyPrint}") >> MIO.pure(
-        Rule.matched(helperCall(dctx.cursor, dctx.config))
+        Rule.matched(Expr.quote {
+          Expr.splice(helperCall(dctx.cursor, dctx.config, dctx.failFast)).asInstanceOf[Either[DecodingFailure, A]]
+        })
       )
+    }
 
     private def yieldUnsupported[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} does not have a cached decoder"))
@@ -500,12 +646,29 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           Type[A].primaryConstructor match {
             case Some(constructor) =>
               for {
-                _ <- dctx.setHelper[A] { (cursor, config) =>
-                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(cursor, config))
+                _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
+                  @scala.annotation.nowarn("msg=is never used")
+                  implicit val AnyT: Type[Any] = DTypes.Any
+                  @scala.annotation.nowarn("msg=is never used")
+                  implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(cursor, config, failFast))
+                    .map { eitherExpr =>
+                      // Named tuples always use fail-fast decode; convert to ValidatedNel when failFast=false
+                      Expr.quote {
+                        (if (Expr.splice(failFast)) Expr.splice(eitherExpr)
+                         else
+                           Validated.fromEither(Expr.splice(eitherExpr)).leftMap(cats.data.NonEmptyList.one(_))): Any
+                      }
+                    }
                 }
                 result <- dctx.getHelper[A].flatMap {
                   case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(dctx.cursor, dctx.config)))
+                    implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                    MIO.pure(Rule.matched(Expr.quote {
+                      Expr
+                        .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                        .asInstanceOf[Either[DecodingFailure, A]]
+                    }))
                   case None =>
                     MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
                 }
@@ -620,12 +783,17 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         CaseClass.parse[A] match {
           case Some(caseClass) =>
             for {
-              _ <- dctx.setHelper[A] { (cursor, config) =>
-                decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(cursor, config))
+              _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
+                decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(cursor, config, failFast))
               }
               result <- dctx.getHelper[A].flatMap {
                 case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.cursor, dctx.config)))
+                  implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                  MIO.pure(Rule.matched(Expr.quote {
+                    Expr
+                      .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                      .asInstanceOf[Either[DecodingFailure, A]]
+                  }))
                 case None =>
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
@@ -639,7 +807,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private def decodeCaseClassFields[A: DecoderCtx](
         caseClass: CaseClass[A]
-    ): MIO[Expr[Either[DecodingFailure, A]]] = {
+    ): MIO[Expr[Any]] = {
       implicit val StringT: Type[String] = DTypes.String
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
@@ -667,14 +835,25 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           })
           .flatMap {
             case Some(expr) =>
+              implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
+              implicit val ValidatedNelDFUnitT: Type[ValidatedNel[DecodingFailure, Unit]] = DTypes.ValidatedNelDFUnit
               MIO.pure(Expr.quote {
                 val config = Expr.splice(dctx.config)
-                if (config.strictDecoding) {
-                  CirceDerivationUtils
-                    .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
-                    .map(_ => Expr.splice(expr))
-                } else
-                  Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                (if (Expr.splice(dctx.failFast)) {
+                   if (config.strictDecoding)
+                     CirceDerivationUtils
+                       .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                       .map(_ => Expr.splice(expr))
+                   else
+                     Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                 } else {
+                   if (config.strictDecoding)
+                     CirceDerivationUtils
+                       .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
+                       .map(_ => Expr.splice(expr))
+                   else
+                     Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
+                 }): Any
               })
             case None =>
               val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
@@ -729,16 +908,32 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             })
             .flatMap {
               case Some(expr) =>
+                implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
+                implicit val ValidatedNelDFUnitT: Type[ValidatedNel[DecodingFailure, Unit]] =
+                  DTypes.ValidatedNelDFUnit
                 MIO.pure(Expr.quote {
-                  CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).flatMap { _ =>
-                    val config = Expr.splice(dctx.config)
-                    if (config.strictDecoding) {
-                      CirceDerivationUtils
-                        .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
-                        .map(_ => Expr.splice(expr))
-                    } else
-                      Right(Expr.splice(expr)): Either[DecodingFailure, A]
-                  }
+                  (if (Expr.splice(dctx.failFast)) {
+                     CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).flatMap { _ =>
+                       val config = Expr.splice(dctx.config)
+                       if (config.strictDecoding)
+                         CirceDerivationUtils
+                           .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                           .map(_ => Expr.splice(expr))
+                       else
+                         Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                     }
+                   } else {
+                     CirceDerivationUtils
+                       .checkIsObjectAccumulating(Expr.splice(dctx.cursor))
+                       .andThen { _ =>
+                         if (Expr.splice(dctx.config).strictDecoding)
+                           CirceDerivationUtils
+                             .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
+                             .map(_ => Expr.splice(expr))
+                         else
+                           Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
+                       }
+                   }): Any
                 })
               case None =>
                 val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
@@ -750,12 +945,13 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           implicit val EitherDFAnyT: Type[Either[DecodingFailure, Any]] = DTypes.EitherDFAny
           implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
           implicit val ListEitherT: Type[List[Either[DecodingFailure, Any]]] = DTypes.ListEitherDFAny
+          implicit val ValidatedNelDFAnyT: Type[ValidatedNel[DecodingFailure, Any]] = DTypes.ValidatedNelDFAny
+          implicit val ListValidatedNelT: Type[List[ValidatedNel[DecodingFailure, Any]]] = DTypes.ListValidatedNelDFAny
+          implicit val ValidatedNelDFArrayAnyT: Type[ValidatedNel[DecodingFailure, Array[Any]]] =
+            DTypes.ValidatedNelDFArrayAny
 
-          // Step 1: For each field, derive a decoder (implicit or recursive) and build
-          // decode + accessor expressions. Uses unsafeCast with the decoder as type witness
-          // to avoid path-dependent type aliases in Expr.quote (Scala 2 compatibility).
-          // Also resolves default values for useDefaults support.
-          // For @transientField fields, use the default value directly without decoding.
+          // Step 1: For each field, derive a decoder and build BOTH fail-fast and accumulating
+          // decode expressions, plus accessor. The failFast branching is done at the wrapping level.
           fields
             .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
@@ -763,7 +959,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               val nameOverride = getAnnotationStringArg[fieldName](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
-                  // Try to get the default value expression for useDefaults / transientField support.
                   val defaultAsAnyOpt: Option[Expr[Any]] =
                     if (param.hasDefault)
                       param.defaultValue.flatMap { existentialOuter =>
@@ -777,24 +972,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                       }
                     else None
 
-                  val decodeExpr: Expr[Either[DecodingFailure, Any]] =
+                  // --- Fail-fast decode expression ---
+                  val ffExpr: Expr[Either[DecodingFailure, Any]] =
                     if (isTransient) {
-                      // Transient field: always use default value (validated above that default exists)
                       defaultAsAnyOpt match {
-                        case Some(defaultAnyExpr) =>
-                          Expr.quote {
-                            Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
-                          }
-                        case None =>
-                          // Should not happen due to validation above, but be safe
-                          Expr.quote {
-                            Right(null): Either[DecodingFailure, Any]
-                          }
+                        case Some(d) => Expr.quote(Right(Expr.splice(d)): Either[DecodingFailure, Any])
+                        case None    => Expr.quote(Right(null): Either[DecodingFailure, Any])
                       }
                     } else {
                       nameOverride match {
                         case Some(customName) =>
-                          // @fieldName override: use the custom name directly, ignoring config transform
                           defaultAsAnyOpt match {
                             case Some(defaultAnyExpr) =>
                               Expr.quote {
@@ -822,7 +1009,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                               }
                           }
                         case None =>
-                          // Standard field: use config.transformMemberNames
                           defaultAsAnyOpt match {
                             case Some(defaultAnyExpr) =>
                               Expr.quote {
@@ -845,11 +1031,86 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                               Expr.quote {
                                 Expr
                                   .splice(dctx.cursor)
-                                  .downField(
-                                    Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
-                                  )
+                                  .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))))
                                   .as(Expr.splice(decoderExpr))
                                   .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                          }
+                      }
+                    }
+
+                  // --- Accumulating decode expression ---
+                  val accExpr: Expr[ValidatedNel[DecodingFailure, Any]] =
+                    if (isTransient) {
+                      defaultAsAnyOpt match {
+                        case Some(d) =>
+                          Expr.quote(Validated.valid(Expr.splice(d)): ValidatedNel[DecodingFailure, Any])
+                        case None =>
+                          Expr.quote(Validated.valid(null): ValidatedNel[DecodingFailure, Any])
+                      }
+                    } else {
+                      nameOverride match {
+                        case Some(customName) =>
+                          defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) =>
+                              Expr.quote {
+                                val config = Expr.splice(dctx.config)
+                                if (config.useDefaults)
+                                  CirceDerivationUtils.decodeFieldWithDefaultAccumulating(
+                                    Expr.splice(dctx.cursor),
+                                    Expr.splice(Expr(customName)),
+                                    Expr.splice(decoderExpr),
+                                    Expr.splice(defaultAnyExpr)
+                                  )
+                                else
+                                  Expr
+                                    .splice(decoderExpr)
+                                    .tryDecodeAccumulating(
+                                      Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                    )
+                                    .map(x => x: Any)
+                              }
+                            case None =>
+                              Expr.quote {
+                                Expr
+                                  .splice(decoderExpr)
+                                  .tryDecodeAccumulating(
+                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                  )
+                                  .map(x => x: Any)
+                              }
+                          }
+                        case None =>
+                          defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) =>
+                              Expr.quote {
+                                val config = Expr.splice(dctx.config)
+                                val fn = config.transformMemberNames(Expr.splice(Expr(fName)))
+                                if (config.useDefaults)
+                                  CirceDerivationUtils.decodeFieldWithDefaultAccumulating(
+                                    Expr.splice(dctx.cursor),
+                                    fn,
+                                    Expr.splice(decoderExpr),
+                                    Expr.splice(defaultAnyExpr)
+                                  )
+                                else
+                                  Expr
+                                    .splice(decoderExpr)
+                                    .tryDecodeAccumulating(Expr.splice(dctx.cursor).downField(fn))
+                                    .map(x => x: Any)
+                              }
+                            case None =>
+                              Expr.quote {
+                                Expr
+                                  .splice(decoderExpr)
+                                  .tryDecodeAccumulating(
+                                    Expr
+                                      .splice(dctx.cursor)
+                                      .downField(
+                                        Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
+                                      )
+                                  )
+                                  .map(x => x: Any)
                               }
                           }
                       }
@@ -864,17 +1125,22 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                     }
                     (fName, typedExpr.as_??)
                   }
-                  (decodeExpr, makeAccessor)
+                  (ffExpr, accExpr, makeAccessor)
                 }
               }
             }
             .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
+              val ffExprs = fieldData.toList.map(_._1)
+              val accExprs = fieldData.toList.map(_._2)
+              val makeAccessors = fieldData.toList.map(_._3)
 
-              // Step 2: Build List literal from the decode expressions.
-              val listExpr: Expr[List[Either[DecodingFailure, Any]]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Either[DecodingFailure, Any]])) { (elem, acc) =>
+              // Step 2: Build List literals for both paths
+              val ffListExpr: Expr[List[Either[DecodingFailure, Any]]] =
+                ffExprs.foldRight(Expr.quote(List.empty[Either[DecodingFailure, Any]])) { (elem, acc) =>
+                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+                }
+              val accListExpr: Expr[List[ValidatedNel[DecodingFailure, Any]]] =
+                accExprs.foldRight(Expr.quote(List.empty[ValidatedNel[DecodingFailure, Any]])) { (elem, acc) =>
                   Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
                 }
 
@@ -897,19 +1163,15 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
-                  // Step 4: Wrap with strictDecoding check if configured
-                  // For strict decoding, field names that have @fieldName are already resolved
-                  // and names without @fieldName still need config.transformMemberNames
-                  if (hasAnyFieldNameAnnotation) {
-                    // Mixed: some names are already resolved, some need transform
-                    // Build the expected fields set accounting for both
-                    val resolvedFieldNames: Expr[Set[String]] = {
+                  // Step 4: Wrap with if(failFast) branching and strictDecoding check
+                  val resolvedFieldNames: Option[Expr[Set[String]]] =
+                    if (hasAnyFieldNameAnnotation) {
                       val nameExprs = fieldsList
                         .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
                         .map { case (name, p) =>
                           getAnnotationStringArg[fieldName](p) match {
-                            case Some(custom) => (custom, true) // already resolved
-                            case None         => (name, false) // needs transform
+                            case Some(custom) => (custom, true)
+                            case None         => (name, false)
                           }
                         }
                       val resolvedList = nameExprs.foldRight(Expr.quote(List.empty[String])) {
@@ -921,33 +1183,46 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                               Expr.splice(acc)
                           }
                       }
-                      Expr.quote(Expr.splice(resolvedList).toSet)
-                    }
-                    Expr.quote {
-                      val config = Expr.splice(dctx.config)
-                      val decoded = CirceDerivationUtils
-                        .sequenceDecodeResults(Expr.splice(listExpr))
-                        .map(Expr.splice(constructLambda))
-                      if (config.strictDecoding) {
-                        CirceDerivationUtils
-                          .checkStrictDecoding(Expr.splice(dctx.cursor), Expr.splice(resolvedFieldNames))
-                          .flatMap(_ => decoded)
-                      } else decoded
-                    }
-                  } else {
-                    Expr.quote {
-                      val config = Expr.splice(dctx.config)
-                      val decoded = CirceDerivationUtils
-                        .sequenceDecodeResults(Expr.splice(listExpr))
-                        .map(Expr.splice(constructLambda))
-                      if (config.strictDecoding) {
-                        val expectedFields =
-                          Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
-                        CirceDerivationUtils
-                          .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
-                          .flatMap(_ => decoded)
-                      } else decoded
-                    }
+                      Some(Expr.quote(Expr.splice(resolvedList).toSet))
+                    } else None
+
+                  Expr.quote {
+                    val config = Expr.splice(dctx.config)
+                    (if (Expr.splice(dctx.failFast)) {
+                       // --- Fail-fast path ---
+                       val decoded = CirceDerivationUtils
+                         .sequenceDecodeResults(Expr.splice(ffListExpr))
+                         .map(Expr.splice(constructLambda))
+                       if (config.strictDecoding) {
+                         val expectedFields = Expr.splice(
+                           resolvedFieldNames.getOrElse(
+                             Expr.quote {
+                               Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                             }
+                           )
+                         )
+                         CirceDerivationUtils
+                           .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
+                           .flatMap(_ => decoded)
+                       } else decoded
+                     } else {
+                       // --- Accumulating path ---
+                       val decoded = CirceDerivationUtils
+                         .sequenceDecodeResultsAccumulating(Expr.splice(accListExpr))
+                         .map(Expr.splice(constructLambda))
+                       if (config.strictDecoding) {
+                         val expectedFields = Expr.splice(
+                           resolvedFieldNames.getOrElse(
+                             Expr.quote {
+                               Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                             }
+                           )
+                         )
+                         CirceDerivationUtils
+                           .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), expectedFields)
+                           .andThen(_ => decoded)
+                       } else decoded
+                     }): Any
                   }
                 }
             }
@@ -988,12 +1263,17 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         Enum.parse[A] match {
           case Some(enumm) =>
             for {
-              _ <- dctx.setHelper[A] { (cursor, config) =>
-                decodeEnumCases[A](enumm)(using dctx.nestInCache(cursor, config))
+              _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
+                decodeEnumCases[A](enumm)(using dctx.nestInCache(cursor, config, failFast))
               }
               result <- dctx.getHelper[A].flatMap {
                 case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.cursor, dctx.config)))
+                  implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                  MIO.pure(Rule.matched(Expr.quote {
+                    Expr
+                      .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                      .asInstanceOf[Either[DecodingFailure, A]]
+                  }))
                 case None =>
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
@@ -1006,13 +1286,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def decodeEnumCases[A: DecoderCtx](
         enumm: Enum[A]
-    ): MIO[Expr[Either[DecodingFailure, A]]] = {
+    ): MIO[Expr[Any]] = {
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
       implicit val StringT: Type[String] = DTypes.String
       implicit val ListStringT: Type[List[String]] = DTypes.ListString
       implicit val TupleT: Type[(String, HCursor)] = DTypes.StringHCursorTuple
       implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
 
       val childrenList = enumm.directChildren.toList
 
@@ -1026,19 +1309,22 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       NonEmptyList.fromList(childrenList) match {
         case None =>
           MIO.pure(Expr.quote {
-            Left(
-              DecodingFailure(
-                s"Enum ${Expr.splice(Expr(Type[A].prettyPrint))} has no subtypes",
-                Expr.splice(dctx.cursor).history
-              )
-            ): Either[DecodingFailure, A]
+            val err = DecodingFailure(
+              s"Enum ${Expr.splice(Expr(Type[A].prettyPrint))} has no subtypes",
+              Expr.splice(dctx.cursor).history
+            )
+            (if (Expr.splice(dctx.failFast))
+               Left(err): Either[DecodingFailure, A]
+             else
+               Validated.invalidNel(err): ValidatedNel[DecodingFailure, A]): Any
           })
 
         case Some(children) =>
           val knownNames: List[String] = children.toList.map(_._1)
 
           // For each child, derive a decoder and produce a dispatch function
-          // that takes (typeNameExpr, innerCursorExpr) and returns Either[DecodingFailure, A]
+          // that takes (typeNameExpr, innerCursorExpr, elseExpr) and returns Any
+          // (Either when failFast=true, ValidatedNel when failFast=false)
           children
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
@@ -1047,7 +1333,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               }
             }
             .flatMap { childDispatchers =>
-              // Build a dispatch lambda: (String, HCursor) => Either[DecodingFailure, A]
+              // Build a dispatch lambda: (String, HCursor) => Any
               LambdaBuilder
                 .of1[(String, HCursor)]("readResult")
                 .traverse { readResultExpr =>
@@ -1056,14 +1342,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   val innerCursorExpr: Expr[HCursor] = Expr.quote(Expr.splice(readResultExpr)._2)
 
                   // Build the if-else dispatch chain (foldRight to get correct order)
-                  val errorExpr: Expr[Either[DecodingFailure, A]] = Expr.quote {
-                    Left(
-                      CirceDerivationUtils.failedToMatchSubtype(
-                        Expr.splice(typeNameExpr),
-                        Expr.splice(innerCursorExpr),
-                        Expr.splice(Expr(knownNames))
-                      )
-                    ): Either[DecodingFailure, A]
+                  val errorExpr: Expr[Any] = Expr.quote {
+                    val failure = CirceDerivationUtils.failedToMatchSubtype(
+                      Expr.splice(typeNameExpr),
+                      Expr.splice(innerCursorExpr),
+                      Expr.splice(Expr(knownNames))
+                    )
+                    (if (Expr.splice(dctx.failFast))
+                       Left(failure): Either[DecodingFailure, A]
+                     else
+                       Validated.invalidNel(failure): ValidatedNel[DecodingFailure, A]): Any
                   }
 
                   MIO.pure(childDispatchers.toList.foldRight(errorExpr) { case (dispatcher, elseExpr) =>
@@ -1071,22 +1359,22 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   })
                 }
                 .map { builder =>
-                  val dispatchFn = builder.build[Either[DecodingFailure, A]]
+                  val dispatchFn = builder.build[Any]
                   Expr.quote {
                     val config = Expr.splice(dctx.config)
                     val cursor = Expr.splice(dctx.cursor)
+                    val failFast = Expr.splice(dctx.failFast)
                     if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings) {
                       // String enum decode path: read plain string, dispatch on name
                       cursor.as[String](io.circe.Decoder.decodeString) match {
                         case Right(typeName) =>
                           Expr.splice(dispatchFn)((typeName, cursor))
                         case Left(_) =>
-                          Left(
-                            DecodingFailure(
-                              "Expected a JSON string for enum value",
-                              cursor.history
-                            )
-                          ): Either[DecodingFailure, A]
+                          val err = DecodingFailure("Expected a JSON string for enum value", cursor.history)
+                          (if (failFast)
+                             Left(err): Either[DecodingFailure, A]
+                           else
+                             Validated.invalidNel(err): ValidatedNel[DecodingFailure, A]): Any
                       }
                     } else {
                       val readResult: Either[DecodingFailure, (String, HCursor)] =
@@ -1094,7 +1382,16 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                           case Some(field) => CirceDerivationUtils.decodeDiscriminator(cursor, field)
                           case None        => CirceDerivationUtils.decodeWrapped(cursor)
                         }
-                      readResult.flatMap(Expr.splice(dispatchFn))
+                      if (failFast) {
+                        readResult.flatMap { r =>
+                          Expr.splice(dispatchFn)(r).asInstanceOf[Either[DecodingFailure, A]]
+                        }: Any
+                      } else {
+                        (readResult match {
+                          case Right(r) => Expr.splice(dispatchFn)(r)
+                          case Left(e)  => Validated.invalidNel(e): ValidatedNel[DecodingFailure, A]
+                        }): Any
+                      }
                     }
                   }
                 }
@@ -1104,15 +1401,19 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     /** Derives a decoder for a single enum child type and returns a dispatch function. The dispatch function takes
       * (typeNameExpr, innerCursorExpr, elseExpr) and produces an if-else expression that checks if the type name
-      * matches and decodes accordingly.
+      * matches and decodes accordingly. Returns Any (Either when failFast=true, ValidatedNel when failFast=false).
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildDecoder[A: DecoderCtx, ChildType: Type](
         childName: String
-    ): MIO[(Expr[String], Expr[HCursor], Expr[Either[DecodingFailure, A]]) => Expr[Either[DecodingFailure, A]]] = {
+    ): MIO[(Expr[String], Expr[HCursor], Expr[Any]) => Expr[Any]] = {
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
       implicit val StringT: Type[String] = DTypes.String
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+      implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
 
       // Try to summon implicit Decoder[ChildType] first
       DTypes
@@ -1121,24 +1422,25 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         .toEither match {
         case Right(decoderExpr) =>
           Log.info(s"Found implicit Decoder[$childName], using it") >>
-            MIO.pure {
-              (
-                  typeNameExpr: Expr[String],
-                  innerCursorExpr: Expr[HCursor],
-                  elseExpr: Expr[Either[DecodingFailure, A]]
-              ) =>
-                Expr.quote {
-                  if (
-                    Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                      .splice(typeNameExpr)
-                  )
-                    Expr
-                      .splice(decoderExpr)
-                      .apply(Expr.splice(innerCursorExpr))
-                      .asInstanceOf[Either[DecodingFailure, A]]
-                  else
-                    Expr.splice(elseExpr)
-                }
+            MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
+              Expr.quote {
+                if (
+                  Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                    .splice(typeNameExpr)
+                )
+                  (if (Expr.splice(dctx.failFast))
+                     Expr
+                       .splice(decoderExpr)
+                       .apply(Expr.splice(innerCursorExpr))
+                       .asInstanceOf[Either[DecodingFailure, A]]
+                   else
+                     (Expr
+                       .splice(decoderExpr)
+                       .decodeAccumulating(Expr.splice(innerCursorExpr)): Any)
+                       .asInstanceOf[ValidatedNel[DecodingFailure, A]]): Any
+                else
+                  Expr.splice(elseExpr)
+              }
             }
 
         case Left(_) =>
@@ -1146,39 +1448,33 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
               Log.info(s"Using singleton for $childName") >>
-                MIO.pure {
-                  (
-                      typeNameExpr: Expr[String],
-                      _: Expr[HCursor],
-                      elseExpr: Expr[Either[DecodingFailure, A]]
-                  ) =>
-                    Expr.quote {
-                      if (
-                        Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                          .splice(typeNameExpr)
-                      )
-                        Right(Expr.splice(singleton).asInstanceOf[A]): Either[DecodingFailure, A]
-                      else
-                        Expr.splice(elseExpr)
-                    }
+                MIO.pure { (typeNameExpr: Expr[String], _: Expr[HCursor], elseExpr: Expr[Any]) =>
+                  Expr.quote {
+                    if (
+                      Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                        .splice(typeNameExpr)
+                    )
+                      (if (Expr.splice(dctx.failFast))
+                         Right(Expr.splice(singleton).asInstanceOf[A]): Either[DecodingFailure, A]
+                       else
+                         Validated.valid(Expr.splice(singleton).asInstanceOf[A]): ValidatedNel[DecodingFailure, A]): Any
+                    else
+                      Expr.splice(elseExpr)
+                  }
                 }
             case None =>
               // No singleton - derive via full rules chain (this sets up a helper in cache)
               deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.cursor)).flatMap { _ =>
                 dctx.getHelper[ChildType].map {
                   case Some(helper) =>
-                    (
-                        typeNameExpr: Expr[String],
-                        innerCursorExpr: Expr[HCursor],
-                        elseExpr: Expr[Either[DecodingFailure, A]]
-                    ) => {
-                      val helperCallExpr = helper(innerCursorExpr, dctx.config)
+                    (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) => {
+                      val helperCallExpr = helper(innerCursorExpr, dctx.config, dctx.failFast)
                       Expr.quote {
                         if (
                           Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
                             .splice(typeNameExpr)
                         )
-                          Expr.splice(helperCallExpr).asInstanceOf[Either[DecodingFailure, A]]
+                          Expr.splice(helperCallExpr) // already returns Any (Either or ValidatedNel based on failFast)
                         else
                           Expr.splice(elseExpr)
                       }
@@ -1187,11 +1483,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   case None =>
                     // No helper - the child was handled by implicit or value type rule
                     // This shouldn't normally happen since we checked implicit above
-                    (
-                        typeNameExpr: Expr[String],
-                        innerCursorExpr: Expr[HCursor],
-                        elseExpr: Expr[Either[DecodingFailure, A]]
-                    ) => elseExpr
+                    (_: Expr[String], _: Expr[HCursor], elseExpr: Expr[Any]) => elseExpr
                 }
               }
           }
@@ -1228,6 +1520,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def DecoderResult[A: Type]: Type[Either[DecodingFailure, A]] =
       Type.of[Either[DecodingFailure, A]]
+
+    // Accumulating types
+    def ValidatedNelDF[A: Type]: Type[ValidatedNel[DecodingFailure, A]] =
+      Type.of[ValidatedNel[DecodingFailure, A]]
+    val ValidatedNelDFAny: Type[ValidatedNel[DecodingFailure, Any]] =
+      Type.of[ValidatedNel[DecodingFailure, Any]]
+    val ValidatedNelDFUnit: Type[ValidatedNel[DecodingFailure, Unit]] =
+      Type.of[ValidatedNel[DecodingFailure, Unit]]
+    val ValidatedNelDFArrayAny: Type[ValidatedNel[DecodingFailure, Array[Any]]] =
+      Type.of[ValidatedNel[DecodingFailure, Array[Any]]]
+    val ListValidatedNelDFAny: Type[List[ValidatedNel[DecodingFailure, Any]]] =
+      Type.of[List[ValidatedNel[DecodingFailure, Any]]]
   }
 }
 

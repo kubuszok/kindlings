@@ -118,17 +118,17 @@ Hearth's `IsCollectionProviderForIArray` handles `IArray[T]` on Scala 3. Encoder
 
 `IntMap` and `LongMap` are `Map` subtypes handled by Hearth's `IsMap` providers. `BitSet` is an `Iterable[Int]` handled by `IsCollection`. No additional Kindlings work needed.
 
+### ~~13. Error Accumulation (Circe)~~ — RESOLVED
+
+Kindlings-derived `KindlingsDecoder[A]` now overrides `decodeAccumulating` with a macro-generated body that accumulates errors across case class fields. The approach uses a single cached def with a `failFast: Boolean` parameter — when `true`, fields fail fast with `Either`; when `false`, all fields are decoded and errors collected into `ValidatedNel`. Nested case classes accumulate recursively when the inner decoder also has `decodeAccumulating` (e.g., summoned implicits or `KindlingsDecoder.derived`). Non-case-class types (enums, collections, options, value types) wrap `apply` with `Validated.fromEither` for the accumulating path.
+
+Runtime helpers added to `CirceDerivationUtils`: `sequenceDecodeResultsAccumulating`, `checkStrictDecodingAccumulating`, `checkIsObjectAccumulating`, `decodeFieldAccumulating`, `decodeFieldWithDefaultAccumulating`, `decoderFromFnWithAcc`.
+
+Tested in **circe-derivation** (6 tests): multi-field error accumulation, valid input, nested case classes, single-field error, `derived` implicit with override, empty case class. Works on both Scala 2.13 and 3.
+
 ---
 
 ## REMAINING MEDIUM PRIORITY GAPS
-
-### 13. Error Accumulation (Circe)
-
-**What circe tests**: `decodeAccumulating` that collects multiple errors instead of failing fast.
-
-**Kindlings status**: No error accumulation tests. May not be in scope if Kindlings doesn't add this API.
-
-**Action**: Evaluate whether this is in scope. If circe's `decodeAccumulating` works with Kindlings-derived decoders, add a test verifying it.
 
 ### 18. Recursive Types — compile-time error for non-opted-in
 

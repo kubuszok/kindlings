@@ -1,5 +1,6 @@
 package hearth.kindlings.circederivation.internal.runtime
 
+import cats.data.{NonEmptyList, Validated, ValidatedNel}
 import io.circe.{Decoder, DecodingFailure, HCursor, Json, JsonObject}
 
 object CirceDerivationUtils {
@@ -166,6 +167,15 @@ object CirceDerivationUtils {
   def decoderFromFn[A](decode: HCursor => Either[DecodingFailure, A]): Decoder[A] =
     new Decoder[A] { def apply(c: HCursor): Decoder.Result[A] = decode(c) }
 
+  def decoderFromFnWithAcc[A](
+      decode: HCursor => Either[DecodingFailure, A],
+      decodeAcc: HCursor => ValidatedNel[DecodingFailure, A]
+  ): Decoder[A] =
+    new Decoder[A] {
+      def apply(c: HCursor): Decoder.Result[A] = decode(c)
+      override def decodeAccumulating(c: HCursor): Decoder.AccumulatingResult[A] = decodeAcc(c)
+    }
+
   /** Decodes Option[A] from cursor using a decode function. Returns Right(None) for null. */
   def decodeOptionFromFn[A](
       cursor: HCursor,
@@ -215,4 +225,53 @@ object CirceDerivationUtils {
         }
         Right(builder.result())
     }
+
+  // --- Accumulating decoder helpers ---
+
+  def sequenceDecodeResultsAccumulating(
+      results: List[ValidatedNel[DecodingFailure, Any]]
+  ): ValidatedNel[DecodingFailure, Array[Any]] = {
+    val arr = new Array[Any](results.size)
+    var errors: List[DecodingFailure] = Nil
+    var i = 0
+    val iter = results.iterator
+    while (iter.hasNext) {
+      iter.next() match {
+        case Validated.Valid(v)   => arr(i) = v
+        case Validated.Invalid(e) => errors = e.toList reverse_::: errors
+      }
+      i += 1
+    }
+    NonEmptyList.fromList(errors.reverse) match {
+      case Some(nel) => Validated.Invalid(nel)
+      case None      => Validated.Valid(arr)
+    }
+  }
+
+  def checkStrictDecodingAccumulating(
+      cursor: HCursor,
+      expectedFields: Set[String]
+  ): ValidatedNel[DecodingFailure, Unit] =
+    Validated.fromEither(checkStrictDecoding(cursor, expectedFields)).leftMap(NonEmptyList.one)
+
+  def checkIsObjectAccumulating(cursor: HCursor): ValidatedNel[DecodingFailure, Unit] =
+    Validated.fromEither(checkIsObject(cursor)).leftMap(NonEmptyList.one)
+
+  def decodeFieldAccumulating[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A]
+  ): ValidatedNel[DecodingFailure, A] =
+    decoder.tryDecodeAccumulating(cursor.downField(fieldName))
+
+  def decodeFieldWithDefaultAccumulating[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A],
+      default: Any
+  ): ValidatedNel[DecodingFailure, Any] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Validated.Valid(default)
+    else decoder.tryDecodeAccumulating(field).map(x => x: Any)
+  }
 }
