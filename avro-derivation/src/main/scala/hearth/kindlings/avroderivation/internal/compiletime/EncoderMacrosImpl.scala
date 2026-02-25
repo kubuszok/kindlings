@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.{AvroConfig, AvroEncoder}
+import hearth.kindlings.avroderivation.{AvroConfig, AvroEncoder, DecimalConfig}
 import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
@@ -270,6 +270,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           EncUseBuiltInSupportRule,
           EncHandleAsValueTypeRule,
           EncHandleAsOptionRule,
+          EncHandleAsEitherRule,
           EncHandleAsMapRule,
           EncHandleAsCollectionRule,
           EncHandleAsNamedTupleRule,
@@ -364,6 +365,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
     @scala.annotation.nowarn("msg=is never used")
     private def builtInEncode[A: EncoderCtx]: Option[Expr[Any]] = {
+      implicit val AvroConfigT: Type[AvroConfig] = EncTypes.AvroConfig
+      implicit val DecimalConfigT: Type[DecimalConfig] = EncTypes.DecimalConfig
       val tpe = Type[A]
       val value = ectx.value
       if (tpe =:= Type.of[Boolean])
@@ -387,7 +390,13 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.wrapByteArray(Expr.splice(value).asInstanceOf[Array[Byte]]): Any))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[BigDecimal].toString: Any))
+        Some(Expr.quote {
+          val bd = Expr.splice(value).asInstanceOf[BigDecimal]
+          (Expr.splice(ectx.config).decimalConfig match {
+            case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
+            case None     => bd.toString
+          }): Any
+        })
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.encodeUUID(Expr.splice(value).asInstanceOf[java.util.UUID]): Any))
       else if (tpe =:= Type.of[java.time.Instant])
@@ -453,6 +462,48 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
+        }
+      }
+  }
+
+  object EncHandleAsEitherRule extends EncoderDerivationRule("handle as Either when possible") {
+    implicit val AnyT: Type[Any] = EncTypes.Any
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as Either") >> {
+        Type[A] match {
+          case IsEither(isEither) =>
+            import isEither.{LeftValue, RightValue}
+            for {
+              leftBuilder <- LambdaBuilder
+                .of1[LeftValue]("leftVal")
+                .traverse { leftExpr =>
+                  deriveEncoderRecursively[LeftValue](using ectx.nest(leftExpr))
+                }
+              rightBuilder <- LambdaBuilder
+                .of1[RightValue]("rightVal")
+                .traverse { rightExpr =>
+                  deriveEncoderRecursively[RightValue](using ectx.nest(rightExpr))
+                }
+            } yield {
+              val leftLambda = leftBuilder.build[Any]
+              val rightLambda = rightBuilder.build[Any]
+              Rule.matched(
+                isEither.value.fold[Any](ectx.value)(
+                  onLeft = leftExpr =>
+                    Expr.quote {
+                      Expr.splice(leftLambda).apply(Expr.splice(leftExpr))
+                    },
+                  onRight = rightExpr =>
+                    Expr.quote {
+                      Expr.splice(rightLambda).apply(Expr.splice(rightExpr))
+                    }
+                )
+              )
+            }
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Either"))
         }
       }
   }
@@ -816,6 +867,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       Type.of[hearth.kindlings.avroderivation.AvroEncoder.LogDerivation]
     val Schema: Type[Schema] = Type.of[Schema]
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
+    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
     val String: Type[String] = Type.of[String]
     val Any: Type[Any] = Type.of[Any]
     val Int: Type[Int] = Type.of[Int]

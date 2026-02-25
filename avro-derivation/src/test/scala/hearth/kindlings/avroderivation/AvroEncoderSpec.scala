@@ -317,6 +317,41 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("BigDecimal decimal encoding") {
+
+      test("BigDecimal with decimalConfig encodes to ByteBuffer") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val result = AvroEncoder.encode(BigDecimal("123.45"))
+        result.isInstanceOf[ByteBuffer] ==> true
+      }
+
+      test("BigDecimal without decimalConfig encodes to String (default)") {
+        val result = AvroEncoder.encode(BigDecimal("123.45"))
+        result ==> "123.45"
+      }
+    }
+
+    group("Either encoding") {
+
+      test("Left encodes the left value") {
+        val result = AvroEncoder.encode[Either[String, Int]](Left("error"))
+        result ==> "error"
+      }
+
+      test("Right encodes the right value") {
+        val result = AvroEncoder.encode[Either[String, Int]](Right(42))
+        result ==> 42
+      }
+
+      test("Either[String, SimplePerson] Right encodes to GenericRecord") {
+        val result = AvroEncoder.encode[Either[String, SimplePerson]](Right(SimplePerson("Alice", 30)))
+        result.isInstanceOf[GenericRecord] ==> true
+        val record = result.asInstanceOf[GenericRecord]
+        record.get("name").toString ==> "Alice"
+        record.get("age").asInstanceOf[Int] ==> 30
+      }
+    }
+
     group("configuration") {
 
       test("snake_case field names") {

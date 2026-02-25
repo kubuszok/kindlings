@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor}
+import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor, DecimalConfig}
 import hearth.kindlings.avroderivation.annotations.{avroDefault, avroDoc, avroNamespace, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
@@ -198,6 +198,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
           SfUseBuiltInSupportRule,
           SfHandleAsValueTypeRule,
           SfHandleAsOptionRule,
+          SfHandleAsEitherRule,
           SfHandleAsMapRule,
           SfHandleAsCollectionRule,
           SfHandleAsNamedTupleRule,
@@ -281,7 +282,10 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
         }
       }
 
+    @scala.annotation.nowarn("msg=is never used")
     private def builtInSchema[A: SchemaForCtx]: Option[Expr[Schema]] = {
+      implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+      implicit val DecimalConfigT: Type[DecimalConfig] = SfTypes.DecimalConfig
       val tpe = Type[A]
       if (tpe =:= Type.of[Boolean])
         Some(Expr.quote(AvroDerivationUtils.booleanSchema))
@@ -304,7 +308,12 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote(AvroDerivationUtils.stringSchema))
+        Some(Expr.quote {
+          Expr.splice(sfctx.config).decimalConfig match {
+            case Some(dc) => AvroDerivationUtils.decimalSchema(dc.precision, dc.scale)
+            case None     => AvroDerivationUtils.stringSchema
+          }
+        })
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.uuidSchema))
       else if (tpe =:= Type.of[java.time.Instant])
@@ -356,6 +365,30 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
+        }
+      }
+  }
+
+  object SfHandleAsEitherRule extends SchemaDerivationRule("handle as Either when possible") {
+    implicit val SchemaT: Type[Schema] = SfTypes.Schema
+
+    def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as Either") >> {
+        Type[A] match {
+          case IsEither(isEither) =>
+            import isEither.{LeftValue, RightValue}
+            for {
+              leftSchema <- deriveSchemaRecursively[LeftValue](using sfctx.nest[LeftValue])
+              rightSchema <- deriveSchemaRecursively[RightValue](using sfctx.nest[RightValue])
+            } yield Rule.matched(Expr.quote {
+              Schema.createUnion(
+                Expr.splice(leftSchema),
+                Expr.splice(rightSchema)
+              )
+            })
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Either"))
         }
       }
   }
@@ -793,6 +826,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       Type.of[hearth.kindlings.avroderivation.AvroSchemaFor.LogDerivation]
     val Schema: Type[Schema] = Type.of[Schema]
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
+    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
     val String: Type[String] = Type.of[String]
     val FieldName: Type[fieldName] = Type.of[fieldName]
     val TransientField: Type[transientField] = Type.of[transientField]

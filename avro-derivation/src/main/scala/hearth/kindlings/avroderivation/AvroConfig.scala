@@ -1,9 +1,12 @@
 package hearth.kindlings.avroderivation
 
+final case class DecimalConfig(precision: Int, scale: Int)
+
 final case class AvroConfig(
     namespace: Option[String] = None,
     transformFieldNames: String => String = identity,
-    transformConstructorNames: String => String = identity
+    transformConstructorNames: String => String = identity,
+    decimalConfig: Option[DecimalConfig] = None
 ) {
 
   def withNamespace(ns: String): AvroConfig = copy(namespace = Some(ns))
@@ -11,6 +14,8 @@ final case class AvroConfig(
   def withTransformConstructorNames(f: String => String): AvroConfig = copy(transformConstructorNames = f)
   def withSnakeCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.snakeCase)
   def withKebabCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.kebabCase)
+  def withDecimalConfig(precision: Int, scale: Int): AvroConfig =
+    copy(decimalConfig = Some(DecimalConfig(precision, scale)))
 }
 object AvroConfig {
 

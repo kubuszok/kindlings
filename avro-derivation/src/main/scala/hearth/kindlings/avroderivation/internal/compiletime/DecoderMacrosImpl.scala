@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder}
+import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, DecimalConfig}
 import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
@@ -274,6 +274,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
           DecUseBuiltInSupportRule,
           DecHandleAsValueTypeRule,
           DecHandleAsOptionRule,
+          DecHandleAsEitherRule,
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
           DecHandleAsNamedTupleRule,
@@ -368,6 +369,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
     @scala.annotation.nowarn("msg=is never used")
     private def builtInDecode[A: DecoderCtx]: Option[Expr[A]] = {
+      implicit val AvroConfigT: Type[AvroConfig] = DecTypes.AvroConfig
+      implicit val DecimalConfigT: Type[DecimalConfig] = DecTypes.DecimalConfig
       val tpe = Type[A]
       val value = dctx.avroValue
       if (tpe =:= Type.of[Boolean])
@@ -391,7 +394,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.decodeByteBuffer(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote(BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value))).asInstanceOf[A]))
+        Some(Expr.quote {
+          (Expr.splice(dctx.config).decimalConfig match {
+            case Some(dc) => AvroDerivationUtils.decodeBigDecimal(Expr.splice(value), dc.scale)
+            case None     => BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)))
+          }).asInstanceOf[A]
+        })
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.decodeUUID(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.time.Instant])
@@ -452,6 +460,50 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
+        }
+      }
+  }
+
+  @scala.annotation.nowarn("msg=is never used")
+  object DecHandleAsEitherRule extends DecoderDerivationRule("handle as Either when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as Either") >> {
+        Type[A] match {
+          case IsEither(isEither) =>
+            import isEither.{LeftValue, RightValue}
+            implicit val AnyT: Type[Any] = DecTypes.Any
+            implicit val SchemaT: Type[Schema] = DecTypes.Schema
+
+            for {
+              leftDecoderBuilder <- LambdaBuilder
+                .of1[Any]("leftRaw")
+                .traverse { leftRawExpr =>
+                  deriveDecoderRecursively[LeftValue](using dctx.nest[LeftValue](leftRawExpr))
+                }
+              rightDecoderBuilder <- LambdaBuilder
+                .of1[Any]("rightRaw")
+                .traverse { rightRawExpr =>
+                  deriveDecoderRecursively[RightValue](using dctx.nest[RightValue](rightRawExpr))
+                }
+              unionSchemaExpr <- deriveSelfContainedSchema[A](dctx.config)
+            } yield {
+              val leftDecodeFn = leftDecoderBuilder.build[LeftValue]
+              val rightDecodeFn = rightDecoderBuilder.build[RightValue]
+              Rule.matched(Expr.quote {
+                AvroDerivationUtils
+                  .decodeEither(
+                    Expr.splice(dctx.avroValue),
+                    Expr.splice(unionSchemaExpr),
+                    Expr.splice(leftDecodeFn),
+                    Expr.splice(rightDecodeFn)
+                  )
+                  .asInstanceOf[A]
+              })
+            }
+
+          case _ =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Either"))
         }
       }
   }
@@ -1055,6 +1107,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       Type.of[hearth.kindlings.avroderivation.AvroDecoder.LogDerivation]
     val Schema: Type[Schema] = Type.of[Schema]
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
+    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
     val String: Type[String] = Type.of[String]
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]

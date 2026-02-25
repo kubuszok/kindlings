@@ -227,6 +227,59 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("BigDecimal decimal") {
+
+      test("BigDecimal decimal round-trip via binary") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val encoder: AvroEncoder[BigDecimal] = AvroEncoder.derive[BigDecimal]
+        val decoder: AvroDecoder[BigDecimal] = AvroDecoder.derive[BigDecimal]
+        val original = BigDecimal("123.45")
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[BigDecimal](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("case class with BigDecimal decimal round-trip") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val encoder: AvroEncoder[WithBigDecimal] = AvroEncoder.derive[WithBigDecimal]
+        val decoder: AvroDecoder[WithBigDecimal] = AvroDecoder.derive[WithBigDecimal]
+        val original = WithBigDecimal(BigDecimal("999.99"))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithBigDecimal](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
+    group("Either") {
+
+      test("Either[String, Int] Left round-trip") {
+        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derive[Either[String, Int]]
+        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derive[Either[String, Int]]
+        val original: Either[String, Int] = Left("error")
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Either[String, Int]](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("Either[String, Int] Right round-trip") {
+        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derive[Either[String, Int]]
+        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derive[Either[String, Int]]
+        val original: Either[String, Int] = Right(42)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Either[String, Int]](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("case class with Either field round-trip") {
+        val encoder: AvroEncoder[WithEither] = AvroEncoder.derive[WithEither]
+        val decoder: AvroDecoder[WithEither] = AvroDecoder.derive[WithEither]
+        val original = WithEither(Right(42))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithEither](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
     group("JSON") {
 
       test("simple case class") {

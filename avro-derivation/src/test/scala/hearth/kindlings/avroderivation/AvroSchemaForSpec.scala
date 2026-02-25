@@ -416,6 +416,62 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("BigDecimal as decimal logical type") {
+
+      test("BigDecimal with decimalConfig produces BYTES with decimal logical type") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val schema = AvroSchemaFor.schemaOf[BigDecimal]
+        schema.getType ==> Schema.Type.BYTES
+        schema.getLogicalType.getName ==> "decimal"
+        schema.getLogicalType.asInstanceOf[org.apache.avro.LogicalTypes.Decimal].getPrecision ==> 10
+        schema.getLogicalType.asInstanceOf[org.apache.avro.LogicalTypes.Decimal].getScale ==> 2
+      }
+
+      test("BigDecimal without decimalConfig produces STRING (default)") {
+        val schema = AvroSchemaFor.schemaOf[BigDecimal]
+        schema.getType ==> Schema.Type.STRING
+      }
+
+      test("case class with BigDecimal field and decimal config") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val schema = AvroSchemaFor.schemaOf[WithBigDecimal]
+        schema.getType ==> Schema.Type.RECORD
+        val amountSchema = schema.getField("amount").schema()
+        amountSchema.getType ==> Schema.Type.BYTES
+        amountSchema.getLogicalType.getName ==> "decimal"
+      }
+    }
+
+    group("Either as union") {
+
+      test("Either[String, Int] produces UNION(STRING, INT)") {
+        val schema = AvroSchemaFor.schemaOf[Either[String, Int]]
+        schema.getType ==> Schema.Type.UNION
+        schema.getTypes.size() ==> 2
+        schema.getTypes.get(0).getType ==> Schema.Type.STRING
+        schema.getTypes.get(1).getType ==> Schema.Type.INT
+      }
+
+      test("Either[String, SimplePerson] produces UNION(STRING, RECORD)") {
+        val schema = AvroSchemaFor.schemaOf[Either[String, SimplePerson]]
+        schema.getType ==> Schema.Type.UNION
+        schema.getTypes.size() ==> 2
+        schema.getTypes.get(0).getType ==> Schema.Type.STRING
+        schema.getTypes.get(1).getType ==> Schema.Type.RECORD
+        schema.getTypes.get(1).getName ==> "SimplePerson"
+      }
+
+      test("case class with Either field") {
+        val schema = AvroSchemaFor.schemaOf[WithEither]
+        schema.getType ==> Schema.Type.RECORD
+        val valueSchema = schema.getField("value").schema()
+        valueSchema.getType ==> Schema.Type.UNION
+        valueSchema.getTypes.size() ==> 2
+        valueSchema.getTypes.get(0).getType ==> Schema.Type.STRING
+        valueSchema.getTypes.get(1).getType ==> Schema.Type.INT
+      }
+    }
+
     group("schema evolution with defaults") {
 
       test("schema with defaults enables forward compatibility") {

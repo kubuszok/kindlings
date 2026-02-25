@@ -271,6 +271,36 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("BigDecimal decimal decoding") {
+
+      test("BigDecimal with decimalConfig decodes from ByteBuffer") {
+        implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
+        val bd = BigDecimal("123.45")
+        val scaled = bd.bigDecimal.setScale(2)
+        val bb = ByteBuffer.wrap(scaled.unscaledValue.toByteArray)
+        val result = AvroDecoder.decode[BigDecimal](bb: Any)
+        result ==> BigDecimal("123.45")
+      }
+
+      test("BigDecimal without decimalConfig decodes from String (default)") {
+        val result = AvroDecoder.decode[BigDecimal](new org.apache.avro.util.Utf8("3.14"): Any)
+        result ==> BigDecimal("3.14")
+      }
+    }
+
+    group("Either decoding") {
+
+      test("Either[String, Int] decodes Left from String") {
+        val result = AvroDecoder.decode[Either[String, Int]](new org.apache.avro.util.Utf8("error"): Any)
+        result ==> Left("error")
+      }
+
+      test("Either[String, Int] decodes Right from Int") {
+        val result = AvroDecoder.decode[Either[String, Int]](42: Any)
+        result ==> Right(42)
+      }
+    }
+
     group("per-field annotations") {
 
       test("@fieldName decodes from custom field name") {

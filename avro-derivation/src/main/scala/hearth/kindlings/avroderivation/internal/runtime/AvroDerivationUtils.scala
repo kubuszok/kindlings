@@ -96,6 +96,12 @@ object AvroDerivationUtils {
   def stringSchema: Schema = Schema.create(Schema.Type.STRING)
   def bytesSchema: Schema = Schema.create(Schema.Type.BYTES)
 
+  def decimalSchema(precision: Int, scale: Int): Schema = {
+    val schema = Schema.create(Schema.Type.BYTES)
+    org.apache.avro.LogicalTypes.decimal(precision, scale).addToSchema(schema)
+    schema
+  }
+
   // Logical type schemas
   def uuidSchema: Schema = {
     val schema = Schema.create(Schema.Type.STRING)
@@ -157,6 +163,17 @@ object AvroDerivationUtils {
     new GenericData.EnumSymbol(schema, name)
 
   def wrapByteArray(bytes: Array[Byte]): ByteBuffer = ByteBuffer.wrap(bytes)
+
+  def encodeBigDecimal(bd: BigDecimal, scale: Int): ByteBuffer = {
+    val scaled = bd.bigDecimal.setScale(scale)
+    ByteBuffer.wrap(scaled.unscaledValue.toByteArray)
+  }
+
+  def encodeEither[L, R](value: Either[L, R], encodeLeft: L => Any, encodeRight: R => Any): Any =
+    value match {
+      case Left(l)  => encodeLeft(l)
+      case Right(r) => encodeRight(r)
+    }
 
   // Logical type encoders
   def encodeUUID(uuid: java.util.UUID): Any = uuid.toString
@@ -223,6 +240,24 @@ object AvroDerivationUtils {
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
     bytes
+  }
+
+  def decodeBigDecimal(value: Any, scale: Int): BigDecimal = {
+    val bb = value.asInstanceOf[ByteBuffer]
+    val bytes = new Array[Byte](bb.remaining())
+    bb.get(bytes)
+    BigDecimal(new java.math.BigDecimal(new java.math.BigInteger(bytes), scale))
+  }
+
+  def decodeEither[L, R](
+      value: Any,
+      unionSchema: Schema,
+      decodeLeft: Any => L,
+      decodeRight: Any => R
+  ): Either[L, R] = {
+    val index = GenericData.get().resolveUnion(unionSchema, value)
+    if (index == 0) Left(decodeLeft(value))
+    else Right(decodeRight(value))
   }
 
   def decodeCharSequence(value: Any): String =

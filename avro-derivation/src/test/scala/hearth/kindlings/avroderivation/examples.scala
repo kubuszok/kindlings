@@ -85,3 +85,8 @@ case class EventRecord(
     time: java.time.LocalTime,
     localTimestamp: java.time.LocalDateTime
 )
+
+// BigDecimal and Either test types
+case class WithBigDecimal(amount: BigDecimal)
+case class WithEither(value: Either[String, Int])
+case class WithEitherRecord(value: Either[String, SimplePerson])
