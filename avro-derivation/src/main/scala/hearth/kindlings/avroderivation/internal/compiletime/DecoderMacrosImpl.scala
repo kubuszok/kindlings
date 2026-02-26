@@ -411,6 +411,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         Some(Expr.quote(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)).charAt(0).asInstanceOf[A]))
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.decodeByteBuffer(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.nio.ByteBuffer])
+        Some(Expr.quote(AvroDerivationUtils.decodeToByteBuffer(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           (Expr.splice(dctx.config).decimalConfig match {

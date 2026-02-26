@@ -8,10 +8,14 @@ import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor, DecimalConfig}
 import hearth.kindlings.avroderivation.annotations.{
+  avroAlias,
   avroDefault,
   avroDoc,
+  avroError,
   avroFixed,
   avroNamespace,
+  avroProp,
+  avroSortPriority,
   fieldName,
   transientField
 }
@@ -323,6 +327,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
         Some(Expr.quote(AvroDerivationUtils.stringSchema))
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
+      else if (tpe =:= Type.of[java.nio.ByteBuffer])
+        Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           Expr.splice(sfctx.config).decimalConfig match {
@@ -584,11 +590,17 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
       implicit val avroDefaultT: Type[avroDefault] = SfTypes.AvroDefault
       implicit val avroFixedT: Type[avroFixed] = SfTypes.AvroFixed
+      implicit val avroErrorT: Type[avroError] = SfTypes.AvroError
+      implicit val avroPropT: Type[avroProp] = SfTypes.AvroProp
+      implicit val avroAliasT: Type[avroAlias] = SfTypes.AvroAlias
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       // Read class-level annotations
       val classDoc: Option[String] = getTypeAnnotationStringArg[avroDoc, A]
       val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+      val isError: Boolean = hasTypeAnnotation[avroError, A]
+      val classProps: List[(String, String)] = getAllTypeAnnotationTwoStringArgs[avroProp, A]
+      val classAliases: List[String] = getAllTypeAnnotationStringArgs[avroAlias, A]
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor
       if (caseClass.isSingleton) {
@@ -598,6 +610,9 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
             typeName,
             classDoc,
             classNamespace,
+            isError,
+            classProps,
+            classAliases,
             Expr.quote {
               java.util.Collections.emptyList[Schema.Field]()
             },
@@ -630,6 +645,9 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               typeName,
               classDoc,
               classNamespace,
+              isError,
+              classProps,
+              classAliases,
               Expr.quote {
                 java.util.Collections.emptyList[Schema.Field]()
               },
@@ -644,6 +662,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               val fieldDoc = getAnnotationStringArg[avroDoc](param)
               val fieldDefault = getAnnotationStringArg[avroDefault](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
+              val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
+              val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
               Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
                 avroFixedSize match {
                   case Some(_) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
@@ -663,11 +683,11 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
                           Expr.splice(Expr(size))
                         )
                       }
-                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault)
+                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                     }
                   case None =>
                     deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
-                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault)
+                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                     }
                 }
               }
@@ -675,49 +695,82 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
             .map { fieldPairs =>
               val javaFieldsExpr = fieldPairs.toList.foldRight(
                 Expr.quote(List.empty[Schema.Field])
-              ) { case ((fName, fieldSchema, nameOverride, fieldDoc, fieldDefault), acc) =>
-                val nameExpr: Expr[String] = nameOverride match {
-                  case Some(customName) => Expr(customName)
-                  case None             =>
-                    Expr.quote {
-                      Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+              ) {
+                case (
+                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases),
+                      acc
+                    ) =>
+                  val nameExpr: Expr[String] = nameOverride match {
+                    case Some(customName) => Expr(customName)
+                    case None             =>
+                      Expr.quote {
+                        Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                      }
+                  }
+                  val baseFieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
+                    case (Some(doc), Some(default)) =>
+                      Expr.quote {
+                        AvroDerivationUtils.createFieldWithDocAndDefault(
+                          Expr.splice(nameExpr),
+                          Expr.splice(fieldSchema),
+                          Expr.splice(Expr(doc)),
+                          Expr.splice(Expr(default))
+                        )
+                      }
+                    case (Some(doc), None) =>
+                      Expr.quote {
+                        AvroDerivationUtils.createFieldWithDoc(
+                          Expr.splice(nameExpr),
+                          Expr.splice(fieldSchema),
+                          Expr.splice(Expr(doc))
+                        )
+                      }
+                    case (None, Some(default)) =>
+                      Expr.quote {
+                        AvroDerivationUtils.createFieldWithDefault(
+                          Expr.splice(nameExpr),
+                          Expr.splice(fieldSchema),
+                          Expr.splice(Expr(default))
+                        )
+                      }
+                    case (None, None) =>
+                      Expr.quote {
+                        AvroDerivationUtils.createField(
+                          Expr.splice(nameExpr),
+                          Expr.splice(fieldSchema)
+                        )
+                      }
+                  }
+                  // Apply field-level @avroProp annotations
+                  val fieldWithPropsExpr: Expr[Schema.Field] =
+                    if (fieldProps.isEmpty) baseFieldExpr
+                    else {
+                      val propsListExpr = fieldProps.foldRight(Expr.quote(List.empty[(String, String)])) {
+                        case ((k, v), listAcc) =>
+                          Expr.quote((Expr.splice(Expr(k)), Expr.splice(Expr(v))) :: Expr.splice(listAcc))
+                      }
+                      Expr.quote {
+                        val f = Expr.splice(baseFieldExpr)
+                        Expr.splice(propsListExpr).foreach { case (k, v) =>
+                          AvroDerivationUtils.addFieldProp(f, k, v)
+                        }
+                        f
+                      }
                     }
-                }
-                val fieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
-                  case (Some(doc), Some(default)) =>
-                    Expr.quote {
-                      AvroDerivationUtils.createFieldWithDocAndDefault(
-                        Expr.splice(nameExpr),
-                        Expr.splice(fieldSchema),
-                        Expr.splice(Expr(doc)),
-                        Expr.splice(Expr(default))
-                      )
+                  // Apply field-level @avroAlias annotations
+                  val fieldExpr: Expr[Schema.Field] =
+                    if (fieldAliases.isEmpty) fieldWithPropsExpr
+                    else {
+                      val aliasesListExpr = fieldAliases.foldRight(Expr.quote(List.empty[String])) { (alias, listAcc) =>
+                        Expr.quote(Expr.splice(Expr(alias)) :: Expr.splice(listAcc))
+                      }
+                      Expr.quote {
+                        val f = Expr.splice(fieldWithPropsExpr)
+                        Expr.splice(aliasesListExpr).foreach(a => AvroDerivationUtils.addFieldAlias(f, a))
+                        f
+                      }
                     }
-                  case (Some(doc), None) =>
-                    Expr.quote {
-                      AvroDerivationUtils.createFieldWithDoc(
-                        Expr.splice(nameExpr),
-                        Expr.splice(fieldSchema),
-                        Expr.splice(Expr(doc))
-                      )
-                    }
-                  case (None, Some(default)) =>
-                    Expr.quote {
-                      AvroDerivationUtils.createFieldWithDefault(
-                        Expr.splice(nameExpr),
-                        Expr.splice(fieldSchema),
-                        Expr.splice(Expr(default))
-                      )
-                    }
-                  case (None, None) =>
-                    Expr.quote {
-                      AvroDerivationUtils.createField(
-                        Expr.splice(nameExpr),
-                        Expr.splice(fieldSchema)
-                      )
-                    }
-                }
-                Expr.quote(Expr.splice(fieldExpr) :: Expr.splice(acc))
+                  Expr.quote(Expr.splice(fieldExpr) :: Expr.splice(acc))
               }
               val fieldsExpr = Expr.quote {
                 val fieldsList = Expr.splice(javaFieldsExpr)
@@ -725,7 +778,16 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
                 fieldsList.foreach(javaFields.add)
                 (javaFields: java.util.List[Schema.Field])
               }
-              createRecordExpr(typeName, classDoc, classNamespace, fieldsExpr, sfctx.config)
+              createRecordExpr(
+                typeName,
+                classDoc,
+                classNamespace,
+                isError,
+                classProps,
+                classAliases,
+                fieldsExpr,
+                sfctx.config
+              )
             }
       }
     }
@@ -734,11 +796,23 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
         typeName: String,
         classDoc: Option[String],
         classNamespace: Option[String],
+        isError: Boolean,
+        classProps: List[(String, String)],
+        classAliases: List[String],
         fieldsExpr: Expr[java.util.List[Schema.Field]],
         configExpr: Expr[AvroConfig]
-    )(implicit SchemaT: Type[Schema], StringT: Type[String], AvroConfigT: Type[AvroConfig]): Expr[Schema] =
-      (classDoc, classNamespace) match {
-        case (Some(doc), Some(ns)) =>
+    )(implicit SchemaT: Type[Schema], StringT: Type[String], AvroConfigT: Type[AvroConfig]): Expr[Schema] = {
+      val baseExpr: Expr[Schema] = (classDoc, classNamespace, isError) match {
+        case (Some(doc), Some(ns), true) =>
+          Expr.quote {
+            AvroDerivationUtils.createRecordWithDocError(
+              Expr.splice(Expr(typeName)),
+              Expr.splice(Expr(ns)),
+              Expr.splice(Expr(doc)),
+              Expr.splice(fieldsExpr)
+            )
+          }
+        case (Some(doc), Some(ns), false) =>
           Expr.quote {
             AvroDerivationUtils.createRecordWithDoc(
               Expr.splice(Expr(typeName)),
@@ -747,7 +821,16 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               Expr.splice(fieldsExpr)
             )
           }
-        case (Some(doc), None) =>
+        case (Some(doc), None, true) =>
+          Expr.quote {
+            AvroDerivationUtils.createRecordWithDocError(
+              Expr.splice(Expr(typeName)),
+              Expr.splice(configExpr).namespace.getOrElse(""),
+              Expr.splice(Expr(doc)),
+              Expr.splice(fieldsExpr)
+            )
+          }
+        case (Some(doc), None, false) =>
           Expr.quote {
             AvroDerivationUtils.createRecordWithDoc(
               Expr.splice(Expr(typeName)),
@@ -756,7 +839,15 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               Expr.splice(fieldsExpr)
             )
           }
-        case (None, Some(ns)) =>
+        case (None, Some(ns), true) =>
+          Expr.quote {
+            AvroDerivationUtils.createRecordError(
+              Expr.splice(Expr(typeName)),
+              Expr.splice(Expr(ns)),
+              Expr.splice(fieldsExpr)
+            )
+          }
+        case (None, Some(ns), false) =>
           Expr.quote {
             AvroDerivationUtils.createRecord(
               Expr.splice(Expr(typeName)),
@@ -764,7 +855,15 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               Expr.splice(fieldsExpr)
             )
           }
-        case (None, None) =>
+        case (None, None, true) =>
+          Expr.quote {
+            AvroDerivationUtils.createRecordError(
+              Expr.splice(Expr(typeName)),
+              Expr.splice(configExpr).namespace.getOrElse(""),
+              Expr.splice(fieldsExpr)
+            )
+          }
+        case (None, None, false) =>
           Expr.quote {
             AvroDerivationUtils.createRecord(
               Expr.splice(Expr(typeName)),
@@ -773,6 +872,34 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
             )
           }
       }
+      // Apply class-level @avroProp annotations
+      val withPropsExpr: Expr[Schema] =
+        if (classProps.isEmpty) baseExpr
+        else {
+          val propsListExpr = classProps.foldRight(Expr.quote(List.empty[(String, String)])) { case ((k, v), listAcc) =>
+            Expr.quote((Expr.splice(Expr(k)), Expr.splice(Expr(v))) :: Expr.splice(listAcc))
+          }
+          Expr.quote {
+            val s = Expr.splice(baseExpr)
+            Expr.splice(propsListExpr).foreach { case (k, v) =>
+              AvroDerivationUtils.addSchemaProp(s, k, v)
+            }
+            s
+          }
+        }
+      // Apply class-level @avroAlias annotations
+      if (classAliases.isEmpty) withPropsExpr
+      else {
+        val aliasesListExpr = classAliases.foldRight(Expr.quote(List.empty[String])) { (alias, listAcc) =>
+          Expr.quote(Expr.splice(Expr(alias)) :: Expr.splice(listAcc))
+        }
+        Expr.quote {
+          val s = Expr.splice(withPropsExpr)
+          Expr.splice(aliasesListExpr).foreach(a => AvroDerivationUtils.addSchemaAlias(s, a))
+          s
+        }
+      }
+    }
   }
 
   object SfHandleAsEnumRule extends SchemaDerivationRule("handle as enum when possible") {
@@ -799,6 +926,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
         enumm: Enum[A]
     ): MIO[Expr[Schema]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
+      implicit val avroSortPriorityT: Type[avroSortPriority] = SfTypes.AvroSortPriority
 
       val childrenList = enumm.directChildren.toList
       val typeName = Type[A].shortName
@@ -817,8 +945,14 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
 
           if (allCaseObjects) {
             // Pure enum of case objects → Avro ENUM schema
-            val symbolNames = children.toList.map(_._1)
-            val symbolsListExpr = symbolNames.foldRight(
+            // Sort by @avroSortPriority
+            val symbolsWithPriority = children.toList.map { case (name, child) =>
+              import child.Underlying as ChildType
+              val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
+              (name, priority.getOrElse(0))
+            }
+            val sortedSymbolNames = symbolsWithPriority.sortBy(_._2).map(_._1)
+            val symbolsListExpr = sortedSymbolNames.foldRight(
               Expr.quote(List.empty[String])
             ) { (name, acc) =>
               Expr.quote {
@@ -838,7 +972,15 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
             })
           } else {
             // Mixed sealed trait → Avro UNION of record schemas
-            children
+            // Sort children by @avroSortPriority
+            val childrenWithPriority = children.toList.map { case (name, child) =>
+              import child.Underlying as ChildType
+              val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
+              (name, child, priority.getOrElse(0))
+            }
+            val sortedList = childrenWithPriority.sortBy(_._3).map(t => (t._1, t._2))
+            val sortedChildren = NonEmptyList(sortedList.head, sortedList.tail)
+            sortedChildren
               .parTraverse { case (_, child) =>
                 import child.Underlying as ChildType
                 Log.namedScope(s"Deriving schema for enum case ${Type[ChildType].prettyPrint}") {
@@ -880,6 +1022,10 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     val AvroNamespace: Type[avroNamespace] = Type.of[avroNamespace]
     val AvroDefault: Type[avroDefault] = Type.of[avroDefault]
     val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
+    val AvroError: Type[avroError] = Type.of[avroError]
+    val AvroProp: Type[avroProp] = Type.of[avroProp]
+    val AvroAlias: Type[avroAlias] = Type.of[avroAlias]
+    val AvroSortPriority: Type[avroSortPriority] = Type.of[avroSortPriority]
   }
 }
 

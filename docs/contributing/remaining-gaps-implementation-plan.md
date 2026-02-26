@@ -17,11 +17,11 @@ This document contains all the information needed to implement each remaining ga
 | 3 | `@stringified` | Jsoniter | Medium | Medium | Not started |
 | 4 | Map as array encoding | Jsoniter | Medium | Medium | Not started |
 | 5 | `@AvroFixed` | Avro | High | Medium | **Done** |
-| 6 | `@AvroProp` | Avro | Medium | Low | Not started |
-| 7 | `@AvroAlias` | Avro | Medium | Medium | Not started |
-| 8 | `@AvroError` | Avro | Low | Low | Not started |
-| 9 | `@AvroSortPriority` | Avro | Low | Low | Not started |
-| 10 | `ByteBuffer` encoding | Avro | Low | Low | Not started |
+| 6 | `@AvroProp` | Avro | Medium | Low | **Done** |
+| 7 | `@AvroAlias` | Avro | Medium | Medium | **Done** |
+| 8 | `@AvroError` | Avro | Low | Low | **Done** |
+| 9 | `@AvroSortPriority` | Avro | Low | Low | **Done** |
+| 10 | `ByteBuffer` encoding | Avro | Low | Low | **Done** |
 | 11 | UTF-8 field names | All | Low | Low (tests only) | Not started |
 | 12 | Union types (Scala 3) | All | Low | Hard (blocked) | Blocked on Hearth |
 | 13 | `Codec.AsObject` | Circe | Low | Low | Not started |
@@ -33,6 +33,11 @@ This document contains all the information needed to implement each remaining ga
 - Circe `KeyEncoder`/`KeyDecoder` — built-in types inlined + user implicit summoning (2026-02-26)
 - Jsoniter non-String map keys — built-in types + `JsonKeyCodec[K]` summoning (2026-02-26)
 - Avro `@avroFixed(size)` — field-level annotation changing `Array[Byte]` fields from BYTES to FIXED schema, with encoder/decoder support and compile-time validation (2026-02-26)
+- Avro `@avroError` — marker annotation setting `isError=true` on RECORD schemas for Avro RPC error types (2026-02-26)
+- Avro `ByteBuffer` — built-in type support for `java.nio.ByteBuffer` mapping to Avro BYTES in schema, encoder, and decoder (2026-02-26)
+- Avro `@avroSortPriority(priority)` — controls ordering of subtypes in ENUM and UNION schemas (2026-02-26)
+- Avro `@avroProp(key, value)` — adds custom key-value properties to schemas and fields, supports multiple annotations on same target (2026-02-26)
+- Avro `@avroAlias(alias)` — adds schema evolution aliases to records and fields, supports multiple annotations on same target (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---

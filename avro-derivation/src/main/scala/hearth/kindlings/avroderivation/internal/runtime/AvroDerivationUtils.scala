@@ -27,6 +27,35 @@ object AvroDerivationUtils {
     schema
   }
 
+  def createRecordError(name: String, namespace: String, fields: util.List[Schema.Field]): Schema = {
+    val schema = Schema.createRecord(name, null, namespace, true)
+    schema.setFields(fields)
+    schema
+  }
+
+  def createRecordWithDocError(
+      name: String,
+      namespace: String,
+      doc: String,
+      fields: util.List[Schema.Field]
+  ): Schema = {
+    val schema = Schema.createRecord(name, doc, namespace, true)
+    schema.setFields(fields)
+    schema
+  }
+
+  def addSchemaProp(schema: Schema, key: String, value: String): Unit =
+    schema.addProp(key, value)
+
+  def addFieldProp(field: Schema.Field, key: String, value: String): Unit =
+    field.addProp(key, value)
+
+  def addSchemaAlias(schema: Schema, alias: String): Unit =
+    schema.addAlias(alias)
+
+  def addFieldAlias(field: Schema.Field, alias: String): Unit =
+    field.addAlias(alias)
+
   def createField(name: String, schema: Schema): Schema.Field =
     new Schema.Field(name, schema)
 
@@ -250,6 +279,9 @@ object AvroDerivationUtils {
     val fixed = value.asInstanceOf[org.apache.avro.generic.GenericFixed]
     fixed.bytes().clone()
   }
+
+  def decodeToByteBuffer(value: Any): ByteBuffer =
+    value.asInstanceOf[ByteBuffer]
 
   def decodeByteBuffer(value: Any): Array[Byte] = {
     val bb = value.asInstanceOf[ByteBuffer]

@@ -329,6 +329,33 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("ByteBuffer") {
+
+      test("WithByteBuffer binary round-trip") {
+        val encoder: AvroEncoder[WithByteBuffer] = AvroEncoder.derive[WithByteBuffer]
+        val decoder: AvroDecoder[WithByteBuffer] = AvroDecoder.derive[WithByteBuffer]
+        val original = WithByteBuffer(java.nio.ByteBuffer.wrap(Array[Byte](1, 2, 3, 4)))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithByteBuffer](bytes)(decoder)
+        val decodedBytes = new Array[Byte](decoded.data.remaining())
+        decoded.data.get(decodedBytes)
+        val originalBytes = Array[Byte](1, 2, 3, 4)
+        decodedBytes.toList ==> originalBytes.toList
+      }
+    }
+
+    group("@avroError") {
+
+      test("@avroError record round-trip") {
+        val encoder: AvroEncoder[AvroErrorRecord] = AvroEncoder.derive[AvroErrorRecord]
+        val decoder: AvroDecoder[AvroErrorRecord] = AvroDecoder.derive[AvroErrorRecord]
+        val original = AvroErrorRecord(500, "Internal Server Error")
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[AvroErrorRecord](bytes)(decoder)
+        decoded ==> original
+      }
+    }
+
     group("JSON") {
 
       test("simple case class") {

@@ -1,10 +1,14 @@
 package hearth.kindlings.avroderivation
 
 import hearth.kindlings.avroderivation.annotations.{
+  avroAlias,
   avroDefault,
   avroDoc,
+  avroError,
   avroFixed,
   avroNamespace,
+  avroProp,
+  avroSortPriority,
   fieldName,
   transientField
 }
@@ -110,6 +114,48 @@ case class WithVector(items: Vector[String])
 // @avroFixed test types
 final case class WithFixedBytes(@avroFixed(4) id: Array[Byte])
 final case class WithFixedAndRegularBytes(@avroFixed(16) token: Array[Byte], data: Array[Byte])
+
+// @avroError test types
+@avroError
+case class AvroErrorRecord(code: Int, message: String)
+
+// ByteBuffer test types
+case class WithByteBuffer(data: java.nio.ByteBuffer)
+
+// @avroSortPriority test types
+sealed trait PrioritizedShape
+@avroSortPriority(2)
+case class PCircle(radius: Double) extends PrioritizedShape
+@avroSortPriority(1)
+case class PRectangle(width: Double, height: Double) extends PrioritizedShape
+
+sealed trait PrioritizedEnum
+@avroSortPriority(3)
+case object PAlpha extends PrioritizedEnum
+@avroSortPriority(1)
+case object PBeta extends PrioritizedEnum
+@avroSortPriority(2)
+case object PGamma extends PrioritizedEnum
+
+// @avroProp test types
+@avroProp("custom-key", "custom-value")
+case class WithClassProp(name: String)
+
+case class WithFieldProp(@avroProp("field-key", "field-value") name: String, age: Int)
+
+@avroProp("key1", "val1")
+@avroProp("key2", "val2")
+case class WithMultipleProps(name: String)
+
+// @avroAlias test types
+@avroAlias("OldPersonName")
+case class AliasedRecord(name: String, age: Int)
+
+case class WithFieldAlias(@avroAlias("old_name") name: String, age: Int)
+
+@avroAlias("V1Name")
+@avroAlias("V2Name")
+case class MultiAliasRecord(name: String)
 
 // Unhandled type for compile-time error tests
 class NotAnAvroType

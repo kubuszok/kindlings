@@ -548,6 +548,97 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("@avroError") {
+
+      test("@avroError marks schema as error record") {
+        val schema = AvroSchemaFor.schemaOf[AvroErrorRecord]
+        schema.getType ==> Schema.Type.RECORD
+        schema.isError ==> true
+      }
+
+      test("regular record is not an error record") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        schema.isError ==> false
+      }
+    }
+
+    group("ByteBuffer") {
+
+      test("ByteBuffer schema maps to BYTES") {
+        val schema = AvroSchemaFor.schemaOf[java.nio.ByteBuffer]
+        schema.getType ==> Schema.Type.BYTES
+      }
+
+      test("case class with ByteBuffer field") {
+        val schema = AvroSchemaFor.schemaOf[WithByteBuffer]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getField("data").schema().getType ==> Schema.Type.BYTES
+      }
+    }
+
+    group("@avroSortPriority") {
+
+      test("enum symbols sorted by priority") {
+        val schema = AvroSchemaFor.schemaOf[PrioritizedEnum]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getEnumSymbols.get(0) ==> "PBeta"
+        schema.getEnumSymbols.get(1) ==> "PGamma"
+        schema.getEnumSymbols.get(2) ==> "PAlpha"
+      }
+
+      test("union members sorted by priority") {
+        val schema = AvroSchemaFor.schemaOf[PrioritizedShape]
+        schema.getType ==> Schema.Type.UNION
+        schema.getTypes.get(0).getName ==> "PRectangle"
+        schema.getTypes.get(1).getName ==> "PCircle"
+      }
+
+      test("default order without priority annotations") {
+        val schema = AvroSchemaFor.schemaOf[Shape]
+        schema.getType ==> Schema.Type.UNION
+        schema.getTypes.get(0).getName ==> "Circle"
+        schema.getTypes.get(1).getName ==> "Rectangle"
+      }
+    }
+
+    group("@avroProp") {
+
+      test("class-level @avroProp adds property to schema") {
+        val schema = AvroSchemaFor.schemaOf[WithClassProp]
+        schema.getProp("custom-key") ==> "custom-value"
+      }
+
+      test("field-level @avroProp adds property to field") {
+        val schema = AvroSchemaFor.schemaOf[WithFieldProp]
+        schema.getField("name").getProp("field-key") ==> "field-value"
+      }
+
+      test("multiple @avroProp on same class") {
+        val schema = AvroSchemaFor.schemaOf[WithMultipleProps]
+        schema.getProp("key1") ==> "val1"
+        schema.getProp("key2") ==> "val2"
+      }
+    }
+
+    group("@avroAlias") {
+
+      test("class-level @avroAlias adds alias to schema") {
+        val schema = AvroSchemaFor.schemaOf[AliasedRecord]
+        assert(schema.getAliases.contains("OldPersonName"))
+      }
+
+      test("field-level @avroAlias adds alias to field") {
+        val schema = AvroSchemaFor.schemaOf[WithFieldAlias]
+        assert(schema.getField("name").aliases().contains("old_name"))
+      }
+
+      test("multiple @avroAlias on same class") {
+        val schema = AvroSchemaFor.schemaOf[MultiAliasRecord]
+        assert(schema.getAliases.contains("V1Name"))
+        assert(schema.getAliases.contains("V2Name"))
+      }
+    }
+
     group("compile-time errors") {
 
       test("schemaOf with unhandled type produces error message") {

@@ -407,6 +407,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
         Some(Expr.quote(Expr.splice(value).asInstanceOf[Char].toString: Any))
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.wrapByteArray(Expr.splice(value).asInstanceOf[Array[Byte]]): Any))
+      else if (tpe =:= Type.of[java.nio.ByteBuffer])
+        Some(Expr.quote(Expr.splice(value).asInstanceOf[java.nio.ByteBuffer]: Any))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           val bd = Expr.splice(value).asInstanceOf[BigDecimal]
