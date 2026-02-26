@@ -157,6 +157,51 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("non-string key maps") {
+
+      test("Map[Int, String] roundtrip") {
+        val value = Map(1 -> "a", 2 -> "b")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Int, String]](json) ==> Right(value)
+      }
+
+      test("Map[Long, String] roundtrip") {
+        val value = Map(100L -> "x", 200L -> "y")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Long, String]](json) ==> Right(value)
+      }
+
+      test("case class with Map[Int, String] field roundtrip") {
+        val value = WithIntKeyMap(Map(1 -> "a", 2 -> "b"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithIntKeyMap](json) ==> Right(value)
+      }
+
+      test("value type key Map[UserId, String] roundtrip") {
+        val value = Map(UserId(42) -> "alice", UserId(99) -> "bob")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[UserId, String]](json) ==> Right(value)
+      }
+
+      test("enum key Map[CardinalDirection, String] roundtrip") {
+        val value = Map[CardinalDirection, String](North -> "up", South -> "down")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[CardinalDirection, String]](json) ==> Right(value)
+      }
+
+      test("empty Map[Int, String] roundtrip") {
+        val value = Map.empty[Int, String]
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Int, String]](json) ==> Right(value)
+      }
+
+      test("Map[Int, List[String]] nested roundtrip") {
+        val value = Map(1 -> List("a", "b"), 2 -> List("c"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Int, List[String]]](json) ==> Right(value)
+      }
+    }
+
     group("with configuration") {
 
       test("custom constructor name transform roundtrip") {

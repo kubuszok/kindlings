@@ -1,7 +1,7 @@
 package hearth.kindlings.circederivation
 
 import hearth.MacroSuite
-import io.circe.{Decoder, Json}
+import io.circe.{Decoder, Json, KeyDecoder}
 
 final class KindlingsDecoderSpec extends MacroSuite {
 
@@ -254,6 +254,110 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("empty map") {
         KindlingsDecoder.decode[Map[String, Int]](Json.obj()) ==> Right(Map.empty[String, Int])
+      }
+
+      test("Map[Int, String]") {
+        val json = Json.obj("1" -> Json.fromString("a"), "2" -> Json.fromString("b"))
+        KindlingsDecoder.decode[Map[Int, String]](json) ==> Right(Map(1 -> "a", 2 -> "b"))
+      }
+
+      test("Map[Long, String]") {
+        val json = Json.obj("100" -> Json.fromString("x"))
+        KindlingsDecoder.decode[Map[Long, String]](json) ==> Right(Map(100L -> "x"))
+      }
+
+      test("empty Map[Int, String]") {
+        KindlingsDecoder.decode[Map[Int, String]](Json.obj()) ==> Right(Map.empty[Int, String])
+      }
+
+      test("case class with Map[Int, String] field") {
+        val json = Json.obj("data" -> Json.obj("1" -> Json.fromString("a")))
+        KindlingsDecoder.decode[WithIntKeyMap](json) ==> Right(WithIntKeyMap(Map(1 -> "a")))
+      }
+
+      test("Map[Int, List[String]] nested") {
+        val json = Json.obj("1" -> Json.arr(Json.fromString("a"), Json.fromString("b")))
+        KindlingsDecoder.decode[Map[Int, List[String]]](json) ==> Right(Map(1 -> List("a", "b")))
+      }
+
+      test("value type key Map[UserId, String]") {
+        val json = Json.obj("42" -> Json.fromString("alice"))
+        KindlingsDecoder.decode[Map[UserId, String]](json) ==> Right(Map(UserId(42) -> "alice"))
+      }
+
+      test("enum key Map[CardinalDirection, String]") {
+        val json = Json.obj("North" -> Json.fromString("up"), "South" -> Json.fromString("down"))
+        KindlingsDecoder.decode[Map[CardinalDirection, String]](json) ==>
+          Right(Map[CardinalDirection, String](North -> "up", South -> "down"))
+      }
+
+      test("Map[Int, String] invalid key returns Left") {
+        val json = Json.obj("abc" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Int, String]](json).isLeft)
+      }
+    }
+
+    group("key codec derivation") {
+
+      test("Int key decodes") {
+        val json = Json.obj("42" -> Json.fromString("a"))
+        KindlingsDecoder.decode[Map[Int, String]](json) ==> Right(Map(42 -> "a"))
+      }
+
+      test("Int key matches KeyDecoder[Int]") {
+        KeyDecoder[Int].apply("42") ==> Some(42)
+        val json = Json.obj("42" -> Json.fromString("a"))
+        KindlingsDecoder.decode[Map[Int, String]](json) ==> Right(Map(42 -> "a"))
+      }
+
+      test("invalid Int key returns Left") {
+        val json = Json.obj("abc" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Int, String]](json).isLeft)
+      }
+
+      test("Long key decodes") {
+        val json = Json.obj("100" -> Json.fromString("x"))
+        KindlingsDecoder.decode[Map[Long, String]](json) ==> Right(Map(100L -> "x"))
+      }
+
+      test("invalid Long key returns Left") {
+        val json = Json.obj("abc" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Long, String]](json).isLeft)
+      }
+
+      test("Double key decodes") {
+        val json = Json.obj("3.14" -> Json.fromString("pi"))
+        KindlingsDecoder.decode[Map[Double, String]](json) ==> Right(Map(3.14 -> "pi"))
+      }
+
+      test("Short key decodes") {
+        val json = Json.obj("42" -> Json.fromString("a"))
+        KindlingsDecoder.decode[Map[Short, String]](json) ==> Right(Map(42.toShort -> "a"))
+      }
+
+      test("Byte key decodes") {
+        val json = Json.obj("7" -> Json.fromString("a"))
+        KindlingsDecoder.decode[Map[Byte, String]](json) ==> Right(Map(7.toByte -> "a"))
+      }
+
+      test("user-provided KeyDecoder[UserId] is used") {
+        implicit val userIdKeyDecoder: KeyDecoder[UserId] = KeyDecoder.instance { s =>
+          if (s.startsWith("user-")) scala.util.Try(UserId(s.stripPrefix("user-").toInt)).toOption
+          else None
+        }
+        val json = Json.obj("user-42" -> Json.fromString("alice"))
+        KindlingsDecoder.decode[Map[UserId, String]](json) ==> Right(Map(UserId(42) -> "alice"))
+      }
+
+      test("value type key without user implicit unwraps") {
+        val json = Json.obj("42" -> Json.fromString("alice"))
+        KindlingsDecoder.decode[Map[UserId, String]](json) ==> Right(Map(UserId(42) -> "alice"))
+      }
+
+      test("enum key decodes") {
+        val json = Json.obj("North" -> Json.fromString("up"))
+        KindlingsDecoder.decode[Map[CardinalDirection, String]](json) ==>
+          Right(Map[CardinalDirection, String](North -> "up"))
       }
     }
 

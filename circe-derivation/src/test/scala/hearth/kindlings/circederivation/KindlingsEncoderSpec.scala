@@ -1,7 +1,7 @@
 package hearth.kindlings.circederivation
 
 import hearth.MacroSuite
-import io.circe.{Encoder, Json}
+import io.circe.{Encoder, Json, KeyEncoder}
 
 final class KindlingsEncoderSpec extends MacroSuite {
 
@@ -117,6 +117,108 @@ final class KindlingsEncoderSpec extends MacroSuite {
 
       test("empty map") {
         KindlingsEncoder.encode(Map.empty[String, Int]) ==> Json.obj()
+      }
+
+      test("Map[Int, String]") {
+        val json = KindlingsEncoder.encode(Map(1 -> "a", 2 -> "b"))
+        val obj = json.asObject.get
+        obj("1") ==> Some(Json.fromString("a"))
+        obj("2") ==> Some(Json.fromString("b"))
+      }
+
+      test("Map[Long, String]") {
+        val json = KindlingsEncoder.encode(Map(100L -> "x"))
+        val obj = json.asObject.get
+        obj("100") ==> Some(Json.fromString("x"))
+      }
+
+      test("empty Map[Int, String]") {
+        KindlingsEncoder.encode(Map.empty[Int, String]) ==> Json.obj()
+      }
+
+      test("case class with Map[Int, String] field") {
+        val json = KindlingsEncoder.encode(WithIntKeyMap(Map(1 -> "a")))
+        val obj = json.asObject.get
+        val data = obj("data").get.asObject.get
+        data("1") ==> Some(Json.fromString("a"))
+      }
+
+      test("Map[Int, List[String]] nested") {
+        val json = KindlingsEncoder.encode(Map(1 -> List("a", "b")))
+        val obj = json.asObject.get
+        obj("1") ==> Some(Json.arr(Json.fromString("a"), Json.fromString("b")))
+      }
+
+      test("value type key Map[UserId, String]") {
+        val json = KindlingsEncoder.encode(Map(UserId(42) -> "alice"))
+        val obj = json.asObject.get
+        obj("42") ==> Some(Json.fromString("alice"))
+      }
+
+      test("enum key Map[CardinalDirection, String]") {
+        val json = KindlingsEncoder.encode(Map[CardinalDirection, String](North -> "up", South -> "down"))
+        val obj = json.asObject.get
+        obj("North") ==> Some(Json.fromString("up"))
+        obj("South") ==> Some(Json.fromString("down"))
+      }
+    }
+
+    group("key codec derivation") {
+
+      test("Int key encodes as toString") {
+        val json = KindlingsEncoder.encode(Map(42 -> "a", -1 -> "b"))
+        val obj = json.asObject.get
+        obj("42") ==> Some(Json.fromString("a"))
+        obj("-1") ==> Some(Json.fromString("b"))
+      }
+
+      test("Int key matches KeyEncoder[Int]") {
+        val json = KindlingsEncoder.encode(Map(42 -> "a"))
+        val jsonKey = json.asObject.get.keys.head
+        jsonKey ==> KeyEncoder[Int].apply(42)
+      }
+
+      test("Long key matches KeyEncoder[Long]") {
+        val json = KindlingsEncoder.encode(Map(42L -> "a"))
+        val jsonKey = json.asObject.get.keys.head
+        jsonKey ==> KeyEncoder[Long].apply(42L)
+      }
+
+      test("Double key matches KeyEncoder[Double]") {
+        val json = KindlingsEncoder.encode(Map(3.14 -> "pi"))
+        val jsonKey = json.asObject.get.keys.head
+        jsonKey ==> KeyEncoder[Double].apply(3.14)
+      }
+
+      test("Short key encodes as toString") {
+        val json = KindlingsEncoder.encode(Map(42.toShort -> "a"))
+        val obj = json.asObject.get
+        obj("42") ==> Some(Json.fromString("a"))
+      }
+
+      test("Byte key encodes as toString") {
+        val json = KindlingsEncoder.encode(Map(7.toByte -> "a"))
+        val obj = json.asObject.get
+        obj("7") ==> Some(Json.fromString("a"))
+      }
+
+      test("user-provided KeyEncoder[UserId] is used") {
+        implicit val userIdKeyEncoder: KeyEncoder[UserId] = KeyEncoder.instance(uid => s"user-${uid.value}")
+        val json = KindlingsEncoder.encode(Map(UserId(42) -> "alice"))
+        val obj = json.asObject.get
+        obj("user-42") ==> Some(Json.fromString("alice"))
+      }
+
+      test("value type key without user implicit uses unwrap") {
+        val json = KindlingsEncoder.encode(Map(UserId(42) -> "alice"))
+        val obj = json.asObject.get
+        obj("42") ==> Some(Json.fromString("alice"))
+      }
+
+      test("enum key encodes as toString") {
+        val json = KindlingsEncoder.encode(Map[CardinalDirection, String](North -> "up"))
+        val obj = json.asObject.get
+        obj("North") ==> Some(Json.fromString("up"))
       }
     }
 

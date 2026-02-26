@@ -196,6 +196,45 @@ object JsoniterDerivationUtils {
     dispatch(typeName)
   }
 
+  /** Write a map with custom key encoding. */
+  def writeMapWithKeyEncoder[K, V](
+      out: JsonWriter,
+      entries: Iterable[(K, V)],
+      encodeKey: (K, JsonWriter) => Unit,
+      encodeValue: V => Unit
+  ): Unit = {
+    out.writeObjectStart()
+    val iter = entries.iterator
+    while (iter.hasNext) {
+      val (key, value) = iter.next()
+      encodeKey(key, out)
+      encodeValue(value)
+    }
+    out.writeObjectEnd()
+  }
+
+  /** Read a map with custom key decoding. */
+  def readMapWithKeyDecoder[K, V, M](
+      in: JsonReader,
+      decodeKey: JsonReader => K,
+      decodeValue: JsonReader => V,
+      factory: scala.collection.Factory[(K, V), M]
+  ): M = {
+    val builder = factory.newBuilder
+    if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{' or null")
+    if (!in.isNextToken('}'.toByte)) {
+      in.rollbackToken()
+      val key = decodeKey(in)
+      builder += ((key, decodeValue(in)))
+      while (in.isNextToken(','.toByte)) {
+        val k = decodeKey(in)
+        builder += ((k, decodeValue(in)))
+      }
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
+    }
+    builder.result()
+  }
+
   /** Cast an `Any` value to `A`, using a decode function purely for type inference. */
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decodeFn: JsonReader => A): A = value.asInstanceOf[A]

@@ -1,6 +1,14 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReaderException, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  writeToString,
+  JsonKeyCodec,
+  JsonReader,
+  JsonReaderException,
+  JsonValueCodec,
+  JsonWriter
+}
 import hearth.MacroSuite
 
 final class KindlingsJsonValueCodecSpec extends MacroSuite {
@@ -122,6 +130,176 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = Map.empty[String, Int]
         val json = writeToString(value)(codec)
         val decoded = readFromString[Map[String, Int]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Map[Int, String] encodes with int keys as strings") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Int, String]]
+        val value = Map(1 -> "a", 2 -> "b")
+        val json = writeToString(value)(codec)
+        json.contains("\"1\":\"a\"") ==> true
+        json.contains("\"2\":\"b\"") ==> true
+        val decoded = readFromString[Map[Int, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Map[Long, String] encodes with long keys as strings") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Long, String]]
+        val value = Map(100L -> "x", 200L -> "y")
+        val json = writeToString(value)(codec)
+        json.contains("\"100\":\"x\"") ==> true
+        val decoded = readFromString[Map[Long, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("empty Map[Int, String] round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Int, String]]
+        val value = Map.empty[Int, String]
+        val json = writeToString(value)(codec)
+        json ==> "{}"
+        val decoded = readFromString[Map[Int, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("case class with Map[Int, String] field") {
+        val codec = KindlingsJsonValueCodec.derive[WithIntKeyMap]
+        val value = WithIntKeyMap(Map(1 -> "a"))
+        val json = writeToString(value)(codec)
+        json.contains("\"data\":{\"1\":\"a\"}") ==> true
+        val decoded = readFromString[WithIntKeyMap](json)(codec)
+        decoded ==> value
+      }
+
+      test("Map[Int, List[String]] nested") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Int, List[String]]]
+        val value = Map(1 -> List("a", "b"))
+        val json = writeToString(value)(codec)
+        json.contains("\"1\":[\"a\",\"b\"]") ==> true
+        val decoded = readFromString[Map[Int, List[String]]](json)(codec)
+        decoded ==> value
+      }
+
+      test("value type key Map[UserId, String] encodes with unwrapped int key") {
+        val codec = KindlingsJsonValueCodec.derive[Map[UserId, String]]
+        val value = Map(UserId(42) -> "alice")
+        val json = writeToString(value)(codec)
+        json.contains("\"42\":\"alice\"") ==> true
+        val decoded = readFromString[Map[UserId, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("enum key Map[CardinalDirection, String] encodes with case name as key") {
+        val codec = KindlingsJsonValueCodec.derive[Map[CardinalDirection, String]]
+        val value = Map[CardinalDirection, String](North -> "up", South -> "down")
+        val json = writeToString(value)(codec)
+        json.contains("\"North\":\"up\"") ==> true
+        json.contains("\"South\":\"down\"") ==> true
+        val decoded = readFromString[Map[CardinalDirection, String]](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("key codec derivation") {
+
+      test("Int key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Int, String]]
+        val value = Map(42 -> "a")
+        val json = writeToString(value)(codec)
+        json.contains("\"42\":\"a\"") ==> true
+        val decoded = readFromString[Map[Int, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Long key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Long, String]]
+        val value = Map(100L -> "x")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[Long, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Double key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Double, String]]
+        val value = Map(3.14 -> "pi")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[Double, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Float key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Float, String]]
+        val value = Map(1.5f -> "x")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[Float, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Short key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Short, String]]
+        val value = Map(42.toShort -> "a")
+        val json = writeToString(value)(codec)
+        json.contains("\"42\":\"a\"") ==> true
+        val decoded = readFromString[Map[Short, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("Boolean key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[Boolean, String]]
+        val value = Map(true -> "yes", false -> "no")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[Boolean, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("BigDecimal key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[BigDecimal, String]]
+        val value = Map(BigDecimal("3.14") -> "pi")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[BigDecimal, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("BigInt key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[BigInt, String]]
+        val value = Map(BigInt(123) -> "x")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Map[BigInt, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("user-provided JsonKeyCodec[UserId] is used") {
+        @scala.annotation.nowarn("msg=is never used")
+        implicit val userIdKeyCodec: JsonKeyCodec[UserId] = new JsonKeyCodec[UserId] {
+          def decodeKey(in: JsonReader): UserId = {
+            val s = in.readKeyAsString()
+            if (s.startsWith("user-")) UserId(s.stripPrefix("user-").toInt)
+            else in.decodeError("expected user- prefix")
+          }
+          def encodeKey(x: UserId, out: JsonWriter): Unit = out.writeKey(s"user-${x.value}")
+        }
+        val codec = KindlingsJsonValueCodec.derive[Map[UserId, String]]
+        val value = Map(UserId(42) -> "alice")
+        val json = writeToString(value)(codec)
+        json.contains("\"user-42\":\"alice\"") ==> true
+        val decoded = readFromString[Map[UserId, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("value type key uses unwrap") {
+        val codec = KindlingsJsonValueCodec.derive[Map[UserId, String]]
+        val value = Map(UserId(42) -> "alice")
+        val json = writeToString(value)(codec)
+        json.contains("\"42\":\"alice\"") ==> true
+        val decoded = readFromString[Map[UserId, String]](json)(codec)
+        decoded ==> value
+      }
+
+      test("enum key round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Map[CardinalDirection, String]]
+        val value = Map[CardinalDirection, String](North -> "up")
+        val json = writeToString(value)(codec)
+        json.contains("\"North\":\"up\"") ==> true
+        val decoded = readFromString[Map[CardinalDirection, String]](json)(codec)
         decoded ==> value
       }
     }

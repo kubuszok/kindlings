@@ -382,5 +382,7 @@ Not derivation-related.
 - Jsoniter Scala: https://github.com/plokhotnyuk/jsoniter-scala (jsoniter-scala-macros/)
 - Avro4s: https://github.com/sksamuel/avro4s (avro4s-core/)
 
+**See also:** [type-class-gap-analysis.md](type-class-gap-analysis.md) — analysis of missing type classes & encoder hierarchies (Circe `Encoder.AsObject`, `KeyEncoder`/`KeyDecoder`; Jsoniter `JsonKeyCodec`; non-String map key support).
+
 Initial analysis: 2026-02-24
-Last updated: 2026-02-25 — Higher-kinded types confirmed working (all modules). Cache operation logging added. Error testing strengthened (avro compile-time, yaml/jsoniter runtime message validation). Gap #18 (recursive types) resolved. Difficulty estimates added for remaining low-priority gaps. IArray workaround still needed (Hearth bug not yet fully fixed).
+Last updated: 2026-02-26 — Added cross-reference to type-class-gap-analysis.md. Higher-kinded types confirmed working (all modules). Cache operation logging added. Error testing strengthened (avro compile-time, yaml/jsoniter runtime message validation). Gap #18 (recursive types) resolved. Difficulty estimates added for remaining low-priority gaps. IArray workaround still needed (Hearth bug not yet fully fixed).

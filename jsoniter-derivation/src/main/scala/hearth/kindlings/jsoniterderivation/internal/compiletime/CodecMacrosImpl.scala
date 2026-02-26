@@ -12,6 +12,7 @@ import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUt
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
   writeToString,
+  JsonKeyCodec,
   JsonReader,
   JsonReaderException,
   JsonValueCodec,
@@ -758,6 +759,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
   object EncHandleAsMapRule extends EncoderDerivationRule("handle as map when possible") {
     implicit val UnitT: Type[Unit] = CTypes.Unit
     implicit val StringT: Type[String] = CTypes.String
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {
@@ -775,9 +777,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Unit]]] = {
       import isMap.{Key, Value}
-      if (!(Key <:< Type[String]))
-        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
-      else {
+      if (Key <:< Type[String]) {
+        // String keys — use existing fast path
         LambdaBuilder
           .of1[Value]("mapValue")
           .traverse { valueExpr =>
@@ -794,8 +795,137 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               )
             })
           }
+      } else {
+        // Non-String keys — try to derive key encoding
+        deriveKeyEncoding[Key].flatMap {
+          case Some(keyEncoderLambda) =>
+            LambdaBuilder
+              .of1[Value]("mapValue")
+              .traverse { valueExpr =>
+                deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
+              }
+              .map { builder =>
+                val valueLambda = builder.build[Unit]
+                val iterableExpr = isMap.asIterable(ectx.value)
+                Rule.matched(Expr.quote {
+                  JsoniterDerivationUtils.writeMapWithKeyEncoder[Key, Value](
+                    Expr.splice(ectx.writer),
+                    Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                    Expr.splice(keyEncoderLambda),
+                    Expr.splice(valueLambda)
+                  )
+                })
+              }
+          case None =>
+            MIO.pure(
+              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived")
+            )
+        }
       }
     }
+
+    /** Try to derive a (K, JsonWriter) => Unit function for map key encoding. Returns None if derivation fails. */
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveKeyEncoding[K: Type](implicit ctx: EncoderCtx[?]): MIO[Option[Expr[(K, JsonWriter) => Unit]]] =
+
+      Log.info(s"Attempting to derive key encoder for ${Type[K].prettyPrint}") >> {
+        // 1. Built-in types with native writeKey overloads
+        val builtIn: Option[MIO[Option[Expr[(K, JsonWriter) => Unit]]]] = {
+          def makeKeyEncoder(
+              body: (Expr[K], Expr[JsonWriter]) => Expr[Unit]
+          ): MIO[Option[Expr[(K, JsonWriter) => Unit]]] =
+            LambdaBuilder
+              .of2[K, JsonWriter]("key", "writer")
+              .traverse { case (keyExpr, writerExpr) =>
+                MIO.pure(body(keyExpr, writerExpr))
+              }
+              .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
+
+          if (Type[K] =:= Type.of[Int])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Int]))))
+          else if (Type[K] =:= Type.of[Long])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Long]))))
+          else if (Type[K] =:= Type.of[Double])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Double]))))
+          else if (Type[K] =:= Type.of[Float])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Float]))))
+          else if (Type[K] =:= Type.of[Short])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Short]))))
+          else if (Type[K] =:= Type.of[Boolean])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Boolean]))))
+          else if (Type[K] =:= Type.of[BigDecimal])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[BigDecimal]))))
+          else if (Type[K] =:= Type.of[BigInt])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[BigInt]))))
+          else
+            None
+        }
+
+        builtIn.getOrElse {
+          // 2. Try summoning user-provided JsonKeyCodec[K]
+          CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither match {
+            case Right(keyCodecExpr) =>
+              Log.info(s"Found implicit JsonKeyCodec[${Type[K].prettyPrint}]") >>
+                LambdaBuilder
+                  .of2[K, JsonWriter]("key", "writer")
+                  .traverse { case (keyExpr, writerExpr) =>
+                    MIO.pure(Expr.quote {
+                      Expr.splice(keyCodecExpr).encodeKey(Expr.splice(keyExpr), Expr.splice(writerExpr))
+                    })
+                  }
+                  .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
+            case Left(_) =>
+              // 3. Value type — unwrap to inner, recurse
+              Type[K] match {
+                case IsValueType(isValueType) =>
+                  import isValueType.Underlying as Inner
+                  deriveKeyEncoding[Inner].flatMap {
+                    case Some(innerKeyEncoder) =>
+                      LambdaBuilder
+                        .of2[K, JsonWriter]("key", "writer")
+                        .traverse { case (keyExpr, writerExpr) =>
+                          val unwrapped = isValueType.value.unwrap(keyExpr)
+                          MIO.pure(Expr.quote {
+                            Expr.splice(innerKeyEncoder).apply(Expr.splice(unwrapped), Expr.splice(writerExpr))
+                          })
+                        }
+                        .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
+                    case None => MIO.pure(None)
+                  }
+                case _ =>
+                  // 4. Enum (all case objects) — write case name as key
+                  Enum.parse[K] match {
+                    case Some(enumm) =>
+                      val childrenList = enumm.directChildren.toList
+                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                        case (_, child) =>
+                          Type.isVal(using child.Underlying) ||
+                          CaseClass
+                            .parse(using child.Underlying)
+                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                      }
+                      if (allCaseObjects) {
+                        // Use .toString on case objects — for case objects, .toString returns the simple name.
+                        // Use adtLeafClassNameMapper for custom name mapping.
+                        LambdaBuilder
+                          .of2[K, JsonWriter]("key", "writer")
+                          .traverse { case (keyExpr, writerExpr) =>
+                            MIO.pure(Expr.quote {
+                              Expr
+                                .splice(writerExpr)
+                                .writeKey(
+                                  Expr.splice(ctx.config).adtLeafClassNameMapper(Expr.splice(keyExpr).toString)
+                                )
+                            })
+                          }
+                          .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
+                      } else MIO.pure(None)
+                    case None => MIO.pure(None)
+                  }
+              }
+          }
+        }
+      }
   }
 
   object EncHandleAsCollectionRule extends EncoderDerivationRule("handle as collection when possible") {
@@ -1484,9 +1614,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
-      if (!(Key <:< Type[String]))
-        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
-      else {
+      if (Key <:< Type[String]) {
+        // String keys — use existing fast path
         LambdaBuilder
           .of1[JsonReader]("valueReader")
           .traverse { valueReaderExpr =>
@@ -1505,6 +1634,189 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 .asInstanceOf[A]
             })
           }
+      } else {
+        // Non-String keys — try to derive key decoding
+        deriveKeyDecoding[Key].flatMap {
+          case Some(keyDecoderLambda) =>
+            LambdaBuilder
+              .of1[JsonReader]("valueReader")
+              .traverse { valueReaderExpr =>
+                deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
+              }
+              .map { builder =>
+                val decodeFn = builder.build[Value]
+                val factoryExpr = isMap.factory
+                Rule.matched(Expr.quote {
+                  JsoniterDerivationUtils
+                    .readMapWithKeyDecoder[Key, Value, A](
+                      Expr.splice(dctx.reader),
+                      Expr.splice(keyDecoderLambda),
+                      Expr.splice(decodeFn),
+                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                    )
+                    .asInstanceOf[A]
+                })
+              }
+          case None =>
+            MIO.pure(
+              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
+            )
+        }
+      }
+    }
+
+    /** Try to derive a JsonReader => K function for map key decoding. Returns None if derivation fails. */
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveKeyDecoding[K: Type](implicit ctx: DecoderCtx[?]): MIO[Option[Expr[JsonReader => K]]] = {
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      implicit val StringT: Type[String] = CTypes.String
+
+      Log.info(s"Attempting to derive key decoder for ${Type[K].prettyPrint}") >> {
+        // 1. Built-in types with native readKeyAs* overloads
+        val builtIn: Option[MIO[Option[Expr[JsonReader => K]]]] = {
+          def makeKeyDecoder(body: Expr[JsonReader] => Expr[K]): MIO[Option[Expr[JsonReader => K]]] =
+            LambdaBuilder
+              .of1[JsonReader]("reader")
+              .traverse { readerExpr =>
+                MIO.pure(body(readerExpr))
+              }
+              .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
+
+          if (Type[K] =:= Type.of[Int])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsInt().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Long])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsLong().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Double])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsDouble().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Float])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsFloat().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Short])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsShort().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Boolean])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBoolean().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[BigDecimal])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigDecimal().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[BigInt])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigInt().asInstanceOf[K])))
+          else
+            None
+        }
+
+        builtIn.getOrElse {
+          // 2. Try summoning user-provided JsonKeyCodec[K]
+          CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither match {
+            case Right(keyCodecExpr) =>
+              Log.info(s"Found implicit JsonKeyCodec[${Type[K].prettyPrint}]") >>
+                LambdaBuilder
+                  .of1[JsonReader]("reader")
+                  .traverse { readerExpr =>
+                    MIO.pure(Expr.quote {
+                      Expr.splice(keyCodecExpr).decodeKey(Expr.splice(readerExpr))
+                    })
+                  }
+                  .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
+            case Left(_) =>
+              // 3. Value type — unwrap to inner, recurse
+              Type[K] match {
+                case IsValueType(isValueType) =>
+                  import isValueType.Underlying as Inner
+                  // Build wrap lambda outside quotes
+                  LambdaBuilder
+                    .of1[Inner]("inner")
+                    .traverse { innerExpr =>
+                      MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
+                    }
+                    .flatMap { wrapBuilder =>
+                      val wrapLambda = wrapBuilder.build[K]
+                      deriveKeyDecoding[Inner].flatMap {
+                        case Some(innerKeyDecoder) =>
+                          LambdaBuilder
+                            .of1[JsonReader]("reader")
+                            .traverse { readerExpr =>
+                              MIO.pure(Expr.quote {
+                                Expr
+                                  .splice(wrapLambda)
+                                  .apply(Expr.splice(innerKeyDecoder).apply(Expr.splice(readerExpr)))
+                              })
+                            }
+                            .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
+                        case None => MIO.pure(None)
+                      }
+                    }
+                case _ =>
+                  // 4. Enum (all case objects) — read key as string, match against case names
+                  Enum.parse[K] match {
+                    case Some(enumm) =>
+                      val childrenList = enumm.directChildren.toList
+                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                        case (_, child) =>
+                          Type.isVal(using child.Underlying) ||
+                          CaseClass
+                            .parse(using child.Underlying)
+                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                      }
+                      if (allCaseObjects) {
+                        NonEmptyList.fromList(childrenList) match {
+                          case None           => MIO.pure(None)
+                          case Some(children) =>
+                            // Build a Map[String, K] lookup expression from singletons, then use it
+                            // inside the lambda to dispatch readKeyAsString() results.
+                            children
+                              .parTraverse { case (childName, child) =>
+                                import child.Underlying as ChildType
+                                Expr.singletonOf[ChildType] match {
+                                  case Some(singleton) =>
+                                    MIO.pure((childName, singleton.asInstanceOf[Expr[K]]))
+                                  case None =>
+                                    CaseClass.parse[ChildType] match {
+                                      case Some(cc) =>
+                                        cc.construct[MIO](new CaseClass.ConstructField[MIO] {
+                                          def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+                                            MIO.fail(new RuntimeException("Unexpected parameter in enum singleton"))
+                                        }).flatMap {
+                                          case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[K]]))
+                                          case None       =>
+                                            MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                        }
+                                      case None =>
+                                        MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                    }
+                                }
+                              }
+                              .flatMap { casesNel =>
+                                // Build Map[String, K] expression
+                                val mapEntries: List[Expr[(String, K)]] = casesNel.toList.map { case (name, caseExpr) =>
+                                  Expr.quote {
+                                    (Expr.splice(Expr(name)), Expr.splice(caseExpr))
+                                  }
+                                }
+                                val lookupMapExpr: Expr[Map[String, K]] = mapEntries.foldLeft(
+                                  Expr.quote(Map.empty[String, K])
+                                ) { (accExpr, entryExpr) =>
+                                  Expr.quote(Expr.splice(accExpr) + Expr.splice(entryExpr))
+                                }
+                                LambdaBuilder
+                                  .of1[JsonReader]("reader")
+                                  .traverse { readerExpr =>
+                                    MIO.pure(Expr.quote {
+                                      val keyStr = Expr.splice(readerExpr).readKeyAsString()
+                                      Expr
+                                        .splice(lookupMapExpr)
+                                        .getOrElse(
+                                          keyStr,
+                                          Expr.splice(readerExpr).decodeError("unknown enum key: " + keyStr): K
+                                        )
+                                    })
+                                  }
+                                  .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
+                              }
+                        }
+                      } else MIO.pure(None)
+                    case None => MIO.pure(None)
+                  }
+              }
+          }
+        }
       }
     }
   }
@@ -2404,6 +2716,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
   private[compiletime] object CTypes {
 
+    def JsonKeyCodec: Type.Ctor1[JsonKeyCodec] = Type.Ctor1.of[JsonKeyCodec]
     def JsonValueCodec: Type.Ctor1[JsonValueCodec] = Type.Ctor1.of[JsonValueCodec]
     def KindlingsJsonValueCodec: Type.Ctor1[KindlingsJsonValueCodec] =
       Type.Ctor1.of[KindlingsJsonValueCodec]

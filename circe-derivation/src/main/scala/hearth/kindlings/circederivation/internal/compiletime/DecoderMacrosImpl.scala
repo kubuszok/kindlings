@@ -10,7 +10,7 @@ import hearth.kindlings.circederivation.{Configuration, KindlingsDecoder}
 import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import cats.data.{Validated, ValidatedNel}
-import io.circe.{Decoder, DecodingFailure, HCursor, Json}
+import io.circe.{Decoder, DecodingFailure, HCursor, Json, KeyDecoder}
 
 trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -591,9 +591,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val EitherDFValue: Type[Either[DecodingFailure, Value]] = DTypes.DecoderResult[Value]
 
-      if (!(Key <:< Type[String]))
-        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
-      else {
+      if (Key <:< Type[String]) {
+        // String keys — use existing fast path
         LambdaBuilder
           .of1[HCursor]("valueCursor")
           .traverse { valueCursorExpr =>
@@ -614,6 +613,233 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 .asInstanceOf[Either[DecodingFailure, A]]
             })
           }
+      } else {
+        // Non-String keys — try to derive a key decoder
+        deriveKeyDecoder[Key].flatMap {
+          case Some(keyDecoderLambda) =>
+            LambdaBuilder
+              .of1[HCursor]("valueCursor")
+              .traverse { valueCursorExpr =>
+                deriveDecoderRecursively[Value](using dctx.nest[Value](valueCursorExpr))
+              }
+              .map { builder =>
+                val decodeFn = builder.build[Either[DecodingFailure, Value]]
+                val factoryExpr = isMap.factory
+                Rule.matched(Expr.quote {
+                  CirceDerivationUtils
+                    .decodeMapWithKeyDecoder[Key, Value, A](
+                      Expr.splice(dctx.cursor),
+                      Expr.splice(keyDecoderLambda),
+                      CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn)),
+                      Expr
+                        .splice(factoryExpr)
+                        .asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                    )
+                    .asInstanceOf[Either[DecodingFailure, A]]
+                })
+              }
+          case None =>
+            MIO.pure(
+              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
+            )
+        }
+      }
+    }
+
+    /** Try to derive a String => Either[DecodingFailure, K] function for map keys. Returns None if derivation fails. */
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveKeyDecoder[K: Type](implicit
+        ctx: DecoderCtx[?]
+    ): MIO[Option[Expr[String => Either[DecodingFailure, K]]]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
+      implicit val EitherDFK: Type[Either[DecodingFailure, K]] = DTypes.DecoderResult[K]
+
+      Log.info(s"Attempting to derive key decoder for ${Type[K].prettyPrint}") >> {
+        // 1. Built-in types — inline parsing via runtime helpers
+        val builtIn: Option[MIO[Option[Expr[String => Either[DecodingFailure, K]]]]] = {
+          def makeBuiltInKeyDecoder(
+              body: Expr[String] => Expr[Either[DecodingFailure, K]]
+          ): MIO[Option[Expr[String => Either[DecodingFailure, K]]]] =
+            LambdaBuilder
+              .of1[String]("keyStr")
+              .traverse { keyStrExpr =>
+                MIO.pure(body(keyStrExpr))
+              }
+              .map { builder =>
+                Some(builder.build[Either[DecodingFailure, K]]): Option[
+                  Expr[String => Either[DecodingFailure, K]]
+                ]
+              }
+
+          if (Type[K] =:= Type.of[Int])
+            Some(
+              makeBuiltInKeyDecoder(s =>
+                Expr.quote(CirceDerivationUtils.decodeKeyInt(Expr.splice(s)).asInstanceOf[Either[DecodingFailure, K]])
+              )
+            )
+          else if (Type[K] =:= Type.of[Long])
+            Some(
+              makeBuiltInKeyDecoder(s =>
+                Expr.quote(CirceDerivationUtils.decodeKeyLong(Expr.splice(s)).asInstanceOf[Either[DecodingFailure, K]])
+              )
+            )
+          else if (Type[K] =:= Type.of[Double])
+            Some(
+              makeBuiltInKeyDecoder(s =>
+                Expr.quote(
+                  CirceDerivationUtils.decodeKeyDouble(Expr.splice(s)).asInstanceOf[Either[DecodingFailure, K]]
+                )
+              )
+            )
+          else if (Type[K] =:= Type.of[Short])
+            Some(
+              makeBuiltInKeyDecoder(s =>
+                Expr.quote(CirceDerivationUtils.decodeKeyShort(Expr.splice(s)).asInstanceOf[Either[DecodingFailure, K]])
+              )
+            )
+          else if (Type[K] =:= Type.of[Byte])
+            Some(
+              makeBuiltInKeyDecoder(s =>
+                Expr.quote(CirceDerivationUtils.decodeKeyByte(Expr.splice(s)).asInstanceOf[Either[DecodingFailure, K]])
+              )
+            )
+          else
+            None
+        }
+
+        builtIn.getOrElse {
+          // 2. Try summoning user-provided KeyDecoder[K]
+          DTypes.KeyDecoder[K].summonExprIgnoring().toEither match {
+            case Right(keyDecoderExpr) =>
+              Log.info(s"Found implicit KeyDecoder[${Type[K].prettyPrint}]") >>
+                LambdaBuilder
+                  .of1[String]("keyStr")
+                  .traverse { keyStrExpr =>
+                    MIO.pure(Expr.quote {
+                      Expr.splice(keyDecoderExpr).apply(Expr.splice(keyStrExpr)) match {
+                        case Some(k) => Right(k): Either[DecodingFailure, K]
+                        case None    =>
+                          Left(
+                            DecodingFailure(
+                              "Failed to decode map key: " + Expr.splice(keyStrExpr),
+                              Nil
+                            )
+                          ): Either[DecodingFailure, K]
+                      }
+                    })
+                  }
+                  .map { builder =>
+                    Some(builder.build[Either[DecodingFailure, K]]): Option[
+                      Expr[String => Either[DecodingFailure, K]]
+                    ]
+                  }
+            case Left(_) =>
+              // 3. Try value type — unwrap to inner, recurse
+              Type[K] match {
+                case IsValueType(isValueType) =>
+                  import isValueType.Underlying as Inner
+                  deriveKeyDecoder[Inner].flatMap {
+                    case Some(innerKeyDecoder) =>
+                      // Build wrap lambda outside quotes
+                      LambdaBuilder
+                        .of1[Inner]("inner")
+                        .traverse { innerExpr =>
+                          MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
+                        }
+                        .flatMap { wrapBuilder =>
+                          val wrapLambda = wrapBuilder.build[K]
+                          LambdaBuilder
+                            .of1[String]("keyStr")
+                            .traverse { keyStrExpr =>
+                              MIO.pure(Expr.quote {
+                                Expr.splice(innerKeyDecoder).apply(Expr.splice(keyStrExpr)).map(Expr.splice(wrapLambda))
+                              })
+                            }
+                            .map { builder =>
+                              Some(builder.build[Either[DecodingFailure, K]]): Option[
+                                Expr[String => Either[DecodingFailure, K]]
+                              ]
+                            }
+                        }
+                    case None => MIO.pure(None)
+                  }
+                case _ =>
+                  // 4. Try enum (all case objects) — build lookup Map[String, K] and use runtime helper
+                  // Uses runtime dispatch to avoid Scala 3 staging issues with singleton expressions in LambdaBuilder
+                  Enum.parse[K] match {
+                    case Some(enumm) =>
+                      val childrenList = enumm.directChildren.toList
+                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                        case (_, child) =>
+                          Type.isVal(using child.Underlying) ||
+                          CaseClass
+                            .parse(using child.Underlying)
+                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                      }
+                      if (allCaseObjects) {
+                        NonEmptyList.fromList(childrenList) match {
+                          case Some(children) =>
+                            // Build singleton expressions for each child
+                            children
+                              .parTraverse { case (childName, child) =>
+                                import child.Underlying as ChildType
+                                Expr.singletonOf[ChildType] match {
+                                  case Some(singleton) =>
+                                    MIO.pure((childName, singleton.asInstanceOf[Expr[K]]))
+                                  case None =>
+                                    CaseClass.parse[ChildType] match {
+                                      case Some(cc) =>
+                                        cc.construct[MIO](new CaseClass.ConstructField[MIO] {
+                                          def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+                                            MIO.fail(new RuntimeException("Unexpected parameter in enum singleton"))
+                                        }).flatMap {
+                                          case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[K]]))
+                                          case None       =>
+                                            MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                        }
+                                      case None =>
+                                        MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                    }
+                                }
+                              }
+                              .flatMap { casesNel =>
+                                // Build a Map[String, K] expression: Map(config.transformConstructorNames("Name") -> singleton, ...)
+                                val lookupMapExpr: Expr[Map[String, K]] = casesNel.toList.foldRight(
+                                  Expr.quote(Map.empty[String, K])
+                                ) { case ((caseName, caseExpr), acc) =>
+                                  Expr.quote {
+                                    Expr.splice(acc) + (
+                                      Expr.splice(ctx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
+                                        -> Expr.splice(caseExpr)
+                                    )
+                                  }
+                                }
+                                // Build the key decoder lambda using the runtime helper
+                                LambdaBuilder
+                                  .of1[String]("keyStr")
+                                  .traverse { keyStrExpr =>
+                                    MIO.pure(Expr.quote {
+                                      CirceDerivationUtils.decodeEnumKey[K](
+                                        Expr.splice(keyStrExpr),
+                                        Expr.splice(lookupMapExpr)
+                                      )
+                                    })
+                                  }
+                                  .map { builder =>
+                                    Some(builder.build[Either[DecodingFailure, K]]): Option[
+                                      Expr[String => Either[DecodingFailure, K]]
+                                    ]
+                                  }
+                              }
+                          case None => MIO.pure(None)
+                        }
+                      } else MIO.pure(None)
+                    case None => MIO.pure(None)
+                  }
+              }
+          }
+        }
       }
     }
   }
@@ -1514,6 +1740,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
   private[compiletime] object DTypes {
 
     def Decoder: Type.Ctor1[Decoder] = Type.Ctor1.of[Decoder]
+    def KeyDecoder: Type.Ctor1[KeyDecoder] = Type.Ctor1.of[KeyDecoder]
     def KindlingsDecoder: Type.Ctor1[KindlingsDecoder] = Type.Ctor1.of[KindlingsDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation]

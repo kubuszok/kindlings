@@ -226,6 +226,70 @@ object CirceDerivationUtils {
         Right(builder.result())
     }
 
+  /** Decodes a Map[K, V] using a key decoder function, value decoder, and factory. */
+  def decodeMapWithKeyDecoder[K, V, M](
+      cursor: HCursor,
+      decodeKey: String => Either[DecodingFailure, K],
+      valueDecoder: Decoder[V],
+      factory: scala.collection.Factory[(K, V), M]
+  ): Either[DecodingFailure, M] =
+    cursor.keys match {
+      case None       => Left(DecodingFailure("Expected JSON object", cursor.history))
+      case Some(keys) =>
+        val builder = factory.newBuilder
+        val iter = keys.iterator
+        while (iter.hasNext) {
+          val keyStr = iter.next()
+          decodeKey(keyStr) match {
+            case Left(err) => return Left(err)
+            case Right(k)  =>
+              cursor.downField(keyStr).as(valueDecoder) match {
+                case Right(value) => builder += ((k, value))
+                case Left(err)    => return Left(err)
+              }
+          }
+        }
+        Right(builder.result())
+    }
+
+  /** Decodes an enum key from a string using a lookup map built at macro time. */
+  def decodeEnumKey[K](
+      keyStr: String,
+      lookup: Map[String, K]
+  ): Either[DecodingFailure, K] =
+    lookup.get(keyStr) match {
+      case Some(k) => Right(k)
+      case None    =>
+        Left(
+          DecodingFailure(
+            s"Unknown enum key: $keyStr. Expected one of: ${lookup.keys.mkString(", ")}",
+            Nil
+          )
+        )
+    }
+
+  // --- Built-in key decoder helpers ---
+
+  def decodeKeyInt(keyStr: String): Either[DecodingFailure, Int] =
+    try Right(java.lang.Integer.parseInt(keyStr))
+    catch { case _: NumberFormatException => Left(DecodingFailure(s"Couldn't decode $keyStr as Int key", Nil)) }
+
+  def decodeKeyLong(keyStr: String): Either[DecodingFailure, Long] =
+    try Right(java.lang.Long.parseLong(keyStr))
+    catch { case _: NumberFormatException => Left(DecodingFailure(s"Couldn't decode $keyStr as Long key", Nil)) }
+
+  def decodeKeyDouble(keyStr: String): Either[DecodingFailure, Double] =
+    try Right(java.lang.Double.parseDouble(keyStr))
+    catch { case _: NumberFormatException => Left(DecodingFailure(s"Couldn't decode $keyStr as Double key", Nil)) }
+
+  def decodeKeyShort(keyStr: String): Either[DecodingFailure, Short] =
+    try Right(java.lang.Short.parseShort(keyStr))
+    catch { case _: NumberFormatException => Left(DecodingFailure(s"Couldn't decode $keyStr as Short key", Nil)) }
+
+  def decodeKeyByte(keyStr: String): Either[DecodingFailure, Byte] =
+    try Right(java.lang.Byte.parseByte(keyStr))
+    catch { case _: NumberFormatException => Left(DecodingFailure(s"Couldn't decode $keyStr as Byte key", Nil)) }
+
   // --- Accumulating decoder helpers ---
 
   def sequenceDecodeResultsAccumulating(

@@ -57,3 +57,9 @@ case class JsoniterWithBothAnnotations(
 
 // Higher-kinded type test
 case class HigherKindedType[F[_]](value: F[Int])
+
+// Non-String map key test types
+case class WithIntKeyMap(data: Map[Int, String])
+case class WithLongKeyMap(data: Map[Long, String])
+final case class UserId(value: Int) extends AnyVal
+case class WithUserIdKeyMap(users: Map[UserId, String])
