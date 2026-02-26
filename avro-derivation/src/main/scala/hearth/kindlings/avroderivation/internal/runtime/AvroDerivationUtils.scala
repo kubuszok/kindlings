@@ -127,6 +127,9 @@ object AvroDerivationUtils {
     schema
   }
 
+  def createFixed(name: String, namespace: String, size: Int): Schema =
+    Schema.createFixed(name, null, namespace, size)
+
   def createEnum(name: String, namespace: String, symbols: util.List[String]): Schema =
     Schema.createEnum(name, null, namespace, symbols)
 
@@ -163,6 +166,14 @@ object AvroDerivationUtils {
     new GenericData.EnumSymbol(schema, name)
 
   def wrapByteArray(bytes: Array[Byte]): ByteBuffer = ByteBuffer.wrap(bytes)
+
+  def wrapByteArrayAsFixed(bytes: Array[Byte], expectedSize: Int): GenericData.Fixed = {
+    if (bytes.length != expectedSize)
+      throw new org.apache.avro.AvroRuntimeException(
+        s"@avroFixed($expectedSize): expected $expectedSize bytes but got ${bytes.length}"
+      )
+    new GenericData.Fixed(Schema.createFixed("fixed", null, null, expectedSize), bytes)
+  }
 
   def encodeBigDecimal(bd: BigDecimal, scale: Int): ByteBuffer = {
     val scaled = bd.bigDecimal.setScale(scale)
@@ -234,6 +245,11 @@ object AvroDerivationUtils {
 
   def decodeEnumSymbol(value: Any): String =
     value.toString
+
+  def decodeFixed(value: Any): Array[Byte] = {
+    val fixed = value.asInstanceOf[org.apache.avro.generic.GenericFixed]
+    fixed.bytes().clone()
+  }
 
   def decodeByteBuffer(value: Any): Array[Byte] = {
     val bb = value.asInstanceOf[ByteBuffer]

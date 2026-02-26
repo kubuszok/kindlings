@@ -1,6 +1,13 @@
 package hearth.kindlings.avroderivation
 
-import hearth.kindlings.avroderivation.annotations.{avroDefault, avroDoc, avroNamespace, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{
+  avroDefault,
+  avroDoc,
+  avroFixed,
+  avroNamespace,
+  fieldName,
+  transientField
+}
 
 case class SimplePerson(name: String, age: Int)
 case class EmptyClass()
@@ -99,6 +106,10 @@ case class WithEitherRecord(value: Either[String, SimplePerson])
 // Collection test types
 case class WithMutableBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
 case class WithVector(items: Vector[String])
+
+// @avroFixed test types
+final case class WithFixedBytes(@avroFixed(4) id: Array[Byte])
+final case class WithFixedAndRegularBytes(@avroFixed(16) token: Array[Byte], data: Array[Byte])
 
 // Unhandled type for compile-time error tests
 class NotAnAvroType

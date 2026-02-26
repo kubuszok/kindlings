@@ -409,6 +409,18 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("@avroFixed") {
+
+      test("decode from encoded FIXED data produces correct Array[Byte]") {
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
+        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derive[WithFixedBytes]
+        val original = WithFixedBytes(Array[Byte](1, 2, 3, 4))
+        val encoded = encoder.encode(original)
+        val decoded = decoder.decode(encoded)
+        decoded.id.toList ==> original.id.toList
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {

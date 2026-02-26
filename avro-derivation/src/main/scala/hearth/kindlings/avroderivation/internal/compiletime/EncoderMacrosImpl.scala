@@ -7,7 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroEncoder, DecimalConfig}
-import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
@@ -731,6 +731,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       implicit val SchemaT: Type[Schema] = EncTypes.Schema
       implicit val fieldNameT: Type[fieldName] = EncTypes.FieldName
       implicit val transientFieldT: Type[transientField] = EncTypes.TransientField
+      implicit val avroFixedT: Type[avroFixed] = EncTypes.AvroFixed
 
       val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
 
@@ -757,10 +758,22 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
               fields
                 .parTraverse { case (fName, fieldValue) =>
                   import fieldValue.{Underlying as Field, value as fieldExpr}
+                  val param = paramsByName.get(fName)
+                  val avroFixedSize = param.flatMap(p => getAnnotationIntArg[avroFixed](p))
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEncoded =>
-                      val nameOverride =
-                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
+                    val encodeMIO: MIO[Expr[Any]] = avroFixedSize match {
+                      case Some(size) =>
+                        MIO.pure(Expr.quote {
+                          AvroDerivationUtils.wrapByteArrayAsFixed(
+                            Expr.splice(fieldExpr).asInstanceOf[Array[Byte]],
+                            Expr.splice(Expr(size))
+                          ): Any
+                        })
+                      case None =>
+                        deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                    }
+                    encodeMIO.map { fieldEncoded =>
+                      val nameOverride = param.flatMap(p => getAnnotationStringArg[fieldName](p))
                       (fName, fieldEncoded, nameOverride)
                     }
                   }
@@ -904,6 +917,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     val Product: Type[Product] = Type.of[Product]
     val FieldName: Type[fieldName] = Type.of[fieldName]
     val TransientField: Type[transientField] = Type.of[transientField]
+    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
   }
 }
 

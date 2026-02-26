@@ -26,4 +26,10 @@ trait AnnotationSupportScala2 extends AnnotationSupport { this: MacroCommonsScal
       case Apply(_, List(Literal(Constant(value: String)))) => Some(value)
       case _                                                => None
     }
+
+  override protected def extractIntLiteralFromAnnotation(annotation: UntypedExpr): Option[Int] =
+    annotation match {
+      case Apply(_, List(Literal(Constant(value: Int)))) => Some(value)
+      case _                                             => None
+    }
 }

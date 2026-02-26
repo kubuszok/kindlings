@@ -7,7 +7,14 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor, DecimalConfig}
-import hearth.kindlings.avroderivation.annotations.{avroDefault, avroDoc, avroNamespace, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{
+  avroDefault,
+  avroDoc,
+  avroFixed,
+  avroNamespace,
+  fieldName,
+  transientField
+}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
@@ -576,6 +583,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       implicit val avroDocT: Type[avroDoc] = SfTypes.AvroDoc
       implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
       implicit val avroDefaultT: Type[avroDefault] = SfTypes.AvroDefault
+      implicit val avroFixedT: Type[avroFixed] = SfTypes.AvroFixed
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       // Read class-level annotations
@@ -635,9 +643,32 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               val nameOverride = getAnnotationStringArg[fieldName](param)
               val fieldDoc = getAnnotationStringArg[avroDoc](param)
               val fieldDefault = getAnnotationStringArg[avroDefault](param)
+              val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
-                deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
-                  (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault)
+                avroFixedSize match {
+                  case Some(_) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
+                    val err = SchemaDerivationError.AvroFixedOnNonByteArray(
+                      fName,
+                      Type[A].prettyPrint,
+                      Type[Field].prettyPrint
+                    )
+                    Log.error(err.message) >> MIO.fail(err)
+                  case Some(size) =>
+                    val fixedName = nameOverride.getOrElse(fName)
+                    MIO.pure {
+                      val fieldSchema = Expr.quote {
+                        AvroDerivationUtils.createFixed(
+                          Expr.splice(Expr(fixedName)),
+                          Expr.splice(sfctx.config).namespace.getOrElse(""),
+                          Expr.splice(Expr(size))
+                        )
+                      }
+                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault)
+                    }
+                  case None =>
+                    deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
+                      (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault)
+                    }
                 }
               }
             }
@@ -848,6 +879,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     val AvroDoc: Type[avroDoc] = Type.of[avroDoc]
     val AvroNamespace: Type[avroNamespace] = Type.of[avroNamespace]
     val AvroDefault: Type[avroDefault] = Type.of[avroDefault]
+    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
   }
 }
 
@@ -870,5 +902,10 @@ private[compiletime] object SchemaDerivationError {
   final case class NoChildrenInSealedTrait(tpeName: String) extends SchemaDerivationError {
     override def message: String =
       s"The type $tpeName does not have any children!"
+  }
+  final case class AvroFixedOnNonByteArray(fieldName: String, tpeName: String, fieldType: String)
+      extends SchemaDerivationError {
+    override def message: String =
+      s"@avroFixed on field '$fieldName' of $tpeName requires Array[Byte], but field type is $fieldType"
   }
 }

@@ -16,7 +16,7 @@ This document contains all the information needed to implement each remaining ga
 | 2 | Literal types | All 4 | Medium | Medium | Not started |
 | 3 | `@stringified` | Jsoniter | Medium | Medium | Not started |
 | 4 | Map as array encoding | Jsoniter | Medium | Medium | Not started |
-| 5 | `@AvroFixed` | Avro | High | Medium | Not started |
+| 5 | `@AvroFixed` | Avro | High | Medium | **Done** |
 | 6 | `@AvroProp` | Avro | Medium | Low | Not started |
 | 7 | `@AvroAlias` | Avro | Medium | Medium | Not started |
 | 8 | `@AvroError` | Avro | Low | Low | Not started |
@@ -32,6 +32,7 @@ This document contains all the information needed to implement each remaining ga
 - Circe `Encoder.AsObject` — `KindlingsEncoder.deriveAsObject[A]` returns `Encoder.AsObject[A]` for case classes and sealed traits (2026-02-26)
 - Circe `KeyEncoder`/`KeyDecoder` — built-in types inlined + user implicit summoning (2026-02-26)
 - Jsoniter non-String map keys — built-in types + `JsonKeyCodec[K]` summoning (2026-02-26)
+- Avro `@avroFixed(size)` — field-level annotation changing `Array[Byte]` fields from BYTES to FIXED schema, with encoder/decoder support and compile-time validation (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---
@@ -226,59 +227,31 @@ File: `KindlingsJsonValueCodecSpec.scala`, new group "map as array":
 
 ---
 
-## Gap 5: `@AvroFixed`
+## Gap 5: `@AvroFixed` — DONE
 
-### Problem
+### What Was Implemented
 
-Avro4s's `@AvroFixed(size)` changes schema type from `BYTES` to `FIXED(size)`. Unlike other annotations that mutate properties, this changes which **schema type** is selected.
+**Approach:** Field-level annotation checked in the case class rules of all 3 derivation phases (schema, encoder, decoder). When `@avroFixed(size)` is present on an `Array[Byte]` field, overrides normal derivation with fixed-specific logic. Compile error if used on non-`Array[Byte]` fields. Extended `AnnotationSupport` with `extractIntLiteralFromAnnotation` / `getAnnotationIntArg` (reusable by Gap 9's `@avroSortPriority`).
 
-### Implementation Plan
+**Files changed:**
+- `annotations/avroFixed.scala` — New `@avroFixed(size: Int)` annotation
+- `AnnotationSupport.scala` — Added `extractIntLiteralFromAnnotation` abstract method and `getAnnotationIntArg` convenience method
+- `AnnotationSupportScala2.scala` — Scala 2 impl: `Literal(Constant(value: Int))`
+- `AnnotationSupportScala3.scala` — Scala 3 impl: `Literal(IntConstant(value))`
+- `AvroDerivationUtils.scala` — Added `createFixed(name, namespace, size)`, `wrapByteArrayAsFixed(bytes, expectedSize)` (with size validation), and `decodeFixed(value)` runtime helpers
+- `SchemaForMacrosImpl.scala` — In `SfHandleAsCaseClassRule`, `@avroFixed` fields produce FIXED schema instead of recursively deriving; added `AvroFixedOnNonByteArray` error case
+- `EncoderMacrosImpl.scala` — In `EncHandleAsCaseClassRule`, `@avroFixed` fields encode as `GenericData.Fixed` via `wrapByteArrayAsFixed` instead of `ByteBuffer`
+- `DecoderMacrosImpl.scala` — In `DecHandleAsCaseClassRule`, `@avroFixed` fields decode via `decodeFixed` (extracts bytes from `GenericFixed`) bypassing `deriveFieldDecoder`
+- `examples.scala` — Added `WithFixedBytes` and `WithFixedAndRegularBytes` test types
+- `AvroSchemaForSpec.scala` — 4 tests: FIXED type/size, name matching, mixed FIXED+BYTES, compile error on non-Array[Byte]
+- `AvroEncoderSpec.scala` — 2 tests: correct-length encode, wrong-length throws AvroRuntimeException
+- `AvroDecoderSpec.scala` — 1 test: decode from encoded FIXED data
+- `AvroRoundTripSpec.scala` — 2 tests: binary round-trips for both test types
 
-**Step 1 — Add annotation:**
-
-File: `avro-derivation/src/main/scala/hearth/kindlings/avroderivation/annotations/avroFixed.scala`
-
-```scala
-package hearth.kindlings.avroderivation.annotations
-import scala.annotation.StaticAnnotation
-final class avroFixed(val size: Int) extends StaticAnnotation
-```
-
-**Step 2 — Extend `AnnotationSupport` to extract integer literals:**
-
-Current `AnnotationSupport` (file: `avro-derivation/src/main/scala/hearth/kindlings/avroderivation/internal/compiletime/AnnotationSupport.scala`) only has `extractStringLiteralFromAnnotation`. Add:
-
-```scala
-protected def extractIntLiteralFromAnnotation(annotation: UntypedExpr): Option[Int]
-
-final def getAnnotationIntArg[Ann: Type](param: Parameter): Option[Int] =
-  findAnnotationOfType[Ann](param).flatMap(extractIntLiteralFromAnnotation)
-```
-
-Update Scala 2 impl (`AnnotationSupportScala2.scala`): match `Literal(Constant(n: Int))` in annotation args.
-Update Scala 3 impl (`AnnotationSupportScala3.scala`): match `Literal(IntConstant(n))` in annotation args.
-
-**Step 3 — Schema rule:**
-
-File: `avro-derivation/src/main/scala/hearth/kindlings/avroderivation/internal/compiletime/SchemaForMacrosImpl.scala`
-
-In the case class field processing, when `@avroFixed(size)` is present on a field of type `Array[Byte]` or `ByteBuffer`:
-- Generate `Schema.createFixed(fieldName, null, namespace, size)` instead of `Schema.create(Schema.Type.BYTES)`
-
-**Step 4 — Encoder rule:**
-
-When writing to a fixed-type schema, validate `bytes.length == size` at runtime, throw if mismatch.
-
-**Step 5 — Decoder rule:**
-
-When reading fixed-type schema, read fixed-size bytes.
-
-### Tests
-
-File: `AvroSchemaForSpec.scala` + `AvroRoundTripSpec.scala`:
-- `@avroFixed(4)` field produces FIXED schema with size 4
-- Encode/decode `Array[Byte]` of correct length
-- Runtime error on wrong length
+**Design notes:**
+- The FIXED schema name uses the field name (or `@fieldName` override if present)
+- Runtime size validation throws `AvroRuntimeException` with a clear message
+- Decoder clones the byte array from `GenericFixed` to avoid aliasing
 
 ---
 
@@ -396,7 +369,7 @@ Controls ordering of types in union schemas.
 final class avroSortPriority(val priority: Int) extends StaticAnnotation
 ```
 
-Requires the integer literal extraction from Gap 5 (`extractIntLiteralFromAnnotation`).
+Uses the integer literal extraction from Gap 5 (`extractIntLiteralFromAnnotation` / `getAnnotationIntArg`) — already implemented.
 
 **Step 2 — Schema modification:**
 
@@ -541,10 +514,10 @@ Lower priority since the internal key derivation already exists for map support 
 | `avro-derivation/src/main/scala/.../internal/compiletime/SchemaForMacrosImpl.scala` | Schema macro impl (line 285 rule chain) |
 | `avro-derivation/src/main/scala/.../internal/compiletime/EncoderMacrosImpl.scala` | Encoder macro impl (line 289 rule chain) |
 | `avro-derivation/src/main/scala/.../internal/compiletime/DecoderMacrosImpl.scala` | Decoder macro impl (line 289 rule chain) |
-| `avro-derivation/src/main/scala/.../internal/compiletime/AnnotationSupport.scala` | Base trait: findAnnotationOfType, findTypeAnnotationOfType, extractStringLiteralFromAnnotation, hasAnnotationType, getAnnotationStringArg, getTypeAnnotationStringArg |
-| `avro-derivation/src/main/scala-2/.../AnnotationSupportScala2.scala` | Scala 2: `param.asUntyped.symbol.annotations`, `Literal(Constant(s: String))` |
-| `avro-derivation/src/main/scala-3/.../AnnotationSupportScala3.scala` | Scala 3: `quotes.reflect.*`, `Apply(_, List(Literal(StringConstant(value))))` |
-| `avro-derivation/src/main/scala/.../annotations/` | avroDefault.scala, avroDoc.scala, avroNamespace.scala, fieldName.scala, transientField.scala |
+| `avro-derivation/src/main/scala/.../internal/compiletime/AnnotationSupport.scala` | Base trait: findAnnotationOfType, findTypeAnnotationOfType, extractStringLiteralFromAnnotation, extractIntLiteralFromAnnotation, hasAnnotationType, getAnnotationStringArg, getAnnotationIntArg, getTypeAnnotationStringArg |
+| `avro-derivation/src/main/scala-2/.../AnnotationSupportScala2.scala` | Scala 2: `param.asUntyped.symbol.annotations`, `Literal(Constant(s: String))`, `Literal(Constant(n: Int))` |
+| `avro-derivation/src/main/scala-3/.../AnnotationSupportScala3.scala` | Scala 3: `quotes.reflect.*`, `Literal(StringConstant(value))`, `Literal(IntConstant(value))` |
+| `avro-derivation/src/main/scala/.../annotations/` | avroDefault.scala, avroDoc.scala, avroFixed.scala, avroNamespace.scala, fieldName.scala, transientField.scala |
 | `avro-derivation/src/test/scala/.../AvroSchemaForSpec.scala` | Schema tests (~62 tests) |
 | `avro-derivation/src/test/scala/.../AvroEncoderSpec.scala` | Encoder tests (~49 tests) |
 | `avro-derivation/src/test/scala/.../AvroDecoderSpec.scala` | Decoder tests (~48 tests) |
@@ -579,7 +552,7 @@ grep -E '(Failed|Errors|FAILED)' /tmp/sbt-output.txt
 ## Appendix C: Suggested Implementation Order
 
 1. ~~**Gap 1** — Circe `Encoder.AsObject`~~ **DONE**
-2. **Gap 5** — `@AvroFixed` (high priority, introduces `extractIntLiteralFromAnnotation` needed by Gap 9)
+2. ~~**Gap 5** — `@AvroFixed`~~ **DONE** (introduced `extractIntLiteralFromAnnotation` reusable by Gap 9)
 3. **Gap 6** — `@AvroProp` (medium, uses existing annotation pattern)
 4. **Gap 7** — `@AvroAlias` (medium, needs `findAllAnnotationsOfType`)
 5. **Gap 3** — `@stringified` (medium, self-contained)

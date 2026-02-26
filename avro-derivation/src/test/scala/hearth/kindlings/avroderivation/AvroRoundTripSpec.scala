@@ -304,6 +304,31 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
     }
 
+    group("@avroFixed") {
+
+      test("WithFixedBytes binary round-trip") {
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
+        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derive[WithFixedBytes]
+        val original = WithFixedBytes(Array[Byte](1, 2, 3, 4))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithFixedBytes](bytes)(decoder)
+        decoded.id.toList ==> original.id.toList
+      }
+
+      test("WithFixedAndRegularBytes binary round-trip (mixed FIXED + BYTES)") {
+        val encoder: AvroEncoder[WithFixedAndRegularBytes] = AvroEncoder.derive[WithFixedAndRegularBytes]
+        val decoder: AvroDecoder[WithFixedAndRegularBytes] = AvroDecoder.derive[WithFixedAndRegularBytes]
+        val original = WithFixedAndRegularBytes(
+          token = Array.fill[Byte](16)(0x42),
+          data = Array[Byte](10, 20, 30)
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithFixedAndRegularBytes](bytes)(decoder)
+        decoded.token.toList ==> original.token.toList
+        decoded.data.toList ==> original.data.toList
+      }
+    }
+
     group("JSON") {
 
       test("simple case class") {

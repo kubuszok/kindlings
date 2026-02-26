@@ -7,7 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, DecimalConfig}
-import hearth.kindlings.avroderivation.annotations.{fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
@@ -766,6 +766,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       implicit val AnyT: Type[Any] = DecTypes.Any
       implicit val fieldNameT: Type[fieldName] = DecTypes.FieldName
       implicit val transientFieldT: Type[transientField] = DecTypes.TransientField
+      implicit val avroFixedT: Type[avroFixed] = DecTypes.AvroFixed
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor
       if (caseClass.isSingleton) {
@@ -861,38 +862,75 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
             .parTraverse { case ((fName, param), reindex) =>
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldName](param)
+              val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Any] = nameOverride match {
-                    case Some(customName) =>
-                      Expr.quote {
-                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                        val fieldValue = AvroDerivationUtils.decodeRecord(
-                          record,
-                          Expr.splice(Expr(customName))
-                        )
-                        Expr.splice(decoderExpr).decode(fieldValue): Any
+                avroFixedSize match {
+                  case Some(_) =>
+                    // Decode GenericFixed -> Array[Byte] directly, no AvroDecoder needed
+                    val arrayByteType: Type[Array[Byte]] = DecTypes.ArrayByte
+                    MIO.pure {
+                      implicit val ArrayByteT: Type[Array[Byte]] = arrayByteType
+                      val decodeExpr: Expr[Any] = nameOverride match {
+                        case Some(customName) =>
+                          Expr.quote {
+                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                            val fieldValue = AvroDerivationUtils.decodeRecord(
+                              record,
+                              Expr.splice(Expr(customName))
+                            )
+                            AvroDerivationUtils.decodeFixed(fieldValue): Any
+                          }
+                        case None =>
+                          Expr.quote {
+                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                            val fieldValue = AvroDerivationUtils.decodeRecord(
+                              record,
+                              Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                            )
+                            AvroDerivationUtils.decodeFixed(fieldValue): Any
+                          }
                       }
-                    case None =>
-                      Expr.quote {
-                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                        val fieldValue = AvroDerivationUtils.decodeRecord(
-                          record,
-                          Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
-                        )
-                        Expr.splice(decoderExpr).decode(fieldValue): Any
+                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                        val typedExpr = Expr.quote {
+                          Expr.splice(arrExpr)(Expr.splice(Expr(reindex))).asInstanceOf[Array[Byte]]
+                        }
+                        (fName, typedExpr.as_??)
                       }
-                  }
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    val typedExpr = Expr.quote {
-                      AvroDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
-                        Expr.splice(decoderExpr)
-                      )
+                      (decodeExpr, makeAccessor)
                     }
-                    (fName, typedExpr.as_??)
-                  }
-                  (decodeExpr, makeAccessor)
+                  case None =>
+                    deriveFieldDecoder[Field].map { decoderExpr =>
+                      val decodeExpr: Expr[Any] = nameOverride match {
+                        case Some(customName) =>
+                          Expr.quote {
+                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                            val fieldValue = AvroDerivationUtils.decodeRecord(
+                              record,
+                              Expr.splice(Expr(customName))
+                            )
+                            Expr.splice(decoderExpr).decode(fieldValue): Any
+                          }
+                        case None =>
+                          Expr.quote {
+                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                            val fieldValue = AvroDerivationUtils.decodeRecord(
+                              record,
+                              Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                            )
+                            Expr.splice(decoderExpr).decode(fieldValue): Any
+                          }
+                      }
+                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                        val typedExpr = Expr.quote {
+                          AvroDerivationUtils.unsafeCast(
+                            Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
+                            Expr.splice(decoderExpr)
+                          )
+                        }
+                        (fName, typedExpr.as_??)
+                      }
+                      (decodeExpr, makeAccessor)
+                    }
                 }
               }
             }
@@ -1135,8 +1173,10 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     val String: Type[String] = Type.of[String]
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
+    val ArrayByte: Type[Array[Byte]] = Type.of[Array[Byte]]
     val FieldName: Type[fieldName] = Type.of[fieldName]
     val TransientField: Type[transientField] = Type.of[transientField]
+    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
   }
 }
 

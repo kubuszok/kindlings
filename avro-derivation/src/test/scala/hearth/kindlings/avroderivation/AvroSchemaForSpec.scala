@@ -508,6 +508,46 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("@avroFixed") {
+
+      test("@avroFixed(4) field produces FIXED schema with size 4") {
+        val schema = AvroSchemaFor.schemaOf[WithFixedBytes]
+        schema.getType ==> Schema.Type.RECORD
+        val idField = schema.getField("id")
+        idField.schema().getType ==> Schema.Type.FIXED
+        idField.schema().getFixedSize ==> 4
+      }
+
+      test("FIXED schema name matches field name") {
+        val schema = AvroSchemaFor.schemaOf[WithFixedBytes]
+        val idField = schema.getField("id")
+        idField.schema().getName ==> "id"
+      }
+
+      test("mixed case class with FIXED and BYTES fields") {
+        val schema = AvroSchemaFor.schemaOf[WithFixedAndRegularBytes]
+        val tokenField = schema.getField("token")
+        tokenField.schema().getType ==> Schema.Type.FIXED
+        tokenField.schema().getFixedSize ==> 16
+        val dataField = schema.getField("data")
+        dataField.schema().getType ==> Schema.Type.BYTES
+      }
+
+      test("@avroFixed on non-Array[Byte] field is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.AvroSchemaFor
+          import hearth.kindlings.avroderivation.annotations.avroFixed
+          case class BadFixed(@avroFixed(4) name: String)
+          AvroSchemaFor.schemaOf[BadFixed]
+          """
+        ).check(
+          "@avroFixed on field 'name'",
+          "requires Array[Byte]"
+        )
+      }
+    }
+
     group("compile-time errors") {
 
       test("schemaOf with unhandled type produces error message") {
