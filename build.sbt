@@ -24,7 +24,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.2.0-242-g0434693-SNAPSHOT"
+  val hearth = "0.2.0-243-g2f2112f-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val circe = "0.14.15"
@@ -269,7 +269,15 @@ val noPublishSettings =
 val al = new {
 
   private val prodProjects =
-    Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson", "yamlDerivation", "jsonFieldConfigExt", "tapirSchemaDerivation")
+    Vector(
+      "fastShowPretty",
+      "circeDerivation",
+      "jsoniterDerivation",
+      "jsoniterJson",
+      "yamlDerivation",
+      "jsonSchemaConfigMacroProviders",
+      "tapirSchemaDerivation"
+    )
 
   private val jvmOnlyProdProjects = Vector("avroDerivation")
 
@@ -330,7 +338,7 @@ lazy val root = project
   .aggregate(jsoniterJson.projectRefs *)
   .aggregate(yamlDerivation.projectRefs *)
   .aggregate(avroDerivation.projectRefs *)
-  .aggregate(jsonFieldConfigExt.projectRefs *)
+  .aggregate(jsonSchemaConfigMacroProviders.projectRefs *)
   .aggregate(tapirSchemaDerivation.projectRefs *)
   .settings(
     moduleName := "kindlings",
@@ -394,14 +402,14 @@ lazy val fastShowPretty = projectMatrix
 lazy val circeDerivation = projectMatrix
   .in(file("circe-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonFieldConfigExt)
+  .dependsOn(jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-circe-derivation",
     name := "kindlings-circe-derivation",
     description := "Circe Encoder/Decoder derivation using Hearth macros",
-    macroExtensionTraits := Seq("hearth.kindlings.jsonfieldconfigext.JsonFieldConfigMacroExtension")
+    macroExtensionTraits := Seq("hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigExtension")
   )
   .settings(settings *)
   .settings(dependencies *)
@@ -417,14 +425,14 @@ lazy val circeDerivation = projectMatrix
 lazy val jsoniterDerivation = projectMatrix
   .in(file("jsoniter-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonFieldConfigExt)
+  .dependsOn(jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-jsoniter-derivation",
     name := "kindlings-jsoniter-derivation",
     description := "Jsoniter Scala JsonValueCodec derivation using Hearth macros",
-    macroExtensionTraits := Seq("hearth.kindlings.jsonfieldconfigext.JsonFieldConfigMacroExtension")
+    macroExtensionTraits := Seq("hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigExtension")
   )
   .settings(settings *)
   .settings(dependencies *)
@@ -503,15 +511,15 @@ lazy val avroDerivation = projectMatrix
     )
   )
 
-lazy val jsonFieldConfigExt = projectMatrix
-  .in(file("json-field-config-ext"))
+lazy val jsonSchemaConfigMacroProviders = projectMatrix
+  .in(file("json-schema-config-macro-providers"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
-    moduleName := "kindlings-json-field-config-ext",
-    name := "kindlings-json-field-config-ext",
-    description := "Shared macro extension interface for JSON field configuration discovery"
+    moduleName := "kindlings-json-schema-config-macro-providers",
+    name := "kindlings-json-schema-config-macro-providers",
+    description := "Shared macro extension interface for JSON schema configuration discovery"
   )
   .settings(settings *)
   .settings(dependencies *)
@@ -521,7 +529,7 @@ lazy val jsonFieldConfigExt = projectMatrix
 lazy val tapirSchemaDerivation = projectMatrix
   .in(file("tapir-schema-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonFieldConfigExt)
+  .dependsOn(jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(

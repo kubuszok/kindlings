@@ -2,14 +2,14 @@ package hearth.kindlings.tapirschemaderivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala3
-import hearth.kindlings.jsonfieldconfigext.JsonFieldConfigSupport
+import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
 import sttp.tapir.Schema
 import scala.quoted.*
 
 final private[tapirschemaderivation] class SchemaMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupportScala3,
-      JsonFieldConfigSupport,
+      JsonSchemaConfigs,
       SchemaMacrosImpl
 private[tapirschemaderivation] object SchemaMacros {
 

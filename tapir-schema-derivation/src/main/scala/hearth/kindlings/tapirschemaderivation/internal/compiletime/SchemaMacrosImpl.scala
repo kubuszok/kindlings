@@ -4,13 +4,13 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.jsonfieldconfigext.{JsonFieldConfigMacroExtension, JsonFieldConfigSupport}
+import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 import hearth.kindlings.tapirschemaderivation.{KindlingsSchema, PreferSchemaConfig}
 import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
 import sttp.tapir.{Schema, SchemaType}
 import sttp.tapir.Schema.SName
 
-trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSupport & AnnotationSupport =>
+trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
 
   // Type helpers
 
@@ -86,7 +86,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
             runSafe {
               for {
                 _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                extensionResult <- MIO(Environment.loadMacroExtensions[JsonFieldConfigMacroExtension])
+                extensionResult <- MIO(Environment.loadMacroExtensions[JsonSchemaConfigExtension])
                 _ <- extensionResult.toMIO(allowFailures = true)
                 jsonCfg <- MIO(resolveJsonConfig(macroName))
                 result <- deriveSchemaRecursively[A](jsonCfg, cache, inProgress)
@@ -134,8 +134,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   // exists in implicit scope to conflict with our locally constructed one.
   sealed private trait ConfigTypeWitness
 
-  private def resolveJsonConfig(macroName: String): JsonFieldConfigProvider =
-    allJsonFieldConfigs match {
+  private def resolveJsonConfig(macroName: String): JsonSchemaConfig =
+    JsonSchemaConfig.all match {
       case Nil =>
         Environment.reportErrorAndAbort(
           s"$macroName: No JSON library configuration found in implicit scope.\n" +
@@ -190,7 +190,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   // Schema derivation — main recursive entry point
 
   private def deriveSchemaRecursively[A: Type](
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]]
   ): MIO[Expr[Schema[A]]] =
@@ -237,7 +237,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
 
   @scala.annotation.nowarn("msg=is never used")
   private def deriveStructurally[A: Type](
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]],
       inProgressSet: Set[String]
@@ -309,7 +309,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   @scala.annotation.nowarn("msg=is never used")
   private def deriveMapSchemaInner[A: Type, Pair: Type](
       isMap: IsMapOf[A, Pair],
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]]
   ): MIO[Expr[Schema[A]]] = {
@@ -371,7 +371,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   @scala.annotation.nowarn("msg=is never used")
   private def deriveCaseClassSchema[A: Type](
       cc: CaseClass[A],
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]]
   ): MIO[Expr[Schema[A]]] = {
@@ -413,7 +413,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   private def deriveFieldExpr[A: Type](
       fieldName: String,
       param: Parameter,
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]]
   ): MIO[Expr[SchemaType.SProductField[A]]] = {
@@ -441,7 +441,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonFieldConfigSup
   @scala.annotation.nowarn("msg=is never used")
   private def deriveEnumSchema[A: Type](
       e: Enum[A],
-      jsonCfg: JsonFieldConfigProvider,
+      jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]]
   ): MIO[Expr[Schema[A]]] = {

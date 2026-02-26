@@ -3,11 +3,11 @@ package internal.compiletime
 
 import hearth.{MacroCommons, MacroCommonsScala3}
 import hearth.std.StdExtensions
-import hearth.kindlings.jsonfieldconfigext.{JsonFieldConfigMacroExtension, JsonFieldConfigSupport}
+import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 
-final class CirceJsonFieldConfigExtension extends JsonFieldConfigMacroExtension {
+final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
-  override protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonFieldConfigSupport): Unit = {
+  override protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonSchemaConfigs): Unit = {
     import ctx.*
 
     // Access Scala 3 quotes.reflect for annotation tree pattern matching
@@ -31,7 +31,7 @@ final class CirceJsonFieldConfigExtension extends JsonFieldConfigMacroExtension 
         val fieldNameTpe: UntypedType = UntypedType.fromTyped[annotations.fieldName]
         val transientFieldTpe: UntypedType = UntypedType.fromTyped[annotations.transientField]
 
-        ctx.registerJsonFieldConfig(new ctx.JsonFieldConfigProvider {
+        ctx.JsonSchemaConfig.register(new ctx.JsonSchemaConfig {
           def libraryName: String = "circe"
           def configType: UntypedType = UntypedType.fromTyped[Configuration]
 

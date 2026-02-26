@@ -3,12 +3,12 @@ package internal.compiletime
 
 import hearth.{MacroCommons, MacroCommonsScala2}
 import hearth.std.StdExtensions
-import hearth.kindlings.jsonfieldconfigext.{JsonFieldConfigMacroExtension, JsonFieldConfigSupport}
+import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 
-final class CirceJsonFieldConfigExtension extends JsonFieldConfigMacroExtension {
+final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
   @scala.annotation.nowarn("msg=is unchecked since it is eliminated by erasure")
-  override protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonFieldConfigSupport): Unit = {
+  override protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonSchemaConfigs): Unit = {
     import ctx.*
 
     // Access Scala 2 context for annotation tree matching with preserved type info
@@ -39,7 +39,7 @@ final class CirceJsonFieldConfigExtension extends JsonFieldConfigMacroExtension 
 
     Expr.summonImplicit[Configuration].toOption match {
       case Some(configExpr) =>
-        ctx.registerJsonFieldConfig(new ctx.JsonFieldConfigProvider {
+        ctx.JsonSchemaConfig.register(new ctx.JsonSchemaConfig {
           def libraryName: String = "circe"
           def configType: UntypedType = UntypedType.fromTyped[Configuration]
 

@@ -1,21 +1,22 @@
-package hearth.kindlings.jsonfieldconfigext
+package hearth.kindlings.jsonschemaconfigs
 
 import hearth.MacroCommons
 import hearth.std.StdExtensions
 
-/** Trait that provides a mutable registry for JSON field configuration providers.
+/** Trait that provides a mutable registry for JSON schema configuration providers.
   *
   * Mix this into your macro context to enable JSON config discovery via macro extensions. Extensions registered via
-  * `ServiceLoader` will call `registerJsonFieldConfig` when they find their library's configuration in implicit scope.
+  * `ServiceLoader` will call `JsonSchemaConfig.register` when they find their library's configuration in implicit
+  * scope.
   */
-trait JsonFieldConfigSupport { this: MacroCommons & StdExtensions =>
+trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
 
-  /** A resolved JSON field configuration from a specific JSON library.
+  /** A resolved JSON schema configuration from a specific JSON library.
     *
     * Implementations are created by library-specific macro extensions (e.g., circe, jsoniter) and registered into the
-    * `JsonFieldConfigSupport` registry during macro expansion.
+    * `JsonSchemaConfigs` registry during macro expansion.
     */
-  trait JsonFieldConfigProvider {
+  trait JsonSchemaConfig {
 
     /** Human-readable library name for diagnostics (e.g., "circe", "jsoniter-scala"). */
     def libraryName: String
@@ -77,15 +78,19 @@ trait JsonFieldConfigSupport { this: MacroCommons & StdExtensions =>
     def useDefaults: Expr[Boolean]
   }
 
-  // Mutable registry (same pattern as StdExtensions.ProvidedCompanion)
-  private val _jsonFieldConfigs: scala.collection.mutable.ListBuffer[JsonFieldConfigProvider] =
-    scala.collection.mutable.ListBuffer.empty[JsonFieldConfigProvider]
+  object JsonSchemaConfig extends JsonSchemaConfigModule
 
-  /** Register a JSON field configuration provider from a library-specific macro extension. */
-  def registerJsonFieldConfig(provider: JsonFieldConfigProvider): Unit =
-    _jsonFieldConfigs += provider
+  trait JsonSchemaConfigModule { this: JsonSchemaConfig.type =>
 
-  /** Get all registered JSON field configuration providers. */
-  def allJsonFieldConfigs: List[JsonFieldConfigProvider] =
-    _jsonFieldConfigs.toList
+    private val _providers: scala.collection.mutable.ListBuffer[JsonSchemaConfig] =
+      scala.collection.mutable.ListBuffer.empty[JsonSchemaConfig]
+
+    /** Register a JSON schema configuration provider from a library-specific macro extension. */
+    def register(provider: JsonSchemaConfig): Unit =
+      _providers += provider
+
+    /** Get all registered JSON schema configuration providers. */
+    def all: List[JsonSchemaConfig] =
+      _providers.toList
+  }
 }
