@@ -575,11 +575,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
         Type[A] match {
-          // IArray is an opaque type on Scala 3, so IsValueType matches it before IsCollection.
-          // Skip it here — IsCollectionProviderForIArray handles it correctly.
-          case _ if Type[A].isIArray =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is IArray, handled as collection instead"))
-
           case IsValueType(isValueType) =>
             import isValueType.Underlying as Inner
 
