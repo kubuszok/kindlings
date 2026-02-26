@@ -24,7 +24,7 @@ This document contains all the information needed to implement each remaining ga
 | 10 | `ByteBuffer` encoding | Avro | Low | Low | **Done** |
 | 11 | UTF-8 field names | All | Low | Low (tests only) | Not started |
 | 12 | Union types (Scala 3) | All | Low | Hard (blocked) | Blocked on Hearth |
-| 13 | `Codec.AsObject` | Circe | Low | Low | Not started |
+| 13 | `Codec.AsObject` | Circe | Low | Low | **Done** |
 | 14 | `JsonCodec` (combined) | Jsoniter | Low | Low | Not started |
 
 ### Already Completed (for reference)

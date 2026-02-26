@@ -219,5 +219,66 @@ final class RoundTripSpec extends MacroSuite {
         KindlingsDecoder.decode[CamelCaseFields](json) ==> Right(value)
       }
     }
+
+    group("KindlingsCodecAsObject") {
+
+      test("derive returns Codec.AsObject") {
+        val codec: io.circe.Codec.AsObject[SimplePerson] = KindlingsCodecAsObject.derive[SimplePerson]
+        val value = SimplePerson("Alice", 30)
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("round-trip via derived codec") {
+        val codec = KindlingsCodecAsObject.derive[PersonWithAddress]
+        val value = PersonWithAddress("Bob", 25, Address("123 Main", "NYC"))
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("produces same output as separate derivation") {
+        val codec = KindlingsCodecAsObject.derive[SimplePerson]
+        val encoder = KindlingsEncoder.deriveAsObject[SimplePerson]
+        val value = SimplePerson("Alice", 30)
+        codec.encodeObject(value) ==> encoder.encodeObject(value)
+      }
+
+      test("with snake_case configuration") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val codec = KindlingsCodecAsObject.derive[CamelCaseFields]
+        val value = CamelCaseFields("Alice", "Smith")
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("sealed trait round-trip with discriminator") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val codec = KindlingsCodecAsObject.derive[Animal]
+        val value: Animal = Dog("Rex", "Labrador")
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("sealed trait round-trip without discriminator") {
+        val codec = KindlingsCodecAsObject.derive[Shape]
+        val value: Shape = Rectangle(3.0, 4.0)
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("empty case class") {
+        val codec = KindlingsCodecAsObject.derive[EmptyClass]
+        val value = EmptyClass()
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+
+      test("derived instance via KindlingsCodecAsObject.derived") {
+        val codec = KindlingsCodecAsObject.derived[SimplePerson]
+        val value = SimplePerson("Alice", 30)
+        val json = codec(value)
+        codec.decodeJson(json) ==> Right(value)
+      }
+    }
   }
 }

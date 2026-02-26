@@ -1,7 +1,8 @@
 package hearth.kindlings.circederivation.internal.runtime
 
 import cats.data.{NonEmptyList, Validated, ValidatedNel}
-import io.circe.{Decoder, DecodingFailure, HCursor, Json, JsonObject}
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json, JsonObject}
 
 object CirceDerivationUtils {
 
@@ -337,5 +338,15 @@ object CirceDerivationUtils {
     val field = cursor.downField(fieldName)
     if (field.failed) Validated.Valid(default)
     else decoder.tryDecodeAccumulating(field).map(x => x: Any)
+  }
+
+  // --- Codec.AsObject combiner ---
+
+  def codecAsObject[A](
+      enc: Encoder.AsObject[A],
+      dec: Decoder[A]
+  ): KindlingsCodecAsObject[A] = new KindlingsCodecAsObject[A] {
+    override def encodeObject(a: A): JsonObject = enc.encodeObject(a)
+    override def apply(c: HCursor): Decoder.Result[A] = dec(c)
   }
 }
