@@ -1,7 +1,7 @@
 package hearth.kindlings.circederivation
 
 import hearth.MacroSuite
-import io.circe.{Encoder, Json, KeyEncoder}
+import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 
 final class KindlingsEncoderSpec extends MacroSuite {
 
@@ -540,6 +540,58 @@ final class KindlingsEncoderSpec extends MacroSuite {
       test("HigherKindedType[Option] encodes correctly") {
         KindlingsEncoder.encode(HigherKindedType[Option](Some(42))) ==>
           Json.obj("value" -> Json.fromInt(42))
+      }
+    }
+
+    group("Encoder.AsObject") {
+
+      test("deriveAsObject for case class returns Encoder.AsObject") {
+        val encoder: Encoder.AsObject[SimplePerson] = KindlingsEncoder.deriveAsObject[SimplePerson]
+        encoder.encodeObject(SimplePerson("Alice", 30)) ==>
+          JsonObject("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+      }
+
+      test("deriveAsObject produces same JSON as derive") {
+        val asObject = KindlingsEncoder.deriveAsObject[SimplePerson]
+        val regular = KindlingsEncoder.derive[SimplePerson]
+        val person = SimplePerson("Alice", 30)
+        asObject(person) ==> regular(person)
+      }
+
+      test("mapJsonObject works on derived AsObject encoder") {
+        val encoder: Encoder.AsObject[SimplePerson] = KindlingsEncoder.deriveAsObject[SimplePerson]
+        val withExtra = encoder.mapJsonObject(_.add("extra", Json.True))
+        withExtra.encodeObject(SimplePerson("Alice", 30)) ==>
+          JsonObject("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30), "extra" -> Json.True)
+      }
+
+      test("deriveAsObject for empty case class") {
+        val encoder: Encoder.AsObject[EmptyClass] = KindlingsEncoder.deriveAsObject[EmptyClass]
+        encoder.encodeObject(EmptyClass()) ==> JsonObject.empty
+      }
+
+      test("deriveAsObject for sealed trait") {
+        val encoder: Encoder.AsObject[Shape] = KindlingsEncoder.deriveAsObject[Shape]
+        encoder.encodeObject(Circle(5.0)) ==>
+          JsonObject("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
+      }
+
+      test("deriveAsObject for sealed trait with discriminator") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val encoder: Encoder.AsObject[Animal] = KindlingsEncoder.deriveAsObject[Animal]
+        encoder.encodeObject(Dog("Rex", "Labrador")) ==>
+          JsonObject(
+            "type" -> Json.fromString("Dog"),
+            "name" -> Json.fromString("Rex"),
+            "breed" -> Json.fromString("Labrador")
+          )
+      }
+
+      test("deriveAsObject with configuration") {
+        implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+        val encoder: Encoder.AsObject[CamelCaseFields] = KindlingsEncoder.deriveAsObject[CamelCaseFields]
+        encoder.encodeObject(CamelCaseFields("Alice", "Smith")) ==>
+          JsonObject("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
       }
     }
 

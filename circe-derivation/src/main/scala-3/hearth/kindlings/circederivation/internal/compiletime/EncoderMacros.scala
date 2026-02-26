@@ -2,7 +2,7 @@ package hearth.kindlings.circederivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala3
-import io.circe.{Encoder, Json}
+import io.circe.{Encoder, Json, JsonObject}
 import scala.quoted.*
 
 final private[circederivation] class EncoderMacros(q: Quotes)
@@ -20,6 +20,11 @@ private[circederivation] object EncoderMacros {
       config: Expr[Configuration]
   )(using q: Quotes): Expr[KindlingsEncoder[A]] =
     new EncoderMacros(q).deriveEncoderTypeClass[A](config)
+
+  def deriveEncoderAsObjectImpl[A: Type](
+      config: Expr[Configuration]
+  )(using q: Quotes): Expr[Encoder.AsObject[A]] =
+    new EncoderMacros(q).deriveEncoderAsObjectTypeClass[A](config)
 
   def deriveInlineEncodeImpl[A: Type](
       value: Expr[A],

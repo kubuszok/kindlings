@@ -8,6 +8,9 @@ private[circederivation] trait KindlingsEncoderCompanionCompat { this: Kindlings
   def derive[A](implicit config: Configuration): Encoder[A] =
     macro internal.compiletime.EncoderMacros.deriveEncoderImpl[A]
 
+  def deriveAsObject[A](implicit config: Configuration): Encoder.AsObject[A] =
+    macro internal.compiletime.EncoderMacros.deriveEncoderAsObjectImpl[A]
+
   def encode[A](value: A)(implicit config: Configuration): Json =
     macro internal.compiletime.EncoderMacros.deriveInlineEncodeImpl[A]
 

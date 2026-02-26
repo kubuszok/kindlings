@@ -6,10 +6,10 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.circederivation.{Configuration, KindlingsEncoder}
+import hearth.kindlings.circederivation.{Configuration, KindlingsEncoder, KindlingsEncoderAsObject}
 import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
-import io.circe.{Encoder, Json, KeyEncoder}
+import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 
 trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -54,6 +54,52 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           }
         }
       }
+    }
+  }
+
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveEncoderAsObjectTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsEncoderAsObject[A]] = {
+    // Compile-time validation: only case classes, named tuples, sealed traits produce objects.
+    // Note: value types (e.g., case class Foo(x: Int) extends AnyVal) ARE case classes and pass this check,
+    // but produce non-object JSON at runtime — the runtime guard in encodeObject handles this.
+    val isCaseClass = CaseClass.parse[A].isDefined
+    val isNamedTuple = Type[A].isNamedTuple
+    val isEnum = Enum.parse[A].isDefined
+    if (!isCaseClass && !isNamedTuple && !isEnum)
+      Environment.reportErrorAndAbort(
+        s"KindlingsEncoder.deriveAsObject: ${Type[A].prettyPrint} is not a case class, sealed trait, or named tuple. " +
+          "Use KindlingsEncoder.derive instead."
+      )
+
+    implicit val KindlingsEncoderAsObjectA: Type[KindlingsEncoderAsObject[A]] = Types.KindlingsEncoderAsObject[A]
+    implicit val JsonObjectT: Type[JsonObject] = Types.JsonObject
+    implicit val JsonT: Type[Json] = Types.Json
+    implicit val ConfigT: Type[Configuration] = Types.Configuration
+    val selfType: Option[??] = Some(Type[A].as_??)
+
+    deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoderAsObject[A]]("KindlingsEncoder.deriveAsObject") {
+      fromCtx =>
+        ValDefs.createVal[Configuration](configExpr).use { configVal =>
+          Expr.quote {
+            val cfg = Expr.splice(configVal)
+            new KindlingsEncoderAsObject[A] {
+              def encodeObject(a: A): JsonObject = {
+                val _ = a
+                val json: Json = Expr.splice {
+                  fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
+                }
+                json.asObject match {
+                  case Some(obj) => obj
+                  case None      =>
+                    throw new IllegalStateException(
+                      "Encoder.AsObject: produced non-object JSON. This can happen when using enumAsStrings=true " +
+                        "with a sealed trait of case objects. Use KindlingsEncoder.derive instead."
+                    )
+                }
+              }
+            }
+          }
+        }
     }
   }
 
@@ -844,9 +890,11 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     def Encoder: Type.Ctor1[Encoder] = Type.Ctor1.of[Encoder]
     def KeyEncoder: Type.Ctor1[KeyEncoder] = Type.Ctor1.of[KeyEncoder]
     def KindlingsEncoder: Type.Ctor1[KindlingsEncoder] = Type.Ctor1.of[KindlingsEncoder]
+    def KindlingsEncoderAsObject: Type.Ctor1[KindlingsEncoderAsObject] = Type.Ctor1.of[KindlingsEncoderAsObject]
     val EncoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation]
     val Json: Type[Json] = Type.of[Json]
+    val JsonObject: Type[JsonObject] = Type.of[JsonObject]
     val Configuration: Type[Configuration] = Type.of[Configuration]
     val String: Type[String] = Type.of[String]
     val FieldName: Type[fieldName] = Type.of[fieldName]

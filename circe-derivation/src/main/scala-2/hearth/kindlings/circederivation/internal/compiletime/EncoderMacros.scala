@@ -18,6 +18,11 @@ final private[circederivation] class EncoderMacros(val c: blackbox.Context)
       config: c.Expr[Configuration]
   ): c.Expr[KindlingsEncoder[A]] = deriveEncoderTypeClass[A](config)
 
+  def deriveEncoderAsObjectImpl[A: c.WeakTypeTag](
+      config: c.Expr[Configuration]
+  ): c.Expr[Encoder.AsObject[A]] =
+    deriveEncoderAsObjectTypeClass[A](config).asInstanceOf[c.Expr[Encoder.AsObject[A]]]
+
   def deriveInlineEncodeImpl[A: c.WeakTypeTag](
       value: c.Expr[A]
   )(config: c.Expr[Configuration]): c.Expr[Json] = deriveInlineEncode[A](value, config)
