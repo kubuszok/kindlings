@@ -25,7 +25,7 @@ This document contains all the information needed to implement each remaining ga
 | 11 | UTF-8 field names | All | Low | Low (tests only) | Not started |
 | 12 | Union types (Scala 3) | All | Low | Hard (blocked) | Blocked on Hearth |
 | 13 | `Codec.AsObject` | Circe | Low | Low | **Done** |
-| 14 | `JsonCodec` (combined) | Jsoniter | Low | Low | Not started |
+| 14 | `JsonCodec` (combined) | Jsoniter | Low | Low | **Done** |
 
 ### Already Completed (for reference)
 
@@ -40,6 +40,8 @@ This document contains all the information needed to implement each remaining ga
 - Avro `@avroAlias(alias)` — adds schema evolution aliases to records and fields, supports multiple annotations on same target (2026-02-26)
 - Jsoniter `@stringified` — per-field annotation encoding numeric fields as JSON strings, with compile-time validation (2026-02-26)
 - Jsoniter `mapAsArray` — config option encoding maps as `[[k1,v1],[k2,v2]]` arrays instead of JSON objects (2026-02-26)
+- Circe `Codec.AsObject` — `KindlingsCodecAsObject.derive[A]` combining `Encoder.AsObject[A]` + `Decoder[A]` with runtime combiner for Scala 3 splice isolation (2026-02-26)
+- Jsoniter `JsonCodec` (combined) — `KindlingsJsonCodec.derive[A]` combining `JsonValueCodec[A]` + `JsonKeyCodec[A]` with standalone `deriveKeyCodec[A]` for primitives, value types, and enums (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---
@@ -476,7 +478,7 @@ This is a convenience — users can already compose `KindlingsEncoder.derived[A]
 
 ---
 
-## Gap 14: Jsoniter `JsonCodec` (Combined)
+## Gap 14: Jsoniter `JsonCodec` (Combined) — Done
 
 ### Problem
 
@@ -578,5 +580,5 @@ grep -E '(Failed|Errors|FAILED)' /tmp/sbt-output.txt
 10. **Gap 10** — ByteBuffer (low, pure type rule addition)
 11. **Gap 11** — UTF-8 field names (low, tests only)
 12. **Gap 13** — `Codec.AsObject` (low, Gap 1 prerequisite now done)
-13. **Gap 14** — `JsonCodec` combined (low)
+13. **Gap 14** — `JsonCodec` combined (done)
 14. **Gap 12** — Union types (blocked on Hearth)

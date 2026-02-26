@@ -1,8 +1,20 @@
 package hearth.kindlings.jsoniterderivation.internal.runtime
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonWriter}
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonKeyCodec, JsonReader, JsonValueCodec, JsonWriter}
+import hearth.kindlings.jsoniterderivation.KindlingsJsonCodec
 
 object JsoniterDerivationUtils {
+
+  def jsonCodec[A](
+      valueCodec: JsonValueCodec[A],
+      keyCodec: JsonKeyCodec[A]
+  ): KindlingsJsonCodec[A] = new KindlingsJsonCodec[A] {
+    def nullValue: A = valueCodec.nullValue
+    def decodeValue(in: JsonReader, default: A): A = valueCodec.decodeValue(in, default)
+    def encodeValue(x: A, out: JsonWriter): Unit = valueCodec.encodeValue(x, out)
+    def decodeKey(in: JsonReader): A = keyCodec.decodeKey(in)
+    def encodeKey(x: A, out: JsonWriter): Unit = keyCodec.encodeKey(x, out)
+  }
 
   // --- Encoder helpers ---
 

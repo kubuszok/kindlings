@@ -6,12 +6,13 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
+import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
 import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
   writeToString,
+  JsonCodec,
   JsonKeyCodec,
   JsonReader,
   JsonReaderException,
@@ -148,6 +149,255 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           }
         }
     }
+  }
+
+  /** Derive a standalone JsonKeyCodec for type A.
+    *
+    * Uses the existing deriveKeyEncoding/deriveKeyDecoding methods with minimal stub contexts. Only succeeds for types
+    * with a natural key representation: built-in primitives, value types wrapping those, and sealed traits/enums of
+    * case objects.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveKeyCodecTypeClass[A: Type](configExpr: Expr[JsoniterConfig]): Expr[JsonKeyCodec[A]] = {
+    implicit val JsonKeyCodecA: Type[JsonKeyCodec[A]] = CTypes.JsonKeyCodec[A]
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+    implicit val UnitT: Type[Unit] = CTypes.Unit
+
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"KindlingsJsonCodec.deriveKeyCodec: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          "Provide an explicit type parameter, e.g.: KindlingsJsonCodec.deriveKeyCodec[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+
+    Log
+      .namedScope(
+        s"Deriving key codec for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val cache = ValDefsCache.mlocal
+          val selfType: Option[??] = None
+
+          // Derive key encoding using a stub EncoderCtx
+          val keyEncMIO: MIO[Option[Expr[(A, JsonWriter) => Unit]]] = {
+            val stubValue = Expr.quote(null.asInstanceOf[A])
+            val stubWriter = Expr.quote(null.asInstanceOf[JsonWriter])
+            implicit val ctx: EncoderCtx[A] = EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType)
+            EncHandleAsMapRule.deriveKeyEncoding[A]
+          }
+
+          // Derive key decoding using a stub DecoderCtx
+          val keyDecMIO: MIO[Option[Expr[JsonReader => A]]] = {
+            implicit val StringT: Type[String] = CTypes.String
+            val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
+            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType)
+            DecHandleAsMapRule.deriveKeyDecoding[A]
+          }
+
+          val (keyEncOpt, keyDecOpt) = runSafe {
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              result <- keyEncMIO.parTuple(keyDecMIO)
+            } yield result
+          }
+
+          val (encFn, decFn) = (keyEncOpt, keyDecOpt) match {
+            case (Some(enc), Some(dec)) => (enc, dec)
+            case _                      =>
+              Environment.reportErrorAndAbort(
+                s"KindlingsJsonCodec.deriveKeyCodec: Cannot derive JsonKeyCodec for ${Type[A].prettyPrint}.\n" +
+                  "Key codecs can only be derived for: primitive types (Int, Long, Double, Float, Short, Boolean, BigDecimal, BigInt),\n" +
+                  "value types wrapping those primitives, and sealed traits/enums of case objects."
+              )
+          }
+
+          val vals = runSafe(cache.get)
+          val resultExpr = Expr.quote {
+            new JsonKeyCodec[A] {
+              def decodeKey(in: JsonReader): A = Expr.splice(decFn).apply(Expr.splice(Expr.quote(in)))
+              def encodeKey(x: A, out: JsonWriter): Unit =
+                Expr.splice(encFn).apply(Expr.splice(Expr.quote(x)), Expr.splice(Expr.quote(out)))
+            }
+          }
+          vals.toValDefs.use(_ => resultExpr)
+        }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final key codec result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        "KindlingsJsonCodec.deriveKeyCodec",
+        infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
+  }
+
+  /** Derive a combined JsonCodec (value + key) for type A. Used only by Scala 2 macro bridge. Scala 3 avoids splice
+    * isolation by calling separate inline methods.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveJsonCodecTypeClass[A: Type](configExpr: Expr[JsoniterConfig]): Expr[KindlingsJsonCodec[A]] = {
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+    implicit val UnitT: Type[Unit] = CTypes.Unit
+    implicit val JsonValueCodecA: Type[JsonValueCodec[A]] = CTypes.JsonValueCodec[A]
+    implicit val JsonKeyCodecA: Type[JsonKeyCodec[A]] = CTypes.JsonKeyCodec[A]
+    implicit val KindlingsJsonCodecA: Type[KindlingsJsonCodec[A]] = CTypes.KindlingsJsonCodec[A]
+
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"KindlingsJsonCodec.derive: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          "Provide an explicit type parameter, e.g.: KindlingsJsonCodec.derive[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+
+    Log
+      .namedScope(
+        s"Deriving combined json codec for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val cache = ValDefsCache.mlocal
+          val selfType: Option[??] = Some(Type[A].as_??)
+
+          // Value codec parts — same as deriveCodecTypeClass
+          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
+            val defBuilder =
+              ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
+            for {
+              _ <- Log.info(s"Forward-declaring json codec encode body for ${Type[A].prettyPrint}")
+              _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
+              _ <- MIO.scoped { rs =>
+                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
+                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+                })
+              }
+              _ <- Log.info(s"Defined json codec encode body for ${Type[A].prettyPrint}")
+              fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
+            } yield fn.get
+          }
+
+          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
+            val defBuilder =
+              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
+            for {
+              _ <- Log.info(s"Forward-declaring json codec decode body for ${Type[A].prettyPrint}")
+              _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
+              _ <- MIO.scoped { rs =>
+                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
+                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+                })
+              }
+              _ <- Log.info(s"Defined json codec decode body for ${Type[A].prettyPrint}")
+              fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
+            } yield fn.get
+          }
+
+          val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+
+          // Key codec parts
+          val keyEncMIO: MIO[Option[Expr[(A, JsonWriter) => Unit]]] = {
+            val stubValue = Expr.quote(null.asInstanceOf[A])
+            val stubWriter = Expr.quote(null.asInstanceOf[JsonWriter])
+            implicit val ctx: EncoderCtx[A] = EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType)
+            EncHandleAsMapRule.deriveKeyEncoding[A]
+          }
+
+          val keyDecMIO: MIO[Option[Expr[JsonReader => A]]] = {
+            implicit val StringT: Type[String] = CTypes.String
+            val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
+            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType)
+            DecHandleAsMapRule.deriveKeyDecoding[A]
+          }
+
+          val (((encFn, decFn), nullVal), (keyEncOpt, keyDecOpt)) = runSafe {
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              result <- encMIO.parTuple(decMIO).parTuple(nullMIO).parTuple(keyEncMIO.parTuple(keyDecMIO))
+            } yield result
+          }
+
+          val (keyEncFn, keyDecFn) = (keyEncOpt, keyDecOpt) match {
+            case (Some(enc), Some(dec)) => (enc, dec)
+            case _                      =>
+              Environment.reportErrorAndAbort(
+                s"KindlingsJsonCodec.derive: Cannot derive JsonKeyCodec for ${Type[A].prettyPrint}.\n" +
+                  "Key codecs can only be derived for: primitive types (Int, Long, Double, Float, Short, Boolean, BigDecimal, BigInt),\n" +
+                  "value types wrapping those primitives, and sealed traits/enums of case objects.\n" +
+                  "If you only need value encoding/decoding, use KindlingsJsonValueCodec.derive instead."
+              )
+          }
+
+          val vals = runSafe(cache.get)
+          val resultExpr = Expr.quote {
+            new KindlingsJsonCodec[A] {
+              def nullValue: A = Expr.splice(nullVal)
+              def decodeValue(in: JsonReader, default: A): A = {
+                val _ = default
+                Expr.splice(decFn(Expr.quote(in), configExpr))
+              }
+              def encodeValue(x: A, out: JsonWriter): Unit =
+                Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr))
+              def decodeKey(in: JsonReader): A = Expr.splice(keyDecFn).apply(Expr.splice(Expr.quote(in)))
+              def encodeKey(x: A, out: JsonWriter): Unit =
+                Expr.splice(keyEncFn).apply(Expr.splice(Expr.quote(x)), Expr.splice(Expr.quote(out)))
+            }
+          }
+          vals.toValDefs.use(_ => resultExpr)
+        }
+      }
+      .flatTap { result =>
+        Log.info(s"Derived final combined json codec result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        "KindlingsJsonCodec.derive",
+        infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
   }
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
@@ -905,7 +1155,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     /** Try to derive a (K, JsonWriter) => Unit function for map key encoding. Returns None if derivation fails. */
     @scala.annotation.nowarn("msg=is never used")
-    private def deriveKeyEncoding[K: Type](implicit ctx: EncoderCtx[?]): MIO[Option[Expr[(K, JsonWriter) => Unit]]] =
+    private[compiletime] def deriveKeyEncoding[K: Type](implicit
+        ctx: EncoderCtx[?]
+    ): MIO[Option[Expr[(K, JsonWriter) => Unit]]] =
 
       Log.info(s"Attempting to derive key encoder for ${Type[K].prettyPrint}") >> {
         // 1. Built-in types with native writeKey overloads
@@ -1885,7 +2137,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     /** Try to derive a JsonReader => K function for map key decoding. Returns None if derivation fails. */
     @scala.annotation.nowarn("msg=is never used")
-    private def deriveKeyDecoding[K: Type](implicit ctx: DecoderCtx[?]): MIO[Option[Expr[JsonReader => K]]] = {
+    private[compiletime] def deriveKeyDecoding[K: Type](implicit
+        ctx: DecoderCtx[?]
+    ): MIO[Option[Expr[JsonReader => K]]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val StringT: Type[String] = CTypes.String
 
@@ -2998,8 +3252,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
   private[compiletime] object CTypes {
 
+    def JsonCodec: Type.Ctor1[JsonCodec] = Type.Ctor1.of[JsonCodec]
     def JsonKeyCodec: Type.Ctor1[JsonKeyCodec] = Type.Ctor1.of[JsonKeyCodec]
     def JsonValueCodec: Type.Ctor1[JsonValueCodec] = Type.Ctor1.of[JsonValueCodec]
+    def KindlingsJsonCodec: Type.Ctor1[KindlingsJsonCodec] = Type.Ctor1.of[KindlingsJsonCodec]
     def KindlingsJsonValueCodec: Type.Ctor1[KindlingsJsonValueCodec] =
       Type.Ctor1.of[KindlingsJsonValueCodec]
     val CodecLogDerivation: Type[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation] =

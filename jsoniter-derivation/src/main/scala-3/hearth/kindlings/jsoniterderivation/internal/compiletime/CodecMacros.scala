@@ -2,7 +2,7 @@ package hearth.kindlings.jsoniterderivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala3
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonKeyCodec, JsonReaderException, JsonValueCodec}
 import scala.quoted.*
 
 final private[jsoniterderivation] class CodecMacros(q: Quotes)
@@ -32,4 +32,9 @@ private[jsoniterderivation] object CodecMacros {
       config: Expr[JsoniterConfig]
   )(using q: Quotes): Expr[Either[JsonReaderException, A]] =
     new CodecMacros(q).deriveInlineReadFromString[A](json, config)
+
+  def deriveKeyCodecImpl[A: Type](
+      config: Expr[JsoniterConfig]
+  )(using q: Quotes): Expr[JsonKeyCodec[A]] =
+    new CodecMacros(q).deriveKeyCodecTypeClass[A](config)
 }

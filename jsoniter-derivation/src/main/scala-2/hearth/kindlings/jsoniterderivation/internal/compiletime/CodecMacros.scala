@@ -2,7 +2,7 @@ package hearth.kindlings.jsoniterderivation
 package internal.compiletime
 
 import hearth.MacroCommonsScala2
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonCodec, JsonKeyCodec, JsonReaderException, JsonValueCodec}
 import scala.reflect.macros.blackbox
 
 final private[jsoniterderivation] class CodecMacros(val c: blackbox.Context)
@@ -27,6 +27,21 @@ final private[jsoniterderivation] class CodecMacros(val c: blackbox.Context)
       json: c.Expr[String]
   )(config: c.Expr[JsoniterConfig]): c.Expr[Either[JsonReaderException, A]] =
     deriveInlineReadFromString[A](json, config)
+
+  def deriveJsonCodecImpl[A: c.WeakTypeTag](
+      config: c.Expr[JsoniterConfig]
+  ): c.Expr[JsonCodec[A]] =
+    deriveJsonCodecTypeClass[A](config).asInstanceOf[c.Expr[JsonCodec[A]]]
+
+  def deriveKindlingsJsonCodecImpl[A: c.WeakTypeTag](
+      config: c.Expr[JsoniterConfig]
+  ): c.Expr[KindlingsJsonCodec[A]] =
+    deriveJsonCodecTypeClass[A](config).asInstanceOf[c.Expr[KindlingsJsonCodec[A]]]
+
+  def deriveKeyCodecImpl[A: c.WeakTypeTag](
+      config: c.Expr[JsoniterConfig]
+  ): c.Expr[JsonKeyCodec[A]] =
+    deriveKeyCodecTypeClass[A](config).asInstanceOf[c.Expr[JsonKeyCodec[A]]]
 
   @scala.annotation.nowarn("msg=unchecked")
   def deriveInlineWriteToStringOpsImpl[A: c.WeakTypeTag](

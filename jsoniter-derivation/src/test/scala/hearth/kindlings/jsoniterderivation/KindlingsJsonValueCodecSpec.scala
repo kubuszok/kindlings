@@ -853,6 +853,72 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
     }
   }
 
+  group("KindlingsJsonCodec") {
+
+    test("derive returns JsonCodec") {
+      val codec = KindlingsJsonCodec.derive[Int]
+      assert(codec.isInstanceOf[com.github.plokhotnyuk.jsoniter_scala.core.JsonCodec[Int]])
+      assert(codec.isInstanceOf[com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec[Int]])
+      assert(codec.isInstanceOf[com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[Int]])
+    }
+
+    test("round-trip value encoding") {
+      val codec: JsonValueCodec[Int] = KindlingsJsonCodec.derive[Int]
+      val json = writeToString(42)(codec)
+      val decoded = readFromString[Int](json)(codec)
+      decoded ==> 42
+    }
+
+    test("key encoding/decoding for Int") {
+      val codec = KindlingsJsonCodec.derive[Int]
+      val keyCodec: JsonKeyCodec[Int] = codec
+      assert(keyCodec != null)
+    }
+
+    test("key encoding/decoding for value type") {
+      val codec = KindlingsJsonCodec.derive[UserId]
+      assert(codec.isInstanceOf[com.github.plokhotnyuk.jsoniter_scala.core.JsonCodec[UserId]])
+    }
+
+    test("key encoding/decoding for enum") {
+      val codec = KindlingsJsonCodec.derive[CardinalDirection]
+      assert(codec.isInstanceOf[com.github.plokhotnyuk.jsoniter_scala.core.JsonCodec[CardinalDirection]])
+    }
+
+    test("produces same value output as separate derivation") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
+      val jsonCodec: JsonValueCodec[CardinalDirection] = KindlingsJsonCodec.derive[CardinalDirection]
+      val valueCodec = KindlingsJsonValueCodec.derive[CardinalDirection]
+      val value = North: CardinalDirection
+      writeToString(value)(jsonCodec) ==> writeToString(value)(valueCodec)
+    }
+
+    test("standalone deriveKeyCodec") {
+      val keyCodec = KindlingsJsonCodec.deriveKeyCodec[Int]
+      assert(keyCodec.isInstanceOf[JsonKeyCodec[Int]])
+    }
+
+    test("standalone deriveKeyCodec for value type") {
+      val keyCodec = KindlingsJsonCodec.deriveKeyCodec[UserId]
+      assert(keyCodec.isInstanceOf[JsonKeyCodec[UserId]])
+    }
+
+    test("standalone deriveKeyCodec for enum") {
+      val keyCodec = KindlingsJsonCodec.deriveKeyCodec[CardinalDirection]
+      assert(keyCodec.isInstanceOf[JsonKeyCodec[CardinalDirection]])
+    }
+
+    test("compile error for unsupported key type") {
+      compileErrors(
+        """
+        hearth.kindlings.jsoniterderivation.KindlingsJsonCodec.derive[hearth.kindlings.jsoniterderivation.SimplePerson]
+        """
+      ).check(
+        "Cannot derive JsonKeyCodec"
+      )
+    }
+  }
+
   group("JsonValueCodecExtensions") {
 
     test("map transforms codec") {

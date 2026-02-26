@@ -7,7 +7,8 @@ import hearth.kindlings.circederivation.{Configuration, KindlingsCodecAsObject, 
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.Decoder
 
-trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport & EncoderMacrosImpl & DecoderMacrosImpl =>
+trait CodecMacrosImpl {
+  this: MacroCommons & StdExtensions & AnnotationSupport & EncoderMacrosImpl & DecoderMacrosImpl =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveCodecAsObjectTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsCodecAsObject[A]] = {
