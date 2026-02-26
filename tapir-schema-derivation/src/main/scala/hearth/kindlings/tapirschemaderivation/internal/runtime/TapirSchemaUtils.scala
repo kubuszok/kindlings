@@ -1,0 +1,139 @@
+package hearth.kindlings.tapirschemaderivation.internal.runtime
+
+import sttp.tapir.{FieldName, Schema, SchemaType}
+import sttp.tapir.Schema.SName
+
+object TapirSchemaUtils {
+
+  /** Apply Tapir annotations to a schema at runtime. Ignores non-Tapir annotations silently. */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def enrichSchema[T](schema: Schema[T], annotations: List[Any]): Schema[T] =
+    annotations.foldLeft(schema) {
+      case (s, ann: Schema.annotations.description)                => s.description(ann.text)
+      case (s, ann: Schema.annotations.encodedExample)             => s.encodedExample(ann.example)
+      case (s, ann: Schema.annotations.default[T @unchecked])      => s.default(ann.default, ann.encoded)
+      case (s, ann: Schema.annotations.validate[T @unchecked])     => s.validate(ann.v)
+      case (s, ann: Schema.annotations.validateEach[T @unchecked]) =>
+        s.modifyUnsafe(Schema.ModifyCollectionElements)((_: Schema[T]).validate(ann.v))
+      case (s, ann: Schema.annotations.format)    => s.format(ann.format)
+      case (s, ann: Schema.annotations.title)     => s.title(ann.name)
+      case (s, _: Schema.annotations.deprecated)  => s.deprecated(true)
+      case (s, _: Schema.annotations.hidden)      => s.hidden(true)
+      case (s, ann: Schema.annotations.customise) => ann.f(s).asInstanceOf[Schema[T]]
+      case (s, _)                                 => s // ignore non-Tapir annotations
+    }
+
+  /** Build an SProductField with annotation support. @encodedName from annotations overrides the JSON-config encoded
+    * name.
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def productFieldWithAnnotations[T](
+      scalaName: String,
+      jsonConfigEncodedName: String,
+      fieldSchema: Schema[Any],
+      index: Int,
+      fieldAnnotations: List[Any]
+  ): SchemaType.SProductField[T] = {
+    val encodedName = fieldAnnotations
+      .collectFirst { case ann: Schema.annotations.encodedName =>
+        ann.name
+      }
+      .getOrElse(jsonConfigEncodedName)
+    val enrichedSchema = enrichSchema(fieldSchema, fieldAnnotations)
+    SchemaType.SProductField[T, Any](
+      FieldName(scalaName, encodedName),
+      enrichedSchema,
+      t => Some(t.asInstanceOf[Product].productElement(index))
+    )
+  }
+
+  /** Empty field list, typed for use in cross-quotes list construction. */
+  def emptyFieldList[T]: List[SchemaType.SProductField[T]] = Nil
+
+  /** Create an SProductField for a case class field using productElement access. */
+  def productField[T](
+      scalaName: String,
+      encodedName: String,
+      fieldSchema: Schema[Any],
+      index: Int
+  ): SchemaType.SProductField[T] =
+    SchemaType.SProductField[T, Any](
+      FieldName(scalaName, encodedName),
+      fieldSchema,
+      t => Some(t.asInstanceOf[Product].productElement(index))
+    )
+
+  /** Create a Schema with SProduct schema type. */
+  def productSchema[T](
+      name: SName,
+      fields: List[SchemaType.SProductField[T]]
+  ): Schema[T] =
+    Schema[T](SchemaType.SProduct[T](fields), Some(name))
+
+  /** Create a Schema with SCoproduct schema type. Uses name-based runtime matching. */
+  def coproductSchema[T](
+      name: SName,
+      subtypes: List[Schema[Any]],
+      discriminator: Option[String]
+  ): Schema[T] = {
+    val disc: Option[SchemaType.SDiscriminator] = discriminator.map { discFieldName =>
+      val mapping: Map[String, SchemaType.SRef[Any]] = subtypes.flatMap { s =>
+        s.name.map { sname =>
+          val shortName = sname.fullName.split('.').last
+          shortName -> SchemaType.SRef[Any](sname)
+        }
+      }.toMap
+      SchemaType.SDiscriminator(FieldName(discFieldName, discFieldName), mapping)
+    }
+
+    Schema[T](
+      SchemaType.SCoproduct[T](subtypes, disc) { (value: T) =>
+        val cn = value.getClass.getName
+        subtypes.collectFirst {
+          case s if s.name.exists(sn => cn == sn.fullName || cn == (sn.fullName + "$")) =>
+            SchemaType.SchemaWithValue(s.asInstanceOf[Schema[Any]], value)
+        }
+      },
+      Some(name)
+    )
+  }
+
+  /** Create a Schema with string-based enum schema type (for case object-only sealed traits). */
+  def stringEnumSchema[T](
+      name: SName,
+      values: List[T],
+      encodedNames: List[String]
+  ): Schema[T] = {
+    val valMap = values.zip(encodedNames).toMap
+    Schema
+      .string[T]
+      .name(name)
+      .copy(validator = sttp.tapir.Validator.enumeration(values, v => valMap.get(v)))
+  }
+
+  /** Create a Schema with SRef schema type for recursive references. */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def refSchema[T](name: SName): Schema[T] =
+    Schema[T](SchemaType.SRef[T](name))
+
+  /** Wrap an element schema as Option. */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def optionSchema[E](elementSchema: Schema[E]): Schema[Any] =
+    elementSchema.asOption.asInstanceOf[Schema[Any]]
+
+  /** Wrap an element schema as a collection (List, Vector, Set, etc.). */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def collectionSchema[E](elementSchema: Schema[E]): Schema[Any] =
+    Schema[Any](
+      SchemaType.SArray[Any, E](elementSchema)(_.asInstanceOf[Iterable[E]]),
+      isOptional = true
+    )
+
+  /** Wrap a value schema as a Map[String, V]. */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def mapSchema[V](valueSchema: Schema[V]): Schema[Any] =
+    Schema[Any](
+      SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(_.asInstanceOf[Map[String, V]]),
+      isOptional = true
+    )
+}

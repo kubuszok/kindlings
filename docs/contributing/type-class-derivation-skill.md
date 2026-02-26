@@ -1066,6 +1066,59 @@ If you skip the built-in type rule, primitive fields inside case classes will fa
 
 Tests that need `group("...")` blocks must extend `MacroSuite` (from `hearth-munit`), which in turn depends on hearth. Modules that do NOT depend on hearth (e.g., a standalone JSON AST module) cannot use `MacroSuite`. In that case, extend plain `munit.FunSuite` and use flat test names instead of nested `group()` blocks.
 
+### `Type.of[A]` bootstrap cycle in macro extensions (Scala 2 AND 3)
+
+**This affects MacroExtension classes that create `Type[A]` instances.** Cross-quotes `Type.of[A]` generates code that resolves `implicit/given Type[A]` (hearth's Type) at the point of evaluation. When you're defining the very `Type[A]` that would be found as the implicit, this creates an inescapable self-referential cycle:
+
+```scala
+// BROKEN — causes StackOverflowError on BOTH Scala 2 and 3:
+lazy val ConfigT = Type.of[Configuration]
+implicit def configType: Type[Configuration] = ConfigT
+// Type.of expansion → needs implicit Type[Configuration] → configType → ConfigT → Type.of → SOE
+
+// ALSO BROKEN — forward reference on Scala 2, SOE on Scala 3:
+implicit val ConfigT: Type[Configuration] = Type.of[Configuration]
+```
+
+**Root cause by platform:**
+- **Scala 2:** The `typeOfImpl` macro generates an `implicit def convertProvidedTypesForCrossQuotes[T](implicit t: Type[T]): WeakTypeTag[T]` that bridges hearth's Type to Scala 2's WeakTypeTag. Even for concrete types, the TypeCreator resolves through this implicit.
+- **Scala 3:** The cross-quotes plugin's `injectGivens` injects `given Type[A]` (hearth's Type) for types referenced in the expansion. For concrete types, this triggers resolution of the implicit being defined.
+
+**Solution — bypass cross-quotes and use platform-native type creation:**
+
+**Scala 2** — use `sc2.c.universe.typeOf[X]` (standard reflection with compiler-generated TypeTag) and convert via `UntypedType.toTyped`:
+```scala
+val sc2 = ctx.asInstanceOf[MacroCommonsScala2]
+implicit val ConfigT: Type[Configuration] =
+  UntypedType.toTyped[Configuration](sc2.c.universe.typeOf[Configuration].asInstanceOf[UntypedType])
+```
+
+**Scala 3** — use `scala.quoted.Type.of[X]` directly (only needs `Quotes`, not hearth's `Type`):
+```scala
+val sc3 = ctx.asInstanceOf[MacroCommonsScala3]
+given scala.quoted.Quotes = sc3.quotes
+implicit val ConfigT: Type[Configuration] =
+  scala.quoted.Type.of[Configuration].asInstanceOf[Type[Configuration]]
+```
+
+**For shared code** (same file compiled on both Scala 2 and 3), move `Type.of` calls into a helper object where the self-referential implicit is NOT in scope:
+```scala
+object TsTypes {
+  // Type.of here resolves Type[A] from the context bound parameter only,
+  // NOT from any local implicit in the caller
+  def SchemaOf[A: Type]: Type[Schema[A]] = Type.of[Schema[A]]
+  def KindlingsSchemaOf[A: Type]: Type[KindlingsSchema[A]] = Type.of[KindlingsSchema[A]]
+}
+
+// In the calling method:
+implicit val schemaAType: Type[Schema[A]] = TsTypes.SchemaOf[A]       // needs Type[A] ✓
+implicit val ksAType: Type[KindlingsSchema[A]] = TsTypes.KindlingsSchemaOf[A]  // needs Type[A] ✓
+```
+
+This works because `Type.of[Schema[A]]` inside `TsTypes` only needs `Type[A]` (from the context bound), and the implicit scope inside `TsTypes` does NOT include the local implicit vals from the caller.
+
+**Reference:** `tapir-schema-derivation` — `SchemaMacrosImpl.TsTypes`, `circe-derivation/scala-2/CirceJsonFieldConfigExtension.scala`, `circe-derivation/scala-3/CirceJsonFieldConfigExtension.scala`.
+
 ## Implementation requirements checklist
 
 Every type class derivation must satisfy all requirements below. Use this checklist when implementing a new derivation and when verifying that an existing one is complete. Each item includes what to implement, where to look for a reference, and how to verify it.

@@ -30,6 +30,7 @@ val versions = new {
   val circe = "0.14.15"
   val jsoniterScala = "2.38.9"
   val scalaYaml = "0.3.1"
+  val tapir = "1.11.16"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -268,7 +269,7 @@ val noPublishSettings =
 val al = new {
 
   private val prodProjects =
-    Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson", "yamlDerivation")
+    Vector("fastShowPretty", "circeDerivation", "jsoniterDerivation", "jsoniterJson", "yamlDerivation", "jsonFieldConfigExt", "tapirSchemaDerivation")
 
   private val jvmOnlyProdProjects = Vector("avroDerivation")
 
@@ -329,6 +330,8 @@ lazy val root = project
   .aggregate(jsoniterJson.projectRefs *)
   .aggregate(yamlDerivation.projectRefs *)
   .aggregate(avroDerivation.projectRefs *)
+  .aggregate(jsonFieldConfigExt.projectRefs *)
+  .aggregate(tapirSchemaDerivation.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -391,12 +394,14 @@ lazy val fastShowPretty = projectMatrix
 lazy val circeDerivation = projectMatrix
   .in(file("circe-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(jsonFieldConfigExt)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-circe-derivation",
     name := "kindlings-circe-derivation",
-    description := "Circe Encoder/Decoder derivation using Hearth macros"
+    description := "Circe Encoder/Decoder derivation using Hearth macros",
+    macroExtensionTraits := Seq("hearth.kindlings.jsonfieldconfigext.JsonFieldConfigMacroExtension")
   )
   .settings(settings *)
   .settings(dependencies *)
@@ -412,12 +417,14 @@ lazy val circeDerivation = projectMatrix
 lazy val jsoniterDerivation = projectMatrix
   .in(file("jsoniter-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(jsonFieldConfigExt)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-jsoniter-derivation",
     name := "kindlings-jsoniter-derivation",
-    description := "Jsoniter Scala JsonValueCodec derivation using Hearth macros"
+    description := "Jsoniter Scala JsonValueCodec derivation using Hearth macros",
+    macroExtensionTraits := Seq("hearth.kindlings.jsonfieldconfigext.JsonFieldConfigMacroExtension")
   )
   .settings(settings *)
   .settings(dependencies *)
@@ -495,3 +502,44 @@ lazy val avroDerivation = projectMatrix
       "org.apache.avro" % "avro" % versions.avro
     )
   )
+
+lazy val jsonFieldConfigExt = projectMatrix
+  .in(file("json-field-config-ext"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-json-field-config-ext",
+    name := "kindlings-json-field-config-ext",
+    description := "Shared macro extension interface for JSON field configuration discovery"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+
+lazy val tapirSchemaDerivation = projectMatrix
+  .in(file("tapir-schema-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(jsonFieldConfigExt)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-tapir-schema-derivation",
+    name := "kindlings-tapir-schema-derivation",
+    description := "Tapir Schema derivation using Hearth macros with JSON-consistent naming"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
+      "io.circe" %%% "circe-core" % versions.circe % Test,
+      "io.circe" %%% "circe-parser" % versions.circe % Test,
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala % Test
+    )
+  )
+  .dependsOn(circeDerivation % Test)
+  .dependsOn(jsoniterDerivation % Test)

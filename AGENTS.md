@@ -59,6 +59,7 @@ Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-com
 - **Phantom type param inference** — unconstrained `A` (not in params/return type) infers `Nothing` on Scala 2, `Any` on Scala 3; guard against both
 - **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; pre-derive with `LambdaBuilder` in one `runSafe` call
 - **`IsMap`/`IsCollection` path-dependent types** — `import isMap.{Key, Value, CtorResult}` before `Expr.quote`
+- **`Type.of[A]` bootstrap cycle in extensions** — cross-quotes `Type.of[A]` resolves `implicit Type[A]` at evaluation time; when defining that implicit, causes SOE. Bypass cross-quotes: Scala 2 use `UntypedType.toTyped[A](sc2.c.universe.typeOf[A])`, Scala 3 use `scala.quoted.Type.of[A].asInstanceOf[Type[A]]`; for shared code, move `Type.of` into a helper object where the self-referential implicit is not in scope
 - **`ValDefsCache` wrapping scope** — `vals.toValDefs.use` must wrap the outermost expression containing all references
 
 Hearth source is at `../hearth/` when documentation is insufficient.

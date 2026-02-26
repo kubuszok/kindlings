@@ -26,8 +26,13 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:scala-hearth.readthedocs.io)",
       "WebFetch(domain:scalameta.org)",
+      "WebFetch(domain:tapir.softwaremill.com)",
       "WebFetch(domain:virtuslab.github.io)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:scala-tapir.readthedocs.io)",
+      "Bash(jar xf:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh search:*)"
     ]
   }
 }
