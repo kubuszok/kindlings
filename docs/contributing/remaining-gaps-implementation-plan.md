@@ -12,7 +12,7 @@ This document contains all the information needed to implement each remaining ga
 
 | # | Gap | Module | Priority | Difficulty | Status |
 |---|-----|--------|----------|------------|--------|
-| 1 | `Encoder.AsObject` | Circe | **High** | Medium | Not started |
+| 1 | `Encoder.AsObject` | Circe | **High** | Medium | **Done** |
 | 2 | Literal types | All 4 | Medium | Medium | Not started |
 | 3 | `@stringified` | Jsoniter | Medium | Medium | Not started |
 | 4 | Map as array encoding | Jsoniter | Medium | Medium | Not started |
@@ -29,121 +29,30 @@ This document contains all the information needed to implement each remaining ga
 
 ### Already Completed (for reference)
 
+- Circe `Encoder.AsObject` — `KindlingsEncoder.deriveAsObject[A]` returns `Encoder.AsObject[A]` for case classes and sealed traits (2026-02-26)
 - Circe `KeyEncoder`/`KeyDecoder` — built-in types inlined + user implicit summoning (2026-02-26)
 - Jsoniter non-String map keys — built-in types + `JsonKeyCodec[K]` summoning (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---
 
-## Gap 1: Circe `Encoder.AsObject`
+## Gap 1: Circe `Encoder.AsObject` — DONE
 
-### Problem
+### What Was Implemented
 
-All other Circe derivation libraries (`circe-generic`, `circe-derivation`, Scala 3 `derives`) return `Encoder.AsObject[A]` for case classes and sealed traits. Kindlings returns `Encoder[A]` — a strictly weaker type. Users migrating lose:
+**Approach:** Added a separate `deriveAsObject[A]` entry point (not modifying `derive`/`derived`). Reuses the existing rule chain (which produces `Expr[Json]`) and extracts `JsonObject` via `.asObject.get` — safe because case classes, named tuples, and sealed traits always produce JSON objects.
 
-1. **`mapJsonObject`** — post-processing derived encoders (add/remove/merge fields)
-2. **`Codec.AsObject` composition** — `Codec.AsObject[A]` requires `Encoder.AsObject[A]`
-3. **Type-level guarantees** — implicit positions requiring `Encoder.AsObject[A]` won't find Kindlings encoders
-4. **Scala 3 idiom** — `case class Foo(...) derives Encoder.AsObject` is the recommended circe pattern
+**Files changed:**
+- `KindlingsEncoder.scala` — Added `KindlingsEncoderAsObject[A]` trait extending `KindlingsEncoder[A] with Encoder.AsObject[A]`
+- `EncoderMacrosImpl.scala` — Added `deriveEncoderAsObjectTypeClass[A]` method with compile-time validation (rejects non-case-class/non-enum/non-named-tuple types) and runtime guard for `enumAsStrings` edge case. Added `KindlingsEncoderAsObject` and `JsonObject` to `Types` object.
+- `EncoderMacros.scala` (Scala 2 & 3) — Added `deriveEncoderAsObjectImpl` bridge methods
+- `KindlingsEncoderCompanionCompat.scala` (Scala 2 & 3) — Added `deriveAsObject[A]` public entry point
+- `KindlingsEncoderSpec.scala` — 7 new tests: case class, same output as derive, mapJsonObject, empty case class, sealed trait, discriminator config, configuration
 
-### Circe's Encoder Hierarchy
-
-```
-Encoder[A]                     -- A => Json (any JSON value)
-  └─ Encoder.AsRoot[A]        -- guarantees array or object output
-       ├─ Encoder.AsArray[A]  -- A => Vector[Json], wrapped as JSON array
-       └─ Encoder.AsObject[A] -- A => JsonObject, wrapped as JSON object
-```
-
-`Decoder[A]` has **no** similar hierarchy — no changes needed for `KindlingsDecoder`.
-
-### Current State
-
-- `KindlingsEncoder[A]` extends `Encoder[A]` (file: `circe-derivation/src/main/scala/hearth/kindlings/circederivation/KindlingsEncoder.scala`)
-- The macro in `deriveEncoderTypeClass[A]` (line 36 of `EncoderMacrosImpl.scala`) creates `new KindlingsEncoder[A] { def apply(a: A): Json = ... }`
-- Internally, case classes already produce `JsonObject` via `CirceDerivationUtils.jsonFromFields` → `Json.fromJsonObject(JsonObject.fromIterable(fields))` — the object is created then immediately wrapped as `Json`
-- `jsonFromFields` is called at lines 644, 649, 740, 745 of `EncoderMacrosImpl.scala`
-
-### Implementation Plan
-
-**Approach:** Make `KindlingsEncoder[A]` extend `Encoder.AsObject[A]` for types that produce objects (case classes, sealed traits). Keep `Encoder[A]` for value types, options, collections, tuples.
-
-**Step 1 — Split `KindlingsEncoder` into two variants:**
-
-File: `circe-derivation/src/main/scala/hearth/kindlings/circederivation/KindlingsEncoder.scala`
-
-```scala
-trait KindlingsEncoder[A] extends Encoder[A] {
-  def apply(a: A): Json
-}
-trait KindlingsEncoderAsObject[A] extends KindlingsEncoder[A] with Encoder.AsObject[A] {
-  def encodeObject(a: A): JsonObject
-  final def apply(a: A): Json = Json.fromJsonObject(encodeObject(a))
-}
-```
-
-Add import: `import io.circe.JsonObject`
-
-**Step 2 — Add `JsonObject`-returning runtime helpers:**
-
-File: `circe-derivation/src/main/scala/hearth/kindlings/circederivation/internal/runtime/CirceDerivationUtils.scala`
-
-Add `jsonObjectFromFields` alongside existing `jsonFromFields`:
-
-```scala
-def jsonObjectFromFields(fields: List[(String, Json)]): JsonObject =
-  JsonObject.fromIterable(fields)
-```
-
-Similarly add `jsonObjectFromMappedPairs`, `addDiscriminatorObject`, `wrapWithTypeNameObject` that return `JsonObject` instead of `Json`.
-
-**Step 3 — Modify the macro to detect object-producing types:**
-
-File: `circe-derivation/src/main/scala/hearth/kindlings/circederivation/internal/compiletime/EncoderMacrosImpl.scala`
-
-In `deriveEncoderTypeClass[A]` (line 36), after derivation, check if the result was produced by case class or sealed trait rules. If so, create `new KindlingsEncoderAsObject[A] { def encodeObject(a: A): JsonObject = ... }` instead.
-
-The case class rule (`EncHandleAsCaseClassRule`) and named tuple rule (`EncHandleAsNamedTupleRule`) should call `jsonObjectFromFields` instead of `jsonFromFields`. The sealed trait rule (`EncHandleAsEnumRule`) should produce `JsonObject` for wrapper-style and discriminator-style encoding.
-
-The value type / option / collection / map / tuple rules keep producing `Json`.
-
-**Step 4 — Update companion entry points:**
-
-Files: `KindlingsEncoderCompanionCompat.scala` (both Scala 2 and 3)
-
-Add overloaded entry points or change `derive` return type:
-- `derive[A]` → return `Encoder[A]` (backwards compatible, AsObject is a subtype)
-- `derived[A]` → return `KindlingsEncoder[A]` (same — AsObject extends KindlingsEncoder)
-
-No signature changes needed since `Encoder.AsObject <: Encoder` — the macro just returns a more specific runtime type.
-
-**Step 5 — Add `Types` entries:**
-
-File: `EncoderMacrosImpl.scala`, `Types` object (line 822)
-
-```scala
-val JsonObject: Type[JsonObject] = Type.of[JsonObject]
-def EncoderAsObject: Type.Ctor1[Encoder.AsObject] = Type.Ctor1.of[Encoder.AsObject]
-def KindlingsEncoderAsObject: Type.Ctor1[KindlingsEncoderAsObject] = Type.Ctor1.of[KindlingsEncoderAsObject]
-```
-
-### Tests
-
-File: `circe-derivation/src/test/scala/hearth/kindlings/circederivation/KindlingsEncoderSpec.scala`
-
-New group "Encoder.AsObject":
-- `derive[SimplePerson]` is assignable to `Encoder.AsObject[SimplePerson]`
-- `derived[SimplePerson]` is assignable to `Encoder.AsObject[SimplePerson]`
-- `mapJsonObject` works on derived encoder
-- Sealed trait produces `Encoder.AsObject`
-- Value type (`WrappedInt`) does NOT produce `Encoder.AsObject` (still `Encoder`)
-- `Option[Int]`, `List[Int]` do NOT produce `Encoder.AsObject`
-
-### Verification
-
-```bash
-sbt --client "circeDerivation/clean; circeDerivation3/clean; test-jvm-2_13; test-jvm-3"
-```
+**Design notes:**
+- `derive[A]` and `derived[A]` are unchanged — fully backwards compatible
+- Value types (e.g. `WrappedInt`) compile with `deriveAsObject` (they ARE case classes) but throw `IllegalStateException` at runtime since they produce non-object JSON
+- `enumAsStrings=true` with all-case-object sealed traits also throws at runtime (produces string, not object)
 
 ---
 
@@ -669,7 +578,7 @@ grep -E '(Failed|Errors|FAILED)' /tmp/sbt-output.txt
 
 ## Appendix C: Suggested Implementation Order
 
-1. **Gap 1** — Circe `Encoder.AsObject` (highest impact, unblocks Gap 13)
+1. ~~**Gap 1** — Circe `Encoder.AsObject`~~ **DONE**
 2. **Gap 5** — `@AvroFixed` (high priority, introduces `extractIntLiteralFromAnnotation` needed by Gap 9)
 3. **Gap 6** — `@AvroProp` (medium, uses existing annotation pattern)
 4. **Gap 7** — `@AvroAlias` (medium, needs `findAllAnnotationsOfType`)
@@ -680,6 +589,6 @@ grep -E '(Failed|Errors|FAILED)' /tmp/sbt-output.txt
 9. **Gap 9** — `@AvroSortPriority` (low, uses int extraction from Gap 5)
 10. **Gap 10** — ByteBuffer (low, pure type rule addition)
 11. **Gap 11** — UTF-8 field names (low, tests only)
-12. **Gap 13** — `Codec.AsObject` (low, depends on Gap 1)
+12. **Gap 13** — `Codec.AsObject` (low, Gap 1 prerequisite now done)
 13. **Gap 14** — `JsonCodec` combined (low)
 14. **Gap 12** — Union types (blocked on Hearth)
