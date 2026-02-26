@@ -1119,6 +1119,105 @@ This works because `Type.of[Schema[A]]` inside `TsTypes` only needs `Type[A]` (f
 
 **Reference:** `tapir-schema-derivation` — `SchemaMacrosImpl.TsTypes`, `circe-derivation/scala-2/CirceJsonFieldConfigExtension.scala`, `circe-derivation/scala-3/CirceJsonFieldConfigExtension.scala`.
 
+### `MacroExtension` ClassTag erasure for intersection types
+
+When registering a `MacroExtension[A & B & C]` via `ServiceLoader`, the `ClassTag` erasure only preserves the **first component** of the intersection type. This means `Environment.loadMacroExtensions[MyExtension]` silently fails if the extension's type parameter includes your custom trait in the intersection.
+
+```scala
+// BROKEN — ClassTag erases to MacroCommons, losing JsonSchemaConfigs:
+abstract class JsonSchemaConfigExtension
+  extends MacroExtension[MacroCommons & StdExtensions & JsonSchemaConfigs]
+// ServiceLoader finds the class, but ClassTag check fails at runtime
+
+// CORRECT — use narrower type, runtime check in extend():
+abstract class JsonSchemaConfigExtension
+  extends MacroExtension[MacroCommons & StdExtensions] {
+
+  final override def extend(ctx: MacroCommons & StdExtensions): Unit = ctx match {
+    case _: JsonSchemaConfigs =>
+      extendJsonConfig(ctx.asInstanceOf[MacroCommons & StdExtensions & JsonSchemaConfigs])
+    case _ => () // silently skip — not a JSON-config-aware context
+  }
+
+  protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonSchemaConfigs): Unit
+}
+```
+
+**Reference:** `json-schema-config-macro-providers/JsonSchemaConfigExtension.scala`.
+
+### Unused implicit warnings from cross-quotes require `@nowarn` + named `def`
+
+Implicit `Type[X]` values placed in scope for `Expr.quote` blocks are flagged as "is never used" by the Scala compiler. With `-Xfatal-warnings`, this is a compilation failure. These implicit vals are needed by the cross-quotes system at macro expansion time, but the compiler sees them as unused local vals.
+
+```scala
+// BROKEN — fatal warning on Scala 2:
+implicit val sNameT: Type[SName] = TsTypes.SNameType
+implicit val utilsT: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+MIO.pure(Expr.quote { TapirSchemaUtils.refSchema[A](Expr.splice(sNameExpr)) })
+// error: local val sNameT in value $anonfun is never used
+
+// CORRECT — wrap in named def with @nowarn:
+@scala.annotation.nowarn("msg=is never used")
+def emitSRef: MIO[Expr[Schema[A]]] = {
+  implicit val sNameT: Type[SName] = TsTypes.SNameType
+  implicit val utilsT: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+  MIO.pure(Expr.quote { TapirSchemaUtils.refSchema[A](Expr.splice(sNameExpr)) })
+}
+emitSRef
+```
+
+The `@nowarn` must be on a named `def`, not on a `val` or anonymous block — the annotation is only effective on method definitions. This pattern is needed wherever implicit `Type` values are introduced solely for cross-quotes usage.
+
+**Reference:** `tapir-schema-derivation/SchemaMacrosImpl.scala` — `emitSRef`, `deriveStructurally`, `deriveCaseClassSchema`, `deriveEnumSchema`.
+
+### `ProviderResult` is not `Option` — extractors can't be chained with `.orElse`
+
+`IsOption.parse[A]`, `IsCollection.parse[A]`, `IsMap.parse[A]` return `ProviderResult`, NOT `Option`. Attempting to chain them with `.map`/`.orElse` like `Option` fails with a type mismatch.
+
+```scala
+// BROKEN — ProviderResult has no .orElse:
+val tryOption = IsOption.parse[A].map { isOption => ... }
+val tryCollection = IsCollection.parse[A].map { isCollection => ... }
+tryOption.orElse(tryCollection)  // type mismatch: ProviderResult vs Option
+
+// CORRECT — use Type[A] match with extractors:
+Type[A] match {
+  case IsOption(isOption) =>
+    import isOption.Underlying as Element
+    // ...
+  case IsMap(isMap) =>
+    import isMap.Underlying as Pair
+    // ...
+  case IsCollection(isCollection) =>
+    import isCollection.Underlying as Element
+    // ...
+  case _ =>
+    CaseClass.parse[A] match { ... }
+}
+```
+
+Pattern matching with the extractors is the correct idiomatic Hearth pattern.
+
+### `IsMap` must be checked before `IsCollection` in pattern match
+
+Because `Map <: Iterable`, `IsCollection` matches map types. If `IsCollection` appears before `IsMap` in the pattern match, maps will be incorrectly handled as flat collections, losing key information.
+
+```scala
+// BROKEN — Map matches IsCollection first:
+Type[A] match {
+  case IsCollection(ic) => // matches Map[K,V] as Iterable[(K,V)]!
+  case IsMap(im) => // never reached for maps
+}
+
+// CORRECT — check IsMap before IsCollection:
+Type[A] match {
+  case IsMap(im) => // catches maps first
+  case IsCollection(ic) => // only non-map collections
+}
+```
+
+**Reference:** `tapir-schema-derivation/SchemaMacrosImpl.scala` — `deriveStructurally`.
+
 ## Implementation requirements checklist
 
 Every type class derivation must satisfy all requirements below. Use this checklist when implementing a new derivation and when verifying that an existing one is complete. Each item includes what to implement, where to look for a reference, and how to verify it.
@@ -1186,6 +1285,12 @@ When looking for implicits, **exclude** the method(s) that trigger this macro. O
 **How to implement:** Collect the method symbols to ignore (e.g., the `derived` method on the companion object) and pass them to `Type[TC[A]].summonExprIgnoring(ignoredImplicits*)`.
 
 **Reference:** `FastShowPrettyMacrosImpl.scala` lines 334-336 (`ignoredImplicits`), line 340 (`summonExprIgnoring`).
+
+**Critical failure mode — OOM from infinite macro expansion:** If you use `Expr.summonImplicit[TC[A]]` instead of `summonExprIgnoring`, and the target library (e.g., Tapir, circe) provides its own automatic derivation (e.g., `Schema.derivedSchema`, `Decoder.derived`), the compiler enters an infinite chain of macro expansions: your macro summons `TC[A]` → finds the library's auto-derivation → that triggers another macro → which summons `TC[A]` again → etc. This causes `java.lang.OutOfMemoryError: Java heap space` and crashes the SBT server. The only recovery is `sbt --client shutdown` and restart.
+
+**Always** use `summonExprIgnoring` and include both your own `derived` and the target library's auto-derivation methods in `ignoredImplicits`.
+
+**Reference (tapir):** `SchemaMacrosImpl.scala` — `ignoredImplicits` ignores both `KindlingsSchema.derived` and `Schema.derivedSchema`.
 
 **Verification:**
 - Verify the macro does not loop infinitely — if `derived` were not ignored, calling `MyTypeClass.derived[SomeCaseClass]` would recursively try to summon `MyTypeClass[SomeCaseClass]`, hitting `derived` again
@@ -1626,6 +1731,76 @@ my-type-class/src/test/
 ```
 
 Since the examples file shares the same package as the spec, no imports are needed. Annotation types (`@fieldName`, `@transientField`) are imported in the examples file.
+
+## Advanced derivation patterns
+
+### Compile-time annotation collection with runtime enrichment
+
+When a derived type class needs to propagate arbitrary annotations from the source type to the output (e.g., Tapir `@description`, `@deprecated`, `@format`), use this pattern:
+
+1. **Collect annotations at compile time** as `List[UntypedExpr]` via platform-specific APIs
+2. **Convert to `Expr[List[Any]]`** using `ann.asTyped[Any]` — this erases the compile-time type but preserves the runtime annotation object
+3. **Pattern-match at runtime** in a utility method to apply annotation effects
+
+```scala
+// Compile-time: collect annotations as untyped expressions
+private def collectAnnotationsExpr(annotations: List[UntypedExpr]): Expr[List[Any]] = {
+  implicit val anyType: Type[Any] = TsTypes.AnyType
+  implicit val listAnyType: Type[List[Any]] = TsTypes.ListAnyType
+  annotations.foldRight(Expr.quote(List.empty[Any]: List[Any])) { (ann, acc) =>
+    val typedAnn: Expr[Any] = ann.asTyped[Any]
+    Expr.quote(Expr.splice(typedAnn) :: Expr.splice(acc))
+  }
+}
+
+// Runtime: pattern-match on concrete annotation types
+def enrichSchema[T](schema: Schema[T], annotations: List[Any]): Schema[T] =
+  annotations.foldLeft(schema) {
+    case (s, ann: description) => s.description(ann.text)
+    case (s, ann: deprecated)  => s.deprecated(true)
+    case (s, _)                => s
+  }
+```
+
+**Platform-specific annotation access:** Scala 2 and 3 access annotations differently. Define a shared `AnnotationSupport` trait with platform-specific implementations:
+- **Scala 2**: `param.asUntyped.asInstanceOf[sc2.UntypedParameter].symbol.annotations` (preserves types); `sc2.c.untypecheck(ann.tree)` to get expression trees
+- **Scala 3**: `param.asUntyped.annotations.asInstanceOf[List[QTerm]]` (already usable)
+
+**Reference:** `tapir-schema-derivation/SchemaMacrosImpl.scala` — `collectAnnotationsExpr`, `fieldAnnotationsExpr`, `typeAnnotationsExpr`. `tapir-schema-derivation/AnnotationSupportScala2.scala` and `AnnotationSupportScala3.scala` for platform-specific implementations.
+
+### Recursive type tracking with `MLocal[Set[String]]` and forward references
+
+When deriving types that can be recursive (e.g., `case class Tree(children: List[Tree])`), use an `MLocal[Set[String]]` to track which types are currently being derived. When a type is encountered that is already in-progress, emit a forward reference (e.g., `SRef` in Tapir) instead of recursing.
+
+This differs from `ValDefsCache`-based recursion handling (used in encoder/decoder derivation where the cache forward-declares a `def`). The `MLocal[Set[String]]` pattern is for cases where you need a **lazy reference value** rather than a cached function.
+
+```scala
+val inProgress: MLocal[Set[String]] =
+  MLocal(Set.empty[String])(identity)((a, b) => a ++ b)
+
+// In the recursive derivation method:
+inProgress.get.flatMap { inProgressSet =>
+  if (inProgressSet.contains(cacheKey[A])) {
+    // Recursive reference detected — emit lazy forward reference
+    Log.info(s"Recursive reference for ${Type[A].prettyPrint}, emitting SRef") >>
+      emitForwardReference[A]
+  } else {
+    // Mark as in-progress, derive, then restore previous set
+    for {
+      _ <- inProgress.set(inProgressSet + cacheKey[A])
+      result <- deriveStructurally[A](...)
+      _ <- inProgress.set(inProgressSet)
+    } yield result
+  }
+}
+```
+
+**`MLocal` constructor arguments:**
+- `Set.empty[String]` — initial value
+- `identity` — fork function (child scope inherits parent's set)
+- `(a, b) => a ++ b` — join function (merge parent and child sets)
+
+**Reference:** `tapir-schema-derivation/SchemaMacrosImpl.scala` — `deriveSchemaRecursively`.
 
 ## Workflow summary
 

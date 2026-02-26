@@ -61,6 +61,10 @@ Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-com
 - **`IsMap`/`IsCollection` path-dependent types** — `import isMap.{Key, Value, CtorResult}` before `Expr.quote`
 - **`Type.of[A]` bootstrap cycle in extensions** — cross-quotes `Type.of[A]` resolves `implicit Type[A]` at evaluation time; when defining that implicit, causes SOE. Bypass cross-quotes: Scala 2 use `UntypedType.toTyped[A](sc2.c.universe.typeOf[A])`, Scala 3 use `scala.quoted.Type.of[A].asInstanceOf[Type[A]]`; for shared code, move `Type.of` into a helper object where the self-referential implicit is not in scope
 - **`ValDefsCache` wrapping scope** — `vals.toValDefs.use` must wrap the outermost expression containing all references
+- **`MacroExtension` ClassTag erasure** — `MacroExtension[A & B & C]` ClassTag only preserves first component; use runtime `match`/`asInstanceOf` in `extend()` for custom traits
+- **Cross-quotes unused `Type` implicit warnings** — implicit `Type[X]` for `Expr.quote` flagged as "never used" with `-Xfatal-warnings`; wrap in `@nowarn("msg=is never used") def`
+- **`IsMap` before `IsCollection` ordering** — `Map <: Iterable` so `IsCollection` matches maps; always check `IsMap` first
+- **`summonExprIgnoring` vs OOM** — `Expr.summonImplicit` without ignoring library auto-derivation methods causes infinite macro expansion → OOM → SBT crash; always use `summonExprIgnoring`
 
 Hearth source is at `../hearth/` when documentation is insufficient.
 See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.

@@ -8,15 +8,18 @@
       "Bash(tail:*)",
       "Bash(tee:*)",
       "Bash(gh api:*)",
-      "Bash(gh run view:*)",
-      "Bash(gh run list:*)",
       "Bash(gh pr list:*)",
       "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh search:*)",
       "Bash(jar tf:*)",
+      "Bash(jar xf:*)",
       "Bash(java -version:*)",
       "Bash(javap:*)",
       "Bash(sbt --client:*)",
       "Bash(scala-cli:*)",
+      "WebFetch(domain:api.github.com)",
       "WebFetch(domain:app.codecov.io)",
       "WebFetch(domain:circe.github.io)",
       "WebFetch(domain:github.com)",
@@ -25,14 +28,11 @@
       "WebFetch(domain:meta.plasm.us)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:scala-hearth.readthedocs.io)",
+      "WebFetch(domain:scala-tapir.readthedocs.io)",
       "WebFetch(domain:scalameta.org)",
       "WebFetch(domain:tapir.softwaremill.com)",
       "WebFetch(domain:virtuslab.github.io)",
-      "WebSearch",
-      "WebFetch(domain:scala-tapir.readthedocs.io)",
-      "Bash(jar xf:*)",
-      "WebFetch(domain:api.github.com)",
-      "Bash(gh search:*)"
+      "WebSearch"
     ]
   }
 }
