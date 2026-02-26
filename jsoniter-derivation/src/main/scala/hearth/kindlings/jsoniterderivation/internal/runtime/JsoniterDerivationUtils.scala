@@ -235,6 +235,75 @@ object JsoniterDerivationUtils {
     builder.result()
   }
 
+  // --- @stringified helpers ---
+
+  def writeStringifiedInt(out: JsonWriter, value: Int): Unit = out.writeVal(value.toString)
+  def writeStringifiedLong(out: JsonWriter, value: Long): Unit = out.writeVal(value.toString)
+  def writeStringifiedDouble(out: JsonWriter, value: Double): Unit = out.writeVal(value.toString)
+  def writeStringifiedFloat(out: JsonWriter, value: Float): Unit = out.writeVal(value.toString)
+  def writeStringifiedShort(out: JsonWriter, value: Short): Unit = out.writeVal(value.toString)
+  def writeStringifiedByte(out: JsonWriter, value: Byte): Unit = out.writeVal(value.toString)
+  def writeStringifiedBigDecimal(out: JsonWriter, value: BigDecimal): Unit = out.writeVal(value.toString)
+  def writeStringifiedBigInt(out: JsonWriter, value: BigInt): Unit = out.writeVal(value.toString)
+
+  def readStringifiedInt(in: JsonReader): Int = in.readString(null).toInt
+  def readStringifiedLong(in: JsonReader): Long = in.readString(null).toLong
+  def readStringifiedDouble(in: JsonReader): Double = in.readString(null).toDouble
+  def readStringifiedFloat(in: JsonReader): Float = in.readString(null).toFloat
+  def readStringifiedShort(in: JsonReader): Short = in.readString(null).toShort
+  def readStringifiedByte(in: JsonReader): Byte = in.readString(null).toByte
+  def readStringifiedBigDecimal(in: JsonReader): BigDecimal = BigDecimal(in.readString(null))
+  def readStringifiedBigInt(in: JsonReader): BigInt = BigInt(in.readString(null))
+
+  // --- mapAsArray helpers ---
+
+  def writeMapAsArray[K, V](
+      out: JsonWriter,
+      entries: Iterable[(K, V)],
+      encodeKey: K => Unit,
+      encodeValue: V => Unit
+  ): Unit = {
+    out.writeArrayStart()
+    val iter = entries.iterator
+    while (iter.hasNext) {
+      val (key, value) = iter.next()
+      out.writeArrayStart()
+      encodeKey(key)
+      encodeValue(value)
+      out.writeArrayEnd()
+    }
+    out.writeArrayEnd()
+  }
+
+  def readMapAsArray[K, V, M](
+      in: JsonReader,
+      decodeKey: JsonReader => K,
+      decodeValue: JsonReader => V,
+      factory: scala.collection.Factory[(K, V), M]
+  ): M = {
+    val builder = factory.newBuilder
+    if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for map-as-array")
+    if (!in.isNextToken(']'.toByte)) {
+      in.rollbackToken()
+      if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for pair")
+      val k = decodeKey(in)
+      if (!in.isNextToken(','.toByte)) in.decodeError("expected ',' between key and value in pair")
+      val v = decodeValue(in)
+      if (!in.isNextToken(']'.toByte)) in.decodeError("expected ']' after pair")
+      builder += ((k, v))
+      while (in.isNextToken(','.toByte)) {
+        if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for pair")
+        val k = decodeKey(in)
+        if (!in.isNextToken(','.toByte)) in.decodeError("expected ',' between key and value in pair")
+        val v = decodeValue(in)
+        if (!in.isNextToken(']'.toByte)) in.decodeError("expected ']' after pair")
+        builder += ((k, v))
+      }
+      if (!in.isCurrentToken(']'.toByte)) in.decodeError("expected ']' or ','")
+    }
+    builder.result()
+  }
+
   /** Cast an `Any` value to `A`, using a decode function purely for type inference. */
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decodeFn: JsonReader => A): A = value.asInstanceOf[A]

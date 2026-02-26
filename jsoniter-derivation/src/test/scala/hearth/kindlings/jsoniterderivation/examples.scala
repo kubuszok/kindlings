@@ -1,6 +1,6 @@
 package hearth.kindlings.jsoniterderivation
 
-import hearth.kindlings.jsoniterderivation.annotations.{fieldName, transientField}
+import hearth.kindlings.jsoniterderivation.annotations.{fieldName, stringified, transientField}
 
 case class CamelCasePerson(firstName: String, lastName: String)
 case class SimplePerson(name: String, age: Int)
@@ -63,3 +63,9 @@ case class WithIntKeyMap(data: Map[Int, String])
 case class WithLongKeyMap(data: Map[Long, String])
 final case class UserId(value: Int) extends AnyVal
 case class WithUserIdKeyMap(users: Map[UserId, String])
+
+// @stringified test types
+case class WithStringifiedInt(@stringified value: Int, name: String)
+case class WithStringifiedLong(@stringified id: Long, label: String)
+case class WithStringifiedBigDecimal(@stringified amount: BigDecimal)
+case class WithMixedStringified(@stringified count: Int, name: String, @stringified score: Double)

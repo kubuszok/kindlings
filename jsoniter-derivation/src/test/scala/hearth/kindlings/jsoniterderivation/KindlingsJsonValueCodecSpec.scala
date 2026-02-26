@@ -757,6 +757,100 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         )
       }
     }
+
+    group("@stringified") {
+
+      test("@stringified Int encodes as string and decodes back") {
+        val codec = KindlingsJsonValueCodec.derive[WithStringifiedInt]
+        val json = writeToString(WithStringifiedInt(42, "Alice"))(codec)
+        json.contains("\"42\"") ==> true
+        val decoded = readFromString[WithStringifiedInt](json)(codec)
+        decoded ==> WithStringifiedInt(42, "Alice")
+      }
+
+      test("@stringified Long encodes as string and decodes back") {
+        val codec = KindlingsJsonValueCodec.derive[WithStringifiedLong]
+        val json = writeToString(WithStringifiedLong(123456789L, "test"))(codec)
+        json.contains("\"123456789\"") ==> true
+        val decoded = readFromString[WithStringifiedLong](json)(codec)
+        decoded ==> WithStringifiedLong(123456789L, "test")
+      }
+
+      test("@stringified BigDecimal encodes as string and decodes back") {
+        val codec = KindlingsJsonValueCodec.derive[WithStringifiedBigDecimal]
+        val json = writeToString(WithStringifiedBigDecimal(BigDecimal("3.14")))(codec)
+        json.contains("\"3.14\"") ==> true
+        val decoded = readFromString[WithStringifiedBigDecimal](json)(codec)
+        decoded ==> WithStringifiedBigDecimal(BigDecimal("3.14"))
+      }
+
+      test("mixed @stringified and normal fields") {
+        val codec = KindlingsJsonValueCodec.derive[WithMixedStringified]
+        val value = WithMixedStringified(42, "Alice", 3.14)
+        val json = writeToString(value)(codec)
+        // count should be stringified, name should be normal, score should be stringified
+        json.contains("\"42\"") ==> true
+        json.contains("\"3.14\"") ==> true
+        val decoded = readFromString[WithMixedStringified](json)(codec)
+        decoded ==> value
+      }
+
+      test("@stringified on non-numeric field is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.jsoniterderivation.annotations.stringified
+          case class BadStringified(name: String, @stringified label: String)
+          hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derive[BadStringified]
+          """
+        ).check(
+          "@stringified on field 'label'"
+        )
+      }
+    }
+
+    group("mapAsArray") {
+
+      test("Map[String, Int] with mapAsArray encodes as array of pairs") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
+        val codec = KindlingsJsonValueCodec.derive[Map[String, Int]]
+        val json = writeToString(Map("a" -> 1, "b" -> 2))(codec)
+        val decoded = readFromString[Map[String, Int]](json)(codec)
+        decoded ==> Map("a" -> 1, "b" -> 2)
+      }
+
+      test("Map[Int, String] with mapAsArray encodes as array of pairs") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
+        val codec = KindlingsJsonValueCodec.derive[Map[Int, String]]
+        val json = writeToString(Map(1 -> "a", 2 -> "b"))(codec)
+        val decoded = readFromString[Map[Int, String]](json)(codec)
+        decoded ==> Map(1 -> "a", 2 -> "b")
+      }
+
+      test("empty map with mapAsArray encodes as empty array") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
+        val codec = KindlingsJsonValueCodec.derive[Map[String, Int]]
+        val json = writeToString(Map.empty[String, Int])(codec)
+        json ==> "[]"
+        val decoded = readFromString[Map[String, Int]](json)(codec)
+        decoded ==> Map.empty[String, Int]
+      }
+
+      test("default config uses object-style encoding") {
+        val codec = KindlingsJsonValueCodec.derive[Map[String, Int]]
+        val json = writeToString(Map("a" -> 1))(codec)
+        json.contains("{") ==> true
+        json.contains("[") ==> false
+      }
+
+      test("case class with map field and mapAsArray") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
+        val codec = KindlingsJsonValueCodec.derive[WithIntKeyMap]
+        val value = WithIntKeyMap(Map(1 -> "a", 2 -> "b"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithIntKeyMap](json)(codec)
+        decoded ==> value
+      }
+    }
   }
 
   group("JsonValueCodecExtensions") {

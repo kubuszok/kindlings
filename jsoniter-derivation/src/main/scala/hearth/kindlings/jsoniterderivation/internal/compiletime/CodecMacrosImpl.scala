@@ -7,7 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
-import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, transientField}
+import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
@@ -777,49 +777,128 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Unit]]] = {
       import isMap.{Key, Value}
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
       if (Key <:< Type[String]) {
-        // String keys — use existing fast path
+        // String keys — derive value encoder, plus key-as-value encoder for mapAsArray
         LambdaBuilder
           .of1[Value]("mapValue")
           .traverse { valueExpr =>
             deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
           }
-          .map { builder =>
-            val valueLambda = builder.build[Unit]
-            val iterableExpr = isMap.asIterable(ectx.value)
-            Rule.matched(Expr.quote {
-              JsoniterDerivationUtils.writeMapStringKeyed[Value](
-                Expr.splice(ectx.writer),
-                Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]],
-                Expr.splice(valueLambda)
-              )
-            })
+          .flatMap { valueBuilder =>
+            val valueLambda = valueBuilder.build[Unit]
+            // Derive a key-as-value encoder for String (for mapAsArray mode)
+            LambdaBuilder
+              .of1[Key]("keyAsValue")
+              .traverse { keyExpr =>
+                // String keys: write as string value
+                MIO.pure(Expr.quote {
+                  Expr.splice(ectx.writer).writeVal(Expr.splice(keyExpr).asInstanceOf[String])
+                })
+              }
+              .map { keyValueBuilder =>
+                val keyValueLambda = keyValueBuilder.build[Unit]
+                val iterableExpr = isMap.asIterable(ectx.value)
+                Rule.matched(Expr.quote {
+                  if (Expr.splice(ectx.config).mapAsArray) {
+                    JsoniterDerivationUtils.writeMapAsArray[Key, Value](
+                      Expr.splice(ectx.writer),
+                      Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                      Expr.splice(keyValueLambda),
+                      Expr.splice(valueLambda)
+                    )
+                  } else {
+                    JsoniterDerivationUtils.writeMapStringKeyed[Value](
+                      Expr.splice(ectx.writer),
+                      Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]],
+                      Expr.splice(valueLambda)
+                    )
+                  }
+                })
+              }
           }
       } else {
-        // Non-String keys — try to derive key encoding
+        // Non-String keys — try to derive key encoding for object mode
         deriveKeyEncoding[Key].flatMap {
           case Some(keyEncoderLambda) =>
+            // Derive value encoder for V
             LambdaBuilder
               .of1[Value]("mapValue")
               .traverse { valueExpr =>
                 deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
               }
-              .map { builder =>
-                val valueLambda = builder.build[Unit]
-                val iterableExpr = isMap.asIterable(ectx.value)
-                Rule.matched(Expr.quote {
-                  JsoniterDerivationUtils.writeMapWithKeyEncoder[Key, Value](
-                    Expr.splice(ectx.writer),
-                    Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
-                    Expr.splice(keyEncoderLambda),
-                    Expr.splice(valueLambda)
-                  )
-                })
+              .flatMap { valueBuilder =>
+                val valueLambda = valueBuilder.build[Unit]
+                // Derive key-as-value encoder for mapAsArray mode
+                LambdaBuilder
+                  .of1[Key]("keyAsValue")
+                  .traverse { keyExpr =>
+                    deriveEncoderRecursively[Key](using ectx.nest(keyExpr))
+                  }
+                  .map { keyValueBuilder =>
+                    val keyValueLambda = keyValueBuilder.build[Unit]
+                    val iterableExpr = isMap.asIterable(ectx.value)
+                    Rule.matched(Expr.quote {
+                      if (Expr.splice(ectx.config).mapAsArray) {
+                        JsoniterDerivationUtils.writeMapAsArray[Key, Value](
+                          Expr.splice(ectx.writer),
+                          Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                          Expr.splice(keyValueLambda),
+                          Expr.splice(valueLambda)
+                        )
+                      } else {
+                        JsoniterDerivationUtils.writeMapWithKeyEncoder[Key, Value](
+                          Expr.splice(ectx.writer),
+                          Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                          Expr.splice(keyEncoderLambda),
+                          Expr.splice(valueLambda)
+                        )
+                      }
+                    })
+                  }
               }
           case None =>
-            MIO.pure(
-              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived")
-            )
+            // No key encoder — try value-level encoding for mapAsArray-only support
+            LambdaBuilder
+              .of1[Value]("mapValue")
+              .traverse { valueExpr =>
+                deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
+              }
+              .flatMap { valueBuilder =>
+                val valueLambda = valueBuilder.build[Unit]
+                LambdaBuilder
+                  .of1[Key]("keyAsValue")
+                  .traverse { keyExpr =>
+                    deriveEncoderRecursively[Key](using ectx.nest(keyExpr))
+                  }
+                  .map { keyValueBuilder =>
+                    val keyValueLambda = keyValueBuilder.build[Unit]
+                    val iterableExpr = isMap.asIterable(ectx.value)
+                    Rule.matched(Expr.quote {
+                      if (Expr.splice(ectx.config).mapAsArray) {
+                        JsoniterDerivationUtils.writeMapAsArray[Key, Value](
+                          Expr.splice(ectx.writer),
+                          Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                          Expr.splice(keyValueLambda),
+                          Expr.splice(valueLambda)
+                        )
+                      } else {
+                        throw new IllegalArgumentException(
+                          "Map key type " + Expr.splice(Expr(Key.prettyPrint)) +
+                            " cannot be used as JSON object key. Use mapAsArray config option."
+                        )
+                      }
+                    })
+                  }
+              }
+              .recoverWith { _ =>
+                MIO.pure(
+                  Rule.yielded(
+                    s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived"
+                  )
+                )
+              }
         }
       }
     }
@@ -1074,6 +1153,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val UnitT: Type[Unit] = CTypes.Unit
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
+      implicit val stringifiedT: Type[stringified] = CTypes.Stringified
 
       val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
 
@@ -1101,7 +1181,19 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 .parTraverse { case (fName, fieldValue) =>
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEnc =>
+                    val isStringified = paramsByName.get(fName).exists(p => hasAnnotationType[stringified](p))
+                    val fieldEncMIO: MIO[Expr[Unit]] = if (isStringified) {
+                      deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
+                        case Some(enc) => MIO.pure(enc)
+                        case None      =>
+                          val err = CodecDerivationError
+                            .StringifiedOnNonNumeric(fName, Type[A].prettyPrint, Type[Field].prettyPrint)
+                          Log.error(err.message) >> MIO.fail(err)
+                      }
+                    } else {
+                      deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                    }
+                    fieldEncMIO.map { fieldEnc =>
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
                       (fName, fieldEnc, nameOverride)
@@ -1139,6 +1231,47 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           }
       }
     }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveStringifiedEncoder[F: Type](value: Expr[F], writer: Expr[JsonWriter])(implicit
+        JsonWriterT: Type[JsonWriter],
+        UnitT: Type[Unit]
+    ): Option[Expr[Unit]] =
+      if (Type[F] =:= CTypes.Int)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedInt(Expr.splice(writer), Expr.splice(value).asInstanceOf[Int])
+        })
+      else if (Type[F] =:= CTypes.Long)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedLong(Expr.splice(writer), Expr.splice(value).asInstanceOf[Long])
+        })
+      else if (Type[F] =:= CTypes.Double)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedDouble(Expr.splice(writer), Expr.splice(value).asInstanceOf[Double])
+        })
+      else if (Type[F] =:= CTypes.Float)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedFloat(Expr.splice(writer), Expr.splice(value).asInstanceOf[Float])
+        })
+      else if (Type[F] =:= CTypes.Short)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedShort(Expr.splice(writer), Expr.splice(value).asInstanceOf[Short])
+        })
+      else if (Type[F] =:= CTypes.Byte)
+        Some(Expr.quote {
+          JsoniterDerivationUtils.writeStringifiedByte(Expr.splice(writer), Expr.splice(value).asInstanceOf[Byte])
+        })
+      else if (Type[F] =:= CTypes.BigDecimal)
+        Some(Expr.quote {
+          JsoniterDerivationUtils
+            .writeStringifiedBigDecimal(Expr.splice(writer), Expr.splice(value).asInstanceOf[BigDecimal])
+        })
+      else if (Type[F] =:= CTypes.BigInt)
+        Some(Expr.quote {
+          JsoniterDerivationUtils
+            .writeStringifiedBigInt(Expr.splice(writer), Expr.splice(value).asInstanceOf[BigInt])
+        })
+      else None
 
     /** Encode a full JSON object: writeObjectStart + fields + writeObjectEnd. */
     @scala.annotation.nowarn("msg=is never used")
@@ -1613,54 +1746,139 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       import isMap.{Key, Value, CtorResult}
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
 
       if (Key <:< Type[String]) {
-        // String keys — use existing fast path
+        // String keys — derive value decoder, plus key-as-value decoder for mapAsArray
         LambdaBuilder
           .of1[JsonReader]("valueReader")
           .traverse { valueReaderExpr =>
             deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
           }
-          .map { builder =>
-            val decodeFn = builder.build[Value]
-            val factoryExpr = isMap.factory
-            Rule.matched(Expr.quote {
-              JsoniterDerivationUtils
-                .readMap[Value, A](
-                  Expr.splice(dctx.reader),
-                  Expr.splice(decodeFn),
-                  Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]]
-                )
-                .asInstanceOf[A]
-            })
+          .flatMap { valueBuilder =>
+            val decodeFn = valueBuilder.build[Value]
+            // Derive key-as-value decoder for String (for mapAsArray mode)
+            LambdaBuilder
+              .of1[JsonReader]("keyValueReader")
+              .traverse { keyReaderExpr =>
+                // String keys: read as string value
+                MIO.pure(Expr.quote {
+                  Expr.splice(keyReaderExpr).readString(null).asInstanceOf[Key]
+                })
+              }
+              .map { keyValueBuilder =>
+                val keyValueDecodeFn = keyValueBuilder.build[Key]
+                val factoryExpr = isMap.factory
+                Rule.matched(Expr.quote {
+                  if (Expr.splice(dctx.config).mapAsArray) {
+                    JsoniterDerivationUtils
+                      .readMapAsArray[Key, Value, A](
+                        Expr.splice(dctx.reader),
+                        Expr.splice(keyValueDecodeFn),
+                        Expr.splice(decodeFn),
+                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                      )
+                      .asInstanceOf[A]
+                  } else {
+                    JsoniterDerivationUtils
+                      .readMap[Value, A](
+                        Expr.splice(dctx.reader),
+                        Expr.splice(decodeFn),
+                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]]
+                      )
+                      .asInstanceOf[A]
+                  }
+                })
+              }
           }
       } else {
-        // Non-String keys — try to derive key decoding
+        // Non-String keys — try to derive key decoding for object mode
         deriveKeyDecoding[Key].flatMap {
           case Some(keyDecoderLambda) =>
+            // Derive value decoder
             LambdaBuilder
               .of1[JsonReader]("valueReader")
               .traverse { valueReaderExpr =>
                 deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
               }
-              .map { builder =>
-                val decodeFn = builder.build[Value]
-                val factoryExpr = isMap.factory
-                Rule.matched(Expr.quote {
-                  JsoniterDerivationUtils
-                    .readMapWithKeyDecoder[Key, Value, A](
-                      Expr.splice(dctx.reader),
-                      Expr.splice(keyDecoderLambda),
-                      Expr.splice(decodeFn),
-                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
-                    )
-                    .asInstanceOf[A]
-                })
+              .flatMap { valueBuilder =>
+                val decodeFn = valueBuilder.build[Value]
+                // Derive key-as-value decoder for mapAsArray mode
+                LambdaBuilder
+                  .of1[JsonReader]("keyValueReader")
+                  .traverse { keyReaderExpr =>
+                    deriveDecoderRecursively[Key](using dctx.nest[Key](keyReaderExpr))
+                  }
+                  .map { keyValueBuilder =>
+                    val keyValueDecodeFn = keyValueBuilder.build[Key]
+                    val factoryExpr = isMap.factory
+                    Rule.matched(Expr.quote {
+                      if (Expr.splice(dctx.config).mapAsArray) {
+                        JsoniterDerivationUtils
+                          .readMapAsArray[Key, Value, A](
+                            Expr.splice(dctx.reader),
+                            Expr.splice(keyValueDecodeFn),
+                            Expr.splice(decodeFn),
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                          )
+                          .asInstanceOf[A]
+                      } else {
+                        JsoniterDerivationUtils
+                          .readMapWithKeyDecoder[Key, Value, A](
+                            Expr.splice(dctx.reader),
+                            Expr.splice(keyDecoderLambda),
+                            Expr.splice(decodeFn),
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                          )
+                          .asInstanceOf[A]
+                      }
+                    })
+                  }
               }
           case None =>
-            MIO.pure(
-              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
-            )
+            // No key decoder — try value-level decoding for mapAsArray-only support
+            LambdaBuilder
+              .of1[JsonReader]("valueReader")
+              .traverse { valueReaderExpr =>
+                deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
+              }
+              .flatMap { valueBuilder =>
+                val decodeFn = valueBuilder.build[Value]
+                LambdaBuilder
+                  .of1[JsonReader]("keyValueReader")
+                  .traverse { keyReaderExpr =>
+                    deriveDecoderRecursively[Key](using dctx.nest[Key](keyReaderExpr))
+                  }
+                  .map { keyValueBuilder =>
+                    val keyValueDecodeFn = keyValueBuilder.build[Key]
+                    val factoryExpr = isMap.factory
+                    Rule.matched(Expr.quote {
+                      if (Expr.splice(dctx.config).mapAsArray) {
+                        JsoniterDerivationUtils
+                          .readMapAsArray[Key, Value, A](
+                            Expr.splice(dctx.reader),
+                            Expr.splice(keyValueDecodeFn),
+                            Expr.splice(decodeFn),
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                          )
+                          .asInstanceOf[A]
+                      } else {
+                        throw new IllegalArgumentException(
+                          "Map key type " + Expr.splice(Expr(Key.prettyPrint)) +
+                            " cannot be used as JSON object key. Use mapAsArray config option."
+                        )
+                      }
+                    })
+                  }
+              }
+              .recoverWith { _ =>
+                MIO.pure(
+                  Rule.yielded(
+                    s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived"
+                  )
+                )
+              }
         }
       }
     }
@@ -2011,6 +2229,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
+      implicit val stringifiedT: Type[stringified] = CTypes.Stringified
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor.
       if (caseClass.isSingleton) {
@@ -2105,8 +2324,20 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
+              val isStringified = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decodeFn =>
+                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (isStringified) {
+                  deriveStringifiedDecoder[Field] match {
+                    case Some(dec) => MIO.pure(dec)
+                    case None      =>
+                      val err = CodecDerivationError
+                        .StringifiedOnNonNumeric(fName, Type[A].prettyPrint, Type[Field].prettyPrint)
+                      Log.error(err.message) >> MIO.fail(err)
+                  }
+                } else {
+                  deriveFieldDecoder[Field]
+                }
+                decodeFnMIO.map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
                     Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
                   }
@@ -2195,6 +2426,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
+      implicit val stringifiedT: Type[stringified] = CTypes.Stringified
 
       // Singletons have no primary constructor.
       if (caseClass.isSingleton) {
@@ -2303,8 +2535,20 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
+              val isStringified = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decodeFn =>
+                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (isStringified) {
+                  deriveStringifiedDecoder[Field] match {
+                    case Some(dec) => MIO.pure(dec)
+                    case None      =>
+                      val err = CodecDerivationError
+                        .StringifiedOnNonNumeric(fName, Type[A].prettyPrint, Type[Field].prettyPrint)
+                      Log.error(err.message) >> MIO.fail(err)
+                  }
+                } else {
+                  deriveFieldDecoder[Field]
+                }
+                decodeFnMIO.map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
                     Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
                   }
@@ -2408,6 +2652,44 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             }
     }
   }
+
+  @scala.annotation.nowarn("msg=is never used")
+  private def deriveStringifiedDecoder[F: Type](implicit
+      JsonReaderT: Type[JsonReader]
+  ): Option[Expr[JsonReader => F]] =
+    if (Type[F] =:= CTypes.Int)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedInt(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.Long)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedLong(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.Double)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedDouble(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.Float)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedFloat(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.Short)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedShort(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.Byte)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedByte(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.BigDecimal)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedBigDecimal(r).asInstanceOf[F]
+      })
+    else if (Type[F] =:= CTypes.BigInt)
+      Some(Expr.quote { (r: JsonReader) =>
+        JsoniterDerivationUtils.readStringifiedBigInt(r).asInstanceOf[F]
+      })
+    else None
 
   object DecHandleAsEnumRule extends DecoderDerivationRule("handle as enum when possible") {
 
@@ -2735,7 +3017,15 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       Type.of[Either[JsonReaderException, A]]
     val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
     val TransientField: Type[transientField] = Type.of[transientField]
+    val Stringified: Type[stringified] = Type.of[stringified]
     val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Double: Type[Double] = Type.of[Double]
+    val Float: Type[Float] = Type.of[Float]
+    val Short: Type[Short] = Type.of[Short]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
+    val BigInt: Type[BigInt] = Type.of[BigInt]
     val Product: Type[Product] = Type.of[Product]
   }
 }
@@ -2770,5 +3060,10 @@ private[compiletime] object CodecDerivationError {
   }
   final case class UnexpectedParameterInSingleton(tpeName: String, context: String) extends CodecDerivationError {
     override def message: String = s"$context: $tpeName"
+  }
+  final case class StringifiedOnNonNumeric(fieldName: String, tpeName: String, fieldTypeName: String)
+      extends CodecDerivationError {
+    override def message: String =
+      s"@stringified on field '$fieldName' of $tpeName requires a numeric type, but found $fieldTypeName"
   }
 }

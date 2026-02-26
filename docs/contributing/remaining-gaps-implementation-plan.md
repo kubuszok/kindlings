@@ -14,8 +14,8 @@ This document contains all the information needed to implement each remaining ga
 |---|-----|--------|----------|------------|--------|
 | 1 | `Encoder.AsObject` | Circe | **High** | Medium | **Done** |
 | 2 | Literal types | All 4 | Medium | Medium | Not started |
-| 3 | `@stringified` | Jsoniter | Medium | Medium | Not started |
-| 4 | Map as array encoding | Jsoniter | Medium | Medium | Not started |
+| 3 | `@stringified` | Jsoniter | Medium | Medium | **Done** |
+| 4 | Map as array encoding | Jsoniter | Medium | Medium | **Done** |
 | 5 | `@AvroFixed` | Avro | High | Medium | **Done** |
 | 6 | `@AvroProp` | Avro | Medium | Low | **Done** |
 | 7 | `@AvroAlias` | Avro | Medium | Medium | **Done** |
@@ -38,6 +38,8 @@ This document contains all the information needed to implement each remaining ga
 - Avro `@avroSortPriority(priority)` — controls ordering of subtypes in ENUM and UNION schemas (2026-02-26)
 - Avro `@avroProp(key, value)` — adds custom key-value properties to schemas and fields, supports multiple annotations on same target (2026-02-26)
 - Avro `@avroAlias(alias)` — adds schema evolution aliases to records and fields, supports multiple annotations on same target (2026-02-26)
+- Jsoniter `@stringified` — per-field annotation encoding numeric fields as JSON strings, with compile-time validation (2026-02-26)
+- Jsoniter `mapAsArray` — config option encoding maps as `[[k1,v1],[k2,v2]]` arrays instead of JSON objects (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---
@@ -125,7 +127,11 @@ Per module, add "literal types" group (Scala 3 only tests):
 
 ---
 
-## Gap 3: `@stringified` (Jsoniter)
+## Gap 3: `@stringified` (Jsoniter) — DONE
+
+### What Was Implemented
+
+Per-field `@stringified` annotation that encodes numeric fields as JSON strings and decodes them back. Supports Int, Long, Double, Float, Short, Byte, BigDecimal, BigInt. Compile-time error on non-numeric types. Modified `encodeCaseClassFieldsOnly`, `decodeCaseClassFields`, and `decodeCaseClassFieldsInline` in `CodecMacrosImpl.scala`. Runtime helpers in `JsoniterDerivationUtils.scala` (2026-02-26).
 
 ### Problem
 
@@ -179,7 +185,11 @@ File: `KindlingsJsonValueCodecSpec.scala`, new group "@stringified":
 
 ---
 
-## Gap 4: Map as Array Encoding (Jsoniter)
+## Gap 4: Map as Array Encoding (Jsoniter) — DONE
+
+### What Was Implemented
+
+`mapAsArray` config option (`JsoniterConfig.withMapAsArray`) that encodes maps as `[[k1,v1],[k2,v2]]` at runtime. Modified `EncHandleAsMapRule` and `DecHandleAsMapRule` in `CodecMacrosImpl.scala` to derive both object-style and array-style encoders/decoders, with runtime branching on `config.mapAsArray`. Added `writeMapAsArray` and `readMapAsArray` helpers in `JsoniterDerivationUtils.scala`. Also handles non-String key types that lack key encoding — in mapAsArray mode they use value-level encoding, with a runtime error in non-mapAsArray mode (2026-02-26).
 
 ### Problem
 
