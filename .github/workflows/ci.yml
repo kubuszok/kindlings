@@ -49,6 +49,9 @@ jobs:
         with:
           jvm: ${{ matrix.jvm }}
           apps: sbt
+      - name: Install native dependencies
+        if: matrix.platform == 'native'
+        run: sudo apt-get update && sudo apt-get install -y libidn2-dev
       - name: "Clean, compile, test${{matrix.platform == 'jvm' && ', generate coverage report' || ''}}"
         run: sbt ci-${{ matrix.platform }}-${{ matrix.scala }}
       - uses: codecov/codecov-action@v5

@@ -30,6 +30,7 @@
       "WebFetch(domain:scala-hearth.readthedocs.io)",
       "WebFetch(domain:scala-tapir.readthedocs.io)",
       "WebFetch(domain:scalameta.org)",
+      "WebFetch(domain:sttp.softwaremill.com)",
       "WebFetch(domain:tapir.softwaremill.com)",
       "WebFetch(domain:virtuslab.github.io)",
       "WebSearch"
