@@ -109,6 +109,52 @@ final class YamlScala3Spec extends MacroSuite {
     }
   }
 
+  group("literal types") {
+
+    group("encoding") {
+
+      test("case class with literal String field") {
+        val node = KindlingsYamlEncoder.encode(YamlWithLiteralString("hello", "Alice"))
+        node ==> mappingOf("tag" -> scalarNode("hello"), "name" -> scalarNode("Alice"))
+      }
+
+      test("case class with literal Int field") {
+        val node = KindlingsYamlEncoder.encode(YamlWithLiteralInt(42, "Bob"))
+        node ==> mappingOf("code" -> scalarNode("42"), "name" -> scalarNode("Bob"))
+      }
+
+      test("case class with literal Boolean field") {
+        val node = KindlingsYamlEncoder.encode(YamlWithLiteralBoolean(true, "Carol"))
+        node ==> mappingOf("flag" -> scalarNode("true"), "name" -> scalarNode("Carol"))
+      }
+    }
+
+    group("decoding") {
+
+      test("case class with literal String field") {
+        val node = mappingOf("tag" -> scalarNode("hello"), "name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[YamlWithLiteralString](node) ==> Right(YamlWithLiteralString("hello", "Alice"))
+      }
+
+      test("case class with literal Int field") {
+        val node = mappingOf("code" -> scalarNode("42"), "name" -> scalarNode("Bob"))
+        KindlingsYamlDecoder.decode[YamlWithLiteralInt](node) ==> Right(YamlWithLiteralInt(42, "Bob"))
+      }
+
+      test("decode literal String with wrong value fails") {
+        val node = mappingOf("tag" -> scalarNode("wrong"), "name" -> scalarNode("Alice"))
+        val result = KindlingsYamlDecoder.decode[YamlWithLiteralString](node)
+        assert(result.isLeft)
+      }
+
+      test("decode literal Int with wrong value fails") {
+        val node = mappingOf("code" -> scalarNode("99"), "name" -> scalarNode("Bob"))
+        val result = KindlingsYamlDecoder.decode[YamlWithLiteralInt](node)
+        assert(result.isLeft)
+      }
+    }
+  }
+
   group("named tuples (Scala 3.7+)") {
 
     group("encoding") {
@@ -155,6 +201,50 @@ final class YamlScala3Spec extends MacroSuite {
         implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
         val node = mappingOf("first_name" -> scalarNode("Alice"), "last_name" -> scalarNode("Smith"))
         KindlingsYamlDecoder.decode[(firstName: String, lastName: String)](node) ==> Right(("Alice", "Smith"))
+      }
+    }
+  }
+
+  group("union types (Scala 3)") {
+
+    // Union type member names use fully-qualified names from Hearth's directChildren
+    val StringFQN = "java.lang.String"
+    val IntFQN = "scala.Int"
+    val ParrotFQN = "hearth.kindlings.yamlderivation.Parrot"
+
+    group("encoding") {
+
+      test("String member of String | Int") {
+        val node = KindlingsYamlEncoder.encode[StringOrInt]("hello")
+        node ==> mappingOf(StringFQN -> scalarNode("hello"))
+      }
+
+      test("Int member of String | Int") {
+        val node = KindlingsYamlEncoder.encode[StringOrInt](42)
+        node ==> mappingOf(IntFQN -> scalarNode("42"))
+      }
+
+      test("case class member of union") {
+        val node = KindlingsYamlEncoder.encode[ParrotOrHamster](Parrot("Polly", 100))
+        node ==> mappingOf(ParrotFQN -> mappingOf("name" -> scalarNode("Polly"), "vocabulary" -> scalarNode("100")))
+      }
+    }
+
+    group("decoding") {
+
+      test("String member of String | Int") {
+        val node = mappingOf(StringFQN -> scalarNode("hello"))
+        KindlingsYamlDecoder.decode[StringOrInt](node) ==> Right("hello": StringOrInt)
+      }
+
+      test("Int member of String | Int") {
+        val node = mappingOf(IntFQN -> scalarNode("42"))
+        KindlingsYamlDecoder.decode[StringOrInt](node) ==> Right(42: StringOrInt)
+      }
+
+      test("case class member of union") {
+        val node = mappingOf(ParrotFQN -> mappingOf("name" -> scalarNode("Polly"), "vocabulary" -> scalarNode("100")))
+        KindlingsYamlDecoder.decode[ParrotOrHamster](node) ==> Right(Parrot("Polly", 100): ParrotOrHamster)
       }
     }
   }

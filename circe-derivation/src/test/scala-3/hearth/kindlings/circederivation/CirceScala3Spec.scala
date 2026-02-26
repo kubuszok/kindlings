@@ -177,6 +177,112 @@ final class CirceScala3Spec extends MacroSuite {
     }
   }
 
+  group("literal types") {
+
+    group("encoding") {
+
+      test("case class with literal String field") {
+        KindlingsEncoder.encode(WithLiteralString("hello", "Alice")) ==>
+          Json.obj("tag" -> Json.fromString("hello"), "name" -> Json.fromString("Alice"))
+      }
+
+      test("case class with literal Int field") {
+        KindlingsEncoder.encode(WithLiteralInt(42, "Bob")) ==>
+          Json.obj("code" -> Json.fromInt(42), "name" -> Json.fromString("Bob"))
+      }
+
+      test("case class with literal Boolean field") {
+        KindlingsEncoder.encode(WithLiteralBoolean(true, "Carol")) ==>
+          Json.obj("flag" -> Json.fromBoolean(true), "name" -> Json.fromString("Carol"))
+      }
+    }
+
+    group("decoding") {
+
+      test("case class with literal String field") {
+        val json = Json.obj("tag" -> Json.fromString("hello"), "name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[WithLiteralString](json) ==> Right(WithLiteralString("hello", "Alice"))
+      }
+
+      test("case class with literal Int field") {
+        val json = Json.obj("code" -> Json.fromInt(42), "name" -> Json.fromString("Bob"))
+        KindlingsDecoder.decode[WithLiteralInt](json) ==> Right(WithLiteralInt(42, "Bob"))
+      }
+
+      test("decode literal String with wrong value fails") {
+        val json = Json.obj("tag" -> Json.fromString("wrong"), "name" -> Json.fromString("Alice"))
+        val result = KindlingsDecoder.decode[WithLiteralString](json)
+        assert(result.isLeft)
+      }
+
+      test("decode literal Int with wrong value fails") {
+        val json = Json.obj("code" -> Json.fromInt(99), "name" -> Json.fromString("Bob"))
+        val result = KindlingsDecoder.decode[WithLiteralInt](json)
+        assert(result.isLeft)
+      }
+    }
+  }
+
+  group("union types (Scala 3)") {
+
+    // Union type member names use fully-qualified names from Hearth's directChildren
+    val StringFQN = "java.lang.String"
+    val IntFQN = "scala.Int"
+    val ParrotFQN = "hearth.kindlings.circederivation.Parrot"
+    val HamsterFQN = "hearth.kindlings.circederivation.Hamster"
+
+    group("encoding") {
+
+      test("String member of String | Int") {
+        val json = KindlingsEncoder.encode[StringOrInt]("hello")
+        json ==> Json.obj(StringFQN -> Json.fromString("hello"))
+      }
+
+      test("Int member of String | Int") {
+        val json = KindlingsEncoder.encode[StringOrInt](42)
+        json ==> Json.obj(IntFQN -> Json.fromInt(42))
+      }
+
+      test("case class member of union") {
+        val json = KindlingsEncoder.encode[ParrotOrHamster](Parrot("Polly", 100))
+        json ==> Json.obj(ParrotFQN -> Json.obj("name" -> Json.fromString("Polly"), "vocabulary" -> Json.fromInt(100)))
+      }
+
+      test("second case class member of union") {
+        val json = KindlingsEncoder.encode[ParrotOrHamster](Hamster("Biscuit", 7.5))
+        json ==> Json.obj(
+          HamsterFQN -> Json.obj("name" -> Json.fromString("Biscuit"), "wheelSize" -> Json.fromDoubleOrNull(7.5))
+        )
+      }
+    }
+
+    group("decoding") {
+
+      test("String member of String | Int") {
+        val json = Json.obj(StringFQN -> Json.fromString("hello"))
+        KindlingsDecoder.decode[StringOrInt](json) ==> Right("hello": StringOrInt)
+      }
+
+      test("Int member of String | Int") {
+        val json = Json.obj(IntFQN -> Json.fromInt(42))
+        KindlingsDecoder.decode[StringOrInt](json) ==> Right(42: StringOrInt)
+      }
+
+      test("case class member of union") {
+        val json =
+          Json.obj(ParrotFQN -> Json.obj("name" -> Json.fromString("Polly"), "vocabulary" -> Json.fromInt(100)))
+        KindlingsDecoder.decode[ParrotOrHamster](json) ==> Right(Parrot("Polly", 100): ParrotOrHamster)
+      }
+
+      test("second case class member of union") {
+        val json = Json.obj(
+          HamsterFQN -> Json.obj("name" -> Json.fromString("Biscuit"), "wheelSize" -> Json.fromDoubleOrNull(7.5))
+        )
+        KindlingsDecoder.decode[ParrotOrHamster](json) ==> Right(Hamster("Biscuit", 7.5): ParrotOrHamster)
+      }
+    }
+  }
+
   group("auto-derivation isolation") {
 
     group("encoder uses kindlings derivation, not circe auto-derivation") {

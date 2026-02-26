@@ -358,6 +358,7 @@ object UseImplicitWhenAvailableRule extends DerivationRule("use implicit when av
 - Get method symbols from the companion object that should be ignored
 - Use `Type[TC[A]].summonExprIgnoring(symbols*)` to summon while skipping specific methods
 - This prevents `derived` from summoning itself, allowing the rule-based logic to handle derivation instead
+- For subtype derivation (e.g., `KindlingsDecoder <: circe.Decoder`), also ignore the **parent library's** companion implicits for features your macro handles directly — e.g., `decodeLiteral*`/`encodeLiteral*` for literal types, `derived` for auto-derivation. See REQ-3e in the Implementation requirements checklist for details
 
 ### Self-type skip in `derived` entrypoint (Chimney-style pattern)
 
@@ -1151,6 +1152,41 @@ When implementing a type class that is a **subtype** of an existing type class (
 - Test that a user-provided `Decoder[MyType]` (parent type) is picked up by the macro
 - Test that the macro does not summon `Decoder.derived` for types it should derive itself
 - If ignoring parent companion built-ins: test that the macro handles primitives without summoning parent companion instances
+
+#### REQ-3e: Ignore library companion implicits for features handled by macro rules
+
+**Principle:** Whatever a library handles via implicits defined in its companions, we should handle in our macro instead — and ignore all those companion-provided implicits so they don't interfere with our derivation rules. This applies to:
+
+1. **Automatic derivation implicits** — methods like `derived`, `apply` on the companion, or anything imported from `generic.auto._` packages
+2. **Literal type implicits** — methods like circe's `decodeLiteralString`, `encodeLiteralString`, `decodeLiteralInt`, etc. that the library provides for singleton/literal types
+3. **Any other companion-provided instances** for types that our macro handles via a dedicated rule (built-in types, value types, etc.)
+
+**Why:** When our macro has a rule that generates encoding/decoding code for a type (e.g., `HandleAsLiteralTypeRule`), but the library's companion also provides an implicit for that same type, `summonExprIgnoring` may find the library's implicit first. This causes our macro rule to be bypassed, and the library's implicit may behave differently (e.g., different error messages, different encoding format) or conflict with our rule chain ordering.
+
+**How to implement:** In `ignoredImplicits`, filter companion methods by name prefix or pattern:
+
+```scala
+lazy val ignoredImplicits: Seq[UntypedMethod] = {
+  val ours = Type.of[KindlingsDecoder.type].methods.collect {
+    case method if method.value.name == "derived" => method.value.asUntyped
+  }
+  val libraryCompanion = Type.of[Decoder.type].methods.collect {
+    case method if method.value.name == "derived"
+      || method.value.name.startsWith("decodeLiteral") =>
+      method.value.asUntyped
+  }
+  ours ++ libraryCompanion
+}
+```
+
+**Rule chain ordering:** Rules for features we handle in-macro (e.g., `HandleAsLiteralTypeRule`) should appear **before** `UseImplicitWhenAvailableRule` in the chain. This ensures our macro handles the type directly without even attempting implicit search, while still ignoring the library's companion implicits as a safety net.
+
+**Reference:** `circe-derivation/DecoderMacrosImpl.scala` and `circe-derivation/EncoderMacrosImpl.scala` — ignore `decodeLiteral*`/`encodeLiteral*` methods from circe's `Decoder.type`/`Encoder.type` companions.
+
+**Verification:**
+- Test that literal types (`case class Foo(tag: "hello")`) are handled by our macro rule, not by the library's companion implicit
+- Test that the error message on decode failure matches our macro's format, not the library's
+- Test that the feature works on both Scala 2.13 and Scala 3
 
 #### REQ-3d: Cache resolved implicits as lazy vals
 

@@ -100,3 +100,10 @@ case class WithIntKeyMap(data: Map[Int, String])
 case class WithLongKeyMap(data: Map[Long, String])
 final case class UserId(value: Int) extends AnyVal
 case class WithUserIdKeyMap(users: Map[UserId, String])
+
+// UTF-8 field name test types
+case class CirceWithUtf8FieldNames(
+    @fieldName("名前") name: String,
+    @fieldName("données") data: Int,
+    @fieldName("field with spaces") value: Boolean
+)

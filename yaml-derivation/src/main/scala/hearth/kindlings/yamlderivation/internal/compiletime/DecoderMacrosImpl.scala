@@ -275,6 +275,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
           DecUseCachedDefWhenAvailableRule,
+          DecHandleAsLiteralTypeRule,
           DecUseImplicitWhenAvailableRule,
           DecHandleAsValueTypeRule,
           DecHandleAsOptionRule,
@@ -375,6 +376,67 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           s"The type ${Type[A].prettyPrint} does not have an implicit YamlDecoder instance: $reason"
         )
       )
+  }
+
+  object DecHandleAsLiteralTypeRule extends DecoderDerivationRule("handle as literal type when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a literal type") >> {
+        implicit val NodeT: Type[Node] = DTypes.Node
+        implicit val CET: Type[ConstructError] = DTypes.ConstructError
+        implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+        extractLiteralDecoder[A] match {
+          case Some(expr) => MIO.pure(Rule.matched(expr))
+          case None       => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
+        }
+      }
+
+    private def decodeLiteralFromScalar[A: DecoderCtx, U](
+        codec: TypeCodec[U]
+    )(implicit
+        exprCodec: ExprCodec[U],
+        ut: Type[U],
+        NodeT: Type[Node],
+        CET: Type[ConstructError],
+        EitherCEA: Type[Either[ConstructError, A]]
+    ): Option[Expr[Either[ConstructError, A]]] =
+      codec.fromType(Type[A]).map { e =>
+        val constant: U = e.value
+        val constantStr: String = constant.toString
+        Expr.quote {
+          Expr.splice(dctx.node) match {
+            case Node.ScalarNode(raw, _) =>
+              if (raw == Expr.splice(Expr(constantStr)))
+                Right(Expr.splice(Expr(constant)).asInstanceOf[A])
+              else
+                Left(
+                  ConstructError.from(
+                    "Expected literal value " + Expr.splice(Expr(constantStr)) + " but got " + raw,
+                    Expr.splice(dctx.node)
+                  )
+                )
+            case other =>
+              Left(ConstructError.from("Expected scalar node for literal type", other))
+          }
+        }
+      }
+
+    private def extractLiteralDecoder[A: DecoderCtx](implicit
+        NodeT: Type[Node],
+        CET: Type[ConstructError],
+        EitherCEA: Type[Either[ConstructError, A]]
+    ): Option[Expr[Either[ConstructError, A]]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val IntT: Type[Int] = DTypes.Int
+      implicit val LongT: Type[Long] = DTypes.Long
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      implicit val DoubleT: Type[Double] = DTypes.Double
+      decodeLiteralFromScalar(Type.StringCodec)
+        .orElse(decodeLiteralFromScalar(Type.IntCodec))
+        .orElse(decodeLiteralFromScalar(Type.LongCodec))
+        .orElse(decodeLiteralFromScalar(Type.BooleanCodec))
+        .orElse(decodeLiteralFromScalar(Type.DoubleCodec))
+    }
   }
 
   object DecHandleAsValueTypeRule extends DecoderDerivationRule("handle as value type when possible") {
@@ -1101,6 +1163,10 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     val ConstructError: Type[ConstructError] = Type.of[ConstructError]
     val YamlConfig: Type[YamlConfig] = Type.of[YamlConfig]
     val String: Type[String] = Type.of[String]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Double: Type[Double] = Type.of[Double]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
     val EitherCEAny: Type[Either[ConstructError, Any]] = Type.of[Either[ConstructError, Any]]

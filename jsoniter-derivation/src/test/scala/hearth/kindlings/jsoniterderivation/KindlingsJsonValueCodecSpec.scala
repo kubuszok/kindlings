@@ -919,6 +919,20 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
     }
   }
 
+  group("UTF-8 field names") {
+
+    test("@fieldName with non-ASCII characters round-trips correctly") {
+      val codec = KindlingsJsonValueCodec.derive[JsoniterWithUtf8FieldNames]
+      val original = JsoniterWithUtf8FieldNames("Alice", 30, true)
+      val json = writeToString(original)(codec)
+      assert(json.contains("名前"))
+      assert(json.contains("données"))
+      assert(json.contains("field with spaces"))
+      val decoded = readFromString[JsoniterWithUtf8FieldNames](json)(codec)
+      decoded ==> original
+    }
+  }
+
   group("JsonValueCodecExtensions") {
 
     test("map transforms codec") {

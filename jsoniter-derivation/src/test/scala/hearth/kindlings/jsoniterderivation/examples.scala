@@ -69,3 +69,10 @@ case class WithStringifiedInt(@stringified value: Int, name: String)
 case class WithStringifiedLong(@stringified id: Long, label: String)
 case class WithStringifiedBigDecimal(@stringified amount: BigDecimal)
 case class WithMixedStringified(@stringified count: Int, name: String, @stringified score: Double)
+
+// UTF-8 field name test types
+case class JsoniterWithUtf8FieldNames(
+    @fieldName("名前") name: String,
+    @fieldName("données") data: Int,
+    @fieldName("field with spaces") value: Boolean
+)

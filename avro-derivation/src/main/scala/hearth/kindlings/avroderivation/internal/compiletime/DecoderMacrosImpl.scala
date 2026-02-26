@@ -288,6 +288,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
           DecUseCachedDefWhenAvailableRule,
+          DecHandleAsLiteralTypeRule,
           DecUseImplicitWhenAvailableRule,
           DecUseBuiltInSupportRule,
           DecHandleAsValueTypeRule,
@@ -370,6 +371,46 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
               )
           }
       }
+  }
+
+  object DecHandleAsLiteralTypeRule extends DecoderDerivationRule("handle as literal type when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a literal type") >> {
+        extractLiteralDecoder[A] match {
+          case Some(expr) => MIO.pure(Rule.matched(expr))
+          case None       => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
+        }
+      }
+
+    private def decodeLiteral[A: DecoderCtx, U](
+        codec: TypeCodec[U],
+        decode: Expr[Any] => Expr[U]
+    )(implicit exprCodec: ExprCodec[U], ut: Type[U]): Option[Expr[A]] =
+      codec.fromType(Type[A]).map { e =>
+        val constant: U = e.value
+        Expr.quote {
+          val actual = Expr.splice(decode(dctx.avroValue))
+          if (actual != Expr.splice(Expr(constant)))
+            throw new org.apache.avro.AvroTypeException(
+              "Expected literal value " + Expr.splice(Expr(constant)) + " but got " + actual
+            )
+          actual.asInstanceOf[A]
+        }
+      }
+
+    private def extractLiteralDecoder[A: DecoderCtx]: Option[Expr[A]] = {
+      implicit val StringT: Type[String] = DecTypes.String
+      implicit val IntT: Type[Int] = DecTypes.Int
+      implicit val LongT: Type[Long] = DecTypes.Long
+      implicit val BooleanT: Type[Boolean] = DecTypes.Boolean
+      implicit val DoubleT: Type[Double] = DecTypes.Double
+      decodeLiteral(Type.StringCodec, v => Expr.quote(AvroDerivationUtils.decodeCharSequence(Expr.splice(v))))
+        .orElse(decodeLiteral(Type.IntCodec, v => Expr.quote(Expr.splice(v).asInstanceOf[Int])))
+        .orElse(decodeLiteral(Type.LongCodec, v => Expr.quote(Expr.splice(v).asInstanceOf[Long])))
+        .orElse(decodeLiteral(Type.BooleanCodec, v => Expr.quote(Expr.splice(v).asInstanceOf[Boolean])))
+        .orElse(decodeLiteral(Type.DoubleCodec, v => Expr.quote(Expr.splice(v).asInstanceOf[Double])))
+    }
   }
 
   object DecUseBuiltInSupportRule extends DecoderDerivationRule("use built-in support for primitives") {
@@ -1108,39 +1149,62 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
               }
           } else {
             // Mixed sealed trait → dispatch based on record schema name
-            val knownNames: List[String] = children.toList.map(_._1)
+            // For union types, Hearth returns FQN child names (e.g., "pkg.Parrot"), but Avro schema
+            // getName returns simple names (e.g., "Parrot"). Extract simple names for comparison.
+            def simpleName(fqn: String): String = fqn.lastIndexOf('.') match {
+              case -1 => fqn
+              case i  => fqn.substring(i + 1)
+            }
+            val knownNames: List[String] = children.toList.map(c => simpleName(c._1))
 
             children
               .parTraverse { case (childName, child) =>
                 import child.Underlying as ChildType
+                val simpleChildName = simpleName(childName)
                 Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                  deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.avroValue)).flatMap { _ =>
-                    dctx.getHelper[ChildType].map {
-                      case Some(helper) =>
-                        (
-                          childName,
-                          (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                            Expr.quote {
-                              val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                              val recordName = record.getSchema.getName
-                              if (
-                                Expr
-                                  .splice(dctx.config)
-                                  .transformConstructorNames(
-                                    Expr.splice(Expr(childName))
-                                  ) == recordName
-                              )
-                                Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
-                              else
-                                Expr.splice(elseExpr)
-                            }
-                        )
-                      case None =>
-                        (
-                          childName,
-                          (_: Expr[Any], elseExpr: Expr[A]) => elseExpr
-                        )
-                    }
+                  deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.avroValue)).flatMap {
+                    decodedExpr =>
+                      dctx.getHelper[ChildType].map {
+                        case Some(helper) =>
+                          (
+                            simpleChildName,
+                            (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
+                              Expr.quote {
+                                val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                val recordName = record.getSchema.getName
+                                if (
+                                  Expr
+                                    .splice(dctx.config)
+                                    .transformConstructorNames(
+                                      Expr.splice(Expr(simpleChildName))
+                                    ) == recordName
+                                )
+                                  Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
+                                else
+                                  Expr.splice(elseExpr)
+                              }
+                          )
+                        case None =>
+                          // No helper registered (e.g., built-in types) — use the derived expression directly
+                          (
+                            simpleChildName,
+                            (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
+                              Expr.quote {
+                                val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                val recordName = record.getSchema.getName
+                                if (
+                                  Expr
+                                    .splice(dctx.config)
+                                    .transformConstructorNames(
+                                      Expr.splice(Expr(simpleChildName))
+                                    ) == recordName
+                                )
+                                  Expr.splice(decodedExpr).asInstanceOf[A]
+                                else
+                                  Expr.splice(elseExpr)
+                              }
+                          )
+                      }
                   }
                 }
               }
@@ -1173,6 +1237,10 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
     val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
     val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
     val String: Type[String] = Type.of[String]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Double: Type[Double] = Type.of[Double]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
     val Any: Type[Any] = Type.of[Any]
     val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
     val ArrayByte: Type[Array[Byte]] = Type.of[Array[Byte]]

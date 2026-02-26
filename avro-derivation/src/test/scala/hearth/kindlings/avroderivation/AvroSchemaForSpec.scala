@@ -639,6 +639,16 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("custom field names") {
+
+      test("@fieldName produces correct schema field names") {
+        val schema = AvroSchemaFor.schemaOf[AvroWithCustomFieldNames]
+        assert(schema.getField("person_name") != null)
+        assert(schema.getField("data_value") != null)
+        assert(schema.getField("is_active") != null)
+      }
+    }
+
     group("compile-time errors") {
 
       test("schemaOf with unhandled type produces error message") {

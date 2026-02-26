@@ -799,6 +799,19 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("UTF-8 field names") {
+
+      test("@fieldName with non-ASCII characters decodes correctly") {
+        val json = Json.obj(
+          "名前" -> Json.fromString("Alice"),
+          "données" -> Json.fromInt(30),
+          "field with spaces" -> Json.fromBoolean(true)
+        )
+        KindlingsDecoder.decode[CirceWithUtf8FieldNames](json) ==>
+          Right(CirceWithUtf8FieldNames("Alice", 30, true))
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {

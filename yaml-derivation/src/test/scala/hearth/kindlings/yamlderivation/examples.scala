@@ -57,3 +57,10 @@ case class YamlWithBothAnnotations(
 
 // Higher-kinded type test
 case class HigherKindedType[F[_]](value: F[Int])
+
+// UTF-8 field name test types
+case class YamlWithUtf8FieldNames(
+    @fieldName("名前") name: String,
+    @fieldName("données") data: Int,
+    @fieldName("field with spaces") value: Boolean
+)

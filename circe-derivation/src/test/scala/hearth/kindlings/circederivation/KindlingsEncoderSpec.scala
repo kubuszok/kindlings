@@ -595,6 +595,18 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("UTF-8 field names") {
+
+      test("@fieldName with non-ASCII characters encodes correctly") {
+        KindlingsEncoder.encode(CirceWithUtf8FieldNames("Alice", 30, true)) ==>
+          Json.obj(
+            "名前" -> Json.fromString("Alice"),
+            "données" -> Json.fromInt(30),
+            "field with spaces" -> Json.fromBoolean(true)
+          )
+      }
+    }
+
     group("compile-time errors") {
 
       test("encode with unhandled type produces error message") {

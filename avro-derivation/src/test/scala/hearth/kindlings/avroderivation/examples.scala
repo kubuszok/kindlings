@@ -157,5 +157,12 @@ case class WithFieldAlias(@avroAlias("old_name") name: String, age: Int)
 @avroAlias("V2Name")
 case class MultiAliasRecord(name: String)
 
+// Custom field name test types (Avro field names must match [A-Za-z_][A-Za-z0-9_]*)
+case class AvroWithCustomFieldNames(
+    @fieldName("person_name") name: String,
+    @fieldName("data_value") data: Int,
+    @fieldName("is_active") value: Boolean
+)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

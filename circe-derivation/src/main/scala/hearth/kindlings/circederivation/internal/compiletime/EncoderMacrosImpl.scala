@@ -268,6 +268,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
           EncUseCachedDefWhenAvailableRule,
+          EncHandleAsLiteralTypeRule,
           EncUseImplicitWhenAvailableRule,
           EncHandleAsValueTypeRule,
           EncHandleAsOptionRule,
@@ -335,7 +336,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         case method if method.value.name == "derived" => method.value.asUntyped
       }
       val circeEncoder = Type.of[Encoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+        case method if method.value.name == "derived" || method.value.name.startsWith("encodeLiteral") =>
+          method.value.asUntyped
       }
       ours ++ circeEncoder
     }
@@ -370,6 +372,41 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           s"The type ${Type[A].prettyPrint} does not have an implicit Encoder instance: $reason"
         )
       )
+  }
+
+  object EncHandleAsLiteralTypeRule extends EncoderDerivationRule("handle as literal type when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a literal type") >> {
+        extractLiteralJson[A] match {
+          case Some(jsonExpr) => MIO.pure(Rule.matched(jsonExpr))
+          case None           => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
+        }
+      }
+
+    private def extractLiteralJson[A: EncoderCtx]: Option[Expr[Json]] = {
+      implicit val JsonT: Type[Json] = Types.Json
+
+      Type.StringCodec.fromType(Type[A]).map { e =>
+        val v: String = e.value; Expr.quote(Json.fromString(Expr.splice(Expr(v))))
+      } orElse Type.IntCodec.fromType(Type[A]).map { e =>
+        val v: Int = e.value; Expr.quote(Json.fromInt(Expr.splice(Expr(v))))
+      } orElse Type.LongCodec.fromType(Type[A]).map { e =>
+        val v: Long = e.value; Expr.quote(Json.fromLong(Expr.splice(Expr(v))))
+      } orElse Type.DoubleCodec.fromType(Type[A]).map { e =>
+        val v: Double = e.value; Expr.quote(Json.fromDoubleOrNull(Expr.splice(Expr(v))))
+      } orElse Type.FloatCodec.fromType(Type[A]).map { e =>
+        val v: Float = e.value; Expr.quote(Json.fromFloatOrNull(Expr.splice(Expr(v))))
+      } orElse Type.BooleanCodec.fromType(Type[A]).map { e =>
+        val v: Boolean = e.value; Expr.quote(Json.fromBoolean(Expr.splice(Expr(v))))
+      } orElse Type.ShortCodec.fromType(Type[A]).map { e =>
+        val v: Short = e.value; Expr.quote(Json.fromInt(Expr.splice(Expr(v)).toInt))
+      } orElse Type.ByteCodec.fromType(Type[A]).map { e =>
+        val v: Byte = e.value; Expr.quote(Json.fromInt(Expr.splice(Expr(v)).toInt))
+      } orElse Type.CharCodec.fromType(Type[A]).map { e =>
+        val v: Char = e.value; Expr.quote(Json.fromString(Expr.splice(Expr(v)).toString))
+      }
+    }
   }
 
   object EncHandleAsValueTypeRule extends EncoderDerivationRule("handle as value type when possible") {

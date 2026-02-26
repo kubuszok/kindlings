@@ -810,6 +810,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
           EncUseCachedDefWhenAvailableRule,
+          EncHandleAsLiteralTypeRule,
           EncUseImplicitWhenAvailableRule,
           EncHandleAsBuiltInRule,
           EncHandleAsValueTypeRule,
@@ -907,6 +908,49 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
         )
       )
+  }
+
+  object EncHandleAsLiteralTypeRule extends EncoderDerivationRule("handle as literal type when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a literal type") >> {
+        extractLiteralEncoder[A] match {
+          case Some(expr) => MIO.pure(Rule.matched(expr))
+          case None       => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
+        }
+      }
+
+    private def extractLiteralEncoder[A: EncoderCtx]: Option[Expr[Unit]] = {
+      val writer = ectx.writer
+      Type.StringCodec.fromType(Type[A]).map { e =>
+        val v: String = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.IntCodec.fromType(Type[A]).map { e =>
+        val v: Int = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.LongCodec.fromType(Type[A]).map { e =>
+        val v: Long = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.DoubleCodec.fromType(Type[A]).map { e =>
+        val v: Double = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.FloatCodec.fromType(Type[A]).map { e =>
+        val v: Float = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.BooleanCodec.fromType(Type[A]).map { e =>
+        val v: Boolean = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.ShortCodec.fromType(Type[A]).map { e =>
+        val v: Short = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.ByteCodec.fromType(Type[A]).map { e =>
+        val v: Byte = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+      } orElse Type.CharCodec.fromType(Type[A]).map { e =>
+        val v: Char = e.value
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)).toString))
+      }
+    }
   }
 
   @scala.annotation.nowarn("msg=is never used")
@@ -1754,6 +1798,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
           DecUseCachedDefWhenAvailableRule,
+          DecHandleAsLiteralTypeRule,
           DecUseImplicitWhenAvailableRule,
           DecHandleAsBuiltInRule,
           DecHandleAsValueTypeRule,
@@ -1855,6 +1900,46 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
         )
       )
+  }
+
+  object DecHandleAsLiteralTypeRule extends DecoderDerivationRule("handle as literal type when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a literal type") >> {
+        extractLiteralDecoder[A] match {
+          case Some(expr) => MIO.pure(Rule.matched(expr))
+          case None       => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
+        }
+      }
+
+    private def decodeLiteral[A: DecoderCtx, U](
+        codec: TypeCodec[U],
+        read: Expr[JsonReader] => Expr[U]
+    )(implicit exprCodec: ExprCodec[U], ut: Type[U]): Option[Expr[A]] =
+      codec.fromType(Type[A]).map { e =>
+        val constant: U = e.value
+        Expr.quote {
+          val actual = Expr.splice(read(dctx.reader))
+          if (actual != Expr.splice(Expr(constant)))
+            Expr
+              .splice(dctx.reader)
+              .decodeError(s"Expected literal value " + Expr.splice(Expr(constant)) + " but got " + actual)
+          actual.asInstanceOf[A]
+        }
+      }
+
+    private def extractLiteralDecoder[A: DecoderCtx]: Option[Expr[A]] = {
+      implicit val StringT: Type[String] = CTypes.String
+      implicit val IntT: Type[Int] = CTypes.Int
+      implicit val LongT: Type[Long] = CTypes.Long
+      implicit val DoubleT: Type[Double] = CTypes.Double
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      decodeLiteral(Type.StringCodec, r => Expr.quote(Expr.splice(r).readString(null)))
+        .orElse(decodeLiteral(Type.IntCodec, r => Expr.quote(Expr.splice(r).readInt())))
+        .orElse(decodeLiteral(Type.LongCodec, r => Expr.quote(Expr.splice(r).readLong())))
+        .orElse(decodeLiteral(Type.BooleanCodec, r => Expr.quote(Expr.splice(r).readBoolean())))
+        .orElse(decodeLiteral(Type.DoubleCodec, r => Expr.quote(Expr.splice(r).readDouble())))
+    }
   }
 
   @scala.annotation.nowarn("msg=is never used")
@@ -3125,7 +3210,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 }
             case None =>
               // No singleton - derive via full rules chain
-              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.reader)).flatMap { _ =>
+              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.reader)).flatMap { decodedExpr =>
                 dctx.getHelper[ChildType].map {
                   case Some(helper) =>
                     (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) => {
@@ -3142,7 +3227,17 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                     }
 
                   case None =>
-                    (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) => elseExpr
+                    // No helper registered (e.g., built-in types like String, Int) — use the derived expression directly
+                    (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+                      Expr.quote {
+                        if (
+                          Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                            .splice(typeNameExpr)
+                        )
+                          Expr.splice(decodedExpr).asInstanceOf[A]
+                        else
+                          Expr.splice(elseExpr)
+                      }
                 }
               }
           }
@@ -3280,6 +3375,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     val Float: Type[Float] = Type.of[Float]
     val Short: Type[Short] = Type.of[Short]
     val Byte: Type[Byte] = Type.of[Byte]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
     val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
     val BigInt: Type[BigInt] = Type.of[BigInt]
     val Product: Type[Product] = Type.of[Product]

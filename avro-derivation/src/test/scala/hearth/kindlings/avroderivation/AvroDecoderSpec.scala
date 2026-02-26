@@ -421,6 +421,18 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("custom field names") {
+
+      test("@fieldName decodes with custom field names") {
+        val encoder: AvroEncoder[AvroWithCustomFieldNames] = AvroEncoder.derive[AvroWithCustomFieldNames]
+        val decoder: AvroDecoder[AvroWithCustomFieldNames] = AvroDecoder.derive[AvroWithCustomFieldNames]
+        val original = AvroWithCustomFieldNames("Alice", 30, true)
+        val encoded = encoder.encode(original)
+        val decoded = decoder.decode(encoded)
+        decoded ==> original
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {

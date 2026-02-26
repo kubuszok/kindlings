@@ -413,6 +413,17 @@ final class AvroEncoderSpec extends MacroSuite {
       }
     }
 
+    group("custom field names") {
+
+      test("@fieldName encodes with custom field names") {
+        val result = AvroEncoder.encode(AvroWithCustomFieldNames("Alice", 30, true))
+        val record = result.asInstanceOf[org.apache.avro.generic.GenericRecord]
+        record.get("person_name").toString ==> "Alice"
+        record.get("data_value").asInstanceOf[Int] ==> 30
+        record.get("is_active").asInstanceOf[Boolean] ==> true
+      }
+    }
+
     group("compile-time errors") {
 
       test("encode with unhandled type produces error message") {

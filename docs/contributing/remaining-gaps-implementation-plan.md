@@ -13,7 +13,7 @@ This document contains all the information needed to implement each remaining ga
 | # | Gap | Module | Priority | Difficulty | Status |
 |---|-----|--------|----------|------------|--------|
 | 1 | `Encoder.AsObject` | Circe | **High** | Medium | **Done** |
-| 2 | Literal types | All 4 | Medium | Medium | Not started |
+| 2 | Literal types | All 4 | Medium | Medium | **Done** |
 | 3 | `@stringified` | Jsoniter | Medium | Medium | **Done** |
 | 4 | Map as array encoding | Jsoniter | Medium | Medium | **Done** |
 | 5 | `@AvroFixed` | Avro | High | Medium | **Done** |
@@ -22,8 +22,8 @@ This document contains all the information needed to implement each remaining ga
 | 8 | `@AvroError` | Avro | Low | Low | **Done** |
 | 9 | `@AvroSortPriority` | Avro | Low | Low | **Done** |
 | 10 | `ByteBuffer` encoding | Avro | Low | Low | **Done** |
-| 11 | UTF-8 field names | All | Low | Low (tests only) | Not started |
-| 12 | Union types (Scala 3) | All | Low | Hard (blocked) | Blocked on Hearth |
+| 11 | UTF-8 field names | All | Low | Low (tests only) | **Done** |
+| 12 | Union types (Scala 3) | All | Low | Hard | **Done** |
 | 13 | `Codec.AsObject` | Circe | Low | Low | **Done** |
 | 14 | `JsonCodec` (combined) | Jsoniter | Low | Low | **Done** |
 
@@ -42,6 +42,9 @@ This document contains all the information needed to implement each remaining ga
 - Jsoniter `mapAsArray` — config option encoding maps as `[[k1,v1],[k2,v2]]` arrays instead of JSON objects (2026-02-26)
 - Circe `Codec.AsObject` — `KindlingsCodecAsObject.derive[A]` combining `Encoder.AsObject[A]` + `Decoder[A]` with runtime combiner for Scala 3 splice isolation (2026-02-26)
 - Jsoniter `JsonCodec` (combined) — `KindlingsJsonCodec.derive[A]` combining `JsonValueCodec[A]` + `JsonKeyCodec[A]` with standalone `deriveKeyCodec[A]` for primitives, value types, and enums (2026-02-26)
+- Literal types — `HandleAsLiteralTypeRule` in all 4 modules: `case class Foo(tag: "hello", code: 42)` encodes/decodes the constant value, validates on decode (2026-02-26)
+- UTF-8 field names — Tests verifying `@fieldName` with non-ASCII characters across all 4 modules (2026-02-26)
+- Union types (Scala 3) — `String | Int`, `Parrot | Hamster` via Hearth's updated `Enum.parse`. Fixed Jsoniter/Avro decoder dispatch for built-in types and FQN name matching (2026-02-26)
 - All items listed as RESOLVED in the former `gap-analysis.md` (generics, enums, opaque types, named tuples, java enums, Scala Enumeration, error accumulation, recursive types, HKTs, mutable collections, IArray, IntMap/LongMap/BitSet, etc.)
 
 ---
@@ -66,66 +69,27 @@ This document contains all the information needed to implement each remaining ga
 
 ---
 
-## Gap 2: Literal Types
+## Gap 2: Literal Types — DONE
 
-### Problem
+### What Was Implemented
 
-Literal type fields (`case class Tagged(tag: "hello", count: 42)`) don't work. The derivation tries to summon `Encoder["hello"]` / `Decoder[42]` which don't exist.
+Added `HandleAsLiteralTypeRule` (encoder and decoder) to all 4 modules. Scala 3 only — on Scala 2, `TypeCodec.fromType` returns `None` for non-literal types, making the rule a no-op.
 
-### What's Needed
+**Approach:** Uses Hearth's `TypeCodec[U].fromType(Type[A])` to extract compile-time constants from literal types (String, Int, Long, Double, Float, Boolean, Short, Byte, Char). Encoder emits the constant value directly. Decoder reads the underlying type, validates against the constant, and errors on mismatch.
 
-A new `HandleAsLiteralTypeRule` per module. Scala 3 only (Scala 2 has no literal type syntax for case class fields — the rule will be a no-op).
+**Files changed per module:**
+- Circe: `EncoderMacrosImpl.scala` (new `EncHandleAsLiteralTypeRule`), `DecoderMacrosImpl.scala` (new `DecHandleAsLiteralTypeRule`)
+- Jsoniter: `CodecMacrosImpl.scala` (new `EncHandleAsLiteralTypeRule`, `DecHandleAsLiteralTypeRule`; added `Boolean` to `CTypes`; added `Type[U]` param to `decodeLiteral`)
+- YAML: `EncoderMacrosImpl.scala`, `DecoderMacrosImpl.scala` (new rules; added `Int/Long/Double/Boolean` to `DTypes`)
+- Avro: `SchemaForMacrosImpl.scala`, `EncoderMacrosImpl.scala`, `DecoderMacrosImpl.scala` (new rules; added `Int/Long/Double/Boolean` to `DecTypes`)
+- All 4 modules: `scala3examples.scala` (test types), Scala 3 spec files (tests)
 
-### Implementation Plan
+**Test types:** `WithLiteralString(tag: "hello", name: String)`, `WithLiteralInt(code: 42, name: String)`, `WithLiteralBoolean(flag: true, name: String)`
 
-**Per module** (circe, jsoniter, yaml, avro):
-
-1. Add `EncHandleAsLiteralTypeRule` before `EncHandleAsValueTypeRule` in the rule chain
-2. Use `Type.valueOfConstant[A]` (Hearth API) to extract the constant at compile time
-3. **Encoder:** emit the constant value directly (the runtime value is always the same)
-4. **Decoder:** read the value, validate it matches the literal, return error otherwise
-
-**Circe example:**
-```scala
-// Encoder: literal String "hello" → Json.fromString("hello")
-// Encoder: literal Int 42 → Json.fromInt(42)
-// Decoder: validate parsed value == literal constant
-```
-
-**Jsoniter example:**
-```scala
-// Encoder: writeVal("hello") or writeVal(42)
-// Decoder: read value, compare against constant, decodeError if mismatch
-```
-
-**Avro example:**
-```scala
-// Schema: use the underlying type schema (STRING for "hello", INT for 42)
-// Add default value equal to the literal constant
-// Encoder: write the constant
-// Decoder: validate value == constant
-```
-
-### Key Hearth API
-
-Verify `Type.valueOfConstant[A]` exists and returns `Option[A]` or similar. Check: `../hearth/` source or Hearth docs at `https://scala-hearth.readthedocs.io/en/latest/`.
-
-### Tests
-
-Per module, add "literal types" group (Scala 3 only tests):
-- `case class Tagged(tag: "hello")` encodes as `{"tag":"hello"}`
-- `case class Counted(n: 42)` encodes as `{"n":42}`
-- `case class BoolFlag(flag: true)` encodes as `{"flag":true}`
-- Decode: correct literal value succeeds
-- Decode: wrong literal value returns error
-
-### File Locations
-
-- Rule chains are assembled in `deriveEncoderRecursively` / `deriveDecoderRecursively`:
-  - Circe encoder: `EncoderMacrosImpl.scala` line 223
-  - Circe decoder: `DecoderMacrosImpl.scala` line 387
-  - Jsoniter: `CodecMacrosImpl.scala` lines 561 (encoder) and 1370 (decoder)
-- Tests: each module's spec file + Scala 3 specific test files
+**Key pitfalls:**
+- On Scala 2, `TypeCodec.fromType` return value is path-dependent; must assign with explicit type `val v: String = e.value` for `ExprCodec` resolution
+- On Scala 2, `orElse` chains of `Option[Expr[SubType]]` need explicit upcast (e.g., `(Node.ScalarNode(...): Node)`)
+- On Scala 3, `decodeLiteral` methods need `Type[U]` in implicit scope for staging
 
 ---
 
@@ -427,38 +391,36 @@ Add `java.nio.ByteBuffer` type check to all 3 avro type rule files:
 
 ---
 
-## Gap 11: UTF-8/Special Characters in Field Names
+## Gap 11: UTF-8/Special Characters in Field Names — DONE
 
-### Problem
+### What Was Implemented
 
-Likely already works. Just needs tests.
+Tests-only change. Verified that `@fieldName` works with non-ASCII characters across all 4 modules. No code changes were needed — the underlying `String` handling already supports UTF-8.
 
-### Implementation Plan
+**Test type per module:** `WithUtf8FieldNames` with `@fieldName("名前")`, `@fieldName("données")`, `@fieldName("field with spaces")`.
 
-Add tests with Unicode field names via `@fieldName`:
-- `@fieldName("名前")` (Japanese)
-- `@fieldName("données")` (French accents)
-- `@fieldName("🔑")` (emoji)
-- `@fieldName("field with spaces")`
-
-Test in at least circe and jsoniter modules.
+**Files changed:** `examples.scala` and spec files in all 4 modules (shared Scala 2/3 test code).
 
 ---
 
-## Gap 12: Union Types (Scala 3) — BLOCKED
+## Gap 12: Union Types (Scala 3) — DONE
 
-### Problem
+### What Was Implemented
 
-Scala 3 union types (`String | Int`) need Hearth support for `isUnion` and `unionMembers` APIs. Currently no Hearth APIs exist for union type introspection.
+Scala 3 union types (`String | Int`, `Parrot | Hamster`) are now supported in all 4 modules. Uses Hearth 0.2.0-241+ which integrates union types into `Enum.parse`/`Enum.unapply`.
 
-### Blockers
+**Approach:** No new rules needed — the existing `HandleAsEnumRule` in each module automatically handles union types because Hearth's `Enum.parse` now returns `Some(...)` for union types (`Type.isUnionType` check). Union type members are treated like sealed trait children.
 
-1. **Hearth upstream:** Need `Type[A].isUnion: Boolean` and `Type[A].unionMembers: List[Type[?]]`
-2. Runtime erasure means no `Class`-based dispatch — would need try-parse fallback
+**Code changes (beyond tests):**
+- `build.sbt` — Updated Hearth to `0.2.0-241-gbc935a9-SNAPSHOT`
+- Jsoniter `CodecMacrosImpl.scala` — Fixed `deriveChildDecoder` to use derived expression directly when `getHelper` returns `None` (built-in types like `String`/`Int` don't register helpers)
+- Avro `DecoderMacrosImpl.scala` — Fixed FQN vs simple name mismatch in record dispatch. Union types return FQN child names from Hearth's `directChildren` (e.g., `"pkg.Parrot"`), but Avro's `record.getSchema.getName` returns simple names (`"Parrot"`). Added `simpleName()` helper to extract simple name at compile time. Also fixed "no helper" fallback.
 
-### Action
+**Test types per module:** `type StringOrInt = String | Int`, `case class Parrot(...)`, `case class Hamster(...)`, `type ParrotOrHamster = Parrot | Hamster`
 
-File a Hearth issue requesting union type introspection APIs. Do not attempt implementation until Hearth provides the APIs.
+**Known behavior:** Union type member names use fully-qualified names (e.g., `java.lang.String`, `scala.Int`, `pkg.Parrot`) as wrapper keys in JSON/YAML encoding. Users can customize this via `transformConstructorNames` config.
+
+**Limitation:** The Avro module only supports case class union members (not primitive unions like `String | Int`), since Avro natively handles primitive types in unions differently.
 
 ---
 
@@ -574,11 +536,13 @@ grep -E '(Failed|Errors|FAILED)' /tmp/sbt-output.txt
 4. **Gap 7** — `@AvroAlias` (medium, needs `findAllAnnotationsOfType`)
 5. **Gap 3** — `@stringified` (medium, self-contained)
 6. **Gap 4** — Map as array (medium, self-contained)
-7. **Gap 2** — Literal types (medium, Scala 3 only, needs Hearth API verification)
-8. **Gap 8** — `@AvroError` (low, trivial with annotation infra from Gap 5)
-9. **Gap 9** — `@AvroSortPriority` (low, uses int extraction from Gap 5)
-10. **Gap 10** — ByteBuffer (low, pure type rule addition)
-11. **Gap 11** — UTF-8 field names (low, tests only)
-12. **Gap 13** — `Codec.AsObject` (low, Gap 1 prerequisite now done)
-13. **Gap 14** — `JsonCodec` combined (done)
-14. **Gap 12** — Union types (blocked on Hearth)
+7. ~~**Gap 2** — Literal types~~ **DONE**
+8. ~~**Gap 8** — `@AvroError`~~ **DONE**
+9. ~~**Gap 9** — `@AvroSortPriority`~~ **DONE**
+10. ~~**Gap 10** — ByteBuffer~~ **DONE**
+11. ~~**Gap 11** — UTF-8 field names~~ **DONE**
+12. ~~**Gap 13** — `Codec.AsObject`~~ **DONE**
+13. ~~**Gap 14** — `JsonCodec` combined~~ **DONE**
+14. ~~**Gap 12** — Union types~~ **DONE**
+
+**All gaps are now implemented.**

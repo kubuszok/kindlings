@@ -447,6 +447,18 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("UTF-8 field names") {
+
+      test("@fieldName with non-ASCII characters encodes correctly") {
+        val node = KindlingsYamlEncoder.encode(YamlWithUtf8FieldNames("Alice", 30, true))
+        node ==> mappingOf(
+          "名前" -> scalarNode("Alice"),
+          "données" -> scalarNode("30"),
+          "field with spaces" -> scalarNode("true")
+        )
+      }
+    }
+
     group("per-field annotations") {
 
       test("@fieldName overrides field name in encoding") {

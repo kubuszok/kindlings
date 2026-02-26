@@ -414,6 +414,19 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("UTF-8 field names") {
+
+      test("@fieldName with non-ASCII characters decodes correctly") {
+        val node = mappingOf(
+          "名前" -> scalarNode("Alice"),
+          "données" -> scalarNode("30"),
+          "field with spaces" -> scalarNode("true")
+        )
+        KindlingsYamlDecoder.decode[YamlWithUtf8FieldNames](node) ==>
+          Right(YamlWithUtf8FieldNames("Alice", 30, true))
+      }
+    }
+
     group("per-field annotations") {
 
       test("@fieldName decodes from custom field name") {

@@ -82,6 +82,64 @@ final class AvroScala3Spec extends MacroSuite {
     }
   }
 
+  group("literal types") {
+
+    test("schema for case class with literal String field") {
+      val schema = AvroSchemaFor.schemaOf[AvroWithLiteralString]
+      schema.getType ==> Schema.Type.RECORD
+      schema.getField("tag").schema().getType ==> Schema.Type.STRING
+      schema.getField("name").schema().getType ==> Schema.Type.STRING
+    }
+
+    test("schema for case class with literal Int field") {
+      val schema = AvroSchemaFor.schemaOf[AvroWithLiteralInt]
+      schema.getField("code").schema().getType ==> Schema.Type.INT
+    }
+
+    test("encode case class with literal String field") {
+      val result = AvroEncoder.encode(AvroWithLiteralString("hello", "Alice"))
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.get("tag").toString ==> "hello"
+      record.get("name").toString ==> "Alice"
+    }
+
+    test("encode case class with literal Int field") {
+      val result = AvroEncoder.encode(AvroWithLiteralInt(42, "Bob"))
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.get("code").asInstanceOf[Int] ==> 42
+    }
+
+    test("decode case class with literal String field") {
+      val schema = AvroSchemaFor.schemaOf[AvroWithLiteralString]
+      val record = new GenericData.Record(schema)
+      record.put("tag", "hello")
+      record.put("name", "Alice")
+      val result = AvroDecoder.decode[AvroWithLiteralString](record: Any)
+      result ==> AvroWithLiteralString("hello", "Alice")
+    }
+
+    test("decode case class with literal Int field") {
+      val schema = AvroSchemaFor.schemaOf[AvroWithLiteralInt]
+      val record = new GenericData.Record(schema)
+      record.put("code", 42)
+      record.put("name", "Bob")
+      val result = AvroDecoder.decode[AvroWithLiteralInt](record: Any)
+      result ==> AvroWithLiteralInt(42, "Bob")
+    }
+
+    test("decode literal String with wrong value fails") {
+      val schema = AvroSchemaFor.schemaOf[AvroWithLiteralString]
+      val record = new GenericData.Record(schema)
+      record.put("tag", "wrong")
+      record.put("name", "Alice")
+      intercept[org.apache.avro.AvroTypeException] {
+        AvroDecoder.decode[AvroWithLiteralString](record: Any)
+      }
+    }
+  }
+
   group("named tuples (Scala 3.7+)") {
 
     test("schema is RECORD with named fields") {
@@ -169,6 +227,45 @@ final class AvroScala3Spec extends MacroSuite {
       val original = AvroUserWithOpaque(UserId(42), "Alice")
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[AvroUserWithOpaque](bytes)
+      decoded ==> original
+    }
+  }
+
+  group("union types (Scala 3)") {
+
+    test("schema for case class union is UNION") {
+      val schema = AvroSchemaFor.schemaOf[ParrotOrHamster]
+      schema.getType ==> Schema.Type.UNION
+      schema.getTypes.size() ==> 2
+      schema.getTypes.get(0).getName ==> "Parrot"
+      schema.getTypes.get(1).getName ==> "Hamster"
+    }
+
+    test("encode Parrot member of union") {
+      val result = AvroEncoder.encode[ParrotOrHamster](Parrot("Polly", 100))
+      result.isInstanceOf[GenericRecord] ==> true
+      val record = result.asInstanceOf[GenericRecord]
+      record.getSchema.getName ==> "Parrot"
+      record.get("name").toString ==> "Polly"
+      record.get("vocabulary").asInstanceOf[Int] ==> 100
+    }
+
+    test("decode Parrot member of union") {
+      val schema = AvroSchemaFor.schemaOf[ParrotOrHamster]
+      val parrotSchema = schema.getTypes.get(0)
+      val record = new GenericData.Record(parrotSchema)
+      record.put("name", "Polly")
+      record.put("vocabulary", 100)
+      val result = AvroDecoder.decode[ParrotOrHamster](record: Any)
+      result ==> Parrot("Polly", 100)
+    }
+
+    test("round-trip case class union") {
+      implicit val encoder: AvroEncoder[ParrotOrHamster] = AvroEncoder.derive[ParrotOrHamster]
+      implicit val decoder: AvroDecoder[ParrotOrHamster] = AvroDecoder.derive[ParrotOrHamster]
+      val original: ParrotOrHamster = Hamster("Biscuit", 7.5)
+      val bytes = AvroIO.toBinary(original)
+      val decoded = AvroIO.fromBinary[ParrotOrHamster](bytes)
       decoded ==> original
     }
   }
