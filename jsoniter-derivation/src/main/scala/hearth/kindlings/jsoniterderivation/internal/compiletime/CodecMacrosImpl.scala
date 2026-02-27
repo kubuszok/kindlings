@@ -818,6 +818,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           EncHandleAsMapRule,
           EncHandleAsCollectionRule,
           EncHandleAsNamedTupleRule,
+          EncHandleAsSingletonRule,
           EncHandleAsCaseClassRule,
           EncHandleAsEnumRule
         )(_[A]).flatMap {
@@ -1264,15 +1265,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   }
                 case _ =>
                   // 4. Enum (all case objects) — write case name as key
-                  Enum.parse[K] match {
+                  Enum.parse[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = enumm.directChildren.toList
                       val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
                         case (_, child) =>
-                          Type.isVal(using child.Underlying) ||
-                          CaseClass
-                            .parse(using child.Underlying)
-                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                          SingletonValue.unapply(child.Underlying).isDefined
                       }
                       if (allCaseObjects) {
                         // Use .toString on case objects — for case objects, .toString returns the simple name.
@@ -1333,23 +1331,20 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- ectx.setHelper[A] { (value, writer, config) =>
-                  encodeNamedTupleFields[A](constructor)(using ectx.nestInCache(value, writer, config))
-                }
-                result <- ectx.getHelper[A].flatMap {
-                  case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.writer, ectx.config)))
-                  case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- ectx.setHelper[A] { (value, writer, config) =>
+                encodeNamedTupleFields[A](namedTuple.primaryConstructor)(using ectx.nestInCache(value, writer, config))
+              }
+              result <- ectx.getHelper[A].flatMap {
+                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.writer, ectx.config)))
+                case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used")
@@ -1413,12 +1408,28 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     }
   }
 
+  object EncHandleAsSingletonRule extends EncoderDerivationRule("handle as singleton when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(_) =>
+            MIO.pure(Rule.matched(Expr.quote {
+              Expr.splice(ectx.writer).writeObjectStart()
+              Expr.splice(ectx.writer).writeObjectEnd()
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object EncHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- ectx.setHelper[A] { (value, writer, config) =>
                 encodeCaseClassFields[A](caseClass)(using ectx.nestInCache(value, writer, config))
@@ -1429,8 +1440,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -1582,8 +1593,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- ectx.setHelper[A] { (value, writer, config) =>
                 encodeEnumCases[A](enumm)(using ectx.nestInCache(value, writer, config))
@@ -1593,8 +1604,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -1610,8 +1621,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       val childrenList = enumm.directChildren.toList
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
-        Type.isVal(using child.Underlying) ||
-        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+        SingletonValue.unapply(child.Underlying).isDefined
       }
 
       enumm
@@ -1631,14 +1641,20 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             val fieldsOnlyMIO: MIO[Expr[Unit]] =
               if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
               else
-                CaseClass.parse[EnumCase] match {
-                  case Some(caseClass) =>
-                    EncHandleAsCaseClassRule.encodeCaseClassFieldsOnly[EnumCase](caseClass)(using
-                      ectx.nest(enumCaseValue)
-                    )
-                  case None =>
-                    // Not a case class (e.g. case object) — no fields
+                SingletonValue.unapply(Type[EnumCase]) match {
+                  case Some(_) =>
+                    // Singleton — no fields
                     MIO.pure(Expr.quote(()): Expr[Unit])
+                  case None =>
+                    CaseClass.parse[EnumCase].toOption match {
+                      case Some(caseClass) =>
+                        EncHandleAsCaseClassRule.encodeCaseClassFieldsOnly[EnumCase](caseClass)(using
+                          ectx.nest(enumCaseValue)
+                        )
+                      case None =>
+                        // Not a case class (e.g. case object) — no fields
+                        MIO.pure(Expr.quote(()): Expr[Unit])
+                    }
                 }
 
             // Also derive the full encoding for wrapper mode
@@ -1801,6 +1817,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
           DecHandleAsNamedTupleRule,
+          DecHandleAsSingletonRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -2292,15 +2309,12 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                     }
                 case _ =>
                   // 4. Enum (all case objects) — read key as string, match against case names
-                  Enum.parse[K] match {
+                  Enum.parse[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = enumm.directChildren.toList
                       val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
                         case (_, child) =>
-                          Type.isVal(using child.Underlying) ||
-                          CaseClass
-                            .parse(using child.Underlying)
-                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                          SingletonValue.unapply(child.Underlying).isDefined
                       }
                       if (allCaseObjects) {
                         NonEmptyList.fromList(childrenList) match {
@@ -2311,11 +2325,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                             children
                               .parTraverse { case (childName, child) =>
                                 import child.Underlying as ChildType
-                                Expr.singletonOf[ChildType] match {
-                                  case Some(singleton) =>
-                                    MIO.pure((childName, singleton.asInstanceOf[Expr[K]]))
+                                SingletonValue.unapply(Type[ChildType]) match {
+                                  case Some(sv) =>
+                                    MIO.pure((childName, sv.singletonExpr.asInstanceOf[Expr[K]]))
                                   case None =>
-                                    CaseClass.parse[ChildType] match {
+                                    CaseClass.parse[ChildType].toOption match {
                                       case Some(cc) =>
                                         cc.construct[MIO](new CaseClass.ConstructField[MIO] {
                                           def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -2407,25 +2421,22 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- dctx.setHelper[A] { (reader, config) =>
-                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(reader, config))
-                }
-                result <- dctx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(dctx.reader, dctx.config)))
-                  case None =>
-                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- dctx.setHelper[A] { (reader, config) =>
+                decodeNamedTupleFields[A](namedTuple.primaryConstructor)(using dctx.nestInCache(reader, config))
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(dctx.reader, dctx.config)))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -2527,12 +2538,30 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     }
   }
 
+  object DecHandleAsSingletonRule extends DecoderDerivationRule("handle as singleton when possible") {
+
+    @scala.annotation.nowarn("msg=is never used")
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(sv) =>
+            implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+            MIO.pure(Rule.matched(Expr.quote {
+              JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
+              Expr.splice(sv.singletonExpr)
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- dctx.setHelper[A] { (reader, config) =>
                 decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(reader, config))
@@ -2545,8 +2574,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -2559,28 +2588,6 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
       implicit val stringifiedT: Type[stringified] = CTypes.Stringified
-
-      // Singletons (case objects, parameterless enum cases) have no primary constructor.
-      if (caseClass.isSingleton) {
-        return caseClass
-          .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-              val err = CodecDerivationError
-                .UnexpectedParameterInSingleton(Type[A].prettyPrint, "Unexpected parameter in singleton")
-              Log.error(err.message) >> MIO.fail(err)
-            }
-          })
-          .flatMap {
-            case Some(expr) =>
-              MIO.pure(Expr.quote {
-                JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
-                Expr.splice(expr)
-              })
-            case None =>
-              val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
-              Log.error(err.message) >> MIO.fail(err)
-          }
-      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -2756,37 +2763,6 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
       implicit val stringifiedT: Type[stringified] = CTypes.Stringified
-
-      // Singletons have no primary constructor.
-      if (caseClass.isSingleton) {
-        return caseClass
-          .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-              val err = CodecDerivationError
-                .UnexpectedParameterInSingleton(Type[A].prettyPrint, "Unexpected field in singleton")
-              Log.error(err.message) >> MIO.fail(err)
-            }
-          })
-          .flatMap {
-            case Some(expr) =>
-              MIO.pure(Expr.quote {
-                val reader = Expr.splice(dctx.reader)
-                if (!reader.isNextToken('}'.toByte)) {
-                  if (reader.isCurrentToken(','.toByte)) {
-                    reader.rollbackToken()
-                    while (reader.isNextToken(','.toByte)) {
-                      val _ = reader.readKeyAsString()
-                      reader.skip()
-                    }
-                  }
-                }
-                Expr.splice(expr)
-              })
-            case None =>
-              val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
-              Log.error(err.message) >> MIO.fail(err)
-          }
-      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -3024,8 +3000,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- dctx.setHelper[A] { (reader, config) =>
                 decodeEnumCases[A](enumm)(using dctx.nestInCache(reader, config))
@@ -3037,8 +3013,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -3055,8 +3031,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       // Check at compile time if all children are singletons (case objects with no fields)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
-          Type.isVal(using child.Underlying) ||
-          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+          SingletonValue.unapply(child.Underlying).isDefined
         }
 
       NonEmptyList.fromList(childrenList) match {
@@ -3243,7 +3218,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
-      CaseClass.parse[ChildType] match {
+      CaseClass.parse[ChildType].toOption match {
         case Some(cc) =>
           DecHandleAsCaseClassRule
             .decodeCaseClassFieldsInline[ChildType](cc)(using dctx.nest[ChildType](dctx.reader))
@@ -3274,9 +3249,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
-      // Try singletonOf first — handles Enumeration values, Java enum values, case objects
-      Expr.singletonOf[ChildType] match {
-        case Some(singleton) =>
+      // Try SingletonValue first — handles Enumeration values, Java enum values, case objects
+      SingletonValue.unapply(Type[ChildType]) match {
+        case Some(sv) =>
           Log.info(s"Using singleton for string enum child $childName") >>
             MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
@@ -3284,14 +3259,14 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
                     .splice(typeNameExpr)
                 )
-                  Expr.splice(singleton).asInstanceOf[A]
+                  Expr.splice(sv.singletonExpr).asInstanceOf[A]
                 else
                   Expr.splice(elseExpr)
               }
             }
         case None =>
           // Fall back to CaseClass.construct for zero-arg case classes
-          CaseClass.parse[ChildType] match {
+          CaseClass.parse[ChildType].toOption match {
             case Some(cc) if cc.primaryConstructor.parameters.flatten.isEmpty =>
               val constructMIO: MIO[Option[Expr[ChildType]]] =
                 cc.construct[MIO](new CaseClass.ConstructField[MIO] {

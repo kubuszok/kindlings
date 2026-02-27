@@ -393,6 +393,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
           DecHandleAsNamedTupleRule,
+          DecHandleAsSingletonRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -834,15 +835,12 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 case _ =>
                   // 4. Try enum (all case objects) — build lookup Map[String, K] and use runtime helper
                   // Uses runtime dispatch to avoid Scala 3 staging issues with singleton expressions in LambdaBuilder
-                  Enum.parse[K] match {
+                  Enum.parse[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = enumm.directChildren.toList
                       val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
                         case (_, child) =>
-                          Type.isVal(using child.Underlying) ||
-                          CaseClass
-                            .parse(using child.Underlying)
-                            .exists(_.primaryConstructor.parameters.flatten.isEmpty)
+                          SingletonValue.unapply(child.Underlying).isDefined
                       }
                       if (allCaseObjects) {
                         NonEmptyList.fromList(childrenList) match {
@@ -851,11 +849,11 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                             children
                               .parTraverse { case (childName, child) =>
                                 import child.Underlying as ChildType
-                                Expr.singletonOf[ChildType] match {
-                                  case Some(singleton) =>
-                                    MIO.pure((childName, singleton.asInstanceOf[Expr[K]]))
+                                SingletonValue.unapply(Type[ChildType]) match {
+                                  case Some(sv) =>
+                                    MIO.pure((childName, sv.singletonExpr.asInstanceOf[Expr[K]]))
                                   case None =>
-                                    CaseClass.parse[ChildType] match {
+                                    CaseClass.parse[ChildType].toOption match {
                                       case Some(cc) =>
                                         cc.construct[MIO](new CaseClass.ConstructField[MIO] {
                                           def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
@@ -951,42 +949,41 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
-                  @scala.annotation.nowarn("msg=is never used")
-                  implicit val AnyT: Type[Any] = DTypes.Any
-                  @scala.annotation.nowarn("msg=is never used")
-                  implicit val BooleanT: Type[Boolean] = DTypes.Boolean
-                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(cursor, config, failFast))
-                    .map { eitherExpr =>
-                      // Named tuples always use fail-fast decode; convert to ValidatedNel when failFast=false
-                      Expr.quote {
-                        (if (Expr.splice(failFast)) Expr.splice(eitherExpr)
-                         else
-                           Validated.fromEither(Expr.splice(eitherExpr)).leftMap(cats.data.NonEmptyList.one(_))): Any
-                      }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
+                @scala.annotation.nowarn("msg=is never used")
+                implicit val AnyT: Type[Any] = DTypes.Any
+                @scala.annotation.nowarn("msg=is never used")
+                implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+                decodeNamedTupleFields[A](namedTuple.primaryConstructor)(using
+                  dctx.nestInCache(cursor, config, failFast)
+                )
+                  .map { eitherExpr =>
+                    // Named tuples always use fail-fast decode; convert to ValidatedNel when failFast=false
+                    Expr.quote {
+                      (if (Expr.splice(failFast)) Expr.splice(eitherExpr)
+                       else
+                         Validated.fromEither(Expr.splice(eitherExpr)).leftMap(cats.data.NonEmptyList.one(_))): Any
                     }
-                }
-                result <- dctx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
-                    MIO.pure(Rule.matched(Expr.quote {
-                      Expr
-                        .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
-                        .asInstanceOf[Either[DecodingFailure, A]]
-                    }))
-                  case None =>
-                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+                  }
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                  MIO.pure(Rule.matched(Expr.quote {
+                    Expr
+                      .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                      .asInstanceOf[Either[DecodingFailure, A]]
+                  }))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -1087,12 +1084,28 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     }
   }
 
+  object DecHandleAsSingletonRule extends DecoderDerivationRule("handle as singleton when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(sv) =>
+            implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+            MIO.pure(Rule.matched(Expr.quote {
+              Right(Expr.splice(sv.singletonExpr)): Either[DecodingFailure, A]
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
                 decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(cursor, config, failFast))
@@ -1110,8 +1123,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -1129,48 +1142,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       implicit val BooleanT: Type[Boolean] = DTypes.Boolean
       implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
       implicit val transientFieldT: Type[transientField] = DTypes.TransientField
-
-      // Singletons (case objects, parameterless enum cases) have no primary constructor.
-      // Use construct directly, which returns the singleton reference via Expr.singletonOf.
-      if (caseClass.isSingleton) {
-        return caseClass
-          .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-              val err = DecoderDerivationError.CannotConstructType(
-                Type[A].prettyPrint,
-                isSingleton = true,
-                Some(s"Unexpected parameter in singleton")
-              )
-              Log.error(err.message) >> MIO.fail(err)
-            }
-          })
-          .flatMap {
-            case Some(expr) =>
-              implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
-              implicit val ValidatedNelDFUnitT: Type[ValidatedNel[DecodingFailure, Unit]] = DTypes.ValidatedNelDFUnit
-              MIO.pure(Expr.quote {
-                val config = Expr.splice(dctx.config)
-                (if (Expr.splice(dctx.failFast)) {
-                   if (config.strictDecoding)
-                     CirceDerivationUtils
-                       .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
-                       .map(_ => Expr.splice(expr))
-                   else
-                     Right(Expr.splice(expr)): Either[DecodingFailure, A]
-                 } else {
-                   if (config.strictDecoding)
-                     CirceDerivationUtils
-                       .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
-                       .map(_ => Expr.splice(expr))
-                   else
-                     Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
-                 }): Any
-              })
-            case None =>
-              val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
-              Log.error(err.message) >> MIO.fail(err)
-          }
-      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -1571,8 +1542,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
                 decodeEnumCases[A](enumm)(using dctx.nestInCache(cursor, config, failFast))
@@ -1589,8 +1560,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -1613,8 +1584,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       // Check at compile time if all children are singletons (case objects with no fields)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
-          Type.isVal(using child.Underlying) ||
-          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+          SingletonValue.unapply(child.Underlying).isDefined
         }
 
       NonEmptyList.fromList(childrenList) match {

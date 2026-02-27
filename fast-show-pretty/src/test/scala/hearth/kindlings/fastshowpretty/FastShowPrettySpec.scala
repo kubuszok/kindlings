@@ -412,9 +412,10 @@ final class FastShowPrettySpec extends MacroSuite {
           "    - The rule handle as Option when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not an Option",
           "    - The rule handle as map when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a map",
           "    - The rule handle as collection when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a collection",
-          "    - The rule handle as named tuple when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a named tuple",
-          "    - The rule handle as case class when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be a case class",
-          "    - The rule handle as enum when possible was not applicable, for the following reasons: The type hearth.kindlings.fastshowpretty.NotAHandledType is not considered to be an enum",
+          "    - The rule handle as named tuple when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not a named tuple",
+          "    - The rule handle as singleton when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not a singleton type",
+          "    - The rule handle as case class when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not a case class",
+          "    - The rule handle as enum when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not sealed, not an enumeration, and not a union type",
           "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
         )
       }

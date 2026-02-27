@@ -236,7 +236,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       }
     }
 
-  // Structural derivation — tries Option, Collection, Map, CaseClass, Enum in order
+  // Structural derivation — tries Option, Map, Collection, Singleton, CaseClass, Enum in order
 
   @scala.annotation.nowarn("msg=is never used")
   private def deriveStructurally[A: Type](
@@ -277,34 +277,47 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
           }
 
       case _ =>
-        // CaseClass
-        CaseClass.parse[A] match {
-          case Some(cc) =>
-            Log.info(s"Deriving Schema for case class ${Type[A].prettyPrint}") >>
+        // Singleton (case object / val) — before CaseClass, produces product schema with no fields
+        SingletonValue.parse[A].toEither match {
+          case Right(_) =>
+            Log.info(s"Deriving Schema for singleton ${Type[A].prettyPrint}") >>
               (for {
                 _ <- inProgress.set(inProgressSet + cacheKey[A])
-                result <- deriveCaseClassSchema[A](cc, jsonCfg, cache, inProgress, derivedType)
+                result <- deriveSingletonSchema[A](jsonCfg, cache, derivedType)
                 _ <- inProgress.set(inProgressSet)
               } yield result)
 
-          case None =>
-            // Enum / sealed trait
-            Enum.parse[A] match {
-              case Some(e) =>
-                Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
+          case Left(_) =>
+            // CaseClass
+            CaseClass.parse[A].toEither match {
+              case Right(cc) =>
+                Log.info(s"Deriving Schema for case class ${Type[A].prettyPrint}") >>
                   (for {
                     _ <- inProgress.set(inProgressSet + cacheKey[A])
-                    result <- deriveEnumSchema[A](e, jsonCfg, cache, inProgress, derivedType)
+                    result <- deriveCaseClassSchema[A](cc, jsonCfg, cache, inProgress, derivedType)
                     _ <- inProgress.set(inProgressSet)
                   } yield result)
 
-              case None =>
-                MIO.fail(
-                  new Exception(
-                    s"Cannot derive tapir Schema for ${Type[A].prettyPrint}: " +
-                      "no implicit Schema[T] found and type is not a case class, sealed trait/enum, Option, collection, or map."
-                  )
-                )
+              case Left(_) =>
+                // Enum / sealed trait
+                Enum.parse[A].toEither match {
+                  case Right(e) =>
+                    Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
+                      (for {
+                        _ <- inProgress.set(inProgressSet + cacheKey[A])
+                        result <- deriveEnumSchema[A](e, jsonCfg, cache, inProgress, derivedType)
+                        _ <- inProgress.set(inProgressSet)
+                      } yield result)
+
+                  case Left(reason) =>
+                    MIO.fail(
+                      new Exception(
+                        s"Cannot derive tapir Schema for ${Type[A].prettyPrint}: " +
+                          s"no implicit Schema[T] found and type is not a singleton, case class, sealed trait/enum, Option, collection, or map. " +
+                          s"Last reason: $reason"
+                      )
+                    )
+                }
             }
         }
     }
@@ -372,6 +385,30 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
         case Some(ref) => MIO.pure(ref)
         case None      => MIO.pure(instance) // fallback, should not happen
       }
+  }
+
+  // Singleton derivation (case object / val — product schema with no fields)
+
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  private def deriveSingletonSchema[A: Type](
+      jsonCfg: JsonSchemaConfig,
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  ): MIO[Expr[Schema[A]]] = {
+    implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+    implicit val SNameT: Type[SName] = TsTypes.SNameType
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+
+    val sNameExpr = computeSNameExpr[A](derivedType)
+    val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
+
+    val rawSchemaExpr = Expr.quote {
+      TapirSchemaUtils.productSchema[A](Expr.splice(sNameExpr), TapirSchemaUtils.emptyFieldList[A])
+    }
+    val schemaExpr = Expr.quote {
+      TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))
+    }
+    setCachedAndGet[A](cache, schemaExpr)
   }
 
   // Case class derivation

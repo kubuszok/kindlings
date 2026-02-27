@@ -490,19 +490,49 @@ object HandleAsCollectionRule extends DerivationRule("handle as collection") {
 }
 ```
 
+### Handling singletons
+
+Use `SingletonValue.parse[A]` to detect singleton types (case objects, parameterless enum cases, etc.). Singletons are **no longer** handled by `CaseClass.parse` — they require a dedicated rule.
+
+```scala
+object HandleAsSingletonRule extends DerivationRule("handle as singleton") {
+
+  def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+    Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+      SingletonValue.parse[A].toEither match {
+        case Right(_) =>
+          val name = Expr(Type[A].shortName)
+          MIO.pure(Rule.matched(Expr.quote {
+            Expr.splice(ctx.sb).append(Expr.splice(name)).append("()")
+          }))
+        case Left(reason) =>
+          MIO.pure(Rule.yielded(reason))
+      }
+    }
+}
+```
+
+For decoder-style derivation, use `sv.singletonExpr` to get the singleton value expression:
+```scala
+SingletonValue.parse[A].toEither match {
+  case Right(sv) => MIO.pure(Rule.matched(Expr.quote { Right(Expr.splice(sv.singletonExpr)) }))
+  case Left(reason) => MIO.pure(Rule.yielded(reason))
+}
+```
+
 ### Handling case classes
 
-Use `CaseClass.parse[A]` to introspect case class structure.
+Use `CaseClass.parse[A]` to introspect case class structure. Returns `ClassViewResult` — use `.toEither` for skip reasons.
 
-**From FastShowPrettyMacrosImpl.scala (lines 291-374):**
+**From FastShowPrettyMacrosImpl.scala:**
 
 ```scala
 object HandleAsCaseClassRule extends DerivationRule("handle as case class") {
 
   def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
     Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-      CaseClass.parse[A] match {
-        case Some(caseClass) =>
+      CaseClass.parse[A].toEither match {
+        case Right(caseClass) =>
           val name = Expr(Type[A].shortName)
           NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
             case Some(fieldValues) =>
@@ -510,8 +540,8 @@ object HandleAsCaseClassRule extends DerivationRule("handle as case class") {
             case None =>
               // handle zero-field case class
           }
-        case None =>
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a case class"))
+        case Left(reason) =>
+          MIO.pure(Rule.yielded(reason))
       }
     }
 }
@@ -519,24 +549,24 @@ object HandleAsCaseClassRule extends DerivationRule("handle as case class") {
 
 ### Handling enums/sealed traits
 
-Use `Enum.parse[A]` and `parMatchOn` for exhaustive case handling.
+Use `Enum.parse[A]` and `parMatchOn` for exhaustive case handling. Returns `ClassViewResult`.
 
-**From FastShowPrettyMacrosImpl.scala (lines 376-408):**
+**From FastShowPrettyMacrosImpl.scala:**
 
 ```scala
 object HandleAsEnumRule extends DerivationRule("handle as enum") {
 
   def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
     Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-      Enum.parse[A] match {
-        case Some(enumm) =>
+      Enum.parse[A].toEither match {
+        case Right(enumm) =>
           enumm
             .parMatchOn[MIO, StringBuilder](ctx.value) { matched =>
               import matched.{value as enumCaseValue, Underlying as EnumCase}
               // derive each case recursively
             }
-        case None =>
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be an enum"))
+        case Left(reason) =>
+          MIO.pure(Rule.yielded(reason))
       }
     }
 }

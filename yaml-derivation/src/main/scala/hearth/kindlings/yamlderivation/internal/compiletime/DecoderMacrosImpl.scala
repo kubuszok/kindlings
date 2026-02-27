@@ -282,6 +282,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           DecHandleAsMapRule,
           DecHandleAsCollectionRule,
           DecHandleAsNamedTupleRule,
+          DecHandleAsSingletonRule,
           DecHandleAsCaseClassRule,
           DecHandleAsEnumRule
         )(_[A]).flatMap {
@@ -598,25 +599,22 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- dctx.setHelper[A] { (node, config) =>
-                  decodeNamedTupleFields[A](constructor)(using dctx.nestInCache(node, config))
-                }
-                result <- dctx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(dctx.node, dctx.config)))
-                  case None =>
-                    MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- dctx.setHelper[A] { (node, config) =>
+                decodeNamedTupleFields[A](namedTuple.primaryConstructor)(using dctx.nestInCache(node, config))
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(dctx.node, dctx.config)))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -717,12 +715,28 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     }
   }
 
+  object DecHandleAsSingletonRule extends DecoderDerivationRule("handle as singleton when possible") {
+
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(sv) =>
+            implicit val EitherT: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+            MIO.pure(Rule.matched(Expr.quote {
+              Right(Expr.splice(sv.singletonExpr)): Either[ConstructError, A]
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object DecHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- dctx.setHelper[A] { (node, config) =>
                 decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(node, config))
@@ -735,8 +749,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -749,28 +763,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       implicit val ConstructErrorT: Type[ConstructError] = DTypes.ConstructError
       implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
       implicit val transientFieldT: Type[transientField] = DTypes.TransientField
-
-      // Singletons (case objects, parameterless enum cases) have no primary constructor
-      if (caseClass.isSingleton) {
-        return caseClass
-          .construct[MIO](new CaseClass.ConstructField[MIO] {
-            def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-              val err = DecoderDerivationError.CannotConstructType(
-                Type[A].prettyPrint,
-                isSingleton = true,
-                Some(s"Unexpected parameter in singleton")
-              )
-              Log.error(err.message) >> MIO.fail(err)
-            }
-          })
-          .flatMap {
-            case Some(expr) =>
-              MIO.pure(Expr.quote(Right(Expr.splice(expr)): Either[ConstructError, A]))
-            case None =>
-              val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = true)
-              Log.error(err.message) >> MIO.fail(err)
-          }
-      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -953,8 +945,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- dctx.setHelper[A] { (node, config) =>
                 decodeEnumCases[A](enumm)(using dctx.nestInCache(node, config))
@@ -966,8 +958,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -987,8 +979,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       // Check at compile time if all children are singletons (case objects with no fields)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
-          Type.isVal(using child.Underlying) ||
-          CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+          SingletonValue.unapply(child.Underlying).isDefined
         }
 
       NonEmptyList.fromList(childrenList) match {

@@ -248,6 +248,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           EncHandleAsMapRule,
           EncHandleAsCollectionRule,
           EncHandleAsNamedTupleRule,
+          EncHandleAsSingletonRule,
           EncHandleAsCaseClassRule,
           EncHandleAsEnumRule
         )(_[A]).flatMap {
@@ -516,23 +517,20 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- ectx.setHelper[A] { (value, config) =>
-                  encodeNamedTupleFields[A](constructor)(using ectx.nestInCache(value, config))
-                }
-                result <- ectx.getHelper[A].flatMap {
-                  case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.config)))
-                  case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- ectx.setHelper[A] { (value, config) =>
+                encodeNamedTupleFields[A](namedTuple.primaryConstructor)(using ectx.nestInCache(value, config))
+              }
+              result <- ectx.getHelper[A].flatMap {
+                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.config)))
+                case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used")
@@ -587,12 +585,27 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     }
   }
 
+  object EncHandleAsSingletonRule extends EncoderDerivationRule("handle as singleton when possible") {
+
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(_) =>
+            MIO.pure(Rule.matched(Expr.quote {
+              YamlDerivationUtils.nodeFromFields(Nil)
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object EncHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- ectx.setHelper[A] { (value, config) =>
                 encodeCaseClassFields[A](caseClass)(using ectx.nestInCache(value, config))
@@ -603,8 +616,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -688,8 +701,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- ectx.setHelper[A] { (value, config) =>
                 encodeEnumCases[A](enumm)(using ectx.nestInCache(value, config))
@@ -699,8 +712,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -713,8 +726,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       val childrenList = enumm.directChildren.toList
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
-        Type.isVal(using child.Underlying) ||
-        CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+        SingletonValue.unapply(child.Underlying).isDefined
       }
 
       enumm

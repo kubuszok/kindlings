@@ -160,25 +160,43 @@ ValDefBuilder.ofLazy[T](name)                 // lazy val
 ValDefBuilder.ofDef1[A, B](name, argName)     // def with 1 arg
 ```
 
-### CaseClass and Enum
+### ClassViewResult, CaseClass, SingletonValue, Enum, NamedTuple
+
+All `.parse` methods return `ClassViewResult[V]` (sealed trait: `Compatible(value)` / `Incompatible(reason)`).
+Use `.toEither` for `Right(value)` / `Left(reason)`, or `.toOption` for backward-compatible `Option[V]`.
 
 ```scala
 import hearth.std.*
 
-CaseClass.parse[A]                            // Option[CaseClass[A]]
+// Class views — all return ClassViewResult
+CaseClass.parse[A]                            // ClassViewResult[CaseClass[A]] — excludes singletons
+SingletonValue.parse[A]                       // ClassViewResult[SingletonValue[A]]
+SingletonValue.unapply(tpe)                   // Option[SingletonValue[A]] — pattern match extractor
+sv.singletonExpr                              // Expr[A] — the singleton value expression
+Enum.parse[A]                                 // ClassViewResult[Enum[A]]
+NamedTuple.parse[A]                           // ClassViewResult[NamedTuple[A]] — Scala 3.7+ named tuples
+
+// CaseClass API
 caseClass.caseFieldValuesAt(expr)             // Get field name-value pairs (ListMap[String, Expr_??])
 caseClass.primaryConstructor                  // Method.NoInstance[A] — the primary constructor
 caseClass.primaryConstructor(fieldMap)        // Either[String, Expr[A]] — construct from Map[String, Expr_??]
 caseClass.construct[F](makeArgument)          // F[Option[Expr[A]]] — construct via ConstructField callback
 
-Enum.parse[A]                                 // Option[Enum[A]]
+// Enum API
 enumm.parMatchOn[F, R](expr)(handler)         // Pattern match on cases
+
+// NamedTuple API
+namedTuple.primaryConstructor                 // Method.NoInstance[A]
+namedTuple.fields                             // List[(String, ??)] — field names and types
+namedTuple.construct[F](makeArgument)         // F[Option[Expr[A]]]
 ```
 
 **Choosing a construction method:**
 - **`caseFieldValuesAt`** — for encoder-style derivation (reading fields from an existing value)
 - **`primaryConstructor(fieldMap)`** — for decoder-style derivation (constructing from decoded data). Takes `Map[String, Expr_??]`, returns `Either[String, Expr[A]]`. Avoids path-dependent type issues.
 - **`construct`** — uses `ConstructField` with dependent return type `Expr[field.tpe.Underlying]`. This has Scala 2 macro hygiene issues with path-dependent types. Prefer `primaryConstructor(fieldMap)` for cross-compiled decoder code.
+
+**Singleton detection in enum children:** Use `SingletonValue.unapply(child.Underlying).isDefined` instead of the old `CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)`.
 
 ### Rules
 

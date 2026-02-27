@@ -295,6 +295,7 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
           HandleAsMapRule,
           HandleAsCollectionRule,
           HandleAsNamedTupleRule,
+          HandleAsSingletonRule,
           HandleAsCaseClassRule,
           HandleAsEnumRule
         )(_[A]).flatMap {
@@ -616,23 +617,25 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple) yieldUnsupportedType[A]
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                _ <- ctx.setHelper[A] { (sb, config, level, value) =>
-                  deriveNamedTupleFields[A](constructor)(using ctx.nestInCache(sb, value, config, level))
-                }
-                result <- ctx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
-                  case None => yieldUnsupportedType[A]
-                }
-              } yield result
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              _ <- ctx.setHelper[A] { (sb, config, level, value) =>
+                deriveNamedTupleFields[A](namedTuple.primaryConstructor)(using
+                  ctx.nestInCache(sb, value, config, level)
+                )
+              }
+              result <- ctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
 
-            case None => yieldUnsupportedType[A]
-          }
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used")
@@ -721,28 +724,43 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
       }
     }
 
-    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
-      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a named tuple"))
+  }
+
+  object HandleAsSingletonRule extends DerivationRule("handle as singleton when possible") {
+
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(_) =>
+            val name = Expr(Type[A].shortName)
+            MIO.pure(Rule.matched(Expr.quote {
+              Expr.splice(ctx.sb).append(Expr.splice(name)).append("()")
+            }))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
   }
 
   object HandleAsCaseClassRule extends DerivationRule("handle as case class when possible") {
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               _ <- ctx.setHelper[A] { (sb, config, level, value) =>
                 deriveCaseClassFields[A](caseClass)(using ctx.nestInCache(sb, value, config, level))
               }
               result <- ctx.getHelper[A].flatMap {
                 case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
-                case None             => yieldUnsupportedType[A]
+                case None             =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
 
-          case None =>
-            yieldUnsupportedType[A]
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -820,27 +838,26 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
       }
     }
 
-    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
-      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be a case class"))
   }
 
   object HandleAsEnumRule extends DerivationRule("handle as enum when possible") {
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               _ <- ctx.setHelper[A] { (sb, config, level, value) =>
                 deriveEnumCases[A](enumm)(using ctx.nestInCache(sb, value, config, level))
               }
               result <- ctx.getHelper[A].flatMap {
                 case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
-                case None             => yieldUnsupportedType[A]
+                case None             =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            yieldUnsupportedType[A]
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -873,8 +890,6 @@ trait FastShowPrettyMacrosImpl { this: MacroCommons & StdExtensions =>
         }
     }
 
-    private def yieldUnsupportedType[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
-      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not considered to be an enum"))
   }
 }
 

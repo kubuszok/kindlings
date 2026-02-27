@@ -223,6 +223,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
           SfHandleAsMapRule,
           SfHandleAsCollectionRule,
           SfHandleAsNamedTupleRule,
+          SfHandleAsSingletonRule,
           SfHandleAsCaseClassRule,
           SfHandleAsEnumRule
         )(_[A]).flatMap {
@@ -506,22 +507,19 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
 
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a named tuple") >> {
-        if (!Type[A].isNamedTuple)
-          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a named tuple"))
-        else
-          Type[A].primaryConstructor match {
-            case Some(constructor) =>
-              for {
-                schemaExpr <- deriveNamedTupleSchema[A](constructor)
-                _ <- sfctx.setCachedSchema[A](schemaExpr)
-                result <- sfctx.getCachedSchema[A].flatMap {
-                  case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
-                  case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
-            case None =>
-              MIO.pure(Rule.yielded(s"Named tuple ${Type[A].prettyPrint} has no primary constructor"))
-          }
+        NamedTuple.parse[A].toEither match {
+          case Right(namedTuple) =>
+            for {
+              schemaExpr <- deriveNamedTupleSchema[A](namedTuple.primaryConstructor)
+              _ <- sfctx.setCachedSchema[A](schemaExpr)
+              result <- sfctx.getCachedSchema[A].flatMap {
+                case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
+                case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
       }
 
     @scala.annotation.nowarn("msg=is never used")
@@ -587,12 +585,43 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     }
   }
 
+  object SfHandleAsSingletonRule extends SchemaDerivationRule("handle as singleton when possible") {
+
+    @scala.annotation.nowarn("msg=is never used")
+    def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
+        SingletonValue.parse[A].toEither match {
+          case Right(_) =>
+            implicit val SchemaT: Type[Schema] = SfTypes.Schema
+            implicit val StringT: Type[String] = SfTypes.String
+            implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+            val typeName = Type[A].shortName
+            val schemaExpr = Expr.quote {
+              AvroDerivationUtils.createRecord(
+                Expr.splice(Expr(typeName)),
+                Expr.splice(sfctx.config).namespace.getOrElse(""),
+                java.util.Collections.emptyList[Schema.Field]()
+              )
+            }
+            for {
+              _ <- sfctx.setCachedSchema[A](schemaExpr)
+              result <- sfctx.getCachedSchema[A].flatMap {
+                case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
+                case None               => MIO.pure(Rule.yielded(s"Failed to cache schema for ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
+        }
+      }
+  }
+
   object SfHandleAsCaseClassRule extends SchemaDerivationRule("handle as case class when possible") {
 
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A] match {
-          case Some(caseClass) =>
+        CaseClass.parse[A].toEither match {
+          case Right(caseClass) =>
             for {
               schemaExpr <- deriveCaseClassSchema[A](caseClass)
               _ <- sfctx.setCachedSchema[A](schemaExpr)
@@ -602,8 +631,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               }
             } yield result
 
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a case class"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -630,25 +659,6 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       val isError: Boolean = hasTypeAnnotation[avroError, A]
       val classProps: List[(String, String)] = getAllTypeAnnotationTwoStringArgs[avroProp, A]
       val classAliases: List[String] = getAllTypeAnnotationStringArgs[avroAlias, A]
-
-      // Singletons (case objects, parameterless enum cases) have no primary constructor
-      if (caseClass.isSingleton) {
-        val typeName = Type[A].shortName
-        return MIO.pure(
-          createRecordExpr(
-            typeName,
-            classDoc,
-            classNamespace,
-            isError,
-            classProps,
-            classAliases,
-            Expr.quote {
-              java.util.Collections.emptyList[Schema.Field]()
-            },
-            sfctx.config
-          )
-        )
-      }
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -935,8 +945,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
 
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A] match {
-          case Some(enumm) =>
+        Enum.parse[A].toEither match {
+          case Right(enumm) =>
             for {
               schemaExpr <- deriveEnumSchema[A](enumm)
               _ <- sfctx.setCachedSchema[A](schemaExpr)
@@ -945,8 +955,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
                 case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
             } yield result
-          case None =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an enum"))
+          case Left(reason) =>
+            MIO.pure(Rule.yielded(reason))
         }
       }
 
@@ -968,8 +978,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
         case Some(children) =>
           val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
             children.toList.forall { case (_, child) =>
-              Type.isVal(using child.Underlying) ||
-              CaseClass.parse(using child.Underlying).exists(_.primaryConstructor.parameters.flatten.isEmpty)
+              SingletonValue.unapply(child.Underlying).isDefined
             }
 
           if (allCaseObjects) {

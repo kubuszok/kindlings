@@ -82,12 +82,23 @@ Living cache of hearth API signatures used in kindlings. **Always verify with `k
 
 | API | Signature | Description |
 |-----|-----------|-------------|
-| `CaseClass.parse[A]` | `: Option[CaseClass[A]]` | Parse type as case class |
+| `ClassViewResult` | Sealed trait: `Compatible(value)` / `Incompatible(reason)` | Return type of all `.parse` methods |
+| `result.toOption` | `: Option[V]` | `Some(value)` for Compatible, `None` for Incompatible |
+| `result.toEither` | `: Either[String, V]` | `Right(value)` for Compatible, `Left(reason)` for Incompatible |
+| `CaseClass.parse[A]` | `: ClassViewResult[CaseClass[A]]` | Parse type as case class (excludes singletons) |
 | `cc.caseFieldValuesAt(expr)` | `: ListMap[String, Expr_??]` | Read field values (encoder) |
 | `cc.primaryConstructor(map)` | `(Map[String, Expr_??]): Either[String, Expr[A]]` | Construct from field map (decoder) |
 | `cc.construct[F](f)` | `(ConstructField[F] => F[Option[Expr[A]]])` | Construct via callback (Scala 2 pitfall!) |
-| `Enum.parse[A]` | `: Option[Enum[A]]` | Parse type as enum/sealed trait |
+| `SingletonValue.parse[A]` | `: ClassViewResult[SingletonValue[A]]` | Parse type as singleton (case object, parameterless enum case, etc.) |
+| `SingletonValue.unapply(tpe)` | `(Type[A]): Option[SingletonValue[A]]` | Pattern match extractor for singletons |
+| `sv.singletonExpr` | `: Expr[A]` | The expression representing the singleton value |
+| `Enum.parse[A]` | `: ClassViewResult[Enum[A]]` | Parse type as enum/sealed trait |
 | `enum.parMatchOn[F, R]` | `(expr)(handler): F[Expr[R]]` | Exhaustive pattern match |
+| `NamedTuple.parse[A]` | `: ClassViewResult[NamedTuple[A]]` | Parse type as named tuple (Scala 3.7+) |
+| `NamedTuple.unapply(tpe)` | `(Type[A]): Option[NamedTuple[A]]` | Pattern match extractor for named tuples |
+| `nt.primaryConstructor` | `: Method.NoInstance[A]` | Named tuple's primary constructor |
+| `nt.fields` | `: List[(String, ??)]` | Named tuple field names and types |
+| `nt.construct[F](f)` | `(ConstructField[F], Accessible): F[Option[Expr[A]]]` | Construct named tuple |
 | `param.tpe` | `: Existential[Type]` | Parameter's type (existential) |
 | `param.index` | `: Int` | Parameter position index |
 
