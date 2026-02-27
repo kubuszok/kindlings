@@ -136,4 +136,53 @@ object TapirSchemaUtils {
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(_.asInstanceOf[Map[String, V]]),
       isOptional = true
     )
+
+  /** Parse a fully-qualified type name (with type parameters) into an SName.
+    *
+    * For `"com.example.Foo[com.example.Bar, scala.Int]"`:
+    *   - `fullName = "com.example.Foo"`
+    *   - `typeParameterShortNames = List("Bar", "Int")`
+    */
+  def parseSName(fullTypeName: String): SName = {
+    val bracketIdx = fullTypeName.indexOf('[')
+    if (bracketIdx < 0) SName(fullTypeName)
+    else {
+      val baseName = fullTypeName.substring(0, bracketIdx)
+      val typeParamsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
+      val typeParams = splitTopLevelTypeParams(typeParamsStr).map(shortenTypeName)
+      SName(baseName, typeParams)
+    }
+  }
+
+  private def splitTopLevelTypeParams(s: String): List[String] = {
+    val result = List.newBuilder[String]
+    var depth = 0
+    var start = 0
+    var i = 0
+    while (i < s.length) {
+      s.charAt(i) match {
+        case '['               => depth += 1
+        case ']'               => depth -= 1
+        case ',' if depth == 0 =>
+          result += s.substring(start, i).trim
+          start = i + 1
+        case _ =>
+      }
+      i += 1
+    }
+    if (start < s.length) result += s.substring(start).trim
+    result.result()
+  }
+
+  private def shortenTypeName(fullName: String): String = {
+    val bracketIdx = fullName.indexOf('[')
+    if (bracketIdx < 0) {
+      fullName.split('.').last
+    } else {
+      val base = fullName.substring(0, bracketIdx).split('.').last
+      val params = fullName.substring(bracketIdx + 1, fullName.length - 1)
+      val shortParams = splitTopLevelTypeParams(params).map(shortenTypeName)
+      base + shortParams.mkString("[", ",", "]")
+    }
+  }
 }

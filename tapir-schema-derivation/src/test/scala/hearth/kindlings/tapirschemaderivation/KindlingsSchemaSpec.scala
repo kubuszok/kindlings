@@ -44,6 +44,54 @@ final class KindlingsSchemaSpec extends MacroSuite {
           s"Expected name ending with SimplePerson, got: ${schema.name.get.fullName}"
         )
       }
+
+      test("parameterized type SName has fullName without type params") {
+        val schema = KindlingsSchema.derive[Box[SimplePerson]]
+        assert(schema.name.isDefined, "Schema should have a name")
+        val name = schema.name.get
+        assert(
+          name.fullName.endsWith("Box"),
+          s"Expected fullName ending with Box (no type params), got: ${name.fullName}"
+        )
+        assert(
+          !name.fullName.contains("["),
+          s"fullName should not contain type params, got: ${name.fullName}"
+        )
+      }
+
+      test("parameterized type SName has typeParameterShortNames") {
+        val schema = KindlingsSchema.derive[Box[SimplePerson]]
+        val name = schema.name.get
+        assertEquals(
+          name.typeParameterShortNames,
+          List("SimplePerson"),
+          s"Expected typeParameterShortNames = List(SimplePerson), got: ${name.typeParameterShortNames}"
+        )
+      }
+
+      test("multi-param type SName has all type parameter short names") {
+        val schema = KindlingsSchema.derive[Pair[SimplePerson, Nested]]
+        val name = schema.name.get
+        assert(
+          name.fullName.endsWith("Pair"),
+          s"Expected fullName ending with Pair, got: ${name.fullName}"
+        )
+        assertEquals(
+          name.typeParameterShortNames,
+          List("SimplePerson", "Nested"),
+          s"Expected two type parameter short names, got: ${name.typeParameterShortNames}"
+        )
+      }
+
+      test("non-parameterized type SName has empty typeParameterShortNames") {
+        val schema = KindlingsSchema.derive[SimplePerson]
+        val name = schema.name.get
+        assertEquals(
+          name.typeParameterShortNames,
+          Nil,
+          s"Expected empty typeParameterShortNames, got: ${name.typeParameterShortNames}"
+        )
+      }
     }
 
     group("sealed traits") {
@@ -208,6 +256,26 @@ final class KindlingsSchemaSpec extends MacroSuite {
         case other =>
           fail(s"Expected SProduct, got: $other")
       }
+    }
+  }
+
+  group("runtime type parameter resolution") {
+
+    test("generic derivation resolves abstract type parameter in SName at runtime") {
+      val schema = GenericDerivation.boxOfPerson
+      val name = schema.name.get
+      assert(
+        name.fullName.endsWith("Box"),
+        s"Expected fullName ending with Box, got: ${name.fullName}"
+      )
+      assert(
+        name.typeParameterShortNames.nonEmpty,
+        s"Expected type parameter short names to be populated, got empty"
+      )
+      assert(
+        name.typeParameterShortNames.head.contains("SimplePerson"),
+        s"Expected type param to contain SimplePerson, got: ${name.typeParameterShortNames}"
+      )
     }
   }
 

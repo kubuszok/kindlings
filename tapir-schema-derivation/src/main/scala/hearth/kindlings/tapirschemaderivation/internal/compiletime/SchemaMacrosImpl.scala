@@ -44,7 +44,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
   def deriveSchema[A: Type]: Expr[Schema[A]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
 
-    deriveFromCtxAndAdaptForEntrypoint[A, Schema[A]]("KindlingsSchema.derive") { fromCtx =>
+    deriveFromCtxAndAdaptForEntrypoint[A, Schema[A]]("KindlingsSchema.derive", derivedType = None) { fromCtx =>
       fromCtx()
     }
   }
@@ -53,19 +53,21 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
   def deriveKindlingsSchema[A: Type]: Expr[KindlingsSchema[A]] = {
     implicit val schemaAType: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val kindlingsSchemaAType: Type[KindlingsSchema[A]] = TsTypes.KindlingsSchemaOf[A]
+    val selfType: Option[??] = Some(Type[A].as_??)
 
-    deriveFromCtxAndAdaptForEntrypoint[A, KindlingsSchema[A]]("KindlingsSchema.derived") { fromCtx =>
-      Expr.quote {
-        new KindlingsSchema[A] {
-          val schema: Schema[A] = Expr.splice(fromCtx())
+    deriveFromCtxAndAdaptForEntrypoint[A, KindlingsSchema[A]]("KindlingsSchema.derived", derivedType = selfType) {
+      fromCtx =>
+        Expr.quote {
+          new KindlingsSchema[A] {
+            val schema: Schema[A] = Expr.splice(fromCtx())
+          }
         }
-      }
     }
   }
 
   // Core entrypoint
 
-  private def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+  private def deriveFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String, derivedType: Option[??])(
       provideCtxAndAdapt: (() => Expr[Schema[A]]) => Expr[Out]
   ): Expr[Out] = {
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
@@ -89,7 +91,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
                 extensionResult <- MIO(Environment.loadMacroExtensions[JsonSchemaConfigExtension])
                 _ <- extensionResult.toMIO(allowFailures = true)
                 jsonCfg <- MIO(resolveJsonConfig(macroName))
-                result <- deriveSchemaRecursively[A](jsonCfg, cache, inProgress)
+                result <- deriveSchemaRecursively[A](jsonCfg, cache, inProgress, derivedType)
                 cacheState <- cache.get
               } yield cacheState.toValDefs.use(_ => result)
             }
@@ -192,7 +194,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
   private def deriveSchemaRecursively[A: Type](
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
-      inProgress: MLocal[Set[String]]
+      inProgress: MLocal[Set[String]],
+      derivedType: Option[??]
   ): MIO[Expr[Schema[A]]] =
     Log.namedScope(s"deriveSchemaRecursively[${Type[A].prettyPrint}]") {
       implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
@@ -211,7 +214,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
               def emitSRef: MIO[Expr[Schema[A]]] = {
                 implicit val sNameT: Type[SName] = TsTypes.SNameType
                 implicit val utilsT: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
-                val sNameExpr = computeSNameExpr[A]
+                val sNameExpr = computeSNameExpr[A](derivedType)
                 MIO.pure(Expr.quote {
                   TapirSchemaUtils.refSchema[A](Expr.splice(sNameExpr))
                 })
@@ -220,13 +223,13 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
                 emitSRef
             } else {
               // 3. Try to summon existing implicit Schema[A], ignoring auto-derivation
-              trySummonSchemaIgnoring[A].flatMap {
+              trySummonSchemaIgnoring[A](derivedType).flatMap {
                 case Some(implicitExpr) =>
                   Log.info(s"Using summoned implicit Schema for ${Type[A].prettyPrint}") >>
                     setCachedAndGet[A](cache, implicitExpr)
                 case None =>
                   // 4. Structural derivation rules
-                  deriveStructurally[A](jsonCfg, cache, inProgress, inProgressSet)
+                  deriveStructurally[A](jsonCfg, cache, inProgress, inProgressSet, derivedType)
               }
             }
           }
@@ -240,7 +243,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
       inProgress: MLocal[Set[String]],
-      inProgressSet: Set[String]
+      inProgressSet: Set[String],
+      derivedType: Option[??]
   ): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
@@ -251,7 +255,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       case IsOption(isOption) =>
         import isOption.Underlying as Element
         Log.info(s"Deriving Schema for Option element: ${Type[Element].prettyPrint}") >>
-          deriveSchemaRecursively[Element](jsonCfg, cache, inProgress).map { elementSchema =>
+          deriveSchemaRecursively[Element](jsonCfg, cache, inProgress, derivedType).map { elementSchema =>
             Expr.quote {
               TapirSchemaUtils.optionSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
             }
@@ -260,13 +264,13 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       // Map[K, V] — checked before Collection because Map <: Iterable
       case IsMap(isMap) =>
         import isMap.Underlying as Pair
-        deriveMapSchemaInner[A, Pair](isMap.value, jsonCfg, cache, inProgress)
+        deriveMapSchemaInner[A, Pair](isMap.value, jsonCfg, cache, inProgress, derivedType)
 
       // Collection (List, Vector, Set, Array, etc.)
       case IsCollection(isCollection) =>
         import isCollection.Underlying as Element
         Log.info(s"Deriving Schema for collection element: ${Type[Element].prettyPrint}") >>
-          deriveSchemaRecursively[Element](jsonCfg, cache, inProgress).map { elementSchema =>
+          deriveSchemaRecursively[Element](jsonCfg, cache, inProgress, derivedType).map { elementSchema =>
             Expr.quote {
               TapirSchemaUtils.collectionSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
             }
@@ -279,7 +283,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
             Log.info(s"Deriving Schema for case class ${Type[A].prettyPrint}") >>
               (for {
                 _ <- inProgress.set(inProgressSet + cacheKey[A])
-                result <- deriveCaseClassSchema[A](cc, jsonCfg, cache, inProgress)
+                result <- deriveCaseClassSchema[A](cc, jsonCfg, cache, inProgress, derivedType)
                 _ <- inProgress.set(inProgressSet)
               } yield result)
 
@@ -290,7 +294,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
                 Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
                   (for {
                     _ <- inProgress.set(inProgressSet + cacheKey[A])
-                    result <- deriveEnumSchema[A](e, jsonCfg, cache, inProgress)
+                    result <- deriveEnumSchema[A](e, jsonCfg, cache, inProgress, derivedType)
                     _ <- inProgress.set(inProgressSet)
                   } yield result)
 
@@ -311,7 +315,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       isMap: IsMapOf[A, Pair],
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
-      inProgress: MLocal[Set[String]]
+      inProgress: MLocal[Set[String]],
+      derivedType: Option[??]
   ): MIO[Expr[Schema[A]]] = {
     import isMap.{Key, Value}
     implicit val anyType: Type[Any] = TsTypes.AnyType
@@ -326,7 +331,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       )
     else {
       Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint}") >>
-        deriveSchemaRecursively[Value](jsonCfg, cache, inProgress).map { valueSchema =>
+        deriveSchemaRecursively[Value](jsonCfg, cache, inProgress, derivedType).map { valueSchema =>
           Expr.quote {
             TapirSchemaUtils.mapSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
           }
@@ -336,11 +341,14 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
 
   // Implicit schema summoning — uses summonExprIgnoring to skip auto-derivation
 
-  private def trySummonSchemaIgnoring[A: Type]: MIO[Option[Expr[Schema[A]]]] = MIO {
-    implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
-    Type[Schema[A]].summonExprIgnoring(ignoredImplicits*).toEither match {
-      case Right(expr) => Some(expr)
-      case Left(_)     => None
+  private def trySummonSchemaIgnoring[A: Type](derivedType: Option[??]): MIO[Option[Expr[Schema[A]]]] = MIO {
+    if (derivedType.exists(_.Underlying =:= Type[A])) None
+    else {
+      implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+      Type[Schema[A]].summonExprIgnoring(ignoredImplicits*).toEither match {
+        case Right(expr) => Some(expr)
+        case Left(_)     => None
+      }
     }
   }
 
@@ -373,7 +381,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       cc: CaseClass[A],
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
-      inProgress: MLocal[Set[String]]
+      inProgress: MLocal[Set[String]],
+      derivedType: Option[??]
   ): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val SNameT: Type[SName] = TsTypes.SNameType
@@ -381,13 +390,13 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
 
     val paramsList = cc.primaryConstructor.parameters.flatten.toList
     val activeParams = paramsList.filterNot { case (_, p) => jsonCfg.isTransientField(p) }
-    val sNameExpr = computeSNameExpr[A]
+    val sNameExpr = computeSNameExpr[A](derivedType)
 
     // Derive field schemas
     val fieldsResult: MIO[List[Expr[SchemaType.SProductField[A]]]] =
       activeParams.foldLeft(MIO.pure(List.empty[Expr[SchemaType.SProductField[A]]])) { case (acc, (fName, param)) =>
         acc.flatMap { results =>
-          deriveFieldExpr[A](fName, param, jsonCfg, cache, inProgress).map(results :+ _)
+          deriveFieldExpr[A](fName, param, jsonCfg, cache, inProgress, derivedType).map(results :+ _)
         }
       }
 
@@ -415,7 +424,8 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       param: Parameter,
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
-      inProgress: MLocal[Set[String]]
+      inProgress: MLocal[Set[String]],
+      derivedType: Option[??]
   ): MIO[Expr[SchemaType.SProductField[A]]] = {
     import param.tpe.Underlying as Field
 
@@ -424,7 +434,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
     val annsExpr: Expr[List[Any]] = fieldAnnotationsExpr(param)
 
     for {
-      fieldSchema <- deriveSchemaRecursively[Field](jsonCfg, cache, inProgress)
+      fieldSchema <- deriveSchemaRecursively[Field](jsonCfg, cache, inProgress, derivedType)
     } yield Expr.quote {
       TapirSchemaUtils.productFieldWithAnnotations[A](
         Expr.splice(Expr(fieldName)),
@@ -443,13 +453,14 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       e: Enum[A],
       jsonCfg: JsonSchemaConfig,
       cache: MLocal[ValDefsCache],
-      inProgress: MLocal[Set[String]]
+      inProgress: MLocal[Set[String]],
+      derivedType: Option[??]
   ): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
 
-    val sNameExpr = computeSNameExpr[A]
+    val sNameExpr = computeSNameExpr[A](derivedType)
     val discriminatorExpr: Expr[Option[String]] = jsonCfg.discriminatorFieldName
     val children = e.directChildren.toList
     val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
@@ -460,7 +471,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       children.foldLeft(MIO.pure(List.empty[Expr[Schema[Any]]])) { case (acc, (_, child)) =>
         acc.flatMap { results =>
           import child.Underlying as ChildType
-          deriveSchemaRecursively[ChildType](jsonCfg, cache, inProgress).map { childSchemaExpr =>
+          deriveSchemaRecursively[ChildType](jsonCfg, cache, inProgress, derivedType).map { childSchemaExpr =>
             results :+ childSchemaExpr.asInstanceOf[Expr[Schema[Any]]]
           }
         }
@@ -490,11 +501,31 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
 
   // SName computation
 
-  private def computeSNameExpr[A: Type]: Expr[SName] = {
+  @scala.annotation.nowarn("msg=is never used")
+  private def computeSNameExpr[A: Type](derivedType: Option[??]): Expr[SName] = {
     implicit val SNameT: Type[SName] = TsTypes.SNameType
-    val pp = Type[A].plainPrint
-    val baseName = pp.takeWhile(_ != '[')
-    Expr.quote(SName(Expr.splice(Expr(baseName))))
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
+      import tpe.Underlying
+      // Guard against self-summoning:
+      // 1. SName for type A can never depend on Schema[A] (we're building it)
+      // 2. Don't summon Schema for the top-level derived type (prevents circular dependency
+      //    when `given Schema[X] = KindlingsSchema.derived[X]` summons itself)
+      if (tpe.Underlying =:= Type[A]) None
+      else if (derivedType.exists(_.Underlying =:= tpe.Underlying)) None
+      else {
+        implicit val SchemaUnderlying: Type[Schema[tpe.Underlying]] = TsTypes.TapirSchemaOf[tpe.Underlying]
+        Type[Schema[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
+          case Right(schemaExpr) =>
+            val fallback = Expr(Type.plainPrint[tpe.Underlying])
+            Some(Expr.quote {
+              Expr.splice(schemaExpr).name.map(_.show).getOrElse(Expr.splice(fallback))
+            })
+          case Left(_) => None
+        }
+      }
+    }
+    Expr.quote(TapirSchemaUtils.parseSName(Expr.splice(fullNameExpr)))
   }
 
   // Annotation helpers

@@ -298,6 +298,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Discriminator | Independent (must manually match JSON lib) | Discovers JSON lib config at compile time | Improvement |
 | JSON config consistency | **No** — schema and codec configs are separate, drift is common | **Yes** — automatically reads Circe/Jsoniter config via `JsonSchemaConfigExtension` | Improvement |
 | Recursive types on Scala 3 | Must use `implicit def` (not `given`), risk of deadlocks | Works | Improvement |
+| Runtime type parameter resolution in SName | No — abstract type params in generic helpers produce `?` in schema names | Resolves at runtime via `runtimePlainPrint` (e.g. `Box[A]` → `SName("Box", List("SimplePerson"))` when `A = SimplePerson`) | Improvement |
 
 ### Not ported
 

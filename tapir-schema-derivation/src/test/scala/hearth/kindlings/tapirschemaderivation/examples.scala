@@ -1,5 +1,7 @@
 package hearth.kindlings.tapirschemaderivation
 
+import hearth.kindlings.circederivation.Configuration
+import sttp.tapir.Schema
 import sttp.tapir.Schema.annotations.*
 import sttp.tapir.Validator
 
@@ -33,3 +35,21 @@ case class WithCollections(tags: List[String], counts: Vector[Int])
 case class WithMap(metadata: Map[String, String])
 
 case class RecursiveTree(value: Int, children: List[RecursiveTree])
+
+case class Box[A](value: A)
+
+case class Pair[A, B](first: A, second: B)
+
+object GenericDerivation {
+
+  implicit val config: Configuration = Configuration.default
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+
+  // Use derived (not derive) when defining a given — triggers derivedType guard
+  implicit val ks: KindlingsSchema[SimplePerson] = KindlingsSchema.derived[SimplePerson]
+  implicit val schemaSimplePerson: Schema[SimplePerson] = ks.schema
+
+  // Non-inline — macro expansion sees abstract A, testing runtimePlainPrint resolution
+  def deriveBoxSchema[A](implicit ev: Schema[A]): Schema[Box[A]] = KindlingsSchema.derive[Box[A]]
+  val boxOfPerson: Schema[Box[SimplePerson]] = deriveBoxSchema[SimplePerson]
+}
