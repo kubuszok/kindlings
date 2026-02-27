@@ -220,7 +220,7 @@ This project uses **sbt-projectmatrix**. Scala version is determined by project 
 - `yourModule` = Scala 2.13
 - `yourModule3` = Scala 3
 
-**Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
+**Do NOT use** `++2.13.18` or `++3.8.2` to switch versions.
 
 ## Cross-quotes pitfalls
 

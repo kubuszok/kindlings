@@ -62,6 +62,21 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 
 > For a deeper dive into why mainstream derivation approaches are suboptimal and how sanely-automatic derivation addresses their shortcomings, see [Sanely-automatic derivation](https://kubuszok.com/2025/sanely-automatic-derivation/).
 
+## Available modules
+
+| Module | Replaces | Derived type classes |
+|---|---|---|
+| `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
+| `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
+| `kindlings-yaml-derivation` | scala-yaml built-in `derives` | `YamlEncoder`, `YamlDecoder` |
+| `kindlings-avro-derivation` | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
+| `kindlings-tapir-schema-derivation` | Tapir built-in `Schema.derived` | `Schema` |
+| `kindlings-fast-show-pretty` | _(original)_ | `FastShowPretty` |
+
+All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native (except Avro which is JVM only).
+
+For a detailed feature-by-feature comparison of each module against the library it replaces, see [FEATURE_PARITY.md](FEATURE_PARITY.md).
+
 ## Why a separate project?
 
 A natural question: why not contribute these derivation improvements directly to Circe, Jsoniter Scala, and other libraries?

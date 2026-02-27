@@ -1636,7 +1636,7 @@ final class MyTypeClassSpec extends MacroSuite {
 sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"
 ```
 
-**Do NOT use** `++2.13.18` or `++3.7.4` to switch versions.
+**Do NOT use** `++2.13.18` or `++3.8.2` to switch versions.
 
 ## Test coverage checklist
 
