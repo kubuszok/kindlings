@@ -1376,5 +1376,192 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         }
       }
     }
+
+    group("feature interactions") {
+
+      test("transientDefault + requireDefaultFields: encoder omits defaults, decoder requires them") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientDefault.withRequireDefaultFields
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        // Encoder omits default values
+        val json = writeToString(WithDefaultFields("Alice", 25, true))(codec)
+        json ==> """{"name":"Alice"}"""
+        // Decoder requires all fields — missing defaults cause error
+        intercept[IllegalArgumentException] {
+          readFromString[WithDefaultFields](json)(codec)
+        }
+      }
+
+      test("transientNone + @fieldName on Option field") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientNone
+        val codec = KindlingsJsonValueCodec.derive[WithRenamedOption]
+        // None field omitted entirely
+        val json = writeToString(WithRenamedOption(None, "Alice"))(codec)
+        assert(!json.contains("e_mail"))
+        // Some field uses renamed key
+        val json2 = writeToString(WithRenamedOption(Some("a@b.com"), "Alice"))(codec)
+        assert(json2.contains("\"e_mail\":\"a@b.com\""))
+        // Round-trip
+        readFromString[WithRenamedOption](json2)(codec) ==> WithRenamedOption(Some("a@b.com"), "Alice")
+      }
+
+      test("checkFieldDuplication + field name transforms") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withCheckFieldDuplication.withSnakeCaseFieldNames
+        val codec = KindlingsJsonValueCodec.derive[CamelCasePerson]
+        val json = """{"first_name":"Alice","last_name":"Smith"}"""
+        readFromString[CamelCasePerson](json)(codec) ==> CamelCasePerson("Alice", "Smith")
+        // Duplicate transformed name
+        val jsonDup = """{"first_name":"Alice","last_name":"Smith","first_name":"Bob"}"""
+        intercept[JsonReaderException] {
+          readFromString[CamelCasePerson](jsonDup)(codec)
+        }
+      }
+
+      test("isStringified + @stringified on same field (no-op interaction)") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
+        val codec = KindlingsJsonValueCodec.derive[WithStringifiedInt]
+        val value = WithStringifiedInt(42, "test")
+        val json = writeToString(value)(codec)
+        // Both global and per-field should encode as string
+        assert(json.contains("\"42\""))
+        readFromString[WithStringifiedInt](json)(codec) ==> value
+      }
+
+      test("requireCollectionFields + transientEmpty") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withRequireCollectionFields.withTransientEmpty
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        // Encoder omits empty collections
+        val json = writeToString(WithCollectionFields("Alice", Nil, Map.empty))(codec)
+        assert(!json.contains("tags"))
+        // Decoder requires collection fields — missing ones cause error
+        intercept[IllegalArgumentException] {
+          readFromString[WithCollectionFields](json)(codec)
+        }
+      }
+
+      test("mapAsArray + mapMaxInsertNumber DoS limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withMapAsArray.withMapMaxInsertNumber(2)
+        val codec = KindlingsJsonValueCodec.derive[WithIntKeyMap]
+        // Within limit works
+        val jsonOk = """{"data":[[1,"a"],[2,"b"]]}"""
+        readFromString[WithIntKeyMap](jsonOk)(codec) ==> WithIntKeyMap(Map(1 -> "a", 2 -> "b"))
+        // Exceeding limit throws
+        val jsonBad = """{"data":[[1,"a"],[2,"b"],[3,"c"]]}"""
+        intercept[JsonReaderException] {
+          readFromString[WithIntKeyMap](jsonBad)(codec)
+        }
+      }
+
+      test("enumAsStrings + adtLeafClassNameMapper") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toLowerCase)
+        val codec = KindlingsJsonValueCodec.derive[CardinalDirection]
+        val json = writeToString[CardinalDirection](North)(codec)
+        json ==> "\"north\""
+        readFromString[CardinalDirection](json)(codec) ==> (North: CardinalDirection)
+      }
+
+      test("@fieldName + @stringified combined") {
+        val codec = KindlingsJsonValueCodec.derive[WithStringifiedAndFieldName]
+        val value = WithStringifiedAndFieldName(42, "test")
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"item_count\":\"42\""))
+        readFromString[WithStringifiedAndFieldName](json)(codec) ==> value
+      }
+
+      test("decodingOnly + config flags still apply to decoder") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withDecodingOnly.withRequireDefaultFields
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        // Encoding throws
+        val _ = intercept[UnsupportedOperationException] {
+          writeToString(WithDefaultFields("Alice"))(codec)
+        }
+        // Decoding respects requireDefaultFields
+        val json = """{"name":"Alice"}"""
+        intercept[IllegalArgumentException] {
+          readFromString[WithDefaultFields](json)(codec)
+        }
+      }
+
+      test("encodingOnly + config flags still apply to encoder") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withEncodingOnly.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        // Encoding respects transientDefault
+        val json = writeToString(WithDefaultFields("Alice", 25, true))(codec)
+        json ==> """{"name":"Alice"}"""
+        // Decoding throws
+        intercept[UnsupportedOperationException] {
+          readFromString[WithDefaultFields](json)(codec)
+        }
+      }
+
+      test("fields in different order than case class") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"age":30,"name":"Alice"}"""
+        readFromString[SimplePerson](json)(codec) ==> SimplePerson("Alice", 30)
+      }
+
+      test("empty object decode for all-defaults case class") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[AllOptionalWithDefaults]
+        val json = """{}"""
+        readFromString[AllOptionalWithDefaults](json)(codec) ==> AllOptionalWithDefaults()
+      }
+    }
+
+    group("edge cases") {
+
+      test("null for non-Option String throws") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":null,"age":30}"""
+        intercept[JsonReaderException] {
+          readFromString[SimplePerson](json)(codec)
+        }
+      }
+
+      test("null for non-Option Int throws") {
+        val codec = KindlingsJsonValueCodec.derive[SingleField]
+        val json = """{"value":null}"""
+        intercept[JsonReaderException] {
+          readFromString[SingleField](json)(codec)
+        }
+      }
+
+      test("Int.MaxValue / Int.MinValue round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[SingleField]
+        val maxVal = SingleField(Int.MaxValue)
+        readFromString[SingleField](writeToString(maxVal)(codec))(codec) ==> maxVal
+        val minVal = SingleField(Int.MinValue)
+        readFromString[SingleField](writeToString(minVal)(codec))(codec) ==> minVal
+      }
+
+      test("Long.MaxValue / Long.MinValue round-trip") {
+        case class WithLong(value: Long)
+        val codec = KindlingsJsonValueCodec.derive[WithLong]
+        val maxVal = WithLong(Long.MaxValue)
+        readFromString[WithLong](writeToString(maxVal)(codec))(codec) ==> maxVal
+        val minVal = WithLong(Long.MinValue)
+        readFromString[WithLong](writeToString(minVal)(codec))(codec) ==> minVal
+      }
+
+      test("Unicode emoji in field values") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val value = SimplePerson("Alice \ud83d\ude00\ud83c\udf1f", 30)
+        val json = writeToString(value)(codec)
+        readFromString[SimplePerson](json)(codec) ==> value
+      }
+
+      test("deeply nested case classes (5 levels)") {
+        val codec = KindlingsJsonValueCodec.derive[DeeplyNested1]
+        val value = DeeplyNested1(DeeplyNested2(DeeplyNested3(DeeplyNested4(DeeplyNested5(42)))))
+        val json = writeToString(value)(codec)
+        readFromString[DeeplyNested1](json)(codec) ==> value
+      }
+    }
   }
 }

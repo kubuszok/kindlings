@@ -102,3 +102,13 @@ case class JsoniterWithUtf8FieldNames(
     @fieldName("données") data: Int,
     @fieldName("field with spaces") value: Boolean
 )
+
+// Feature interaction test types
+case class WithRenamedOption(@fieldName("e_mail") email: Option[String] = None, name: String)
+case class WithStringifiedAndFieldName(@stringified @fieldName("item_count") count: Int, label: String)
+case class AllOptionalWithDefaults(x: Int = 1, y: String = "hello", z: Boolean = true)
+case class DeeplyNested1(a: DeeplyNested2)
+case class DeeplyNested2(b: DeeplyNested3)
+case class DeeplyNested3(c: DeeplyNested4)
+case class DeeplyNested4(d: DeeplyNested5)
+case class DeeplyNested5(value: Int)

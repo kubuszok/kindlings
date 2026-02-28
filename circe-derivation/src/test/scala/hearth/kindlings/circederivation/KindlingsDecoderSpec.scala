@@ -840,5 +840,18 @@ final class KindlingsDecoderSpec extends MacroSuite {
         )
       }
     }
+
+    group("edge cases") {
+
+      test("null for non-Option field fails decode") {
+        val json = io.circe.parser.parse("""{"name":null,"age":30}""").getOrElse(Json.Null)
+        assert(KindlingsDecoder.decode[SimplePerson](json).isLeft)
+      }
+
+      test("fields in different order than case class") {
+        val json = io.circe.parser.parse("""{"age":30,"name":"Alice"}""").getOrElse(Json.Null)
+        KindlingsDecoder.decode[SimplePerson](json) ==> Right(SimplePerson("Alice", 30))
+      }
+    }
   }
 }

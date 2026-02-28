@@ -179,5 +179,9 @@ case object Small extends SizeWithDefault
 case object Medium extends SizeWithDefault
 case object Large extends SizeWithDefault
 
+// @avroErasedName test type
+@annotations.avroErasedName
+case class ErasedBox[A](value: A)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

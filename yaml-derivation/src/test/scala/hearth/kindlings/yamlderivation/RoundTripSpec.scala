@@ -189,6 +189,14 @@ final class RoundTripSpec extends MacroSuite {
         val decoded = codec.construct(node)
         decoded ==> Right(value)
       }
+
+      test("codec with annotations round-trip") {
+        val codec = KindlingsYamlCodec.derive[YamlWithFieldName]
+        val value = YamlWithFieldName("Alice", 30)
+        val node = codec.asNode(value)
+        val decoded = codec.construct(node)
+        decoded ==> Right(value)
+      }
     }
   }
 }

@@ -76,6 +76,40 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       * Returns `Expr[Boolean]` because this is a runtime configuration value.
       */
     def useDefaults: Expr[Boolean]
+
+    /** Whether fields with default values should be marked as optional in the schema.
+      *
+      * When true, fields that have Scala default values are treated as optional in the generated schema, because the
+      * JSON decoder will fill in defaults for missing fields.
+      *
+      * Circe: maps to `useDefaults`. Jsoniter: maps to `transientDefault`.
+      */
+    def fieldsWithDefaultsAreOptional: Expr[Boolean]
+
+    /** Whether empty collection/map fields should be marked as optional in the schema.
+      *
+      * When true, fields typed as `Iterable[_]`, `Map[_,_]`, or `String` are treated as optional, because the JSON
+      * encoder may omit them when empty.
+      *
+      * Circe: always false. Jsoniter: maps to `transientEmpty`.
+      */
+    def emptyFieldsAreOptional: Expr[Boolean]
+
+    /** Whether maps should be encoded as arrays of key-value pairs instead of objects.
+      *
+      * When true, `Map[K, V]` produces an array schema of `[K, V]` tuples instead of an open product schema.
+      *
+      * Circe: always false. Jsoniter: maps to `mapAsArray`.
+      */
+    def mapsAreArrays: Expr[Boolean]
+
+    /** Whether numeric fields should be represented as strings in the schema.
+      *
+      * When true, numeric field types get a `"string"` format annotation on their schema.
+      *
+      * Circe: always false. Jsoniter: maps to `isStringified`.
+      */
+    def numericFieldsAsStrings: Expr[Boolean]
   }
 
   object JsonSchemaConfig extends JsonSchemaConfigModule

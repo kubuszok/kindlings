@@ -706,5 +706,16 @@ final class AvroSchemaForSpec extends MacroSuite {
         )
       }
     }
+
+    group("complex nested schema with multiple annotation types") {
+
+      test("schema with @avroDoc, @avroNamespace, @avroDefault combined") {
+        val schema = AvroSchemaFor.schemaOf[FullyAnnotatedRecord]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getDoc ==> "A record with custom namespace"
+        schema.getNamespace ==> "com.example.docs"
+        schema.getField("id").doc() ==> "The identifier"
+      }
+    }
   }
 }

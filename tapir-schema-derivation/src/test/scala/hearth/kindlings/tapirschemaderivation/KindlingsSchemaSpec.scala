@@ -301,6 +301,165 @@ final class KindlingsSchemaSpec extends MacroSuite {
       )
     }
   }
+
+  group("config features (dual-library)") {
+
+    group("field renaming (snake_case)") {
+
+      test("circe config transforms field names") {
+        assertEquals(
+          CirceSnakeCaseDerivation.fieldEncodedNames,
+          List("first_name", "last_name")
+        )
+      }
+
+      test("jsoniter config transforms field names") {
+        assertEquals(
+          JsoniterPreferredDerivation.snakeCaseFieldNames,
+          List("first_name", "last_name")
+        )
+      }
+    }
+
+    group("constructor name transforms + discriminator") {
+
+      test("circe config uses resolved constructor names in discriminator") {
+        val schema = CirceDiscriminatorDerivation.schema
+        schema.schemaType match {
+          case c: SchemaType.SCoproduct[Shape] =>
+            c.discriminator match {
+              case Some(disc) =>
+                val mappingKeys = disc.mapping.keys.toSet
+                assertEquals(mappingKeys, Set("circle", "rectangle"))
+              case None => fail("Expected discriminator")
+            }
+          case other => fail(s"Expected SCoproduct, got: $other")
+        }
+      }
+
+      test("jsoniter config uses resolved constructor names in discriminator") {
+        val schema = JsoniterDiscriminatorDerivation.schema
+        schema.schemaType match {
+          case c: SchemaType.SCoproduct[Shape] =>
+            c.discriminator match {
+              case Some(disc) =>
+                val mappingKeys = disc.mapping.keys.toSet
+                assertEquals(mappingKeys, Set("circle", "rectangle"))
+              case None => fail("Expected discriminator")
+            }
+          case other => fail(s"Expected SCoproduct, got: $other")
+        }
+      }
+    }
+
+    group("@transientField") {
+
+      test("circe @transientField excludes field from schema") {
+        val schema = CirceTransientDerivation.schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithCirceTransientField] =>
+            val fieldNames = p.fields.map(_.name.name)
+            assertEquals(fieldNames, List("visible"))
+          case other => fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("jsoniter @transientField excludes field from schema") {
+        val schema = JsoniterTransientDerivation.schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithJsoniterTransientField] =>
+            val fieldNames = p.fields.map(_.name.name)
+            assertEquals(fieldNames, List("visible"))
+          case other => fail(s"Expected SProduct, got: $other")
+        }
+      }
+    }
+
+    group("enumAsStrings") {
+
+      test("circe config produces string enum schema") {
+        val schema = CirceEnumAsStringsDerivation.schema
+        schema.schemaType match {
+          case _: SchemaType.SString[?] => () // string schema for enum
+          case other                    => fail(s"Expected SString, got: $other")
+        }
+      }
+
+      test("jsoniter config produces string enum schema") {
+        val schema = JsoniterEnumAsStringsDerivation.schema
+        schema.schemaType match {
+          case _: SchemaType.SString[?] => () // string schema for enum
+          case other                    => fail(s"Expected SString, got: $other")
+        }
+      }
+    }
+
+    group("fieldsWithDefaultsAreOptional") {
+
+      test("circe useDefaults marks fields with defaults as optional") {
+        val schema = CirceDefaultsOptionalDerivation.schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithDefaults] =>
+            val nameField = p.fields.find(_.name.name == "name").get
+            val ageField = p.fields.find(_.name.name == "age").get
+            val activeField = p.fields.find(_.name.name == "active").get
+            // name has no default — not optional
+            assertEquals(nameField.schema.isOptional, false)
+            // age has default — optional
+            assertEquals(ageField.schema.isOptional, true)
+            // active has default — optional
+            assertEquals(activeField.schema.isOptional, true)
+          case other => fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("jsoniter transientDefault marks fields with defaults as optional") {
+        val schema = JsoniterDefaultsOptionalDerivation.schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithDefaults] =>
+            val nameField = p.fields.find(_.name.name == "name").get
+            val ageField = p.fields.find(_.name.name == "age").get
+            val activeField = p.fields.find(_.name.name == "active").get
+            assertEquals(nameField.schema.isOptional, false)
+            assertEquals(ageField.schema.isOptional, true)
+            assertEquals(activeField.schema.isOptional, true)
+          case other => fail(s"Expected SProduct, got: $other")
+        }
+      }
+    }
+  }
+
+  group("config features (jsoniter-only)") {
+
+    test("mapAsArray produces array schema for maps") {
+      val schema = JsoniterMapAsArrayDerivation.schema
+      schema.schemaType match {
+        case p: SchemaType.SProduct[WithMap] =>
+          val metadataField = p.fields.find(_.name.name == "metadata").get
+          metadataField.schema.schemaType match {
+            case _: SchemaType.SArray[?, ?] => () // array schema for map
+            case other                      => fail(s"Expected SArray for map, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("isStringified adds string format to numeric fields") {
+      val schema = JsoniterStringifiedDerivation.schema
+      schema.schemaType match {
+        case p: SchemaType.SProduct[NumericFields] =>
+          val xField = p.fields.find(_.name.name == "x").get
+          val yField = p.fields.find(_.name.name == "y").get
+          val nameField = p.fields.find(_.name.name == "name").get
+          // Numeric fields get "string" format
+          assertEquals(xField.schema.format, Some("string"))
+          assertEquals(yField.schema.format, Some("string"))
+          // Non-numeric field is unaffected
+          assertEquals(nameField.schema.format, None)
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+  }
 }
 
 /** Helper object that derives a schema preferring jsoniter-scala config with snake_case field names. Separate object
@@ -316,4 +475,80 @@ object JsoniterPreferredDerivation {
     case p: SchemaType.SProduct[CamelCasePerson] => p.fields.map(_.name.encodedName)
     case _                                       => Nil
   }
+}
+
+// --- Dual-library helper objects ---
+
+object CirceSnakeCaseDerivation {
+  implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  private val schema: Schema[CamelCasePerson] = KindlingsSchema.derive[CamelCasePerson]
+  val fieldEncodedNames: List[String] = schema.schemaType match {
+    case p: SchemaType.SProduct[CamelCasePerson] => p.fields.map(_.name.encodedName)
+    case _                                       => Nil
+  }
+}
+
+object CirceDiscriminatorDerivation {
+  implicit val config: Configuration =
+    Configuration(discriminator = Some("type"), transformConstructorNames = _.toLowerCase)
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
+}
+
+object JsoniterDiscriminatorDerivation {
+  implicit val config: JsoniterConfig =
+    JsoniterConfig(discriminatorFieldName = Some("type"), adtLeafClassNameMapper = _.toLowerCase)
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
+}
+
+object CirceTransientDerivation {
+  implicit val config: Configuration = Configuration.default
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val schema: Schema[WithCirceTransientField] = KindlingsSchema.derive[WithCirceTransientField]
+}
+
+object JsoniterTransientDerivation {
+  implicit val config: JsoniterConfig = JsoniterConfig.default
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[WithJsoniterTransientField] = KindlingsSchema.derive[WithJsoniterTransientField]
+}
+
+object CirceEnumAsStringsDerivation {
+  implicit val config: Configuration = Configuration.default.withEnumAsStrings
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val schema: Schema[Color] = KindlingsSchema.derive[Color]
+}
+
+object JsoniterEnumAsStringsDerivation {
+  implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[Color] = KindlingsSchema.derive[Color]
+}
+
+object CirceDefaultsOptionalDerivation {
+  implicit val config: Configuration = Configuration.default.withDefaults
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val schema: Schema[WithDefaults] = KindlingsSchema.derive[WithDefaults]
+}
+
+object JsoniterDefaultsOptionalDerivation {
+  implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[WithDefaults] = KindlingsSchema.derive[WithDefaults]
+}
+
+// --- Jsoniter-only helper objects ---
+
+object JsoniterMapAsArrayDerivation {
+  implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[WithMap] = KindlingsSchema.derive[WithMap]
+}
+
+object JsoniterStringifiedDerivation {
+  implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[NumericFields] = KindlingsSchema.derive[NumericFields]
 }

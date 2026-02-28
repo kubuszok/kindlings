@@ -70,19 +70,27 @@ object TapirSchemaUtils {
   ): Schema[T] =
     Schema[T](SchemaType.SProduct[T](fields), Some(name))
 
-  /** Create a Schema with SCoproduct schema type. Uses name-based runtime matching. */
+  /** Create a Schema with SCoproduct schema type. Uses name-based runtime matching.
+    *
+    * @param resolvedNames
+    *   constructor names after applying the JSON library's name transform (e.g., `config.transformConstructorNames`).
+    *   Used as discriminator mapping keys. Must be the same size and order as `subtypes`.
+    */
   def coproductSchema[T](
       name: SName,
       subtypes: List[Schema[Any]],
-      discriminator: Option[String]
+      discriminator: Option[String],
+      resolvedNames: List[String]
   ): Schema[T] = {
     val disc: Option[SchemaType.SDiscriminator] = discriminator.map { discFieldName =>
-      val mapping: Map[String, SchemaType.SRef[Any]] = subtypes.flatMap { s =>
-        s.name.map { sname =>
-          val shortName = sname.fullName.split('.').last
-          shortName -> SchemaType.SRef[Any](sname)
+      val mapping: Map[String, SchemaType.SRef[Any]] = subtypes
+        .zip(resolvedNames)
+        .flatMap { case (s, resolvedName) =>
+          s.name.map { sname =>
+            resolvedName -> SchemaType.SRef[Any](sname)
+          }
         }
-      }.toMap
+        .toMap
       SchemaType.SDiscriminator(FieldName(discFieldName, discFieldName), mapping)
     }
 
@@ -136,6 +144,31 @@ object TapirSchemaUtils {
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(_.asInstanceOf[Map[String, V]]),
       isOptional = true
     )
+
+  /** Wrap a value schema as a Map encoded as array of key-value pair objects (for jsoniter mapAsArray). */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def mapAsArraySchema[V](valueSchema: Schema[V]): Schema[Any] = {
+    val pairSchema: Schema[Any] = Schema[Any](
+      SchemaType.SProduct[Any](
+        List(
+          SchemaType.SProductField[Any, String](FieldName("key"), Schema.string[String], _ => None),
+          SchemaType.SProductField[Any, V](FieldName("value"), valueSchema, _ => None)
+        )
+      )
+    )
+    Schema[Any](
+      SchemaType.SArray[Any, Any](pairSchema)(_.asInstanceOf[Iterable[Any]]),
+      isOptional = true
+    )
+  }
+
+  /** Conditionally mark a schema as optional at runtime. */
+  def markFieldOptional(schema: Schema[Any], optional: Boolean): Schema[Any] =
+    if (optional) schema.copy(isOptional = true) else schema
+
+  /** Conditionally add "string" format to a schema at runtime. */
+  def markFieldStringFormat(schema: Schema[Any], stringified: Boolean): Schema[Any] =
+    if (stringified) schema.format("string") else schema
 
   /** Parse a fully-qualified type name (with type parameters) into an SName.
     *

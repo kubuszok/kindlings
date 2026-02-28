@@ -376,5 +376,26 @@ final class AvroRoundTripSpec extends MacroSuite {
         decoded ==> original
       }
     }
+
+    group("annotation round-trips") {
+
+      test("@avroNoDefault round-trip (decode without default)") {
+        val encoder: AvroEncoder[WithNoDefault] = AvroEncoder.derive[WithNoDefault]
+        val decoder: AvroDecoder[WithNoDefault] = AvroDecoder.derive[WithNoDefault]
+        val original = WithNoDefault("Alice", 42)
+        val json = AvroIO.toJson(original)(encoder)
+        val decoded = AvroIO.fromJson[WithNoDefault](json)(decoder)
+        decoded ==> original
+      }
+
+      test("@avroEnumDefault round-trip") {
+        val encoder: AvroEncoder[SizeWithDefault] = AvroEncoder.derive[SizeWithDefault]
+        val decoder: AvroDecoder[SizeWithDefault] = AvroDecoder.derive[SizeWithDefault]
+        val original: SizeWithDefault = Large
+        val json = AvroIO.toJson(original)(encoder)
+        val decoded = AvroIO.fromJson[SizeWithDefault](json)(decoder)
+        decoded ==> original
+      }
+    }
   }
 }

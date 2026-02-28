@@ -490,5 +490,26 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
           Right(YamlWithBothAnnotations("Alice", 0, true))
       }
     }
+
+    group("edge cases") {
+
+      test("null/~ for non-Option field fails decode") {
+        val nullNode = hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils.nodeNull
+        val node = mappingOf("name" -> nullNode, "age" -> scalarNode("30"))
+        val result = KindlingsYamlDecoder.decode[SimplePerson](node)
+        assert(result.isLeft)
+      }
+
+      test("fields in different order than case class") {
+        val node = mappingOf("age" -> scalarNode("30"), "name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[SimplePerson](node) ==> Right(SimplePerson("Alice", 30))
+      }
+
+      test("useDefaults + enumAsStrings interaction") {
+        implicit val config: YamlConfig = YamlConfig.default.withUseDefaults.withEnumAsStrings
+        val node = mappingOf("name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[WithDefaults](node) ==> Right(WithDefaults("Alice", 25, true))
+      }
+    }
   }
 }

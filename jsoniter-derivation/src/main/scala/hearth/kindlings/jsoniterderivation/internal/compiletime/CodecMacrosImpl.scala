@@ -991,41 +991,21 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           else if (Type[A] =:= Type.of[BigInt])
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[BigInt])))
           else if (Type[A] =:= CTypes.Instant)
-            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Instant].toString)))
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Instant])))
           else if (Type[A] =:= CTypes.LocalDate)
-            Some(
-              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDate].toString))
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDate])))
           else if (Type[A] =:= CTypes.LocalTime)
-            Some(
-              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalTime].toString))
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalTime])))
           else if (Type[A] =:= CTypes.LocalDateTime)
-            Some(
-              Expr.quote(
-                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDateTime].toString)
-              )
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDateTime])))
           else if (Type[A] =:= CTypes.OffsetDateTime)
-            Some(
-              Expr.quote(
-                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.OffsetDateTime].toString)
-              )
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.OffsetDateTime])))
           else if (Type[A] =:= CTypes.ZonedDateTime)
-            Some(
-              Expr.quote(
-                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZonedDateTime].toString)
-              )
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZonedDateTime])))
           else if (Type[A] =:= CTypes.Duration)
-            Some(
-              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Duration].toString))
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Duration])))
           else if (Type[A] =:= CTypes.Period)
-            Some(
-              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Period].toString))
-            )
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Period])))
           else
             None
 
@@ -1670,37 +1650,35 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     ): Option[Expr[Unit]] =
       if (Type[F] =:= CTypes.Int)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedInt(Expr.splice(writer), Expr.splice(value).asInstanceOf[Int])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Int])
         })
       else if (Type[F] =:= CTypes.Long)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedLong(Expr.splice(writer), Expr.splice(value).asInstanceOf[Long])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Long])
         })
       else if (Type[F] =:= CTypes.Double)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedDouble(Expr.splice(writer), Expr.splice(value).asInstanceOf[Double])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Double])
         })
       else if (Type[F] =:= CTypes.Float)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedFloat(Expr.splice(writer), Expr.splice(value).asInstanceOf[Float])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Float])
         })
       else if (Type[F] =:= CTypes.Short)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedShort(Expr.splice(writer), Expr.splice(value).asInstanceOf[Short])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Short])
         })
       else if (Type[F] =:= CTypes.Byte)
         Some(Expr.quote {
-          JsoniterDerivationUtils.writeStringifiedByte(Expr.splice(writer), Expr.splice(value).asInstanceOf[Byte])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Byte])
         })
       else if (Type[F] =:= CTypes.BigDecimal)
         Some(Expr.quote {
-          JsoniterDerivationUtils
-            .writeStringifiedBigDecimal(Expr.splice(writer), Expr.splice(value).asInstanceOf[BigDecimal])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[BigDecimal])
         })
       else if (Type[F] =:= CTypes.BigInt)
         Some(Expr.quote {
-          JsoniterDerivationUtils
-            .writeStringifiedBigInt(Expr.splice(writer), Expr.splice(value).asInstanceOf[BigInt])
+          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[BigInt])
         })
       else None
 
@@ -2162,21 +2140,21 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 .asInstanceOf[A]
             })
           else if (Type[A] =:= CTypes.Instant)
-            Some(Expr.quote(JsoniterDerivationUtils.readInstant(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readInstant(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.LocalDate)
-            Some(Expr.quote(JsoniterDerivationUtils.readLocalDate(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readLocalDate(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.LocalTime)
-            Some(Expr.quote(JsoniterDerivationUtils.readLocalTime(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readLocalTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.LocalDateTime)
-            Some(Expr.quote(JsoniterDerivationUtils.readLocalDateTime(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readLocalDateTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.OffsetDateTime)
-            Some(Expr.quote(JsoniterDerivationUtils.readOffsetDateTime(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readOffsetDateTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.ZonedDateTime)
-            Some(Expr.quote(JsoniterDerivationUtils.readZonedDateTime(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readZonedDateTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.Duration)
-            Some(Expr.quote(JsoniterDerivationUtils.readDuration(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readDuration(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.Period)
-            Some(Expr.quote(JsoniterDerivationUtils.readPeriod(Expr.splice(reader)).asInstanceOf[A]))
+            Some(Expr.quote(Expr.splice(reader).readPeriod(null).asInstanceOf[A]))
           else
             None
 
@@ -3438,35 +3416,35 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
   ): Option[Expr[JsonReader => F]] =
     if (Type[F] =:= CTypes.Int)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedInt(r).asInstanceOf[F]
+        r.readStringAsInt().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.Long)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedLong(r).asInstanceOf[F]
+        r.readStringAsLong().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.Double)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedDouble(r).asInstanceOf[F]
+        r.readStringAsDouble().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.Float)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedFloat(r).asInstanceOf[F]
+        r.readStringAsFloat().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.Short)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedShort(r).asInstanceOf[F]
+        r.readStringAsShort().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.Byte)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedByte(r).asInstanceOf[F]
+        r.readStringAsByte().asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.BigDecimal)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedBigDecimal(r).asInstanceOf[F]
+        r.readStringAsBigDecimal(null).asInstanceOf[F]
       })
     else if (Type[F] =:= CTypes.BigInt)
       Some(Expr.quote { (r: JsonReader) =>
-        JsoniterDerivationUtils.readStringifiedBigInt(r).asInstanceOf[F]
+        r.readStringAsBigInt(null).asInstanceOf[F]
       })
     else None
 

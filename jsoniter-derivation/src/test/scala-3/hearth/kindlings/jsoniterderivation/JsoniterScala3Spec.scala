@@ -144,6 +144,17 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
   }
 
+  group("IArray (Scala 3)") {
+
+    test("IArray[Int] round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[IArray[Int]]
+      val original: IArray[Int] = IArray(1, 2, 3)
+      val json = writeToString(original)(codec)
+      val decoded = readFromString[IArray[Int]](json)(codec)
+      assert(decoded.toSeq == original.toSeq)
+    }
+  }
+
   group("union types (Scala 3)") {
 
     // Union type member names use fully-qualified names from Hearth's directChildren

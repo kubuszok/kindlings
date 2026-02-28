@@ -40,6 +40,27 @@ case class Box[A](value: A)
 
 case class Pair[A, B](first: A, second: B)
 
+// Config feature test types
+
+sealed trait Color
+case object Red extends Color
+case object Green extends Color
+case object Blue extends Color
+
+case class WithDefaults(name: String, age: Int = 25, active: Boolean = true)
+
+case class NumericFields(x: Int, y: Double, name: String)
+
+case class WithCirceTransientField(
+    visible: String,
+    @hearth.kindlings.circederivation.annotations.transientField hidden: String = ""
+)
+
+case class WithJsoniterTransientField(
+    visible: String,
+    @hearth.kindlings.jsoniterderivation.annotations.transientField hidden: String = ""
+)
+
 object GenericDerivation {
 
   implicit val config: Configuration = Configuration.default

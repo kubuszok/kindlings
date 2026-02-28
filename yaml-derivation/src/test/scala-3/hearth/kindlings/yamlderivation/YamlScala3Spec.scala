@@ -205,6 +205,17 @@ final class YamlScala3Spec extends MacroSuite {
     }
   }
 
+  group("IArray (Scala 3)") {
+
+    test("IArray[Int] round-trip") {
+      val original: IArray[Int] = IArray(1, 2, 3)
+      val node = KindlingsYamlEncoder.encode(original)
+      val decoded = KindlingsYamlDecoder.decode[IArray[Int]](node)
+      assert(decoded.isRight)
+      assert(decoded.toOption.get.toSeq == original.toSeq)
+    }
+  }
+
   group("union types (Scala 3)") {
 
     // Union type member names use fully-qualified names from Hearth's directChildren

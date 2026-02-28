@@ -231,6 +231,24 @@ final class AvroScala3Spec extends MacroSuite {
     }
   }
 
+  group("IArray (Scala 3)") {
+
+    test("IArray[Int] schema is ARRAY") {
+      val schema = AvroSchemaFor.schemaOf[IArray[Int]]
+      schema.getType ==> Schema.Type.ARRAY
+      schema.getElementType.getType ==> Schema.Type.INT
+    }
+
+    test("IArray[Int] round-trip via binary") {
+      implicit val encoder: AvroEncoder[IArray[Int]] = AvroEncoder.derive[IArray[Int]]
+      implicit val decoder: AvroDecoder[IArray[Int]] = AvroDecoder.derive[IArray[Int]]
+      val original: IArray[Int] = IArray(1, 2, 3)
+      val bytes = AvroIO.toBinary(original)
+      val decoded = AvroIO.fromBinary[IArray[Int]](bytes)
+      assert(decoded.toSeq == original.toSeq)
+    }
+  }
+
   group("union types (Scala 3)") {
 
     test("schema for case class union is UNION") {

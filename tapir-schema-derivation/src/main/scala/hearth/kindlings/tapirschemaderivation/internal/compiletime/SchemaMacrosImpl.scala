@@ -222,14 +222,25 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
               Log.info(s"Recursive reference detected for ${Type[A].prettyPrint}, emitting SRef") >>
                 emitSRef
             } else {
-              // 3. Try to summon existing implicit Schema[A], ignoring auto-derivation
-              trySummonSchemaIgnoring[A](derivedType).flatMap {
-                case Some(implicitExpr) =>
-                  Log.info(s"Using summoned implicit Schema for ${Type[A].prettyPrint}") >>
-                    setCachedAndGet[A](cache, implicitExpr)
-                case None =>
-                  // 4. Structural derivation rules
+              // 3. Try to summon existing implicit Schema[A], ignoring auto-derivation.
+              //    Skip summoning for Map types — Tapir provides a built-in Schema[Map[K,V]]
+              //    (SOpenProduct), but we need structural derivation to respect mapsAreArrays.
+              val isMapType: Boolean = Type[A] match {
+                case IsMap(_) => true
+                case _        => false
+              }
+              if (isMapType) {
+                Log.info(s"Map type detected, skipping summoning for ${Type[A].prettyPrint}") >>
                   deriveStructurally[A](jsonCfg, cache, inProgress, inProgressSet, derivedType)
+              } else {
+                trySummonSchemaIgnoring[A](derivedType).flatMap {
+                  case Some(implicitExpr) =>
+                    Log.info(s"Using summoned implicit Schema for ${Type[A].prettyPrint}") >>
+                      setCachedAndGet[A](cache, implicitExpr)
+                  case None =>
+                    // 4. Structural derivation rules
+                    deriveStructurally[A](jsonCfg, cache, inProgress, inProgressSet, derivedType)
+                }
               }
             }
           }
@@ -343,10 +354,14 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
         )
       )
     else {
+      val mapsAreArraysExpr: Expr[Boolean] = jsonCfg.mapsAreArrays
       Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint}") >>
         deriveSchemaRecursively[Value](jsonCfg, cache, inProgress, derivedType).map { valueSchema =>
           Expr.quote {
-            TapirSchemaUtils.mapSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
+            if (Expr.splice(mapsAreArraysExpr))
+              TapirSchemaUtils.mapAsArraySchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
+            else
+              TapirSchemaUtils.mapSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
           }
         }
     }
@@ -456,6 +471,7 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
     } yield result
   }
 
+  @scala.annotation.nowarn("msg=is never used")
   private def deriveFieldExpr[A: Type](
       fieldName: String,
       param: Parameter,
@@ -465,22 +481,85 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       derivedType: Option[??]
   ): MIO[Expr[SchemaType.SProductField[A]]] = {
     import param.tpe.Underlying as Field
+    implicit val anyType: Type[Any] = TsTypes.AnyType
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
 
     val fieldIndex = param.index
     val encodedNameExpr: Expr[String] = jsonCfg.resolveFieldName(param, fieldName)
     val annsExpr: Expr[List[Any]] = fieldAnnotationsExpr(param)
 
+    // Compile-time type checks for field enrichment (C5, C6, C8)
+    val hasDefault: Boolean = param.hasDefault
+    val isCollectionOrMap: Boolean = Type[Field] match {
+      case IsMap(_)        => true
+      case IsCollection(_) => true
+      case _               => false
+    }
+    val isNumeric: Boolean = isNumericFieldType[Field]
+
     for {
       fieldSchema <- deriveSchemaRecursively[Field](jsonCfg, cache, inProgress, derivedType)
-    } yield Expr.quote {
-      TapirSchemaUtils.productFieldWithAnnotations[A](
-        Expr.splice(Expr(fieldName)),
-        Expr.splice(encodedNameExpr),
-        Expr.splice(fieldSchema).asInstanceOf[Schema[Any]],
-        Expr.splice(Expr(fieldIndex)),
-        Expr.splice(annsExpr)
-      )
+    } yield {
+      // Start with the field schema as Schema[Any]
+      val baseSchemaExpr: Expr[Schema[Any]] = Expr.quote {
+        Expr.splice(fieldSchema).asInstanceOf[Schema[Any]]
+      }
+
+      // C5: fieldsWithDefaultsAreOptional — mark fields with defaults as optional
+      val afterDefault = if (hasDefault) {
+        val flag = jsonCfg.fieldsWithDefaultsAreOptional
+        Expr.quote(TapirSchemaUtils.markFieldOptional(Expr.splice(baseSchemaExpr), Expr.splice(flag)))
+      } else baseSchemaExpr
+
+      // C6: emptyFieldsAreOptional — mark collection/map fields as optional
+      val afterEmpty = if (isCollectionOrMap) {
+        val flag = jsonCfg.emptyFieldsAreOptional
+        Expr.quote(TapirSchemaUtils.markFieldOptional(Expr.splice(afterDefault), Expr.splice(flag)))
+      } else afterDefault
+
+      // C8: numericFieldsAsStrings — add "string" format to numeric fields
+      val enrichedSchemaExpr = if (isNumeric) {
+        val flag = jsonCfg.numericFieldsAsStrings
+        Expr.quote(TapirSchemaUtils.markFieldStringFormat(Expr.splice(afterEmpty), Expr.splice(flag)))
+      } else afterEmpty
+
+      Expr.quote {
+        TapirSchemaUtils.productFieldWithAnnotations[A](
+          Expr.splice(Expr(fieldName)),
+          Expr.splice(encodedNameExpr),
+          Expr.splice(enrichedSchemaExpr),
+          Expr.splice(Expr(fieldIndex)),
+          Expr.splice(annsExpr)
+        )
+      }
     }
+  }
+
+  /** Check if a type is a numeric primitive or BigDecimal/BigInt at compile time. Uses `plainPrint` (not `prettyPrint`)
+    * to avoid ANSI color codes on Scala 2.
+    */
+  private def isNumericFieldType[F: Type]: Boolean = {
+    val pp = Type.plainPrint[F]
+    Set(
+      "Int",
+      "Long",
+      "Double",
+      "Float",
+      "Short",
+      "Byte",
+      "BigDecimal",
+      "BigInt",
+      "scala.Int",
+      "scala.Long",
+      "scala.Double",
+      "scala.Float",
+      "scala.Short",
+      "scala.Byte",
+      "scala.math.BigDecimal",
+      "scala.math.BigInt",
+      "scala.BigDecimal",
+      "scala.BigInt"
+    ).contains(pp)
   }
 
   // Enum / sealed trait derivation
@@ -496,11 +575,37 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    implicit val stringT: Type[String] = TsTypes.StringType
 
     val sNameExpr = computeSNameExpr[A](derivedType)
     val discriminatorExpr: Expr[Option[String]] = jsonCfg.discriminatorFieldName
+    val enumAsStringsExpr: Expr[Boolean] = jsonCfg.enumAsStrings
     val children = e.directChildren.toList
     val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
+
+    // Build resolved constructor names for discriminator mapping (C3)
+    val resolvedNamesListExpr: Expr[List[String]] = children
+      .map { case (childName, _) =>
+        jsonCfg.resolveConstructorName(childName)
+      }
+      .foldRight(Expr.quote(Nil: List[String])) { (nameExpr, acc) =>
+        Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
+      }
+
+    // Check at compile time if all children are singletons (C4 — stringEnumSchema)
+    val allSingletons: Boolean = children.forall { case (_, child) =>
+      import child.Underlying as ChildType
+      SingletonValue.parse[ChildType].toEither.isRight
+    }
+
+    // Build singleton values list for stringEnumSchema (only when all children are singletons)
+    val singletonValuesOpt: Option[Expr[List[A]]] = if (allSingletons) {
+      Some(children.foldRight(Expr.quote(Nil: List[A])) { case ((_, child), acc) =>
+        import child.Underlying as ChildType
+        val sv = SingletonValue.parse[ChildType].toEither.toOption.get
+        Expr.quote(Expr.splice(sv.singletonExpr).asInstanceOf[A] :: Expr.splice(acc))
+      })
+    } else None
 
     // Derive schemas for each child, casting to Schema[Any] inside the quote
     // because Schema is invariant and we need a homogeneous list
@@ -522,12 +627,34 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
       ) { (schemaExpr, acc) =>
         Expr.quote(Expr.splice(schemaExpr).asInstanceOf[Schema[Any]] :: Expr.splice(acc))
       }
-      rawSchemaExpr = Expr.quote {
-        TapirSchemaUtils.coproductSchema[A](
-          Expr.splice(sNameExpr),
-          Expr.splice(subtypesListExpr),
-          Expr.splice(discriminatorExpr)
-        )
+      rawSchemaExpr = singletonValuesOpt match {
+        // All children are singletons — at runtime, branch on enumAsStrings
+        case Some(singletonValuesExpr) =>
+          Expr.quote {
+            if (Expr.splice(enumAsStringsExpr))
+              TapirSchemaUtils.stringEnumSchema[A](
+                Expr.splice(sNameExpr),
+                Expr.splice(singletonValuesExpr),
+                Expr.splice(resolvedNamesListExpr)
+              )
+            else
+              TapirSchemaUtils.coproductSchema[A](
+                Expr.splice(sNameExpr),
+                Expr.splice(subtypesListExpr),
+                Expr.splice(discriminatorExpr),
+                Expr.splice(resolvedNamesListExpr)
+              )
+          }
+        // Not all singletons — always coproduct
+        case None =>
+          Expr.quote {
+            TapirSchemaUtils.coproductSchema[A](
+              Expr.splice(sNameExpr),
+              Expr.splice(subtypesListExpr),
+              Expr.splice(discriminatorExpr),
+              Expr.splice(resolvedNamesListExpr)
+            )
+          }
       }
       schemaExpr = Expr.quote {
         TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))

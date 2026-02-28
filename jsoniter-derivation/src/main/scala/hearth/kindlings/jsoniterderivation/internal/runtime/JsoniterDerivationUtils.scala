@@ -284,26 +284,6 @@ object JsoniterDerivationUtils {
     builder.result()
   }
 
-  // --- @stringified helpers ---
-
-  def writeStringifiedInt(out: JsonWriter, value: Int): Unit = out.writeVal(value.toString)
-  def writeStringifiedLong(out: JsonWriter, value: Long): Unit = out.writeVal(value.toString)
-  def writeStringifiedDouble(out: JsonWriter, value: Double): Unit = out.writeVal(value.toString)
-  def writeStringifiedFloat(out: JsonWriter, value: Float): Unit = out.writeVal(value.toString)
-  def writeStringifiedShort(out: JsonWriter, value: Short): Unit = out.writeVal(value.toString)
-  def writeStringifiedByte(out: JsonWriter, value: Byte): Unit = out.writeVal(value.toString)
-  def writeStringifiedBigDecimal(out: JsonWriter, value: BigDecimal): Unit = out.writeVal(value.toString)
-  def writeStringifiedBigInt(out: JsonWriter, value: BigInt): Unit = out.writeVal(value.toString)
-
-  def readStringifiedInt(in: JsonReader): Int = in.readString(null).toInt
-  def readStringifiedLong(in: JsonReader): Long = in.readString(null).toLong
-  def readStringifiedDouble(in: JsonReader): Double = in.readString(null).toDouble
-  def readStringifiedFloat(in: JsonReader): Float = in.readString(null).toFloat
-  def readStringifiedShort(in: JsonReader): Short = in.readString(null).toShort
-  def readStringifiedByte(in: JsonReader): Byte = in.readString(null).toByte
-  def readStringifiedBigDecimal(in: JsonReader): BigDecimal = BigDecimal(in.readString(null))
-  def readStringifiedBigInt(in: JsonReader): BigInt = BigInt(in.readString(null))
-
   // --- mapAsArray helpers ---
 
   def writeMapAsArray[K, V](
@@ -368,42 +348,6 @@ object JsoniterDerivationUtils {
 
   def throwDuplicateField(in: JsonReader, fieldName: String): Nothing =
     in.decodeError(s"duplicate field: $fieldName")
-
-  // --- BigDecimal / BigInt validation ---
-
-  // --- java.time helpers ---
-
-  def readInstant(in: JsonReader): java.time.Instant =
-    try java.time.Instant.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readLocalDate(in: JsonReader): java.time.LocalDate =
-    try java.time.LocalDate.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readLocalTime(in: JsonReader): java.time.LocalTime =
-    try java.time.LocalTime.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readLocalDateTime(in: JsonReader): java.time.LocalDateTime =
-    try java.time.LocalDateTime.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readOffsetDateTime(in: JsonReader): java.time.OffsetDateTime =
-    try java.time.OffsetDateTime.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readZonedDateTime(in: JsonReader): java.time.ZonedDateTime =
-    try java.time.ZonedDateTime.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readDuration(in: JsonReader): java.time.Duration =
-    try java.time.Duration.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
-
-  def readPeriod(in: JsonReader): java.time.Period =
-    try java.time.Period.parse(in.readString(null))
-    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
 
   // --- BigDecimal / BigInt validation ---
 

@@ -279,6 +279,32 @@ final class RoundTripSpec extends MacroSuite {
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
       }
+
+      test("Codec.AsObject with strictDecoding rejects extra fields") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val codec = KindlingsCodecAsObject.derive[SimplePerson]
+        val json = io.circe.parser.parse("""{"name":"Alice","age":30,"extra":true}""").getOrElse(io.circe.Json.Null)
+        assert(codec.decodeJson(json).isLeft)
+      }
+
+      test("Codec.AsObject with @transientField") {
+        val codec = KindlingsCodecAsObject.derive[CirceWithTransient]
+        val value = CirceWithTransient("Alice", Some("cached"))
+        val json = codec(value)
+        // Transient field should not appear in encoded JSON
+        assert(!json.noSpaces.contains("cache"))
+        // Decoded value should use default
+        codec.decodeJson(json) ==> Right(CirceWithTransient("Alice", None))
+      }
+    }
+
+    group("recursive types") {
+
+      test("recursive type auto-derivation round-trip") {
+        val value = RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil)))))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[RecursiveTree](json) ==> Right(value)
+      }
     }
   }
 }

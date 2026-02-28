@@ -70,6 +70,18 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
           def useDefaults: Expr[Boolean] =
             Expr.quote(Expr.splice(configExpr).useDefaults)
+
+          def fieldsWithDefaultsAreOptional: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).useDefaults)
+
+          def emptyFieldsAreOptional: Expr[Boolean] =
+            Expr.quote(false)
+
+          def mapsAreArrays: Expr[Boolean] =
+            Expr.quote(false)
+
+          def numericFieldsAsStrings: Expr[Boolean] =
+            Expr.quote(false)
         })
       case None => () // no circe Configuration in scope
     }

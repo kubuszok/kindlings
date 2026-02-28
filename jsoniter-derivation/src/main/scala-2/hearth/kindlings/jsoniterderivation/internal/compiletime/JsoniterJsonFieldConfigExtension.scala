@@ -79,6 +79,18 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
           def useDefaults: Expr[Boolean] =
             Expr.quote(false)
+
+          def fieldsWithDefaultsAreOptional: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).transientDefault)
+
+          def emptyFieldsAreOptional: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).transientEmpty)
+
+          def mapsAreArrays: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).mapAsArray)
+
+          def numericFieldsAsStrings: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).isStringified)
         })
       case None => () // no JsoniterConfig in scope
     }
