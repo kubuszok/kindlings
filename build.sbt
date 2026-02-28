@@ -30,7 +30,7 @@ val versions = new {
   val circe = "0.14.15"
   val jsoniterScala = "2.38.9"
   val scalaYaml = "0.3.1"
-  val tapir = "1.11.16"
+  val tapir = "1.11.50"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
