@@ -70,6 +70,32 @@ case class WithStringifiedLong(@stringified id: Long, label: String)
 case class WithStringifiedBigDecimal(@stringified amount: BigDecimal)
 case class WithMixedStringified(@stringified count: Int, name: String, @stringified score: Double)
 
+// isStringified (global config) test type
+case class WithNumericFields(count: Int, score: Double, name: String)
+
+// circeLikeObjectEncoding test type (sealed trait with mixed case objects and case classes)
+sealed trait MixedEnum
+case object Pending extends MixedEnum
+case object Done extends MixedEnum
+case class InProgress(progress: Int) extends MixedEnum
+
+// transientDefault / transientEmpty / transientNone test types
+case class WithDefaultFields(name: String, age: Int = 25, active: Boolean = true)
+case class WithOptionFields(name: String, email: Option[String] = None, phone: Option[String] = None)
+case class WithCollectionFields(name: String, tags: List[String] = Nil, scores: Map[String, Int] = Map.empty)
+case class WithMixedTransient(
+    name: String,
+    age: Int = 0,
+    email: Option[String] = None,
+    tags: List[String] = Nil
+)
+
+// BigDecimal / DoS protection test types
+case class WithBigDecimalField(value: BigDecimal)
+case class WithBigIntField(value: BigInt)
+case class WithMapField(data: Map[String, Int])
+case class WithListField(items: List[Int])
+
 // UTF-8 field name test types
 case class JsoniterWithUtf8FieldNames(
     @fieldName("名前") name: String,

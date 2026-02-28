@@ -4,9 +4,11 @@ import hearth.kindlings.avroderivation.annotations.{
   avroAlias,
   avroDefault,
   avroDoc,
+  avroEnumDefault,
   avroError,
   avroFixed,
   avroNamespace,
+  avroNoDefault,
   avroProp,
   avroSortPriority,
   fieldName,
@@ -163,6 +165,19 @@ case class AvroWithCustomFieldNames(
     @fieldName("data_value") data: Int,
     @fieldName("is_active") value: Boolean
 )
+
+// @avroNoDefault test types
+case class WithNoDefault(
+    name: String,
+    @avroNoDefault age: Int = 0
+)
+
+// @avroEnumDefault test types
+@avroEnumDefault("Medium")
+sealed trait SizeWithDefault
+case object Small extends SizeWithDefault
+case object Medium extends SizeWithDefault
+case object Large extends SizeWithDefault
 
 // Unhandled type for compile-time error tests
 class NotAnAvroType

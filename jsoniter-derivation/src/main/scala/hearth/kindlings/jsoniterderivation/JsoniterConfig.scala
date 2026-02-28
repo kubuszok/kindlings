@@ -6,7 +6,24 @@ final case class JsoniterConfig(
     discriminatorFieldName: Option[String] = None,
     skipUnexpectedFields: Boolean = true,
     enumAsStrings: Boolean = false,
-    mapAsArray: Boolean = false
+    mapAsArray: Boolean = false,
+    isStringified: Boolean = false,
+    decodingOnly: Boolean = false,
+    encodingOnly: Boolean = false,
+    circeLikeObjectEncoding: Boolean = false,
+    useScalaEnumValueId: Boolean = false,
+    transientDefault: Boolean = false,
+    transientEmpty: Boolean = false,
+    transientNone: Boolean = false,
+    requireCollectionFields: Boolean = false,
+    requireDefaultFields: Boolean = false,
+    requireDiscriminatorFirst: Boolean = true,
+    checkFieldDuplication: Boolean = false,
+    bigDecimalPrecision: Int = 34,
+    bigDecimalScaleLimit: Int = 6178,
+    bigDecimalDigitsLimit: Int = 308,
+    mapMaxInsertNumber: Int = Int.MaxValue,
+    setMaxInsertNumber: Int = Int.MaxValue
 ) {
 
   def withFieldNameMapper(f: String => String): JsoniterConfig = copy(fieldNameMapper = f)
@@ -24,6 +41,26 @@ final case class JsoniterConfig(
   def withSkipUnexpectedFields(skip: Boolean): JsoniterConfig = copy(skipUnexpectedFields = skip)
   def withEnumAsStrings: JsoniterConfig = copy(enumAsStrings = true)
   def withMapAsArray: JsoniterConfig = copy(mapAsArray = true)
+  def withStringified: JsoniterConfig = copy(isStringified = true)
+  def withDecodingOnly: JsoniterConfig = copy(decodingOnly = true)
+  def withEncodingOnly: JsoniterConfig = copy(encodingOnly = true)
+  def withCirceLikeObjectEncoding: JsoniterConfig = copy(circeLikeObjectEncoding = true)
+  def withUseScalaEnumValueId: JsoniterConfig = copy(useScalaEnumValueId = true)
+  def withTransientDefault: JsoniterConfig = copy(transientDefault = true)
+  def withTransientEmpty: JsoniterConfig = copy(transientEmpty = true)
+  def withTransientNone: JsoniterConfig = copy(transientNone = true)
+  def withRequireCollectionFields: JsoniterConfig = copy(requireCollectionFields = true)
+  def withRequireDefaultFields: JsoniterConfig = copy(requireDefaultFields = true)
+  def withRequireDiscriminatorFirst(require: Boolean): JsoniterConfig =
+    copy(requireDiscriminatorFirst = require)
+  def withCheckFieldDuplication: JsoniterConfig = copy(checkFieldDuplication = true)
+  def withBigDecimalPrecision(precision: Int): JsoniterConfig = copy(bigDecimalPrecision = precision)
+  def withBigDecimalScaleLimit(scaleLimit: Int): JsoniterConfig =
+    copy(bigDecimalScaleLimit = scaleLimit)
+  def withBigDecimalDigitsLimit(digitsLimit: Int): JsoniterConfig =
+    copy(bigDecimalDigitsLimit = digitsLimit)
+  def withMapMaxInsertNumber(max: Int): JsoniterConfig = copy(mapMaxInsertNumber = max)
+  def withSetMaxInsertNumber(max: Int): JsoniterConfig = copy(setMaxInsertNumber = max)
 }
 object JsoniterConfig {
 

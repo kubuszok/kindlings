@@ -204,6 +204,18 @@ object YamlDerivationUtils {
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decoder: YamlDecoder[A]): A = value.asInstanceOf[A]
 
+  def decodeFieldWithDefault(
+      node: Node,
+      fieldName: String,
+      decoder: YamlDecoder[?],
+      default: Any
+  ): Either[ConstructError, Any] =
+    getOptionalField(node, fieldName).flatMap {
+      case Some(fieldNode) =>
+        decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+      case None => Right(default)
+    }
+
   def isNullNode(node: Node): Boolean = node.tag == Tag.nullTag
 
   def nodeToYaml(node: Node): String = {
@@ -218,4 +230,17 @@ object YamlDerivationUtils {
     import org.virtuslab.yaml.*
     yaml.asNode.flatMap(decode(_))
   }
+
+  // --- Codec combiner ---
+
+  def yamlCodec[A](
+      enc: org.virtuslab.yaml.YamlEncoder[A],
+      dec: YamlDecoder[A]
+  ): hearth.kindlings.yamlderivation.KindlingsYamlCodec[A] =
+    new hearth.kindlings.yamlderivation.KindlingsYamlCodec[A] {
+      override def asNode(obj: A): Node = enc.asNode(obj)
+      override def construct(
+          node: Node
+      )(implicit settings: LoadSettings): Either[ConstructError, A] = dec.construct(node)
+    }
 }

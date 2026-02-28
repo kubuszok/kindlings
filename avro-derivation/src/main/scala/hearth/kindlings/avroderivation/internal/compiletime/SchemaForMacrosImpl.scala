@@ -11,9 +11,11 @@ import hearth.kindlings.avroderivation.annotations.{
   avroAlias,
   avroDefault,
   avroDoc,
+  avroEnumDefault,
   avroError,
   avroFixed,
   avroNamespace,
+  avroNoDefault,
   avroProp,
   avroSortPriority,
   fieldName,
@@ -651,6 +653,7 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       implicit val avroErrorT: Type[avroError] = SfTypes.AvroError
       implicit val avroPropT: Type[avroProp] = SfTypes.AvroProp
       implicit val avroAliasT: Type[avroAlias] = SfTypes.AvroAlias
+      implicit val avroNoDefaultT: Type[avroNoDefault] = SfTypes.AvroNoDefault
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       // Read class-level annotations
@@ -670,6 +673,18 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
       } match {
         case Some(name) =>
           val err = SchemaDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+          return Log.error(err.message) >> MIO.fail(err)
+        case None => // OK
+      }
+
+      // Validate: @avroNoDefault and @avroDefault on the same field is a compile error
+      fieldsList.collectFirst {
+        case (name, param)
+            if hasAnnotationType[avroNoDefault](param) && getAnnotationStringArg[avroDefault](param).isDefined =>
+          name
+      } match {
+        case Some(name) =>
+          val err = SchemaDerivationError.ConflictingDefaultAnnotations(name, Type[A].prettyPrint)
           return Log.error(err.message) >> MIO.fail(err)
         case None => // OK
       }
@@ -699,7 +714,9 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldName](param)
               val fieldDoc = getAnnotationStringArg[avroDoc](param)
-              val fieldDefault = getAnnotationStringArg[avroDefault](param)
+              val fieldDefault =
+                if (hasAnnotationType[avroNoDefault](param)) None
+                else getAnnotationStringArg[avroDefault](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
               val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
@@ -966,9 +983,12 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     ): MIO[Expr[Schema]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val avroSortPriorityT: Type[avroSortPriority] = SfTypes.AvroSortPriority
+      implicit val avroEnumDefaultT: Type[avroEnumDefault] = SfTypes.AvroEnumDefault
+      implicit val StringT: Type[String] = SfTypes.String
 
       val childrenList = enumm.directChildren.toList
       val typeName = Type[A].shortName
+      val enumDefault: Option[String] = getTypeAnnotationStringArg[avroEnumDefault, A]
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
@@ -998,16 +1018,32 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
                   Expr.splice(acc)
               }
             }
-            MIO.pure(Expr.quote {
-              val symbols = Expr.splice(symbolsListExpr)
-              val javaSymbols = new java.util.ArrayList[String](symbols.size)
-              symbols.foreach(javaSymbols.add)
-              AvroDerivationUtils.createEnum(
-                Expr.splice(Expr(typeName)),
-                Expr.splice(sfctx.config).namespace.getOrElse(""),
-                javaSymbols
-              )
-            })
+            val createEnumExpr: Expr[Schema] = enumDefault match {
+              case Some(default) =>
+                Expr.quote {
+                  val symbols = Expr.splice(symbolsListExpr)
+                  val javaSymbols = new java.util.ArrayList[String](symbols.size)
+                  symbols.foreach(javaSymbols.add)
+                  AvroDerivationUtils.createEnumWithDefault(
+                    Expr.splice(Expr(typeName)),
+                    Expr.splice(sfctx.config).namespace.getOrElse(""),
+                    javaSymbols,
+                    Expr.splice(Expr(default))
+                  )
+                }
+              case None =>
+                Expr.quote {
+                  val symbols = Expr.splice(symbolsListExpr)
+                  val javaSymbols = new java.util.ArrayList[String](symbols.size)
+                  symbols.foreach(javaSymbols.add)
+                  AvroDerivationUtils.createEnum(
+                    Expr.splice(Expr(typeName)),
+                    Expr.splice(sfctx.config).namespace.getOrElse(""),
+                    javaSymbols
+                  )
+                }
+            }
+            MIO.pure(createEnumExpr)
           } else {
             // Mixed sealed trait → Avro UNION of record schemas
             // Sort children by @avroSortPriority
@@ -1064,6 +1100,8 @@ trait SchemaForMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSuppo
     val AvroProp: Type[avroProp] = Type.of[avroProp]
     val AvroAlias: Type[avroAlias] = Type.of[avroAlias]
     val AvroSortPriority: Type[avroSortPriority] = Type.of[avroSortPriority]
+    val AvroNoDefault: Type[avroNoDefault] = Type.of[avroNoDefault]
+    val AvroEnumDefault: Type[avroEnumDefault] = Type.of[avroEnumDefault]
   }
 }
 
@@ -1091,5 +1129,9 @@ private[compiletime] object SchemaDerivationError {
       extends SchemaDerivationError {
     override def message: String =
       s"@avroFixed on field '$fieldName' of $tpeName requires Array[Byte], but field type is $fieldType"
+  }
+  final case class ConflictingDefaultAnnotations(fieldName: String, tpeName: String) extends SchemaDerivationError {
+    override def message: String =
+      s"@avroNoDefault and @avroDefault cannot both be present on field '$fieldName' of $tpeName"
   }
 }

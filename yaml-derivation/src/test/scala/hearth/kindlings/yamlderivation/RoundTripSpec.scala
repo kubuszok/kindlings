@@ -162,5 +162,33 @@ final class RoundTripSpec extends MacroSuite {
         decoded ==> Right(value)
       }
     }
+
+    group("KindlingsYamlCodec") {
+
+      test("simple case class roundtrip") {
+        val codec = KindlingsYamlCodec.derive[SimplePerson]
+        val value = SimplePerson("Bob", 25)
+        val node = codec.asNode(value)
+        val decoded = codec.construct(node)
+        decoded ==> Right(value)
+      }
+
+      test("sealed trait roundtrip with discriminator") {
+        implicit val config: YamlConfig = YamlConfig.default.withDiscriminator("kind")
+        val codec = KindlingsYamlCodec.derive[Shape]
+        val value: Shape = Circle(3.14)
+        val node = codec.asNode(value)
+        val decoded = codec.construct(node)
+        decoded ==> Right(value)
+      }
+
+      test("derived codec via implicit") {
+        implicit val codec: KindlingsYamlCodec[SimplePerson] = KindlingsYamlCodec.derived[SimplePerson]
+        val value = SimplePerson("Charlie", 40)
+        val node = codec.asNode(value)
+        val decoded = codec.construct(node)
+        decoded ==> Right(value)
+      }
+    }
   }
 }

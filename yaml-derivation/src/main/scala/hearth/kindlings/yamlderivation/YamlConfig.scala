@@ -4,7 +4,8 @@ final case class YamlConfig(
     transformMemberNames: String => String = identity,
     transformConstructorNames: String => String = identity,
     discriminator: Option[String] = None,
-    enumAsStrings: Boolean = false
+    enumAsStrings: Boolean = false,
+    useDefaults: Boolean = false
 ) {
 
   def withTransformMemberNames(f: String => String): YamlConfig = copy(transformMemberNames = f)
@@ -18,6 +19,7 @@ final case class YamlConfig(
   def withKebabCaseConstructorNames: YamlConfig = copy(transformConstructorNames = YamlConfig.kebabCase)
   def withDiscriminator(field: String): YamlConfig = copy(discriminator = Some(field))
   def withEnumAsStrings: YamlConfig = copy(enumAsStrings = true)
+  def withUseDefaults: YamlConfig = copy(useDefaults = true)
 }
 object YamlConfig {
 

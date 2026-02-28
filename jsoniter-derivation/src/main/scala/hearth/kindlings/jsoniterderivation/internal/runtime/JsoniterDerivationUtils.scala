@@ -59,10 +59,33 @@ object JsoniterDerivationUtils {
   def writeEnumAsString(out: JsonWriter, typeName: String): Unit =
     out.writeVal(typeName)
 
+  def writeScalaEnumValueId(out: JsonWriter, value: Any): Unit =
+    out.writeVal(value.asInstanceOf[scala.Enumeration#Value].id)
+
   def readEnumAsString[A](in: JsonReader)(dispatch: String => A): A = {
     val typeName = in.readString(null)
     dispatch(typeName)
   }
+
+  def readScalaEnumValueId[A](in: JsonReader)(dispatch: Int => A): A = {
+    val id = in.readInt()
+    dispatch(id)
+  }
+
+  def scalaEnumValueId(value: Any): Int =
+    value.asInstanceOf[scala.Enumeration#Value].id
+
+  def readCirceLikeObject[A](in: JsonReader)(
+      stringDispatch: String => A,
+      wrapperDispatch: String => A
+  ): A =
+    if (in.isNextToken('"')) {
+      in.rollbackToken()
+      readEnumAsString[A](in)(stringDispatch)
+    } else {
+      in.rollbackToken()
+      readWrapped[A](in)(wrapperDispatch)
+    }
 
   def writeWrapped(out: JsonWriter, typeName: String)(encodeInner: => Unit): Unit = {
     out.writeObjectStart()
@@ -106,14 +129,20 @@ object JsoniterDerivationUtils {
   def readCollection[Item, Coll](
       in: JsonReader,
       decodeItem: JsonReader => Item,
-      factory: scala.collection.Factory[Item, Coll]
+      factory: scala.collection.Factory[Item, Coll],
+      maxInserts: Int
   ): Coll = {
     val builder = factory.newBuilder
     if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' or null")
     if (!in.isNextToken(']'.toByte)) {
       in.rollbackToken()
+      var count = 1
       builder += decodeItem(in)
-      while (in.isNextToken(','.toByte)) builder += decodeItem(in)
+      while (in.isNextToken(','.toByte)) {
+        count += 1
+        if (count > maxInserts) in.decodeError(s"too many collection items (max: $maxInserts)")
+        builder += decodeItem(in)
+      }
       if (!in.isCurrentToken(']'.toByte)) in.decodeError("expected ']' or ','")
     }
     builder.result()
@@ -122,15 +151,19 @@ object JsoniterDerivationUtils {
   def readMap[V, M](
       in: JsonReader,
       decodeValue: JsonReader => V,
-      factory: scala.collection.Factory[(String, V), M]
+      factory: scala.collection.Factory[(String, V), M],
+      maxInserts: Int
   ): M = {
     val builder = factory.newBuilder
     if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{' or null")
     if (!in.isNextToken('}'.toByte)) {
       in.rollbackToken()
+      var count = 1
       val key = in.readKeyAsString()
       builder += ((key, decodeValue(in)))
       while (in.isNextToken(','.toByte)) {
+        count += 1
+        if (count > maxInserts) in.decodeError(s"too many map entries (max: $maxInserts)")
         val k = in.readKeyAsString()
         builder += ((k, decodeValue(in)))
       }
@@ -230,15 +263,19 @@ object JsoniterDerivationUtils {
       in: JsonReader,
       decodeKey: JsonReader => K,
       decodeValue: JsonReader => V,
-      factory: scala.collection.Factory[(K, V), M]
+      factory: scala.collection.Factory[(K, V), M],
+      maxInserts: Int
   ): M = {
     val builder = factory.newBuilder
     if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{' or null")
     if (!in.isNextToken('}'.toByte)) {
       in.rollbackToken()
+      var count = 1
       val key = decodeKey(in)
       builder += ((key, decodeValue(in)))
       while (in.isNextToken(','.toByte)) {
+        count += 1
+        if (count > maxInserts) in.decodeError(s"too many map entries (max: $maxInserts)")
         val k = decodeKey(in)
         builder += ((k, decodeValue(in)))
       }
@@ -291,12 +328,14 @@ object JsoniterDerivationUtils {
       in: JsonReader,
       decodeKey: JsonReader => K,
       decodeValue: JsonReader => V,
-      factory: scala.collection.Factory[(K, V), M]
+      factory: scala.collection.Factory[(K, V), M],
+      maxInserts: Int
   ): M = {
     val builder = factory.newBuilder
     if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for map-as-array")
     if (!in.isNextToken(']'.toByte)) {
       in.rollbackToken()
+      var count = 1
       if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for pair")
       val k = decodeKey(in)
       if (!in.isNextToken(','.toByte)) in.decodeError("expected ',' between key and value in pair")
@@ -304,6 +343,8 @@ object JsoniterDerivationUtils {
       if (!in.isNextToken(']'.toByte)) in.decodeError("expected ']' after pair")
       builder += ((k, v))
       while (in.isNextToken(','.toByte)) {
+        count += 1
+        if (count > maxInserts) in.decodeError(s"too many map entries (max: $maxInserts)")
         if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' for pair")
         val k = decodeKey(in)
         if (!in.isNextToken(','.toByte)) in.decodeError("expected ',' between key and value in pair")
@@ -319,4 +360,77 @@ object JsoniterDerivationUtils {
   /** Cast an `Any` value to `A`, using a decode function purely for type inference. */
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decodeFn: JsonReader => A): A = value.asInstanceOf[A]
+
+  // --- Validation helpers ---
+
+  def throwMissingField(fieldName: String): Nothing =
+    throw new IllegalArgumentException(s"missing required field: $fieldName")
+
+  def throwDuplicateField(in: JsonReader, fieldName: String): Nothing =
+    in.decodeError(s"duplicate field: $fieldName")
+
+  // --- BigDecimal / BigInt validation ---
+
+  // --- java.time helpers ---
+
+  def readInstant(in: JsonReader): java.time.Instant =
+    try java.time.Instant.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readLocalDate(in: JsonReader): java.time.LocalDate =
+    try java.time.LocalDate.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readLocalTime(in: JsonReader): java.time.LocalTime =
+    try java.time.LocalTime.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readLocalDateTime(in: JsonReader): java.time.LocalDateTime =
+    try java.time.LocalDateTime.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readOffsetDateTime(in: JsonReader): java.time.OffsetDateTime =
+    try java.time.OffsetDateTime.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readZonedDateTime(in: JsonReader): java.time.ZonedDateTime =
+    try java.time.ZonedDateTime.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readDuration(in: JsonReader): java.time.Duration =
+    try java.time.Duration.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  def readPeriod(in: JsonReader): java.time.Period =
+    try java.time.Period.parse(in.readString(null))
+    catch { case e: java.time.format.DateTimeParseException => in.decodeError(e.getMessage) }
+
+  // --- BigDecimal / BigInt validation ---
+
+  def validateBigDecimal(
+      in: JsonReader,
+      value: BigDecimal,
+      precision: Int,
+      scaleLimit: Int,
+      digitsLimit: Int
+  ): BigDecimal = {
+    if (value ne null) {
+      val u = value.underlying()
+      if (u.precision > precision)
+        in.decodeError(s"BigDecimal precision ${u.precision} exceeds limit $precision")
+      if (u.scale > scaleLimit || u.scale < -scaleLimit)
+        in.decodeError(s"BigDecimal scale ${u.scale} exceeds limit $scaleLimit")
+      if (u.unscaledValue.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103
+        in.decodeError(s"BigDecimal digits exceed limit $digitsLimit")
+    }
+    value
+  }
+
+  def validateBigInt(in: JsonReader, value: BigInt, digitsLimit: Int): BigInt = {
+    if (value ne null) {
+      if (value.underlying.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103
+        in.decodeError(s"BigInt digits exceed limit $digitsLimit")
+    }
+    value
+  }
 }

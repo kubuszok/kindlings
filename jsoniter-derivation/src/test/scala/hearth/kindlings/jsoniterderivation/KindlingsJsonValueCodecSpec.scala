@@ -955,5 +955,426 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       val decoded = readFromString[Int](json)(positiveCodec)
       decoded ==> 42
     }
+
+    group("decodingOnly / encodingOnly") {
+
+      test("encodingOnly codec encodes normally") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withEncodingOnly
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        writeToString(SimplePerson("Alice", 30))(codec) ==> """{"name":"Alice","age":30}"""
+      }
+
+      test("encodingOnly codec throws on decode") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withEncodingOnly
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        intercept[UnsupportedOperationException] {
+          readFromString[SimplePerson]("""{"name":"Alice","age":30}""")(codec)
+        }
+      }
+
+      test("decodingOnly codec decodes normally") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withDecodingOnly
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        readFromString[SimplePerson]("""{"name":"Alice","age":30}""")(codec) ==> SimplePerson("Alice", 30)
+      }
+
+      test("decodingOnly codec throws on encode") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withDecodingOnly
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        intercept[UnsupportedOperationException] {
+          writeToString(SimplePerson("Alice", 30))(codec)
+        }
+      }
+    }
+
+    group("isStringified (global)") {
+
+      test("global isStringified encodes numeric fields as strings") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
+        val codec = KindlingsJsonValueCodec.derive[WithNumericFields]
+        val json = writeToString(WithNumericFields(42, 3.14, "hello"))(codec)
+        assert(json.contains("\"42\""))
+        assert(json.contains("\"3.14\""))
+        assert(json.contains("\"hello\""))
+      }
+
+      test("global isStringified decodes numeric fields from strings") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
+        val codec = KindlingsJsonValueCodec.derive[WithNumericFields]
+        val json = """{"count":"42","score":"3.14","name":"hello"}"""
+        readFromString[WithNumericFields](json)(codec) ==> WithNumericFields(42, 3.14, "hello")
+      }
+
+      test("without isStringified, numeric fields use normal encoding") {
+        val codec = KindlingsJsonValueCodec.derive[WithNumericFields]
+        val json = writeToString(WithNumericFields(42, 3.14, "hello"))(codec)
+        assert(json.contains(":42"))
+        assert(json.contains(":3.14"))
+      }
+    }
+
+    group("useScalaEnumValueId") {
+
+      test("Scala Enumeration encodes as id when useScalaEnumValueId=true") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true, useScalaEnumValueId = true)
+        val codec = KindlingsJsonValueCodec.derive[ScalaColor.Value]
+        val json = writeToString[ScalaColor.Value](ScalaColor.Red)(codec)
+        json ==> "0"
+      }
+
+      test("Scala Enumeration decodes from id when useScalaEnumValueId=true") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true, useScalaEnumValueId = true)
+        val codec = KindlingsJsonValueCodec.derive[ScalaColor.Value]
+        readFromString[ScalaColor.Value]("1")(codec) ==> ScalaColor.Green
+      }
+
+      test("Scala Enumeration round-trip with useScalaEnumValueId") {
+        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true, useScalaEnumValueId = true)
+        val codec = KindlingsJsonValueCodec.derive[ScalaColor.Value]
+        ScalaColor.values.foreach { color =>
+          val json = writeToString[ScalaColor.Value](color)(codec)
+          readFromString[ScalaColor.Value](json)(codec) ==> color
+        }
+      }
+    }
+
+    group("circeLikeObjectEncoding") {
+
+      test("case objects encode as bare strings") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCirceLikeObjectEncoding
+        val codec = KindlingsJsonValueCodec.derive[MixedEnum]
+        writeToString[MixedEnum](Pending)(codec) ==> "\"Pending\""
+      }
+
+      test("case classes encode as wrapped objects") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCirceLikeObjectEncoding
+        val codec = KindlingsJsonValueCodec.derive[MixedEnum]
+        writeToString[MixedEnum](InProgress(50))(codec) ==> """{"InProgress":{"progress":50}}"""
+      }
+
+      test("case object round-trip with circeLikeObjectEncoding") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCirceLikeObjectEncoding
+        val codec = KindlingsJsonValueCodec.derive[MixedEnum]
+        val json = writeToString[MixedEnum](Done)(codec)
+        readFromString[MixedEnum](json)(codec) ==> (Done: MixedEnum)
+      }
+
+      test("case class round-trip with circeLikeObjectEncoding") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCirceLikeObjectEncoding
+        val codec = KindlingsJsonValueCodec.derive[MixedEnum]
+        val json = writeToString[MixedEnum](InProgress(75))(codec)
+        readFromString[MixedEnum](json)(codec) ==> (InProgress(75): MixedEnum)
+      }
+    }
+
+    group("transientDefault") {
+
+      test("fields with default values are omitted when equal to default") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true) // all defaults
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"Alice"}"""
+      }
+
+      test("fields with non-default values are written") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 30, false)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"age\":30"))
+        assert(json.contains("\"active\":false"))
+      }
+
+      test("round-trip with transientDefault") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true) // all defaults
+        val json = writeToString(value)(codec)
+        readFromString[WithDefaultFields](json)(codec) ==> value
+      }
+
+      test("round-trip with non-default values") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Bob", 42, false)
+        val json = writeToString(value)(codec)
+        readFromString[WithDefaultFields](json)(codec) ==> value
+      }
+    }
+
+    group("transientNone") {
+
+      test("None fields are omitted") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientNone
+        val codec = KindlingsJsonValueCodec.derive[WithOptionFields]
+        val value = WithOptionFields("Alice", None, None)
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"Alice"}"""
+      }
+
+      test("Some fields are written") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientNone
+        val codec = KindlingsJsonValueCodec.derive[WithOptionFields]
+        val value = WithOptionFields("Alice", Some("alice@test.com"), None)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"email\":\"alice@test.com\""))
+        assert(!json.contains("\"phone\""))
+      }
+
+      test("round-trip with transientNone") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientNone
+        val codec = KindlingsJsonValueCodec.derive[WithOptionFields]
+        val value = WithOptionFields("Alice", None, None)
+        val json = writeToString(value)(codec)
+        readFromString[WithOptionFields](json)(codec) ==> value
+      }
+
+      test("round-trip with Some values") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientNone
+        val codec = KindlingsJsonValueCodec.derive[WithOptionFields]
+        val value = WithOptionFields("Alice", Some("alice@test.com"), Some("555-1234"))
+        val json = writeToString(value)(codec)
+        readFromString[WithOptionFields](json)(codec) ==> value
+      }
+    }
+
+    group("transientEmpty") {
+
+      test("empty collections are omitted") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientEmpty.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val value = WithCollectionFields("Alice", Nil, Map.empty)
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"Alice"}"""
+      }
+
+      test("non-empty collections are written") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientEmpty.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val value = WithCollectionFields("Alice", List("scala"), Map("math" -> 95))
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"tags\""))
+        assert(json.contains("\"scores\""))
+      }
+
+      test("round-trip with transientEmpty") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientEmpty.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val value = WithCollectionFields("Alice", Nil, Map.empty)
+        val json = writeToString(value)(codec)
+        readFromString[WithCollectionFields](json)(codec) ==> value
+      }
+
+      test("round-trip with non-empty collections") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientEmpty.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val value = WithCollectionFields("Alice", List("a", "b"), Map("x" -> 1))
+        val json = writeToString(value)(codec)
+        readFromString[WithCollectionFields](json)(codec) ==> value
+      }
+    }
+
+    group("mixed transient flags") {
+
+      test("all transient flags combined") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientDefault.withTransientNone.withTransientEmpty
+        val codec = KindlingsJsonValueCodec.derive[WithMixedTransient]
+        val value = WithMixedTransient("Alice", 0, None, Nil) // all defaults/empty
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"Alice"}"""
+      }
+
+      test("all transient flags combined round-trip") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientDefault.withTransientNone.withTransientEmpty
+        val codec = KindlingsJsonValueCodec.derive[WithMixedTransient]
+        val value = WithMixedTransient("Alice", 0, None, Nil)
+        val json = writeToString(value)(codec)
+        readFromString[WithMixedTransient](json)(codec) ==> value
+      }
+
+      test("non-default values round-trip correctly") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withTransientDefault.withTransientNone.withTransientEmpty
+        val codec = KindlingsJsonValueCodec.derive[WithMixedTransient]
+        val value = WithMixedTransient("Bob", 42, Some("bob@test.com"), List("x"))
+        val json = writeToString(value)(codec)
+        readFromString[WithMixedTransient](json)(codec) ==> value
+      }
+    }
+
+    group("requireDefaultFields") {
+
+      test("accepts complete JSON with all fields present") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireDefaultFields
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val json = """{"name":"Alice","age":30,"active":false}"""
+        readFromString[WithDefaultFields](json)(codec) ==> WithDefaultFields("Alice", 30, false)
+      }
+
+      test("throws when field with default is missing") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireDefaultFields
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val json = """{"name":"Alice"}"""
+        intercept[IllegalArgumentException] {
+          readFromString[WithDefaultFields](json)(codec)
+        }
+      }
+
+      test("round-trip works when all fields present") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireDefaultFields
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Bob", 42, true)
+        val json = writeToString(value)(codec)
+        readFromString[WithDefaultFields](json)(codec) ==> value
+      }
+    }
+
+    group("requireCollectionFields") {
+
+      test("accepts complete JSON with all collection fields present") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireCollectionFields
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val json = """{"name":"Alice","tags":["a"],"scores":{"x":1}}"""
+        readFromString[WithCollectionFields](json)(codec) ==> WithCollectionFields("Alice", List("a"), Map("x" -> 1))
+      }
+
+      test("throws when collection field is missing") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireCollectionFields
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val json = """{"name":"Alice"}"""
+        intercept[IllegalArgumentException] {
+          readFromString[WithCollectionFields](json)(codec)
+        }
+      }
+
+      test("round-trip works when all fields present") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireCollectionFields
+        val codec = KindlingsJsonValueCodec.derive[WithCollectionFields]
+        val value = WithCollectionFields("Bob", List("x", "y"), Map("a" -> 1))
+        val json = writeToString(value)(codec)
+        readFromString[WithCollectionFields](json)(codec) ==> value
+      }
+    }
+
+    group("checkFieldDuplication") {
+
+      test("accepts JSON without duplicates") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCheckFieldDuplication
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice","age":30}"""
+        readFromString[SimplePerson](json)(codec) ==> SimplePerson("Alice", 30)
+      }
+
+      test("throws on duplicate field") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withCheckFieldDuplication
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice","age":30,"name":"Bob"}"""
+        intercept[JsonReaderException] {
+          readFromString[SimplePerson](json)(codec)
+        }
+      }
+
+      test("allows duplicates when flag is off") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val json = """{"name":"Alice","age":30,"name":"Bob"}"""
+        // Last value wins when duplication check is off
+        readFromString[SimplePerson](json)(codec) ==> SimplePerson("Bob", 30)
+      }
+    }
+
+    group("BigDecimal limits") {
+
+      test("accepts normal BigDecimal values") {
+        val codec = KindlingsJsonValueCodec.derive[WithBigDecimalField]
+        val json = """{"value":123.456}"""
+        readFromString[WithBigDecimalField](json)(codec) ==> WithBigDecimalField(BigDecimal("123.456"))
+      }
+
+      test("rejects BigDecimal exceeding precision limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withBigDecimalPrecision(5)
+        val codec = KindlingsJsonValueCodec.derive[WithBigDecimalField]
+        val json = """{"value":123456.789}"""
+        intercept[JsonReaderException] {
+          readFromString[WithBigDecimalField](json)(codec)
+        }
+      }
+
+      test("accepts BigDecimal within custom precision") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withBigDecimalPrecision(10)
+        val codec = KindlingsJsonValueCodec.derive[WithBigDecimalField]
+        val json = """{"value":123.456}"""
+        readFromString[WithBigDecimalField](json)(codec) ==> WithBigDecimalField(BigDecimal("123.456"))
+      }
+    }
+
+    group("BigInt limits") {
+
+      test("accepts normal BigInt values") {
+        val codec = KindlingsJsonValueCodec.derive[WithBigIntField]
+        val json = """{"value":12345}"""
+        readFromString[WithBigIntField](json)(codec) ==> WithBigIntField(BigInt(12345))
+      }
+
+      test("rejects BigInt exceeding digits limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withBigDecimalDigitsLimit(3)
+        val codec = KindlingsJsonValueCodec.derive[WithBigIntField]
+        val json = """{"value":12345}"""
+        intercept[JsonReaderException] {
+          readFromString[WithBigIntField](json)(codec)
+        }
+      }
+    }
+
+    group("map size limits") {
+
+      test("accepts map within limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withMapMaxInsertNumber(5)
+        val codec = KindlingsJsonValueCodec.derive[WithMapField]
+        val json = """{"data":{"a":1,"b":2}}"""
+        readFromString[WithMapField](json)(codec) ==> WithMapField(Map("a" -> 1, "b" -> 2))
+      }
+
+      test("rejects map exceeding limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withMapMaxInsertNumber(2)
+        val codec = KindlingsJsonValueCodec.derive[WithMapField]
+        val json = """{"data":{"a":1,"b":2,"c":3}}"""
+        intercept[JsonReaderException] {
+          readFromString[WithMapField](json)(codec)
+        }
+      }
+    }
+
+    group("collection size limits") {
+
+      test("accepts collection within limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withSetMaxInsertNumber(5)
+        val codec = KindlingsJsonValueCodec.derive[WithListField]
+        val json = """{"items":[1,2,3]}"""
+        readFromString[WithListField](json)(codec) ==> WithListField(List(1, 2, 3))
+      }
+
+      test("rejects collection exceeding limit") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig.default.withSetMaxInsertNumber(2)
+        val codec = KindlingsJsonValueCodec.derive[WithListField]
+        val json = """{"items":[1,2,3]}"""
+        intercept[JsonReaderException] {
+          readFromString[WithListField](json)(codec)
+        }
+      }
+    }
   }
 }

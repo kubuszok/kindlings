@@ -427,6 +427,40 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("useDefaults") {
+
+      test("missing field with default uses default value") {
+        implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
+        val node = mappingOf("name" -> scalarNode("Alice"))
+        KindlingsYamlDecoder.decode[WithDefaults](node) ==> Right(WithDefaults("Alice", 25, true))
+      }
+
+      test("provided value overrides default") {
+        implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
+        val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"), "active" -> scalarNode("false"))
+        KindlingsYamlDecoder.decode[WithDefaults](node) ==> Right(WithDefaults("Alice", 30, false))
+      }
+
+      test("field without default is still required") {
+        implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
+        val node = mappingOf("age" -> scalarNode("30"))
+        val Left(error) = KindlingsYamlDecoder.decode[WithDefaults](node): @unchecked
+        assert(error.getMessage.contains("Missing field: name"))
+      }
+
+      test("without useDefaults, missing defaulted field is an error") {
+        val node = mappingOf("name" -> scalarNode("Alice"))
+        val Left(error) = KindlingsYamlDecoder.decode[WithDefaults](node): @unchecked
+        assert(error.getMessage.contains("Missing field: age"))
+      }
+
+      test("all defaults used when only required fields provided") {
+        implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
+        val node = mappingOf("name" -> scalarNode("Bob"))
+        KindlingsYamlDecoder.decode[WithDefaults](node) ==> Right(WithDefaults("Bob", 25, true))
+      }
+    }
+
     group("per-field annotations") {
 
       test("@fieldName decodes from custom field name") {

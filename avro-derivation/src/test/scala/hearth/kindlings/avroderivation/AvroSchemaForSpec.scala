@@ -416,6 +416,37 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("@avroNoDefault annotation") {
+
+      test("field with @avroNoDefault has no default value in schema") {
+        val schema = AvroSchemaFor.schemaOf[WithNoDefault]
+        assert(!schema.getField("name").hasDefaultValue)
+        assert(!schema.getField("age").hasDefaultValue)
+      }
+
+      test("@avroNoDefault and @avroDefault on same field is compile error") {
+        compileErrors(
+          """
+          import hearth.kindlings.avroderivation.AvroSchemaFor
+          import hearth.kindlings.avroderivation.annotations.{avroDefault, avroNoDefault}
+          case class Conflicting(@avroNoDefault @avroDefault("0") x: Int = 0)
+          AvroSchemaFor.schemaOf[Conflicting]
+          """
+        ).check(
+          "@avroNoDefault and @avroDefault cannot both be present"
+        )
+      }
+    }
+
+    group("@avroEnumDefault annotation") {
+
+      test("enum with @avroEnumDefault has default symbol in schema") {
+        val schema = AvroSchemaFor.schemaOf[SizeWithDefault]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getEnumDefault ==> "Medium"
+      }
+    }
+
     group("BigDecimal as decimal logical type") {
 
       test("BigDecimal with decimalConfig produces BYTES with decimal logical type") {

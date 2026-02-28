@@ -46,10 +46,15 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             def nullValue: A = Expr.splice(nullValueExpr)
             def decodeValue(in: JsonReader, default: A): A = {
               val _ = default
+              if (Expr.splice(configExpr).encodingOnly)
+                throw new UnsupportedOperationException("encoding-only codec cannot decode")
               Expr.splice(decodeFn(Expr.quote(in), configExpr))
             }
             def encodeValue(x: A, out: JsonWriter): Unit =
-              Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
+              if (Expr.splice(configExpr).decodingOnly)
+                throw new UnsupportedOperationException("decoding-only codec cannot encode")
+              else
+                Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
           }
         }
     }
@@ -985,6 +990,42 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[BigDecimal])))
           else if (Type[A] =:= Type.of[BigInt])
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[BigInt])))
+          else if (Type[A] =:= CTypes.Instant)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Instant].toString)))
+          else if (Type[A] =:= CTypes.LocalDate)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDate].toString))
+            )
+          else if (Type[A] =:= CTypes.LocalTime)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalTime].toString))
+            )
+          else if (Type[A] =:= CTypes.LocalDateTime)
+            Some(
+              Expr.quote(
+                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.LocalDateTime].toString)
+              )
+            )
+          else if (Type[A] =:= CTypes.OffsetDateTime)
+            Some(
+              Expr.quote(
+                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.OffsetDateTime].toString)
+              )
+            )
+          else if (Type[A] =:= CTypes.ZonedDateTime)
+            Some(
+              Expr.quote(
+                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZonedDateTime].toString)
+              )
+            )
+          else if (Type[A] =:= CTypes.Duration)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Duration].toString))
+            )
+          else if (Type[A] =:= CTypes.Period)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Period].toString))
+            )
           else
             None
 
@@ -1453,6 +1494,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val UnitT: Type[Unit] = CTypes.Unit
+      implicit val AnyT: Type[Any] = CTypes.Any
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
       implicit val stringifiedT: Type[stringified] = CTypes.Stringified
@@ -1483,8 +1525,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 .parTraverse { case (fName, fieldValue) =>
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    val isStringified = paramsByName.get(fName).exists(p => hasAnnotationType[stringified](p))
-                    val fieldEncMIO: MIO[Expr[Unit]] = if (isStringified) {
+                    val hasStringifiedAnnotation =
+                      paramsByName.get(fName).exists(p => hasAnnotationType[stringified](p))
+                    val fieldEncMIO: MIO[Expr[Unit]] = if (hasStringifiedAnnotation) {
                       deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
                         case Some(enc) => MIO.pure(enc)
                         case None      =>
@@ -1493,33 +1536,119 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                           Log.error(err.message) >> MIO.fail(err)
                       }
                     } else {
-                      deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                      // When no @stringified annotation, check if global isStringified applies
+                      deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
+                        case Some(stringifiedEnc) =>
+                          // Numeric field: generate both paths, select at runtime
+                          deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { normalEnc =>
+                            Expr.quote {
+                              if (Expr.splice(ectx.config).isStringified)
+                                Expr.splice(stringifiedEnc)
+                              else
+                                Expr.splice(normalEnc)
+                            }
+                          }
+                        case None =>
+                          // Non-numeric field: always normal encoding
+                          deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                      }
                     }
                     fieldEncMIO.map { fieldEnc =>
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
-                      (fName, fieldEnc, nameOverride)
+
+                      // Build the writeKey + encode expression
+                      val unconditionalWrite: Expr[Unit] = nameOverride match {
+                        case Some(customName) =>
+                          Expr.quote {
+                            Expr.splice(ectx.writer).writeKey(Expr.splice(Expr(customName)))
+                            Expr.splice(fieldEnc)
+                          }
+                        case None =>
+                          Expr.quote {
+                            Expr
+                              .splice(ectx.writer)
+                              .writeKey(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
+                            Expr.splice(fieldEnc)
+                          }
+                      }
+
+                      // Determine transient skip conditions based on field type
+                      val param = paramsByName.get(fName)
+                      val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
+                        p.defaultValue.flatMap { existentialOuter =>
+                          val methodOf = existentialOuter.value
+                          methodOf.value match {
+                            case noInstance: Method.NoInstance[?] =>
+                              import noInstance.Returned
+                              noInstance(Map.empty).toOption.map(_.upcast[Any])
+                            case _ => None
+                          }
+                        }
+                      }
+
+                      val isOptionField = Type[Field] match {
+                        case IsOption(_) => true
+                        case _           => false
+                      }
+                      val isStringField = Type[Field] =:= CTypes.String
+                      val isCollectionField = !isOptionField && {
+                        val isMap = Type[Field] match { case IsMap(_) => true; case _ => false }
+                        val isColl = Type[Field] match { case IsCollection(_) => true; case _ => false }
+                        isMap || isColl
+                      }
+                      val isEmptyCapable = isStringField || isCollectionField
+
+                      // Build skip conditions (only applicable ones per field type)
+                      val conditions = List.newBuilder[Expr[Boolean]]
+
+                      defaultAsAnyOpt.foreach { defaultExpr =>
+                        conditions += Expr.quote {
+                          Expr.splice(ectx.config).transientDefault &&
+                          Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
+                        }
+                      }
+
+                      if (isOptionField) {
+                        conditions += Expr.quote {
+                          Expr.splice(ectx.config).transientNone &&
+                          !Expr.splice(fieldExpr).asInstanceOf[Option[Any]].isDefined
+                        }
+                      }
+
+                      if (isEmptyCapable) {
+                        if (isStringField) {
+                          conditions += Expr.quote {
+                            Expr.splice(ectx.config).transientEmpty &&
+                            Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
+                          }
+                        } else {
+                          // Collection or Map — both extend Iterable
+                          conditions += Expr.quote {
+                            Expr.splice(ectx.config).transientEmpty &&
+                            Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
+                          }
+                        }
+                      }
+
+                      val condList = conditions.result()
+                      if (condList.isEmpty) {
+                        unconditionalWrite
+                      } else {
+                        val skipExpr = condList.reduce { (a, b) =>
+                          Expr.quote(Expr.splice(a) || Expr.splice(b))
+                        }
+                        Expr.quote {
+                          if (!Expr.splice(skipExpr)) {
+                            Expr.splice(unconditionalWrite)
+                          }
+                        }
+                      }
                     }
                   }
                 }
-                .map { fieldPairs =>
-                  fieldPairs.toList
-                    .map {
-                      case (fName, fieldEnc, Some(customName)) =>
-                        Expr.quote {
-                          Expr
-                            .splice(ectx.writer)
-                            .writeKey(Expr.splice(Expr(customName)))
-                          Expr.splice(fieldEnc)
-                        }
-                      case (fName, fieldEnc, None) =>
-                        Expr.quote {
-                          Expr
-                            .splice(ectx.writer)
-                            .writeKey(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
-                          Expr.splice(fieldEnc)
-                        }
-                    }
+                .map { fieldExprs =>
+                  fieldExprs.toList
                     .foldLeft(Expr.quote(()): Expr[Unit]) { (acc, field) =>
                       Expr.quote {
                         Expr.splice(acc)
@@ -1667,12 +1796,59 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               fullEnc <- fullEncMIO
             } yield
               if (allCaseObjects) {
+                if (isEnumerationOrJavaEnum)
+                  Expr.quote {
+                    val config = Expr.splice(ectx.config)
+                    if (config.useScalaEnumValueId)
+                      JsoniterDerivationUtils.writeScalaEnumValueId(
+                        Expr.splice(ectx.writer),
+                        Expr.splice(enumCaseValue)
+                      )
+                    else {
+                      val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                      if (config.enumAsStrings)
+                        JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                      else
+                        config.discriminatorFieldName match {
+                          case Some(discriminatorField) =>
+                            Expr.splice(ectx.writer).writeObjectStart()
+                            Expr.splice(ectx.writer).writeKey(discriminatorField)
+                            Expr.splice(ectx.writer).writeVal(name)
+                            Expr.splice(ectx.writer).writeObjectEnd()
+                          case None =>
+                            JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {}
+                        }
+                    }
+                  }
+                else
+                  Expr.quote {
+                    val config = Expr.splice(ectx.config)
+                    val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                    if (config.enumAsStrings) {
+                      JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                    } else {
+                      config.discriminatorFieldName match {
+                        case Some(discriminatorField) =>
+                          Expr.splice(ectx.writer).writeObjectStart()
+                          Expr.splice(ectx.writer).writeKey(discriminatorField)
+                          Expr.splice(ectx.writer).writeVal(name)
+                          Expr.splice(fieldsOnly)
+                          Expr.splice(ectx.writer).writeObjectEnd()
+                        case None =>
+                          JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                            Expr.splice(fullEnc)
+                          }
+                      }
+                    }
+                  }
+              } else {
+                val isSingletonCase = SingletonValue.unapply(Type[EnumCase]).isDefined
                 Expr.quote {
                   val config = Expr.splice(ectx.config)
                   val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-                  if (config.enumAsStrings) {
+                  if (config.circeLikeObjectEncoding && Expr.splice(Expr(isSingletonCase)))
                     JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
-                  } else {
+                  else
                     config.discriminatorFieldName match {
                       case Some(discriminatorField) =>
                         Expr.splice(ectx.writer).writeObjectStart()
@@ -1685,23 +1861,6 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                           Expr.splice(fullEnc)
                         }
                     }
-                  }
-                }
-              } else {
-                Expr.quote {
-                  val name = Expr.splice(ectx.config).adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-                  Expr.splice(ectx.config).discriminatorFieldName match {
-                    case Some(discriminatorField) =>
-                      Expr.splice(ectx.writer).writeObjectStart()
-                      Expr.splice(ectx.writer).writeKey(discriminatorField)
-                      Expr.splice(ectx.writer).writeVal(name)
-                      Expr.splice(fieldsOnly)
-                      Expr.splice(ectx.writer).writeObjectEnd()
-                    case None =>
-                      JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
-                        Expr.splice(fullEnc)
-                      }
-                  }
                 }
               }
           }
@@ -1981,9 +2140,43 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           else if (Type[A] =:= Type.of[Char])
             Some(Expr.quote(Expr.splice(reader).readChar().asInstanceOf[A]))
           else if (Type[A] =:= Type.of[BigDecimal])
-            Some(Expr.quote(Expr.splice(reader).readBigDecimal(null).asInstanceOf[A]))
+            Some(Expr.quote {
+              JsoniterDerivationUtils
+                .validateBigDecimal(
+                  Expr.splice(reader),
+                  Expr.splice(reader).readBigDecimal(null),
+                  Expr.splice(dctx.config).bigDecimalPrecision,
+                  Expr.splice(dctx.config).bigDecimalScaleLimit,
+                  Expr.splice(dctx.config).bigDecimalDigitsLimit
+                )
+                .asInstanceOf[A]
+            })
           else if (Type[A] =:= Type.of[BigInt])
-            Some(Expr.quote(Expr.splice(reader).readBigInt(null).asInstanceOf[A]))
+            Some(Expr.quote {
+              JsoniterDerivationUtils
+                .validateBigInt(
+                  Expr.splice(reader),
+                  Expr.splice(reader).readBigInt(null),
+                  Expr.splice(dctx.config).bigDecimalDigitsLimit
+                )
+                .asInstanceOf[A]
+            })
+          else if (Type[A] =:= CTypes.Instant)
+            Some(Expr.quote(JsoniterDerivationUtils.readInstant(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.LocalDate)
+            Some(Expr.quote(JsoniterDerivationUtils.readLocalDate(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.LocalTime)
+            Some(Expr.quote(JsoniterDerivationUtils.readLocalTime(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.LocalDateTime)
+            Some(Expr.quote(JsoniterDerivationUtils.readLocalDateTime(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.OffsetDateTime)
+            Some(Expr.quote(JsoniterDerivationUtils.readOffsetDateTime(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.ZonedDateTime)
+            Some(Expr.quote(JsoniterDerivationUtils.readZonedDateTime(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.Duration)
+            Some(Expr.quote(JsoniterDerivationUtils.readDuration(Expr.splice(reader)).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.Period)
+            Some(Expr.quote(JsoniterDerivationUtils.readPeriod(Expr.splice(reader)).asInstanceOf[A]))
           else
             None
 
@@ -2121,7 +2314,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                         Expr.splice(dctx.reader),
                         Expr.splice(keyValueDecodeFn),
                         Expr.splice(decodeFn),
-                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
+                        Expr.splice(dctx.config).mapMaxInsertNumber
                       )
                       .asInstanceOf[A]
                   } else {
@@ -2129,7 +2323,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                       .readMap[Value, A](
                         Expr.splice(dctx.reader),
                         Expr.splice(decodeFn),
-                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]]
+                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]],
+                        Expr.splice(dctx.config).mapMaxInsertNumber
                       )
                       .asInstanceOf[A]
                   }
@@ -2164,7 +2359,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                             Expr.splice(dctx.reader),
                             Expr.splice(keyValueDecodeFn),
                             Expr.splice(decodeFn),
-                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
+                            Expr.splice(dctx.config).mapMaxInsertNumber
                           )
                           .asInstanceOf[A]
                       } else {
@@ -2173,7 +2369,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                             Expr.splice(dctx.reader),
                             Expr.splice(keyDecoderLambda),
                             Expr.splice(decodeFn),
-                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
+                            Expr.splice(dctx.config).mapMaxInsertNumber
                           )
                           .asInstanceOf[A]
                       }
@@ -2204,7 +2401,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                             Expr.splice(dctx.reader),
                             Expr.splice(keyValueDecodeFn),
                             Expr.splice(decodeFn),
-                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]]
+                            Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
+                            Expr.splice(dctx.config).mapMaxInsertNumber
                           )
                           .asInstanceOf[A]
                       } else {
@@ -2405,7 +2603,8 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                     .readCollection[Item, A](
                       Expr.splice(dctx.reader),
                       Expr.splice(decodeFn),
-                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[Item, A]]
+                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[Item, A]],
+                      Expr.splice(dctx.config).setMaxInsertNumber
                     )
                     .asInstanceOf[A]
                 })
@@ -2660,9 +2859,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
-              val isStringified = hasAnnotationType[stringified](param)
+              val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (isStringified) {
+                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (hasStringifiedAnnotation) {
                   deriveStringifiedDecoder[Field] match {
                     case Some(dec) => MIO.pure(dec)
                     case None      =>
@@ -2671,7 +2870,19 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                       Log.error(err.message) >> MIO.fail(err)
                   }
                 } else {
-                  deriveFieldDecoder[Field]
+                  deriveStringifiedDecoder[Field] match {
+                    case Some(stringifiedDec) =>
+                      deriveFieldDecoder[Field].map { normalDec =>
+                        Expr.quote { (r: JsonReader) =>
+                          if (Expr.splice(dctx.config).isStringified)
+                            Expr.splice(stringifiedDec).apply(r)
+                          else
+                            Expr.splice(normalDec).apply(r)
+                        }
+                      }
+                    case None =>
+                      deriveFieldDecoder[Field]
+                  }
                 }
                 decodeFnMIO.map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
@@ -2697,14 +2908,128 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
+                  // Build require check expressions: validate required fields before transient init
+                  val requireCheckExprs: List[Expr[Unit]] =
+                    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
+                      import param.tpe.Underlying as Field
+                      val checks = List.newBuilder[Expr[Unit]]
+
+                      // requireDefaultFields: fields with defaults must be explicitly present
+                      if (param.hasDefault) {
+                        checks += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).requireDefaultFields &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                          )
+                            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                        }
+                      }
+
+                      // requireCollectionFields: collection/map fields must be explicitly present
+                      val isCollOrMap = Type[Field] match {
+                        case IsMap(_)        => true
+                        case IsCollection(_) => true
+                        case _               => false
+                      }
+                      if (isCollOrMap) {
+                        checks += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).requireCollectionFields &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                          )
+                            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                        }
+                      }
+
+                      checks.result()
+                    }
+
+                  val requireCheckAll: Expr[Unit] =
+                    requireCheckExprs.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(step)
+                      }
+                    }
+
+                  // Build transient init expressions: fill null slots for absent fields
+                  val transientInitExprs: List[Expr[Unit]] =
+                    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
+                      import param.tpe.Underlying as Field
+                      val initSteps = List.newBuilder[Expr[Unit]]
+
+                      // transientDefault: use field's default value
+                      if (param.hasDefault) {
+                        param.defaultValue
+                          .flatMap { existentialOuter =>
+                            val methodOf = existentialOuter.value
+                            methodOf.value match {
+                              case noInstance: Method.NoInstance[?] =>
+                                import noInstance.Returned
+                                noInstance(Map.empty).toOption.map(_.upcast[Any])
+                              case _ => None
+                            }
+                          }
+                          .foreach { defaultExpr =>
+                            initSteps += Expr.quote {
+                              if (
+                                Expr.splice(dctx.config).transientDefault &&
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                              )
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
+                            }
+                          }
+                      }
+
+                      // transientNone: use None for Option fields
+                      val isOpt = Type[Field] match {
+                        case IsOption(_) => true; case _ => false
+                      }
+                      if (isOpt) {
+                        initSteps += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).transientNone &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                          )
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = (None: Any)
+                        }
+                      }
+
+                      // transientEmpty: use "" for String fields
+                      if (Type[Field] =:= CTypes.String) {
+                        initSteps += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).transientEmpty &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                          )
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = ("": Any)
+                        }
+                      }
+
+                      initSteps.result()
+                    }
+
+                  val transientInitAll: Expr[Unit] =
+                    transientInitExprs.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(step)
+                      }
+                    }
+
                   // Non-transient fields read from the array
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
                   // Merge with transient defaults
                   val fieldMap = nonTransientFieldMap ++ transientDefaults
                   caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error)          =>
+                    case Right(constructExpr) =>
+                      MIO.pure(Expr.quote {
+                        Expr.splice(requireCheckAll)
+                        Expr.splice(transientInitAll)
+                        Expr.splice(constructExpr)
+                      })
+                    case Left(error) =>
                       val err =
                         CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
                       Log.error(err.message) >> MIO.fail(err)
@@ -2719,6 +3044,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   }
 
                   Expr.quote {
+                    val _seen: Array[Boolean] =
+                      if (Expr.splice(dctx.config).checkFieldDuplication)
+                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
+                      else null
                     JsoniterDerivationUtils.readObject[A](
                       Expr.splice(dctx.reader),
                       Expr.splice(Expr(fieldMappings.size)),
@@ -2732,12 +3061,22 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                           case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(Expr(customName))) {
+                                if (_seen != null) {
+                                  if (_seen(Expr.splice(Expr(index))))
+                                    JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                                  _seen(Expr.splice(Expr(index))) = true
+                                }
                                 arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
                               } else Expr.splice(elseExpr)
                             }
                           case ((name, index, decodeFnErased, None), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                if (_seen != null) {
+                                  if (_seen(Expr.splice(Expr(index))))
+                                    JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                                  _seen(Expr.splice(Expr(index))) = true
+                                }
                                 arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
                               } else Expr.splice(elseExpr)
                             }
@@ -2840,9 +3179,9 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
-              val isStringified = hasAnnotationType[stringified](param)
+              val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (isStringified) {
+                val decodeFnMIO: MIO[Expr[JsonReader => Field]] = if (hasStringifiedAnnotation) {
                   deriveStringifiedDecoder[Field] match {
                     case Some(dec) => MIO.pure(dec)
                     case None      =>
@@ -2851,7 +3190,19 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                       Log.error(err.message) >> MIO.fail(err)
                   }
                 } else {
-                  deriveFieldDecoder[Field]
+                  deriveStringifiedDecoder[Field] match {
+                    case Some(stringifiedDec) =>
+                      deriveFieldDecoder[Field].map { normalDec =>
+                        Expr.quote { (r: JsonReader) =>
+                          if (Expr.splice(dctx.config).isStringified)
+                            Expr.splice(stringifiedDec).apply(r)
+                          else
+                            Expr.splice(normalDec).apply(r)
+                        }
+                      }
+                    case None =>
+                      deriveFieldDecoder[Field]
+                  }
                 }
                 decodeFnMIO.map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
@@ -2876,12 +3227,121 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
+                  // Build require check expressions: validate required fields before transient init
+                  val requireCheckExprs0: List[Expr[Unit]] =
+                    nonTransientWithIndex.flatMap { case ((fName0, param0), idx0) =>
+                      import param0.tpe.Underlying as Field0
+                      val checks = List.newBuilder[Expr[Unit]]
+
+                      if (param0.hasDefault) {
+                        checks += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).requireDefaultFields &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) == null
+                          )
+                            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName0)))
+                        }
+                      }
+
+                      val isCollOrMap0 = Type[Field0] match {
+                        case IsMap(_)        => true
+                        case IsCollection(_) => true
+                        case _               => false
+                      }
+                      if (isCollOrMap0) {
+                        checks += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).requireCollectionFields &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) == null
+                          )
+                            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName0)))
+                        }
+                      }
+
+                      checks.result()
+                    }
+
+                  val requireCheckAll0: Expr[Unit] =
+                    requireCheckExprs0.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(step)
+                      }
+                    }
+
+                  // Build transient init expressions: fill null slots for absent fields
+                  val transientInitExprs: List[Expr[Unit]] =
+                    nonTransientWithIndex.flatMap { case ((fName0, param0), idx0) =>
+                      import param0.tpe.Underlying as Field0
+                      val initSteps = List.newBuilder[Expr[Unit]]
+
+                      if (param0.hasDefault) {
+                        param0.defaultValue
+                          .flatMap { existentialOuter =>
+                            val methodOf = existentialOuter.value
+                            methodOf.value match {
+                              case noInstance: Method.NoInstance[?] =>
+                                import noInstance.Returned
+                                noInstance(Map.empty).toOption.map(_.upcast[Any])
+                              case _ => None
+                            }
+                          }
+                          .foreach { defaultExpr =>
+                            initSteps += Expr.quote {
+                              if (
+                                Expr.splice(dctx.config).transientDefault &&
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) == null
+                              )
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) = Expr.splice(defaultExpr)
+                            }
+                          }
+                      }
+
+                      val isOpt0 = Type[Field0] match {
+                        case IsOption(_) => true; case _ => false
+                      }
+                      if (isOpt0) {
+                        initSteps += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).transientNone &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) == null
+                          )
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) = (None: Any)
+                        }
+                      }
+
+                      if (Type[Field0] =:= CTypes.String) {
+                        initSteps += Expr.quote {
+                          if (
+                            Expr.splice(dctx.config).transientEmpty &&
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) == null
+                          )
+                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx0))) = ("": Any)
+                        }
+                      }
+
+                      initSteps.result()
+                    }
+
+                  val transientInitAll: Expr[Unit] =
+                    transientInitExprs.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(step)
+                      }
+                    }
+
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
                   val fieldMap = nonTransientFieldMap ++ transientDefaults
                   caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error)          =>
+                    case Right(constructExpr) =>
+                      MIO.pure(Expr.quote {
+                        Expr.splice(requireCheckAll0)
+                        Expr.splice(transientInitAll)
+                        Expr.splice(constructExpr)
+                      })
+                    case Left(error) =>
                       val err =
                         CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
                       Log.error(err.message) >> MIO.fail(err)
@@ -2895,6 +3355,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   }
 
                   Expr.quote {
+                    val _seen: Array[Boolean] =
+                      if (Expr.splice(dctx.config).checkFieldDuplication)
+                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
+                      else null
                     JsoniterDerivationUtils.readObjectInline[A](
                       Expr.splice(dctx.reader),
                       Expr.splice(Expr(fieldMappings.size)),
@@ -2908,12 +3372,22 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                           case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(Expr(customName))) {
+                                if (_seen != null) {
+                                  if (_seen(Expr.splice(Expr(index))))
+                                    JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                                  _seen(Expr.splice(Expr(index))) = true
+                                }
                                 arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
                               } else Expr.splice(elseExpr)
                             }
                           case ((name, index, decodeFnErased, None), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                if (_seen != null) {
+                                  if (_seen(Expr.splice(Expr(index))))
+                                    JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                                  _seen(Expr.splice(Expr(index))) = true
+                                }
                                 arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
                               } else Expr.splice(elseExpr)
                             }
@@ -3047,24 +3521,35 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
         case Some(children) =>
           val knownNames: List[String] = children.toList.map(_._1)
 
+          val isScalaEnumeration = Type[A].isEnumeration
+
           // For each child, derive BOTH wrapper-mode and inline (discriminator-mode) decoders,
-          // and optionally string-enum dispatchers for all-case-objects enums
+          // and optionally string-enum dispatchers for case-object children
           children
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
+              val isSingleton = SingletonValue.unapply(Type[ChildType]).isDefined || isScalaEnumeration ||
+                Type[A].isJavaEnum
               Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
                 for {
                   wrapper <- deriveChildDecoder[A, ChildType](childName)
                   inline <- deriveChildDecoderInline[A, ChildType](childName)
                   stringEnum <-
-                    if (allCaseObjects) deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
+                    if (allCaseObjects || isSingleton)
+                      deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
                     else MIO.pure(None)
-                } yield (wrapper, inline, stringEnum)
+                  enumId <-
+                    if (allCaseObjects && isScalaEnumeration)
+                      deriveChildDecoderEnumId[A, ChildType](childName).map(Some(_))
+                    else MIO.pure(None)
+                } yield (wrapper, inline, stringEnum, enumId)
               }
             }
             .flatMap { allDispatchers =>
               val wrapperDispatchers = allDispatchers.toList.map(_._1)
               val inlineDispatchers = allDispatchers.toList.map(_._2)
+
+              implicit val IntT: Type[Int] = CTypes.Int
 
               def buildErrorExpr(typeNameExpr: Expr[String]): Expr[A] = Expr.quote {
                 Expr
@@ -3087,43 +3572,124 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   }
                   .map(_.build[A])
 
+              def buildIntErrorExpr(idExpr: Expr[Int]): Expr[A] = Expr.quote {
+                Expr
+                  .splice(dctx.reader)
+                  .decodeError(
+                    "Unknown enum value id: " + Expr.splice(idExpr)
+                  ): A
+              }
+
+              def buildIntDispatchLambda(
+                  dispatchers: List[(Expr[Int], Expr[JsonReader], Expr[A]) => Expr[A]]
+              ): MIO[Expr[Int => A]] =
+                LambdaBuilder
+                  .of1[Int]("enumId")
+                  .traverse { idExpr =>
+                    MIO.pure(dispatchers.foldRight(buildIntErrorExpr(idExpr)) { case (dispatcher, elseExpr) =>
+                      dispatcher(idExpr, dctx.reader, elseExpr)
+                    })
+                  }
+                  .map(_.build[A])
+
               for {
                 wrapperDispatchFn <- buildDispatchLambda(wrapperDispatchers)
                 inlineDispatchFn <- buildDispatchLambda(inlineDispatchers)
                 result <-
                   if (allCaseObjects) {
                     val stringEnumDispatchers = allDispatchers.toList.flatMap(_._3)
-                    buildDispatchLambda(stringEnumDispatchers).map { stringEnumDispatchFn =>
-                      Expr.quote {
-                        val config = Expr.splice(dctx.config)
-                        val reader = Expr.splice(dctx.reader)
-                        if (config.enumAsStrings) {
-                          JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(stringEnumDispatchFn))
-                        } else {
-                          config.discriminatorFieldName match {
-                            case Some(field) =>
-                              JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                                Expr.splice(inlineDispatchFn)
-                              )
-                            case None =>
-                              JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                          }
+                    val enumIdDispatchers = allDispatchers.toList.flatMap(_._4)
+                    for {
+                      stringEnumDispatchFn <- buildDispatchLambda(stringEnumDispatchers)
+                      enumIdDispatchFnOpt <-
+                        if (enumIdDispatchers.nonEmpty) buildIntDispatchLambda(enumIdDispatchers).map(Some(_))
+                        else MIO.pure(None)
+                    } yield enumIdDispatchFnOpt match {
+                      case Some(enumIdDispatchFn) =>
+                        // Scala Enumeration with useScalaEnumValueId support
+                        Expr.quote {
+                          val config = Expr.splice(dctx.config)
+                          val reader = Expr.splice(dctx.reader)
+                          if (config.useScalaEnumValueId)
+                            JsoniterDerivationUtils.readScalaEnumValueId[A](reader)(
+                              Expr.splice(enumIdDispatchFn)
+                            )
+                          else if (config.enumAsStrings)
+                            JsoniterDerivationUtils.readEnumAsString[A](reader)(
+                              Expr.splice(stringEnumDispatchFn)
+                            )
+                          else
+                            config.discriminatorFieldName match {
+                              case Some(field) =>
+                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                                  Expr.splice(inlineDispatchFn)
+                                )
+                              case None =>
+                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                            }
                         }
-                      }
+                      case None =>
+                        // Non-Enumeration all-case-objects enum
+                        Expr.quote {
+                          val config = Expr.splice(dctx.config)
+                          val reader = Expr.splice(dctx.reader)
+                          if (config.enumAsStrings)
+                            JsoniterDerivationUtils.readEnumAsString[A](reader)(
+                              Expr.splice(stringEnumDispatchFn)
+                            )
+                          else
+                            config.discriminatorFieldName match {
+                              case Some(field) =>
+                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                                  Expr.splice(inlineDispatchFn)
+                                )
+                              case None =>
+                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                            }
+                        }
                     }
                   } else {
-                    MIO.pure(Expr.quote {
-                      val config = Expr.splice(dctx.config)
-                      val reader = Expr.splice(dctx.reader)
-                      config.discriminatorFieldName match {
-                        case Some(field) =>
-                          JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                            Expr.splice(inlineDispatchFn)
-                          )
+                    // Mixed enum (case objects + case classes)
+                    // Build string-enum dispatchers for singleton children (for circeLikeObjectEncoding)
+                    val singletonStringEnumDispatchers = allDispatchers.toList.flatMap(_._3)
+                    (if (singletonStringEnumDispatchers.nonEmpty)
+                       buildDispatchLambda(singletonStringEnumDispatchers).map(Some(_))
+                     else MIO.pure(None)).map { singletonDispatchFnOpt =>
+                      singletonDispatchFnOpt match {
+                        case Some(singletonDispatchFn) =>
+                          Expr.quote {
+                            val config = Expr.splice(dctx.config)
+                            val reader = Expr.splice(dctx.reader)
+                            if (config.circeLikeObjectEncoding)
+                              JsoniterDerivationUtils.readCirceLikeObject[A](reader)(
+                                Expr.splice(singletonDispatchFn),
+                                Expr.splice(wrapperDispatchFn)
+                              )
+                            else
+                              config.discriminatorFieldName match {
+                                case Some(field) =>
+                                  JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                                    Expr.splice(inlineDispatchFn)
+                                  )
+                                case None =>
+                                  JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                              }
+                          }
                         case None =>
-                          JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                          Expr.quote {
+                            val config = Expr.splice(dctx.config)
+                            val reader = Expr.splice(dctx.reader)
+                            config.discriminatorFieldName match {
+                              case Some(field) =>
+                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
+                                  Expr.splice(inlineDispatchFn)
+                                )
+                              case None =>
+                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
+                            }
+                          }
                       }
-                    })
+                    }
                   }
               } yield result
             }
@@ -3306,6 +3872,31 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
           }
       }
     }
+
+    /** Derive an Int-based enum-id child decoder for useScalaEnumValueId support. Matches the child's .id at runtime.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def deriveChildDecoderEnumId[A: DecoderCtx, ChildType: Type](
+        childName: String
+    ): MIO[(Expr[Int], Expr[JsonReader], Expr[A]) => Expr[A]] = {
+      implicit val IntT: Type[Int] = CTypes.Int
+      SingletonValue.unapply(Type[ChildType]) match {
+        case Some(sv) =>
+          Log.info(s"Using singleton for enum-id child $childName") >>
+            MIO.pure { (idExpr: Expr[Int], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+              Expr.quote {
+                if (Expr.splice(idExpr) == JsoniterDerivationUtils.scalaEnumValueId(Expr.splice(sv.singletonExpr)))
+                  Expr.splice(sv.singletonExpr).asInstanceOf[A]
+                else
+                  Expr.splice(elseExpr)
+              }
+            }
+        case None =>
+          MIO.pure { (_: Expr[Int], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+            elseExpr
+          }
+      }
+    }
   }
 
   // Types
@@ -3344,6 +3935,14 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
     val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
     val BigInt: Type[BigInt] = Type.of[BigInt]
     val Product: Type[Product] = Type.of[Product]
+    val Instant: Type[java.time.Instant] = Type.of[java.time.Instant]
+    val LocalDate: Type[java.time.LocalDate] = Type.of[java.time.LocalDate]
+    val LocalTime: Type[java.time.LocalTime] = Type.of[java.time.LocalTime]
+    val LocalDateTime: Type[java.time.LocalDateTime] = Type.of[java.time.LocalDateTime]
+    val OffsetDateTime: Type[java.time.OffsetDateTime] = Type.of[java.time.OffsetDateTime]
+    val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
+    val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
+    val Period: Type[java.time.Period] = Type.of[java.time.Period]
   }
 }
 

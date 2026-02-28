@@ -162,6 +162,14 @@ object AvroDerivationUtils {
   def createEnum(name: String, namespace: String, symbols: util.List[String]): Schema =
     Schema.createEnum(name, null, namespace, symbols)
 
+  def createEnumWithDefault(
+      name: String,
+      namespace: String,
+      symbols: util.List[String],
+      defaultSymbol: String
+  ): Schema =
+    Schema.createEnum(name, null, namespace, symbols, defaultSymbol)
+
   // --- Encoder helpers ---
 
   def encodeRecord(schema: Schema, fieldValues: util.List[(String, Any)]): GenericRecord = {

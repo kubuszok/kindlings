@@ -55,6 +55,10 @@ case class YamlWithBothAnnotations(
     active: Boolean
 )
 
+// useDefaults test types
+case class WithDefaults(name: String, age: Int = 25, active: Boolean = true)
+case class AllDefaults(x: Int = 1, y: Int = 2)
+
 // Higher-kinded type test
 case class HigherKindedType[F[_]](value: F[Int])
 

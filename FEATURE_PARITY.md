@@ -28,7 +28,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | `Encoder[A]` | Yes | Yes | Parity |
 | `Encoder.AsObject[A]` | Yes | Yes (`deriveAsObject`) | Parity |
 | `Decoder[A]` | Yes | Yes | Parity |
-| `Codec.AsObject[A]` | Scala 3 only | No separate Codec type | Gap (minor) |
+| `Codec.AsObject[A]` | Scala 3 only | Yes (`KindlingsCodecAsObject`) | Parity |
 
 ### Annotations
 
@@ -78,19 +78,19 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Skip unexpected fields | Yes (default `true`) | Yes | Parity |
 | Enum as strings | Yes | Yes | Parity |
 | Map as array | Yes | Yes | Parity |
-| `transientDefault` | Yes | No | Gap |
-| `transientEmpty` | Yes | No | Gap |
-| `transientNone` | Yes | No | Gap |
-| `isStringified` (global) | Yes | No (per-field `@stringified` only) | Gap |
-| `decodingOnly` / `encodingOnly` | Yes | No | Gap |
-| `requireCollectionFields` | Yes | No | Gap |
-| `requireDefaultFields` | Yes | No | Gap |
-| `requireDiscriminatorFirst` | Yes | No | Gap |
-| `circeLikeObjectEncoding` | Yes | No | Gap |
-| `checkFieldDuplication` | Yes | No | Gap |
-| `bigDecimalPrecision`/`bigDecimalScaleLimit`/`bigDecimalDigitsLimit` | Yes (DoS protection) | No | Gap |
-| `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | No | Gap |
-| `useScalaEnumValueId` | Yes | No | Gap |
+| `transientDefault` | Yes | Yes | Parity |
+| `transientEmpty` | Yes | Yes | Parity |
+| `transientNone` | Yes | Yes | Parity |
+| `isStringified` (global) | Yes | Yes | Parity |
+| `decodingOnly` / `encodingOnly` | Yes | Yes | Parity |
+| `requireCollectionFields` | Yes | Yes | Parity |
+| `requireDefaultFields` | Yes | Yes | Parity |
+| `requireDiscriminatorFirst` | Yes | Yes (default `true`, `false` not yet supported) | Parity |
+| `circeLikeObjectEncoding` | Yes | Yes | Parity |
+| `checkFieldDuplication` | Yes | Yes | Parity |
+| `bigDecimalPrecision`/`bigDecimalScaleLimit`/`bigDecimalDigitsLimit` | Yes (DoS protection) | Yes | Parity |
+| `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes | Parity |
+| `useScalaEnumValueId` | Yes | Yes | Parity |
 
 ### Type classes
 
@@ -115,7 +115,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Non-string map keys | Yes (extensive) | Yes (numeric + value types + BigDecimal/BigInt) | Parity |
 | Value class unwrapping | Yes (+ `inlineOneValueClasses`) | Automatic (always) | Parity |
 | Recursive types | Yes (`allowRecursiveTypes = true`) | Yes (no flag needed) | Improvement |
-| java.time built-in codecs | Yes (ISO-8601) | No (user-provided) | Gap |
+| java.time built-in codecs | Yes (ISO-8601) | Yes (ISO-8601: Instant, LocalDate, LocalTime, LocalDateTime, OffsetDateTime, ZonedDateTime, Duration, Period) | Parity |
 
 ### Cross-compilation
 
@@ -128,12 +128,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 
 | Feature | Notes |
 |---|---|
-| `transientDefault`/`transientEmpty`/`transientNone` | Fine-grained control over omitting fields during encoding |
-| DoS protection limits | `bigDecimalPrecision`, `mapMaxInsertNumber`, `setMaxInsertNumber`, etc. |
-| `decodingOnly` / `encodingOnly` | Restricts codec to one direction |
-| `circeLikeObjectEncoding` | Alternative ADT encoding style |
-| java.time codecs | Built-in ISO-8601 temporal codecs |
-| Convenience factories (`makeCirceLike`, etc.) | Pre-configured codec makers |
+| Convenience factories (`makeCirceLike`, etc.) | Pre-configured codec makers — trivially achievable with `JsoniterConfig.default.withCirceLikeObjectEncoding` |
 
 ---
 
@@ -156,7 +151,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 |---|---|---|---|
 | `YamlEncoder[A]` | Yes (Scala 3 only!) | Yes (Scala 2+3) | Improvement |
 | `YamlDecoder[A]` | Yes (Scala 3 only!) | Yes (Scala 2+3) | Improvement |
-| `YamlCodec[A]` | Yes (Scala 3 only!) | No combined type | Gap (minor) |
+| `YamlCodec[A]` | Yes (Scala 3 only!) | Yes (`KindlingsYamlCodec`, Scala 2+3) | Improvement |
 
 ### Annotations
 
@@ -183,11 +178,11 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Scala 3 Native | No ([#324](https://github.com/VirtusLab/scala-yaml/issues/324)) | Yes | Improvement |
 | Cross-platform | JVM + JS (Scala 2 Native only) | JVM + JS + Native | Improvement |
 
-### Not ported
+### Configuration (cont.)
 
-| Feature | Notes |
-|---|---|
-| `useDefaults` | scala-yaml uses runtime reflection for defaults; Kindlings does not support this yet |
+| Feature | scala-yaml | Kindlings | Status |
+|---|---|---|---|
+| `useDefaults` | Yes (runtime reflection) | Yes (compile-time) | Improvement |
 
 ---
 
@@ -226,9 +221,9 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
 | Default values (`@AvroDefault`) | From constructor defaults (automatic) | `@avroDefault(json)` (explicit JSON string) | Parity (different API) |
 | Subtype ordering (`@AvroUnionPosition` / `@avroSortPriority`) | Yes | Yes | Parity |
-| `@AvroNoDefault` (suppress defaults) | Yes | No | Gap |
-| `@AvroErasedName` (disable generic name encoding) | Yes | No | Gap |
-| `@AvroEnumDefault` | Yes | No | Gap |
+| `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
+| `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |
+| `@AvroEnumDefault` | Yes | Yes (`@avroEnumDefault`) | Parity |
 
 ### Type support
 
@@ -260,13 +255,10 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 
 | Feature | Notes |
 |---|---|
-| `@AvroNoDefault` | Suppress default value in schema |
-| `@AvroErasedName` | Disable generic type parameter name encoding |
-| `@AvroEnumDefault` | Default value for enum type |
-| Shapeless Coproduct → UNION | avro4s can map `A :+: B :+: CNil` to UNION |
-| Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. |
-| Refined types | `avro4s-refined` module |
-| Kafka `GenericSerde` | `avro4s-kafka` module |
+| Shapeless Coproduct → UNION | avro4s can map `A :+: B :+: CNil` to UNION — Hearth doesn't use Shapeless |
+| Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
+| Refined types | `avro4s-refined` module — external ecosystem |
+| Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
 
 ---
 
