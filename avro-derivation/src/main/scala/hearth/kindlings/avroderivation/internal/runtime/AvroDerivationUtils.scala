@@ -44,6 +44,24 @@ object AvroDerivationUtils {
     schema
   }
 
+  /** Creates an empty record schema (no fields) for forward-declaration in recursive schemas. */
+  def createEmptyRecord(name: String, doc: String, namespace: String, isError: Boolean): Schema =
+    Schema.createRecord(name, doc, namespace, isError)
+
+  /** Sets fields on a pre-created record schema and returns it. Used with createEmptyRecord for recursive schemas. */
+  def setRecordFields(schema: Schema, fields: util.List[Schema.Field]): Schema = {
+    schema.setFields(fields)
+    schema
+  }
+
+  /** Sets fields from a Scala List on a pre-created record schema and returns it. */
+  def setRecordFieldsFromList(schema: Schema, fields: List[Schema.Field]): Schema = {
+    val javaFields = new util.ArrayList[Schema.Field](fields.size)
+    fields.foreach(javaFields.add)
+    schema.setFields(javaFields)
+    schema
+  }
+
   def addSchemaProp(schema: Schema, key: String, value: String): Unit =
     schema.addProp(key, value)
 

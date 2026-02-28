@@ -609,19 +609,19 @@ final class AvroSchemaForSpec extends MacroSuite {
 
     group("@avroSortPriority") {
 
-      test("enum symbols sorted by priority") {
+      test("enum symbols sorted by priority (higher = first)") {
         val schema = AvroSchemaFor.schemaOf[PrioritizedEnum]
         schema.getType ==> Schema.Type.ENUM
-        schema.getEnumSymbols.get(0) ==> "PBeta"
+        schema.getEnumSymbols.get(0) ==> "PAlpha"
         schema.getEnumSymbols.get(1) ==> "PGamma"
-        schema.getEnumSymbols.get(2) ==> "PAlpha"
+        schema.getEnumSymbols.get(2) ==> "PBeta"
       }
 
-      test("union members sorted by priority") {
+      test("union members sorted by priority (higher = first)") {
         val schema = AvroSchemaFor.schemaOf[PrioritizedShape]
         schema.getType ==> Schema.Type.UNION
-        schema.getTypes.get(0).getName ==> "PRectangle"
-        schema.getTypes.get(1).getName ==> "PCircle"
+        schema.getTypes.get(0).getName ==> "PCircle"
+        schema.getTypes.get(1).getName ==> "PRectangle"
       }
 
       test("default order without priority annotations") {
@@ -704,6 +704,29 @@ final class AvroSchemaForSpec extends MacroSuite {
         ).check(
           "type parameter was inferred as"
         )
+      }
+    }
+
+    group("recursive types") {
+
+      test("self-recursive case class schema") {
+        val schema = AvroSchemaFor.schemaOf[RecursiveNode]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "RecursiveNode"
+      }
+
+      test("recursive via Option schema") {
+        val schema = AvroSchemaFor.schemaOf[LinkedNode]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "LinkedNode"
+      }
+    }
+
+    group("additional type coverage") {
+
+      test("mixed sealed trait schema has union with enum and record") {
+        val schema = AvroSchemaFor.schemaOf[MixedEvent]
+        schema.getType ==> Schema.Type.UNION
       }
     }
 

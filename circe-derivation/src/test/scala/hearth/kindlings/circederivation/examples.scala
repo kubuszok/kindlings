@@ -101,6 +101,20 @@ case class WithLongKeyMap(data: Map[Long, String])
 final case class UserId(value: Int) extends AnyVal
 case class WithUserIdKeyMap(users: Map[UserId, String])
 
+// Consecutive capitals test types
+case class HTMLParser(content: String)
+case class HTTPSConnection(url: String, port: Int)
+
+// Option+default test types
+case class WithOptionAndDefault(name: String, opt: Option[String] = Some("default"))
+case class WithOptionNoDefault(name: String, opt: Option[String])
+
+// Multi-level sealed hierarchy test types
+sealed trait GrandParent
+sealed trait Parent extends GrandParent
+case class Child(value: Int) extends Parent
+case class Uncle(name: String) extends GrandParent
+
 // UTF-8 field name test types
 case class CirceWithUtf8FieldNames(
     @fieldName("名前") name: String,

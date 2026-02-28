@@ -61,6 +61,9 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Feature | Notes |
 |---|---|
 | `@ConfiguredJsonCodec` macro annotation | Minor — `derives` / explicit derivation covers the same ground |
+| `incomplete`/`patch` decoders | Niche API for partial decoding — not ported |
+| `ExtrasDecoder` | Extension of Decoder with extra metadata — not ported |
+| `@JsonNoDefault` equivalent | Upstream suppresses default for specific fields; Kindlings `@transientField` serves a different purpose (excludes from encoding entirely) |
 
 ---
 
@@ -85,8 +88,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | `decodingOnly` / `encodingOnly` | Yes | Yes | Parity |
 | `requireCollectionFields` | Yes | Yes | Parity |
 | `requireDefaultFields` | Yes | Yes | Parity |
-| `requireDiscriminatorFirst` | Yes | Yes (default `true`, `false` not yet supported) | Parity |
-| `circeLikeObjectEncoding` | Yes | Yes | Parity |
+| `circeLikeObjectEncoding` | Yes | Yes (case objects encoded as `{"Name":{}}` matching upstream) | Parity |
 | `checkFieldDuplication` | Yes | Yes | Parity |
 | `bigDecimalPrecision`/`bigDecimalScaleLimit`/`bigDecimalDigitsLimit` | Yes (DoS protection) | Yes | Parity |
 | `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes | Parity |
@@ -129,6 +131,20 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Feature | Notes |
 |---|---|
 | Convenience factories (`makeCirceLike`, etc.) | Pre-configured codec makers — trivially achievable with `JsoniterConfig.default.withCirceLikeObjectEncoding` |
+| `requireDiscriminatorFirst` | Upstream allows discriminator anywhere in object when `false`; Kindlings always requires discriminator first (removed dead config field) |
+| `javaEnumValueNameMapper` | Separate mapper for Java enum values — not ported |
+| `requireCollectionFields` buffering | Config field exists but full buffering behavior not wired |
+| Additional built-in types | Upstream supports `UUID`, `BitSet`, `Either`, `Unit`, and 8+ java.time types natively; Kindlings covers `Instant`, `LocalDate`, `LocalTime`, `LocalDateTime`, `OffsetDateTime`, `ZonedDateTime`, `Duration`, `Period` |
+
+### Default value differences
+
+| Config field | Upstream default | Kindlings default | Notes |
+|---|---|---|---|
+| `mapMaxInsertNumber` | `1024` | `1024` | Same |
+| `setMaxInsertNumber` | `1024` | `1024` | Same |
+| `transientDefault` | `true` | `false` | Kindlings requires explicit opt-in |
+| `transientEmpty` | `false` | `false` | Same |
+| `transientNone` | `false` | `false` | Same |
 
 ---
 
@@ -259,6 +275,15 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
 | Refined types | `avro4s-refined` module — external ecosystem |
 | Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
+| `OffsetDateTime`, `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types |
+| Timestamp precision variants (`TimestampMicros`, `TimestampNanos`) | Upstream supports micros/nanos; Kindlings uses millis |
+| Byte collection special-casing (`Array[Byte]` → `BYTES`) | Upstream auto-detects byte arrays/collections and maps to Avro BYTES |
+| Decoder type widening | Upstream widens `Int` → `Long`, `Float` → `Double` during decoding |
+| Generic type parameter names in schema | Upstream encodes generic type params in schema name (e.g., `Box[Int]`); Kindlings erases them (design decision) |
+
+### `@avroSortPriority` note
+
+Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority values appear first in UNION/ENUM ordering, matching upstream semantics.
 
 ---
 
@@ -292,6 +317,13 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Recursive types on Scala 3 | Must use `implicit def` (not `given`), risk of deadlocks | Works | Improvement |
 | Runtime type parameter resolution in SName | No — abstract type params in generic helpers produce `?` in schema names | Resolves at runtime via `runtimePlainPrint` (e.g. `Box[A]` → `SName("Box", List("SimplePerson"))` when `A = SimplePerson`) | Improvement |
 
+### Coproduct (sealed trait) schemas
+
+Discriminator metadata is fully propagated to child schemas:
+- Each child `SProduct` gets a discriminator field with single-value `Validator.Enumeration`
+- `encodedDiscriminatorValue` attribute is set on each child schema
+- Matches upstream Tapir's `addDiscriminatorField` behavior
+
 ### Not ported
 
 | Feature | Notes |
@@ -299,6 +331,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | `Schema.derivedEnumeration` | Specific enum schema derivation |
 | `Schema.oneOfWrapped` | Manual union schema builder |
 | `.modify(_.path)` post-derivation | Tapir core feature, not a derivation concern |
+| Value class unwrapping in schemas | Upstream unwraps value classes to their inner type's schema; Kindlings wraps them in an `SProduct` |
 
 ---
 

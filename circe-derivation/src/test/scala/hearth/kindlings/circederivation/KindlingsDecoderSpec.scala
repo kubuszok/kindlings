@@ -853,5 +853,110 @@ final class KindlingsDecoderSpec extends MacroSuite {
         KindlingsDecoder.decode[SimplePerson](json) ==> Right(SimplePerson("Alice", 30))
       }
     }
+
+    group("Option + default interaction") {
+
+      test("null overrides default for Option[String]") {
+        val json = Json.obj("name" -> Json.fromString("test"), "opt" -> Json.Null)
+        KindlingsDecoder.decode[WithOptionAndDefault](json) ==> Right(WithOptionAndDefault("test", None))
+      }
+
+      test("missing field uses default for Option[String]") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("test"))
+        KindlingsDecoder.decode[WithOptionAndDefault](json) ==> Right(WithOptionAndDefault("test", Some("default")))
+      }
+
+      test("null for non-Option with default fails decode") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("test"), "age" -> Json.Null)
+        assert(KindlingsDecoder.decode[PersonWithDefaults](json).isLeft)
+      }
+
+      test("missing key for Option without default") {
+        val json = Json.obj("name" -> Json.fromString("test"))
+        KindlingsDecoder.decode[WithOptionNoDefault](json) ==> Right(WithOptionNoDefault("test", None))
+      }
+
+      test("provided value overrides default") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("test"), "opt" -> Json.fromString("explicit"))
+        KindlingsDecoder.decode[WithOptionAndDefault](json) ==> Right(WithOptionAndDefault("test", Some("explicit")))
+      }
+
+      test("missing non-Option without default fails") {
+        val json = Json.obj("name" -> Json.fromString("test"))
+        val Left(error) = KindlingsDecoder.decode[PersonWithDefaults](json): @unchecked
+        error.getMessage ==> "DecodingFailure at .age: Missing required field"
+      }
+    }
+
+    group("constructor name transforms extended") {
+
+      test("PascalCase constructors") {
+        implicit val config: Configuration = Configuration.default.withPascalCaseConstructorNames
+        val encoded = KindlingsEncoder.encode[Shape](Circle(5.0))
+        val obj = encoded.asObject.get
+        assert(obj.contains("Circle"))
+        KindlingsDecoder.decode[Shape](encoded) ==> Right(Circle(5.0): Shape)
+      }
+
+      test("SCREAMING_SNAKE_CASE constructors") {
+        implicit val config: Configuration = Configuration.default.withScreamingSnakeCaseConstructorNames
+        val encoded = KindlingsEncoder.encode[Shape](Circle(5.0))
+        val obj = encoded.asObject.get
+        assert(obj.contains("CIRCLE"))
+        KindlingsDecoder.decode[Shape](encoded) ==> Right(Circle(5.0): Shape)
+      }
+    }
+
+    group("snake_case consecutive capitals") {
+
+      test("HTMLParser becomes html_parser") {
+        Configuration.default.withSnakeCaseMemberNames.transformMemberNames("HTMLParser") ==> "html_parser"
+      }
+
+      test("firstName becomes first_name") {
+        Configuration.default.withSnakeCaseMemberNames.transformMemberNames("firstName") ==> "first_name"
+      }
+
+      test("getHTTPSResponse becomes get_https_response") {
+        Configuration.default.withSnakeCaseMemberNames.transformMemberNames("getHTTPSResponse") ==>
+          "get_https_response"
+      }
+
+      test("kebab-case HTMLParser becomes html-parser") {
+        Configuration.default.withKebabCaseMemberNames.transformMemberNames("HTMLParser") ==> "html-parser"
+      }
+    }
+
+    group("sealed trait hierarchy") {
+
+      test("multi-level hierarchy encodes/decodes") {
+        // Uncle is a direct child of GrandParent on both Scala 2 and 3
+        val original: GrandParent = Uncle("Bob")
+        val encoded = KindlingsEncoder.encode[GrandParent](original)
+        val obj = encoded.asObject.get
+        assert(obj.contains("Uncle"))
+        KindlingsDecoder.decode[GrandParent](encoded) ==> Right(Uncle("Bob"): GrandParent)
+      }
+    }
+
+    group("strict decoding extended") {
+
+      test("strict decoding rejects unknown fields with field list in error") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj(
+          "name" -> Json.fromString("Alice"),
+          "age" -> Json.fromInt(30),
+          "foo" -> Json.fromString("bar"),
+          "baz" -> Json.fromInt(99)
+        )
+        val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
+        assert(error.message.contains("Unexpected field(s):"))
+        assert(error.message.contains("baz"))
+        assert(error.message.contains("foo"))
+      }
+    }
   }
 }

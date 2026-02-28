@@ -1,6 +1,6 @@
 package hearth.kindlings.tapirschemaderivation.internal.runtime
 
-import sttp.tapir.{FieldName, Schema, SchemaType}
+import sttp.tapir.{FieldName, Schema, SchemaType, Validator}
 import sttp.tapir.Schema.SName
 
 object TapirSchemaUtils {
@@ -76,6 +76,7 @@ object TapirSchemaUtils {
     *   constructor names after applying the JSON library's name transform (e.g., `config.transformConstructorNames`).
     *   Used as discriminator mapping keys. Must be the same size and order as `subtypes`.
     */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def coproductSchema[T](
       name: SName,
       subtypes: List[Schema[Any]],
@@ -94,10 +95,40 @@ object TapirSchemaUtils {
       SchemaType.SDiscriminator(FieldName(discFieldName, discFieldName), mapping)
     }
 
+    // When a discriminator is present, add the discriminator field to each child SProduct schema
+    // and set the encodedDiscriminatorValue attribute, matching upstream Tapir's addDiscriminatorField.
+    val enrichedSubtypes: List[Schema[Any]] = discriminator match {
+      case Some(discFieldName) =>
+        subtypes.zip(resolvedNames).map { case (childSchema, resolvedName) =>
+          val withDiscField = childSchema.schemaType match {
+            case p: SchemaType.SProduct[Any @unchecked] =>
+              val alreadyHasField = p.fields.exists(_.name.encodedName == discFieldName)
+              if (alreadyHasField) childSchema
+              else {
+                val discFieldSchema = Schema.string.copy(
+                  validator = Validator.enumeration(List(resolvedName), (v: String) => Some(v))
+                )
+                val discField = SchemaType.SProductField[Any, String](
+                  FieldName(discFieldName, discFieldName),
+                  discFieldSchema,
+                  _ => Some(resolvedName)
+                )
+                childSchema.copy(schemaType = p.copy(fields = discField :: p.fields))
+              }
+            case _ => childSchema
+          }
+          withDiscField.attribute(
+            Schema.EncodedDiscriminatorValue.Attribute,
+            Schema.EncodedDiscriminatorValue(resolvedName)
+          )
+        }
+      case None => subtypes
+    }
+
     Schema[T](
-      SchemaType.SCoproduct[T](subtypes, disc) { (value: T) =>
+      SchemaType.SCoproduct[T](enrichedSubtypes, disc) { (value: T) =>
         val cn = value.getClass.getName
-        subtypes.collectFirst {
+        enrichedSubtypes.collectFirst {
           case s if s.name.exists(sn => cn == sn.fullName || cn == (sn.fullName + "$")) =>
             SchemaType.SchemaWithValue(s.asInstanceOf[Schema[Any]], value)
         }

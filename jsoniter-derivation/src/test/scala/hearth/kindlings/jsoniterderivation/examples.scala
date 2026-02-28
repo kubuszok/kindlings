@@ -112,3 +112,19 @@ case class DeeplyNested2(b: DeeplyNested3)
 case class DeeplyNested3(c: DeeplyNested4)
 case class DeeplyNested4(d: DeeplyNested5)
 case class DeeplyNested5(value: Int)
+
+// Numeric boundary test types
+case class ByteBoundaries(min: Byte, max: Byte)
+case class ShortBoundaries(min: Short, max: Short)
+
+// Unicode test types
+case class UnicodeContent(value: String)
+
+// Nested structure test types
+case class NestedLists(matrix: List[List[Int]])
+case class OptionalList(items: Option[List[Int]])
+
+// Value class edge cases
+case class WrappedString(value: String) extends AnyVal
+case class WithOptionalWrapped(item: Option[WrappedInt])
+case class WithWrappedList(items: List[WrappedInt])

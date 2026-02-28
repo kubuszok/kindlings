@@ -510,6 +510,86 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         val node = mappingOf("name" -> scalarNode("Alice"))
         KindlingsYamlDecoder.decode[WithDefaults](node) ==> Right(WithDefaults("Alice", 25, true))
       }
+
+      test("extra/unknown fields in input are silently ignored") {
+        val node = mappingOf(
+          "name" -> scalarNode("Alice"),
+          "age" -> scalarNode("30"),
+          "unknownField" -> scalarNode("ignored"),
+          "anotherExtra" -> scalarNode("alsoIgnored")
+        )
+        KindlingsYamlDecoder.decode[SimplePerson](node) ==> Right(SimplePerson("Alice", 30))
+      }
+
+      test("empty string field value treated as null by scala-yaml") {
+        // scala-yaml's ScalarNode("") is tagged as null, so non-Option String fields fail
+        val node = mappingOf("name" -> scalarNode(""), "age" -> scalarNode("30"))
+        assert(KindlingsYamlDecoder.decode[SimplePerson](node).isLeft)
+      }
+    }
+
+    group("mixed sealed traits (case objects + case classes)") {
+
+      test("decode case class child of mixed sealed trait") {
+        val node = mappingOf("Budgie" -> mappingOf("name" -> scalarNode("Polly"), "canTalk" -> scalarNode("true")))
+        KindlingsYamlDecoder.decode[MixedPet](node) ==> Right(Budgie("Polly", true): MixedPet)
+      }
+
+      test("decode case object child of mixed sealed trait") {
+        val node = mappingOf("Goldfish" -> mappingOf())
+        KindlingsYamlDecoder.decode[MixedPet](node) ==> Right(Goldfish: MixedPet)
+      }
+
+      test("decode mixed sealed trait with discriminator") {
+        implicit val config: YamlConfig = YamlConfig(discriminator = Some("kind"))
+        val node = mappingOf(
+          "kind" -> scalarNode("Budgie"),
+          "name" -> scalarNode("Polly"),
+          "canTalk" -> scalarNode("true")
+        )
+        KindlingsYamlDecoder.decode[MixedPet](node) ==> Right(Budgie("Polly", true): MixedPet)
+      }
+    }
+
+    group("multi-level sealed hierarchy") {
+
+      test("decode leaf type through intermediate sealed trait round-trips") {
+        // Encoding format for multi-level hierarchy differs between Scala 2 (flat) and Scala 3 (nested).
+        // Verify via round-trip instead of asserting specific intermediate format.
+        val value: YamlVehicle = YamlCar("Toyota")
+        val node = KindlingsYamlEncoder.encode[YamlVehicle](value)
+        KindlingsYamlDecoder.decode[YamlVehicle](node) ==> Right(value)
+      }
+
+      test("decode direct child of base sealed trait") {
+        val node = mappingOf("YamlBicycle" -> mappingOf("gears" -> scalarNode("21")))
+        KindlingsYamlDecoder.decode[YamlVehicle](node) ==> Right(YamlBicycle(21): YamlVehicle)
+      }
+    }
+
+    group("collection of sealed traits") {
+
+      test("decode List[Shape]") {
+        val node = seqOf(
+          mappingOf("Circle" -> mappingOf("radius" -> scalarNode("5.0"))),
+          mappingOf("Rectangle" -> mappingOf("width" -> scalarNode("3.0"), "height" -> scalarNode("4.0")))
+        )
+        KindlingsYamlDecoder.decode[List[Shape]](node) ==> Right(
+          List(Circle(5.0), Rectangle(3.0, 4.0))
+        )
+      }
+
+      test("decode ShapeCollection with embedded list of sealed trait") {
+        val node = mappingOf(
+          "shapes" -> seqOf(
+            mappingOf("Circle" -> mappingOf("radius" -> scalarNode("1.0"))),
+            mappingOf("Rectangle" -> mappingOf("width" -> scalarNode("2.0"), "height" -> scalarNode("3.0")))
+          )
+        )
+        KindlingsYamlDecoder.decode[ShapeCollection](node) ==> Right(
+          ShapeCollection(List(Circle(1.0), Rectangle(2.0, 3.0)))
+        )
+      }
     }
   }
 }

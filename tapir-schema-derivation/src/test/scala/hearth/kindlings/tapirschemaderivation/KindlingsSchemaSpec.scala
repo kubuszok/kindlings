@@ -460,6 +460,117 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
     }
   }
+
+  group("annotation coverage") {
+
+    test("@description annotation on field") {
+      val schema = KindlingsSchema.derive[AnnotatedPerson]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[AnnotatedPerson] =>
+          val nameField = p.fields.find(_.name.name == "name")
+          assert(nameField.isDefined, "Should have a 'name' field")
+          assertEquals(nameField.get.schema.description, Some("The name"))
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("@validate annotation on field") {
+      val schema = KindlingsSchema.derive[WithValidation]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[WithValidation] =>
+          val ageField = p.fields.find(_.name.name == "age")
+          assert(ageField.isDefined, "Should have an 'age' field")
+          assert(ageField.get.schema.validator != sttp.tapir.Validator.pass, "age field should have a validator")
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("@deprecated annotation on type") {
+      val schema = KindlingsSchema.derive[DeprecatedType]
+      assert(schema.deprecated, "Schema should be deprecated")
+    }
+  }
+
+  group("recursive type verification") {
+
+    test("recursive field emits SRef") {
+      val schema = KindlingsSchema.derive[RecursiveTree]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[RecursiveTree] =>
+          val childrenField = p.fields.find(_.name.name == "children")
+          assert(childrenField.isDefined, "Should have a 'children' field")
+          childrenField.get.schema.schemaType match {
+            case arr: SchemaType.SArray[?, ?] =>
+              arr.element.schemaType match {
+                case _: SchemaType.SRef[?] => () // success — recursive reference via SRef
+                case other                 => fail(s"Expected SRef inside array, got: $other")
+              }
+            case other => fail(s"Expected SArray for children field, got: $other")
+          }
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("recursive through Option") {
+      val schema = KindlingsSchema.derive[RecursiveOption]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[RecursiveOption] =>
+          val childField = p.fields.find(_.name.name == "child")
+          assert(childField.isDefined, "Should have a 'child' field")
+          // Option[RecursiveOption] uses .asOption which wraps in SOption containing SRef
+          assert(childField.get.schema.isOptional, "child field should be optional")
+          childField.get.schema.schemaType match {
+            case SchemaType.SOption(innerSchema) =>
+              innerSchema.schemaType match {
+                case _: SchemaType.SRef[?] =>
+                  () // success — SOption(SRef) for recursive Option type
+                case other =>
+                  fail(s"Expected SRef inside SOption for recursive Option field, got: $other")
+              }
+            case other =>
+              fail(s"Expected SOption for recursive Option field, got: $other")
+          }
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+  }
+
+  group("discriminator child metadata") {
+
+    test("discriminator adds field to child schemas") {
+      val schema = JsoniterDiscriminatorChildDerivation.schema
+      schema.schemaType match {
+        case c: SchemaType.SCoproduct[Shape] =>
+          c.subtypes.foreach { childSchema =>
+            childSchema.schemaType match {
+              case p: SchemaType.SProduct[?] =>
+                // Each child SProduct should have a "type" discriminator field
+                val typeField = p.fields.find(_.name.encodedName == "type")
+                assert(
+                  typeField.isDefined,
+                  s"Child schema should have a 'type' field, fields: ${p.fields.map(_.name.encodedName)}"
+                )
+                // The discriminator field should have a single-value validator
+                assert(
+                  typeField.get.schema.validator != sttp.tapir.Validator.pass,
+                  "Discriminator field should have a validator"
+                )
+              case other =>
+                fail(s"Expected SProduct for child, got: $other")
+            }
+            // Each child should have encodedDiscriminatorValue attribute
+            val discValue = childSchema.attributes.get(Schema.EncodedDiscriminatorValue.Attribute)
+            assert(discValue.isDefined, "Child schema should have encodedDiscriminatorValue attribute")
+          }
+        case other =>
+          fail(s"Expected SCoproduct, got: $other")
+      }
+    }
+  }
 }
 
 /** Helper object that derives a schema preferring jsoniter-scala config with snake_case field names. Separate object
@@ -551,4 +662,11 @@ object JsoniterStringifiedDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
   val schema: Schema[NumericFields] = KindlingsSchema.derive[NumericFields]
+}
+
+object JsoniterDiscriminatorChildDerivation {
+  implicit val config: JsoniterConfig =
+    JsoniterConfig(discriminatorFieldName = Some("type"))
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
 }

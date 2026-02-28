@@ -61,6 +61,15 @@ case class WithJsoniterTransientField(
     @hearth.kindlings.jsoniterderivation.annotations.transientField hidden: String = ""
 )
 
+// Recursive through Option
+case class RecursiveOption(value: String, child: Option[RecursiveOption])
+
+// Case object in sealed trait
+sealed trait Status
+case object Active extends Status
+case object Inactive extends Status
+case class Custom(label: String) extends Status
+
 object GenericDerivation {
 
   implicit val config: Configuration = Configuration.default

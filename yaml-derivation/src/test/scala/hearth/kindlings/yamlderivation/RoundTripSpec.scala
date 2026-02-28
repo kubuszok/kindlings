@@ -198,5 +198,42 @@ final class RoundTripSpec extends MacroSuite {
         decoded ==> Right(value)
       }
     }
+
+    group("mixed sealed traits") {
+
+      test("mixed sealed trait case class round-trip") {
+        val value: MixedPet = Budgie("Polly", true)
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[MixedPet](node)
+        decoded ==> Right(value)
+      }
+
+      test("mixed sealed trait case object round-trip") {
+        val value: MixedPet = Goldfish
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[MixedPet](node)
+        decoded ==> Right(value)
+      }
+    }
+
+    group("multi-level sealed hierarchy") {
+
+      test("leaf through intermediate round-trip") {
+        val value: YamlVehicle = YamlCar("Honda")
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[YamlVehicle](node)
+        decoded ==> Right(value)
+      }
+
+      test("direct child of base round-trip") {
+        val value: YamlVehicle = YamlBicycle(18)
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[YamlVehicle](node)
+        decoded ==> Right(value)
+      }
+    }
+
+    // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
+    // in yaml encoder macro — see KindlingsYamlEncoderSpec.
   }
 }

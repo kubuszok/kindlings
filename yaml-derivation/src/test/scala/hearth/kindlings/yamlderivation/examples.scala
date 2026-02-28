@@ -68,3 +68,19 @@ case class YamlWithUtf8FieldNames(
     @fieldName("données") data: Int,
     @fieldName("field with spaces") value: Boolean
 )
+
+// Mixed sealed trait (case objects + case classes)
+sealed trait MixedPet
+case object Goldfish extends MixedPet
+case class Budgie(name: String, canTalk: Boolean) extends MixedPet
+case object Turtle extends MixedPet
+
+// Multi-level sealed hierarchy
+sealed trait YamlVehicle
+sealed trait YamlMotorized extends YamlVehicle
+case class YamlCar(brand: String) extends YamlMotorized
+case class YamlTruck(payload: Int) extends YamlMotorized
+case class YamlBicycle(gears: Int) extends YamlVehicle
+
+// Wrapper for List[Shape]
+case class ShapeCollection(shapes: List[Shape])

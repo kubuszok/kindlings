@@ -397,5 +397,37 @@ final class AvroRoundTripSpec extends MacroSuite {
         decoded ==> original
       }
     }
+
+    group("recursive types") {
+
+      test("self-recursive case class (RecursiveNode) binary round-trip") {
+        val encoder: AvroEncoder[RecursiveNode] = AvroEncoder.derive[RecursiveNode]
+        val decoder: AvroDecoder[RecursiveNode] = AvroDecoder.derive[RecursiveNode]
+        val original = RecursiveNode(1, List(RecursiveNode(2, List()), RecursiveNode(3, List())))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[RecursiveNode](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("recursive via Option (LinkedNode) binary round-trip") {
+        val encoder: AvroEncoder[LinkedNode] = AvroEncoder.derive[LinkedNode]
+        val decoder: AvroDecoder[LinkedNode] = AvroDecoder.derive[LinkedNode]
+        val original = LinkedNode("a", Some(LinkedNode("b", Some(LinkedNode("c", None)))))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[LinkedNode](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("mixed sealed trait (case objects + case classes) round-trip") {
+        val encoder: AvroEncoder[MixedEvent] = AvroEncoder.derive[MixedEvent]
+        val decoder: AvroDecoder[MixedEvent] = AvroDecoder.derive[MixedEvent]
+        val values: List[MixedEvent] = List(Started, Stopped, Error("boom"))
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)(encoder)
+          val decoded = AvroIO.fromBinary[MixedEvent](bytes)(decoder)
+          decoded ==> original
+        }
+      }
+    }
   }
 }

@@ -183,5 +183,18 @@ case object Large extends SizeWithDefault
 @annotations.avroErasedName
 case class ErasedBox[A](value: A)
 
+// Recursive type test types
+case class RecursiveNode(value: Int, children: List[RecursiveNode])
+case class LinkedNode(value: String, next: Option[LinkedNode])
+
+// Mixed sealed trait (case objects + case classes)
+sealed trait MixedEvent
+case object Started extends MixedEvent
+case object Stopped extends MixedEvent
+case class Error(message: String) extends MixedEvent
+
+// Option[SealedTrait] test
+case class WithOptionalShape(shape: Option[Shape])
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

@@ -2,9 +2,10 @@ package hearth.kindlings.avroderivation.annotations
 
 import scala.annotation.StaticAnnotation
 
-/** Controls the ordering of subtypes within an Avro ENUM or UNION schema. Lower priority values appear first. Subtypes
+/** Controls the ordering of subtypes within an Avro ENUM or UNION schema. Higher priority values appear first. Subtypes
   * without this annotation default to priority 0.
   *
-  * Example: `@avroSortPriority(1) case class Foo(...) extends MySealedTrait`
+  * Example: `@avroSortPriority(10) case class Foo(...) extends MySealedTrait` — Foo appears before lower-priority
+  * subtypes.
   */
 final class avroSortPriority(val priority: Int) extends StaticAnnotation

@@ -1040,10 +1040,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     group("circeLikeObjectEncoding") {
 
-      test("case objects encode as bare strings") {
+      test("case objects encode as wrapped empty objects") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withCirceLikeObjectEncoding
         val codec = KindlingsJsonValueCodec.derive[MixedEnum]
-        writeToString[MixedEnum](Pending)(codec) ==> "\"Pending\""
+        writeToString[MixedEnum](Pending)(codec) ==> """{"Pending":{}}"""
       }
 
       test("case classes encode as wrapped objects") {
@@ -1561,6 +1561,148 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val value = DeeplyNested1(DeeplyNested2(DeeplyNested3(DeeplyNested4(DeeplyNested5(42)))))
         val json = writeToString(value)(codec)
         readFromString[DeeplyNested1](json)(codec) ==> value
+      }
+    }
+
+    group("numeric boundaries") {
+
+      test("Byte min/max round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[ByteBoundaries]
+        val value = ByteBoundaries(Byte.MinValue, Byte.MaxValue)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[ByteBoundaries](json)(codec)
+        decoded ==> value
+      }
+
+      test("Short min/max round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[ShortBoundaries]
+        val value = ShortBoundaries(Short.MinValue, Short.MaxValue)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[ShortBoundaries](json)(codec)
+        decoded ==> value
+      }
+
+      test("Float precision edge case") {
+        case class WithFloat(value: Float)
+        val codec = KindlingsJsonValueCodec.derive[WithFloat]
+        val value = WithFloat(Float.MaxValue)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithFloat](json)(codec)
+        decoded ==> value
+      }
+
+      test("BigDecimal at precision limit") {
+        val codec = KindlingsJsonValueCodec.derive[WithBigDecimalField]
+        val value = WithBigDecimalField(BigDecimal("1234567890123456789012345678901234"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithBigDecimalField](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("unicode and encoding edge cases") {
+
+      test("surrogate pairs in values") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val value = SimplePerson("Hello \ud83c\udf0d", 1)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[SimplePerson](json)(codec)
+        decoded ==> value
+      }
+
+      test("escaped characters in values") {
+        val codec = KindlingsJsonValueCodec.derive[UnicodeContent]
+        val value = UnicodeContent("line1\nline2\ttab\\backslash")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[UnicodeContent](json)(codec)
+        decoded ==> value
+      }
+
+      test("non-ASCII in field values") {
+        val codec = KindlingsJsonValueCodec.derive[UnicodeContent]
+        val value = UnicodeContent("\u65e5\u672c\u8a9e")
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[UnicodeContent](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("nested structures") {
+
+      test("nested collections round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[NestedLists]
+        val value = NestedLists(List(List(1, 2), List(3)))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[NestedLists](json)(codec)
+        decoded ==> value
+      }
+
+      test("Option wrapping collection round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[OptionalList]
+        val some = OptionalList(Some(List(1, 2, 3)))
+        val jsonSome = writeToString(some)(codec)
+        readFromString[OptionalList](jsonSome)(codec) ==> some
+        val none = OptionalList(None)
+        val jsonNone = writeToString(none)(codec)
+        readFromString[OptionalList](jsonNone)(codec) ==> none
+      }
+
+      test("deeply nested option round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[OptionalList]
+        val value = OptionalList(None)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[OptionalList](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("field edge cases") {
+
+      test("empty JSON object for all-defaults class") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true)
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"Alice"}"""
+      }
+
+      test("all fields present when no transientDefault") {
+        val codec = KindlingsJsonValueCodec.derive[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true)
+        val json = writeToString(value)(codec)
+        assert(json.contains("\"name\""))
+        assert(json.contains("\"age\""))
+        assert(json.contains("\"active\""))
+      }
+    }
+
+    group("value class edge cases") {
+
+      test("value class wrapping String round-trip") {
+        case class WithWrappedString(name: WrappedString)
+        val codec = KindlingsJsonValueCodec.derive[WithWrappedString]
+        val value = WithWrappedString(WrappedString("hello"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithWrappedString](json)(codec)
+        decoded ==> value
+      }
+
+      test("value class in Option round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithOptionalWrapped]
+        val some = WithOptionalWrapped(Some(WrappedInt(42)))
+        val jsonSome = writeToString(some)(codec)
+        readFromString[WithOptionalWrapped](jsonSome)(codec) ==> some
+        val none = WithOptionalWrapped(None)
+        val jsonNone = writeToString(none)(codec)
+        readFromString[WithOptionalWrapped](jsonNone)(codec) ==> none
+      }
+
+      test("value class in collection round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithWrappedList]
+        val value = WithWrappedList(List(WrappedInt(1), WrappedInt(2)))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithWrappedList](json)(codec)
+        decoded ==> value
       }
     }
   }

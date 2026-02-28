@@ -17,7 +17,6 @@ final case class JsoniterConfig(
     transientNone: Boolean = false,
     requireCollectionFields: Boolean = false,
     requireDefaultFields: Boolean = false,
-    requireDiscriminatorFirst: Boolean = true,
     checkFieldDuplication: Boolean = false,
     bigDecimalPrecision: Int = 34,
     bigDecimalScaleLimit: Int = 6178,
@@ -51,8 +50,6 @@ final case class JsoniterConfig(
   def withTransientNone: JsoniterConfig = copy(transientNone = true)
   def withRequireCollectionFields: JsoniterConfig = copy(requireCollectionFields = true)
   def withRequireDefaultFields: JsoniterConfig = copy(requireDefaultFields = true)
-  def withRequireDiscriminatorFirst(require: Boolean): JsoniterConfig =
-    copy(requireDiscriminatorFirst = require)
   def withCheckFieldDuplication: JsoniterConfig = copy(checkFieldDuplication = true)
   def withBigDecimalPrecision(precision: Int): JsoniterConfig = copy(bigDecimalPrecision = precision)
   def withBigDecimalScaleLimit(scaleLimit: Int): JsoniterConfig =

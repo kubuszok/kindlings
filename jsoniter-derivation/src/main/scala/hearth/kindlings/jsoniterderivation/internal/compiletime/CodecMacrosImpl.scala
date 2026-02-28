@@ -1825,7 +1825,10 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                   val config = Expr.splice(ectx.config)
                   val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
                   if (config.circeLikeObjectEncoding && Expr.splice(Expr(isSingletonCase)))
-                    JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                    JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                      Expr.splice(ectx.writer).writeObjectStart()
+                      Expr.splice(ectx.writer).writeObjectEnd()
+                    }
                   else
                     config.discriminatorFieldName match {
                       case Some(discriminatorField) =>
@@ -3520,7 +3523,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                     if (allCaseObjects && isScalaEnumeration)
                       deriveChildDecoderEnumId[A, ChildType](childName).map(Some(_))
                     else MIO.pure(None)
-                } yield (wrapper, inline, stringEnum, enumId)
+                  circeLikeWrapper <-
+                    if (isSingleton)
+                      deriveChildDecoderCirceLikeWrapper[A, ChildType](childName).map(Some(_))
+                    else MIO.pure(None)
+                } yield (wrapper, inline, stringEnum, enumId, circeLikeWrapper)
               }
             }
             .flatMap { allDispatchers =>
@@ -3628,20 +3635,23 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                     }
                   } else {
                     // Mixed enum (case objects + case classes)
-                    // Build string-enum dispatchers for singleton children (for circeLikeObjectEncoding)
-                    val singletonStringEnumDispatchers = allDispatchers.toList.flatMap(_._3)
-                    (if (singletonStringEnumDispatchers.nonEmpty)
-                       buildDispatchLambda(singletonStringEnumDispatchers).map(Some(_))
-                     else MIO.pure(None)).map { singletonDispatchFnOpt =>
-                      singletonDispatchFnOpt match {
-                        case Some(singletonDispatchFn) =>
+                    // Build circe-like combined dispatchers: singletons consume inner {},
+                    // case classes use regular wrapper dispatch
+                    val circeLikeDispatchers = allDispatchers.toList.map { t =>
+                      t._5.getOrElse(t._1) // circe-like wrapper for singletons, regular wrapper for case classes
+                    }
+                    val hasSingletons = allDispatchers.toList.exists(_._5.isDefined)
+                    (if (hasSingletons)
+                       buildDispatchLambda(circeLikeDispatchers).map(Some(_))
+                     else MIO.pure(None)).map { circeLikeDispatchFnOpt =>
+                      circeLikeDispatchFnOpt match {
+                        case Some(circeLikeDispatchFn) =>
                           Expr.quote {
                             val config = Expr.splice(dctx.config)
                             val reader = Expr.splice(dctx.reader)
                             if (config.circeLikeObjectEncoding)
-                              JsoniterDerivationUtils.readCirceLikeObject[A](reader)(
-                                Expr.splice(singletonDispatchFn),
-                                Expr.splice(wrapperDispatchFn)
+                              JsoniterDerivationUtils.readWrapped[A](reader)(
+                                Expr.splice(circeLikeDispatchFn)
                               )
                             else
                               config.discriminatorFieldName match {
@@ -3845,6 +3855,74 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               val err = CodecDerivationError.UnexpectedParameterInSingleton(
                 Type[ChildType].prettyPrint,
                 "Expected singleton/case object for string enum but got"
+              )
+              Log.error(err.message) >> MIO.fail(err)
+          }
+      }
+    }
+
+    /** Derive a circe-like wrapper child decoder for singleton children. Similar to deriveChildDecoderStringEnum but
+      * reads an empty JSON object {} before returning the singleton value, matching circe's encoding of case objects as
+      * {"TypeName":{}}.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def deriveChildDecoderCirceLikeWrapper[A: DecoderCtx, ChildType: Type](
+        childName: String
+    ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+
+      SingletonValue.unapply(Type[ChildType]) match {
+        case Some(sv) =>
+          Log.info(s"Using singleton for circe-like wrapper child $childName") >>
+            MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
+              Expr.quote {
+                if (
+                  Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                    .splice(typeNameExpr)
+                ) {
+                  JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
+                  Expr.splice(sv.singletonExpr).asInstanceOf[A]
+                } else
+                  Expr.splice(elseExpr)
+              }
+            }
+        case None =>
+          // Fall back to CaseClass.construct for zero-arg case classes
+          CaseClass.parse[ChildType].toOption match {
+            case Some(cc) if cc.primaryConstructor.parameters.flatten.isEmpty =>
+              val constructMIO: MIO[Option[Expr[ChildType]]] =
+                cc.construct[MIO](new CaseClass.ConstructField[MIO] {
+                  def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
+                    val err = CodecDerivationError.UnexpectedParameterInSingleton(
+                      Type[ChildType].prettyPrint,
+                      "Unexpected parameter in singleton"
+                    )
+                    Log.error(err.message) >> MIO.fail(err)
+                  }
+                })
+              constructMIO.flatMap {
+                case Some(instanceExpr) =>
+                  MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
+                    Expr.quote {
+                      if (
+                        Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                          .splice(typeNameExpr)
+                      ) {
+                        JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
+                        Expr.splice(instanceExpr).asInstanceOf[A]
+                      } else
+                        Expr.splice(elseExpr)
+                    }
+                  }
+                case None =>
+                  val err = CodecDerivationError.CannotConstructType(Type[ChildType].prettyPrint, isSingleton = true)
+                  Log.error(err.message) >> MIO.fail(err)
+              }
+
+            case _ =>
+              val err = CodecDerivationError.UnexpectedParameterInSingleton(
+                Type[ChildType].prettyPrint,
+                "Expected singleton/case object for circe-like wrapper but got"
               )
               Log.error(err.message) >> MIO.fail(err)
           }

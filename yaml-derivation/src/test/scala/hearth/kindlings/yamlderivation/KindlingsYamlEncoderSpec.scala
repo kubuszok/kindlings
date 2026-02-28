@@ -489,5 +489,46 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         decoded ==> Right(YamlWithTransient("Alice", None))
       }
     }
+
+    group("mixed sealed traits (case objects + case classes)") {
+
+      test("encode case class child of mixed sealed trait") {
+        val node = KindlingsYamlEncoder.encode[MixedPet](Budgie("Polly", true))
+        node ==> mappingOf("Budgie" -> mappingOf("name" -> scalarNode("Polly"), "canTalk" -> scalarNode("true")))
+      }
+
+      test("encode case object child of mixed sealed trait") {
+        val node = KindlingsYamlEncoder.encode[MixedPet](Goldfish)
+        node ==> mappingOf("Goldfish" -> mappingOf())
+      }
+
+      test("encode mixed sealed trait with enumAsStrings still uses wrapper for non-enum-only traits") {
+        // enumAsStrings only applies to sealed traits with ALL case objects — mixed traits use wrapper
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        val node = KindlingsYamlEncoder.encode[MixedPet](Goldfish)
+        node ==> mappingOf("Goldfish" -> mappingOf())
+      }
+    }
+
+    group("multi-level sealed hierarchy") {
+
+      test("encode leaf type through intermediate sealed trait round-trips") {
+        // Encoding format for multi-level hierarchy differs between Scala 2 (flat) and Scala 3 (nested).
+        // Verify via round-trip instead of asserting specific intermediate format.
+        val value: YamlVehicle = YamlCar("Toyota")
+        val node = KindlingsYamlEncoder.encode[YamlVehicle](value)
+        val decoded = KindlingsYamlDecoder.decode[YamlVehicle](node)
+        decoded ==> Right(value)
+      }
+
+      test("encode direct child of base sealed trait") {
+        val node = KindlingsYamlEncoder.encode[YamlVehicle](YamlBicycle(21))
+        node ==> mappingOf("YamlBicycle" -> mappingOf("gears" -> scalarNode("21")))
+      }
+    }
+
+    // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
+    // in yaml encoder macro. The Shape encoder is derived inside the List encoder's splice context,
+    // but the resulting expression escapes that splice boundary.
   }
 }

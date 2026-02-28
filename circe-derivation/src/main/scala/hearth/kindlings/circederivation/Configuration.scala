@@ -18,41 +18,37 @@ final case class Configuration(
     copy(transformMemberNames = Configuration.screamingSnakeCase)
   def withSnakeCaseConstructorNames: Configuration = copy(transformConstructorNames = Configuration.snakeCase)
   def withKebabCaseConstructorNames: Configuration = copy(transformConstructorNames = Configuration.kebabCase)
+  def withPascalCaseConstructorNames: Configuration = copy(transformConstructorNames = Configuration.pascalCase)
+  def withScreamingSnakeCaseConstructorNames: Configuration =
+    copy(transformConstructorNames = Configuration.screamingSnakeCase)
   def withDefaults: Configuration = copy(useDefaults = true)
+  def withoutDefaults: Configuration = copy(useDefaults = false)
   def withDiscriminator(field: String): Configuration = copy(discriminator = Some(field))
+  def withoutDiscriminator: Configuration = copy(discriminator = None)
   def withStrictDecoding: Configuration = copy(strictDecoding = true)
+  def withoutStrictDecoding: Configuration = copy(strictDecoding = false)
   def withEnumAsStrings: Configuration = copy(enumAsStrings = true)
 }
 object Configuration {
 
   implicit val default: Configuration = Configuration()
 
+  // Regex patterns matching upstream circe's case transformation algorithm.
+  // Handles consecutive capitals correctly: HTMLParser → html_parser (not h_t_m_l_parser)
+  private val basePattern = java.util.regex.Pattern.compile("([A-Z]+)([A-Z][a-z])")
+  private val swapPattern = java.util.regex.Pattern.compile("([a-z\\d])([A-Z])")
+
+  private def separateWords(s: String, separator: Char): String = {
+    val partial = basePattern.matcher(s).replaceAll("$1" + separator + "$2")
+    swapPattern.matcher(partial).replaceAll("$1" + separator + "$2")
+  }
+
   private[circederivation] val snakeCase: String => String = { s =>
-    val sb = new StringBuilder
-    var i = 0
-    while (i < s.length) {
-      val c = s.charAt(i)
-      if (c.isUpper) {
-        if (i > 0) sb.append('_')
-        sb.append(c.toLower)
-      } else sb.append(c)
-      i += 1
-    }
-    sb.toString
+    separateWords(s, '_').toLowerCase
   }
 
   private[circederivation] val kebabCase: String => String = { s =>
-    val sb = new StringBuilder
-    var i = 0
-    while (i < s.length) {
-      val c = s.charAt(i)
-      if (c.isUpper) {
-        if (i > 0) sb.append('-')
-        sb.append(c.toLower)
-      } else sb.append(c)
-      i += 1
-    }
-    sb.toString
+    separateWords(s, '-').toLowerCase
   }
 
   private[circederivation] val pascalCase: String => String = { s =>
@@ -61,16 +57,6 @@ object Configuration {
   }
 
   private[circederivation] val screamingSnakeCase: String => String = { s =>
-    val sb = new StringBuilder
-    var i = 0
-    while (i < s.length) {
-      val c = s.charAt(i)
-      if (c.isUpper) {
-        if (i > 0) sb.append('_')
-        sb.append(c)
-      } else sb.append(c.toUpper)
-      i += 1
-    }
-    sb.toString
+    separateWords(s, '_').toUpperCase
   }
 }
