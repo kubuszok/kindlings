@@ -296,7 +296,8 @@ val al = new {
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix"
     val jvmOnly = if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix") else Vector.empty
     val scala3Only =
-      if (isScala3(scalaSuffix)) scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix")
+      if (isScala3(scalaSuffix))
+        scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix")
       else Vector.empty
     crossPlatformProjects ++ jvmOnly ++ scala3Only
   }
@@ -616,8 +617,14 @@ lazy val integrationTests = projectMatrix
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE ++ ironDepForScala3) *)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
-  .dependsOn(fastShowPretty, circeDerivation, jsoniterDerivation, yamlDerivation, tapirSchemaDerivation,
-    refinedIntegration)
+  .dependsOn(
+    fastShowPretty,
+    circeDerivation,
+    jsoniterDerivation,
+    yamlDerivation,
+    tapirSchemaDerivation,
+    refinedIntegration
+  )
   .settings(noPublishSettings *)
   .settings(settings *)
   .settings(dependencies *)
