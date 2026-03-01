@@ -2170,6 +2170,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
 
   object DecHandleAsValueTypeRule extends DecoderDerivationRule("handle as value type when possible") {
 
+    @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
         Type[A] match {
@@ -2177,10 +2178,22 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             import isValueType.Underlying as Inner
 
             // Build wrap lambda outside quotes to avoid staging issues with wrap.Result type
+            // For EitherStringOrValue wraps, handle the Either and throw on Left
             LambdaBuilder
               .of1[Inner]("inner")
               .traverse { innerExpr =>
-                MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
+                isValueType.value.wrap match {
+                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                    val wrapResult = isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
+                    MIO.pure(Expr.quote {
+                      Expr.splice(wrapResult) match {
+                        case scala.Right(v)  => v
+                        case scala.Left(msg) => Expr.splice(dctx.reader).decodeError(msg)
+                      }
+                    })
+                  case _ =>
+                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
+                }
               }
               .flatMap { builder =>
                 val wrapLambda = builder.build[A]
@@ -2464,11 +2477,27 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                 case IsValueType(isValueType) =>
                   import isValueType.Underlying as Inner
                   // Build wrap lambda outside quotes
-                  LambdaBuilder
-                    .of1[Inner]("inner")
-                    .traverse { innerExpr =>
-                      MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
-                    }
+                  // For EitherStringOrValue wraps, handle Either and throw on Left
+                  @scala.annotation.nowarn("msg=is never used")
+                  def buildWrapLambda() =
+                    LambdaBuilder
+                      .of1[Inner]("inner")
+                      .traverse { innerExpr =>
+                        isValueType.value.wrap match {
+                          case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                            val wrapResult =
+                              isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, K]]]
+                            MIO.pure(Expr.quote {
+                              Expr.splice(wrapResult) match {
+                                case scala.Right(v)  => v
+                                case scala.Left(msg) => throw new IllegalArgumentException(msg)
+                              }
+                            })
+                          case _ =>
+                            MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
+                        }
+                      }
+                  buildWrapLambda()
                     .flatMap { wrapBuilder =>
                       val wrapLambda = wrapBuilder.build[K]
                       deriveKeyDecoding[Inner].flatMap {

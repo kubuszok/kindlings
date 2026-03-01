@@ -453,20 +453,47 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               .summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*)
               .toEither match {
               case Right(innerDecoder) =>
-                LambdaBuilder
-                  .of1[Inner]("inner")
-                  .traverse { innerExpr =>
-                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
-                  }
-                  .map { builder =>
-                    val wrapLambda = builder.build[A]
-                    Rule.matched(Expr.quote {
-                      Expr
-                        .splice(innerDecoder)
-                        .construct(Expr.splice(dctx.node))(org.virtuslab.yaml.LoadSettings.empty)
-                        .map(Expr.splice(wrapLambda))
-                    })
-                  }
+                isValueType.value.wrap match {
+                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                    // Wrap returns Either[String, A] — convert Left(String) to Left(ConstructError)
+                    @scala.annotation.nowarn("msg=is never used")
+                    implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+                    LambdaBuilder
+                      .of1[Inner]("inner")
+                      .traverse { innerExpr =>
+                        val wrapResult = isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
+                        MIO.pure(Expr.quote {
+                          Expr.splice(wrapResult).left.map { (msg: String) =>
+                            ConstructError.from(msg, Expr.splice(dctx.node))
+                          }
+                        })
+                      }
+                      .map { builder =>
+                        val wrapLambda = builder.build[Either[ConstructError, A]]
+                        Rule.matched(Expr.quote {
+                          Expr
+                            .splice(innerDecoder)
+                            .construct(Expr.splice(dctx.node))(org.virtuslab.yaml.LoadSettings.empty)
+                            .flatMap(Expr.splice(wrapLambda))
+                        })
+                      }
+                  case _ =>
+                    // PlainValue — original behavior
+                    LambdaBuilder
+                      .of1[Inner]("inner")
+                      .traverse { innerExpr =>
+                        MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
+                      }
+                      .map { builder =>
+                        val wrapLambda = builder.build[A]
+                        Rule.matched(Expr.quote {
+                          Expr
+                            .splice(innerDecoder)
+                            .construct(Expr.splice(dctx.node))(org.virtuslab.yaml.LoadSettings.empty)
+                            .map(Expr.splice(wrapLambda))
+                        })
+                      }
+                }
               case Left(reason) =>
                 MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no YamlDecoder: $reason"))
             }

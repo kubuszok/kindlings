@@ -582,18 +582,41 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
             // Summon a Decoder[Inner]
             DTypes.Decoder[Inner].summonExprIgnoring(DecUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
               case Right(innerDecoder) =>
-                // Build wrap lambda outside quotes to avoid staging issues with wrap.Result type
-                LambdaBuilder
-                  .of1[Inner]("inner")
-                  .traverse { innerExpr =>
-                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
-                  }
-                  .map { builder =>
-                    val wrapLambda = builder.build[A]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).map(Expr.splice(wrapLambda))
-                    })
-                  }
+                isValueType.value.wrap match {
+                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                    // Wrap returns Either[String, A] — convert Left(String) to Left(DecodingFailure)
+                    @scala.annotation.nowarn("msg=is never used")
+                    implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                    LambdaBuilder
+                      .of1[Inner]("inner")
+                      .traverse { innerExpr =>
+                        val wrapResult = isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
+                        MIO.pure(Expr.quote {
+                          Expr.splice(wrapResult).left.map { (msg: String) =>
+                            io.circe.DecodingFailure(msg, Expr.splice(dctx.cursor).history)
+                          }
+                        })
+                      }
+                      .map { builder =>
+                        val wrapLambda = builder.build[Either[DecodingFailure, A]]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).flatMap(Expr.splice(wrapLambda))
+                        })
+                      }
+                  case _ =>
+                    // PlainValue — original behavior
+                    LambdaBuilder
+                      .of1[Inner]("inner")
+                      .traverse { innerExpr =>
+                        MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
+                      }
+                      .map { builder =>
+                        val wrapLambda = builder.build[A]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).map(Expr.splice(wrapLambda))
+                        })
+                      }
+                }
               case Left(reason) =>
                 MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no Decoder: $reason"))
             }
@@ -809,27 +832,65 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   import isValueType.Underlying as Inner
                   deriveKeyDecoder[Inner].flatMap {
                     case Some(innerKeyDecoder) =>
-                      // Build wrap lambda outside quotes
-                      LambdaBuilder
-                        .of1[Inner]("inner")
-                        .traverse { innerExpr =>
-                          MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
-                        }
-                        .flatMap { wrapBuilder =>
-                          val wrapLambda = wrapBuilder.build[K]
+                      isValueType.value.wrap match {
+                        case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                          // Wrap returns Either[String, K] — convert Left(String) to Left(DecodingFailure)
+                          // EitherDFK implicit is already in scope from line 747
                           LambdaBuilder
-                            .of1[String]("keyStr")
-                            .traverse { keyStrExpr =>
+                            .of1[Inner]("inner")
+                            .traverse { innerExpr =>
+                              val wrapResult =
+                                isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, K]]]
                               MIO.pure(Expr.quote {
-                                Expr.splice(innerKeyDecoder).apply(Expr.splice(keyStrExpr)).map(Expr.splice(wrapLambda))
+                                Expr.splice(wrapResult).left.map { (msg: String) =>
+                                  io.circe.DecodingFailure(msg, Nil)
+                                }
                               })
                             }
-                            .map { builder =>
-                              Some(builder.build[Either[DecodingFailure, K]]): Option[
-                                Expr[String => Either[DecodingFailure, K]]
-                              ]
+                            .flatMap { wrapBuilder =>
+                              val wrapLambda = wrapBuilder.build[Either[DecodingFailure, K]]
+                              LambdaBuilder
+                                .of1[String]("keyStr")
+                                .traverse { keyStrExpr =>
+                                  MIO.pure(Expr.quote {
+                                    Expr
+                                      .splice(innerKeyDecoder)
+                                      .apply(Expr.splice(keyStrExpr))
+                                      .flatMap(Expr.splice(wrapLambda))
+                                  })
+                                }
+                                .map { builder =>
+                                  Some(builder.build[Either[DecodingFailure, K]]): Option[
+                                    Expr[String => Either[DecodingFailure, K]]
+                                  ]
+                                }
                             }
-                        }
+                        case _ =>
+                          // PlainValue — original behavior
+                          LambdaBuilder
+                            .of1[Inner]("inner")
+                            .traverse { innerExpr =>
+                              MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[K]])
+                            }
+                            .flatMap { wrapBuilder =>
+                              val wrapLambda = wrapBuilder.build[K]
+                              LambdaBuilder
+                                .of1[String]("keyStr")
+                                .traverse { keyStrExpr =>
+                                  MIO.pure(Expr.quote {
+                                    Expr
+                                      .splice(innerKeyDecoder)
+                                      .apply(Expr.splice(keyStrExpr))
+                                      .map(Expr.splice(wrapLambda))
+                                  })
+                                }
+                                .map { builder =>
+                                  Some(builder.build[Either[DecodingFailure, K]]): Option[
+                                    Expr[String => Either[DecodingFailure, K]]
+                                  ]
+                                }
+                            }
+                      }
                     case None => MIO.pure(None)
                   }
                 case _ =>
