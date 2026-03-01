@@ -287,6 +287,16 @@ trait SchemaMacrosImpl { this: MacroCommons & StdExtensions & JsonSchemaConfigs 
             }
           }
 
+      // Value type (AnyVal, opaque, Refined, Iron) — derive schema for underlying type
+      case IsValueType(isValueType) =>
+        import isValueType.Underlying as Inner
+        Log.info(s"Deriving Schema for value type ${Type[A].prettyPrint} as ${Type[Inner].prettyPrint}") >>
+          deriveSchemaRecursively[Inner](jsonCfg, cache, inProgress, derivedType).map { innerSchema =>
+            Expr.quote {
+              Expr.splice(innerSchema).asInstanceOf[Schema[A]]
+            }
+          }
+
       case _ =>
         // Singleton (case object / val) — before CaseClass, produces product schema with no fields
         SingletonValue.parse[A].toEither match {

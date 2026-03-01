@@ -31,6 +31,8 @@ val versions = new {
   val jsoniterScala = "2.38.9"
   val scalaYaml = "0.3.1"
   val tapir = "1.11.50"
+  val refined = "0.11.3"
+  val iron = "3.0.1"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -276,19 +278,27 @@ val al = new {
       "jsoniterJson",
       "yamlDerivation",
       "jsonSchemaConfigMacroProviders",
-      "tapirSchemaDerivation"
+      "tapirSchemaDerivation",
+      "refinedIntegration"
     )
 
   private val jvmOnlyProdProjects = Vector("avroDerivation")
 
+  private val scala3OnlyProdProjects = Vector("ironIntegration")
+
   private def isJVM(platform: String): Boolean = platform == "JVM"
+
+  private def isScala3(scalaSuffix: String): Boolean = scalaSuffix == "3"
 
   private def projects(platform: String, scalaSuffix: String): Vector[String] = {
     val crossPlatformProjects = for {
       name <- prodProjects
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix"
     val jvmOnly = if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix") else Vector.empty
-    crossPlatformProjects ++ jvmOnly
+    val scala3Only =
+      if (isScala3(scalaSuffix)) scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix")
+      else Vector.empty
+    crossPlatformProjects ++ jvmOnly ++ scala3Only
   }
 
   def ci(platform: String, scalaSuffix: String): String = {
@@ -318,7 +328,11 @@ val al = new {
     } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix/publishLocal"
     val jvmOnly =
       if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix/publishLocal") else Vector.empty
-    crossPlatform ++ jvmOnly
+    val scala3Only =
+      if (isScala3(scalaSuffix))
+        scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix/publishLocal")
+      else Vector.empty
+    crossPlatform ++ jvmOnly ++ scala3Only
   }
 
   val publishLocalForTests = (publishLocal("JVM", "") ++ publishLocal("JVM", "3")).mkString(" ; ")
@@ -340,6 +354,9 @@ lazy val root = project
   .aggregate(avroDerivation.projectRefs *)
   .aggregate(jsonSchemaConfigMacroProviders.projectRefs *)
   .aggregate(tapirSchemaDerivation.projectRefs *)
+  .aggregate(refinedIntegration.projectRefs *)
+  .aggregate(ironIntegration.projectRefs *)
+  .aggregate(integrationTests.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -551,3 +568,70 @@ lazy val tapirSchemaDerivation = projectMatrix
   )
   .dependsOn(circeDerivation % Test)
   .dependsOn(jsoniterDerivation % Test)
+
+lazy val refinedIntegration = projectMatrix
+  .in(file("refined-integration"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-refined-integration",
+    name := "kindlings-refined-integration",
+    description := "Refined types integration — IsValueType provider for eu.timepit.refined.api.Refined",
+    macroExtensionTraits := Seq("hearth.std.StandardMacroExtension")
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "eu.timepit" %%% "refined" % versions.refined)
+
+lazy val ironIntegration = projectMatrix
+  .in(file("iron-integration"))
+  .someVariations(List(versions.scala3), versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-iron-integration",
+    name := "kindlings-iron-integration",
+    description := "Iron types integration — IsValueType provider for io.github.iltotore.iron.IronType",
+    macroExtensionTraits := Seq("hearth.std.StandardMacroExtension")
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "io.github.iltotore" %%% "iron" % versions.iron)
+
+// Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
+val ironDepForScala3 = List(
+  MatrixAction.ForScala(_.isScala3).Configure { project =>
+    val suffix = project.id.stripPrefix("integrationTests") // "3", "JS3", "Native3"
+    project.dependsOn(LocalProject(s"ironIntegration$suffix"))
+  }
+)
+
+lazy val integrationTests = projectMatrix
+  .in(file("integration-tests"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE ++ ironDepForScala3) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .dependsOn(fastShowPretty, circeDerivation, jsoniterDerivation, yamlDerivation, tapirSchemaDerivation,
+    refinedIntegration)
+  .settings(noPublishSettings *)
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "eu.timepit" %%% "refined" % versions.refined,
+      "io.circe" %%% "circe-core" % versions.circe,
+      "io.circe" %%% "circe-parser" % versions.circe,
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
+      "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml,
+      "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir
+    ),
+    libraryDependencies ++= versions.fold(scalaVersion.value)(
+      for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),
+      for2_13 = Seq.empty
+    )
+  )

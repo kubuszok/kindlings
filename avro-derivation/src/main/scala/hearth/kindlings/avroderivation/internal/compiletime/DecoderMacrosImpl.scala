@@ -479,6 +479,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
 
   object DecHandleAsValueTypeRule extends DecoderDerivationRule("handle as value type when possible") {
 
+    @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
         Type[A] match {
@@ -486,9 +487,19 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & SchemaForMacrosIm
             import isValueType.Underlying as Inner
             for {
               innerResult <- deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.avroValue))
-            } yield {
-              val wrapped = isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]]
-              Rule.matched(wrapped)
+            } yield isValueType.value.wrap match {
+              case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                // Wrap returns Either[String, A] — throw AvroRuntimeException on Left
+                val eitherResult = isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[String, A]]]
+                Rule.matched(Expr.quote {
+                  Expr.splice(eitherResult) match {
+                    case scala.Right(v)  => v
+                    case scala.Left(msg) => throw new org.apache.avro.AvroRuntimeException(msg)
+                  }
+                })
+              case _ =>
+                // PlainValue — original behavior
+                Rule.matched(isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]])
             }
 
           case _ =>
