@@ -32,7 +32,7 @@ val versions = new {
   val scalaYaml = "0.3.1"
   val tapir = "1.11.50"
   val refined = "0.11.3"
-  val iron = "3.0.1"
+  val iron = "3.0.4"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
