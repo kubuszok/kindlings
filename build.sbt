@@ -30,7 +30,7 @@ val versions = new {
   val circe = "0.14.15"
   val jsoniterScala = "2.38.9"
   val scalaYaml = "0.3.1"
-  val tapir = "1.13.9"
+  val tapir = "1.13.10"
   val refined = "0.11.3"
   val iron = "3.3.0"
 
