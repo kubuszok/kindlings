@@ -33,6 +33,7 @@ val versions = new {
   val tapir = "1.13.10"
   val refined = "0.11.3"
   val iron = "3.3.0"
+  val scalaXml = "2.3.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -276,10 +277,12 @@ val al = new {
       "circeDerivation",
       "jsoniterDerivation",
       "jsoniterJson",
+      "ubjsonDerivation",
       "yamlDerivation",
       "jsonSchemaConfigMacroProviders",
       "tapirSchemaDerivation",
-      "refinedIntegration"
+      "refinedIntegration",
+      "xmlDerivation"
     )
 
   private val jvmOnlyProdProjects = Vector("avroDerivation")
@@ -351,12 +354,14 @@ lazy val root = project
   .aggregate(circeDerivation.projectRefs *)
   .aggregate(jsoniterDerivation.projectRefs *)
   .aggregate(jsoniterJson.projectRefs *)
+  .aggregate(ubjsonDerivation.projectRefs *)
   .aggregate(yamlDerivation.projectRefs *)
   .aggregate(avroDerivation.projectRefs *)
   .aggregate(jsonSchemaConfigMacroProviders.projectRefs *)
   .aggregate(tapirSchemaDerivation.projectRefs *)
   .aggregate(refinedIntegration.projectRefs *)
   .aggregate(ironIntegration.projectRefs *)
+  .aggregate(xmlDerivation.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .settings(
     moduleName := "kindlings",
@@ -489,6 +494,21 @@ lazy val jsoniterJson = projectMatrix
     resolvers += mavenCentralSnapshots
   )
 
+lazy val ubjsonDerivation = projectMatrix
+  .in(file("ubjson-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-ubjson-derivation",
+    name := "kindlings-ubjson-derivation",
+    description := "UBJson (Universal Binary JSON) ValueCodec derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+
 lazy val yamlDerivation = projectMatrix
   .in(file("yaml-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
@@ -506,6 +526,26 @@ lazy val yamlDerivation = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml
+    )
+  )
+
+lazy val xmlDerivation = projectMatrix
+  .in(file("xml-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-xml-derivation",
+    name := "kindlings-xml-derivation",
+    description := "Scala XML Encoder/Decoder derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml
     )
   )
 
@@ -621,7 +661,9 @@ lazy val integrationTests = projectMatrix
     fastShowPretty,
     circeDerivation,
     jsoniterDerivation,
+    ubjsonDerivation,
     yamlDerivation,
+    xmlDerivation,
     tapirSchemaDerivation,
     refinedIntegration
   )
@@ -635,7 +677,8 @@ lazy val integrationTests = projectMatrix
       "io.circe" %%% "circe-parser" % versions.circe,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml,
-      "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir
+      "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
+      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),
