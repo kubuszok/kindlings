@@ -34,6 +34,7 @@ val versions = new {
   val refined = "0.11.3"
   val iron = "3.3.0"
   val scalaXml = "2.3.0"
+  val cats = "2.12.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -282,7 +283,9 @@ val al = new {
       "jsonSchemaConfigMacroProviders",
       "tapirSchemaDerivation",
       "refinedIntegration",
-      "xmlDerivation"
+      "xmlDerivation",
+      "catsDerivation",
+      "catsIntegration"
     )
 
   private val jvmOnlyProdProjects = Vector("avroDerivation")
@@ -362,6 +365,8 @@ lazy val root = project
   .aggregate(refinedIntegration.projectRefs *)
   .aggregate(ironIntegration.projectRefs *)
   .aggregate(xmlDerivation.projectRefs *)
+  .aggregate(catsDerivation.projectRefs *)
+  .aggregate(catsIntegration.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .settings(
     moduleName := "kindlings",
@@ -644,6 +649,44 @@ lazy val ironIntegration = projectMatrix
   .settings(publishSettings *)
   .settings(libraryDependencies += "io.github.iltotore" %%% "iron" % versions.iron)
 
+lazy val catsDerivation = projectMatrix
+  .in(file("cats-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-cats-derivation",
+    name := "kindlings-cats-derivation",
+    description := "Cats type class derivation (Show, Eq, Order, Hash, Semigroup, Monoid, etc.) using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.typelevel" %%% "cats-core" % versions.cats,
+      "org.typelevel" %%% "alleycats-core" % versions.cats
+    )
+  )
+
+lazy val catsIntegration = projectMatrix
+  .in(file("cats-integration"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-cats-integration",
+    name := "kindlings-cats-integration",
+    description := "Cats data types integration — IsCollection/IsMap providers for NonEmptyList, NonEmptyMap, Chain, etc.",
+    macroExtensionTraits := Seq("hearth.std.StandardMacroExtension")
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
+
 // Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
 val ironDepForScala3 = List(
   MatrixAction.ForScala(_.isScala3).Configure { project =>
@@ -665,7 +708,8 @@ lazy val integrationTests = projectMatrix
     yamlDerivation,
     xmlDerivation,
     tapirSchemaDerivation,
-    refinedIntegration
+    refinedIntegration,
+    catsIntegration
   )
   .settings(noPublishSettings *)
   .settings(settings *)
@@ -678,7 +722,8 @@ lazy val integrationTests = projectMatrix
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml,
       "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
-      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml
+      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
+      "org.typelevel" %%% "cats-core" % versions.cats
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),

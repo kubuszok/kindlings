@@ -924,6 +924,54 @@ Expr.quote { Left(DecodingFailure("error", Nil)).asInstanceOf[Either[DecodingFai
 
 **Reference:** `DecoderMacrosImpl.scala` — `directDecoderOpt` in `deriveDecoderTypeClass`.
 
+### Helper method pattern for path-dependent types in collection providers
+
+A variant of the path-dependent type pitfall specific to `IsCollection.Provider` implementations. When `Type.Ctor1.unapply` extracts `elem.Underlying`, using it inside `Expr.quote` via `import elem.Underlying as Elem` fails on Scala 2.
+
+**Solution:** Move `Expr.quote` code to helper methods where element types are regular type parameters:
+
+```scala
+// Helper method — E is a regular type parameter, safe for Scala 2 reification:
+def mkNEL[A, E](AT: Type[A], elemType: Type[E]): IsCollection[A] = {
+  implicit val eType: Type[E] = elemType
+  implicit val aType: Type[A] = AT
+  Existential[IsCollectionOf[A, *], E](new IsCollectionOf[A, E] {
+    override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
+      Expr.quote(Expr.splice(value).asInstanceOf[cats.data.NonEmptyList[E]].toList)
+    // ...
+  })
+}
+
+// In parse — pass path-dependent type as argument, not via import:
+override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
+  NELCtor.unapply(tpe) match {
+    case Some(elem) => ProviderResult.Matched(mkNEL(tpe, elem.Underlying))
+    case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyList")
+  }
+```
+
+**Reference:** `CatsCollectionAndMapProviders.scala` — `mkNEL`, `mkNEV`, `mkNEC`, `mkChain`, `mkNEM`, `mkNES`.
+
+### Newtype type aliases in `Expr.quote` (Scala 2)
+
+Cats Newtype types (`NonEmptyChain`, `NonEmptyMap`, `NonEmptySet`) are type aliases to `*Impl.Type[A]`. Referencing these types inside `Expr.quote` fails on Scala 2 with "not found: value data" because the reifier tries to reify the `cats.data.*Impl` path.
+
+**Solution:** Create a runtime helper object that encapsulates the Newtype references. Macro-generated code calls the helpers instead:
+
+```scala
+// Runtime helper — references Newtype types at runtime only:
+object CatsConversions {
+  def nonEmptyChainToIterable[A](a: Any): Iterable[A] =
+    a.asInstanceOf[cats.data.NonEmptyChain[A]].toChain.toList
+  def buildNonEmptyChain(list: List[Any]): Either[String, Any] = ...
+}
+
+// In Expr.quote — only calls the helper, no Newtype references:
+Expr.quote(CatsConversions.nonEmptyChainToIterable[E](Expr.splice(value)))
+```
+
+**Reference:** `CatsConversions.scala` and `CatsCollectionAndMapProviders.scala` (NEC, NEM, NES providers).
+
 ### Macro methods require concrete types at call site
 
 A generic `def helper[A](value: A)` that calls `KindlingsEncoder.encode(value)` internally won't work — the macro sees `A` as abstract, not the concrete type. Always call macro methods directly with concrete types at each call site.
