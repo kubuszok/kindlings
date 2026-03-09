@@ -91,8 +91,6 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           "or add a type ascription to the result variable."
       )
 
-    // Follow circe's pattern: run derivation outside the quote block, extract the cached helper,
-    // then only splice the helper call inside. This avoids Scala 3 splice isolation errors.
     Log
       .namedScope(
         s"Deriving XML decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
@@ -117,47 +115,40 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           val helperOpt = runSafe(placeholderCtx.getHelper[A])
           val cache = runSafe(placeholderCtx.cache.get)
 
-          // Step 3: Build a single decode function via LambdaBuilder,
-          // avoiding deep Expr.quote/Expr.splice nesting that causes "Nested context should not loop"
-          val decodeFnExpr: Expr[scala.xml.Elem => Either[XmlDecodingError, A]] =
-            helperOpt match {
-              case Some(helper) =>
-                runSafe {
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("decElem")
-                    .traverse { elemExpr =>
-                      // The helper calls decode_A(elem, config). But we don't have config yet at this point,
-                      // so we pass the configExpr (from the macro param). The cached def is parameterized
-                      // on both but here we partially apply with the macro-level config.
-                      MIO.pure(helper(elemExpr, configExpr))
-                    }
-                    .map(_.build[Either[XmlDecodingError, A]])
+          helperOpt match {
+            case Some(helper) =>
+              // Type has a cached def — call it directly (no lambda allocation)
+              cache.toValDefs.use { _ =>
+                Expr.quote {
+                  new KindlingsXmlDecoder[A] {
+                    def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] =
+                      Expr.splice(helper(Expr.quote(elem), configExpr))
+                  }
                 }
-              case None =>
-                runSafe {
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("directElem2")
-                    .traverse { elemExpr =>
-                      val freshCtx =
-                        DecoderCtx.from[A](elemExpr, configExpr, derivedType = selfType)
-                      for {
-                        _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                        result <- deriveDecoderRecursively[A](using freshCtx)
-                        freshCache <- freshCtx.cache.get
-                      } yield freshCache.toValDefs.use(_ => result)
-                    }
-                    .map(_.build[Either[XmlDecodingError, A]])
-                }
-            }
-
-          // Wrap cache.toValDefs.use around the ENTIRE instance block (only needed for helper path)
-          cache.toValDefs.use { _ =>
-            Expr.quote {
-              new KindlingsXmlDecoder[A] {
-                def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] =
-                  Expr.splice(decodeFnExpr)(elem)
               }
-            }
+            case None =>
+              // Simple type without cached helper (value types, options, collections) —
+              // derive directly with real context. Define fromCtx outside the quote to avoid
+              // ClassTag leaks from loadStandardExtensions into the reified context.
+              val fromCtx: DecoderCtx[A] => Expr[Either[XmlDecodingError, A]] =
+                ctx =>
+                  runSafe {
+                    for {
+                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                      result <- deriveDecoderRecursively[A](using ctx)
+                      freshCache <- ctx.cache.get
+                    } yield freshCache.toValDefs.use(_ => result)
+                  }
+              Expr.quote {
+                new KindlingsXmlDecoder[A] {
+                  def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] = {
+                    val _ = elem
+                    Expr.splice {
+                      fromCtx(DecoderCtx.from[A](Expr.quote(elem), configExpr, derivedType = selfType))
+                    }
+                  }
+                }
+              }
           }
         }
       }
