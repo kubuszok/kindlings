@@ -68,14 +68,14 @@ final class UBJsonReader private (private val in: InputStream) {
     b
   }
 
-  /** Read a length (used for strings and high-precision numbers). UBJson lengths are preceded by a type marker indicating
-    * the integer type of the length.
+  /** Read a length (used for strings and high-precision numbers). UBJson lengths are preceded by a type marker
+    * indicating the integer type of the length.
     */
   private def readLength(): Int = {
     val marker = readRawByte()
     marker match {
       case 'i' => readRawByte().toInt
-      case 'U' => readRawByte().toInt & 0xFF
+      case 'U' => readRawByte().toInt & 0xff
       case 'I' => readInt16().toInt
       case 'l' => readInt32()
       case 'L' =>
@@ -88,18 +88,18 @@ final class UBJsonReader private (private val in: InputStream) {
 
   private def readInt16(): Short = {
     val b = readRawBytes(2)
-    ((b(0) & 0xFF) << 8 | (b(1) & 0xFF)).toShort
+    ((b(0) & 0xff) << 8 | (b(1) & 0xff)).toShort
   }
 
   private def readInt32(): Int = {
     val b = readRawBytes(4)
-    (b(0) & 0xFF) << 24 | (b(1) & 0xFF) << 16 | (b(2) & 0xFF) << 8 | (b(3) & 0xFF)
+    (b(0) & 0xff) << 24 | (b(1) & 0xff) << 16 | (b(2) & 0xff) << 8 | (b(3) & 0xff)
   }
 
   private def readInt64(): Long = {
     val b = readRawBytes(8)
-    (b(0) & 0xFFL) << 56 | (b(1) & 0xFFL) << 48 | (b(2) & 0xFFL) << 40 | (b(3) & 0xFFL) << 32 |
-      (b(4) & 0xFFL) << 24 | (b(5) & 0xFFL) << 16 | (b(6) & 0xFFL) << 8 | (b(7) & 0xFFL)
+    (b(0) & 0xffL) << 56 | (b(1) & 0xffL) << 48 | (b(2) & 0xffL) << 40 | (b(3) & 0xffL) << 32 |
+      (b(4) & 0xffL) << 24 | (b(5) & 0xffL) << 16 | (b(6) & 0xffL) << 8 | (b(7) & 0xffL)
   }
 
   // --- Public read methods ---
@@ -128,7 +128,7 @@ final class UBJsonReader private (private val in: InputStream) {
     val m = readRawByte()
     m match {
       case 'i' => readRawByte().toShort
-      case 'U' => (readRawByte().toInt & 0xFF).toShort
+      case 'U' => (readRawByte().toInt & 0xff).toShort
       case 'I' => readInt16()
       case _   => decodeError(s"expected integer marker for short, got '${m.toChar}'")
     }
@@ -138,7 +138,7 @@ final class UBJsonReader private (private val in: InputStream) {
     val m = readRawByte()
     m match {
       case 'i' => readRawByte().toInt
-      case 'U' => readRawByte().toInt & 0xFF
+      case 'U' => readRawByte().toInt & 0xff
       case 'I' => readInt16().toInt
       case 'l' => readInt32()
       case _   => decodeError(s"expected integer marker for int, got '${m.toChar}'")
@@ -149,7 +149,7 @@ final class UBJsonReader private (private val in: InputStream) {
     val m = readRawByte()
     m match {
       case 'i' => readRawByte().toLong
-      case 'U' => (readRawByte().toInt & 0xFF).toLong
+      case 'U' => (readRawByte().toInt & 0xff).toLong
       case 'I' => readInt16().toLong
       case 'l' => readInt32().toLong
       case 'L' => readInt64()
@@ -164,7 +164,7 @@ final class UBJsonReader private (private val in: InputStream) {
         val bits = readInt32()
         java.lang.Float.intBitsToFloat(bits)
       case 'i' => readRawByte().toFloat
-      case 'U' => (readRawByte().toInt & 0xFF).toFloat
+      case 'U' => (readRawByte().toInt & 0xff).toFloat
       case 'I' => readInt16().toFloat
       case 'l' => readInt32().toFloat
       case _   => decodeError(s"expected float marker 'd', got '${m.toChar}'")
@@ -181,7 +181,7 @@ final class UBJsonReader private (private val in: InputStream) {
         val bits = readInt32()
         java.lang.Float.intBitsToFloat(bits).toDouble
       case 'i' => readRawByte().toDouble
-      case 'U' => (readRawByte().toInt & 0xFF).toDouble
+      case 'U' => (readRawByte().toInt & 0xff).toDouble
       case 'I' => readInt16().toDouble
       case 'l' => readInt32().toDouble
       case 'L' => readInt64().toDouble
@@ -205,7 +205,7 @@ final class UBJsonReader private (private val in: InputStream) {
         val bits = readInt32()
         BigDecimal(java.lang.Float.intBitsToFloat(bits).toDouble)
       case 'i' => BigDecimal(readRawByte().toInt)
-      case 'U' => BigDecimal(readRawByte().toInt & 0xFF)
+      case 'U' => BigDecimal(readRawByte().toInt & 0xff)
       case 'I' => BigDecimal(readInt16().toInt)
       case 'l' => BigDecimal(readInt32())
       case 'L' => BigDecimal(readInt64())
@@ -284,15 +284,15 @@ final class UBJsonReader private (private val in: InputStream) {
     val m = readRawByte()
     m match {
       case 'Z' | 'N' | 'T' | 'F' => () // no payload
-      case 'i'                     => { val _ = readRawByte() }
-      case 'U'                     => { val _ = readRawByte() }
-      case 'C'                     => { val _ = readRawByte() }
-      case 'I'                     => { val _ = readRawBytes(2) }
-      case 'l'                     => { val _ = readRawBytes(4) }
-      case 'L'                     => { val _ = readRawBytes(8) }
-      case 'd'                     => { val _ = readRawBytes(4) }
-      case 'D'                     => { val _ = readRawBytes(8) }
-      case 'S' | 'H' =>
+      case 'i'                   => val _ = readRawByte()
+      case 'U'                   => val _ = readRawByte()
+      case 'C'                   => val _ = readRawByte()
+      case 'I'                   => val _ = readRawBytes(2)
+      case 'l'                   => val _ = readRawBytes(4)
+      case 'L'                   => val _ = readRawBytes(8)
+      case 'd'                   => val _ = readRawBytes(4)
+      case 'D'                   => val _ = readRawBytes(8)
+      case 'S' | 'H'             =>
         val len = readLength()
         val _ = readRawBytes(len)
       case '[' => skipArray()
@@ -324,7 +324,7 @@ final class UBJsonReader private (private val in: InputStream) {
     val m = peekToken()
     m match {
       case 'i' | 'U' | 'I' | 'l' => readInt()
-      case 'L'                     =>
+      case 'L'                   =>
         val v = readLong()
         if (v > Int.MaxValue || v < Int.MinValue) decodeError(s"long value $v overflows int")
         v.toInt

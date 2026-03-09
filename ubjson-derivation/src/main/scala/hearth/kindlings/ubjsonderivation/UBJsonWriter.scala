@@ -28,26 +28,26 @@ final class UBJsonWriter(private val out: OutputStream) {
   private def writeBytes(bytes: Array[Byte]): Unit = out.write(bytes)
 
   private def writeInt16(v: Short): Unit = {
-    out.write((v >> 8) & 0xFF)
-    out.write(v & 0xFF)
+    out.write((v >> 8) & 0xff)
+    out.write(v & 0xff)
   }
 
   private def writeInt32(v: Int): Unit = {
-    out.write((v >> 24) & 0xFF)
-    out.write((v >> 16) & 0xFF)
-    out.write((v >> 8) & 0xFF)
-    out.write(v & 0xFF)
+    out.write((v >> 24) & 0xff)
+    out.write((v >> 16) & 0xff)
+    out.write((v >> 8) & 0xff)
+    out.write(v & 0xff)
   }
 
   private def writeInt64(v: Long): Unit = {
-    out.write(((v >> 56) & 0xFF).toInt)
-    out.write(((v >> 48) & 0xFF).toInt)
-    out.write(((v >> 40) & 0xFF).toInt)
-    out.write(((v >> 32) & 0xFF).toInt)
-    out.write(((v >> 24) & 0xFF).toInt)
-    out.write(((v >> 16) & 0xFF).toInt)
-    out.write(((v >> 8) & 0xFF).toInt)
-    out.write((v & 0xFF).toInt)
+    out.write(((v >> 56) & 0xff).toInt)
+    out.write(((v >> 48) & 0xff).toInt)
+    out.write(((v >> 40) & 0xff).toInt)
+    out.write(((v >> 32) & 0xff).toInt)
+    out.write(((v >> 24) & 0xff).toInt)
+    out.write(((v >> 16) & 0xff).toInt)
+    out.write(((v >> 8) & 0xff).toInt)
+    out.write((v & 0xff).toInt)
   }
 
   /** Write a length-prefixed integer using the smallest possible type. */
@@ -85,7 +85,7 @@ final class UBJsonWriter(private val out: OutputStream) {
 
   def writeUInt8(v: Int): Unit = {
     writeByte('U')
-    writeByte((v & 0xFF).toByte)
+    writeByte((v & 0xff).toByte)
   }
 
   def writeInt(v: Int): Unit =

@@ -161,9 +161,9 @@ object XmlDerivationUtils {
 
   def parseBoolean(value: String, context: String): Either[XmlDecodingError, Boolean] =
     value.toLowerCase match {
-      case "true" | "1" | "yes"  => Right(true)
+      case "true" | "1" | "yes" => Right(true)
       case "false" | "0" | "no" => Right(false)
-      case _                     => Left(XmlDecodingError.InvalidValue(value, "Boolean", context))
+      case _                    => Left(XmlDecodingError.InvalidValue(value, "Boolean", context))
     }
 
   def parseShort(value: String, context: String): Either[XmlDecodingError, Short] =
@@ -224,7 +224,7 @@ object XmlDerivationUtils {
     val children = elem.child.collect { case e: scala.xml.Elem => e }.toList
     children match {
       case single :: Nil => Right((single.label, single))
-      case _             => Left(XmlDecodingError.General(s"Expected exactly one child element for wrapped ADT in <${elem.label}>"))
+      case _ => Left(XmlDecodingError.General(s"Expected exactly one child element for wrapped ADT in <${elem.label}>"))
     }
   }
 
@@ -232,12 +232,38 @@ object XmlDerivationUtils {
       elem: scala.xml.Elem,
       attributeName: String
   ): Either[XmlDecodingError, String] =
-    getAttribute(elem, attributeName)
-      .left
+    getAttribute(elem, attributeName).left
       .map(_ => XmlDecodingError.MissingDiscriminator(attributeName, elem.label))
 
   def failedToMatchSubtype(typeName: String, knownSubtypes: List[String]): XmlDecodingError =
     XmlDecodingError.UnknownDiscriminator(typeName, knownSubtypes)
+
+  def decodeWithDiscriminator[A](
+      elem: scala.xml.Elem,
+      attributeName: String,
+      dispatch: (String, scala.xml.Elem) => Either[XmlDecodingError, A]
+  ): Either[XmlDecodingError, A] =
+    decodeDiscriminator(elem, attributeName) match {
+      case Right(typeName) => dispatch(typeName, elem)
+      case Left(err)       => Left(err)
+    }
+
+  def dispatchByName[A](
+      typeName: String,
+      elem: scala.xml.Elem,
+      childNames: List[String],
+      childDecoders: List[scala.xml.Elem => Either[XmlDecodingError, Any]]
+  ): Either[XmlDecodingError, A] = {
+    val nameIter = childNames.iterator
+    val decoderIter = childDecoders.iterator
+    while (nameIter.hasNext) {
+      val name = nameIter.next()
+      val decoder = decoderIter.next()
+      if (name == typeName)
+        return decoder(elem).asInstanceOf[Either[XmlDecodingError, A]]
+    }
+    Left(failedToMatchSubtype(typeName, childNames))
+  }
 
   def sequenceDecodeResults(results: List[Either[XmlDecodingError, Any]]): Either[XmlDecodingError, Array[Any]] = {
     val arr = new Array[Any](results.size)
@@ -255,8 +281,9 @@ object XmlDerivationUtils {
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decoder: hearth.kindlings.xmlderivation.XmlDecoder[A]): A = value.asInstanceOf[A]
 
-  /** Cast an `Any` value to `A`, using a decode function purely for type inference.
-    * This avoids path-dependent type issues when used inside Expr.quote on Scala 2. */
+  /** Cast an `Any` value to `A`, using a decode function purely for type inference. This avoids path-dependent type
+    * issues when used inside Expr.quote on Scala 2.
+    */
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCastWithFn[A](value: Any, decodeFn: scala.xml.Elem => Either[XmlDecodingError, A]): A =
     value.asInstanceOf[A]

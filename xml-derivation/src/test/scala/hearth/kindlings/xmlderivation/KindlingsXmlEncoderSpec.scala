@@ -80,15 +80,14 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
       }
     }
 
-    // TODO: Fix encoder macro for sealed traits on Scala 3 - "Block contains definition with different owners"
-    // group("sealed traits") {
-    //
-    //   test("case class subtype") {
-    //     val encoder = KindlingsXmlEncoder.derive[Shape]
-    //     val result = encoder.encode(Circle(5.0), "shape")
-    //     assert(result.label == "shape")
-    //   }
-    // }
+    group("sealed traits") {
+
+      test("case class subtype") {
+        val encoder = KindlingsXmlEncoder.derive[Shape]
+        val result = encoder.encode(Circle(5.0), "shape")
+        assert(result.label == "shape")
+      }
+    }
 
     group("options") {
 

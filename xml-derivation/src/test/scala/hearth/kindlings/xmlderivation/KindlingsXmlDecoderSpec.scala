@@ -18,13 +18,12 @@ final class KindlingsXmlDecoderSpec extends MacroSuite {
         assert(result == Right(SimplePerson("Alice", 30)))
       }
 
-      // TODO: Fix decoder macro for empty case classes - "not found: value caseClass" on Scala 2
-      // test("empty case class") {
-      //   val decoder = KindlingsXmlDecoder.derive[EmptyClass]
-      //   val elem = parseXml("<empty/>")
-      //   val result = decoder.decode(elem)
-      //   assert(result == Right(EmptyClass()))
-      // }
+      test("empty case class") {
+        val decoder = KindlingsXmlDecoder.derive[EmptyClass]
+        val elem = parseXml("<empty/>")
+        val result = decoder.decode(elem)
+        assert(result == Right(EmptyClass()))
+      }
 
       test("single field case class") {
         val decoder = KindlingsXmlDecoder.derive[SingleField]
@@ -62,20 +61,19 @@ final class KindlingsXmlDecoderSpec extends MacroSuite {
 
     group("sealed traits") {
 
-      // TODO: Fix decoder macro for sealed traits - "recursive value elem needs type" on Scala 2
-      // test("decode with discriminator attribute") {
-      //   val decoder = KindlingsXmlDecoder.derive[Shape]
-      //   val elem = parseXml("""<shape type="Circle"><radius>5.0</radius></shape>""")
-      //   val result = decoder.decode(elem)
-      //   assert(result == Right(Circle(5.0)))
-      // }
-      //
-      // test("unknown discriminator returns error") {
-      //   val decoder = KindlingsXmlDecoder.derive[Shape]
-      //   val elem = parseXml("""<shape type="Triangle"><sides>3</sides></shape>""")
-      //   val result = decoder.decode(elem)
-      //   assert(result.isLeft)
-      // }
+      test("decode with discriminator attribute") {
+        val decoder = KindlingsXmlDecoder.derive[Shape]
+        val elem = parseXml("""<shape type="Circle"><radius>5.0</radius></shape>""")
+        val result = decoder.decode(elem)
+        assert(result == Right(Circle(5.0)))
+      }
+
+      test("unknown discriminator returns error") {
+        val decoder = KindlingsXmlDecoder.derive[Shape]
+        val elem = parseXml("""<shape type="Triangle"><sides>3</sides></shape>""")
+        val result = decoder.decode(elem)
+        assert(result.isLeft)
+      }
     }
 
     group("error handling") {
