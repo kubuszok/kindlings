@@ -132,7 +132,11 @@ final class UBJsonWriter(private val out: OutputStream) {
   }
 
   def writeBigDecimal(v: BigDecimal): Unit = {
-    val str = v.underlying().toPlainString
+    // Use toString instead of toPlainString — Scala Native's toPlainString
+    // has a bug that zeroes out the integer part (e.g. "12.34" → "00.34").
+    // toString may produce scientific notation (e.g. "1E+10") but BigDecimal(str)
+    // can parse it back correctly.
+    val str = v.toString
     val bytes = str.getBytes(StandardCharsets.UTF_8)
     writeByte('H')
     writeLength(bytes.length)
