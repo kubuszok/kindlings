@@ -93,7 +93,9 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               val _ = elementName
               val _ = cfg
               Expr.splice {
-                fromCtx(EncoderCtx.from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType))
+                fromCtx(
+                  EncoderCtx.from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType)
+                )
               }
             }
           }
@@ -405,7 +407,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[String]))
         })
         else if (Type[A] <:< Type[Boolean]) Rule.matched(Expr.quote {
-          XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Boolean]).toString)
+          XmlDerivationUtils
+            .makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Boolean]).toString)
         })
         else if (Type[A] <:< Type[Int]) Rule.matched(Expr.quote {
           XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Int]).toString)
@@ -414,7 +417,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Long]).toString)
         })
         else if (Type[A] <:< Type[Double]) Rule.matched(Expr.quote {
-          XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Double]).toString)
+          XmlDerivationUtils
+            .makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Double]).toString)
         })
         else if (Type[A] <:< Type[Float]) Rule.matched(Expr.quote {
           XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Float]).toString)
@@ -429,10 +433,12 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[Char]).toString)
         })
         else if (Type[A] <:< Type[BigDecimal]) Rule.matched(Expr.quote {
-          XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[BigDecimal]).toString)
+          XmlDerivationUtils
+            .makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[BigDecimal]).toString)
         })
         else if (Type[A] <:< Type[BigInt]) Rule.matched(Expr.quote {
-          XmlDerivationUtils.makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[BigInt]).toString)
+          XmlDerivationUtils
+            .makeTextElem(Expr.splice(ectx.elementName), Expr.splice(ectx.value.upcast[BigInt]).toString)
         })
         else Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in primitive type")
       }
@@ -596,7 +602,9 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           case Right(caseClass) =>
             val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
             if (allFields.isEmpty)
-              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule"))
+              MIO.pure(
+                Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
+              )
             else
               for {
                 _ <- ectx.setHelper[A] { (value, name, config) =>
@@ -663,9 +671,13 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               } else if (isElemAnnotated) {
                 val xmlFieldName = customName.getOrElse(fName)
                 val wrapperName = paramOpt.flatMap(p => getAnnotationStringArg[xmlWrapper](p))
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr).copy(
-                  elementName = Expr(xmlFieldName)
-                )).map { encodedExpr =>
+                deriveEncoderRecursively[Field](using
+                  ectx
+                    .nest(fieldExpr)
+                    .copy(
+                      elementName = Expr(xmlFieldName)
+                    )
+                ).map { encodedExpr =>
                   wrapperName match {
                     case Some(wrapper) => FieldEncoding.WrappedChild(wrapper, encodedExpr)
                     case None          => FieldEncoding.Child(encodedExpr)
@@ -674,9 +686,13 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               } else {
                 // Default mode from config - use Element by default
                 val xmlFieldName = customName.getOrElse(fName)
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr).copy(
-                  elementName = Expr(xmlFieldName)
-                )).map { encodedExpr =>
+                deriveEncoderRecursively[Field](using
+                  ectx
+                    .nest(fieldExpr)
+                    .copy(
+                      elementName = Expr(xmlFieldName)
+                    )
+                ).map { encodedExpr =>
                   FieldEncoding.Child(encodedExpr)
                 }
               }
@@ -686,8 +702,8 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 case FieldEncoding.Attr(name, expr) => (name, expr)
               }
               val childList: List[Expr[scala.xml.Elem]] = encodings.toList.collect {
-                case FieldEncoding.Child(expr)             => expr
-                case FieldEncoding.WrappedChild(_, expr)   => expr
+                case FieldEncoding.Child(expr)           => expr
+                case FieldEncoding.WrappedChild(_, expr) => expr
               }
               val contentOpt: Option[Expr[scala.xml.Elem]] = encodings.toList.collectFirst {
                 case FieldEncoding.Content(expr) => expr
@@ -777,8 +793,7 @@ trait EncoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 .map(_._1)
                 .getOrElse(Type[EnumCase].shortName)
               Expr.quote {
-                val inner = Expr.splice(caseElem)
-                XmlDerivationUtils.addDiscriminator(inner, "type", Expr.splice(Expr(caseName)))
+                XmlDerivationUtils.addDiscriminator(Expr.splice(caseElem), "type", Expr.splice(Expr(caseName)))
               }
             }
           }

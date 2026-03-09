@@ -7,12 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.xmlderivation.{KindlingsXmlDecoder, XmlConfig, XmlDecodingError}
-import hearth.kindlings.xmlderivation.annotations.{
-  transientField,
-  xmlAttribute,
-  xmlContent,
-  xmlName
-}
+import hearth.kindlings.xmlderivation.annotations.{transientField, xmlAttribute, xmlContent, xmlName}
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
@@ -29,19 +24,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]]("KindlingsXmlDecoder.decode") {
-      fromCtx =>
-        ValDefs.createVal[scala.xml.Elem](elemExpr).use { elemVal =>
-          ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-            Expr.quote {
-              val _ = Expr.splice(elemVal)
-              val _ = Expr.splice(configVal)
-              Expr.splice {
-                fromCtx(DecoderCtx.from(elemVal, configVal, derivedType = None))
-              }
+    deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]]("KindlingsXmlDecoder.decode") { fromCtx =>
+      ValDefs.createVal[scala.xml.Elem](elemExpr).use { elemVal =>
+        ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
+          Expr.quote {
+            val _ = Expr.splice(elemVal)
+            val _ = Expr.splice(configVal)
+            Expr.splice {
+              fromCtx(DecoderCtx.from(elemVal, configVal, derivedType = None))
             }
           }
         }
+      }
     }
   }
 
@@ -97,22 +91,105 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
           "or add a type ascription to the result variable."
       )
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, KindlingsXmlDecoder[A]]("KindlingsXmlDecoder.derived") { fromCtx =>
-      ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-        Expr.quote {
-          val cfg = Expr.splice(configVal)
-          new KindlingsXmlDecoder[A] {
-            def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] = {
-              val _ = elem
-              val _ = cfg
-              Expr.splice {
-                fromCtx(DecoderCtx.from(Expr.quote(elem), Expr.quote(cfg), derivedType = selfType))
+    // Follow circe's pattern: run derivation outside the quote block, extract the cached helper,
+    // then only splice the helper call inside. This avoids Scala 3 splice isolation errors.
+    Log
+      .namedScope(
+        s"Deriving XML decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          implicit val AnyT: Type[Any] = DTypes.Any
+
+          // Step 1: Run derivation with placeholder context to populate cache
+          val placeholderCtx = DecoderCtx.from[A](
+            elem = Expr.quote(null.asInstanceOf[scala.xml.Elem]),
+            config = Expr.quote(null.asInstanceOf[XmlConfig]),
+            derivedType = selfType
+          )
+          runSafe {
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- deriveDecoderRecursively[A](using placeholderCtx)
+            } yield ()
+          }
+
+          // Step 2: Extract cached helper and cache
+          val helperOpt = runSafe(placeholderCtx.getHelper[A])
+          val cache = runSafe(placeholderCtx.cache.get)
+
+          // Step 3: Build a single decode function via LambdaBuilder,
+          // avoiding deep Expr.quote/Expr.splice nesting that causes "Nested context should not loop"
+          val decodeFnExpr: Expr[scala.xml.Elem => Either[XmlDecodingError, A]] =
+            helperOpt match {
+              case Some(helper) =>
+                runSafe {
+                  LambdaBuilder
+                    .of1[scala.xml.Elem]("decElem")
+                    .traverse { elemExpr =>
+                      // The helper calls decode_A(elem, config). But we don't have config yet at this point,
+                      // so we pass the configExpr (from the macro param). The cached def is parameterized
+                      // on both but here we partially apply with the macro-level config.
+                      MIO.pure(helper(elemExpr, configExpr))
+                    }
+                    .map(_.build[Either[XmlDecodingError, A]])
+                }
+              case None =>
+                runSafe {
+                  LambdaBuilder
+                    .of1[scala.xml.Elem]("directElem2")
+                    .traverse { elemExpr =>
+                      val freshCtx =
+                        DecoderCtx.from[A](elemExpr, configExpr, derivedType = selfType)
+                      for {
+                        _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                        result <- deriveDecoderRecursively[A](using freshCtx)
+                        freshCache <- freshCtx.cache.get
+                      } yield freshCache.toValDefs.use(_ => result)
+                    }
+                    .map(_.build[Either[XmlDecodingError, A]])
+                }
+            }
+
+          // Wrap cache.toValDefs.use around the ENTIRE instance block (only needed for helper path)
+          cache.toValDefs.use { _ =>
+            Expr.quote {
+              new KindlingsXmlDecoder[A] {
+                def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] =
+                  Expr.splice(decodeFnExpr)(elem)
               }
             }
           }
         }
       }
-    }
+      .flatTap { result =>
+        Log.info(s"Derived final XML decoder result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        "KindlingsXmlDecoder.derived",
+        infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
+          }
+          .mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.xmlderivation.debug.logDerivationForKindlingsXmlDecoder or scalac option -Xmacro-settings:xmlDerivation.logDerivation=true"
+        if (errorLogs.nonEmpty)
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |and the following logs:
+             |$errorLogs
+             |$hint""".stripMargin
+        else
+          s"""Macro derivation failed with the following errors:
+             |$errorsRendered
+             |$hint""".stripMargin
+      }
   }
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
@@ -224,7 +301,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
         )(_ => instance)
     }
 
-    def getHelper[B: Type]: MIO[Option[(Expr[scala.xml.Elem], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, B]]]] = {
+    def getHelper[B: Type]
+        : MIO[Option[(Expr[scala.xml.Elem], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, B]]]] = {
       implicit val EitherT: Type[Either[XmlDecodingError, B]] = DTypes.DecoderResult[B]
       implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
       implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
@@ -424,93 +502,126 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
         if (Type[A] <:< Type[String]) {
           implicit val ResultT: Type[Either[XmlDecodingError, String]] = DTypes.DecoderResult[String]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseString(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Boolean]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseString(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Boolean]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Boolean]] = DTypes.DecoderResult[Boolean]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseBoolean(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Int]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseBoolean(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Int]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Int]] = DTypes.DecoderResult[Int]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseInt(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Long]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseInt(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Long]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Long]] = DTypes.DecoderResult[Long]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseLong(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Double]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseLong(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Double]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Double]] = DTypes.DecoderResult[Double]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseDouble(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Float]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseDouble(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Float]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Float]] = DTypes.DecoderResult[Float]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseFloat(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Short]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseFloat(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Short]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Short]] = DTypes.DecoderResult[Short]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseShort(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Byte]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseShort(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Byte]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Byte]] = DTypes.DecoderResult[Byte]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseByte(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[Char]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseByte(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[Char]) {
           implicit val ResultT: Type[Either[XmlDecodingError, Char]] = DTypes.DecoderResult[Char]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseChar(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[BigDecimal]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseChar(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[BigDecimal]) {
           implicit val ResultT: Type[Either[XmlDecodingError, BigDecimal]] = DTypes.DecoderResult[BigDecimal]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseBigDecimal(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else if (Type[A] <:< Type[BigInt]) {
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseBigDecimal(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else if (Type[A] <:< Type[BigInt]) {
           implicit val ResultT: Type[Either[XmlDecodingError, BigInt]] = DTypes.DecoderResult[BigInt]
-          Rule.matched(Expr.quote {
-            XmlDerivationUtils.getTextContent(Expr.splice(elem)).flatMap(v =>
-              XmlDerivationUtils.parseBigInt(v, Expr.splice(elem).label)
-            )
-          }.asInstanceOf[Expr[Either[XmlDecodingError, A]]])
-        }
-        else Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in primitive type")
+          Rule.matched(
+            Expr
+              .quote {
+                XmlDerivationUtils
+                  .getTextContent(Expr.splice(elem))
+                  .flatMap(v => XmlDerivationUtils.parseBigInt(v, Expr.splice(elem).label))
+              }
+              .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
+          )
+        } else Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in primitive type")
       }
   }
 
@@ -712,18 +823,28 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
         implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
         implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
-        CaseClass.parse[A].toEither match {
-          case Right(caseClass) if caseClass.primaryConstructor.parameters.flatten.isEmpty =>
-            caseClass.primaryConstructor(Map.empty) match {
-              case Right(constructExpr) =>
-                MIO.pure(Rule.matched(Expr.quote {
-                  Right(Expr.splice(constructExpr))
-                }))
-              case Left(error) =>
-                MIO.pure(Rule.yielded(s"Cannot construct ${Type[A].prettyPrint}: $error"))
-            }
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a singleton/empty case class"))
+        Expr.singletonOf[A] match {
+          case Some(_) =>
+            // Use setHelper/getHelper so the singleton Expr is created inside the helper's Quotes scope,
+            // avoiding splice isolation errors on Scala 3
+            for {
+              _ <- dctx.setHelper[A] { (_, _) =>
+                Expr.singletonOf[A] match {
+                  case Some(singletonExpr) =>
+                    MIO.pure(Expr.quote(Right(Expr.splice(singletonExpr))))
+                  case None =>
+                    MIO.fail(new RuntimeException(s"Singleton disappeared for ${Type[A].prettyPrint}"))
+                }
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for singleton ${Type[A].prettyPrint}"))
+              }
+            } yield result
+          case None =>
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a singleton"))
         }
       }
   }
@@ -734,22 +855,18 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            val fields = caseClass.primaryConstructor.parameters.flatten.toList
-            if (fields.isEmpty)
-              MIO.pure(
-                Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
-              )
-            else
-              for {
-                _ <- dctx.setHelper[A] { (elem, config) =>
-                  decodeCaseClassFields[A](caseClass, fields)(using dctx.nestInCache(elem, config))
-                }
-                result <- dctx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
-                  case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
+            for {
+              _ <- dctx.setHelper[A] { (elem, config) =>
+                decodeCaseClassFields[A](caseClass, caseClass.primaryConstructor.parameters.flatten.toList)(
+                  using dctx.nestInCache(elem, config)
+                )
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
+                case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }
@@ -791,7 +908,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                       case noInstance: Method.NoInstance[?] =>
                         noInstance(Map.empty) match {
                           case Right(expr) => expr.asInstanceOf[Expr[Any]]
-                          case Left(_) =>
+                          case Left(_)     =>
                             Environment.reportErrorAndAbort(
                               s"Field '$fName' is annotated with @transientField but its default value could not be resolved"
                             )
@@ -824,14 +941,23 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
               buildDecodeExpr[A](caseClass, constructor, fields, decodings.toList)
             }
         case None =>
-          constructor(Map.empty) match {
-            case Right(constructExpr) =>
-              MIO.pure(Expr.quote {
-                Right(Expr.splice(constructExpr))
-              })
-            case Left(error) =>
-              MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
-          }
+          caseClass
+            .construct[MIO](new CaseClass.ConstructField[MIO] {
+              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
+                MIO.fail(
+                  new RuntimeException(
+                    s"Unexpected parameter in zero-argument case class ${Type[A].prettyPrint}"
+                  )
+                )
+            })
+            .flatMap {
+              case Some(constructExpr) =>
+                MIO.pure(Expr.quote {
+                  Right(Expr.splice(constructExpr))
+                })
+              case None =>
+                MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+            }
       }
     }
 
@@ -858,7 +984,9 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
       // `import param.tpe.Underlying as FieldT` inside Expr.quote's asInstanceOf, which leaked
       // the path `param` into generated code). Now we use unsafeCastWithFn with the child lambda
       // for type inference, keeping path-dependent types out of Expr.quote.
-      fields.zip(decodings).zipWithIndex
+      fields
+        .zip(decodings)
+        .zipWithIndex
         .foldLeft(MIO.pure(List.empty[(Expr[Either[XmlDecodingError, Any]], Expr[Array[Any]] => (String, Expr_??))])) {
           case (accMIO, (((fName, param), decoding), idx)) =>
             import param.tpe.Underlying as FieldT
@@ -876,7 +1004,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                       deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dummyElemExpr))
                     }
                     .map { builder =>
-                      val castLambda = builder.build[Either[XmlDecodingError, FieldT]]
+                      val castLambda = builder
+                        .build[Either[XmlDecodingError, FieldT]]
                         .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
                       val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                         val typedExpr: Expr[FieldT] = Expr.quote {
@@ -898,7 +1027,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                       deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](contentElemExpr))
                     }
                     .map { builder =>
-                      val castLambda = builder.build[Either[XmlDecodingError, FieldT]]
+                      val castLambda = builder
+                        .build[Either[XmlDecodingError, FieldT]]
                         .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
                       val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                         val typedExpr: Expr[FieldT] = Expr.quote {
@@ -916,7 +1046,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                   // Build a decode lambda for type inference in the accessor.
                   implicit val eitherFieldT: Type[Either[XmlDecodingError, FieldT]] = DTypes.DecoderResult[FieldT]
                   val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                    XmlDerivationUtils.getAttribute(Expr.splice(dctx.elem), Expr.splice(Expr(attrName)))
+                    XmlDerivationUtils
+                      .getAttribute(Expr.splice(dctx.elem), Expr.splice(Expr(attrName)))
                       .asInstanceOf[Either[XmlDecodingError, Any]]
                   }
                   LambdaBuilder
@@ -925,7 +1056,8 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                       deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](attrElemExpr))
                     }
                     .map { builder =>
-                      val castLambda = builder.build[Either[XmlDecodingError, FieldT]]
+                      val castLambda = builder
+                        .build[Either[XmlDecodingError, FieldT]]
                         .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
                       val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                         val typedExpr: Expr[FieldT] = Expr.quote {
@@ -990,7 +1122,7 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
                 makeAccessors.map(_(decodedValuesExpr)).toMap
               constructor(fieldMap) match {
                 case Right(constructExpr) => MIO.pure(constructExpr)
-                case Left(error) =>
+                case Left(error)          =>
                   MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
               }
             }
@@ -1012,70 +1144,131 @@ trait DecoderMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a sealed trait/enum") >> {
-        implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
-        implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
         Enum.parse[A].toEither match {
           case Right(parsedEnum) =>
-            deriveEnumDecoder[A](parsedEnum)
+            for {
+              _ <- dctx.setHelper[A] { (elem, config) =>
+                decodeEnumCases[A](parsedEnum)(using dctx.nestInCache(elem, config))
+              }
+              result <- dctx.getHelper[A].flatMap {
+                case Some(helperCall) =>
+                  MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
+                case None =>
+                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              }
+            } yield result
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }
       }
 
-    private def deriveEnumDecoder[A: DecoderCtx](
+    @scala.annotation.nowarn("msg=is never used")
+    private def decodeEnumCases[A: DecoderCtx](
         enumType: Enum[A]
-    )(implicit
-        EitherT: Type[Either[XmlDecodingError, A]],
-        XmlDecodingErrorT: Type[XmlDecodingError]
-    ): MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] = {
+    ): MIO[Expr[Either[XmlDecodingError, A]]] = {
+      implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
       implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
       implicit val StringT: Type[String] = DTypes.String
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
       val childrenList = enumType.directChildren.toList
-      val knownNames: List[String] = childrenList.map(_._1)
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
-          MIO.pure(Rule.yielded(s"Enum ${Type[A].prettyPrint} has no subtypes"))
+          val knownNames: List[String] = Nil
+          MIO.pure(Expr.quote {
+            Left(
+              XmlDerivationUtils.failedToMatchSubtype("", Expr.splice(Expr(knownNames)))
+            ): Either[XmlDecodingError, A]
+          })
 
         case Some(children) =>
+          // Derive all child decoders, collecting their helpers as lambdas
           children
             .traverse { case (childName, child) =>
               import child.Underlying as ChildType
-              implicit val EitherChildT: Type[Either[XmlDecodingError, ChildType]] =
-                DTypes.DecoderResult[ChildType]
+              deriveChildDecoderLambda[A, ChildType](childName)
+            }
+            .flatMap { childLambdas =>
+              val childNames: List[String] = childLambdas.toList.map(_._1)
+              val childDecoderExprs: List[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
+                childLambdas.toList.map(_._2)
+
+              // Wrap the final assembly in a LambdaBuilder to get a proper runSafe context
+              // for creating Expr(childNames) — this avoids Scala 3 splice isolation issues
               LambdaBuilder
-                .of1[scala.xml.Elem]("subtypeElem")
-                .traverse { subtypeElemExpr =>
-                  deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](subtypeElemExpr))
+                .of1[scala.xml.Elem]("dispatchElem")
+                .traverse { elemExpr =>
+                  // Create the names list inside runSafe context
+                  val namesListExpr: Expr[List[String]] = Expr(childNames)
+
+                  // Build the decoders list expression using foldRight
+                  val decodersListExpr: Expr[List[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
+                    childDecoderExprs.foldRight(
+                      Expr.quote(List.empty[scala.xml.Elem => Either[XmlDecodingError, Any]])
+                    ) { (decoder, acc) =>
+                      Expr.quote(Expr.splice(decoder) :: Expr.splice(acc))
+                    }
+
+                  MIO.pure(Expr.quote {
+                    XmlDerivationUtils.getAttribute(Expr.splice(elemExpr), "type") match {
+                      case Right(typeName) =>
+                        XmlDerivationUtils.dispatchByName[A](
+                          typeName,
+                          Expr.splice(elemExpr),
+                          Expr.splice(namesListExpr),
+                          Expr.splice(decodersListExpr)
+                        )
+                      case Left(_) =>
+                        Left(XmlDecodingError.MissingDiscriminator("type", Expr.splice(elemExpr).label))
+                    }
+                  })
                 }
                 .map { builder =>
-                  val lambda = builder.build[Either[XmlDecodingError, ChildType]]
-                  (childName, lambda.asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, A]]])
+                  val dispatchLambda = builder.build[Either[XmlDecodingError, A]]
+                  Expr.quote {
+                    Expr.splice(dispatchLambda)(Expr.splice(dctx.elem))
+                  }
                 }
             }
-            .map { branches =>
-              Rule.matched(Expr.quote {
-                val elem: scala.xml.Elem = Expr.splice(dctx.elem)
-                // Try discriminator attribute first
-                XmlDerivationUtils.decodeDiscriminator(elem, "type") match {
-                  case Right(typeName) =>
-                    Expr.splice {
-                      // Build an if-else chain
-                      branches.toList.foldRight(
-                        Expr.quote(Left(XmlDerivationUtils.failedToMatchSubtype(typeName, Expr.splice(Expr(knownNames)))): Either[XmlDecodingError, A])
-                      ) { case ((childName, lambda), elseExpr) =>
-                        Expr.quote {
-                          if (typeName == Expr.splice(Expr(childName)))
-                            Expr.splice(lambda).apply(elem)
-                          else
-                            Expr.splice(elseExpr)
-                        }
-                      }
-                    }
-                  case Left(err) => Left(err)
-                }
-              })
-            }
+      }
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveChildDecoderLambda[A: DecoderCtx, ChildType: Type](
+        childName: String
+    ): MIO[(String, Expr[scala.xml.Elem => Either[XmlDecodingError, Any]])] = {
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
+
+      // Derive via full rules chain (singletons use setHelper too), then use cached helper
+      implicit val EitherChildT: Type[Either[XmlDecodingError, ChildType]] = DTypes.DecoderResult[ChildType]
+      implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
+      deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.elem)).flatMap { _ =>
+        dctx.getHelper[ChildType].flatMap {
+          case Some(helper) =>
+            // Build a lambda that calls the cached helper
+            LambdaBuilder
+              .of1[scala.xml.Elem]("childElem")
+              .traverse { childElemExpr =>
+                val helperCallExpr: Expr[Either[XmlDecodingError, ChildType]] =
+                  helper(childElemExpr, dctx.config)
+                MIO.pure(Expr.quote {
+                  Expr.splice(helperCallExpr).asInstanceOf[Either[XmlDecodingError, Any]]
+                })
+              }
+              .map { builder =>
+                val lambda = builder.build[Either[XmlDecodingError, Any]]
+                (childName, lambda)
+              }
+          case None =>
+            MIO.fail(
+              new RuntimeException(s"No helper found for enum case ${Type[ChildType].prettyPrint}")
+            )
+        }
       }
     }
   }

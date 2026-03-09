@@ -6,7 +6,13 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.ubjsonderivation.{KindlingsUBJsonValueCodec, UBJsonConfig, UBJsonReader, UBJsonValueCodec, UBJsonWriter}
+import hearth.kindlings.ubjsonderivation.{
+  KindlingsUBJsonValueCodec,
+  UBJsonConfig,
+  UBJsonReader,
+  UBJsonValueCodec,
+  UBJsonWriter
+}
 import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
@@ -801,7 +807,7 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
               else
                 SingletonValue.unapply(Type[EnumCase]) match {
                   case Some(_) => MIO.pure(Expr.quote(()): Expr[Unit])
-                  case None =>
+                  case None    =>
                     CaseClass.parse[EnumCase].toOption match {
                       case Some(caseClass) =>
                         EncHandleAsCaseClassRule.encodeCaseClassFieldsOnly[EnumCase](caseClass)(using
@@ -814,7 +820,11 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
             // Full encoding for wrapper mode
             val fullEncMIO: MIO[Expr[Unit]] =
               if (Type[A].isEnumeration || Type[A].isJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
-              else deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
+              else
+                SingletonValue.unapply(Type[EnumCase]) match {
+                  case Some(_) => MIO.pure(Expr.quote(()): Expr[Unit])
+                  case None    => deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
+                }
 
             for {
               fieldsOnly <- fieldsOnlyMIO
@@ -1521,6 +1531,34 @@ trait CodecMacrosImpl { this: MacroCommons & StdExtensions & AnnotationSupport =
                           )
                             Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = ("": Any)
                         }
+                      }
+
+                      // For collections/maps, use default value when transientEmpty and field is missing
+                      val isCollOrMapField = !isOpt && {
+                        val isMapF = Type[Field] match { case IsMap(_) => true; case _ => false }
+                        val isCollF = Type[Field] match { case IsCollection(_) => true; case _ => false }
+                        isMapF || isCollF
+                      }
+                      if (isCollOrMapField && param.hasDefault) {
+                        param.defaultValue
+                          .flatMap { existentialOuter =>
+                            val methodOf = existentialOuter.value
+                            methodOf.value match {
+                              case noInstance: Method.NoInstance[?] =>
+                                import noInstance.Returned
+                                noInstance(Map.empty).toOption.map(_.upcast[Any])
+                              case _ => None
+                            }
+                          }
+                          .foreach { defaultExpr =>
+                            initSteps += Expr.quote {
+                              if (
+                                Expr.splice(dctx.config).transientEmpty &&
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                              )
+                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
+                            }
+                          }
                       }
 
                       initSteps.result()

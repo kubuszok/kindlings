@@ -21,13 +21,12 @@ final class RoundTripSpec extends MacroSuite {
       assert(roundTrip(person, "person") == Right(person))
     }
 
-    // TODO: Fix decoder macro for empty case classes - "not found: value caseClass" on Scala 2
-    // test("empty case class") {
-    //   implicit val encoder: XmlEncoder[EmptyClass] = KindlingsXmlEncoder.derive[EmptyClass]
-    //   implicit val decoder: XmlDecoder[EmptyClass] = KindlingsXmlDecoder.derive[EmptyClass]
-    //   val empty = EmptyClass()
-    //   assert(roundTrip(empty, "empty") == Right(empty))
-    // }
+    test("empty case class") {
+      implicit val encoder: XmlEncoder[EmptyClass] = KindlingsXmlEncoder.derive[EmptyClass]
+      implicit val decoder: XmlDecoder[EmptyClass] = KindlingsXmlDecoder.derive[EmptyClass]
+      val empty = EmptyClass()
+      assert(roundTrip(empty, "empty") == Right(empty))
+    }
 
     test("nested case class") {
       implicit val encoder: XmlEncoder[PersonWithAddress] = KindlingsXmlEncoder.derive[PersonWithAddress]
