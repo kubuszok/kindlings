@@ -51,7 +51,7 @@ Code uses `Expr`, `Type`, etc. from **Hearth's API**, NOT `scala.quoted.Expr` or
 
 Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-compilation pitfalls":
 
-- **Path-dependent types in `Expr.quote`** — fails on Scala 2; use `LambdaBuilder` or runtime type witness
+- **Path-dependent types in `Expr.quote`** — fails on Scala 2; use `LambdaBuilder`, runtime type witness, or helper method pattern (see `collection-integration-skill.md` §3a)
 - **Macro-internal types leak** — `??`, `Expr_??` inside `Expr.quote` cause reification failures; extract to `val` before quote
 - **`Array` needs `ClassTag`** — Hearth's `IsCollectionProviderForArray` summons `ClassTag[T]` via `Expr.summonImplicit[ClassTag[T]]` at macro expansion time. If the ClassTag is available in the user's implicit scope, `Array[T]` works automatically. If not, the `IsCollection` match silently skips and derivation fails. For macro-internal arrays (e.g., building `Array` inside `Expr.quote`), use `List` and `::` instead
 - **`Expr.upcast` only widens** — use `.asInstanceOf` inside `Expr.quote` for narrowing; also needs `Type[A]` in scope
@@ -65,6 +65,11 @@ Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-com
 - **Cross-quotes unused `Type` implicit warnings** — implicit `Type[X]` for `Expr.quote` flagged as "never used" with `-Xfatal-warnings`; wrap in `@nowarn("msg=is never used") def`
 - **`IsMap` before `IsCollection` ordering** — `Map <: Iterable` so `IsCollection` matches maps; always check `IsMap` first
 - **`summonExprIgnoring` vs OOM** — `Expr.summonImplicit` without ignoring library auto-derivation methods causes infinite macro expansion → OOM → SBT crash; always use `summonExprIgnoring`
+- **Newtype aliases in `Expr.quote`** — cats Newtype types (`NonEmptyChain`, `NonEmptyMap`, `NonEmptySet`) fail on Scala 2 with "not found: value data"; use runtime helper pattern (see `collection-integration-skill.md` §3b)
+- **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — `Impl.unapply` returns `Nothing` for first type arg of `Function1[Int, Boolean]`; always wrap with `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)` for reliable decomposition
+- **`primaryConstructor` strict type checking** — `primaryConstructor(Map[String, Expr_??])` checks `Underlying <:< paramType`; can't pass `Expr[Any]` for non-`Any` fields; use helper method pattern to preserve field type through transformations
+- **HKT type constructor summoning across compilation boundary** — summoning `ConsK[G]` where `G` is a field's type constructor (e.g., `List` from `List[A]`) requires platform-specific APIs to extract the constructor and build the type; use an abstract bridge method implemented in Scala 2/3 bridges (see `ConsKMacrosImpl.scala`)
+- **Erased approach for polymorphic type classes** — Scala 2 macros can't handle free type variables in generated trees; work with `F[Any]` and `Any => Any`, cast with `asInstanceOf` at boundaries; safe due to JVM type erasure (see `FunctorMacrosImpl.scala`)
 
 Hearth source is at `../hearth/` when documentation is insufficient.
 See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.
@@ -83,7 +88,29 @@ See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as refer
 - `circe-derivation/DecoderMacrosImpl.scala` — reference for **decoder-style** derivation (constructing types)
 - `jsoniter-derivation/CodecMacrosImpl.scala` — reference for **combined codec** (encoder + decoder, `LambdaBuilder` pattern)
 
-Also in `type-class-derivation-skill.md`: "Implementing a new module", "Debugging derivation", "Syncing from Hearth".
+Also in `type-class-derivation-skill.md`: "Implementing a new module", "Debugging derivation", "Syncing from Hearth", "Polymorphic (HKT) type class derivation".
+
+### Cats type class derivation — `cats-derivation/` module
+
+Derives type classes from cats/alleycats for case classes and sealed traits:
+
+- **Monomorphic** (kind `*`): Show, Eq, Order, PartialOrder, Hash, Semigroup, Monoid, CommutativeSemigroup, CommutativeMonoid, Empty
+- **Polymorphic** (kind `* → *`): Functor, Contravariant, Invariant, Apply, Applicative, Foldable, Traverse, Reducible, NonEmptyTraverse, SemigroupK, MonoidK, Pure, EmptyK, NonEmptyAlternative, Alternative, ConsK
+
+Key reference files:
+- `SemigroupMacrosImpl.scala` — monomorphic derivation (summon field instances, combine pairwise)
+- `FunctorMacrosImpl.scala` — polymorphic derivation (erased approach, two-probe field classification)
+- `ConsKMacrosImpl.scala` — polymorphic with nested field handling (bridge method for type constructor summoning, runtime helper, carry-and-absorb algorithm)
+- `ContravariantMacrosImpl.scala` — Function1 field classification using `Type.Ctor2.fromUntyped`
+- `ApplicativeMacrosImpl.scala` — composed derivation (pure + map + ap body builders)
+- `NonEmptyAlternativeMacrosImpl.scala` — multi-trait composition (Applicative + SemigroupK patterns)
+
+### Collection & map integration — follow `docs/contributing/collection-integration-skill.md`
+
+- `cats-integration/CatsCollectionAndMapProviders.scala` — reference for **collection/map providers** (NonEmptyList, NonEmptyVector, NonEmptyChain, Chain, NonEmptyMap, NonEmptySet)
+- `cats-integration/runtime/CatsConversions.scala` — reference for **runtime helper pattern** (Newtype aliases)
+
+Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), `fromUntyped` for cross-compilation-boundary matching.
 
 ### Fixing a bug
 

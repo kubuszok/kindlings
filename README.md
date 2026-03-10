@@ -66,11 +66,12 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 
 | Module | Replaces | Derived type classes |
 |---|---|---|
+| `kindlings-avro-derivation` | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
+| `kindlings-cats-derivation` | kittens | `Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Functor`, `Foldable`, `Traverse`, and [19 more](FEATURE_PARITY.md#cats-derivation) |
 | `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
 | `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
-| `kindlings-yaml-derivation` | scala-yaml built-in `derives` | `YamlEncoder`, `YamlDecoder` |
-| `kindlings-avro-derivation` | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
 | `kindlings-tapir-schema-derivation` | Tapir built-in `Schema.derived` | `Schema` |
+| `kindlings-yaml-derivation` | scala-yaml built-in `derives` | `YamlEncoder`, `YamlDecoder` |
 | `kindlings-fast-show-pretty` | _(original)_ | `FastShowPretty` |
 
 All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native (except Avro which is JVM only).

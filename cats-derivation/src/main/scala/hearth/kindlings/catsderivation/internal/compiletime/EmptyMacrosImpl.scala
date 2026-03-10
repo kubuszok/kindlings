@@ -64,7 +64,7 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
     Log.namedScope(s"Deriving Empty for ${Type[A].prettyPrint}") {
       CaseClass.parse[A].toEither match {
         case Right(caseClass) => deriveEmptyCaseClass[A](caseClass, selfType)
-        case Left(_) =>
+        case Left(_)          =>
           Enum.parse[A].toEither match {
             case Right(enumm) => deriveEmptyEnum[A](enumm, selfType)
             case Left(reason) =>
@@ -93,7 +93,7 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     caseClass.primaryConstructor(emptyFields.toMap) match {
       case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error) =>
+      case Left(error)          =>
         MIO.fail(new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error"))
     }
   }
@@ -121,7 +121,7 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     emptyVariants match {
       case List(singleEmpty) => MIO.pure(singleEmpty)
-      case Nil =>
+      case Nil               =>
         MIO.fail(
           new RuntimeException(
             s"Cannot derive Empty for ${Type[A].prettyPrint}: no variant has an Empty instance"
@@ -140,13 +140,14 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
   @scala.annotation.nowarn("msg=is never used")
   private def summonEmptyFor[Field: Type](fieldName: String, selfType: Option[??]): Expr[Field] = {
     val emptyFieldType = EmptyTypes.Empty[Field]
-    val result = if (selfType.exists(_.Underlying =:= Type[Field]))
-      emptyFieldType.summonExprIgnoring().toEither.left.map(_ => "self-type skipped")
-    else
-      emptyFieldType.summonExprIgnoring().toEither
+    val result =
+      if (selfType.exists(_.Underlying =:= Type[Field]))
+        emptyFieldType.summonExprIgnoring().toEither.left.map(_ => "self-type skipped")
+      else
+        emptyFieldType.summonExprIgnoring().toEither
 
     result match {
-      case Right(m) => Expr.quote(Expr.splice(m).empty)
+      case Right(m)     => Expr.quote(Expr.splice(m).empty)
       case Left(reason) =>
         throw new RuntimeException(
           s"No Empty instance found for field $fieldName: ${Type[Field].prettyPrint}: $reason"

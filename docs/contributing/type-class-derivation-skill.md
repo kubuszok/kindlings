@@ -1296,6 +1296,261 @@ Type[A] match {
 
 **Reference:** `tapir-schema-derivation/SchemaMacrosImpl.scala` — `deriveStructurally`.
 
+### `Type.Ctor2.of[Function1].unapply` returns `Nothing` for type args on Scala 3
+
+On Scala 3, `Type.Ctor2.of[Function1]` uses `Impl.unapply` which relies on `case '[HKT[a, b]]` pattern matching. For function types like `Int => Boolean`, this returns `(Nothing, Boolean)` instead of `(Int, Boolean)` — the first type argument is incorrectly resolved.
+
+This is the same class of issue as `Type.Ctor2.fromUntyped` for cross-compilation-boundary matching (documented in `value-type-integration-skill.md`), but occurs even within the same compilation unit for `Function1`.
+
+```scala
+// BROKEN on Scala 3 — unapply returns (Nothing, Boolean) for Function1[Int, Boolean]:
+val Function1Ctor2 = Type.Ctor2.of[Function1]
+Function1Ctor2.unapply(fieldType) // arg1 = Nothing, not Int!
+
+// CORRECT — fromUntyped uses semantic matching (TypeRepr.=:= + baseType):
+val Function1Ctor2 = {
+  val impl = Type.Ctor2.of[Function1]
+  Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
+}
+Function1Ctor2.unapply(fieldType) // arg1 = Int ✓
+```
+
+**Rule of thumb:** Always wrap `Type.Ctor2.of[F]` with `fromUntyped` when you need reliable `unapply` decomposition, especially for standard library types like `Function1`.
+
+**Reference:** `ContravariantMacrosImpl.scala` — two-probe field classification for Function1 fields.
+
+### `primaryConstructor` type-checks field expressions strictly
+
+`CaseClass.primaryConstructor(Map[String, Expr_??])` performs `<:<` subtype checks between the `Expr_??`'s `Underlying` type and the expected constructor parameter type. If you produce an `Expr[Any]` (via `.upcast[Any]` or `.asInstanceOf[Any]` inside `Expr.quote`) for a field that expects `Function1[Any, Boolean]`, it fails:
+
+```
+Invalid run parameter type: !(TypeTag[Any] <:< WeakTypeTag[Any => Boolean])
+```
+
+This means you must preserve the field's original type through transformations. Since path-dependent types (from `import fieldValue.Underlying as Field`) can't be used directly in `Expr.quote` on Scala 2, use the **helper method pattern**:
+
+```scala
+// BROKEN — produces Expr[Any], primaryConstructor rejects it:
+val composed: Expr[Any] = Expr.quote {
+  Expr.splice(fieldExpr.upcast[Any]).asInstanceOf[Function1[Any, Any]]
+    .compose(Expr.splice(fExpr)).asInstanceOf[Any]
+}
+(fieldName, composed.as_??)  // Underlying = Any, but constructor expects Function1[Any, R]
+
+// CORRECT — helper method with regular type parameter:
+@scala.annotation.nowarn("msg=is never used|unused implicit parameter")
+private def mkComposeExpr[Field](
+    fieldExpr: Expr[Field],
+    fExpr: Expr[Any => Any]
+)(implicit FieldType: Type[Field], AnyType: Type[Any]): Expr[Field] =
+  Expr.quote {
+    Expr.splice(fieldExpr).asInstanceOf[Function1[Any, Any]]
+      .compose(Expr.splice(fExpr)).asInstanceOf[Field]
+  }
+
+// Then at the call site:
+val composed: Expr[Field] = mkComposeExpr[Field](fieldExpr, fExpr)
+(fieldName, composed.as_??)  // Underlying = Field ✓
+```
+
+The helper method makes `Field` a regular type parameter resolved by cross-quotes via the `implicit Type[Field]`, producing an expression tree with the correct type annotation.
+
+**Reference:** `ContravariantMacrosImpl.scala` — `mkComposeExpr` helper method.
+
+## Polymorphic (HKT) type class derivation
+
+When deriving type classes parameterized by a type constructor `F[_]` (e.g., `Functor[F]`, `Foldable[F]`, `ConsK[F]`), the patterns differ significantly from monomorphic derivation. This section documents the shared patterns used across all polymorphic derivations in `cats-derivation/`.
+
+### The erased approach
+
+Scala 2 macros report "free type variable" errors when method-level type parameters appear in macro-generated expression trees (e.g., `CaseClass[F[B]].primaryConstructor` fails because `B` is not reified via `WeakTypeTag`). To work around this, all polymorphic derivations use an **erased approach**:
+
+1. Build the body for `F[Any]` using `Any` as the type parameter
+2. Use `Any => Any` for function parameters (e.g., `map`'s `f: A => B` becomes `Any => Any`)
+3. Cast with `asInstanceOf` at the boundaries of the generated code
+
+```scala
+Expr.quote {
+  new cats.Functor[F] {
+    def map[A, B](fa: F[A])(f: A => B): F[B] = {
+      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+      val anyF: Any => Any = f.asInstanceOf[Any => Any]
+      // ... body works entirely with F[Any] and Any ...
+      Expr.splice(doMap(Expr.quote(anyFa), Expr.quote(anyF))).asInstanceOf[F[B]]
+    }
+  }
+}
+```
+
+This is safe because JVM erasure means `F[A]` and `F[Any]` have the same runtime representation.
+
+**Reference:** `FunctorMacrosImpl.scala`, `PureMacrosImpl.scala`
+
+### Two-probe field classification
+
+To determine how each field relates to the type parameter `A` in `F[A]`, parse the case class at two different type applications and compare field types:
+
+```scala
+val ccInt = CaseClass.parse(using FCtor.apply[Int])
+val ccString = CaseClass.parse(using FCtor.apply[String])
+
+fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+  val tInt = pInt.tpe.Underlying
+  val tString = pString.tpe.Underlying
+  if (tInt =:= IntType && tString =:= StringType) {
+    // DIRECT: field type IS the type parameter A
+  } else if (tInt =:= tString) {
+    // INVARIANT: field type doesn't depend on A (e.g., String, Int)
+  } else {
+    // NESTED: field contains A but isn't A directly (e.g., List[A], A => Boolean)
+  }
+}
+```
+
+**Field classification summary:**
+
+| Category | In `F[Int]` | In `F[String]` | Example | Treatment |
+|---|---|---|---|---|
+| Direct | `Int` | `String` | `value: A` | Maps/transforms directly |
+| Invariant | `String` | `String` | `label: String` | Copy unchanged or combine via Semigroup/Monoid |
+| Nested | `List[Int]` | `List[String]` | `items: List[A]` | Depends on type class — may recurse or summon |
+
+**Reference:** `FunctorMacrosImpl.scala` (direct + invariant only), `ConsKMacrosImpl.scala` (all three categories)
+
+### Preserving field types for `primaryConstructor`
+
+`CaseClass.primaryConstructor(Map[String, Expr_??])` performs strict `<:<` subtype checks. If you produce an `Expr[Any]` for a field that expects `List[Any]` or `String`, it fails. Always preserve the original field type:
+
+```scala
+fields.foreach { case (fieldName, fieldValue) =>
+  import fieldValue.Underlying as Field
+  val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+  if (directFields.contains(fieldName)) {
+    // Direct fields: both carried and field value are Expr[Any] — matches Any parameter type
+    resultFields += ((fieldName, carriedExpr.as_??))
+  } else if (needsTransform) {
+    // Cast result back to Field type inside Expr.quote:
+    val transformed: Expr[Field] = Expr.quote {
+      someTransform(Expr.splice(fieldExpr.upcast[Any])).asInstanceOf[Field]
+    }
+    resultFields += ((fieldName, transformed.as_??))
+  } else {
+    // Invariant: keep original typed expression
+    resultFields += ((fieldName, fieldExpr.as_??))
+  }
+}
+```
+
+The `.asInstanceOf[Field]` inside `Expr.quote` works because `import fieldValue.Underlying as Field` brings an implicit `Type[Field]` into scope, which cross-quotes uses to resolve the type.
+
+**Reference:** `ConsKMacrosImpl.scala` — `deriveConsKBody`
+
+### Bridge method pattern for nested field type constructor summoning
+
+When a nested field like `List[A]` requires summoning a type class for its type constructor (e.g., `ConsK[List]`), you can't construct `Type[ConsK[List]]` in shared cross-compiled code because `ConsK` takes `F[_]` (kind `* -> *`) and Hearth's `Type.Ctor1` handles kind `*` arguments only.
+
+**Solution:** Define an abstract method in the shared trait, implemented in each bridge using platform-specific APIs:
+
+```scala
+// Shared trait (ConsKMacrosImpl.scala):
+protected def summonConsKForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
+```
+
+Scala 3 bridge implementation:
+```scala
+protected def summonConsKForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
+  import q.reflect.*
+  val repr = TypeRepr.of(using fieldType.asInstanceOf[scala.quoted.Type[Any]])
+  repr.dealias match {
+    case AppliedType(fieldCtor, _ :: Nil) =>
+      val consKCtor = TypeRepr.of[alleycats.ConsK[List]] match {
+        case AppliedType(ctor, _) => ctor
+      }
+      Implicits.search(consKCtor.appliedTo(fieldCtor)) match {
+        case iss: ImplicitSearchSuccess => Some(iss.tree.asExpr.asInstanceOf[Expr[Any]])
+        case _ => None
+      }
+    case _ => None
+  }
+}
+```
+
+Scala 2 bridge implementation:
+```scala
+protected def summonConsKForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
+  val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+  val ctor = tpe.typeConstructor
+  val consKCtor = c.universe.weakTypeOf[alleycats.ConsK[List]].typeConstructor
+  c.inferImplicitValue(c.universe.appliedType(consKCtor, List(ctor))) match {
+    case c.universe.EmptyTree => None
+    case tree => Some(c.Expr[Any](tree).asInstanceOf[Expr[Any]])
+  }
+}
+```
+
+The trick: use a concrete type like `ConsK[List]` and destructure it to get the `ConsK` type constructor, then re-apply it to the field's type constructor.
+
+**Reference:** `ConsKMacros.scala` (both Scala 2 and Scala 3 bridges)
+
+### Runtime helper pattern for erased HKT calls
+
+When macro-generated code needs to call a method on a type class with higher-kinded parameters (e.g., `ConsK[G].cons(hd, tl)` where `G` is not known statically), wrap the call in a runtime helper to isolate the unsafe casts:
+
+```scala
+// runtime/ConsKRuntime.scala:
+object ConsKRuntime {
+  def cons(consKInstance: Any, hd: Any, tl: Any): Any =
+    consKInstance.asInstanceOf[alleycats.ConsK[List]].cons[Any](hd, tl.asInstanceOf[List[Any]])
+}
+```
+
+At JVM runtime, `ConsK[List]` and `ConsK[Vector]` are both just `ConsK` (erasure), so the cast to `ConsK[List]` is a no-op. The `.cons[Any](hd, tl.asInstanceOf[List[Any]])` erases to `.cons(Object, Object): Object`.
+
+The macro-generated code calls the helper:
+```scala
+Expr.quote {
+  ConsKRuntime.cons(Expr.splice(consKExpr), Expr.splice(carried), Expr.splice(fieldExpr.upcast[Any]))
+    .asInstanceOf[Field]
+}
+```
+
+**Reference:** `ConsKRuntime.scala`, `ConsKMacrosImpl.scala`
+
+### ConsK carry-and-absorb algorithm
+
+For `ConsK[F]` derivation (`cons[A](hd: A, tl: F[A]): F[A]`), walk fields left-to-right with a "carried" element:
+
+1. Initialize carried = `hd`
+2. For each field:
+   - **Direct** (`A`): shift — field gets carried, old value becomes new carried
+   - **Nested with ConsK** (`G[A]`): absorb — `ConsK[G].cons(carried, tl.field)`, carried cleared
+   - **Invariant or non-absorbable**: copy from `tl`
+3. After all fields: error if carried not absorbed
+
+This handles common patterns:
+- `ListWrap[A](items: List[A])` → cons directly into items
+- `NEL[A](head: A, tail: List[A])` → shift head, cons displaced head into tail
+- `NamedList[A](items: List[A], name: String)` → cons into items, copy name
+
+**Reference:** `ConsKMacrosImpl.scala` — `deriveConsKBody`
+
+### Composed type class derivation
+
+Some type classes combine multiple interfaces (e.g., `NonEmptyAlternative` = `Applicative` + `SemigroupK`). Rather than delegating to existing derived instances, derive each method body independently to avoid runtime overhead:
+
+```scala
+// NonEmptyAlternativeMacrosImpl generates bodies for:
+// - pure(a): from Applicative pattern (direct fields = a, invariant = Monoid.empty)
+// - map(fa)(f): from Functor pattern (apply f to direct fields)
+// - ap(ff)(fa): from Applicative pattern (apply function field, Semigroup.combine invariant)
+// - combineK(x, y): from SemigroupK pattern (Semigroup.combine all fields)
+```
+
+This approach generates a single anonymous class with all methods, rather than composing at runtime via `Applicative[F]` + `SemigroupK[F]`.
+
+**Reference:** `NonEmptyAlternativeMacrosImpl.scala`, `AlternativeMacrosImpl.scala`
+
 ## Implementation requirements checklist
 
 Every type class derivation must satisfy all requirements below. Use this checklist when implementing a new derivation and when verifying that an existing one is complete. Each item includes what to implement, where to look for a reference, and how to verify it.

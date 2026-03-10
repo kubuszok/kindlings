@@ -1,0 +1,198 @@
+package hearth.kindlings.catsderivation.internal.compiletime
+
+import hearth.MacroCommons
+import hearth.fp.effect.*
+import hearth.std.*
+
+import hearth.kindlings.catsderivation.LogDerivation
+
+/** Contravariant derivation: contramaps over type parameter fields in case classes.
+  *
+  * Uses an erased approach: builds the contramap body for F[Any] with (Any => Any), then wraps with asInstanceOf casts.
+  * Supports Function1[A, R] fields where A is the type parameter (contravariant position).
+  */
+trait ContravariantMacrosImpl { this: MacroCommons & StdExtensions =>
+
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  def deriveContravariant[F[_]](
+      FCtor0: Type.Ctor1[F],
+      ContravariantFType: Type[cats.Contravariant[F]]
+  ): Expr[cats.Contravariant[F]] = {
+    val macroName = "Contravariant.derived"
+
+    implicit val FCtor: Type.Ctor1[F] = FCtor0
+    implicit val ContravariantFT: Type[cats.Contravariant[F]] = ContravariantFType
+    implicit val AnyType: Type[Any] = ContravariantTypes.Any
+    implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+
+    Log
+      .namedScope(s"Deriving Contravariant at: ${Environment.currentPosition.prettyPrint}") {
+        CaseClass.parse[F[Any]].toEither match {
+          case Right(caseClass) =>
+            MIO.scoped { runSafe =>
+              implicit val IntType: Type[Int] = ContravariantTypes.Int
+              implicit val StringType: Type[String] = ContravariantTypes.String
+
+              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
+                case Right(cc) => cc
+                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
+              }
+              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
+                case Right(cc) => cc
+                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
+              }
+
+              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
+              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+
+              val contravariantFields = scala.collection.mutable.Set.empty[String]
+
+              val Function1Ctor2 = {
+                val impl = Type.Ctor2.of[Function1]
+                Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
+              }
+
+              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+                val tInt = pInt.tpe.Underlying
+                val tString = pString.tpe.Underlying
+                if (tInt =:= tString) {
+                  // Invariant field — no transformation needed
+                } else if (tInt =:= IntType && tString =:= StringType) {
+                  throw new RuntimeException(
+                    s"Cannot derive Contravariant: field '$name' uses the type parameter directly (covariant position). " +
+                      "Contravariant requires the type parameter to appear only in contravariant positions."
+                  )
+                } else {
+                  // Nested field — check if it's Function1 with A in contravariant position
+                  (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
+                    case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
+                      import arg1Int.Underlying as A1Int
+                      import arg2Int.Underlying as A2Int
+                      import arg1String.Underlying as A1String
+                      import arg2String.Underlying as A2String
+
+                      val firstArgChanges = !(A1Int =:= A1String)
+                      val secondArgChanges = !(A2Int =:= A2String)
+
+                      if (firstArgChanges && !secondArgChanges) {
+                        contravariantFields += name
+                      } else if (!firstArgChanges && secondArgChanges) {
+                        throw new RuntimeException(
+                          s"Cannot derive Contravariant: field '$name' has the type parameter in covariant position " +
+                            "(Function1 return type)."
+                        )
+                      } else {
+                        throw new RuntimeException(
+                          s"Cannot derive Contravariant: field '$name' has the type parameter in both positions of Function1."
+                        )
+                      }
+                    case _ =>
+                      throw new RuntimeException(
+                        s"Cannot derive Contravariant: field '$name' contains a nested type constructor that is not Function1. " +
+                          "Only Function1[A, R] fields and invariant fields are currently supported."
+                      )
+                  }
+                }
+              }
+
+              val contravariantFieldSet: Set[String] = contravariantFields.toSet
+
+              val doContramap: (Expr[F[Any]], Expr[Any => Any]) => Expr[F[Any]] = (faExpr, fExpr) =>
+                runSafe {
+                  for {
+                    _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                    result <- deriveContramapBody[F](caseClass, contravariantFieldSet, faExpr, fExpr)
+                  } yield result
+                }
+
+              Expr.quote {
+                new cats.Contravariant[F] {
+                  def contramap[A, B](fa: F[A])(f: B => A): F[B] = {
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val anyF: Any => Any = f.asInstanceOf[Any => Any]
+                    val _ = anyFa
+                    val _ = anyF
+                    Expr.splice(doContramap(Expr.quote(anyFa), Expr.quote(anyF))).asInstanceOf[F[B]]
+                  }
+                }
+              }
+            }
+          case Left(reason) =>
+            MIO.fail(
+              new RuntimeException(
+                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+              )
+            )
+        }
+      }
+      .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogContravariantDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogContravariantDerivation) RenderFrom(Log.Level.Info) else DontRender
+      ) { (errorLogs, errors) =>
+        val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+        if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
+        else s"Macro derivation failed:\n$errorsRendered\n$hint"
+      }
+  }
+
+  @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
+  private def deriveContramapBody[F[_]](
+      caseClass: CaseClass[F[Any]],
+      contravariantFields: Set[String],
+      faExpr: Expr[F[Any]],
+      fExpr: Expr[Any => Any]
+  )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
+    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+
+    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
+      import fieldValue.Underlying as Field
+      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+      if (contravariantFields.contains(fieldName)) {
+        val composed: Expr[Field] = mkComposeExpr[Field](fieldExpr, fExpr)
+        (fieldName, composed.as_??)
+      } else {
+        (fieldName, fieldExpr.as_??)
+      }
+    }
+
+    caseClass.primaryConstructor(mappedFields.toMap) match {
+      case Right(constructExpr) => MIO.pure(constructExpr)
+      case Left(error)          =>
+        MIO.fail(new RuntimeException(s"Cannot construct contramapped result: $error"))
+    }
+  }
+
+  /** Helper method pattern: Field is a regular type parameter here, so cross-quotes can resolve it via the implicit
+    * Type[Field] parameter.
+    */
+  @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
+  private def mkComposeExpr[Field](
+      fieldExpr: Expr[Field],
+      fExpr: Expr[Any => Any]
+  )(implicit FieldType: Type[Field], AnyType: Type[Any]): Expr[Field] =
+    Expr.quote {
+      Expr.splice(fieldExpr).asInstanceOf[Function1[Any, Any]].compose(Expr.splice(fExpr)).asInstanceOf[Field]
+    }
+
+  protected object ContravariantTypes {
+    val Any: Type[Any] = Type.of[Any]
+    val Int: Type[Int] = Type.of[Int]
+    val String: Type[String] = Type.of[String]
+    val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
+      Type.of[hearth.kindlings.catsderivation.LogDerivation]
+  }
+
+  def shouldWeLogContravariantDerivation: Boolean = {
+    implicit val LogDerivationType: Type[LogDerivation] = ContravariantTypes.LogDerivation
+    Expr.summonImplicit[LogDerivation].isDefined || (for {
+      data <- Environment.typedSettings.toOption
+      cd <- data.get("catsDerivation")
+      shouldLog <- cd.get("logDerivation").flatMap(_.asBoolean)
+    } yield shouldLog).getOrElse(false)
+  }
+}
