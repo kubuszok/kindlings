@@ -8,8 +8,9 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 /** Pure derivation: constructs F[A] from a single value A.
   *
-  * Uses an erased approach: builds the pure body for F[Any] from Any, then wraps with asInstanceOf casts. All
-  * type-parameter-dependent fields are filled with the provided value. Invariant fields cause a derivation error.
+  * Uses free type variables A directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support for
+  * method-level type parameters inside Expr.quote/Expr.splice. All type-parameter-dependent fields are filled with the
+  * provided value. Invariant fields cause a derivation error.
   */
 trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
 
@@ -19,83 +20,72 @@ trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val PureFT: Type[alleycats.Pure[F]] = PureFType
-    implicit val AnyType: Type[Any] = PureTypes.Any
-    implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
 
     Log
       .namedScope(s"Deriving Pure at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              implicit val IntType: Type[Int] = PureTypes.Int
-              implicit val StringType: Type[String] = PureTypes.String
+        MIO.scoped { runSafe =>
+          implicit val IntType: Type[Int] = PureTypes.Int
+          implicit val StringType: Type[String] = PureTypes.String
 
-              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-              }
-              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-              }
+          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
+          }
+          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
+          }
 
-              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
 
-              val directFields = scala.collection.mutable.Set.empty[String]
+          val directFields = scala.collection.mutable.Set.empty[String]
 
-              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= tString) {
-                  // Invariant field — no value to fill
-                } else if (tInt =:= IntType && tString =:= StringType) {
-                  directFields += name
-                } else {
-                  throw new RuntimeException(
-                    s"Cannot derive Pure: field '$name' contains a nested type constructor. " +
-                      "Only direct type parameter fields (A) and invariant fields are supported, " +
-                      "but invariant fields also require default values which are not yet supported."
-                  )
-                }
-              }
+          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+            val tInt = pInt.tpe.Underlying
+            val tString = pString.tpe.Underlying
+            if (tInt =:= tString) {
+              // Invariant field — no value to fill
+            } else if (tInt =:= IntType && tString =:= StringType) {
+              directFields += name
+            } else {
+              throw new RuntimeException(
+                s"Cannot derive Pure: field '$name' contains a nested type constructor. " +
+                  "Only direct type parameter fields (A) and invariant fields are supported, " +
+                  "but invariant fields also require default values which are not yet supported."
+              )
+            }
+          }
 
-              // Check if there are any non-direct fields (invariant) — these need defaults we can't provide
-              val allFieldNames = fieldsInt.map(_._1).toSet
-              val invariantFields = allFieldNames -- directFields.toSet
-              if (invariantFields.nonEmpty) {
-                throw new RuntimeException(
-                  s"Cannot derive Pure: fields ${invariantFields.mkString(", ")} are not of the type parameter type. " +
-                    "Pure can only be derived when all fields use the type parameter directly."
-                )
-              }
+          // Check if there are any non-direct fields (invariant) — these need defaults we can't provide
+          val allFieldNames = fieldsInt.map(_._1).toSet
+          val invariantFields = allFieldNames -- directFields.toSet
+          if (invariantFields.nonEmpty) {
+            throw new RuntimeException(
+              s"Cannot derive Pure: fields ${invariantFields.mkString(", ")} are not of the type parameter type. " +
+                "Pure can only be derived when all fields use the type parameter directly."
+            )
+          }
 
-              val directFieldSet: Set[String] = directFields.toSet
+          val directFieldSet: Set[String] = directFields.toSet
 
-              val doPure: Expr[Any] => Expr[F[Any]] = aExpr =>
-                runSafe {
-                  for {
-                    _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                    result <- derivePureBody[F](caseClass, directFieldSet, aExpr)
-                  } yield result
-                }
+          // Pre-load extensions before entering the quote
+          runSafe {
+            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+          }
 
-              Expr.quote {
-                new alleycats.Pure[F] {
-                  def pure[A](a: A): F[A] = {
-                    val anyA: Any = a.asInstanceOf[Any]
-                    val _ = anyA
-                    Expr.splice(doPure(Expr.quote(anyA))).asInstanceOf[F[A]]
+          Expr.quote {
+            new alleycats.Pure[F] {
+              def pure[A](a: A): F[A] =
+                Expr.splice {
+                  runSafe {
+                    derivePureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(
+                      Type.of[A]
+                    )
                   }
                 }
-              }
             }
-          case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
-              )
-            )
+          }
         }
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
@@ -113,11 +103,17 @@ trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
   }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused implicit parameter")
-  private def derivePureBody[F[_]](
-      caseClass: CaseClass[F[Any]],
+  private def derivePureBody[F[_], A](
+      FCtor: Type.Ctor1[F],
       directFields: Set[String],
-      aExpr: Expr[Any]
-  )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
+      aExpr: Expr[A]
+  )(implicit AType: Type[A]): MIO[Expr[F[A]]] = {
+    implicit val FAType: Type[F[A]] = FCtor.apply[A]
+
+    val caseClass = CaseClass.parse[F[A]].toEither match {
+      case Right(cc) => cc
+      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
+    }
     val fields = caseClass.primaryConstructor.parameters.flatten.toList
 
     val fieldMap: Map[String, Expr_??] = fields.map { case (fieldName, _) =>
@@ -133,7 +129,6 @@ trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
   }
 
   protected object PureTypes {
-    val Any: Type[Any] = Type.of[Any]
     val Int: Type[Int] = Type.of[Int]
     val String: Type[String] = Type.of[String]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =

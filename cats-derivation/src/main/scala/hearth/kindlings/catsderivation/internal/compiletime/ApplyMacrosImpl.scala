@@ -8,8 +8,9 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 /** Apply derivation: Functor map + ap (apply function fields to value fields).
   *
-  * Uses an erased approach: builds bodies for F[Any] with (Any => Any), then wraps with asInstanceOf casts. For ap,
-  * direct fields have their function applied; invariant fields are combined via Semigroup.
+  * Uses free type variables A and B directly in the generated code for map, relying on Hearth 0.2.0-264+ cross-quotes
+  * support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach since both
+  * ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
 trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
 
@@ -19,93 +20,88 @@ trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ApplyFT: Type[cats.Apply[F]] = ApplyFType
-    implicit val AnyType: Type[Any] = ApplyTypes.Any
-    implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
 
     Log
       .namedScope(s"Deriving Apply at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              implicit val IntType: Type[Int] = ApplyTypes.Int
-              implicit val StringType: Type[String] = ApplyTypes.String
+        MIO.scoped { runSafe =>
+          implicit val IntType: Type[Int] = ApplyTypes.Int
+          implicit val StringType: Type[String] = ApplyTypes.String
 
-              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-              }
-              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-              }
+          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
+          }
+          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
+          }
 
-              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
 
-              val directFields = scala.collection.mutable.Set.empty[String]
-              val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
+          val directFields = scala.collection.mutable.Set.empty[String]
+          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
 
-              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= IntType && tString =:= StringType) {
-                  directFields += name
-                } else if (tInt =:= tString) {
-                  // Invariant
-                } else {
-                  nestedFields += name
-                }
-              }
+          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+            val tInt = pInt.tpe.Underlying
+            val tString = pString.tpe.Underlying
+            if (tInt =:= IntType && tString =:= StringType) {
+              directFields += name
+            } else if (tInt =:= tString) {
+              // Invariant
+            } else {
+              nestedFields += name
+            }
+          }
 
-              if (nestedFields.nonEmpty) {
-                throw new RuntimeException(
-                  s"Cannot derive Apply: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                    "Only direct type parameter fields (A) and invariant fields are supported."
-                )
-              }
+          if (nestedFields.nonEmpty) {
+            throw new RuntimeException(
+              s"Cannot derive Apply: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
+                "Only direct type parameter fields (A) and invariant fields are supported."
+            )
+          }
 
-              val directFieldSet: Set[String] = directFields.toSet
+          val directFieldSet: Set[String] = directFields.toSet
 
-              // Pre-load extensions eagerly to avoid Scala 3 sibling splice isolation issues
-              val _ = runSafe {
-                Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              }
+          // Pre-load extensions before entering the quote
+          runSafe {
+            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+          }
 
-              val doMap: (Expr[F[Any]], Expr[Any => Any]) => Expr[F[Any]] = (faExpr, fExpr) =>
-                runSafe {
-                  deriveApplyMapBody[F](caseClass, directFieldSet, faExpr, fExpr)
-                }
+          // ap still needs the erased approach: ff: F[A => B] and fa: F[A] both need F[Any] for field extraction
+          implicit val AnyType: Type[Any] = ApplyTypes.Any
+          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
 
-              val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
-                runSafe {
-                  deriveApplyApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
-                }
+          val caseClass = CaseClass.parse[F[Any]].toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Any]: $e")
+          }
 
-              Expr.quote {
-                new cats.Apply[F] {
-                  def map[A, B](fa: F[A])(f: A => B): F[B] = {
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyF: Any => Any = f.asInstanceOf[Any => Any]
-                    val _ = anyFa
-                    val _ = anyF
-                    Expr.splice(doMap(Expr.quote(anyFa), Expr.quote(anyF))).asInstanceOf[F[B]]
-                  }
-                  def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
-                    val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val _ = anyFf
-                    val _ = anyFa
-                    Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
+          val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
+            runSafe {
+              deriveApplyApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
+            }
+
+          Expr.quote {
+            new cats.Apply[F] {
+              def map[A, B](fa: F[A])(f: A => B): F[B] =
+                Expr.splice {
+                  runSafe {
+                    deriveApplyMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
+                      Type.of[A],
+                      Type.of[B]
+                    )
                   }
                 }
+              def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
+                val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                val _ = anyFf
+                val _ = anyFa
+                Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
               }
             }
-          case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
-              )
-            )
+          }
         }
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
@@ -123,12 +119,19 @@ trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
-  private def deriveApplyMapBody[F[_]](
-      caseClass: CaseClass[F[Any]],
+  private def deriveApplyMapBody[F[_], A, B](
+      FCtor: Type.Ctor1[F],
       directFields: Set[String],
-      faExpr: Expr[F[Any]],
-      fExpr: Expr[Any => Any]
-  )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
+      faExpr: Expr[F[A]],
+      fExpr: Expr[A => B]
+  )(implicit AType: Type[A], BType: Type[B]): MIO[Expr[F[B]]] = {
+    implicit val FAType: Type[F[A]] = FCtor.apply[A]
+    implicit val FBType: Type[F[B]] = FCtor.apply[B]
+
+    val caseClass = CaseClass.parse[F[A]].toEither match {
+      case Right(cc) => cc
+      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
+    }
     val fields = caseClass.caseFieldValuesAt(faExpr).toList
 
     val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
@@ -136,14 +139,18 @@ trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
       val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
 
       if (directFields.contains(fieldName)) {
-        val mapped: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
+        val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
         (fieldName, mapped.as_??)
       } else {
         (fieldName, fieldExpr.as_??)
       }
     }
 
-    caseClass.primaryConstructor(mappedFields.toMap) match {
+    val caseClassB = CaseClass.parse[F[B]].toEither match {
+      case Right(cc) => cc
+      case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
+    }
+    caseClassB.primaryConstructor(mappedFields.toMap) match {
       case Right(constructExpr) => MIO.pure(constructExpr)
       case Left(error)          =>
         MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
