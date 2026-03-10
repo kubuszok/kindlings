@@ -107,7 +107,9 @@ final class CatsDerivationSpec extends MacroSuite {
 
     test("sealed trait with case classes") {
       examples.Shape.showShape.show(examples.Circle(1.5)) ==> "Circle(radius = 1.5)"
-      examples.Shape.showShape.show(examples.Rectangle(3.0, 4.0)) ==> "Rectangle(width = 3.0, height = 4.0)"
+      examples.Shape.showShape.show(
+        examples.Rectangle(3.0, 4.0)
+      ) ==> s"Rectangle(width = ${3.0.toString}, height = ${4.0.toString})"
     }
 
     test("sealed trait with case objects") {
