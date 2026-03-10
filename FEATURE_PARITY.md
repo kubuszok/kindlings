@@ -6,6 +6,162 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 
 ---
 
+## avro-derivation
+
+**Replaces:** `com.sksamuel.avro4s` (v4 for Scala 2, v5 for Scala 3 — separate incompatible versions)
+
+### Configuration
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| Namespace config | Yes | Yes | Parity |
+| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom) | Yes (4 built-in strategies) | Parity |
+| Constructor name transforms | Not built-in | Yes | Improvement |
+| Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig` | Parity (different API) |
+
+### Type classes
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| `SchemaFor[A]` | Yes | Yes (`AvroSchemaFor`) | Parity |
+| `Encoder[A]` | Yes | Yes (`AvroEncoder`) | Parity |
+| `Decoder[A]` | Yes | Yes (`AvroDecoder`) | Parity |
+
+### Annotations
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| Per-field rename (`@AvroName` / `@fieldName`) | Yes | Yes | Parity |
+| Documentation (`@AvroDoc` / `@avroDoc`) | Yes | Yes | Parity |
+| Namespace (`@AvroNamespace` / `@avroNamespace`) | Yes | Yes | Parity |
+| Custom properties (`@AvroProp` / `@avroProp`) | Yes | Yes (stackable) | Parity |
+| Aliases (`@AvroAlias` / `@avroAlias`) | Yes | Yes (stackable) | Parity |
+| Fixed size (`@AvroFixed` / `@avroFixed`) | Yes | Yes | Parity |
+| Error type (`@AvroError` / `@avroError`) | Yes | Yes | Parity |
+| Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
+| Default values (`@AvroDefault`) | From constructor defaults (automatic) | `@avroDefault(json)` (explicit JSON string) | Parity (different API) |
+| Subtype ordering (`@AvroUnionPosition` / `@avroSortPriority`) | Yes | Yes | Parity |
+| `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
+| `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |
+| `@AvroEnumDefault` | Yes | Yes (`@avroEnumDefault`) | Parity |
+
+### Type support
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| UUID | Yes | Yes | Parity |
+| Instant | Yes | Yes | Parity |
+| LocalDate | Yes | Yes | Parity |
+| LocalTime | Yes | Yes | Parity |
+| LocalDateTime | Yes | Yes | Parity |
+| BigDecimal | BYTES/FIXED with decimal logical type | BYTES with decimal logical type (when DecimalConfig provided); STRING fallback | Parity |
+| Value classes | Unwrapped | Unwrapped | Parity |
+| Case classes → RECORD | Yes | Yes | Parity |
+| Sealed case objects → ENUM | Yes | Yes | Parity |
+| Sealed traits → UNION | Yes | Yes | Parity |
+| `Either[A,B]` → UNION | Yes | Yes | Parity |
+| `Option[T]` → UNION(null,T) | Yes | Yes | Parity |
+| Recursive types | Yes (with caveats) | Yes | Parity |
+| Shapeless Coproduct → UNION | Yes | No | Gap |
+
+### Cross-compilation
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| Unified Scala 2+3 API | No (v4 ≠ v5, different APIs) | Yes | Improvement |
+| Cross-platform | JVM only | JVM only (Avro dependency is JVM-only) | Parity |
+
+### Not ported
+
+| Feature | Notes |
+|---|---|
+| Shapeless Coproduct → UNION | avro4s can map `A :+: B :+: CNil` to UNION — Hearth doesn't use Shapeless |
+| Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
+| Refined types | `avro4s-refined` module — external ecosystem |
+| Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
+| `OffsetDateTime`, `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types |
+| Timestamp precision variants (`TimestampMicros`, `TimestampNanos`) | Upstream supports micros/nanos; Kindlings uses millis |
+| Byte collection special-casing (`Array[Byte]` → `BYTES`) | Upstream auto-detects byte arrays/collections and maps to Avro BYTES |
+| Decoder type widening | Upstream widens `Int` → `Long`, `Float` → `Double` during decoding |
+| Generic type parameter names in schema | Upstream encodes generic type params in schema name (e.g., `Box[Int]`); Kindlings erases them (design decision) |
+
+### `@avroSortPriority` note
+
+Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority values appear first in UNION/ENUM ordering, matching upstream semantics.
+
+---
+
+## cats-derivation
+
+**Replaces:** [kittens](https://github.com/typelevel/kittens) — automatic/semi-automatic type class derivation for Cats
+
+### Type classes — monomorphic (kind `*`)
+
+| Type class | kittens (Scala 2) | kittens (Scala 3) | Kindlings | Status |
+|---|---|---|---|---|
+| `cats.Show` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Eq` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Order` | Yes | Yes | Yes | Parity |
+| `cats.kernel.PartialOrder` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Hash` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Semigroup` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Monoid` | Yes | Yes | Yes | Parity |
+| `cats.kernel.CommutativeSemigroup` | Yes | Yes | Yes | Parity |
+| `cats.kernel.CommutativeMonoid` | Yes | Yes | Yes | Parity |
+| `alleycats.Empty` | Yes | Yes | Yes | Parity |
+
+### Type classes — polymorphic (kind `* -> *`)
+
+| Type class | kittens (Scala 2) | kittens (Scala 3) | Kindlings | Status |
+|---|---|---|---|---|
+| `cats.Functor` | Yes | Yes | Yes | Parity |
+| `cats.Contravariant` | Yes | Yes | Yes | Parity |
+| `cats.Invariant` | Yes | Yes | Yes | Parity |
+| `cats.Apply` | Yes | Yes | Yes | Parity |
+| `cats.Applicative` | Yes | Yes | Yes | Parity |
+| `cats.Foldable` | Yes | Yes | Yes | Parity |
+| `cats.Traverse` | Yes | Yes | Yes | Parity |
+| `cats.Reducible` | Yes | Yes | Yes | Parity |
+| `cats.NonEmptyTraverse` | Yes | Yes | Yes | Parity |
+| `cats.SemigroupK` | Yes | Yes | Yes | Parity |
+| `cats.MonoidK` | Yes | Yes | Yes | Parity |
+| `alleycats.Pure` | Yes | Yes | Yes | Parity |
+| `alleycats.EmptyK` | Yes | Yes | Yes | Parity |
+| `cats.NonEmptyAlternative` | No | No | Yes | Improvement |
+| `cats.Alternative` | No | No | Yes | Improvement |
+| `alleycats.ConsK` | Yes | No ([#489](https://github.com/typelevel/kittens/issues/489)) | Yes | Improvement |
+
+### Type support
+
+| Feature | kittens | Kindlings | Status |
+|---|---|---|---|
+| Case classes (products) | Yes | Yes | Parity |
+| Sealed traits (coproducts) — Show, Eq, Order, Hash | Yes | Yes | Parity |
+| Sealed trait with case objects only | Yes | Yes | Parity |
+| Nested container fields (e.g., `List[A]` in `F[A]`) for ConsK | Scala 2 only (Shapeless) | Yes (both Scala 2+3) | Improvement |
+| Head+tail shift pattern for ConsK (e.g., `NEL[A](head: A, tail: List[A])`) | Scala 2 only | Yes (both Scala 2+3) | Improvement |
+
+### Derivation API
+
+| Feature | kittens | Kindlings | Status |
+|---|---|---|---|
+| Semi-automatic (`TypeClass.derived`) | Yes | Yes | Parity |
+| Automatic (`import derived._`) | Yes (Scala 3 only for some) | No | Gap |
+| Unified Scala 2+3 API | No — Shapeless on 2, Mirrors on 3 | Yes | Improvement |
+| Cross-platform (JVM/JS/Native) | JVM focus | JVM + JS + Native | Improvement |
+
+### Not ported
+
+| Feature | Notes |
+|---|---|
+| `cats.Show` for enums using ordinal | kittens uses ordinal for Show of coproducts; Kindlings uses class name + fields |
+| `cats.kernel.BoundedSemilattice` | Niche type class — not ported |
+| `cats.kernel.Band` | Niche type class — not ported |
+| `cats.kernel.Group` / `CommutativeGroup` | Would require inverse operation — not derivable from field instances alone |
+| Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
+
+---
+
 ## circe-derivation
 
 **Replaces:** `circe-generic-extras` (Scala 2 only, community-maintained) + circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder`/`ConfiguredCodec`
@@ -148,6 +304,54 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 
 ---
 
+## tapir-schema-derivation
+
+**Replaces:** Tapir's built-in `Schema.derived` + `sttp.tapir.generic.auto.*`
+
+### Annotations
+
+| Feature | Tapir built-in | Kindlings | Status |
+|---|---|---|---|
+| `@description` | Yes | Yes | Parity |
+| `@title` | Yes | Yes | Parity |
+| `@encodedName` | Yes | Yes | Parity |
+| `@format` | Yes | Yes | Parity |
+| `@hidden` | Yes (was broken on Scala 3) | Yes | Parity |
+| `@deprecated` | Yes | Yes | Parity |
+| `@validate` | Yes | Yes | Parity |
+| `@validateEach` | Yes | Yes | Parity |
+| `@default` | Yes | Yes | Parity |
+| `@encodedExample` | Yes | Yes | Parity |
+| `@customise` | Yes | Yes | Parity |
+
+### Configuration
+
+| Feature | Tapir built-in | Kindlings | Status |
+|---|---|---|---|
+| Field naming | Independent `sttp.tapir.generic.Configuration` (must manually match JSON lib) | Discovers JSON lib config at compile time | Improvement |
+| Discriminator | Independent (must manually match JSON lib) | Discovers JSON lib config at compile time | Improvement |
+| JSON config consistency | **No** — schema and codec configs are separate, drift is common | **Yes** — automatically reads Circe/Jsoniter config via `JsonSchemaConfigExtension` | Improvement |
+| Recursive types on Scala 3 | Must use `implicit def` (not `given`), risk of deadlocks | Works | Improvement |
+| Runtime type parameter resolution in SName | No — abstract type params in generic helpers produce `?` in schema names | Resolves at runtime via `runtimePlainPrint` (e.g. `Box[A]` → `SName("Box", List("SimplePerson"))` when `A = SimplePerson`) | Improvement |
+
+### Coproduct (sealed trait) schemas
+
+Discriminator metadata is fully propagated to child schemas:
+- Each child `SProduct` gets a discriminator field with single-value `Validator.Enumeration`
+- `encodedDiscriminatorValue` attribute is set on each child schema
+- Matches upstream Tapir's `addDiscriminatorField` behavior
+
+### Not ported
+
+| Feature | Notes |
+|---|---|
+| `Schema.derivedEnumeration` | Specific enum schema derivation |
+| `Schema.oneOfWrapped` | Manual union schema builder |
+| `.modify(_.path)` post-derivation | Tapir core feature, not a derivation concern |
+| Value class unwrapping in schemas | Upstream unwraps value classes to their inner type's schema; Kindlings wraps them in an `SProduct` |
+
+---
+
 ## yaml-derivation
 
 **Replaces:** VirtusLab `scala-yaml` built-in `derives YamlEncoder`/`YamlDecoder`/`YamlCodec`
@@ -199,139 +403,6 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
 | `useDefaults` | Yes (runtime reflection) | Yes (compile-time) | Improvement |
-
----
-
-## avro-derivation
-
-**Replaces:** `com.sksamuel.avro4s` (v4 for Scala 2, v5 for Scala 3 — separate incompatible versions)
-
-### Configuration
-
-| Feature | avro4s | Kindlings | Status |
-|---|---|---|---|
-| Namespace config | Yes | Yes | Parity |
-| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom) | Yes (4 built-in strategies) | Parity |
-| Constructor name transforms | Not built-in | Yes | Improvement |
-| Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig` | Parity (different API) |
-
-### Type classes
-
-| Feature | avro4s | Kindlings | Status |
-|---|---|---|---|
-| `SchemaFor[A]` | Yes | Yes (`AvroSchemaFor`) | Parity |
-| `Encoder[A]` | Yes | Yes (`AvroEncoder`) | Parity |
-| `Decoder[A]` | Yes | Yes (`AvroDecoder`) | Parity |
-
-### Annotations
-
-| Feature | avro4s | Kindlings | Status |
-|---|---|---|---|
-| Per-field rename (`@AvroName` / `@fieldName`) | Yes | Yes | Parity |
-| Documentation (`@AvroDoc` / `@avroDoc`) | Yes | Yes | Parity |
-| Namespace (`@AvroNamespace` / `@avroNamespace`) | Yes | Yes | Parity |
-| Custom properties (`@AvroProp` / `@avroProp`) | Yes | Yes (stackable) | Parity |
-| Aliases (`@AvroAlias` / `@avroAlias`) | Yes | Yes (stackable) | Parity |
-| Fixed size (`@AvroFixed` / `@avroFixed`) | Yes | Yes | Parity |
-| Error type (`@AvroError` / `@avroError`) | Yes | Yes | Parity |
-| Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
-| Default values (`@AvroDefault`) | From constructor defaults (automatic) | `@avroDefault(json)` (explicit JSON string) | Parity (different API) |
-| Subtype ordering (`@AvroUnionPosition` / `@avroSortPriority`) | Yes | Yes | Parity |
-| `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
-| `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |
-| `@AvroEnumDefault` | Yes | Yes (`@avroEnumDefault`) | Parity |
-
-### Type support
-
-| Feature | avro4s | Kindlings | Status |
-|---|---|---|---|
-| UUID | Yes | Yes | Parity |
-| Instant | Yes | Yes | Parity |
-| LocalDate | Yes | Yes | Parity |
-| LocalTime | Yes | Yes | Parity |
-| LocalDateTime | Yes | Yes | Parity |
-| BigDecimal | BYTES/FIXED with decimal logical type | BYTES with decimal logical type (when DecimalConfig provided); STRING fallback | Parity |
-| Value classes | Unwrapped | Unwrapped | Parity |
-| Case classes → RECORD | Yes | Yes | Parity |
-| Sealed case objects → ENUM | Yes | Yes | Parity |
-| Sealed traits → UNION | Yes | Yes | Parity |
-| `Either[A,B]` → UNION | Yes | Yes | Parity |
-| `Option[T]` → UNION(null,T) | Yes | Yes | Parity |
-| Recursive types | Yes (with caveats) | Yes | Parity |
-| Shapeless Coproduct → UNION | Yes | No | Gap |
-
-### Cross-compilation
-
-| Feature | avro4s | Kindlings | Status |
-|---|---|---|---|
-| Unified Scala 2+3 API | No (v4 ≠ v5, different APIs) | Yes | Improvement |
-| Cross-platform | JVM only | JVM only (Avro dependency is JVM-only) | Parity |
-
-### Not ported
-
-| Feature | Notes |
-|---|---|
-| Shapeless Coproduct → UNION | avro4s can map `A :+: B :+: CNil` to UNION — Hearth doesn't use Shapeless |
-| Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
-| Refined types | `avro4s-refined` module — external ecosystem |
-| Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
-| `OffsetDateTime`, `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types |
-| Timestamp precision variants (`TimestampMicros`, `TimestampNanos`) | Upstream supports micros/nanos; Kindlings uses millis |
-| Byte collection special-casing (`Array[Byte]` → `BYTES`) | Upstream auto-detects byte arrays/collections and maps to Avro BYTES |
-| Decoder type widening | Upstream widens `Int` → `Long`, `Float` → `Double` during decoding |
-| Generic type parameter names in schema | Upstream encodes generic type params in schema name (e.g., `Box[Int]`); Kindlings erases them (design decision) |
-
-### `@avroSortPriority` note
-
-Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority values appear first in UNION/ENUM ordering, matching upstream semantics.
-
----
-
-## tapir-schema-derivation
-
-**Replaces:** Tapir's built-in `Schema.derived` + `sttp.tapir.generic.auto.*`
-
-### Annotations
-
-| Feature | Tapir built-in | Kindlings | Status |
-|---|---|---|---|
-| `@description` | Yes | Yes | Parity |
-| `@title` | Yes | Yes | Parity |
-| `@encodedName` | Yes | Yes | Parity |
-| `@format` | Yes | Yes | Parity |
-| `@hidden` | Yes (was broken on Scala 3) | Yes | Parity |
-| `@deprecated` | Yes | Yes | Parity |
-| `@validate` | Yes | Yes | Parity |
-| `@validateEach` | Yes | Yes | Parity |
-| `@default` | Yes | Yes | Parity |
-| `@encodedExample` | Yes | Yes | Parity |
-| `@customise` | Yes | Yes | Parity |
-
-### Configuration
-
-| Feature | Tapir built-in | Kindlings | Status |
-|---|---|---|---|
-| Field naming | Independent `sttp.tapir.generic.Configuration` (must manually match JSON lib) | Discovers JSON lib config at compile time | Improvement |
-| Discriminator | Independent (must manually match JSON lib) | Discovers JSON lib config at compile time | Improvement |
-| JSON config consistency | **No** — schema and codec configs are separate, drift is common | **Yes** — automatically reads Circe/Jsoniter config via `JsonSchemaConfigExtension` | Improvement |
-| Recursive types on Scala 3 | Must use `implicit def` (not `given`), risk of deadlocks | Works | Improvement |
-| Runtime type parameter resolution in SName | No — abstract type params in generic helpers produce `?` in schema names | Resolves at runtime via `runtimePlainPrint` (e.g. `Box[A]` → `SName("Box", List("SimplePerson"))` when `A = SimplePerson`) | Improvement |
-
-### Coproduct (sealed trait) schemas
-
-Discriminator metadata is fully propagated to child schemas:
-- Each child `SProduct` gets a discriminator field with single-value `Validator.Enumeration`
-- `encodedDiscriminatorValue` attribute is set on each child schema
-- Matches upstream Tapir's `addDiscriminatorField` behavior
-
-### Not ported
-
-| Feature | Notes |
-|---|---|
-| `Schema.derivedEnumeration` | Specific enum schema derivation |
-| `Schema.oneOfWrapped` | Manual union schema builder |
-| `.modify(_.path)` post-derivation | Tapir core feature, not a derivation concern |
-| Value class unwrapping in schemas | Upstream unwraps value classes to their inner type's schema; Kindlings wraps them in an `SProduct` |
 
 ---
 
