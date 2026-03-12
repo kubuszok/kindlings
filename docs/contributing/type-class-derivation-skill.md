@@ -2,14 +2,19 @@
 
 Use this skill when implementing or modifying type class derivation macros in this repository.
 
-**Reference implementation:** `fast-show-pretty/src/main/scala/hearth/kindlings/fastshowpretty/internal/compiletime/FastShowPrettyMacrosImpl.scala`
+**Reference implementation:** `fast-show-pretty/src/main/scala/hearth/kindlings/fastshowpretty/internal/compiletime/`
+
+The `fast-show-pretty` module uses a **modular rules architecture**:
+- `FastShowPrettyMacrosImpl.scala` — entry points, `DerivationCtx`, `deriveResultRecursively`, and the `Types` object
+- `DerivationError.scala` — sealed error hierarchy (`UnsupportedType`, `NoChildrenInSealedTrait`)
+- `rules/` — one trait per derivation rule (e.g. `FastShowPrettyHandleAsCaseClassRule.scala`); each trait uses a self-type `{ this: FastShowPrettyMacrosImpl & MacroCommons & StdExtensions => }` and defines its rule as a nested `object`; `FastShowPrettyMacrosImpl` extends all of them
 
 This module demonstrates how to derive type classes using hearth. When creating derivations for different type classes in other modules, follow the same patterns and conventions shown here.
 
 ## Before writing code
 
 1. **Use MCP to verify available APIs** - Query the `kindlings-metals` MCP server (at `.metals/mcp.json`) to confirm that types, methods, and imports you plan to use actually exist in hearth
-2. **Read the reference implementation** - Study `FastShowPrettyMacrosImpl.scala` to understand the patterns
+2. **Read the reference implementation** - Study `FastShowPrettyMacrosImpl.scala` and the `rules/` trait files to understand the patterns
 3. **Check hearth documentation** - See `hearth-documentation-skill.md` for how to find the right docs version
 
 ## Implementing a new module
@@ -86,7 +91,7 @@ This will print the derivation log at compile time, showing which rules matched 
 
 Instead of passing many parameters through method signatures, bundle them into a context case class. This makes the code easier to modify and extend.
 
-**From FastShowPrettyMacrosImpl.scala (lines 94-131):**
+**From `FastShowPrettyMacrosImpl.scala` (`DerivationCtx` inner class):**
 
 ```scala
 final case class DerivationCtx[A](
@@ -142,7 +147,7 @@ object DerivationCtx {
 
 Define derivation as a sequence of rules. Each rule checks if it applies and returns either a matched result or yields with a reason.
 
-**From FastShowPrettyMacrosImpl.scala (lines 137-140, 164-190):**
+**From `FastShowPrettyMacrosImpl.scala` (`deriveResultRecursively`) and the `rules/` traits:**
 
 ```scala
 abstract class DerivationRule(val name: String) extends Rule {
@@ -189,7 +194,7 @@ def deriveResultRecursively[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
 
 Log at every decision point using `Log` from `hearth.fp.effect`.
 
-**From FastShowPrettyMacrosImpl.scala (lines 198, 227, 259, 294, 379, 414, 461):**
+**From `FastShowPrettyUseCachedDefWhenAvailableRule.scala`, `FastShowPrettyHandleAsCaseClassRule.scala`, etc.:**
 
 ```scala
 object UseCachedDefWhenAvailableRule extends DerivationRule("use cached def when available") {
@@ -227,7 +232,7 @@ object UseBuiltInSupportRule extends DerivationRule("use built-in support") {
 
 Cache generated definitions to avoid code duplication and enable recursive types.
 
-**From FastShowPrettyMacrosImpl.scala (lines 194-217, 421-430):**
+**From `FastShowPrettyUseCachedDefWhenAvailableRule.scala` and `FastShowPrettyHandleAsCaseClassRule.scala`:**
 
 ```scala
 object UseCachedDefWhenAvailableRule extends DerivationRule("use cached def when available") {
@@ -281,7 +286,7 @@ MIO.scoped { runSafe =>
 
 Call `deriveResultRecursively` for nested types, updating the context appropriately.
 
-**From FastShowPrettyMacrosImpl.scala (lines 299-310, 386-395):**
+**From `FastShowPrettyHandleAsCaseClassRule.scala` and `FastShowPrettyHandleAsCollectionRule.scala`:**
 
 ```scala
 // For case class fields (lines 299-310):
@@ -322,7 +327,7 @@ enumm
 
 When deriving, prevent the macro from summoning itself (which would cause infinite recursion).
 
-**From FastShowPrettyMacrosImpl.scala (lines 220-243):**
+**From `FastShowPrettyUseImplicitWhenAvailableRule.scala`:**
 
 ```scala
 object UseImplicitWhenAvailableRule extends DerivationRule("use implicit when available") {
@@ -434,13 +439,13 @@ Expr.quote {
 }
 ```
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` (lines 43-70), `EncoderMacrosImpl.scala` (lines 35-57), `DecoderMacrosImpl.scala` (lines 41-64).
+**Reference:** `FastShowPrettyMacrosImpl.scala` (entry points), `EncoderMacrosImpl.scala` (lines 35-57), `DecoderMacrosImpl.scala` (lines 41-64).
 
 ### Handling built-in types
 
 Check types using `<:<` (subtype check) and generate appropriate code.
 
-**From FastShowPrettyMacrosImpl.scala (lines 246-289):**
+**From `FastShowPrettyUseBuiltInSupportRule.scala`:**
 
 ```scala
 object UseBuiltInSupportRule extends DerivationRule("use built-in support") {
@@ -472,7 +477,7 @@ object UseBuiltInSupportRule extends DerivationRule("use built-in support") {
 
 Use pattern matching on types with extractors like `IsCollection` and `IsMap`.
 
-**From FastShowPrettyMacrosImpl.scala (lines 410-455, 457-520):**
+**From `FastShowPrettyHandleAsCollectionRule.scala` and `FastShowPrettyHandleAsMapRule.scala`:**
 
 ```scala
 object HandleAsCollectionRule extends DerivationRule("handle as collection") {
@@ -1564,7 +1569,7 @@ The macro must provide **two** entry points:
 
 Both entry points should delegate to the same core derivation logic (e.g., `deriveFromCtxAndAdaptForEntrypoint`). The difference is only in how the result is wrapped.
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 16-68 (`deriveInline` and `deriveTypeClass`), `DecoderMacrosImpl.scala` lines 17-64.
+**Reference:** `FastShowPrettyMacrosImpl.scala` (`deriveInline` and `deriveTypeClass` entry points), `DecoderMacrosImpl.scala` lines 17-64.
 
 **Verification:**
 - Confirm both `deriveTypeClass` and `deriveInline` methods exist in the macro impl
@@ -1589,7 +1594,7 @@ Derived logic for case classes and enums must be **cached as local `def`s** (not
 2. At the start of case class / enum rules, call `ctx.setHelper[A]` to forward-declare the def, then derive the body, then return the cached call
 3. Use `MIO.scoped { runSafe => ... }` inside the builder to convert `MIO[Expr[...]]` to `Expr[...]`
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 172-209 (`getHelper`/`setHelper`), lines 663-670 (case class rule calling `setHelper`), lines 762-770 (enum rule calling `setHelper`).
+**Reference:** `FastShowPrettyMacrosImpl.scala` (`getHelper`/`setHelper` on `DerivationCtx`), `FastShowPrettyHandleAsCaseClassRule.scala` (case class rule calling `setHelper`), `FastShowPrettyHandleAsEnumRule.scala` (enum rule calling `setHelper`).
 
 **Verification:**
 - Define a recursive data type (e.g., `case class Tree(children: List[Tree])`) and verify it compiles and works at runtime
@@ -1604,7 +1609,7 @@ Before deriving from scratch, check if the user has provided an implicit instanc
 
 **How to implement:** The `UseImplicitWhenAvailableRule` must appear in the rule chain **before** built-in, case class, and enum rules (but after the cache rule).
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 330-370 (`UseImplicitWhenAvailableRule`).
+**Reference:** `FastShowPrettyUseImplicitWhenAvailableRule.scala`.
 
 **Verification:**
 - Define a type with a manually-provided implicit instance
@@ -1617,7 +1622,7 @@ When looking for implicits, **exclude** the method(s) that trigger this macro. O
 
 **How to implement:** Collect the method symbols to ignore (e.g., the `derived` method on the companion object) and pass them to `Type[TC[A]].summonExprIgnoring(ignoredImplicits*)`.
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 334-336 (`ignoredImplicits`), line 340 (`summonExprIgnoring`).
+**Reference:** `FastShowPrettyUseImplicitWhenAvailableRule.scala` (`ignoredImplicits` and `summonExprIgnoring`).
 
 **Critical failure mode — OOM from infinite macro expansion:** If you use `Expr.summonImplicit[TC[A]]` instead of `summonExprIgnoring`, and the target library (e.g., Tapir, circe) provides its own automatic derivation (e.g., `Schema.derivedSchema`, `Decoder.derived`), the compiler enters an infinite chain of macro expansions: your macro summons `TC[A]` → finds the library's auto-derivation → that triggers another macro → which summons `TC[A]` again → etc. This causes `java.lang.OutOfMemoryError: Java heap space` and crashes the SBT server. The only recovery is `sbt --client shutdown` and restart.
 
@@ -1685,7 +1690,7 @@ Every successfully resolved implicit must be **cached as a `lazy val`**. Do not 
 
 **How to implement:** When `summonExprIgnoring` succeeds, immediately store the result via `ctx.cache.buildCachedWith("instance", ValDefBuilder.ofLazy[TC[A]]("instance"))`, then use the cached reference everywhere.
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 342-344 — after summoning, the implicit is stored in cache and then `UseCachedDefWhenAvailableRule` retrieves it.
+**Reference:** `FastShowPrettyUseImplicitWhenAvailableRule.scala` — after summoning, the implicit is stored in cache and then `UseCachedDefWhenAvailableRule` retrieves it.
 
 **Verification:**
 - Test a type that uses the same nested type in multiple fields (e.g., `case class Pair(a: String, b: String)`) — verify compilation succeeds and the implicit is only resolved once
@@ -1700,7 +1705,7 @@ Built-in types (Boolean, Byte, Short, Int, Long, Float, Double, Char, String, an
 2. For each match, generate an expression that calls a runtime utility method or produces the result inline
 3. Runtime utilities go in `internal/runtime/MyTypeClassUtils.scala`
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 379-514 (`UseBuiltInSupportRule`), `FastShowPrettyUtils.scala` for runtime helpers.
+**Reference:** `FastShowPrettyUseBuiltInSupportRule.scala`, `FastShowPrettyUtils.scala` for runtime helpers.
 
 **Verification:**
 - Write tests that exercise each built-in type individually
@@ -1715,7 +1720,7 @@ If the type class should support value types (classes extending `AnyVal`), handl
 2. Unwrap the value type via `isValueType.unwrap(ctx.value)` to get the underlying value
 3. Recurse on the underlying type
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 516-546 (`HandleAsValueTypeRule`).
+**Reference:** `FastShowPrettyHandleAsValueTypeRule.scala`.
 
 **Verification:**
 - Define a value class (e.g., `case class UserId(value: Int) extends AnyVal`)
@@ -1747,7 +1752,7 @@ If the type class should support collections and maps, handle them using hearth'
 3. Cache the item/key/value derivation as a def (just like case classes) to avoid code duplication when the collection has many elements
 4. Use `LambdaBuilder` for generating iteration callbacks
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 548-662 (`HandleAsMapRule`, `HandleAsCollectionRule`).
+**Reference:** `FastShowPrettyHandleAsMapRule.scala`, `FastShowPrettyHandleAsCollectionRule.scala`.
 
 **Verification:**
 - Test `List[A]`, `Vector[A]`, `Set[A]` for collections
@@ -1794,7 +1799,7 @@ Check for a scalac macro setting at macro expansion time:
 -Xmacro-settings:myModule.logDerivation=true
 ```
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 121-136 (how both mechanisms are checked).
+**Reference:** `FastShowPrettyMacrosImpl.scala` (`shouldWeLogDerivation`, how both mechanisms are checked).
 
 **Verification:** Logging configuration cannot be tested by unit tests. Verify by confirming the `debug/package.scala` file exists and the scalac option check is present in the macro bridge code.
 
@@ -1812,7 +1817,7 @@ The error message must include:
 2. Format the reasons into a readable error message
 3. Append a line like: `"Enable debug logging with: import hearth.kindlings.mymodule.debug.logDerivationForMyTypeClass or -Xmacro-settings:myModule.logDerivation=true"`
 
-**Reference:** `FastShowPrettyMacrosImpl.scala` lines 77-119 (`DerivationError` and error formatting).
+**Reference:** `DerivationError.scala` (error sealed trait hierarchy), `FastShowPrettyMacrosImpl.scala` (error formatting in `deriveResultRecursively`).
 
 **Verification:**
 - Write a test using `compileErrors("MyTypeClass.derived[UnsupportedType]").check(...)` to verify that:
@@ -2013,7 +2018,7 @@ Each module defines a sealed error trait hierarchy at the bottom of its `MacrosI
 
 | Module | File | Sealed Trait | Case Classes |
 |--------|------|-------------|--------------|
-| fast-show-pretty | `FastShowPrettyMacrosImpl.scala` | `DerivationError` | `UnsupportedType`, `NoChildrenInSealedTrait` |
+| fast-show-pretty | `DerivationError.scala` | `DerivationError` | `UnsupportedType`, `NoChildrenInSealedTrait` |
 | circe encoder | `EncoderMacrosImpl.scala` | `EncoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
 | circe decoder | `DecoderMacrosImpl.scala` | `DecoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `CannotConstructType` |
 | yaml encoder | `EncoderMacrosImpl.scala` | `EncoderDerivationError` | `UnsupportedType`, `TransientFieldMissingDefault`, `NoChildrenInSealedTrait` |
