@@ -24,17 +24,17 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.2.0-264-g6434e09-SNAPSHOT"
+  val hearth = "0.2.0-265-g51c5f48-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
+  val cats = "2.13.0"
   val circe = "0.14.15"
+  val iron = "3.3.0"
   val jsoniterScala = "2.38.9"
-  val scalaYaml = "0.3.1"
   val tapir = "1.13.11"
   val refined = "0.11.3"
-  val iron = "3.3.0"
-  val scalaXml = "2.3.0"
-  val cats = "2.12.0"
+  val scalaYaml = "0.3.1"
+  val scalaXml = "2.4.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
