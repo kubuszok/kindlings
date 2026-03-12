@@ -71,6 +71,8 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 | `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
 | `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
 | `kindlings-tapir-schema-derivation` | Tapir built-in `Schema.derived` | `Schema` |
+| `kindlings-ubjson-derivation` | _(original)_ | `UBJsonValueCodec` |
+| `kindlings-xml-derivation` | _(original)_ | `XmlEncoder`, `XmlDecoder` |
 | `kindlings-yaml-derivation` | scala-yaml built-in `derives` | `YamlEncoder`, `YamlDecoder` |
 | `kindlings-fast-show-pretty` | _(original)_ | `FastShowPretty` |
 

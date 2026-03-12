@@ -352,6 +352,75 @@ Discriminator metadata is fully propagated to child schemas:
 
 ---
 
+## ubjson-derivation
+
+**Original type class** — no replacement target. Provides compile-time derivation of combined encoder/decoder codecs for the [UBJson (Universal Binary JSON)](https://ubjson.org/) binary format. Uses a streaming reader/writer API for efficient serialization. Cross-compiled for Scala 2.13 + 3, JVM + JS + Native.
+
+### Type classes
+
+| Type class | Description |
+|---|---|
+| `UBJsonValueCodec[A]` | Combined encoder/decoder for UBJson binary format (streaming reader/writer) |
+
+### Configuration
+
+| Config option | Default | Description |
+|---|---|---|
+| `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
+| `adtLeafClassNameMapper` | `identity` | Transform sealed trait subtype names |
+| `discriminatorFieldName` | `None` | Discriminator field for sealed traits (wrapper encoding when `None`) |
+| `skipUnexpectedFields` | `true` | Skip unknown fields during decoding |
+| `enumAsStrings` | `false` | Encode case object enums as strings instead of objects |
+| `transientDefault` | `false` | Omit fields with default values during encoding |
+| `transientEmpty` | `false` | Omit empty collections during encoding |
+| `transientNone` | `false` | Omit `None` fields during encoding |
+| `requireCollectionFields` | `false` | Require collection fields to be present during decoding |
+| `requireDefaultFields` | `false` | Require fields with defaults to be present during decoding |
+| `checkFieldDuplication` | `false` | Check for duplicate field names during decoding |
+| `bigDecimalPrecision` | `34` | Maximum precision for BigDecimal (DoS protection) |
+| `bigDecimalScaleLimit` | `6178` | Maximum scale for BigDecimal (DoS protection) |
+| `bigDecimalDigitsLimit` | `308` | Maximum digits for BigDecimal/BigInt (DoS protection) |
+| `mapMaxInsertNumber` | `Int.MaxValue` | Maximum map entries (DoS protection) |
+| `setMaxInsertNumber` | `Int.MaxValue` | Maximum set entries (DoS protection) |
+
+### Annotations
+
+| Annotation | Description |
+|---|---|
+| `@fieldName(name)` | Rename a field in the UBJson representation |
+| `@transientField` | Exclude a field from encoding/decoding (requires default value) |
+| `@stringified` | Encode a numeric field as a string |
+
+### Type support
+
+| Type | Support |
+|---|---|
+| Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (native UBJson types) |
+| `String` | Yes |
+| `BigDecimal`, `BigInt` | Yes (with configurable DoS protection) |
+| `Option[A]` | Yes (null for `None`) |
+| Collections (`List`, `Vector`, etc.) | Yes (via Hearth `IsCollection`) |
+| `Map[K, V]` (string keys) | Yes (UBJson object) |
+| `Map[K, V]` (non-string keys: `Int`, `Long`, etc.) | Yes (array of key-value pairs) |
+| Case classes | Yes (UBJson object with field names) |
+| Value classes | Yes (automatic unwrapping) |
+| Sealed traits (wrapper encoding) | Yes (single-key object wrapping subtype name) |
+| Sealed traits (discriminator encoding) | Yes (via `discriminatorFieldName` config) |
+| Case object enums | Yes (object or string encoding via `enumAsStrings`) |
+| Mixed enums (case objects + case classes) | Yes |
+| Singletons (case objects) | Yes |
+| Generic types (`Box[A]`, `Pair[A, B]`) | Yes |
+| Higher-kinded types (`F[_]`) | Yes |
+| Recursive types | Yes |
+| Nested structures (arbitrary depth) | Yes |
+| Type aliases | Yes |
+
+### Codec extensions
+
+`UBJsonValueCodecExtensions` provides `map` and `mapDecode` combinators for transforming existing codecs, enabling support for custom types by mapping to/from supported types.
+
+---
+
 ## yaml-derivation
 
 **Replaces:** VirtusLab `scala-yaml` built-in `derives YamlEncoder`/`YamlDecoder`/`YamlCodec`
@@ -403,6 +472,79 @@ Discriminator metadata is fully propagated to child schemas:
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
 | `useDefaults` | Yes (runtime reflection) | Yes (compile-time) | Improvement |
+
+---
+
+## xml-derivation
+
+**Original type class** — no replacement target. Provides compile-time derivation of XML encoders and decoders using `scala.xml.Elem` as the XML representation. Fields can be mapped to XML elements, attributes, or text content via annotations. Decoders return `Either[XmlDecodingError, A]` for safe error handling. Cross-compiled for Scala 2.13 + 3, JVM + JS + Native.
+
+### Type classes
+
+| Type class | Description |
+|---|---|
+| `XmlEncoder[A]` | Encodes a value to `scala.xml.Elem` with a given element name |
+| `XmlDecoder[A]` | Decodes a `scala.xml.Elem` to `Either[XmlDecodingError, A]` |
+| `XmlCodec[A]` | Combined encoder + decoder (`KindlingsXmlCodec` derives both) |
+
+### Configuration
+
+| Config option | Default | Description |
+|---|---|---|
+| `defaultFieldMode` | `XmlFieldMode.Element` | Default mapping for fields: `Element` (child elements) or `Attribute` (XML attributes) |
+| `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
+| `constructorNameMapper` | `identity` | Transform sealed trait subtype names for discriminator values |
+| `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None` to disable) |
+| `enumAsStrings` | `false` | Encode case object enums as text content strings |
+| `useDefaults` | `false` | Use constructor default values for missing fields during decoding |
+| `transientNone` | `false` | Omit `None` fields during encoding |
+| `transientEmpty` | `false` | Omit empty collections during encoding |
+
+### Annotations
+
+| Annotation | Description |
+|---|---|
+| `@xmlName(name)` | Rename a field/subtype in the XML representation |
+| `@transientField` | Exclude a field from encoding/decoding (requires default value) |
+| `@xmlAttribute` | Force a field to be encoded/decoded as an XML attribute |
+| `@xmlElement` | Force a field to be encoded/decoded as a child XML element |
+| `@xmlContent` | Map a field to the text content of the enclosing element |
+| `@xmlWrapper(name)` | Wrap a collection field in an additional element with the given name |
+| `@xmlUnwrapped` | Inline collection elements directly without a wrapper element |
+
+### Type support
+
+| Type | Support |
+|---|---|
+| Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (text representation) |
+| `String` | Yes |
+| `BigDecimal`, `BigInt` | Yes (text representation) |
+| `Option[A]` | Yes (omitted or present) |
+| Collections (`List`, `Vector`, etc.) | Yes (via Hearth `IsCollection`) |
+| `Map[K, V]` | Yes (via Hearth `IsMap`) |
+| Case classes | Yes (fields as child elements or attributes) |
+| Value classes | Yes (automatic unwrapping) |
+| Sealed traits | Yes (discriminator attribute) |
+| Case object enums | Yes (object or string encoding via `enumAsStrings`) |
+| Singletons (case objects) | Yes |
+| Generic types (`Box[A]`, `Pair[A, B]`) | Yes |
+| Nested structures (arbitrary depth) | Yes |
+
+### Error handling
+
+`XmlDecodingError` is a sealed hierarchy providing structured errors:
+
+| Error type | Description |
+|---|---|
+| `MissingAttribute` | Required XML attribute not found |
+| `MissingElement` | Required child element not found |
+| `InvalidValue` | Text content cannot be parsed to expected type |
+| `UnexpectedElement` | Unknown child element encountered |
+| `MissingContent` | Element has no text content |
+| `UnknownDiscriminator` | Discriminator value doesn't match any known subtype |
+| `MissingDiscriminator` | Discriminator attribute not found on element |
+| `Multiple` | Aggregation of multiple errors |
+| `General` | Catch-all for other error conditions |
 
 ---
 

@@ -7,3 +7,6 @@ import eu.timepit.refined.numeric.Positive
 case class RefinedPerson(name: String Refined NonEmpty, age: Int Refined Positive)
 case class WithRefinedOption(value: Option[Int Refined Positive])
 case class WithRefinedList(values: List[String Refined NonEmpty])
+
+// Plain surrogate for testing refined/iron validation rejection via binary codecs
+case class PlainPerson(name: String, age: Int)
