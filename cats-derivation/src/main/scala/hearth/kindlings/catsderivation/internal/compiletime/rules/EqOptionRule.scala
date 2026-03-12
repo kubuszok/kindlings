@@ -32,8 +32,7 @@ trait EqOptionRuleImpl {
                   onSome = xInner =>
                     isOption.value.fold[Boolean](eqctx.y)(
                       onEmpty = Expr(false),
-                      onSome = yInner =>
-                        Expr.quote(Expr.splice(lambda).apply(Expr.splice(xInner), Expr.splice(yInner)))
+                      onSome = yInner => Expr.quote(Expr.splice(lambda).apply(Expr.splice(xInner), Expr.splice(yInner)))
                     )
                 )
               )

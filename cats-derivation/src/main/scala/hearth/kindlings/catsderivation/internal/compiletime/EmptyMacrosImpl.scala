@@ -7,7 +7,12 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** Empty derivation: product (all fields: Empty) and coproduct (exactly one variant: Empty). */
-trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
+trait EmptyMacrosImpl
+    extends rules.EmptyUseCachedRuleImpl
+    with rules.EmptyUseImplicitRuleImpl
+    with rules.EmptyBuiltInRuleImpl
+    with rules.EmptyCaseClassRuleImpl
+    with rules.EmptyEnumRuleImpl { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEmpty[A: Type]: Expr[alleycats.Empty[A]] = {
@@ -36,10 +41,12 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
       .namedScope(s"Deriving Empty[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
         MIO.scoped { runSafe =>
           runSafe {
+            val ctx = EmptyCtx.from[A](selfType)
             for {
               _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveEmptyForType[A](selfType)
-            } yield adapt(result)
+              result <- deriveEmptyRecursively[A](using ctx)
+              cache <- ctx.cache.get
+            } yield adapt(cache.toValDefs.use(_ => result))
           }
         }
       }
@@ -57,114 +64,67 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
       }
   }
 
-  /** Derive the empty value for type A. Does NOT try to summon Empty[A] — that would cause infinite recursion for the
-    * top-level type. Instead goes directly to structural derivation (case class or enum).
-    */
-  private def deriveEmptyForType[A: Type](selfType: Option[??]): MIO[Expr[A]] =
+  // Context for Empty derivation — no value parameter (produces, doesn't consume)
+
+  final case class EmptyCtx[A](
+      tpe: Type[A],
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  ) {
+    def nestType[B: Type]: EmptyCtx[B] = EmptyCtx(Type[B], cache, derivedType)
+  }
+  object EmptyCtx {
+    def from[A: Type](derivedType: Option[??]): EmptyCtx[A] =
+      EmptyCtx(Type[A], ValDefsCache.mlocal, derivedType)
+  }
+
+  def ectx[A](implicit A: EmptyCtx[A]): EmptyCtx[A] = A
+  implicit def emptyCtxType[A: EmptyCtx]: Type[A] = ectx.tpe
+
+  abstract class EmptyDerivationRule(val name: String) extends Rule {
+    def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]]
+  }
+
+  // Recursive derivation
+
+  def deriveEmptyRecursively[A: EmptyCtx]: MIO[Expr[A]] =
     Log.namedScope(s"Deriving Empty for ${Type[A].prettyPrint}") {
-      CaseClass.parse[A].toEither match {
-        case Right(caseClass) => deriveEmptyCaseClass[A](caseClass, selfType)
-        case Left(_)          =>
-          Enum.parse[A].toEither match {
-            case Right(enumm) => deriveEmptyEnum[A](enumm, selfType)
-            case Left(reason) =>
-              MIO.fail(
-                new RuntimeException(
-                  s"Cannot derive Empty for ${Type[A].prettyPrint}: not a case class and not an enum. $reason"
-                )
-              )
-          }
+      Rules(
+        EmptyUseCachedRule,
+        EmptyUseImplicitRule,
+        EmptyBuiltInRule,
+        EmptyCaseClassRule,
+        EmptyEnumRule
+      )(_[A]).flatMap {
+        case Right(result) =>
+          Log.info(s"Derived Empty for ${Type[A].prettyPrint}") >> MIO.pure(result)
+        case Left(reasons) =>
+          val reasonsStrings = reasons.toListMap
+            .removed(EmptyUseCachedRule)
+            .view
+            .map { case (rule, reasons) =>
+              if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
+              else s" - ${rule.name}: ${reasons.mkString(", ")}"
+            }
+            .toList
+          val err = EmptyDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+          Log.error(err.message) >> MIO.fail(err)
       }
     }
 
-  @scala.annotation.nowarn("msg=is never used")
-  private def deriveEmptyCaseClass[A: Type](
-      caseClass: CaseClass[A],
-      selfType: Option[??]
-  ): MIO[Expr[A]] = {
-    val constructor = caseClass.primaryConstructor
-    val fields = constructor.parameters.flatten.toList
-
-    val emptyFields: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
-      import param.tpe.Underlying as Field
-      val emptyExpr: Expr[Field] = summonEmptyFor[Field](fieldName, selfType)
-      (fieldName, emptyExpr.as_??)
-    }
-
-    caseClass.primaryConstructor(emptyFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
-        MIO.fail(new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error"))
-    }
-  }
-
-  @scala.annotation.nowarn("msg=is never used|is unchecked")
-  private def deriveEmptyEnum[A: Type](
-      enumm: Enum[A],
-      selfType: Option[??]
-  ): MIO[Expr[A]] = {
-    val children = enumm.exhaustiveChildren match {
-      case Some(m) => m.toList.map(_._2)
-      case None    =>
-        return MIO.fail(
-          new RuntimeException(s"Cannot derive Empty for ${Type[A].prettyPrint}: no children found")
-        )
-    }
-
-    val emptyVariants: List[Expr[A]] = children.flatMap { (child: ??<:[A]) =>
-      val childType = child.Underlying
-      summonEmptyExprOpt(childType, selfType).map { instanceExpr =>
-        implicit val ct: Type[child.Underlying] = childType
-        Expr.quote(Expr.splice(instanceExpr).empty.asInstanceOf[A])
-      }
-    }
-
-    emptyVariants match {
-      case List(singleEmpty) => MIO.pure(singleEmpty)
-      case Nil               =>
-        MIO.fail(
-          new RuntimeException(
-            s"Cannot derive Empty for ${Type[A].prettyPrint}: no variant has an Empty instance"
-          )
-        )
-      case _ =>
-        MIO.fail(
-          new RuntimeException(
-            s"Cannot derive Empty for ${Type[A].prettyPrint}: multiple variants have Empty instances (need exactly one)"
-          )
-        )
-    }
-  }
-
-  /** Summon Empty[Field] for a field type, skipping the self-type to avoid circular references. */
-  @scala.annotation.nowarn("msg=is never used")
-  private def summonEmptyFor[Field: Type](fieldName: String, selfType: Option[??]): Expr[Field] = {
-    val emptyFieldType = EmptyTypes.Empty[Field]
-    val result =
-      if (selfType.exists(_.Underlying =:= Type[Field]))
-        emptyFieldType.summonExprIgnoring().toEither.left.map(_ => "self-type skipped")
-      else
-        emptyFieldType.summonExprIgnoring().toEither
-
-    result match {
-      case Right(m)     => Expr.quote(Expr.splice(m).empty)
-      case Left(reason) =>
-        throw new RuntimeException(
-          s"No Empty instance found for field $fieldName: ${Type[Field].prettyPrint}: $reason"
-        )
-    }
-  }
-
-  /** Try to summon Empty[A] optionally, skipping self-type. */
-  @scala.annotation.nowarn("msg=is never used")
-  private def summonEmptyExprOpt[A](tpe: Type[A], selfType: Option[??]): Option[Expr[alleycats.Empty[A]]] = {
-    implicit val t: Type[A] = tpe
-    if (selfType.exists(_.Underlying =:= Type[A])) None
-    else EmptyTypes.Empty[A].summonExprIgnoring().toOption
-  }
+  // Types
 
   protected object EmptyTypes {
     def Empty: Type.Ctor1[alleycats.Empty] = Type.Ctor1.of[alleycats.Empty]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Short: Type[Short] = Type.of[Short]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Float: Type[Float] = Type.of[Float]
+    val Double: Type[Double] = Type.of[Double]
+    val Char: Type[Char] = Type.of[Char]
+    val String: Type[String] = Type.of[String]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }
@@ -178,5 +138,23 @@ trait EmptyMacrosImpl { this: MacroCommons & StdExtensions =>
       shouldLog <- catsDerivation.get("logDerivation").flatMap(_.asBoolean)
     } yield shouldLog).getOrElse(false)
     logDerivationImported || logDerivationSetGlobally
+  }
+}
+
+sealed private[compiletime] trait EmptyDerivationError
+    extends util.control.NoStackTrace
+    with Product
+    with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
+private[compiletime] object EmptyDerivationError {
+  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends EmptyDerivationError {
+    override def message: String =
+      s"The type $tpeName was not handled by any Empty derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class MultipleEmptyVariants(tpeName: String) extends EmptyDerivationError {
+    override def message: String =
+      s"Cannot derive Empty for $tpeName: multiple variants have Empty instances (need exactly one)"
   }
 }

@@ -7,7 +7,9 @@ import hearth.std.*
 /** Monoid derivation: extends Semigroup with empty (constructed from field Monoid.empty values). */
 trait MonoidMacrosImpl
     extends SemigroupMacrosImpl
+    with rules.MonoidUseCachedRuleImpl
     with rules.MonoidUseImplicitRuleImpl
+    with rules.MonoidBuiltInRuleImpl
     with rules.MonoidCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
 
   final case class MonoidDerivationResult[A](empty: Expr[A], combine: (Expr[A], Expr[A]) => MIO[Expr[A]])
@@ -36,14 +38,16 @@ trait MonoidMacrosImpl
   def deriveMonoidRecursively[A: MonoidCtx]: MIO[MonoidDerivationResult[A]] =
     Log.namedScope(s"Deriving Monoid for ${Type[A].prettyPrint}") {
       Rules(
+        MonoidUseCachedRule,
         MonoidUseImplicitRule,
+        MonoidBuiltInRule,
         MonoidCaseClassRule
       )(_[A]).flatMap {
         case Right(result) =>
           Log.info(s"Derived Monoid for ${Type[A].prettyPrint}") >> MIO.pure(result)
         case Left(reasons) =>
           val reasonsStrings = reasons.toListMap
-            .removed(MonoidUseImplicitRule)
+            .removed(MonoidUseCachedRule)
             .view
             .map { case (rule, reasons) =>
               if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
@@ -74,7 +78,7 @@ trait MonoidMacrosImpl
     }
   }
 
-  private def deriveMonoidEntrypoint[A: Type, Out: Type](macroName: String)(
+  protected def deriveMonoidEntrypoint[A: Type, Out: Type](macroName: String)(
       adapt: (Expr[A], (Expr[A], Expr[A]) => Expr[A]) => Expr[Out]
   ): Expr[Out] = {
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
@@ -86,12 +90,17 @@ trait MonoidMacrosImpl
       .namedScope(s"Deriving Monoid[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
         MIO.scoped { runSafe =>
           runSafe {
+            val ctx = MonoidCtx.from[A](Some(Type[A].as_??))
             for {
               _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveMonoidRecursively[A](using MonoidCtx.from(Some(Type[A].as_??)))
+              result <- deriveMonoidRecursively[A](using ctx)
+              cache <- ctx.cache.get
             } yield {
+              val doEmpty = cache.toValDefs.use(_ => result.empty)
+              // combine creates its own fresh SemigroupCtx with its own cache (via the rules),
+              // so we just need to runSafe the MIO
               val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) => runSafe(result.combine(xExpr, yExpr))
-              adapt(result.empty, doCombine)
+              adapt(doEmpty, doCombine)
             }
           }
         }
@@ -108,32 +117,6 @@ trait MonoidMacrosImpl
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }
-  }
-
-  protected def deriveMonoidEmpty[A: Type](
-      caseClass: CaseClass[A]
-  ): MIO[Expr[A]] = {
-    val constructor = caseClass.primaryConstructor
-    val fields = constructor.parameters.flatten.toList
-
-    val emptyFields: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
-      import param.tpe.Underlying as Field
-      val monoidExpr = MonoidTypes.Monoid[Field].summonExprIgnoring().toEither match {
-        case Right(m)     => m
-        case Left(reason) =>
-          throw new RuntimeException(
-            s"No Monoid instance found for field $fieldName: ${Field.prettyPrint}: $reason"
-          )
-      }
-      val emptyExpr: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
-      (fieldName, emptyExpr.as_??)
-    }
-
-    caseClass.primaryConstructor(emptyFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
-        MIO.fail(new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error"))
-    }
   }
 
   protected object MonoidTypes {

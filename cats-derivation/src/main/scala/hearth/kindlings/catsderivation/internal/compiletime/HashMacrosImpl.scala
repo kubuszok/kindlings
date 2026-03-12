@@ -1,13 +1,19 @@
 package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
-import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
 /** Hash derivation: combines Eq (field-by-field equality) with Hash (MurmurHash3-based hashing). */
-trait HashMacrosImpl extends EqMacrosImpl { this: MacroCommons & StdExtensions =>
+trait HashMacrosImpl
+    extends EqMacrosImpl
+    with rules.HashUseCachedRuleImpl
+    with rules.HashUseImplicitRuleImpl
+    with rules.HashBuiltInRuleImpl
+    with rules.HashSingletonRuleImpl
+    with rules.HashCaseClassRuleImpl
+    with rules.HashEnumRuleImpl { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveHash[A: Type]: Expr[cats.kernel.Hash[A]] = {
@@ -17,6 +23,7 @@ trait HashMacrosImpl extends EqMacrosImpl { this: MacroCommons & StdExtensions =
     deriveHashEntrypoint[A, cats.kernel.Hash[A]](macroName)
   }
 
+  @scala.annotation.nowarn("msg=is never used")
   private def deriveHashEntrypoint[A: Type, Out: Type](macroName: String): Expr[Out] = {
     implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
     implicit val IntType: Type[Int] = HashTypes.Int
@@ -35,10 +42,12 @@ trait HashMacrosImpl extends EqMacrosImpl { this: MacroCommons & StdExtensions =
             LambdaBuilder
               .of1[A]("hashValue")
               .traverse { valueExpr =>
+                val hashCtx = HashCtx.from(valueExpr, selfType)
                 for {
                   _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                  result <- deriveHashForValue[A](valueExpr, selfType)
-                } yield result
+                  result <- deriveHashRecursively[A](using hashCtx)
+                  cache <- hashCtx.cache.get
+                } yield cache.toValDefs.use(_ => result)
               }
               .map(_.build[Int])
           }
@@ -84,61 +93,67 @@ trait HashMacrosImpl extends EqMacrosImpl { this: MacroCommons & StdExtensions =
       }
   }
 
-  private def deriveHashForValue[A: Type](
+  // Hash context — carries a single value to hash
+
+  final case class HashCtx[A](
+      tpe: Type[A],
       value: Expr[A],
+      cache: MLocal[ValDefsCache],
       derivedType: Option[??]
-  ): MIO[Expr[Int]] = {
-    implicit val IntType: Type[Int] = HashTypes.Int
-
-    val skipSelf = derivedType.exists(_.Underlying =:= Type[A])
-    val implicitResult = if (skipSelf) None else HashTypes.Hash[A].summonExprIgnoring().toOption
-
-    implicitResult match {
-      case Some(instanceExpr) =>
-        MIO.pure(Expr.quote(Expr.splice(instanceExpr).hash(Expr.splice(value))))
-      case None =>
-        deriveHashDirect[A](value, derivedType)
-    }
+  ) {
+    def nest[B: Type](newValue: Expr[B]): HashCtx[B] = HashCtx(Type[B], newValue, cache, derivedType)
+  }
+  object HashCtx {
+    def from[A: Type](value: Expr[A], derivedType: Option[??]): HashCtx[A] =
+      HashCtx(Type[A], value, ValDefsCache.mlocal, derivedType)
   }
 
-  private def deriveHashDirect[A: Type](
-      value: Expr[A],
-      derivedType: Option[??]
-  ): MIO[Expr[Int]] = {
-    implicit val IntType: Type[Int] = HashTypes.Int
+  def hctx[A](implicit A: HashCtx[A]): HashCtx[A] = A
+  implicit def hashCtxType[A: HashCtx]: Type[A] = hctx.tpe
 
-    CaseClass.parse[A].toEither match {
-      case Right(caseClass) =>
-        val fields = caseClass.caseFieldValuesAt(value).toList
-        NonEmptyList.fromList(fields) match {
-          case Some(fieldValues) =>
-            fieldValues
-              .traverse { case (fieldName, fieldValue) =>
-                import fieldValue.{Underlying as Field, value as fieldExpr}
-                Log.namedScope(s"Deriving hash for $fieldName: ${Field.prettyPrint}") {
-                  deriveHashForValue[Field](fieldExpr, derivedType).map(r => (fieldName, r))
-                }
-              }
-              .map { hashes =>
-                val seed = Expr(scala.util.hashing.MurmurHash3.productSeed)
-                val mixed = hashes.toList.foldLeft(seed) { case (acc, (_, h)) =>
-                  Expr.quote(scala.util.hashing.MurmurHash3.mix(Expr.splice(acc), Expr.splice(h)))
-                }
-                val size = Expr(fields.size)
-                Expr.quote {
-                  scala.util.hashing.MurmurHash3.finalizeHash(Expr.splice(mixed), Expr.splice(size))
-                }
-              }
-          case None =>
-            MIO.pure(Expr(Type[A].shortName.hashCode))
-        }
-      case Left(_) =>
-        MIO.pure(Expr.quote(Expr.splice(value).hashCode()))
-    }
+  abstract class HashDerivationRule(val name: String) extends Rule {
+    def apply[A: HashCtx]: MIO[Rule.Applicability[Expr[Int]]]
   }
+
+  // Recursive derivation
+
+  def deriveHashRecursively[A: HashCtx]: MIO[Expr[Int]] =
+    Log.namedScope(s"Deriving Hash for ${Type[A].prettyPrint}") {
+      Rules(
+        HashUseCachedRule,
+        HashUseImplicitRule,
+        HashBuiltInRule,
+        HashSingletonRule,
+        HashCaseClassRule,
+        HashEnumRule
+      )(_[A]).flatMap {
+        case Right(result) =>
+          Log.info(s"Derived Hash for ${Type[A].prettyPrint}") >> MIO.pure(result)
+        case Left(reasons) =>
+          val reasonsStrings = reasons.toListMap
+            .removed(HashUseCachedRule)
+            .view
+            .map { case (rule, reasons) =>
+              if (reasons.isEmpty) s"${rule.name} not applicable"
+              else s" - ${rule.name}: ${reasons.mkString(", ")}"
+            }
+            .toList
+          MIO.fail(HashDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings))
+      }
+    }
 
   protected object HashTypes {
     def Hash: Type.Ctor1[cats.kernel.Hash] = Type.Ctor1.of[cats.kernel.Hash]
     val Int: Type[Int] = Type.of[Int]
+  }
+}
+
+sealed private[compiletime] trait HashDerivationError extends util.control.NoStackTrace with Product with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
+private[compiletime] object HashDerivationError {
+  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends HashDerivationError {
+    override def message: String = s"$tpeName not handled by any Hash rule:\n${reasons.mkString("\n")}"
   }
 }

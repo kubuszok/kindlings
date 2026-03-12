@@ -17,11 +17,11 @@ trait SemigroupUseImplicitRuleImpl {
       else
         SemigroupTypes.Semigroup[A].summonExprIgnoring().toEither match {
           case Right(instanceExpr) =>
-            MIO.pure(
-              Rule.matched(
-                Expr.quote(Expr.splice(instanceExpr).combine(Expr.splice(sgctx.x), Expr.splice(sgctx.y)))
-              )
-            )
+            sgctx.cache.buildCachedWith(
+              "cached-semigroup-instance",
+              ValDefBuilder.ofLazy[cats.kernel.Semigroup[A]](s"semigroup_${Type[A].shortName}")
+            )(_ => instanceExpr) >>
+              SemigroupUseCachedRule[A]
           case Left(reason) =>
             MIO.pure(Rule.yielded(s"No implicit Semigroup[${Type[A].prettyPrint}]: $reason"))
         }
