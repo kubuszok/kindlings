@@ -7,30 +7,30 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-trait MonoidCaseClassRuleImpl {
-  this: MonoidMacrosImpl & MacroCommons & StdExtensions =>
+trait EmptyCaseClassRuleImpl {
+  this: EmptyMacrosImpl & MacroCommons & StdExtensions =>
 
-  @scala.annotation.nowarn("msg=is never used")
-  object MonoidCaseClassRule extends MonoidDerivationRule("Monoid as case class") {
-    def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]] =
+  object EmptyCaseClassRule extends EmptyDerivationRule("Empty as case class") {
+
+    def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          deriveMonoidCaseClassEmpty[A](caseClass).map { empty =>
-            val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
-              // Use a fresh SemigroupCtx with its own cache so combine defs are self-contained
-              val sgCtx = SemigroupCtx.from(x, y, moidctx.derivedType)
-              for {
-                result <- deriveSemigroupRecursively[A](using sgCtx)
-                cache <- sgCtx.cache.get
-              } yield cache.toValDefs.use(_ => result)
+          val defBuilder = ValDefBuilder.ofLazy[A](s"empty_${Type[A].shortName}")
+          for {
+            _ <- ectx.cache.forwardDeclare("cached-empty-value", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(ectx.cache.buildCachedWith("cached-empty-value", defBuilder) { _ =>
+                runSafe(deriveCaseClassEmpty[A](caseClass))
+              })
             }
-            Rule.matched(MonoidDerivationResult(empty, combine))
-          }
+            result <- EmptyUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }
 
-    private def deriveMonoidCaseClassEmpty[A: MonoidCtx](
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveCaseClassEmpty[A: EmptyCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[A]] = {
       val constructor = caseClass.primaryConstructor
@@ -41,11 +41,8 @@ trait MonoidCaseClassRuleImpl {
           fieldList
             .traverse { case (fieldName, param) =>
               import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving Monoid.empty for field $fieldName: ${Field.prettyPrint}") {
-                deriveMonoidRecursively[Field](using MonoidCtx(Type.of[Field], moidctx.cache, moidctx.derivedType)).map {
-                  result =>
-                    (fieldName, result.empty.as_??)
-                }
+              Log.namedScope(s"Deriving Empty for field $fieldName: ${Field.prettyPrint}") {
+                deriveEmptyRecursively[Field](using ectx.nestType[Field]).map(r => (fieldName, r.as_??))
               }
             }
             .flatMap { emptyFields =>
@@ -57,7 +54,6 @@ trait MonoidCaseClassRuleImpl {
               }
             }
         case None =>
-          // No fields — construct empty instance
           caseClass.primaryConstructor(Map.empty) match {
             case Right(constructExpr) => MIO.pure(constructExpr)
             case Left(error)          =>

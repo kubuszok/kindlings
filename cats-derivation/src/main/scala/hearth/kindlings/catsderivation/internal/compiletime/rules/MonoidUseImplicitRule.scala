@@ -17,10 +17,11 @@ trait MonoidUseImplicitRuleImpl {
       else
         MonoidTypes.Monoid[A].summonExprIgnoring().toEither match {
           case Right(instanceExpr) =>
-            val empty = Expr.quote(Expr.splice(instanceExpr).empty)
-            val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) =>
-              MIO.pure(Expr.quote(Expr.splice(instanceExpr).combine(Expr.splice(x), Expr.splice(y))))
-            MIO.pure(Rule.matched(MonoidDerivationResult(empty, combine)))
+            moidctx.cache.buildCachedWith(
+              "cached-monoid-instance",
+              ValDefBuilder.ofLazy[cats.kernel.Monoid[A]](s"monoid_${Type[A].shortName}")
+            )(_ => instanceExpr) >>
+              MonoidUseCachedRule[A]
           case Left(reason) =>
             MIO.pure(Rule.yielded(s"No implicit Monoid[${Type[A].prettyPrint}]: $reason"))
         }
