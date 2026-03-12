@@ -16,8 +16,8 @@ trait MonoidUseCachedRuleImpl {
       moidctx.cache.get0Ary[cats.kernel.Monoid[A]]("cached-monoid-instance").flatMap {
         case Some(instance) =>
           val empty = Expr.quote(Expr.splice(instance).empty)
-          val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) =>
-            MIO.pure(Expr.quote(Expr.splice(instance).combine(Expr.splice(x), Expr.splice(y))))
+          val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] =
+            (x, y) => MIO.pure(Expr.quote(Expr.splice(instance).combine(Expr.splice(x), Expr.splice(y))))
           MIO.pure(Rule.matched(MonoidDerivationResult(empty, combine)))
         case None =>
           MIO.pure(Rule.yielded(s"No cached Monoid for ${Type[A].prettyPrint}"))

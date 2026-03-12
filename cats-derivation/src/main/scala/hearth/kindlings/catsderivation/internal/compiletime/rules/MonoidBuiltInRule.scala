@@ -11,7 +11,7 @@ trait MonoidBuiltInRuleImpl {
   @scala.annotation.nowarn("msg=is never used")
   object MonoidBuiltInRule extends MonoidDerivationRule("built-in Monoid for primitives") {
 
-    def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]] = {
+    def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]] =
       Log.info(s"Checking built-in Monoid for ${Type[A].prettyPrint}") >> MIO {
         if (Type[A] <:< SemigroupTypes.Byte)
           Rule.matched(mkNumericMonoid[A](Expr(0.toByte).asInstanceOf[Expr[A]]))
@@ -30,7 +30,6 @@ trait MonoidBuiltInRuleImpl {
         else
           Rule.yielded(s"${Type[A].prettyPrint} is not a built-in Monoid type")
       }
-    }
 
     private def mkNumericMonoid[A: MonoidCtx](emptyVal: Expr[A]): MonoidDerivationResult[A] = {
       val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
