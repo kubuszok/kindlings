@@ -10,6 +10,7 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait OrderMacrosImpl
     extends rules.OrderUseCachedRuleImpl
     with rules.OrderUseImplicitRuleImpl
+    with rules.OrderBuiltInRuleImpl
     with rules.OrderValueTypeRuleImpl
     with rules.OrderSingletonRuleImpl
     with rules.OrderCaseClassRuleImpl
@@ -99,6 +100,7 @@ trait OrderMacrosImpl
       Rules(
         OrderUseCachedRule,
         OrderUseImplicitRule,
+        OrderBuiltInRule,
         OrderValueTypeRule,
         OrderSingletonRule,
         OrderCaseClassRule,
@@ -120,7 +122,15 @@ trait OrderMacrosImpl
 
   protected object OrderTypes {
     def Order: Type.Ctor1[cats.kernel.Order] = Type.Ctor1.of[cats.kernel.Order]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Short: Type[Short] = Type.of[Short]
     val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Float: Type[Float] = Type.of[Float]
+    val Double: Type[Double] = Type.of[Double]
+    val Char: Type[Char] = Type.of[Char]
+    val String: Type[String] = Type.of[String]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }

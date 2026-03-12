@@ -7,7 +7,11 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** Semigroup derivation: combines case class fields pairwise using their Semigroup instances. */
-trait SemigroupMacrosImpl extends rules.SemigroupUseImplicitRuleImpl with rules.SemigroupCaseClassRuleImpl {
+trait SemigroupMacrosImpl
+    extends rules.SemigroupUseCachedRuleImpl
+    with rules.SemigroupUseImplicitRuleImpl
+    with rules.SemigroupBuiltInRuleImpl
+    with rules.SemigroupCaseClassRuleImpl {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
@@ -57,14 +61,16 @@ trait SemigroupMacrosImpl extends rules.SemigroupUseImplicitRuleImpl with rules.
   def deriveSemigroupRecursively[A: SemigroupCtx]: MIO[Expr[A]] =
     Log.namedScope(s"Deriving Semigroup for ${Type[A].prettyPrint}") {
       Rules(
+        SemigroupUseCachedRule,
         SemigroupUseImplicitRule,
+        SemigroupBuiltInRule,
         SemigroupCaseClassRule
       )(_[A]).flatMap {
         case Right(result) =>
           Log.info(s"Derived Semigroup for ${Type[A].prettyPrint}") >> MIO.pure(result)
         case Left(reasons) =>
           val reasonsStrings = reasons.toListMap
-            .removed(SemigroupUseImplicitRule)
+            .removed(SemigroupUseCachedRule)
             .view
             .map { case (rule, reasons) =>
               if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
@@ -87,12 +93,15 @@ trait SemigroupMacrosImpl extends rules.SemigroupUseImplicitRuleImpl with rules.
     Log
       .namedScope(s"Deriving $macroName[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
         MIO.scoped { runSafe =>
+          val selfType: Option[??] = Some(Type[A].as_??)
           val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) =>
             runSafe {
+              val ctx = SemigroupCtx.from(xExpr, yExpr, selfType)
               for {
                 _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveSemigroupRecursively[A](using SemigroupCtx.from(xExpr, yExpr, Some(Type[A].as_??)))
-              } yield result
+                result <- deriveSemigroupRecursively[A](using ctx)
+                cache <- ctx.cache.get
+              } yield cache.toValDefs.use(_ => result)
             }
           adapt(doCombine)
         }
@@ -111,41 +120,15 @@ trait SemigroupMacrosImpl extends rules.SemigroupUseImplicitRuleImpl with rules.
       }
   }
 
-  protected def deriveSemigroupCombine[A: Type](
-      caseClass: CaseClass[A],
-      x: Expr[A],
-      y: Expr[A]
-  ): MIO[Expr[A]] = {
-    val fieldsX = caseClass.caseFieldValuesAt(x).toList
-    val fieldsY = caseClass.caseFieldValuesAt(y).toList
-
-    val combinedFields: List[(String, Expr_??)] =
-      fieldsX.zip(fieldsY).map { case ((fieldName, fieldValueX), (_, fieldValueY)) =>
-        import fieldValueX.Underlying as Field
-        val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
-        val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
-
-        val sgExpr = SemigroupTypes.Semigroup[Field].summonExprIgnoring().toEither match {
-          case Right(sg)    => sg
-          case Left(reason) =>
-            throw new RuntimeException(
-              s"No Semigroup instance found for field $fieldName: ${Field.prettyPrint}: $reason"
-            )
-        }
-        val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
-        (fieldName, combined.as_??)
-      }
-
-    val fieldMap: Map[String, Expr_??] = combinedFields.toMap
-    caseClass.primaryConstructor(fieldMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
-        MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
-    }
-  }
-
   protected object SemigroupTypes {
     def Semigroup: Type.Ctor1[cats.kernel.Semigroup] = Type.Ctor1.of[cats.kernel.Semigroup]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Short: Type[Short] = Type.of[Short]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Float: Type[Float] = Type.of[Float]
+    val Double: Type[Double] = Type.of[Double]
+    val String: Type[String] = Type.of[String]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }
