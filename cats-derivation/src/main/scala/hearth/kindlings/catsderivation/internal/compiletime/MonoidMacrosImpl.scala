@@ -5,7 +5,55 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 /** Monoid derivation: extends Semigroup with empty (constructed from field Monoid.empty values). */
-trait MonoidMacrosImpl extends SemigroupMacrosImpl { this: MacroCommons & StdExtensions =>
+trait MonoidMacrosImpl
+    extends SemigroupMacrosImpl
+    with rules.MonoidUseImplicitRuleImpl
+    with rules.MonoidCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
+
+  final case class MonoidDerivationResult[A](empty: Expr[A], combine: (Expr[A], Expr[A]) => MIO[Expr[A]])
+
+  // Context
+
+  final case class MonoidCtx[A](
+      tpe: Type[A],
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  )
+  object MonoidCtx {
+    def from[A: Type](derivedType: Option[??]): MonoidCtx[A] =
+      MonoidCtx(Type[A], ValDefsCache.mlocal, derivedType)
+  }
+
+  def moidctx[A](implicit A: MonoidCtx[A]): MonoidCtx[A] = A
+  implicit def monoidCtxType[A: MonoidCtx]: Type[A] = moidctx.tpe
+
+  abstract class MonoidDerivationRule(val name: String) extends Rule {
+    def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]]
+  }
+
+  // Recursive derivation
+
+  def deriveMonoidRecursively[A: MonoidCtx]: MIO[MonoidDerivationResult[A]] =
+    Log.namedScope(s"Deriving Monoid for ${Type[A].prettyPrint}") {
+      Rules(
+        MonoidUseImplicitRule,
+        MonoidCaseClassRule
+      )(_[A]).flatMap {
+        case Right(result) =>
+          Log.info(s"Derived Monoid for ${Type[A].prettyPrint}") >> MIO.pure(result)
+        case Left(reasons) =>
+          val reasonsStrings = reasons.toListMap
+            .removed(MonoidUseImplicitRule)
+            .view
+            .map { case (rule, reasons) =>
+              if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
+              else s" - ${rule.name}: ${reasons.mkString(", ")}"
+            }
+            .toList
+          val err = MonoidDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+          Log.error(err.message) >> MIO.fail(err)
+      }
+    }
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveMonoid[A: Type]: Expr[cats.kernel.Monoid[A]] = {
@@ -36,28 +84,16 @@ trait MonoidMacrosImpl extends SemigroupMacrosImpl { this: MacroCommons & StdExt
 
     Log
       .namedScope(s"Deriving Monoid[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[A].toEither match {
-          case Right(caseClass) =>
-            deriveMonoidEmpty[A](caseClass).flatMap { emptyExpr =>
-              MIO.scoped { runSafe =>
-                val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) =>
-                  runSafe {
-                    for {
-                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                      result <- deriveSemigroupCombine[A](caseClass, xExpr, yExpr)
-                    } yield result
-                  }
-
-                adapt(emptyExpr, doCombine)
-              }
+        MIO.scoped { runSafe =>
+          runSafe {
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              result <- deriveMonoidRecursively[A](using MonoidCtx.from(Some(Type[A].as_??)))
+            } yield {
+              val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) => runSafe(result.combine(xExpr, yExpr))
+              adapt(result.empty, doCombine)
             }
-          case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive Monoid for ${Type[A].prettyPrint}: $reason. " +
-                  "Monoid can only be derived for case classes."
-              )
-            )
+          }
         }
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
@@ -102,5 +138,19 @@ trait MonoidMacrosImpl extends SemigroupMacrosImpl { this: MacroCommons & StdExt
 
   protected object MonoidTypes {
     def Monoid: Type.Ctor1[cats.kernel.Monoid] = Type.Ctor1.of[cats.kernel.Monoid]
+  }
+}
+
+sealed private[compiletime] trait MonoidDerivationError
+    extends util.control.NoStackTrace
+    with Product
+    with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
+private[compiletime] object MonoidDerivationError {
+  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends MonoidDerivationError {
+    override def message: String =
+      s"The type $tpeName was not handled by any Monoid derivation rule:\n${reasons.mkString("\n")}"
   }
 }
