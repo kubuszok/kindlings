@@ -10,7 +10,7 @@ trait EmptyBuiltInRuleImpl {
 
   object EmptyBuiltInRule extends EmptyDerivationRule("built-in Empty for primitives") {
 
-    def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]] = {
+    def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Checking built-in Empty for ${Type[A].prettyPrint}") >> MIO {
         if (Type[A] <:< EmptyTypes.Boolean)
           Rule.matched(Expr(false).asInstanceOf[Expr[A]])
@@ -33,6 +33,5 @@ trait EmptyBuiltInRuleImpl {
         else
           Rule.yielded(s"${Type[A].prettyPrint} is not a built-in Empty type")
       }
-    }
   }
 }

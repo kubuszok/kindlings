@@ -35,9 +35,11 @@ trait EmptyEnumRuleImpl {
             case List(singleEmpty) =>
               MIO.pure(Rule.matched(singleEmpty))
             case Nil =>
-              MIO.pure(Rule.yielded(
-                s"${Type[A].prettyPrint}: no variant has an Empty instance"
-              ))
+              MIO.pure(
+                Rule.yielded(
+                  s"${Type[A].prettyPrint}: no variant has an Empty instance"
+                )
+              )
             case _ =>
               MIO.fail(EmptyDerivationError.MultipleEmptyVariants(Type[A].prettyPrint))
           }
