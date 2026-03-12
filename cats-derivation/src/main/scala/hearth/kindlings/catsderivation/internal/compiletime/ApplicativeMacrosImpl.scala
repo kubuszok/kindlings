@@ -12,9 +12,73 @@ import hearth.kindlings.catsderivation.LogDerivation
   * cross-quotes support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach
   * since both ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplicativeMacrosImpl { this: MacroCommons & StdExtensions =>
+trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
 
-  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  final case class ApplicativeCaseClassResult[F[_]](
+      FCtor: Type.Ctor1[F],
+      directFieldSet: Set[String],
+      caseClass: CaseClass[F[Any]]
+  )
+
+  abstract class ApplicativeDerivationRule(val name: String) extends Rule {
+    def apply[F[_]](implicit FCtor: Type.Ctor1[F]): MIO[Rule.Applicability[ApplicativeCaseClassResult[F]]]
+  }
+
+  def deriveApplicativeRecursively[F[_]](implicit FCtor: Type.Ctor1[F]): MIO[ApplicativeCaseClassResult[F]] = {
+    implicit val AnyType: Type[Any] = ApplicativeTypes.Any
+    val fName = FCtor.apply[Any].shortName
+    Log.namedScope(s"Deriving Applicative for $fName") {
+      Rules(ApplicativeCaseClassRule)(_[F]).flatMap {
+        case Right(result) =>
+          Log.info(s"Derived Applicative for $fName") >> MIO.pure(result)
+        case Left(reasons) =>
+          val reasonsStrings = reasons.toListMap.view.map { case (rule, rs) =>
+            if (rs.isEmpty) s"The rule ${rule.name} was not applicable"
+            else s" - ${rule.name}: ${rs.mkString(", ")}"
+          }.toList
+          val err = ApplicativeDerivationError.UnsupportedType(fName, reasonsStrings)
+          Log.error(err.message) >> MIO.fail(err)
+      }
+    }
+  }
+
+  protected def deriveApplicativeForCaseClass[F[_]](
+      result: ApplicativeCaseClassResult[F],
+      runSafe: hearth.fp.DirectStyle.RunSafe[hearth.fp.effect.MIO]
+  )(implicit FCtor: Type.Ctor1[F]): Expr[cats.Applicative[F]] = {
+    implicit val AnyType: Type[Any] = ApplicativeTypes.Any
+    implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+    val directFieldSet = result.directFieldSet
+    val caseClass = result.caseClass
+    val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
+      runSafe(deriveApplicativeApBody[F](caseClass, directFieldSet, ffExpr, faExpr))
+    Expr.quote {
+      new cats.Applicative[F] {
+        def pure[A](a: A): F[A] =
+          Expr.splice {
+            runSafe(deriveApplicativePureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(Type.of[A]))
+          }
+        override def map[A, B](fa: F[A])(f: A => B): F[B] =
+          Expr.splice {
+            runSafe {
+              deriveApplicativeMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
+                Type.of[A],
+                Type.of[B]
+              )
+            }
+          }
+        def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
+          val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+          val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+          val _ = anyFf
+          val _ = anyFa
+          Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
+        }
+      }
+    }
+  }
+
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   def deriveApplicative[F[_]](
       FCtor0: Type.Ctor1[F],
       ApplicativeFType: Type[cats.Applicative[F]]
@@ -27,89 +91,11 @@ trait ApplicativeMacrosImpl { this: MacroCommons & StdExtensions =>
     Log
       .namedScope(s"Deriving Applicative at: ${Environment.currentPosition.prettyPrint}") {
         MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = ApplicativeTypes.Int
-          implicit val StringType: Type[String] = ApplicativeTypes.String
-
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
-
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
-
-          val directFields = scala.collection.mutable.Set.empty[String]
-          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
-
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else if (tInt =:= tString) {
-              // Invariant
-            } else {
-              nestedFields += name
-            }
-          }
-
-          if (nestedFields.nonEmpty) {
-            throw new RuntimeException(
-              s"Cannot derive Applicative: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                "Only direct type parameter fields (A) and invariant fields are supported."
-            )
-          }
-
-          val directFieldSet: Set[String] = directFields.toSet
-
-          // Pre-load extensions before entering the quote
           runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          // ap still needs the erased approach: ff: F[A => B] and fa: F[A] both need F[Any] for field extraction
-          implicit val AnyType: Type[Any] = ApplicativeTypes.Any
-          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-
-          val caseClass = CaseClass.parse[F[Any]].toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Any]: $e")
-          }
-
-          val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
-            runSafe {
-              deriveApplicativeApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
-            }
-
-          Expr.quote {
-            new cats.Applicative[F] {
-              def pure[A](a: A): F[A] =
-                Expr.splice {
-                  runSafe {
-                    deriveApplicativePureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(Type.of[A])
-                  }
-                }
-              override def map[A, B](fa: F[A])(f: A => B): F[B] =
-                Expr.splice {
-                  runSafe {
-                    deriveApplicativeMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
-                      Type.of[A],
-                      Type.of[B]
-                    )
-                  }
-                }
-              def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
-                val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFf
-                val _ = anyFa
-                Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
-              }
-            }
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              result <- deriveApplicativeRecursively[F]
+            } yield deriveApplicativeForCaseClass(result, runSafe)(FCtor)
           }
         }
       }
@@ -266,5 +252,19 @@ trait ApplicativeMacrosImpl { this: MacroCommons & StdExtensions =>
       cd <- data.get("catsDerivation")
       shouldLog <- cd.get("logDerivation").flatMap(_.asBoolean)
     } yield shouldLog).getOrElse(false)
+  }
+}
+
+sealed private[compiletime] trait ApplicativeDerivationError
+    extends util.control.NoStackTrace
+    with Product
+    with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
+private[compiletime] object ApplicativeDerivationError {
+  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends ApplicativeDerivationError {
+    override def message: String =
+      s"The type constructor $tpeName was not handled by any Applicative derivation rule:\n${reasons.mkString("\n")}"
   }
 }

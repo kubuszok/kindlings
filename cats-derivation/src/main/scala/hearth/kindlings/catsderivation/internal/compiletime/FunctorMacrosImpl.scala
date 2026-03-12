@@ -11,9 +11,52 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FunctorMacrosImpl { this: MacroCommons & StdExtensions =>
+trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
 
-  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  final case class FunctorCaseClassResult[F[_]](FCtor: Type.Ctor1[F], directFieldSet: Set[String])
+
+  abstract class FunctorDerivationRule(val name: String) extends Rule {
+    def apply[F[_]](implicit FCtor: Type.Ctor1[F]): MIO[Rule.Applicability[FunctorCaseClassResult[F]]]
+  }
+
+  def deriveFunctorRecursively[F[_]](implicit FCtor: Type.Ctor1[F]): MIO[FunctorCaseClassResult[F]] = {
+    implicit val AnyType: Type[Any] = FunctorTypes.Any
+    val fName = FCtor.apply[Any].shortName
+    Log.namedScope(s"Deriving Functor for $fName") {
+      Rules(FunctorCaseClassRule)(_[F]).flatMap {
+        case Right(result) =>
+          Log.info(s"Derived Functor for $fName") >> MIO.pure(result)
+        case Left(reasons) =>
+          val reasonsStrings = reasons.toListMap.view.map { case (rule, rs) =>
+            if (rs.isEmpty) s"The rule ${rule.name} was not applicable"
+            else s" - ${rule.name}: ${rs.mkString(", ")}"
+          }.toList
+          val err = FunctorDerivationError.UnsupportedType(fName, reasonsStrings)
+          Log.error(err.message) >> MIO.fail(err)
+      }
+    }
+  }
+
+  protected def deriveFunctorForCaseClass[F[_]](
+      result: FunctorCaseClassResult[F],
+      runSafe: hearth.fp.DirectStyle.RunSafe[hearth.fp.effect.MIO]
+  )(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] =
+    Expr.quote {
+      new cats.Functor[F] {
+        def map[A, B](fa: F[A])(f: A => B): F[B] =
+          Expr.splice {
+            val body: MIO[Expr[F[B]]] = deriveFunctorMapBody[F, A, B](
+              result.FCtor,
+              result.directFieldSet,
+              Expr.quote(fa),
+              Expr.quote(f)
+            )(Type.of[A], Type.of[B])
+            runSafe(body)
+          }
+      }
+    }
+
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   def deriveFunctor[F[_]](FCtor0: Type.Ctor1[F], FunctorFType: Type[cats.Functor[F]]): Expr[cats.Functor[F]] = {
     val macroName = "Functor.derived"
 
@@ -23,62 +66,11 @@ trait FunctorMacrosImpl { this: MacroCommons & StdExtensions =>
     Log
       .namedScope(s"Deriving Functor at: ${Environment.currentPosition.prettyPrint}") {
         MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = FunctorTypes.Int
-          implicit val StringType: Type[String] = FunctorTypes.String
-
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
-
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
-
-          val directFields = scala.collection.mutable.Set.empty[String]
-          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
-
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else if (tInt =:= tString) {
-              // Invariant: same type regardless of type parameter
-            } else {
-              nestedFields += name
-            }
-          }
-
-          if (nestedFields.nonEmpty) {
-            throw new RuntimeException(
-              s"Cannot derive Functor: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                "Only direct type parameter fields (A) and invariant fields are supported."
-            )
-          }
-
-          val directFieldSet: Set[String] = directFields.toSet
-
-          // Pre-load extensions before entering the quote
           runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          Expr.quote {
-            new cats.Functor[F] {
-              def map[A, B](fa: F[A])(f: A => B): F[B] =
-                Expr.splice {
-                  runSafe {
-                    deriveFunctorMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
-                      Type.of[A],
-                      Type.of[B]
-                    )
-                  }
-                }
-            }
+            for {
+              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              result <- deriveFunctorRecursively[F]
+            } yield deriveFunctorForCaseClass(result, runSafe)(FCtor)
           }
         }
       }
@@ -150,5 +142,19 @@ trait FunctorMacrosImpl { this: MacroCommons & StdExtensions =>
       cd <- data.get("catsDerivation")
       shouldLog <- cd.get("logDerivation").flatMap(_.asBoolean)
     } yield shouldLog).getOrElse(false)
+  }
+}
+
+sealed private[compiletime] trait FunctorDerivationError
+    extends util.control.NoStackTrace
+    with Product
+    with Serializable {
+  def message: String
+  override def getMessage(): String = message
+}
+private[compiletime] object FunctorDerivationError {
+  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends FunctorDerivationError {
+    override def message: String =
+      s"The type constructor $tpeName was not handled by any Functor derivation rule:\n${reasons.mkString("\n")}"
   }
 }
