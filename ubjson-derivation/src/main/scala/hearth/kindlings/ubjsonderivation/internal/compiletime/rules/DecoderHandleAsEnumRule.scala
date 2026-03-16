@@ -7,14 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.ubjsonderivation.{
-  KindlingsUBJsonValueCodec,
-  UBJsonConfig,
-  UBJsonReader,
-  UBJsonValueCodec,
-  UBJsonWriter
-}
-import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
+import hearth.kindlings.ubjsonderivation.UBJsonReader
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 trait DecoderHandleAsEnumRuleImpl {
@@ -296,37 +289,6 @@ trait DecoderHandleAsEnumRuleImpl {
           }
       }
     }
-  }
-
-  // Types
-
-  private[compiletime] object CTypes {
-
-    def UBJsonValueCodec: Type.Ctor1[UBJsonValueCodec] = Type.Ctor1.of[UBJsonValueCodec]
-    def KindlingsUBJsonValueCodec: Type.Ctor1[KindlingsUBJsonValueCodec] =
-      Type.Ctor1.of[KindlingsUBJsonValueCodec]
-    val CodecLogDerivation: Type[hearth.kindlings.ubjsonderivation.KindlingsUBJsonValueCodec.LogDerivation] =
-      Type.of[hearth.kindlings.ubjsonderivation.KindlingsUBJsonValueCodec.LogDerivation]
-    val UBJsonConfig: Type[UBJsonConfig] = Type.of[UBJsonConfig]
-    val UBJsonReader: Type[UBJsonReader] = Type.of[UBJsonReader]
-    val UBJsonWriter: Type[UBJsonWriter] = Type.of[UBJsonWriter]
-    val String: Type[String] = Type.of[String]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Stringified: Type[stringified] = Type.of[stringified]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Float: Type[Float] = Type.of[Float]
-    val Short: Type[Short] = Type.of[Short]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
-    val BigInt: Type[BigInt] = Type.of[BigInt]
   }
 
 }

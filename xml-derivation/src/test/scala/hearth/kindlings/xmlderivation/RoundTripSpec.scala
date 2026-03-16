@@ -49,6 +49,21 @@ final class RoundTripSpec extends MacroSuite {
       assert(roundTrip(person, "person") == Right(person))
     }
 
+    // Note: XML decoder derivation for recursive types fails on Scala 2 with "not found: type $anonfun"
+    // (a Scala 2 macro reification limitation). Encoder-only test:
+    test("indirect recursive type encoder compiles") {
+      val encoder: XmlEncoder[RecursiveParent] = KindlingsXmlEncoder.derive[RecursiveParent]
+      val value = RecursiveParent(
+        "root",
+        List(
+          RecursiveNode("a", List(RecursiveNode("b", Nil))),
+          RecursiveNode("c", Nil)
+        )
+      )
+      val elem = encoder.encode(value, "parent")
+      assert(elem.label == "parent")
+    }
+
     test("custom field names with @xmlName") {
       implicit val encoder: XmlEncoder[XmlWithFieldName] = KindlingsXmlEncoder.derive[XmlWithFieldName]
       implicit val decoder: XmlDecoder[XmlWithFieldName] = KindlingsXmlDecoder.derive[XmlWithFieldName]

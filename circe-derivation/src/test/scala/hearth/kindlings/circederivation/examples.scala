@@ -115,6 +115,10 @@ sealed trait Parent extends GrandParent
 case class Child(value: Int) extends Parent
 case class Uncle(name: String) extends GrandParent
 
+// Indirect recursion test types
+case class RecursiveNode(id: String, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])
+
 // UTF-8 field name test types
 case class CirceWithUtf8FieldNames(
     @fieldName("名前") name: String,

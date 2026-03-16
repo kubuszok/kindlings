@@ -397,6 +397,20 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val decoded = readFromString[RecursiveTree](json)(codec)
         decoded ==> value
       }
+
+      test("indirect recursive type round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[RecursiveParent]
+        val value = RecursiveParent(
+          "root",
+          List(
+            RecursiveNode("a", List(RecursiveNode("b", Nil))),
+            RecursiveNode("c", Nil)
+          )
+        )
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[RecursiveParent](json)(codec)
+        decoded ==> value
+      }
     }
 
     group("auto-derivation") {

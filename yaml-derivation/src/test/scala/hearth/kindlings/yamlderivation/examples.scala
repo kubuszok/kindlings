@@ -84,3 +84,7 @@ case class YamlBicycle(gears: Int) extends YamlVehicle
 
 // Wrapper for List[Shape]
 case class ShapeCollection(shapes: List[Shape])
+
+// Indirect recursion test types
+case class RecursiveNode(id: String, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])

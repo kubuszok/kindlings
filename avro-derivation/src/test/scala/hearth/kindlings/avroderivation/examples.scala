@@ -185,6 +185,7 @@ case class ErasedBox[A](value: A)
 
 // Recursive type test types
 case class RecursiveNode(value: Int, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])
 case class LinkedNode(value: String, next: Option[LinkedNode])
 
 // Mixed sealed trait (case objects + case classes)

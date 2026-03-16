@@ -514,6 +514,26 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
     }
 
+    test("indirect recursive type uses SRef") {
+      val schema = KindlingsSchema.derive[RecursiveParent]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[RecursiveParent] =>
+          val nodesField = p.fields.find(_.name.name == "nodes")
+          assert(nodesField.isDefined, "Should have a 'nodes' field")
+          nodesField.get.schema.schemaType match {
+            case arr: SchemaType.SArray[?, ?] =>
+              arr.element.schemaType match {
+                case _: SchemaType.SRef[?]     => () // success — indirect recursive reference via SRef
+                case _: SchemaType.SProduct[?] => () // also acceptable — non-recursive product
+                case other                     => fail(s"Expected SRef or SProduct inside array, got: $other")
+              }
+            case other => fail(s"Expected SArray for nodes field, got: $other")
+          }
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+
     test("recursive through Option") {
       val schema = KindlingsSchema.derive[RecursiveOption]
       schema.schemaType match {

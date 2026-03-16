@@ -7,7 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.ubjsonderivation.UBJsonReader
+import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader}
 import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, transientField}
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
@@ -115,15 +115,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decodeFn =>
                   val decodeFnErased: Expr[UBJsonReader => Any] = Expr.quote { (r: UBJsonReader) =>
-                    Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
+                    Expr.splice(decodeFn(Expr.quote(r))).asInstanceOf[Any]
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    val typedExpr = Expr.quote {
-                      UBJsonDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(arrayIndex))),
-                        Expr.splice(decodeFn)
-                      )
-                    }
+                    val typedExpr = mkFieldAccessExpr[Field](arrExpr, arrayIndex)
                     (fName, typedExpr.as_??)
                   }
                   (fName, arrayIndex, decodeFnErased, makeAccessor, nameOverride)
@@ -418,15 +413,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decodeFn =>
                   val decodeFnErased: Expr[UBJsonReader => Any] = Expr.quote { (r: UBJsonReader) =>
-                    Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
+                    Expr.splice(decodeFn(Expr.quote(r))).asInstanceOf[Any]
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    val typedExpr = Expr.quote {
-                      UBJsonDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(arrayIndex))),
-                        Expr.splice(decodeFn)
-                      )
-                    }
+                    val typedExpr = mkFieldAccessExpr[Field](arrExpr, arrayIndex)
                     (fName, typedExpr.as_??)
                   }
                   (fName, arrayIndex, decodeFnErased, makeAccessor, nameOverride)
@@ -490,30 +480,55 @@ trait DecoderHandleAsCaseClassRuleImpl {
     }
   }
 
+  /** Helper method to create a typed field access expression from an Array[Any]. Extracted to avoid path-dependent type
+    * issues on Scala 2 when `Field` comes from `import param.tpe.Underlying as Field` inside `Expr.quote`.
+    */
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[UBJsonReader => Field]] = {
-    implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
+  private def mkFieldAccessExpr[F: Type](arrExpr: Expr[Array[Any]], index: Int): Expr[F] = {
+    implicit val AnyT: Type[Any] = CTypes.Any
+    implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
+    Expr.quote {
+      Expr.splice(arrExpr)(Expr.splice(Expr(index))).asInstanceOf[F]
+    }
+  }
 
-    CTypes
-      .UBJsonValueCodec[Field]
-      .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-      .toEither match {
-      case Right(codecExpr) =>
-        Log.info(s"Found implicit UBJsonValueCodec[${Type[Field].prettyPrint}]") >> MIO.pure(
-          Expr.quote { (r: UBJsonReader) =>
-            Expr.splice(codecExpr).decode(r)
-          }
-        )
-      case Left(_) =>
-        Log.info(s"Building decoder for ${Type[Field].prettyPrint} via recursive derivation") >>
-          LambdaBuilder
-            .of1[UBJsonReader]("fieldReader")
-            .traverse { fieldReaderExpr =>
-              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldReaderExpr))
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+  private def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[UBJsonReader] => Expr[Field]] = {
+    implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
+    implicit val ConfigT: Type[UBJsonConfig] = CTypes.UBJsonConfig
+
+    // 1. Check if already cached via setHelper (case class/enum rules)
+    ctx.getHelper[Field].flatMap {
+      case Some(helperCall) =>
+        Log.info(s"Found cached decoder helper for field ${Type[Field].prettyPrint}") >>
+          MIO.pure((reader: Expr[UBJsonReader]) => helperCall(reader, ctx.config))
+      case None =>
+        // 2. Check if cached via previous deriveFieldDecoder call
+        ctx.cache.get2Ary[UBJsonReader, UBJsonConfig, Field]("field-decode-method").flatMap {
+          case Some(helperCall) =>
+            Log.info(s"Found field decode cache for ${Type[Field].prettyPrint}") >>
+              MIO.pure((reader: Expr[UBJsonReader]) => helperCall(reader, ctx.config))
+          case None =>
+            // 3. Forward-declare, derive body via traverse, then build
+            val defBuilder = ValDefBuilder.ofDef2[UBJsonReader, UBJsonConfig, Field](
+              s"decode_field_${Type[Field].shortName}"
+            )
+            for {
+              _ <- Log.info(s"Building decoder for ${Type[Field].prettyPrint} via cached def")
+              _ <- ctx.cache.forwardDeclare("field-decode-method", defBuilder)
+              builtBuilder <- defBuilder.traverse { case (_, (reader, config)) =>
+                val nestedCtx =
+                  DecoderCtx.from[Field](reader, config, ctx.cache, ctx.derivedType)
+                deriveDecoderRecursively[Field](using nestedCtx)
+              }
+              currentCache <- ctx.cache.get
+              _ <- ctx.cache.set(builtBuilder.buildCached(currentCache, "field-decode-method"))
+              fn <- ctx.cache.get2Ary[UBJsonReader, UBJsonConfig, Field]("field-decode-method")
+            } yield {
+              val helperCall = fn.get
+              (reader: Expr[UBJsonReader]) => helperCall(reader, ctx.config)
             }
-            .map { builder =>
-              builder.build[Field]
-            }
+        }
     }
   }
 

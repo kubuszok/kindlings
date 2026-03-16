@@ -321,7 +321,7 @@ enumm
 - Use `ctx.nest(newExpr)` to create context for nested type
 - Use `ctx.incrementLevel` when nesting increases indentation
 - Wrap in `Log.namedScope(...)` for hierarchical logging
-- Use `.parTraverse` for parallel derivation of independent items
+- Use `.parTraverse` for parallel derivation of independent items (requires Hearth 0.2.0-268+ for correct cache threading — see [parTraverse pitfall](#partraverse-and-valdefscache-state-threading-fixed-in-hearth-020-268))
 
 ### Ignoring implicits to prevent self-summoning
 
@@ -1361,6 +1361,14 @@ val composed: Expr[Field] = mkComposeExpr[Field](fieldExpr, fExpr)
 The helper method makes `Field` a regular type parameter resolved by cross-quotes via the `implicit Type[Field]`, producing an expression tree with the correct type annotation.
 
 **Reference:** `ContravariantMacrosImpl.scala` — `mkComposeExpr` helper method.
+
+### `parTraverse` and `ValDefsCache` state threading (fixed in Hearth 0.2.0-268+)
+
+Prior to Hearth 0.2.0-268, `parTraverse` did not thread `ValDefsCache` state between branches — each field derivation forked from the same cache snapshot, causing shared types to be re-derived exponentially (100% CPU hangs on large recursive type graphs).
+
+**Fixed in Hearth 0.2.0-268** via `MLocal.unsafeSharedParallel`: branch B now sees branch A's cache writes, and `forwardDeclare` is idempotent (skips already-built entries). All modules can safely use `parTraverse` for field derivation.
+
+If you encounter this issue on an older Hearth version, the workaround is to use `.traverse` (sequential) instead of `.parTraverse`.
 
 ## Polymorphic (HKT) type class derivation
 

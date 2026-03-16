@@ -14,9 +14,4 @@ private[ubjsonderivation] object CodecMacros {
       config: Expr[UBJsonConfig]
   )(using q: Quotes): Expr[UBJsonValueCodec[A]] =
     new CodecMacros(q).deriveCodecTypeClass[A](config)
-
-  def deriveKindlingsCodecImpl[A: Type](
-      config: Expr[UBJsonConfig]
-  )(using q: Quotes): Expr[KindlingsUBJsonValueCodec[A]] =
-    new CodecMacros(q).deriveCodecTypeClass[A](config)
 }

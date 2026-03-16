@@ -4,7 +4,7 @@ import eu.timepit.refined.refineV
 import eu.timepit.refined.collection.NonEmpty
 import eu.timepit.refined.numeric.Positive
 import hearth.MacroSuite
-import hearth.kindlings.ubjsonderivation.KindlingsUBJsonValueCodec
+import hearth.kindlings.ubjsonderivation.UBJsonValueCodec
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 final class RefinedUBJsonSpec extends MacroSuite {
@@ -20,7 +20,7 @@ final class RefinedUBJsonSpec extends MacroSuite {
     group("encoding") {
 
       test("case class with refined fields encodes correctly") {
-        val codec = KindlingsUBJsonValueCodec.derive[RefinedPerson]
+        val codec = UBJsonValueCodec.derived[RefinedPerson]
         val person = RefinedPerson(alice, thirty)
         val bytes = UBJsonDerivationUtils.writeToBytes(person)(codec)
         assert(bytes.nonEmpty)
@@ -34,7 +34,7 @@ final class RefinedUBJsonSpec extends MacroSuite {
     group("decoding valid") {
 
       test("case class with refined fields decodes via round-trip") {
-        val codec = KindlingsUBJsonValueCodec.derive[RefinedPerson]
+        val codec = UBJsonValueCodec.derived[RefinedPerson]
         val person = RefinedPerson(alice, thirty)
         val bytes = UBJsonDerivationUtils.writeToBytes(person)(codec)
         val result = UBJsonDerivationUtils.readFromBytes[RefinedPerson](bytes)(codec)
@@ -46,9 +46,9 @@ final class RefinedUBJsonSpec extends MacroSuite {
     group("decoding invalid") {
 
       test("refined positive rejects negative with error") {
-        val validCodec = KindlingsUBJsonValueCodec.derive[RefinedPerson]
+        val validCodec = UBJsonValueCodec.derived[RefinedPerson]
         // Encode a plain case class with invalid refined values by using a surrogate type
-        val plainCodec = KindlingsUBJsonValueCodec.derive[PlainPerson]
+        val plainCodec = UBJsonValueCodec.derived[PlainPerson]
         val bytes = UBJsonDerivationUtils.writeToBytes(PlainPerson("Alice", -1))(plainCodec)
         intercept[hearth.kindlings.ubjsonderivation.UBJsonReaderException] {
           UBJsonDerivationUtils.readFromBytes[RefinedPerson](bytes)(validCodec)
@@ -56,8 +56,8 @@ final class RefinedUBJsonSpec extends MacroSuite {
       }
 
       test("refined non-empty rejects empty string with error") {
-        val validCodec = KindlingsUBJsonValueCodec.derive[RefinedPerson]
-        val plainCodec = KindlingsUBJsonValueCodec.derive[PlainPerson]
+        val validCodec = UBJsonValueCodec.derived[RefinedPerson]
+        val plainCodec = UBJsonValueCodec.derived[PlainPerson]
         val bytes = UBJsonDerivationUtils.writeToBytes(PlainPerson("", 30))(plainCodec)
         intercept[hearth.kindlings.ubjsonderivation.UBJsonReaderException] {
           UBJsonDerivationUtils.readFromBytes[RefinedPerson](bytes)(validCodec)
@@ -69,7 +69,7 @@ final class RefinedUBJsonSpec extends MacroSuite {
 
       test("encode then decode preserves value") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[RefinedPerson] =
-          KindlingsUBJsonValueCodec.derive[RefinedPerson]
+          UBJsonValueCodec.derived[RefinedPerson]
         val person = RefinedPerson(alice, thirty)
         val decoded = roundTrip(person)
         assertEquals(decoded.name.value, "Alice")

@@ -5,7 +5,7 @@ import io.github.iltotore.iron.constraint.any.*
 import io.github.iltotore.iron.constraint.numeric.*
 import io.github.iltotore.iron.constraint.string.*
 import hearth.MacroSuite
-import hearth.kindlings.ubjsonderivation.KindlingsUBJsonValueCodec
+import hearth.kindlings.ubjsonderivation.UBJsonValueCodec
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 final class IronUBJsonSpec extends MacroSuite {
@@ -18,7 +18,7 @@ final class IronUBJsonSpec extends MacroSuite {
     group("encoding") {
 
       test("case class with iron fields encodes correctly") {
-        val codec = KindlingsUBJsonValueCodec.derive[IronPerson]
+        val codec = UBJsonValueCodec.derived[IronPerson]
         val person = IronPerson("Alice", 30)
         val bytes = UBJsonDerivationUtils.writeToBytes(person)(codec)
         assert(bytes.nonEmpty)
@@ -31,7 +31,7 @@ final class IronUBJsonSpec extends MacroSuite {
     group("decoding valid") {
 
       test("case class with iron fields decodes via round-trip") {
-        val codec = KindlingsUBJsonValueCodec.derive[IronPerson]
+        val codec = UBJsonValueCodec.derived[IronPerson]
         val person = IronPerson("Alice", 30)
         val bytes = UBJsonDerivationUtils.writeToBytes(person)(codec)
         val result = UBJsonDerivationUtils.readFromBytes[IronPerson](bytes)(codec)
@@ -43,8 +43,8 @@ final class IronUBJsonSpec extends MacroSuite {
     group("decoding invalid") {
 
       test("iron positive rejects negative with error") {
-        val validCodec = KindlingsUBJsonValueCodec.derive[IronPerson]
-        val plainCodec = KindlingsUBJsonValueCodec.derive[PlainPerson]
+        val validCodec = UBJsonValueCodec.derived[IronPerson]
+        val plainCodec = UBJsonValueCodec.derived[PlainPerson]
         val bytes = UBJsonDerivationUtils.writeToBytes(PlainPerson("Alice", -1))(plainCodec)
         intercept[hearth.kindlings.ubjsonderivation.UBJsonReaderException] {
           UBJsonDerivationUtils.readFromBytes[IronPerson](bytes)(validCodec)
@@ -56,7 +56,7 @@ final class IronUBJsonSpec extends MacroSuite {
 
       test("encode then decode preserves value") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[IronPerson] =
-          KindlingsUBJsonValueCodec.derive[IronPerson]
+          UBJsonValueCodec.derived[IronPerson]
         val person = IronPerson("Alice", 30)
         val decoded = roundTrip(person)
         assertEquals(decoded.name: String, "Alice")

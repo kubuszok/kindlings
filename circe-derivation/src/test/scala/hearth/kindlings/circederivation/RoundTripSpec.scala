@@ -305,6 +305,18 @@ final class RoundTripSpec extends MacroSuite {
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[RecursiveTree](json) ==> Right(value)
       }
+
+      test("indirect recursive type round-trip") {
+        val value = RecursiveParent(
+          "root",
+          List(
+            RecursiveNode("a", List(RecursiveNode("b", Nil))),
+            RecursiveNode("c", Nil)
+          )
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[RecursiveParent](json) ==> Right(value)
+      }
     }
   }
 }

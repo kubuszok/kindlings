@@ -11,9 +11,5 @@ final private[ubjsonderivation] class CodecMacros(val c: blackbox.Context)
 
   def deriveCodecImpl[A: c.WeakTypeTag](
       config: c.Expr[UBJsonConfig]
-  ): c.Expr[UBJsonValueCodec[A]] = deriveCodecTypeClass[A](config).asInstanceOf[c.Expr[UBJsonValueCodec[A]]]
-
-  def deriveKindlingsCodecImpl[A: c.WeakTypeTag](
-      config: c.Expr[UBJsonConfig]
-  ): c.Expr[KindlingsUBJsonValueCodec[A]] = deriveCodecTypeClass[A](config)
+  ): c.Expr[UBJsonValueCodec[A]] = deriveCodecTypeClass[A](config)
 }

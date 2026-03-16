@@ -233,6 +233,22 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("recursive types") {
+
+      test("indirect recursive type round-trip") {
+        val value = RecursiveParent(
+          "root",
+          List(
+            RecursiveNode("a", List(RecursiveNode("b", Nil))),
+            RecursiveNode("c", Nil)
+          )
+        )
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[RecursiveParent](node)
+        decoded ==> Right(value)
+      }
+    }
+
     // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
     // in yaml encoder macro — see KindlingsYamlEncoderSpec.
   }

@@ -418,6 +418,21 @@ final class AvroRoundTripSpec extends MacroSuite {
         decoded ==> original
       }
 
+      test("indirect recursive type (RecursiveParent) binary round-trip") {
+        val encoder: AvroEncoder[RecursiveParent] = AvroEncoder.derive[RecursiveParent]
+        val decoder: AvroDecoder[RecursiveParent] = AvroDecoder.derive[RecursiveParent]
+        val original = RecursiveParent(
+          "root",
+          List(
+            RecursiveNode(1, List(RecursiveNode(2, List()))),
+            RecursiveNode(3, List())
+          )
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[RecursiveParent](bytes)(decoder)
+        decoded ==> original
+      }
+
       test("mixed sealed trait (case objects + case classes) round-trip") {
         val encoder: AvroEncoder[MixedEvent] = AvroEncoder.derive[MixedEvent]
         val decoder: AvroDecoder[MixedEvent] = AvroDecoder.derive[MixedEvent]

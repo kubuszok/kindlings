@@ -103,3 +103,72 @@ case class ShortBoundaries(min: Short, max: Short)
 
 // Unicode content
 case class UnicodeContent(value: String)
+
+// Indirect recursion test types
+case class RecursiveNode(id: String, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])
+
+// Recursive types: isolating Option vs plain field
+case class Recursive3Plain(id: String, extra: String, children: List[Recursive3Plain] = Nil)
+case class Recursive3Option(id: String, extra: Option[String] = None, children: List[Recursive3Option] = Nil)
+
+// Large recursive type graph (reproduces G3dModelJson scenario)
+case class LargeRecKeyframeV1(
+    keytime: Float = 0f,
+    translation: Option[List[Float]] = None,
+    rotation: Option[List[Float]] = None,
+    scale: Option[List[Float]] = None
+)
+case class LargeRecKeyframeV2(keytime: Float = 0f, value: List[Float])
+case class LargeRecAnimBone(
+    boneId: String,
+    keyframes: Option[List[LargeRecKeyframeV1]] = None,
+    translation: Option[List[LargeRecKeyframeV2]] = None,
+    rotation: Option[List[LargeRecKeyframeV2]] = None,
+    scaling: Option[List[LargeRecKeyframeV2]] = None
+)
+case class LargeRecAnimation(id: String = "", bones: List[LargeRecAnimBone] = Nil)
+case class LargeRecMeshPart(id: String, tpe: String, indices: List[Short])
+case class LargeRecMesh(id: String = "", attributes: List[String], vertices: List[Float], parts: List[LargeRecMeshPart])
+case class LargeRecTexture(
+    id: String,
+    filename: String,
+    uvTranslation: Option[List[Float]] = None,
+    uvScaling: Option[List[Float]] = None,
+    tpe: String
+)
+case class LargeRecMaterial(
+    id: String,
+    diffuse: Option[List[Float]] = None,
+    ambient: Option[List[Float]] = None,
+    emissive: Option[List[Float]] = None,
+    specular: Option[List[Float]] = None,
+    reflection: Option[List[Float]] = None,
+    shininess: Float = 0f,
+    opacity: Float = 1f,
+    textures: List[LargeRecTexture] = Nil
+)
+case class LargeRecBone(
+    node: String,
+    translation: Option[List[Float]] = None,
+    rotation: Option[List[Float]] = None,
+    scale: Option[List[Float]] = None
+)
+case class LargeRecNodePart(meshpartid: String, materialid: String, bones: List[LargeRecBone] = Nil)
+case class LargeRecNode(
+    id: String,
+    translation: Option[List[Float]] = None,
+    rotation: Option[List[Float]] = None,
+    scale: Option[List[Float]] = None,
+    mesh: Option[String] = None,
+    parts: List[LargeRecNodePart] = Nil,
+    children: List[LargeRecNode] = Nil
+)
+case class LargeRecModel(
+    version: List[Short],
+    id: String = "",
+    meshes: List[LargeRecMesh] = Nil,
+    materials: List[LargeRecMaterial] = Nil,
+    nodes: List[LargeRecNode] = Nil,
+    animations: List[LargeRecAnimation] = Nil
+)
