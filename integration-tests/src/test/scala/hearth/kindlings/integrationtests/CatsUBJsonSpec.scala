@@ -2,7 +2,7 @@ package hearth.kindlings.integrationtests
 
 import cats.data.{Chain, Const, NonEmptyChain, NonEmptyList, NonEmptyMap, NonEmptySet, NonEmptyVector}
 import hearth.MacroSuite
-import hearth.kindlings.ubjsonderivation.KindlingsUBJsonValueCodec
+import hearth.kindlings.ubjsonderivation.UBJsonValueCodec
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 final class CatsUBJsonSpec extends MacroSuite {
@@ -16,7 +16,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithNEL] =
-          KindlingsUBJsonValueCodec.derive[WithNEL]
+          UBJsonValueCodec.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val decoded = roundTrip(v)
         decoded.values ==> NonEmptyList.of(1, 2, 3)
@@ -27,7 +27,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithNEV] =
-          KindlingsUBJsonValueCodec.derive[WithNEV]
+          UBJsonValueCodec.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val decoded = roundTrip(v)
         decoded.values ==> NonEmptyVector.of(10, 20)
@@ -38,7 +38,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithNEC] =
-          KindlingsUBJsonValueCodec.derive[WithNEC]
+          UBJsonValueCodec.derived[WithNEC]
         val v = WithNEC(NonEmptyChain.of(7, 8))
         val decoded = roundTrip(v)
         assert(decoded.values.toList == List(7, 8))
@@ -49,7 +49,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithChain] =
-          KindlingsUBJsonValueCodec.derive[WithChain]
+          UBJsonValueCodec.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val decoded = roundTrip(v)
         assert(decoded.values.toList == List(1, 2, 3))
@@ -57,7 +57,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip empty") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithChain] =
-          KindlingsUBJsonValueCodec.derive[WithChain]
+          UBJsonValueCodec.derived[WithChain]
         val v = WithChain(Chain.empty)
         val decoded = roundTrip(v)
         assert(decoded.values.toList == List.empty)
@@ -68,7 +68,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithNEM] =
-          KindlingsUBJsonValueCodec.derive[WithNEM]
+          UBJsonValueCodec.derived[WithNEM]
         val v = WithNEM(NonEmptyMap.of("x" -> 1, "y" -> 2))
         val decoded = roundTrip(v)
         assert(decoded.values.toSortedMap.size == 2)
@@ -79,7 +79,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithNES] =
-          KindlingsUBJsonValueCodec.derive[WithNES]
+          UBJsonValueCodec.derived[WithNES]
         val v = WithNES(NonEmptySet.of(3, 1, 2))
         val decoded = roundTrip(v)
         assert(decoded.values.toSortedSet == Set(1, 2, 3))
@@ -90,7 +90,7 @@ final class CatsUBJsonSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val codec: hearth.kindlings.ubjsonderivation.UBJsonValueCodec[WithConst] =
-          KindlingsUBJsonValueCodec.derive[WithConst]
+          UBJsonValueCodec.derived[WithConst]
         val v = WithConst(Const("hello"))
         val decoded = roundTrip(v)
         decoded.value.getConst ==> "hello"

@@ -70,6 +70,7 @@ Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-com
 - **`primaryConstructor` strict type checking** — `primaryConstructor(Map[String, Expr_??])` checks `Underlying <:< paramType`; can't pass `Expr[Any]` for non-`Any` fields; use helper method pattern to preserve field type through transformations
 - **HKT type constructor summoning across compilation boundary** — summoning `ConsK[G]` where `G` is a field's type constructor (e.g., `List` from `List[A]`) requires platform-specific APIs to extract the constructor and build the type; use an abstract bridge method implemented in Scala 2/3 bridges (see `ConsKMacrosImpl.scala`)
 - **Erased approach for polymorphic type classes** — Scala 2 macros can't handle free type variables in generated trees; work with `F[Any]` and `Any => Any`, cast with `asInstanceOf` at boundaries; safe due to JVM type erasure (see `FunctorMacrosImpl.scala`)
+- **`parTraverse` and `ValDefsCache` (fixed in Hearth 0.2.0-268+)** — prior versions forked cache state per branch, causing exponential re-derivation and 100% CPU hangs on large type graphs; fixed by `MLocal.unsafeSharedParallel` which threads cache writes between branches
 
 Hearth source is at `../hearth/` when documentation is insufficient.
 See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.

@@ -124,6 +124,10 @@ case class UnicodeContent(value: String)
 case class NestedLists(matrix: List[List[Int]])
 case class OptionalList(items: Option[List[Int]])
 
+// Indirect recursion test types
+case class RecursiveNode(id: String, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])
+
 // Value class edge cases
 case class WrappedString(value: String) extends AnyVal
 case class WithOptionalWrapped(item: Option[WrappedInt])
