@@ -2,15 +2,11 @@ package hearth.kindlings.ubjsonderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.ubjsonderivation.{
-  KindlingsUBJsonValueCodec,
-  UBJsonConfig,
-  UBJsonReader,
-  UBJsonValueCodec,
-  UBJsonWriter
-}
+import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader, UBJsonValueCodec, UBJsonWriter}
+import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 
 trait CodecMacrosImpl
     extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
@@ -38,18 +34,17 @@ trait CodecMacrosImpl
 
   /** Derive a combined UBJsonValueCodec for type A. */
   @scala.annotation.nowarn("msg=is never used")
-  def deriveCodecTypeClass[A: Type](configExpr: Expr[UBJsonConfig]): Expr[KindlingsUBJsonValueCodec[A]] = {
+  def deriveCodecTypeClass[A: Type](configExpr: Expr[UBJsonConfig]): Expr[UBJsonValueCodec[A]] = {
     implicit val CodecA: Type[UBJsonValueCodec[A]] = CTypes.UBJsonValueCodec[A]
-    implicit val KindlingsCodecA: Type[KindlingsUBJsonValueCodec[A]] = CTypes.KindlingsUBJsonValueCodec[A]
     implicit val ConfigT: Type[UBJsonConfig] = CTypes.UBJsonConfig
     implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
     implicit val UBJsonWriterT: Type[UBJsonWriter] = CTypes.UBJsonWriter
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
-    deriveCodecFromCtxAndAdaptForEntrypoint[A, KindlingsUBJsonValueCodec[A]]("KindlingsUBJsonValueCodec.derived") {
+    deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]]("UBJsonValueCodec.derived") {
       case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
-          new KindlingsUBJsonValueCodec[A] {
+          new UBJsonValueCodec[A] {
             def nullValue: A = Expr.splice(nullValueExpr)
             def decode(reader: UBJsonReader): A =
               Expr.splice(decodeFn(Expr.quote(reader), configExpr))
@@ -95,11 +90,11 @@ trait CodecMacrosImpl
             for {
               _ <- Log.info(s"Forward-declaring codec encode body for ${Type[A].prettyPrint}")
               _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
-                })
+              builtEnc <- defBuilder.traverse { case (_, (v, w, c)) =>
+                deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType))
               }
+              encCache <- cache.get
+              _ <- cache.set(builtEnc.buildCached(encCache, "codec-encode-body"))
               _ <- Log.info(s"Defined codec encode body for ${Type[A].prettyPrint}")
               fn <- cache.get3Ary[A, UBJsonWriter, UBJsonConfig, Unit]("codec-encode-body")
             } yield fn.get
@@ -112,11 +107,11 @@ trait CodecMacrosImpl
             for {
               _ <- Log.info(s"Forward-declaring codec decode body for ${Type[A].prettyPrint}")
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
-                })
+              builtDec <- defBuilder.traverse { case (_, (r, c)) =>
+                deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType))
               }
+              decCache <- cache.get
+              _ <- cache.set(builtDec.buildCached(decCache, "codec-decode-body"))
               _ <- Log.info(s"Defined codec decode body for ${Type[A].prettyPrint}")
               fn <- cache.get2Ary[UBJsonReader, UBJsonConfig, A]("codec-decode-body")
             } yield fn.get
@@ -155,7 +150,7 @@ trait CodecMacrosImpl
           }
           .mkString("\n")
         val hint =
-          "Enable debug logging with: import hearth.kindlings.ubjsonderivation.debug.logDerivationForKindlingsUBJsonValueCodec or scalac option -Xmacro-settings:ubjsonDerivation.logDerivation=true"
+          "Enable debug logging with: import hearth.kindlings.ubjsonderivation.debug.logDerivationForUBJsonValueCodec or scalac option -Xmacro-settings:ubjsonDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)
           s"""Macro derivation failed with the following errors:
              |$errorsRendered
@@ -170,8 +165,8 @@ trait CodecMacrosImpl
   }
 
   def shouldWeLogCodecDerivation: Boolean = {
-    implicit val LogDerivation: Type[KindlingsUBJsonValueCodec.LogDerivation] = CTypes.CodecLogDerivation
-    def logDerivationImported = Expr.summonImplicit[KindlingsUBJsonValueCodec.LogDerivation].isDefined
+    implicit val LogDerivation: Type[UBJsonValueCodec.LogDerivation] = CTypes.CodecLogDerivation
+    def logDerivationImported = Expr.summonImplicit[UBJsonValueCodec.LogDerivation].isDefined
 
     def logDerivationSetGlobally = (for {
       data <- Environment.typedSettings.toOption
@@ -254,11 +249,11 @@ trait CodecMacrosImpl
       for {
         _ <- Log.info(s"Forward-declaring encode helper for ${Type[B].prettyPrint}")
         _ <- cache.forwardDeclare("cached-encode-method", defBuilder)
-        _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-encode-method", defBuilder) { case (_, (value, writer, config)) =>
-            runSafe(helper(value, writer, config))
-          })
+        builtBuilder <- defBuilder.traverse { case (_, (value, writer, config)) =>
+          helper(value, writer, config)
         }
+        currentCache <- cache.get
+        _ <- cache.set(builtBuilder.buildCached(currentCache, "cached-encode-method"))
         _ <- Log.info(s"Defined encode helper for ${Type[B].prettyPrint}")
       } yield ()
     }
@@ -378,11 +373,11 @@ trait CodecMacrosImpl
       for {
         _ <- Log.info(s"Forward-declaring decode helper for ${Type[B].prettyPrint}")
         _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
-        _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (reader, config)) =>
-            runSafe(helper(reader, config))
-          })
+        builtBuilder <- defBuilder.traverse { case (_, (reader, config)) =>
+          helper(reader, config)
         }
+        currentCache <- cache.get
+        _ <- cache.set(builtBuilder.buildCached(currentCache, "cached-decode-method"))
         _ <- Log.info(s"Defined decode helper for ${Type[B].prettyPrint}")
       } yield ()
     }
@@ -448,4 +443,33 @@ trait CodecMacrosImpl
             Log.error(err.message) >> MIO.fail(err)
         }
       }
+
+  // Types
+
+  private[compiletime] object CTypes {
+
+    def UBJsonValueCodec: Type.Ctor1[UBJsonValueCodec] = Type.Ctor1.of[UBJsonValueCodec]
+    val CodecLogDerivation: Type[hearth.kindlings.ubjsonderivation.UBJsonValueCodec.LogDerivation] =
+      Type.of[hearth.kindlings.ubjsonderivation.UBJsonValueCodec.LogDerivation]
+    val UBJsonConfig: Type[UBJsonConfig] = Type.of[UBJsonConfig]
+    val UBJsonReader: Type[UBJsonReader] = Type.of[UBJsonReader]
+    val UBJsonWriter: Type[UBJsonWriter] = Type.of[UBJsonWriter]
+    val String: Type[String] = Type.of[String]
+    val Unit: Type[Unit] = Type.of[Unit]
+    val Any: Type[Any] = Type.of[Any]
+    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
+    val ListString: Type[List[String]] = Type.of[List[String]]
+    val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
+    val TransientField: Type[transientField] = Type.of[transientField]
+    val Stringified: Type[stringified] = Type.of[stringified]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Double: Type[Double] = Type.of[Double]
+    val Float: Type[Float] = Type.of[Float]
+    val Short: Type[Short] = Type.of[Short]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
+    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
+    val BigInt: Type[BigInt] = Type.of[BigInt]
+  }
 }

@@ -15,11 +15,14 @@ trait EncoderUseCachedDefWhenAvailableRuleImpl {
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to use cached encoder for ${Type[A].prettyPrint}") >>
         ectx.getInstance[A].flatMap {
-          case Some(instance) => callCachedInstance[A](instance)
-          case None           =>
+          case Some(instance) =>
+            callCachedInstance[A](instance)
+          case None =>
             ectx.getHelper[A].flatMap {
-              case Some(helperCall) => callCachedHelper[A](helperCall)
-              case None             => yieldUnsupported[A]
+              case Some(helperCall) =>
+                callCachedHelper[A](helperCall)
+              case None =>
+                yieldUnsupported[A]
             }
         }
 

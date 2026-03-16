@@ -12,3 +12,13 @@ trait UBJsonValueCodec[A] {
   /** The null/default value for type A. */
   def nullValue: A
 }
+object UBJsonValueCodec extends UBJsonValueCodecCompanionCompat {
+
+  /** Special type - if its implicit is in scope then macros will log the derivation process.
+    *
+    * @see
+    *   [[hearth.kindlings.ubjsonderivation.debug.logDerivationForUBJsonValueCodec]] for details
+    */
+  sealed trait LogDerivation
+  object LogDerivation extends LogDerivation
+}

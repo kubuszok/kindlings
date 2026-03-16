@@ -61,6 +61,10 @@ case class WithJsoniterTransientField(
     @hearth.kindlings.jsoniterderivation.annotations.transientField hidden: String = ""
 )
 
+// Indirect recursion test types
+case class RecursiveNode(id: String, children: List[RecursiveNode])
+case class RecursiveParent(name: String, nodes: List[RecursiveNode])
+
 // Recursive through Option
 case class RecursiveOption(value: String, child: Option[RecursiveOption])
 
