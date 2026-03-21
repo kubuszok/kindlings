@@ -5,7 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec
+import hearth.kindlings.jsoniterderivation.{KindlingsJsonCodec, KindlingsJsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 
 trait DecoderUseImplicitWhenAvailableRuleImpl {
@@ -13,12 +13,12 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsJsonValueCodec.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsJsonValueCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to use implicit JsonValueCodec for ${Type[A].prettyPrint}") >> {

@@ -295,10 +295,32 @@ trait DecoderMacrosImpl
   // The actual derivation logic
 
   def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[A]] =
+    dctx.getHelper[A].flatMap {
+      case Some(helperCall) =>
+        Log.info(s"Found cached decoder helper for ${Type[A].prettyPrint}") >>
+          MIO.pure(helperCall(dctx.avroValue, dctx.config))
+      case None =>
+        dctx.getInstance[A].flatMap {
+          case Some(instance) =>
+            Log.info(s"Found cached decoder instance for ${Type[A].prettyPrint}") >>
+              MIO.pure(Expr.quote {
+                Expr.splice(instance).decode(Expr.splice(dctx.avroValue))
+              })
+          case None =>
+            dctx.setHelper[A] { (value, config) =>
+              deriveDecoderRecursivelyViaRules[A](using dctx.nestInCache(value, config))
+            } >> dctx.getHelper[A].flatMap {
+              case Some(helperCall) => MIO.pure(helperCall(dctx.avroValue, dctx.config))
+              case None             =>
+                MIO.fail(new Exception(s"Failed to build decoder helper for ${Type[A].prettyPrint}"))
+            }
+        }
+    }
+
+  private def deriveDecoderRecursivelyViaRules[A: DecoderCtx]: MIO[Expr[A]] =
     Log
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
-          AvroDecoderUseCachedDefWhenAvailableRule,
           AvroDecoderHandleAsLiteralTypeRule,
           AvroDecoderUseImplicitWhenAvailableRule,
           AvroDecoderUseBuiltInSupportRule,
@@ -317,14 +339,12 @@ trait DecoderMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(AvroDecoderUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(AvroDecoderUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = DecoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }

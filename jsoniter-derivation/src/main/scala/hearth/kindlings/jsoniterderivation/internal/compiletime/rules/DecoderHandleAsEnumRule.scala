@@ -28,17 +28,8 @@ trait DecoderHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            for {
-              _ <- dctx.setHelper[A] { (reader, config) =>
-                decodeEnumCases[A](enumm)(using dctx.nestInCache(reader, config))
-              }
-              result <- dctx.getHelper[A].flatMap {
-                case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.reader, dctx.config)))
-                case None =>
-                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            // Note: caching is handled by deriveDecoderRecursively — do NOT call setHelper here.
+            decodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

@@ -19,15 +19,8 @@ trait EncoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            for {
-              _ <- ectx.setHelper[A] { (value, writer, config) =>
-                encodeCaseClassFields[A](caseClass)(using ectx.nestInCache(value, writer, config))
-              }
-              result <- ectx.getHelper[A].flatMap {
-                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.writer, ectx.config)))
-                case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            // Note: caching is handled by deriveEncoderRecursively
+            encodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

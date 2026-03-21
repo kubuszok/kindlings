@@ -17,15 +17,8 @@ trait EncoderHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            for {
-              _ <- ectx.setHelper[A] { (value, writer, config) =>
-                encodeEnumCases[A](enumm)(using ectx.nestInCache(value, writer, config))
-              }
-              result <- ectx.getHelper[A].flatMap {
-                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ectx.value, ectx.writer, ectx.config)))
-                case None             => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            // Note: caching is handled by deriveEncoderRecursively — do NOT call setHelper here.
+            encodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

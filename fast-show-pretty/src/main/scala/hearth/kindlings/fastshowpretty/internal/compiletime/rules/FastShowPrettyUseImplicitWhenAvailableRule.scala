@@ -11,9 +11,10 @@ trait FastShowPrettyUseImplicitWhenAvailableRuleImpl { this: FastShowPrettyMacro
 
   object FastShowPrettyUseImplicitWhenAvailableRule extends DerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits = Type.of[FastShowPretty.type].methods.collect {
-      case method if method.value.name == "derived" => method.value.asUntyped
-    }
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[FastShowPretty.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      }
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to use implicit support for ${Type[A].prettyPrint}") >> {
