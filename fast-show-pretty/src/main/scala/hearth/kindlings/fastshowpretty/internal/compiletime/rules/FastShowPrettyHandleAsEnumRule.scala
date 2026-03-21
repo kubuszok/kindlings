@@ -13,16 +13,7 @@ trait FastShowPrettyHandleAsEnumRuleImpl { this: FastShowPrettyMacrosImpl & Macr
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            for {
-              _ <- ctx.setHelper[A] { (sb, config, level, value) =>
-                deriveEnumCases[A](enumm)(using ctx.nestInCache(sb, value, config, level))
-              }
-              result <- ctx.getHelper[A].flatMap {
-                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
-                case None             =>
-                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            deriveEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

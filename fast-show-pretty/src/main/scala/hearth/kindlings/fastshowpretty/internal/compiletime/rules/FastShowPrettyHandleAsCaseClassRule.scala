@@ -17,16 +17,7 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            for {
-              _ <- ctx.setHelper[A] { (sb, config, level, value) =>
-                deriveCaseClassFields[A](caseClass)(using ctx.nestInCache(sb, value, config, level))
-              }
-              result <- ctx.getHelper[A].flatMap {
-                case Some(helperCall) => MIO.pure(Rule.matched(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value)))
-                case None             =>
-                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            deriveCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

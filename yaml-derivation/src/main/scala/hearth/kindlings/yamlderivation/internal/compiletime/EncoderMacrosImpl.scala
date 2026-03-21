@@ -248,8 +248,26 @@ trait EncoderMacrosImpl
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[Node]] =
     Log
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
+        ectx.getHelper[A].flatMap {
+          case Some(helperCall) =>
+            Log.info(s"Using cached encoder helper for ${Type[A].prettyPrint}") >>
+              MIO.pure(helperCall(ectx.value, ectx.config))
+          case None =>
+            ectx.setHelper[A] { (value, config) =>
+              deriveEncoderViaRules[A](using ectx.nestInCache(value, config))
+            } >> ectx.getHelper[A].flatMap {
+              case Some(helperCall) =>
+                MIO.pure(helperCall(ectx.value, ectx.config))
+              case None =>
+                deriveEncoderViaRules[A]
+            }
+        }
+      }
+
+  private def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Node]] =
+    Log
+      .namedScope(s"Deriving encoder via rules for type ${Type[A].prettyPrint}") {
         Rules(
-          EncoderUseCachedDefWhenAvailableRule,
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderHandleAsValueTypeRule,
@@ -266,14 +284,12 @@ trait EncoderMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(EncoderUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(EncoderUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }

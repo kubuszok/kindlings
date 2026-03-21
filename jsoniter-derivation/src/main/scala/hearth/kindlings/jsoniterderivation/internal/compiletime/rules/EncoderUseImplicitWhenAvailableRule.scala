@@ -5,7 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec
+import hearth.kindlings.jsoniterderivation.{KindlingsJsonCodec, KindlingsJsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 
 trait EncoderUseImplicitWhenAvailableRuleImpl {
@@ -13,12 +13,17 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
 
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsJsonValueCodec.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    // Collect ALL implicit/given methods from companion objects in the type class hierarchy.
+    // This prevents infinite macro expansion when summonExprIgnoring finds a library-provided
+    // auto-derivation method (e.g., KindlingsJsonCodec.derived) that transitively calls back
+    // into the same macro. Using isImplicit instead of name-based filtering is more robust
+    // against renames and additional implicit methods.
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsJsonValueCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to use implicit JsonValueCodec for ${Type[A].prettyPrint}") >> {

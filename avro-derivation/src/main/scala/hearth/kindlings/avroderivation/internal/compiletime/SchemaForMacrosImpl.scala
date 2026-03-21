@@ -241,10 +241,18 @@ trait SchemaForMacrosImpl
   // The actual derivation logic
 
   def deriveSchemaRecursively[A: SchemaForCtx]: MIO[Expr[Schema]] =
+    sfctx.getCachedSchema[A].flatMap {
+      case Some(cachedSchema) =>
+        Log.info(s"Found cached schema for ${Type[A].prettyPrint}") >>
+          MIO.pure(cachedSchema)
+      case None =>
+        deriveSchemaRecursivelyViaRules[A]
+    }
+
+  private def deriveSchemaRecursivelyViaRules[A: SchemaForCtx]: MIO[Expr[Schema]] =
     Log
       .namedScope(s"Deriving schema for type ${Type[A].prettyPrint}") {
         Rules(
-          AvroSchemaForUseCachedDefWhenAvailableRule,
           AvroSchemaForCheckSelfRecordRule,
           AvroSchemaForHandleAsLiteralTypeRule,
           AvroSchemaForUseImplicitWhenAvailableRule,
@@ -264,7 +272,7 @@ trait SchemaForMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(AvroSchemaForUseCachedDefWhenAvailableRule)
+              // .removed(AvroSchemaForUseCachedDefWhenAvailableRule)
               .removed(AvroSchemaForCheckSelfRecordRule)
               .view
               .map { case (rule, reasons) =>

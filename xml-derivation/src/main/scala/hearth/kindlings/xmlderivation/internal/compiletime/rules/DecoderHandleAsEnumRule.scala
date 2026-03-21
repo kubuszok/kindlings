@@ -19,17 +19,7 @@ trait DecoderHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a sealed trait/enum") >> {
         Enum.parse[A].toEither match {
           case Right(parsedEnum) =>
-            for {
-              _ <- dctx.setHelper[A] { (elem, config) =>
-                decodeEnumCases[A](parsedEnum)(using dctx.nestInCache(elem, config))
-              }
-              result <- dctx.getHelper[A].flatMap {
-                case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
-                case None =>
-                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            decodeEnumCases[A](parsedEnum).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

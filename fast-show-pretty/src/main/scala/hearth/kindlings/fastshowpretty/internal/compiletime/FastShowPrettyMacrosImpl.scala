@@ -292,10 +292,34 @@ trait FastShowPrettyMacrosImpl
   // The actual derivation logic in the form of DerivationCtx[A] ?=> MIO[Expr[StringBuilder]].
 
   def deriveResultRecursively[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
+    ctx.getHelper[A].flatMap {
+      case Some(helperCall) =>
+        Log.info(s"Found cached render helper for ${Type[A].prettyPrint}") >>
+          MIO.pure(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value))
+      case None =>
+        ctx.getInstance[A].flatMap {
+          case Some(instance) =>
+            Log.info(s"Found cached instance for ${Type[A].prettyPrint}") >>
+              MIO.pure(Expr.quote {
+                Expr
+                  .splice(instance)
+                  .render(Expr.splice(ctx.sb), Expr.splice(ctx.config), Expr.splice(ctx.level))(Expr.splice(ctx.value))
+              })
+          case None =>
+            ctx.setHelper[A] { (sb, config, level, value) =>
+              deriveResultRecursivelyViaRules[A](using ctx.nestInCache(sb, value, config, level))
+            } >> ctx.getHelper[A].flatMap {
+              case Some(helperCall) => MIO.pure(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value))
+              case None             =>
+                MIO.fail(new Exception(s"Failed to build render helper for ${Type[A].prettyPrint}"))
+            }
+        }
+    }
+
+  private def deriveResultRecursivelyViaRules[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
     Log
       .namedScope(s"Deriving for type ${Type[A].prettyPrint}") {
         Rules(
-          FastShowPrettyUseCachedDefWhenAvailableRule,
           FastShowPrettyUseImplicitWhenAvailableRule,
           FastShowPrettyUseBuiltInSupportRule,
           FastShowPrettyHandleAsValueTypeRule,
@@ -312,14 +336,12 @@ trait FastShowPrettyMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(FastShowPrettyUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(FastShowPrettyUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = DerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }

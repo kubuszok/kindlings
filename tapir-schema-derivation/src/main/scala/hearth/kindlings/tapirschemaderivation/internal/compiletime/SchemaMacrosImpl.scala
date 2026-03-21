@@ -244,10 +244,20 @@ trait SchemaMacrosImpl
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]]
   }
 
-  def deriveSchemaRecursively[A: SchemaCtx]: MIO[Expr[Schema[A]]] =
+  def deriveSchemaRecursively[A: SchemaCtx]: MIO[Expr[Schema[A]]] = {
+    implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+    sctx.cache.get0Ary[Schema[A]](sctx.cacheKey).flatMap {
+      case Some(cached) =>
+        Log.info(s"Using cached Schema for ${Type[A].prettyPrint}") >>
+          MIO.pure(cached)
+      case None =>
+        deriveSchemaRecursivelyViaRules[A]
+    }
+  }
+
+  private def deriveSchemaRecursivelyViaRules[A: SchemaCtx]: MIO[Expr[Schema[A]]] =
     Log.namedScope(s"deriveSchemaRecursively[${Type[A].prettyPrint}]") {
       Rules(
-        SchemaUseCachedWhenAvailableRule,
         SchemaUseSelfRefWhenRecursiveRule,
         SchemaUseImplicitWhenAvailableRule,
         SchemaHandleAsOptionRule,
@@ -263,14 +273,12 @@ trait SchemaMacrosImpl
             MIO.pure(result)
         case Left(reasons) =>
           val reasonsStrings = reasons.toListMap
-            .removed(SchemaUseCachedWhenAvailableRule)
-            .view
-            .map { case (rule, reasonList) =>
+            // .removed(SchemaUseCachedWhenAvailableRule)
+            .view.map { case (rule, reasonList) =>
               if (reasonList.isEmpty) s"The rule ${rule.name} was not applicable"
               else
                 s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasonList.mkString(", ")}"
-            }
-            .toList
+            }.toList
           MIO.fail(
             new Exception(
               s"Cannot derive tapir Schema for ${Type[A].prettyPrint}: " +
@@ -296,11 +304,15 @@ trait SchemaMacrosImpl
     val key = cacheKey[A]
     val name = cacheName[A]
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
-    cache.buildCachedWith(key, ValDefBuilder.ofLazy[Schema[A]](name))(_ => instance) >>
-      cache.get0Ary[Schema[A]](key).flatMap {
-        case Some(ref) => MIO.pure(ref)
-        case None      => MIO.pure(instance) // fallback, should not happen
-      }
+    cache.get0Ary[Schema[A]](key).flatMap {
+      case Some(ref) => MIO.pure(ref) // already cached
+      case None      =>
+        cache.buildCachedWith(key, ValDefBuilder.ofLazy[Schema[A]](name))(_ => instance) >>
+          cache.get0Ary[Schema[A]](key).flatMap {
+            case Some(ref) => MIO.pure(ref)
+            case None      => MIO.pure(instance) // fallback, should not happen
+          }
+    }
   }
 
   // Singleton derivation (case object / val — product schema with no fields)

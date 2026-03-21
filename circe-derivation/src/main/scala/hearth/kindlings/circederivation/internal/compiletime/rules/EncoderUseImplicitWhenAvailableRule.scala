@@ -5,7 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.circederivation.KindlingsEncoder
+import hearth.kindlings.circederivation.{KindlingsCodecAsObject, KindlingsEncoder}
 import io.circe.{Encoder, Json}
 
 trait EncoderUseImplicitWhenAvailableRuleImpl {
@@ -13,16 +13,18 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
 
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsEncoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
-      }
-      val circeEncoder = Type.of[Encoder.type].methods.collect {
+    // Ignore ALL implicit/given methods from Kindlings companion objects (our auto-derivation).
+    // For circe's own companions, only ignore specific auto-derivation methods (not built-in
+    // instances like encodeInt, encodeString, etc.).
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsEncoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[Encoder.type].methods.collect {
         case method if method.value.name == "derived" || method.value.name.startsWith("encodeLiteral") =>
           method.value.asUntyped
       }
-      ours ++ circeEncoder
-    }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
       Log.info(s"Attempting to use implicit Encoder for ${Type[A].prettyPrint}") >> {

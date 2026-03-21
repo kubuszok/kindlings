@@ -268,7 +268,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
 
       test("user-provided JsonKeyCodec[UserId] is used") {
-        @scala.annotation.nowarn("msg=is never used")
+        @scala.annotation.nowarn("msg=is never used|unused local definition")
         implicit val userIdKeyCodec: JsonKeyCodec[UserId] = new JsonKeyCodec[UserId] {
           def decodeKey(in: JsonReader): UserId = {
             val s = in.readKeyAsString()
@@ -600,7 +600,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       test("user-provided codec for nested field is used over derivation") {
         // User-provided implicits for NESTED types take priority (the derived type itself is always derived)
-        @scala.annotation.nowarn("msg=is never used")
+        @scala.annotation.nowarn("msg=is never used|unused local definition")
         implicit val customIntCodec: JsonValueCodec[Int] = new JsonValueCodec[Int] {
           def nullValue: Int = 0
           def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: Int): Int =

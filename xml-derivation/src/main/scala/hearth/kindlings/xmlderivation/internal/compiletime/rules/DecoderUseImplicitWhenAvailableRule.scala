@@ -5,19 +5,19 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.xmlderivation.{KindlingsXmlDecoder, XmlDecodingError}
+import hearth.kindlings.xmlderivation.{KindlingsXmlCodec, KindlingsXmlDecoder, XmlDecodingError}
 
 trait DecoderUseImplicitWhenAvailableRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsXmlDecoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsXmlDecoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsXmlCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =
       Log.info(s"Attempting to use implicit XmlDecoder for ${Type[A].prettyPrint}") >> {

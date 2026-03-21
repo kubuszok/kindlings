@@ -283,8 +283,26 @@ trait DecoderMacrosImpl
   def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[Either[ConstructError, A]]] =
     Log
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
+        dctx.getHelper[A].flatMap {
+          case Some(helperCall) =>
+            Log.info(s"Using cached decoder helper for ${Type[A].prettyPrint}") >>
+              MIO.pure(helperCall(dctx.node, dctx.config))
+          case None =>
+            dctx.setHelper[A] { (node, config) =>
+              deriveDecoderViaRules[A](using dctx.nestInCache(node, config))
+            } >> dctx.getHelper[A].flatMap {
+              case Some(helperCall) =>
+                MIO.pure(helperCall(dctx.node, dctx.config))
+              case None =>
+                deriveDecoderViaRules[A]
+            }
+        }
+      }
+
+  private def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[Either[ConstructError, A]]] =
+    Log
+      .namedScope(s"Deriving decoder via rules for type ${Type[A].prettyPrint}") {
         Rules(
-          DecoderUseCachedDefWhenAvailableRule,
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
           DecoderHandleAsValueTypeRule,
@@ -301,14 +319,12 @@ trait DecoderMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(DecoderUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(DecoderUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = DecoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }

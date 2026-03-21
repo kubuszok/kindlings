@@ -20,17 +20,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            for {
-              _ <- dctx.setHelper[A] { (reader, config) =>
-                decodeCaseClassFields[A](caseClass)(using dctx.nestInCache(reader, config))
-              }
-              result <- dctx.getHelper[A].flatMap {
-                case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.reader, dctx.config)))
-                case None =>
-                  MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            // Note: caching is handled by deriveDecoderRecursively — do NOT call setHelper here.
+            decodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

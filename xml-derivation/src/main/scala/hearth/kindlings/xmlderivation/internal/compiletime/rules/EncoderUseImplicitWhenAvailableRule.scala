@@ -5,19 +5,19 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.xmlderivation.KindlingsXmlEncoder
+import hearth.kindlings.xmlderivation.{KindlingsXmlCodec, KindlingsXmlEncoder}
 
 trait EncoderUseImplicitWhenAvailableRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsXmlEncoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsXmlEncoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsXmlCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
       Log.info(s"Attempting to use implicit XmlEncoder for ${Type[A].prettyPrint}") >> {

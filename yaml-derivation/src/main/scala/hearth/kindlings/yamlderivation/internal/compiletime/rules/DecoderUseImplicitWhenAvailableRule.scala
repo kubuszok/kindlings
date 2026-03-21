@@ -5,7 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.yamlderivation.KindlingsYamlDecoder
+import hearth.kindlings.yamlderivation.{KindlingsYamlCodec, KindlingsYamlDecoder}
 import org.virtuslab.yaml.ConstructError
 
 trait DecoderUseImplicitWhenAvailableRuleImpl {
@@ -13,12 +13,12 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsYamlDecoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsYamlDecoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsYamlCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to use implicit YamlDecoder for ${Type[A].prettyPrint}") >> {

@@ -12,12 +12,10 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[UBJsonValueCodec.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[UBJsonValueCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to use implicit UBJsonValueCodec for ${Type[A].prettyPrint}") >> {

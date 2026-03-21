@@ -5,7 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.circederivation.KindlingsDecoder
+import hearth.kindlings.circederivation.{KindlingsCodecAsObject, KindlingsDecoder}
 import io.circe.{Decoder, DecodingFailure}
 
 trait DecoderUseImplicitWhenAvailableRuleImpl {
@@ -13,16 +13,15 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsDecoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
-      }
-      val circeDecoder = Type.of[Decoder.type].methods.collect {
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsDecoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[Decoder.type].methods.collect {
         case method if method.value.name == "derived" || method.value.name.startsWith("decodeLiteral") =>
           method.value.asUntyped
       }
-      ours ++ circeDecoder
-    }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to use implicit Decoder for ${Type[A].prettyPrint}") >> {

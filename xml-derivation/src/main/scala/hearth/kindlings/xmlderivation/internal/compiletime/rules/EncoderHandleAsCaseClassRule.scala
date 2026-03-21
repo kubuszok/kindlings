@@ -33,18 +33,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
                 Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
               )
             else
-              for {
-                _ <- ectx.setHelper[A] { (value, name, config) =>
-                  encodeCaseClassFields[A](caseClass)(
-                    using ectx.nestInCache(value, name, config)
-                  )
-                }
-                result <- ectx.getHelper[A].flatMap {
-                  case Some(helperCall) =>
-                    MIO.pure(Rule.matched(helperCall(ectx.value, ectx.elementName, ectx.config)))
-                  case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                }
-              } yield result
+              encodeCaseClassFields[A](caseClass).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }
