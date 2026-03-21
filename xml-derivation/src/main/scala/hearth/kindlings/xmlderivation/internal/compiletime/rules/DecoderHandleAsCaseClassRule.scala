@@ -20,18 +20,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            for {
-              _ <- dctx.setHelper[A] { (elem, config) =>
-                decodeCaseClassFields[A](caseClass, caseClass.primaryConstructor.parameters.flatten.toList)(
-                  using dctx.nestInCache(elem, config)
-                )
-              }
-              result <- dctx.getHelper[A].flatMap {
-                case Some(helperCall) =>
-                  MIO.pure(Rule.matched(helperCall(dctx.elem, dctx.config)))
-                case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-              }
-            } yield result
+            decodeCaseClassFields[A](caseClass, caseClass.primaryConstructor.parameters.flatten.toList)
+              .map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

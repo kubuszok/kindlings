@@ -5,19 +5,19 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.yamlderivation.KindlingsYamlEncoder
+import hearth.kindlings.yamlderivation.{KindlingsYamlCodec, KindlingsYamlEncoder}
 
 trait EncoderUseImplicitWhenAvailableRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val ours = Type.of[KindlingsYamlEncoder.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsYamlEncoder.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
+      } ++ Type.of[KindlingsYamlCodec.type].methods.collect {
+        case method if method.value.isImplicit => method.value.asUntyped
       }
-      ours
-    }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[org.virtuslab.yaml.Node]]] =
       Log.info(s"Attempting to use implicit YamlEncoder for ${Type[A].prettyPrint}") >> {

@@ -272,10 +272,30 @@ trait EncoderMacrosImpl
   // The actual derivation logic
 
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[Json]] =
+    // Cache ALL types (including built-ins, options, collections) as helper defs.
+    // Without this, built-in types are re-derived for every field reference, causing
+    // O(n*m) compilation time for large type graphs (n types × m fields).
+    // The forward-declaration also breaks recursive self-references (e.g., Node → List[Node]).
+    ectx.getHelper[A].flatMap {
+      case Some(helperCall) =>
+        Log.info(s"Using cached encoder for ${Type[A].prettyPrint}") >>
+          MIO.pure(helperCall(ectx.value, ectx.config))
+      case None =>
+        for {
+          _ <- ectx.setHelper[A] { (value, config) =>
+            deriveEncoderViaRules[A](using ectx.nestInCache(value, config))
+          }
+          helper <- ectx.getHelper[A]
+        } yield helper.get(ectx.value, ectx.config)
+    }
+
+  private def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Json]] =
     Log
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
-          EncoderUseCachedDefWhenAvailableRule,
+          // Note: EncoderUseCachedDefWhenAvailableRule is NOT included here because
+          // caching is handled by deriveEncoderRecursively (which wraps in setHelper).
+          // Including it would match the forward-declared helper and create a self-referential loop.
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderHandleAsValueTypeRule,
@@ -292,14 +312,12 @@ trait EncoderMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(EncoderUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(EncoderUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }

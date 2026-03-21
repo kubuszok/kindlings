@@ -274,8 +274,26 @@ trait EncoderMacrosImpl
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[scala.xml.Elem]] =
     Log
       .namedScope(s"Deriving XML encoder for type ${Type[A].prettyPrint}") {
+        ectx.getHelper[A].flatMap {
+          case Some(helperCall) =>
+            Log.info(s"Using cached encoder helper for ${Type[A].prettyPrint}") >>
+              MIO.pure(helperCall(ectx.value, ectx.elementName, ectx.config))
+          case None =>
+            ectx.setHelper[A] { (value, name, config) =>
+              deriveEncoderViaRules[A](using ectx.nestInCache(value, name, config))
+            } >> ectx.getHelper[A].flatMap {
+              case Some(helperCall) =>
+                MIO.pure(helperCall(ectx.value, ectx.elementName, ectx.config))
+              case None =>
+                deriveEncoderViaRules[A]
+            }
+        }
+      }
+
+  private def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[scala.xml.Elem]] =
+    Log
+      .namedScope(s"Deriving XML encoder via rules for type ${Type[A].prettyPrint}") {
         Rules(
-          EncoderUseCachedDefWhenAvailableRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderHandleAsBuiltInRule,
           EncoderHandleAsValueTypeRule,
@@ -291,14 +309,12 @@ trait EncoderMacrosImpl
               MIO.pure(result)
           case Left(reasons) =>
             val reasonsStrings = reasons.toListMap
-              .removed(EncoderUseCachedDefWhenAvailableRule)
-              .view
-              .map { case (rule, reasons) =>
+              // .removed(EncoderUseCachedDefWhenAvailableRule)
+              .view.map { case (rule, reasons) =>
                 if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }
-              .toList
+              }.toList
             val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }
