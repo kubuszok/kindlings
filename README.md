@@ -6,7 +6,7 @@ Type class derivation that compiles faster, runs faster, and works the same on S
 
 Most Scala libraries derive type class instances using Shapeless (Scala 2), Scala 3 Mirrors, or Magnolia. These approaches work, but they come with trade-offs that compound as your project grows: slow compilation, poor error messages, runtime overhead from intermediate representations, and API fragmentation between Scala 2 and Scala 3.
 
-Kindlings takes a different path. Built on [Hearth](https://github.com/MateuszKubuszok/hearth), it uses macros to generate code that is closer to what you'd write by hand — while providing a better developer experience than any of the alternatives.
+Kindlings takes a different path. Built on [Hearth](https://github.com/kubuszok/hearth), it uses macros to generate code that is closer to what you'd write by hand — while providing a better developer experience than any of the alternatives.
 
 ### One API across Scala 2.13 and Scala 3
 
@@ -84,7 +84,7 @@ For a detailed feature-by-feature comparison of each module against the library 
 
 A natural question: why not contribute these derivation improvements directly to Circe, Jsoniter Scala, and other libraries?
 
-**Different foundations require different codebases.** Kindlings' derivation is built on [Hearth](https://github.com/MateuszKubuszok/hearth), a macro toolkit that provides high-level, cross-platform abstractions over Scala 2 and Scala 3 metaprogramming. Existing libraries use their own macro infrastructure (or Shapeless/Mirrors). Replacing the internals of a library with a completely different macro foundation is not a patch — it's a rewrite of the derivation layer, with different trade-offs, different error handling, and different supported types. That's not something you sneak into a PR.
+**Different foundations require different codebases.** Kindlings' derivation is built on [Hearth](https://github.com/kubuszok/hearth), a macro toolkit that provides high-level, cross-platform abstractions over Scala 2 and Scala 3 metaprogramming. Existing libraries use their own macro infrastructure (or Shapeless/Mirrors). Replacing the internals of a library with a completely different macro foundation is not a patch — it's a rewrite of the derivation layer, with different trade-offs, different error handling, and different supported types. That's not something you sneak into a PR.
 
 **Maintaining cross-version compatibility is a design constraint, not a feature flag.** Most libraries have separate Scala 2 and Scala 3 implementations with different capabilities and sometimes different APIs. Kindlings is built from the ground up to share a single API and a single derivation logic across both versions. Retrofitting this onto a library that was designed differently would mean restructuring their entire build and module layout.
 

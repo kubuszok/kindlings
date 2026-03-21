@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Kindlings** provides type classes (re)implemented with [Hearth](https://github.com/MateuszKubuszok/hearth/) to kick-off the ecosystem — cross-compiled (Scala 2.13 + 3) type class derivation using Hearth's macro-agnostic APIs.
+**Kindlings** provides type classes (re)implemented with [Hearth](https://github.com/kubuszok/hearth/) to kick-off the ecosystem — cross-compiled (Scala 2.13 + 3) type class derivation using Hearth's macro-agnostic APIs.
 
 - **Scala Versions**: 2.13.18, 3.8.2 | **Platforms**: JVM, Scala.js, Scala Native | **Build Tool**: SBT
 
