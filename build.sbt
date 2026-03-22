@@ -35,6 +35,7 @@ val versions = new {
   val refined = "0.11.3"
   val scalaYaml = "0.3.1"
   val scalaXml = "2.4.0"
+  val scalaSaxParser = "0.1.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -256,6 +257,7 @@ val publishSettings = Seq(
   pomIncludeRepository := { _ =>
     false
   },
+  versionScheme := Some("early-semver"),
   // Sonatype ignores isSnapshot setting and only looks at -SNAPSHOT suffix in version:
   //   https://central.sonatype.org/publish/publish-maven/#performing-a-snapshot-deployment
   // meanwhile sbt-git used to set up SNAPSHOT if there were uncommitted changes:
@@ -550,7 +552,8 @@ lazy val xmlDerivation = projectMatrix
   .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
-      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml
+      "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
+      "com.kubuszok" %%% "scala-sax-parser" % versions.scalaSaxParser
     )
   )
 
@@ -723,6 +726,7 @@ lazy val integrationTests = projectMatrix
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml,
       "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
       "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
+      "com.kubuszok" %%% "scala-sax-parser" % versions.scalaSaxParser,
       "org.typelevel" %%% "cats-core" % versions.cats
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
