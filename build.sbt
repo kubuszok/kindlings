@@ -24,7 +24,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.2.0-276-gfa814a9-SNAPSHOT"
+  val hearth = "0.2.0-282-g8a6c0d6-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val cats = "2.13.0"
@@ -472,6 +472,16 @@ lazy val jsoniterDerivation = projectMatrix
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala
     )
+  )
+  .settings(
+    Test / scalacOptions ++= {
+      if (scalaBinaryVersion.value == "3")
+        Seq(
+          "-Xmacro-settings:hearth.mioBenchmarkScopes=true",
+          s"-Xmacro-settings:hearth.mioBenchmarkFlameGraphDir=${crossTarget.value / "flame-graphs"}"
+        )
+      else Seq.empty
+    }
   )
 
 lazy val jsoniterJson = projectMatrix

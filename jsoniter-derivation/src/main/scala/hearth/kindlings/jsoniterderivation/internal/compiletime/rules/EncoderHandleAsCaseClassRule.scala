@@ -13,6 +13,92 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
 trait EncoderHandleAsCaseClassRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
+  /** Build transient skip conditions for a single encoder field. Returns empty list when no conditions apply. */
+  @scala.annotation.nowarn("msg=is never used")
+  private def buildFieldSkipConditions[Field: Type](
+      fieldExpr: Expr[Field],
+      param: Option[Parameter],
+      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig]
+  )(implicit AnyT: Type[Any]): List[Expr[Boolean]] = {
+    val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
+      p.defaultValue.flatMap { existentialOuter =>
+        val methodOf = existentialOuter.value
+        methodOf.value match {
+          case noInstance: Method.NoInstance[?] =>
+            import noInstance.Returned
+            noInstance(Map.empty).toOption.map(_.upcast[Any])
+          case _ => None
+        }
+      }
+    }
+
+    val isOptionField = Type[Field] match {
+      case IsOption(_) => true
+      case _           => false
+    }
+    val isStringField = Type[Field] =:= CTypes.String
+    val isCollectionField = !isOptionField && {
+      val isMap = Type[Field] match { case IsMap(_) => true; case _ => false }
+      val isColl = Type[Field] match { case IsCollection(_) => true; case _ => false }
+      isMap || isColl
+    }
+    val isEmptyCapable = isStringField || isCollectionField
+
+    val conditions = List.newBuilder[Expr[Boolean]]
+
+    defaultAsAnyOpt.foreach { defaultExpr =>
+      conditions += Expr.quote {
+        Expr.splice(config).transientDefault &&
+        Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
+      }
+    }
+
+    if (isOptionField) {
+      conditions += Expr.quote {
+        Expr.splice(config).transientNone &&
+        !Expr.splice(fieldExpr).asInstanceOf[Option[Any]].isDefined
+      }
+    }
+
+    if (isEmptyCapable) {
+      if (isStringField) {
+        conditions += Expr.quote {
+          Expr.splice(config).transientEmpty &&
+          Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
+        }
+      } else {
+        conditions += Expr.quote {
+          Expr.splice(config).transientEmpty &&
+          Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
+        }
+      }
+    }
+
+    conditions.result()
+  }
+
+  /** Wrap an unconditional write with skip conditions, or return it as-is if no conditions apply. */
+  @scala.annotation.nowarn("msg=is never used")
+  private def applySkipConditions(
+      unconditionalWrite: Expr[Unit],
+      condList: List[Expr[Boolean]]
+  ): Expr[Unit] = {
+    implicit val boolT: Type[Boolean] = CTypes.Boolean
+    implicit val unitT: Type[Unit] = CTypes.Unit
+    if (condList.isEmpty) {
+      unconditionalWrite
+    } else {
+      val skipExpr = condList.reduce { (a, b) =>
+        Expr.quote(Expr.splice(a) || Expr.splice(b))
+      }
+      Expr.quote {
+        if (!Expr.splice(skipExpr)) {
+          Expr.splice(unconditionalWrite)
+        }
+      }
+    }
+  }
+
   object EncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
@@ -114,78 +200,8 @@ trait EncoderHandleAsCaseClassRuleImpl {
                             Expr.splice(fieldEnc)
                           }
                       }
-
-                      // Determine transient skip conditions based on field type
-                      val param = paramsByName.get(fName)
-                      val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
-                        p.defaultValue.flatMap { existentialOuter =>
-                          val methodOf = existentialOuter.value
-                          methodOf.value match {
-                            case noInstance: Method.NoInstance[?] =>
-                              import noInstance.Returned
-                              noInstance(Map.empty).toOption.map(_.upcast[Any])
-                            case _ => None
-                          }
-                        }
-                      }
-
-                      val isOptionField = Type[Field] match {
-                        case IsOption(_) => true
-                        case _           => false
-                      }
-                      val isStringField = Type[Field] =:= CTypes.String
-                      val isCollectionField = !isOptionField && {
-                        val isMap = Type[Field] match { case IsMap(_) => true; case _ => false }
-                        val isColl = Type[Field] match { case IsCollection(_) => true; case _ => false }
-                        isMap || isColl
-                      }
-                      val isEmptyCapable = isStringField || isCollectionField
-
-                      // Build skip conditions (only applicable ones per field type)
-                      val conditions = List.newBuilder[Expr[Boolean]]
-
-                      defaultAsAnyOpt.foreach { defaultExpr =>
-                        conditions += Expr.quote {
-                          Expr.splice(ectx.config).transientDefault &&
-                          Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
-                        }
-                      }
-
-                      if (isOptionField) {
-                        conditions += Expr.quote {
-                          Expr.splice(ectx.config).transientNone &&
-                          !Expr.splice(fieldExpr).asInstanceOf[Option[Any]].isDefined
-                        }
-                      }
-
-                      if (isEmptyCapable) {
-                        if (isStringField) {
-                          conditions += Expr.quote {
-                            Expr.splice(ectx.config).transientEmpty &&
-                            Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
-                          }
-                        } else {
-                          // Collection or Map — both extend Iterable
-                          conditions += Expr.quote {
-                            Expr.splice(ectx.config).transientEmpty &&
-                            Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
-                          }
-                        }
-                      }
-
-                      val condList = conditions.result()
-                      if (condList.isEmpty) {
-                        unconditionalWrite
-                      } else {
-                        val skipExpr = condList.reduce { (a, b) =>
-                          Expr.quote(Expr.splice(a) || Expr.splice(b))
-                        }
-                        Expr.quote {
-                          if (!Expr.splice(skipExpr)) {
-                            Expr.splice(unconditionalWrite)
-                          }
-                        }
-                      }
+                      val condList = buildFieldSkipConditions[Field](fieldExpr, paramsByName.get(fName), ectx.config)
+                      applySkipConditions(unconditionalWrite, condList)
                     }
                   }
                 }

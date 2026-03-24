@@ -7,17 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
-import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
-import com.github.plokhotnyuk.jsoniter_scala.core.{
-  JsonCodec,
-  JsonKeyCodec,
-  JsonReader,
-  JsonReaderException,
-  JsonValueCodec,
-  JsonWriter
-}
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 
 trait DecoderHandleAsEnumRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -252,10 +243,7 @@ trait DecoderHandleAsEnumRuleImpl {
     ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
-      CTypes
-        .JsonValueCodec[ChildType]
-        .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-        .toEither match {
+      summonJsonValueCodecCached[ChildType] match {
         case Right(codecExpr) =>
           Log.info(s"Found implicit JsonValueCodec[$childName], using it") >>
             MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
@@ -515,52 +503,6 @@ trait DecoderHandleAsEnumRuleImpl {
           }
       }
     }
-  }
-
-  // Types
-
-  private[compiletime] object CTypes {
-
-    def JsonCodec: Type.Ctor1[JsonCodec] = Type.Ctor1.of[JsonCodec]
-    def JsonKeyCodec: Type.Ctor1[JsonKeyCodec] = Type.Ctor1.of[JsonKeyCodec]
-    def JsonValueCodec: Type.Ctor1[JsonValueCodec] = Type.Ctor1.of[JsonValueCodec]
-    def KindlingsJsonCodec: Type.Ctor1[KindlingsJsonCodec] = Type.Ctor1.of[KindlingsJsonCodec]
-    def KindlingsJsonValueCodec: Type.Ctor1[KindlingsJsonValueCodec] =
-      Type.Ctor1.of[KindlingsJsonValueCodec]
-    val CodecLogDerivation: Type[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation] =
-      Type.of[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation]
-    val JsoniterConfig: Type[JsoniterConfig] = Type.of[JsoniterConfig]
-    val JsonReader: Type[JsonReader] = Type.of[JsonReader]
-    val JsonWriter: Type[JsonWriter] = Type.of[JsonWriter]
-    val String: Type[String] = Type.of[String]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val JsonReaderException: Type[JsonReaderException] = Type.of[JsonReaderException]
-    def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
-      Type.of[Either[JsonReaderException, A]]
-    val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Stringified: Type[stringified] = Type.of[stringified]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Float: Type[Float] = Type.of[Float]
-    val Short: Type[Short] = Type.of[Short]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
-    val BigInt: Type[BigInt] = Type.of[BigInt]
-    val Product: Type[Product] = Type.of[Product]
-    val Instant: Type[java.time.Instant] = Type.of[java.time.Instant]
-    val LocalDate: Type[java.time.LocalDate] = Type.of[java.time.LocalDate]
-    val LocalTime: Type[java.time.LocalTime] = Type.of[java.time.LocalTime]
-    val LocalDateTime: Type[java.time.LocalDateTime] = Type.of[java.time.LocalDateTime]
-    val OffsetDateTime: Type[java.time.OffsetDateTime] = Type.of[java.time.OffsetDateTime]
-    val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
-    val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
-    val Period: Type[java.time.Period] = Type.of[java.time.Period]
   }
 
 }
