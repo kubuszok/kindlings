@@ -39,10 +39,7 @@ trait DecoderHandleAsValueTypeRuleImpl {
               .flatMap { builder =>
                 val wrapLambda = builder.build[A]
                 // Try implicit first, fall back to recursive derivation (includes built-in types)
-                CTypes
-                  .JsonValueCodec[Inner]
-                  .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-                  .toEither match {
+                summonJsonValueCodecCached[Inner] match {
                   case Right(innerCodec) =>
                     MIO.pure(Rule.matched(Expr.quote {
                       Expr

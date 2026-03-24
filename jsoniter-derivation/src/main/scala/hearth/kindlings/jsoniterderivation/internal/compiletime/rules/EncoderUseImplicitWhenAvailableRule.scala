@@ -5,25 +5,10 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.{KindlingsJsonCodec, KindlingsJsonValueCodec}
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-
 trait EncoderUseImplicitWhenAvailableRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
-
-    // Collect ALL implicit/given methods from companion objects in the type class hierarchy.
-    // This prevents infinite macro expansion when summonExprIgnoring finds a library-provided
-    // auto-derivation method (e.g., KindlingsJsonCodec.derived) that transitively calls back
-    // into the same macro. Using isImplicit instead of name-based filtering is more robust
-    // against renames and additional implicit methods.
-    lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsJsonValueCodec.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
-      } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
-      }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to use implicit JsonValueCodec for ${Type[A].prettyPrint}") >> {
@@ -32,26 +17,20 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
             Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search")
           )
         else
-          CTypes.JsonValueCodec[A].summonExprIgnoring(ignoredImplicits*).toEither match {
-            case Right(instanceExpr) => cacheAndUse[A](instanceExpr)
-            case Left(reason)        => yieldUnsupported[A](reason)
+          summonJsonValueCodecCached[A] match {
+            case Right(instanceExpr) =>
+              Log.info(s"Found implicit codec ${instanceExpr.prettyPrint}, using directly") >>
+                MIO.pure(Rule.matched(Expr.quote {
+                  Expr.splice(instanceExpr).encodeValue(Expr.splice(ectx.value), Expr.splice(ectx.writer))
+                }))
+            case Left(reason) =>
+              MIO.pure(
+                Rule.yielded(
+                  s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
+                )
+              )
           }
       }
-
-    private def cacheAndUse[A: EncoderCtx](
-        instanceExpr: Expr[JsonValueCodec[A]]
-    ): MIO[Rule.Applicability[Expr[Unit]]] =
-      Log.info(s"Found implicit codec ${instanceExpr.prettyPrint}, using directly") >>
-        MIO.pure(Rule.matched(Expr.quote {
-          Expr.splice(instanceExpr).encodeValue(Expr.splice(ectx.value), Expr.splice(ectx.writer))
-        }))
-
-    private def yieldUnsupported[A: EncoderCtx](reason: String): MIO[Rule.Applicability[Expr[Unit]]] =
-      MIO.pure(
-        Rule.yielded(
-          s"The type ${Type[A].prettyPrint} does not have an implicit JsonValueCodec instance: $reason"
-        )
-      )
   }
 
 }

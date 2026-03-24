@@ -1,13 +1,15 @@
 package hearth.kindlings.jsoniterderivation.internal.compiletime
 
 import hearth.MacroCommons
+import hearth.fp.data.NonEmptyVector
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
+import hearth.kindlings.jsoniterderivation.{annotations, JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
   writeToString,
+  JsonCodec,
   JsonKeyCodec,
   JsonReader,
   JsonReaderException,
@@ -40,6 +42,51 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  // Shared type representations — centralized here so all rules access them consistently.
+  private[compiletime] object CTypes {
+
+    def JsonCodec: Type.Ctor1[JsonCodec] = Type.Ctor1.of[JsonCodec]
+    def JsonKeyCodec: Type.Ctor1[JsonKeyCodec] = Type.Ctor1.of[JsonKeyCodec]
+    def JsonValueCodec: Type.Ctor1[JsonValueCodec] = Type.Ctor1.of[JsonValueCodec]
+    def KindlingsJsonCodec: Type.Ctor1[KindlingsJsonCodec] = Type.Ctor1.of[KindlingsJsonCodec]
+    def KindlingsJsonValueCodec: Type.Ctor1[KindlingsJsonValueCodec] =
+      Type.Ctor1.of[KindlingsJsonValueCodec]
+    val CodecLogDerivation: Type[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation] =
+      Type.of[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation]
+    val JsoniterConfig: Type[JsoniterConfig] = Type.of[JsoniterConfig]
+    val JsonReader: Type[JsonReader] = Type.of[JsonReader]
+    val JsonWriter: Type[JsonWriter] = Type.of[JsonWriter]
+    val String: Type[String] = Type.of[String]
+    val Unit: Type[Unit] = Type.of[Unit]
+    val Any: Type[Any] = Type.of[Any]
+    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
+    val ListString: Type[List[String]] = Type.of[List[String]]
+    val JsonReaderException: Type[JsonReaderException] = Type.of[JsonReaderException]
+    def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
+      Type.of[Either[JsonReaderException, A]]
+    val FieldName: Type[annotations.fieldName] = Type.of[annotations.fieldName]
+    val TransientField: Type[annotations.transientField] = Type.of[annotations.transientField]
+    val Stringified: Type[annotations.stringified] = Type.of[annotations.stringified]
+    val Int: Type[Int] = Type.of[Int]
+    val Long: Type[Long] = Type.of[Long]
+    val Double: Type[Double] = Type.of[Double]
+    val Float: Type[Float] = Type.of[Float]
+    val Short: Type[Short] = Type.of[Short]
+    val Byte: Type[Byte] = Type.of[Byte]
+    val Boolean: Type[Boolean] = Type.of[Boolean]
+    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
+    val BigInt: Type[BigInt] = Type.of[BigInt]
+    val Product: Type[Product] = Type.of[Product]
+    val Instant: Type[java.time.Instant] = Type.of[java.time.Instant]
+    val LocalDate: Type[java.time.LocalDate] = Type.of[java.time.LocalDate]
+    val LocalTime: Type[java.time.LocalTime] = Type.of[java.time.LocalTime]
+    val LocalDateTime: Type[java.time.LocalDateTime] = Type.of[java.time.LocalDateTime]
+    val OffsetDateTime: Type[java.time.OffsetDateTime] = Type.of[java.time.OffsetDateTime]
+    val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
+    val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
+    val Period: Type[java.time.Period] = Type.of[java.time.Period]
+  }
 
   // Entrypoints
 
@@ -102,7 +149,7 @@ trait CodecMacrosImpl
           "or add a type ascription to the result variable."
       )
 
-    CTypes.JsonValueCodec[A].summonExprIgnoring(EncoderUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+    summonJsonValueCodecCached[A] match {
       case Right(codecExpr) =>
         Expr.quote {
           writeToString[A](Expr.splice(valueExpr))(Expr.splice(codecExpr))
@@ -148,7 +195,7 @@ trait CodecMacrosImpl
           "or add a type ascription to the result variable."
       )
 
-    CTypes.JsonValueCodec[A].summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
+    summonJsonValueCodecCached[A] match {
       case Right(codecExpr) =>
         Expr.quote {
           try Right(readFromString[A](Expr.splice(jsonExpr))(Expr.splice(codecExpr)))
@@ -222,7 +269,7 @@ trait CodecMacrosImpl
 
           val (keyEncOpt, keyDecOpt) = runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               result <- keyEncMIO.parTuple(keyDecMIO)
             } yield result
           }
@@ -254,29 +301,9 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         "KindlingsJsonCodec.deriveKeyCodec",
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
-      ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |$errorLogs
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+      )(renderDerivationErrorMessage)
   }
 
   /** Derive a combined JsonCodec (value + key) for type A. Used only by Scala 2 macro bridge. Scala 3 avoids splice
@@ -359,7 +386,7 @@ trait CodecMacrosImpl
 
           val (((encFn, decFn), nullVal), (keyEncOpt, keyDecOpt)) = runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               result <- encMIO.parTuple(decMIO).parTuple(nullMIO).parTuple(keyEncMIO.parTuple(keyDecMIO))
             } yield result
           }
@@ -399,29 +426,9 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         "KindlingsJsonCodec.derive",
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
-      ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |$errorLogs
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+      )(renderDerivationErrorMessage)
   }
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
@@ -467,7 +474,7 @@ trait CodecMacrosImpl
 
           val encFn = runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               result <- encMIO
             } yield result
           }
@@ -483,29 +490,9 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
-      ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |$errorLogs
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+      )(renderDerivationErrorMessage)
   }
 
   def deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
@@ -551,7 +538,7 @@ trait CodecMacrosImpl
 
           val (decFn, nullVal) = runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               result <- decMIO.parTuple(nullMIO)
             } yield result
           }
@@ -567,29 +554,9 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
-      ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |$errorLogs
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+      )(renderDerivationErrorMessage)
   }
 
   def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
@@ -663,7 +630,7 @@ trait CodecMacrosImpl
           // Combine with parTuple (parallel error aggregation)
           val ((encFn, decFn), nullVal) = runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               result <- encMIO.parTuple(decMIO).parTuple(nullMIO)
             } yield result
           }
@@ -679,29 +646,9 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
-      ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |$errorLogs
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+      )(renderDerivationErrorMessage)
   }
 
   def shouldWeLogCodecDerivation: Boolean = {
@@ -715,6 +662,29 @@ trait CodecMacrosImpl
     } yield shouldLog).getOrElse(false)
 
     logDerivationImported || logDerivationSetGlobally
+  }
+
+  private def renderDerivationErrorMessage(errorLogs: String, errors: NonEmptyVector[Throwable]): String = {
+    val errorsRendered = errors
+      .map { e =>
+        e.getMessage.split("\n").toList match {
+          case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+          case _            => "  - " + e.getMessage
+        }
+      }
+      .mkString("\n")
+    val hint =
+      "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
+    if (errorLogs.nonEmpty)
+      s"""Macro derivation failed with the following errors:
+         |$errorsRendered
+         |and the following logs:
+         |$errorLogs
+         |$hint""".stripMargin
+    else
+      s"""Macro derivation failed with the following errors:
+         |$errorsRendered
+         |$hint""".stripMargin
   }
 
   // Null value derivation
@@ -851,9 +821,8 @@ trait CodecMacrosImpl
     Log
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
-          // Note: EncoderUseCachedDefWhenAvailableRule is NOT included here because
-          // caching is handled by deriveEncoderRecursively (which wraps in setHelper).
-          // Including it would match the forward-declared helper and create a self-referential loop.
+          // Note: EncoderUseCachedDefWhenAvailableRule / DecoderUseCachedDefWhenAvailableRule are NOT
+          // included here because caching is handled by derive*Recursively (which wraps in setHelper).
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderHandleAsBuiltInRule,
@@ -865,18 +834,16 @@ trait CodecMacrosImpl
           EncoderHandleAsSingletonRule,
           EncoderHandleAsCaseClassRule,
           EncoderHandleAsEnumRule
-        )(_[A]).flatMap {
+        )(rule => Log.namedScope(s"encoder rule:${rule.name}")(rule[A])).flatMap {
           case Right(result) =>
             Log.info(s"Derived encoder for ${Type[A].prettyPrint}: ${result.prettyPrint}") >>
               MIO.pure(result)
           case Left(reasons) =>
-            val reasonsStrings = reasons.toListMap
-              // .removed(EncoderUseCachedDefWhenAvailableRule)
-              .view.map { case (rule, reasons) =>
-                if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
-                else
-                  s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }.toList
+            val reasonsStrings = reasons.toListMap.view.map { case (rule, reasons) =>
+              if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
+              else
+                s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
+            }.toList
             val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }
@@ -971,26 +938,74 @@ trait CodecMacrosImpl
 
   // Decoder derivation
 
-  def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[A]] =
-    dctx.getHelper[A].flatMap {
-      case Some(helperCall) =>
-        Log.info(s"Using cached decoder for ${Type[A].prettyPrint}") >>
-          MIO.pure(helperCall(dctx.reader, dctx.config))
-      case None =>
-        for {
-          _ <- dctx.setHelper[A] { (reader, config) =>
-            deriveDecoderViaRules[A](using dctx.nestInCache(reader, config))
-          }
-          helper <- dctx.getHelper[A]
-        } yield helper.get(dctx.reader, dctx.config)
+  // Guard to ensure loadStandardExtensions() is called at most once per expansion,
+  // since it is not idempotent (each call re-registers all providers).
+  private var standardExtensionsLoaded: Boolean = false
+  private def ensureStandardExtensionsLoaded(): MIO[Unit] =
+    if (standardExtensionsLoaded) MIO.pure(())
+    else
+      Environment.loadStandardExtensions().toMIO(allowFailures = false).map { _ =>
+        standardExtensionsLoaded = true
+        ()
+      }
+
+  // Shared ignored implicits for summonExprIgnoring — prevents infinite macro expansion
+  // when summoning finds library auto-derivation methods (e.g., KindlingsJsonCodec.derived).
+  private[compiletime] lazy val codecIgnoredImplicits: Seq[UntypedMethod] =
+    Type.of[KindlingsJsonValueCodec.type].methods.collect {
+      case method if method.value.isImplicit => method.value.asUntyped
+    } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
+      case method if method.value.isImplicit => method.value.asUntyped
     }
+
+  // Cache for summonExprIgnoring results — avoids re-summoning the same type.
+  // Key: UntypedType, Value: Right(expr) on success, Left(reason) on failure.
+  private val summonCodecCache: scala.collection.mutable.Map[UntypedType, Either[String, Any]] =
+    scala.collection.mutable.Map.empty
+
+  /** Summon JsonValueCodec[A] with caching. Returns cached result on repeated calls for the same type. */
+  private[compiletime] def summonJsonValueCodecCached[A: Type]: Either[String, Expr[JsonValueCodec[A]]] =
+    summonCodecCache
+      .getOrElseUpdate(
+        Type[A].asUntyped,
+        CTypes.JsonValueCodec[A].summonExprIgnoring(codecIgnoredImplicits*).toEither
+      )
+      .asInstanceOf[Either[String, Expr[JsonValueCodec[A]]]]
+
+  // Debug counter to detect runaway decoder derivation — fail gracefully instead of OOM
+  private var decoderDerivationCounter: Int = 0
+  private val decoderDerivationLimit: Int = 500
+
+  def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[A]] = {
+    decoderDerivationCounter += 1
+    if (decoderDerivationCounter > decoderDerivationLimit)
+      MIO.fail(
+        new RuntimeException(
+          s"Derivation limit ($decoderDerivationLimit) exceeded at decoder for ${Type[A].prettyPrint}. " +
+            "This likely indicates an infinite derivation loop."
+        )
+      )
+    else
+      dctx.getHelper[A].flatMap {
+        case Some(helperCall) =>
+          Log.info(s"Using cached decoder for ${Type[A].prettyPrint}") >>
+            MIO.pure(helperCall(dctx.reader, dctx.config))
+        case None =>
+          for {
+            _ <- dctx.setHelper[A] { (reader, config) =>
+              deriveDecoderViaRules[A](using dctx.nestInCache(reader, config))
+            }
+            helper <- dctx.getHelper[A]
+          } yield helper.get(dctx.reader, dctx.config)
+      }
+  }
 
   private def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[A]] =
     Log
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
-          // Note: DecoderUseCachedDefWhenAvailableRule is NOT included here because
-          // caching is handled by deriveDecoderRecursively (which wraps in setHelper).
+          // Note: EncoderUseCachedDefWhenAvailableRule / DecoderUseCachedDefWhenAvailableRule are NOT
+          // included here because caching is handled by derive*Recursively (which wraps in setHelper).
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
           DecoderHandleAsBuiltInRule,
@@ -1002,18 +1017,16 @@ trait CodecMacrosImpl
           DecoderHandleAsSingletonRule,
           DecoderHandleAsCaseClassRule,
           DecoderHandleAsEnumRule
-        )(_[A]).flatMap {
+        )(rule => Log.namedScope(s"decoder rule:${rule.name}")(rule[A])).flatMap {
           case Right(result) =>
             Log.info(s"Derived decoder for ${Type[A].prettyPrint}: ${result.prettyPrint}") >>
               MIO.pure(result)
           case Left(reasons) =>
-            val reasonsStrings = reasons.toListMap
-              // .removed(DecoderUseCachedDefWhenAvailableRule)
-              .view.map { case (rule, reasons) =>
-                if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
-                else
-                  s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
-              }.toList
+            val reasonsStrings = reasons.toListMap.view.map { case (rule, reasons) =>
+              if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
+              else
+                s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
+            }.toList
             val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
             Log.error(err.message) >> MIO.fail(err)
         }
