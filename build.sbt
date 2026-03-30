@@ -36,6 +36,7 @@ val versions = new {
   val scalaYaml = "0.3.1"
   val scalaXml = "2.4.0"
   val scalaSaxParser = "0.1.0"
+  val scalacheck = "1.18.1"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -287,6 +288,7 @@ val al = new {
       "refinedIntegration",
       "xmlDerivation",
       "catsDerivation",
+      "scalacheckDerivation",
       "catsIntegration"
     )
 
@@ -368,6 +370,7 @@ lazy val root = project
   .aggregate(ironIntegration.projectRefs *)
   .aggregate(xmlDerivation.projectRefs *)
   .aggregate(catsDerivation.projectRefs *)
+  .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .settings(
@@ -680,6 +683,26 @@ lazy val catsDerivation = projectMatrix
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % versions.cats,
       "org.typelevel" %%% "alleycats-core" % versions.cats
+    )
+  )
+
+lazy val scalacheckDerivation = projectMatrix
+  .in(file("scalacheck-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-scalacheck-derivation",
+    name := "kindlings-scalacheck-derivation",
+    description := "ScalaCheck Arbitrary, Cogen, and Shrink derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.scalacheck" %%% "scalacheck" % versions.scalacheck
     )
   )
 
