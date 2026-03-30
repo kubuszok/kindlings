@@ -71,6 +71,7 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 | `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
 | `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
 | `kindlings-pureconfig-derivation` | PureConfig `pureconfig.generic.semiauto` / `auto` / `derivation.default` (JVM only) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` (subtypes of `pureconfig.ConfigReader`/`Writer`/`Convert`) |
+| `kindlings-scalacheck-derivation` | ScalaCheck manual instances | `Arbitrary` |
 | `kindlings-sconfig-derivation` | _(original)_ — built on `org.ekrich:sconfig` (cross-platform HOCON port of typesafe-config) | `ConfigReader`, `ConfigWriter`, `ConfigCodec` |
 | `kindlings-tapir-schema-derivation` | Tapir built-in `Schema.derived` | `Schema` |
 | `kindlings-ubjson-derivation` | _(original)_ | `UBJsonValueCodec` |

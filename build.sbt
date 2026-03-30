@@ -37,6 +37,7 @@ val versions = new {
   val scalaXml = "2.4.0"
   val scalaSaxParser = "0.1.0"
   val pureconfig = "0.17.10"
+  val scalacheck = "1.18.1"
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
 
@@ -290,6 +291,7 @@ val al = new {
       "refinedIntegration",
       "xmlDerivation",
       "catsDerivation",
+      "scalacheckDerivation",
       "catsIntegration",
       "sconfigDerivation"
     )
@@ -374,6 +376,7 @@ lazy val root = project
   .aggregate(ironIntegration.projectRefs *)
   .aggregate(xmlDerivation.projectRefs *)
   .aggregate(catsDerivation.projectRefs *)
+  .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .settings(
@@ -748,6 +751,26 @@ lazy val catsDerivation = projectMatrix
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % versions.cats,
       "org.typelevel" %%% "alleycats-core" % versions.cats
+    )
+  )
+
+lazy val scalacheckDerivation = projectMatrix
+  .in(file("scalacheck-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-scalacheck-derivation",
+    name := "kindlings-scalacheck-derivation",
+    description := "ScalaCheck Arbitrary, Cogen, and Shrink derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.scalacheck" %%% "scalacheck" % versions.scalacheck
     )
   )
 
