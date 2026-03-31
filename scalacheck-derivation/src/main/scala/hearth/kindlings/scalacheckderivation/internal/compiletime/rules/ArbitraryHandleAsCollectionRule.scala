@@ -11,7 +11,7 @@ trait ArbitraryHandleAsCollectionRuleImpl { this: ArbitraryMacrosImpl & MacroCom
 
   @scala.annotation.nowarn("msg=is never used")
   object ArbitraryHandleAsCollectionRule extends ArbitraryDerivationRule("handle as Collection when possible") {
-    def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] = {
+    def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
       Type[A] match {
         case IsCollection(isCollection) =>
           import isCollection.Underlying as ElemType
@@ -24,14 +24,16 @@ trait ArbitraryHandleAsCollectionRuleImpl { this: ArbitraryMacrosImpl & MacroCom
 
               MIO.pure(Rule.matched(Expr.quote {
                 // Use listOf and convert to target collection type using the factory
-                _root_.org.scalacheck.Gen.listOf(Expr.splice(elemGen)).map { list =>
-                  Expr.splice(factoryExpr).fromSpecific(list).asInstanceOf[CtorResult]
-                }.asInstanceOf[Gen[A]]
+                _root_.org.scalacheck.Gen
+                  .listOf(Expr.splice(elemGen))
+                  .map { list =>
+                    Expr.splice(factoryExpr).fromSpecific(list).asInstanceOf[CtorResult]
+                  }
+                  .asInstanceOf[Gen[A]]
               }))
             }
         case _ =>
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a Collection"))
       }
-    }
   }
 }

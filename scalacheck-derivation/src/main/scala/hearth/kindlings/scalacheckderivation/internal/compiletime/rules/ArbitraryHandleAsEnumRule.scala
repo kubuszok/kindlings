@@ -67,7 +67,8 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
                       }
 
                     Expr.quote {
-                      _root_.org.scalacheck.Gen.oneOf(Expr.splice(firstGen), Expr.splice(secondGen), Expr.splice(restGens) *)
+                      _root_.org.scalacheck.Gen
+                        .oneOf(Expr.splice(firstGen), Expr.splice(secondGen), Expr.splice(restGens)*)
                     }
                   }
                 case Nil =>

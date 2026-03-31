@@ -17,17 +17,17 @@ trait ArbitraryBuiltInRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & StdE
       // Check if it's a type with built-in ScalaCheck support by checking each type explicitly
       val isBuiltIn =
         Type[A] =:= Type.of[Boolean] ||
-        Type[A] =:= Type.of[Byte] ||
-        Type[A] =:= Type.of[Short] ||
-        Type[A] =:= Type.of[Int] ||
-        Type[A] =:= Type.of[Long] ||
-        Type[A] =:= Type.of[Float] ||
-        Type[A] =:= Type.of[Double] ||
-        Type[A] =:= Type.of[Char] ||
-        Type[A] =:= Type.of[String] ||
-        Type[A] =:= Type.of[Unit] ||
-        Type[A] =:= Type.of[BigInt] ||
-        Type[A] =:= Type.of[BigDecimal]
+          Type[A] =:= Type.of[Byte] ||
+          Type[A] =:= Type.of[Short] ||
+          Type[A] =:= Type.of[Int] ||
+          Type[A] =:= Type.of[Long] ||
+          Type[A] =:= Type.of[Float] ||
+          Type[A] =:= Type.of[Double] ||
+          Type[A] =:= Type.of[Char] ||
+          Type[A] =:= Type.of[String] ||
+          Type[A] =:= Type.of[Unit] ||
+          Type[A] =:= Type.of[BigInt] ||
+          Type[A] =:= Type.of[BigDecimal]
 
       if (isBuiltIn) {
         // For built-in types, summon the implicit Arbitrary instance

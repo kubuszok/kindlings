@@ -31,7 +31,6 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
           MIO.pure(Rule.yielded(reason.toString))
       }
 
-
     @scala.annotation.nowarn
     private def deriveCaseClassArbitrary[A: ArbitraryCtx](
         caseClass: CaseClass[A]
@@ -102,7 +101,7 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                   // Build constructor
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error) =>
+                    case Left(error)          =>
                       MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
                   }
                 }
