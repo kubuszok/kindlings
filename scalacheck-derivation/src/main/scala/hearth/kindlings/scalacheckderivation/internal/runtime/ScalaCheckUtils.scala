@@ -31,9 +31,9 @@ object ScalaCheckUtils {
 
   /** Runtime type cast helper to avoid path-dependent type leakage in macros.
     *
-    * The gen parameter is unused at runtime due to JVM type erasure, but carries type information at compile-time.
-    * This allows `unsafeCast[A]` to infer A from `Gen[A]` without leaking path-dependent types like
-    * `param.tpe.FieldType` into the generated code, which would cause "not found: value param" compilation errors.
+    * The gen parameter is unused at runtime due to JVM type erasure, but carries type information at compile-time. This
+    * allows `unsafeCast[A]` to infer A from `Gen[A]` without leaking path-dependent types like `param.tpe.FieldType`
+    * into the generated code, which would cause "not found: value param" compilation errors.
     *
     * ==Type Witness Pattern==
     *

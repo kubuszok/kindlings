@@ -1,6 +1,6 @@
 package hearth.kindlings.scalacheckderivation
 
-import org.scalacheck.{Arbitrary => ScalaCheckArbitrary}
+import org.scalacheck.Arbitrary as ScalaCheckArbitrary
 import scala.language.experimental.macros
 
 object DeriveArbitrary {
