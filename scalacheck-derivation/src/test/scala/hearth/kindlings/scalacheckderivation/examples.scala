@@ -2,6 +2,7 @@ package hearth.kindlings.scalacheckderivation
 
 import org.scalacheck.Arbitrary
 import hearth.kindlings.scalacheckderivation.DeriveArbitrary
+import hearth.kindlings.scalacheckderivation.extensions.*
 
 /** Compilable examples that mirror the Scaladoc in Arbitrary.scala.
   *
@@ -9,6 +10,18 @@ import hearth.kindlings.scalacheckderivation.DeriveArbitrary
   */
 @scala.annotation.nowarn
 object examples {
+
+  // ==Arbitrary.derived Syntax==
+  // Recommended approach: use Arbitrary.derived directly
+  object ArbitraryDerivedSyntax {
+    case class Person(name: String, age: Int)
+    object Person {
+      implicit val arbPerson: Arbitrary[Person] = Arbitrary.derived[Person]
+    }
+
+    // For Scala 3, you can use the derives clause:
+    // case class Book(title: String, author: String) derives Arbitrary
+  }
 
   // ==Basic Usage==
   // From Arbitrary.scala lines 15-30
