@@ -1,6 +1,6 @@
 package hearth.kindlings.scalacheckderivation
 
-import org.scalacheck.{Arbitrary => ScArbitrary}
+import org.scalacheck.Arbitrary as ScArbitrary
 import hearth.kindlings.scalacheckderivation.DeriveArbitrary
 
 @scala.annotation.nowarn

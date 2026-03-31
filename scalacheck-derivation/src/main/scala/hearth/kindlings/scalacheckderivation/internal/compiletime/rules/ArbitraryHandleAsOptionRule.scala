@@ -10,7 +10,7 @@ import org.scalacheck.Gen
 trait ArbitraryHandleAsOptionRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & StdExtensions =>
 
   object ArbitraryHandleAsOptionRule extends ArbitraryDerivationRule("handle as Option when possible") {
-    def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] = {
+    def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
       Type[A] match {
         case IsOption(isOption) =>
           import isOption.Underlying as Inner
@@ -25,6 +25,5 @@ trait ArbitraryHandleAsOptionRuleImpl { this: ArbitraryMacrosImpl & MacroCommons
         case _ =>
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))
       }
-    }
   }
 }
