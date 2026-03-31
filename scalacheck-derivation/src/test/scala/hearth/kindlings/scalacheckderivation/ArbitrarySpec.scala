@@ -1,7 +1,8 @@
 package hearth.kindlings.scalacheckderivation
 
-import org.scalacheck.Arbitrary as ScArbitrary
+import org.scalacheck.Arbitrary
 import hearth.kindlings.scalacheckderivation.DeriveArbitrary
+import hearth.kindlings.scalacheckderivation.extensions.*
 
 @scala.annotation.nowarn
 class ArbitrarySpec extends munit.FunSuite {
@@ -10,7 +11,7 @@ class ArbitrarySpec extends munit.FunSuite {
     import hearth.kindlings.scalacheckderivation.debug.logDerivationForScalaCheckDerivation
     case class Person(name: String, age: Int)
 
-    val arb: ScArbitrary[Person] = DeriveArbitrary.derived[Person]
+    val arb: Arbitrary[Person] = DeriveArbitrary.derived[Person]
     val samples = List.fill(10)(arb.arbitrary.sample).flatten
 
     assert(samples.nonEmpty, "Should generate some samples")
@@ -20,7 +21,7 @@ class ArbitrarySpec extends munit.FunSuite {
   test("derives Arbitrary for case class with multiple fields") {
     case class Point(x: Int, y: Int)
 
-    val arb: ScArbitrary[Point] = DeriveArbitrary.derived[Point]
+    val arb: Arbitrary[Point] = DeriveArbitrary.derived[Point]
     val samples = List.fill(10)(arb.arbitrary.sample).flatten
 
     assert(samples.nonEmpty, "Should generate some samples")
@@ -30,8 +31,8 @@ class ArbitrarySpec extends munit.FunSuite {
     case class Address(street: String, city: String)
     case class Person(name: String, address: Address)
 
-    implicit val arbAddress: ScArbitrary[Address] = DeriveArbitrary.derived[Address]
-    val arb: ScArbitrary[Person] = DeriveArbitrary.derived[Person]
+    implicit val arbAddress: Arbitrary[Address] = DeriveArbitrary.derived[Address]
+    val arb: Arbitrary[Person] = DeriveArbitrary.derived[Person]
 
     val samples = List.fill(10)(arb.arbitrary.sample).flatten
 
@@ -42,7 +43,7 @@ class ArbitrarySpec extends munit.FunSuite {
   test("derives Arbitrary for case class with Option field") {
     case class Person(name: String, nickname: Option[String])
 
-    val arb: ScArbitrary[Person] = DeriveArbitrary.derived[Person]
+    val arb: Arbitrary[Person] = DeriveArbitrary.derived[Person]
     val samples = List.fill(20)(arb.arbitrary.sample).flatten
 
     assert(samples.nonEmpty, "Should generate some samples")
@@ -54,7 +55,7 @@ class ArbitrarySpec extends munit.FunSuite {
   test("derives Arbitrary for case class with collection field") {
     case class Box(items: List[Int])
 
-    val arb: ScArbitrary[Box] = DeriveArbitrary.derived[Box]
+    val arb: Arbitrary[Box] = DeriveArbitrary.derived[Box]
     val samples = List.fill(10)(arb.arbitrary.sample).flatten
 
     assert(samples.nonEmpty, "Should generate some samples")
@@ -66,7 +67,7 @@ class ArbitrarySpec extends munit.FunSuite {
     case object Green extends Color
     case object Blue extends Color
 
-    val arb: ScArbitrary[Color] = DeriveArbitrary.derived[Color]
+    val arb: Arbitrary[Color] = DeriveArbitrary.derived[Color]
     val samples = List.fill(30)(arb.arbitrary.sample).flatten
 
     assert(samples.nonEmpty, "Should generate some samples")
@@ -80,9 +81,9 @@ class ArbitrarySpec extends munit.FunSuite {
     case class Circle(radius: Double) extends Shape
     case class Rectangle(width: Double, height: Double) extends Shape
 
-    implicit val arbCircle: ScArbitrary[Circle] = DeriveArbitrary.derived[Circle]
-    implicit val arbRectangle: ScArbitrary[Rectangle] = DeriveArbitrary.derived[Rectangle]
-    val arb: ScArbitrary[Shape] = DeriveArbitrary.derived[Shape]
+    implicit val arbCircle: Arbitrary[Circle] = DeriveArbitrary.derived[Circle]
+    implicit val arbRectangle: Arbitrary[Rectangle] = DeriveArbitrary.derived[Rectangle]
+    val arb: Arbitrary[Shape] = DeriveArbitrary.derived[Shape]
 
     val samples = List.fill(20)(arb.arbitrary.sample).flatten
 
@@ -96,9 +97,84 @@ class ArbitrarySpec extends munit.FunSuite {
     import hearth.kindlings.scalacheckderivation.debug.logDerivationForScalaCheckDerivation
     case class Empty()
 
-    val arb: ScArbitrary[Empty] = DeriveArbitrary.derived[Empty]
+    val arb: Arbitrary[Empty] = DeriveArbitrary.derived[Empty]
     val sample = arb.arbitrary.sample
 
     assert(sample.isDefined, "Should generate Empty instance")
+  }
+
+  test("derives Arbitrary for standalone Option type") {
+    val arb: Arbitrary[Option[Int]] = DeriveArbitrary.derived[Option[Int]]
+    val samples = List.fill(20)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some samples")
+    val hasNone = samples.exists(_.isEmpty)
+    val hasSome = samples.exists(_.isDefined)
+    assert(hasNone || hasSome, "Should generate both None and Some")
+  }
+
+  test("derives Arbitrary for standalone List type") {
+    val arb: Arbitrary[List[String]] = DeriveArbitrary.derived[List[String]]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some samples")
+  }
+
+  test("derives Arbitrary for Vector") {
+    case class Container(values: Vector[Int])
+
+    val arb: Arbitrary[Container] = DeriveArbitrary.derived[Container]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some samples")
+  }
+
+  test("derives Arbitrary for Set") {
+    case class UniqueItems(items: Set[Int])
+
+    val arb: Arbitrary[UniqueItems] = DeriveArbitrary.derived[UniqueItems]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some samples")
+  }
+
+  test("derives Arbitrary for nested Option") {
+    case class NestedOpt(value: Option[Option[String]])
+
+    val arb: Arbitrary[NestedOpt] = DeriveArbitrary.derived[NestedOpt]
+    val samples = List.fill(20)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some samples")
+  }
+
+  test("derives Arbitrary for built-in types") {
+    case class AllTypes(
+        b: Boolean,
+        byte: Byte,
+        short: Short,
+        i: Int,
+        l: Long,
+        f: Float,
+        d: Double,
+        c: Char,
+        s: String,
+        bigInt: BigInt,
+        bigDec: BigDecimal
+    )
+
+    val arb: Arbitrary[AllTypes] = DeriveArbitrary.derived[AllTypes]
+    val samples = List.fill(5)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate samples with all built-in types")
+  }
+
+  test("derives Arbitrary using Arbitrary.derived syntax") {
+    case class User(name: String, age: Int, email: String)
+
+    val arb: Arbitrary[User] = Arbitrary.derived[User]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate User samples using Arbitrary.derived")
+    assert(samples.forall(u => u.name != null && u.email != null), "Fields should not be null")
   }
 }
