@@ -635,7 +635,9 @@ val sconfigJavaTimePolyfill = List(
 
 lazy val sconfigDerivation = projectMatrix
   .in(file("sconfig-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE ++ sconfigJavaTimePolyfill) *)
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ only1VersionInIDE ++ sconfigJavaTimePolyfill) *
+  )
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(

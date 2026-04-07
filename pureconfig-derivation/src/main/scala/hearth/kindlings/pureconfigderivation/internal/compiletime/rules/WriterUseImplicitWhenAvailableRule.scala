@@ -14,8 +14,8 @@ trait WriterUseImplicitWhenAvailableRuleImpl {
 
   object WriterUseImplicitWhenAvailableRule extends WriterDerivationRule("use implicit when available") {
 
-    /** See [[ReaderUseImplicitWhenAvailableRule.ignoredImplicits]] for the rationale on
-      * which auto-derivation surfaces are filtered.
+    /** See [[ReaderUseImplicitWhenAvailableRule.ignoredImplicits]] for the rationale on which auto-derivation surfaces
+      * are filtered.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsConfigWriter.type].methods.collect {

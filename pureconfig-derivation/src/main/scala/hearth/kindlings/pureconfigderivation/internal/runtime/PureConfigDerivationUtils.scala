@@ -3,12 +3,7 @@ package hearth.kindlings.pureconfigderivation.internal.runtime
 import com.typesafe.config.{ConfigValue, ConfigValueFactory}
 import pureconfig.ConfigCursor
 import pureconfig.ConfigReader.Result
-import pureconfig.error.{
-  ConfigReaderFailures,
-  ConvertFailure,
-  KeyNotFound,
-  WrongType
-}
+import pureconfig.error.{ConfigReaderFailures, ConvertFailure, KeyNotFound, WrongType}
 import pureconfig.{ConfigReader, ConfigWriter}
 
 import scala.jdk.CollectionConverters.*
@@ -17,16 +12,15 @@ object PureConfigDerivationUtils {
 
   // --- Reader helpers ---
 
-  /** Wrap a function as a [[ConfigReader]]. Used by the macro to materialise lambdas as
-    * standalone reader values when needed.
+  /** Wrap a function as a [[ConfigReader]]. Used by the macro to materialise lambdas as standalone reader values when
+    * needed.
     */
   def readerFromFn[A](read: ConfigCursor => Result[A]): ConfigReader[A] =
     new ConfigReader[A] {
       override def from(cur: ConfigCursor): Result[A] = read(cur)
     }
 
-  /** Read a (possibly missing) field, falling back to the supplied default when the
-    * key is absent.
+  /** Read a (possibly missing) field, falling back to the supplied default when the key is absent.
     */
   def readFieldWithDefault[A](
       obj: pureconfig.ConfigObjectCursor,
@@ -47,8 +41,8 @@ object PureConfigDerivationUtils {
   ): Result[A] =
     obj.atKey(key).flatMap(reader.from)
 
-  /** Read a field that may be absent. The reader receives an `isUndefined` cursor when the
-    * key is missing, which lets `Option[T]` readers turn it into `None` rather than failing.
+  /** Read a field that may be absent. The reader receives an `isUndefined` cursor when the key is missing, which lets
+    * `Option[T]` readers turn it into `None` rather than failing.
     */
   def readOptionalKey[A](
       obj: pureconfig.ConfigObjectCursor,
@@ -61,8 +55,8 @@ object PureConfigDerivationUtils {
   def readDiscriminator(obj: pureconfig.ConfigObjectCursor, field: String): Result[String] =
     obj.atKey(field).flatMap(_.asString)
 
-  /** Read a "single-key wrapping" sealed-trait encoding: `{"VariantName": { …fields… }}`.
-    * Returns the (typeName, innerCursor) pair.
+  /** Read a "single-key wrapping" sealed-trait encoding: `{"VariantName": { …fields… }}`. Returns the (typeName,
+    * innerCursor) pair.
     */
   def readWrapped(obj: pureconfig.ConfigObjectCursor): Result[(String, ConfigCursor)] = {
     val keys = obj.keys.toList
@@ -85,8 +79,7 @@ object PureConfigDerivationUtils {
     }
   }
 
-  /** Build a [[ConfigReaderFailures]] reporting that no sealed-trait subtype matched the
-    * given discriminator value.
+  /** Build a [[ConfigReaderFailures]] reporting that no sealed-trait subtype matched the given discriminator value.
     */
   def failedToMatchSubtype(
       typeName: String,
@@ -105,9 +98,8 @@ object PureConfigDerivationUtils {
       )
     )
 
-  /** Sequence a list of decode results into an array. On any failure, returns the
-    * combined failures so users see every problem at once instead of having to fix one
-    * field and re-run.
+  /** Sequence a list of decode results into an array. On any failure, returns the combined failures so users see every
+    * problem at once instead of having to fix one field and re-run.
     */
   def sequenceResults(results: List[Result[Any]]): Result[Array[Any]] = {
     val arr = new Array[Any](results.size)
@@ -142,10 +134,9 @@ object PureConfigDerivationUtils {
       )
     )
 
-  /** Strict-mode check for `allowUnknownKeys = false`. After the decode result has been
-    * computed, this verifies that the input object has no keys other than the ones the
-    * derivation expected. If unknown keys remain, the result is replaced with a failure
-    * listing each one as a separate `UnknownKey` failure (matching upstream PureConfig's
+  /** Strict-mode check for `allowUnknownKeys = false`. After the decode result has been computed, this verifies that
+    * the input object has no keys other than the ones the derivation expected. If unknown keys remain, the result is
+    * replaced with a failure listing each one as a separate `UnknownKey` failure (matching upstream PureConfig's
     * `ProductHint.bottom` behaviour).
     */
   def checkUnknownKeys[A](
@@ -167,15 +158,14 @@ object PureConfigDerivationUtils {
         }
       }
 
-  /** Cast `Any` to `A` using a `ConfigReader[A]` purely as a type-inference hint. The
-    * reader is not invoked. This avoids leaking path-dependent field types into
-    * `Expr.quote` on Scala 2.
+  /** Cast `Any` to `A` using a `ConfigReader[A]` purely as a type-inference hint. The reader is not invoked. This
+    * avoids leaking path-dependent field types into `Expr.quote` on Scala 2.
     */
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, reader: ConfigReader[A]): A = value.asInstanceOf[A]
 
-  /** Read a list cursor and decode every item with the given reader, collecting into the
-    * builder produced by the supplied factory.
+  /** Read a list cursor and decode every item with the given reader, collecting into the builder produced by the
+    * supplied factory.
     */
   def decodeCollectionWith[Item, Coll](
       cur: ConfigCursor,
@@ -195,8 +185,8 @@ object PureConfigDerivationUtils {
       else Right(builder.result())
     }
 
-  /** Read an object cursor and decode every value with the given reader, collecting into
-    * the builder produced by the supplied factory. Map keys are always strings.
+  /** Read an object cursor and decode every value with the given reader, collecting into the builder produced by the
+    * supplied factory. Map keys are always strings.
     */
   def decodeMapWith[V, M](
       cur: ConfigCursor,
@@ -234,8 +224,8 @@ object PureConfigDerivationUtils {
     ConfigValueFactory.fromMap(map)
   }
 
-  /** Add a `discriminator -> typeName` pair to the front of `inner` (object encoding).
-    * If `inner` is not an object, wrap it under a "value" key as a fallback.
+  /** Add a `discriminator -> typeName` pair to the front of `inner` (object encoding). If `inner` is not an object,
+    * wrap it under a "value" key as a fallback.
     */
   def addDiscriminator(discriminator: String, typeName: String, inner: ConfigValue): ConfigValue = {
     val map = new java.util.LinkedHashMap[String, ConfigValue]()

@@ -122,8 +122,7 @@ trait ReaderHandleAsEnumRuleImpl {
                       ): Either[ConfigReaderFailures, A]
                     }
 
-              val dispatchTree
-                  : (Expr[String], Expr[ConfigCursor]) => Expr[Either[ConfigReaderFailures, A]] =
+              val dispatchTree: (Expr[String], Expr[ConfigCursor]) => Expr[Either[ConfigReaderFailures, A]] =
                 (typeNameExpr, innerCursorExpr) =>
                   childDispatchers.toList.foldRight(errorExpr(typeNameExpr)(innerCursorExpr)) {
                     case (dispatcher, elseExpr) =>
