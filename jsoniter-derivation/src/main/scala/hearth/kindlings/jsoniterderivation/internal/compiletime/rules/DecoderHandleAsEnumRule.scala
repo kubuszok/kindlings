@@ -98,17 +98,20 @@ trait DecoderHandleAsEnumRuleImpl {
                   ): A
               }
 
+              // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration lambdas.
+              // The dispatch functions built here are spliced into runtime helper calls
+              // (`readEnumAsString` etc.); each `dispatcher` is itself a closure that composes its body
+              // using the active Quotes when invoked, so a direct cross-quotes function literal works.
               def buildDispatchLambda(
                   dispatchers: List[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]]
               ): MIO[Expr[String => A]] =
-                LambdaBuilder
-                  .of1[String]("typeName")
-                  .traverse { typeNameExpr =>
-                    MIO.pure(dispatchers.foldRight(buildErrorExpr(typeNameExpr)) { case (dispatcher, elseExpr) =>
-                      dispatcher(typeNameExpr, dctx.reader, elseExpr)
-                    })
+                MIO.pure(Expr.quote { (typeName: String) =>
+                  Expr.splice {
+                    dispatchers.foldRight(buildErrorExpr(Expr.quote(typeName))) { case (dispatcher, elseExpr) =>
+                      dispatcher(Expr.quote(typeName), dctx.reader, elseExpr)
+                    }
                   }
-                  .map(_.build[A])
+                })
 
               def buildIntErrorExpr(idExpr: Expr[Int]): Expr[A] = Expr.quote {
                 Expr
@@ -121,14 +124,13 @@ trait DecoderHandleAsEnumRuleImpl {
               def buildIntDispatchLambda(
                   dispatchers: List[(Expr[Int], Expr[JsonReader], Expr[A]) => Expr[A]]
               ): MIO[Expr[Int => A]] =
-                LambdaBuilder
-                  .of1[Int]("enumId")
-                  .traverse { idExpr =>
-                    MIO.pure(dispatchers.foldRight(buildIntErrorExpr(idExpr)) { case (dispatcher, elseExpr) =>
-                      dispatcher(idExpr, dctx.reader, elseExpr)
-                    })
+                MIO.pure(Expr.quote { (enumId: Int) =>
+                  Expr.splice {
+                    dispatchers.foldRight(buildIntErrorExpr(Expr.quote(enumId))) { case (dispatcher, elseExpr) =>
+                      dispatcher(Expr.quote(enumId), dctx.reader, elseExpr)
+                    }
                   }
-                  .map(_.build[A])
+                })
 
               for {
                 wrapperDispatchFn <- buildDispatchLambda(wrapperDispatchers)

@@ -7,6 +7,7 @@ import scala.reflect.macros.blackbox
 final private[yamlderivation] class CodecMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with AnnotationSupportScala2
+    with LoadStandardExtensionsOnce
     with EncoderMacrosImpl
     with DecoderMacrosImpl
     with CodecMacrosImpl {

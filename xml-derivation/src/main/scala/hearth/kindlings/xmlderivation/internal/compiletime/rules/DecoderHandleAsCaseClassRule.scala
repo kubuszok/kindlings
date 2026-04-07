@@ -134,11 +134,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
       implicit val IntT: Type[Int] = DTypes.Int
 
-      // Build decode expressions, child lambdas, and accessor functions in a single pass.
-      // This avoids path-dependent type issues with Expr.quote on Scala 2 (the old code used
-      // `import param.tpe.Underlying as FieldT` inside Expr.quote's asInstanceOf, which leaked
-      // the path `param` into generated code). Now we use unsafeCastWithFn with the child lambda
-      // for type inference, keeping path-dependent types out of Expr.quote.
+      // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration lambdas.
+      // The previous implementation built per-field "cast lambdas" (`Elem => Either[…, FieldT]`) only
+      // to satisfy `unsafeCastWithFn`'s type inference, with the path-dependent `FieldT` import staying
+      // outside `Expr.quote`. We now use the helper-method pattern (`mkFieldAccess[F: Type]`) — the path
+      // dependence is bound to a regular type parameter at the helper's call site, never leaking into
+      // the reified `Expr.quote`. For the FromChildElement case the cached helper from `setHelper` is
+      // used directly inside a cross-quotes `flatMap` callback (Either's flatMap is shape-equivalent
+      // to Optional iteration so the lambda is per-rule-5 legitimate as well, but here we don't even
+      // need a lambda — the body is inlined as part of the splice).
       fields
         .zip(decodings)
         .zipWithIndex
@@ -148,114 +152,65 @@ trait DecoderHandleAsCaseClassRuleImpl {
             accMIO.flatMap { acc =>
               decoding match {
                 case FieldDecoding.Default(defaultExpr) =>
-                  // Build a decode lambda purely for type inference in the accessor.
-                  // This avoids using path-dependent FieldT inside Expr.quote.
-                  implicit val eitherFieldT: Type[Either[XmlDecodingError, FieldT]] = DTypes.DecoderResult[FieldT]
+                  // Transient field: the value is the user-supplied default; no per-field decoder
+                  // derivation is needed at this site.
                   val decodeExpr: Expr[Either[XmlDecodingError, Any]] =
                     Expr.quote(Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any])
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("dummyElem")
-                    .traverse { dummyElemExpr =>
-                      deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dummyElemExpr))
-                    }
-                    .map { builder =>
-                      val castLambda = builder
-                        .build[Either[XmlDecodingError, FieldT]]
-                        .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr: Expr[FieldT] = Expr.quote {
-                          XmlDerivationUtils.unsafeCastWithFn(
-                            Expr.splice(arrExpr)(Expr.splice(Expr(idx))),
-                            Expr.splice(castLambda)
-                          )
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      acc :+ (decodeExpr, makeAccessor)
-                    }
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
+                  }
+                  MIO.pure(acc :+ ((decodeExpr, makeAccessor)))
 
                 case FieldDecoding.FromContent(decodedExpr) =>
-                  implicit val eitherFieldT: Type[Either[XmlDecodingError, FieldT]] = DTypes.DecoderResult[FieldT]
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("contentElem")
-                    .traverse { contentElemExpr =>
-                      deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](contentElemExpr))
-                    }
-                    .map { builder =>
-                      val castLambda = builder
-                        .build[Either[XmlDecodingError, FieldT]]
-                        .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr: Expr[FieldT] = Expr.quote {
-                          XmlDerivationUtils.unsafeCastWithFn(
-                            Expr.splice(arrExpr)(Expr.splice(Expr(idx))),
-                            Expr.splice(castLambda)
-                          )
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      acc :+ (decodedExpr, makeAccessor)
-                    }
+                  // The decoder body was already derived at the FieldDecoding stage in
+                  // `decodeCaseClassFields` (line where `FieldDecoding.FromContent` is built);
+                  // use that result directly.
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                    (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
+                  }
+                  MIO.pure(acc :+ ((decodedExpr, makeAccessor)))
 
                 case FieldDecoding.FromAttribute(attrName, _) =>
-                  // Build a decode lambda for type inference in the accessor.
-                  implicit val eitherFieldT: Type[Either[XmlDecodingError, FieldT]] = DTypes.DecoderResult[FieldT]
-                  val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                    XmlDerivationUtils
-                      .getAttribute(Expr.splice(dctx.elem), Expr.splice(Expr(attrName)))
-                      .asInstanceOf[Either[XmlDecodingError, Any]]
+                  // Drive derivation for the field type (populates the shared cache via setHelper
+                  // for downstream use); the resulting Expr is unused here because the runtime
+                  // value is the raw attribute string, cast through `mkFieldAccess` at the
+                  // accessor site (preserves the previous `unsafeCastWithFn`-based behavior).
+                  deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem)).map { _ =>
+                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
+                      XmlDerivationUtils
+                        .getAttribute(Expr.splice(dctx.elem), Expr.splice(Expr(attrName)))
+                        .asInstanceOf[Either[XmlDecodingError, Any]]
+                    }
+                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
+                    }
+                    acc :+ ((decodeExpr, makeAccessor))
                   }
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("attrElem")
-                    .traverse { attrElemExpr =>
-                      deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](attrElemExpr))
-                    }
-                    .map { builder =>
-                      val castLambda = builder
-                        .build[Either[XmlDecodingError, FieldT]]
-                        .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr: Expr[FieldT] = Expr.quote {
-                          XmlDerivationUtils.unsafeCastWithFn(
-                            Expr.splice(arrExpr)(Expr.splice(Expr(idx))),
-                            Expr.splice(castLambda)
-                          )
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      acc :+ (decodeExpr, makeAccessor)
-                    }
 
                 case FieldDecoding.FromChildElement(childName, _) =>
-                  implicit val eitherFieldT: Type[Either[XmlDecodingError, FieldT]] = DTypes.DecoderResult[FieldT]
-                  LambdaBuilder
-                    .of1[scala.xml.Elem]("childElem")
-                    .traverse { childElemExpr =>
-                      deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](childElemExpr))
-                    }
-                    .map { builder =>
-                      val childLambda = builder.build[Either[XmlDecodingError, FieldT]]
-                      val childLambdaAsAny = childLambda
-                        .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]]
-                      val childLambdaForCast = childLambda
-                        .asInstanceOf[Expr[scala.xml.Elem => Either[XmlDecodingError, FieldT]]]
-                      val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                        XmlDerivationUtils.getChildElem(Expr.splice(dctx.elem), Expr.splice(Expr(childName))).flatMap {
-                          childElem =>
-                            Expr.splice(childLambdaAsAny).apply(childElem)
-                        }
+                  // Drive recursion to populate the shared cache via setHelper for FieldT, then
+                  // retrieve the helper-call function and inline it inside a cross-quotes flatMap
+                  // callback. The helper-call function uses the active Quotes at invocation time,
+                  // so the resulting splice tree is built against the wrapping splice's Quotes.
+                  for {
+                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
+                    helperOpt <- dctx.getHelper[FieldT]
+                  } yield {
+                    val configExpr = dctx.config
+                    val helper = helperOpt.get
+                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
+                      XmlDerivationUtils.getChildElem(Expr.splice(dctx.elem), Expr.splice(Expr(childName))).flatMap {
+                        childElem =>
+                          Expr
+                            .splice(helper(Expr.quote(childElem), configExpr))
+                            .asInstanceOf[Either[XmlDecodingError, Any]]
                       }
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr: Expr[FieldT] = Expr.quote {
-                          XmlDerivationUtils.unsafeCastWithFn(
-                            Expr.splice(arrExpr)(Expr.splice(Expr(idx))),
-                            Expr.splice(childLambdaForCast)
-                          )
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      acc :+ (decodeExpr, makeAccessor)
                     }
+                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
+                    }
+                    acc :+ ((decodeExpr, makeAccessor))
+                  }
               }
             }
         }
@@ -291,6 +246,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
               }
             }
         }
+    }
+
+    /** Helper method that builds a typed field access expression from an `Array[Any]`. The path-dependent field type
+      * `F` is bound to a regular type parameter at the call site, so it never appears inside the reified `Expr.quote`
+      * body. This replaces the previous `unsafeCastWithFn`-with-phantom-decoder approach used to dodge path-dependent
+      * type leakage on Scala 2. Same shape as `ubjson-derivation/.../DecoderHandleAsCaseClassRule.mkFieldAccessExpr`.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
+    private def mkFieldAccess[F: Type](arrExpr: Expr[Array[Any]], idx: Int): Expr[F] = {
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
+      implicit val IntT: Type[Int] = DTypes.Int
+      Expr.quote {
+        Expr.splice(arrExpr)(Expr.splice(Expr(idx))).asInstanceOf[F]
+      }
     }
   }
 

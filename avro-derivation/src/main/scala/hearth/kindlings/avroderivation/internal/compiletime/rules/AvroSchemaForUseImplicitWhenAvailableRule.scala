@@ -13,6 +13,10 @@ trait AvroSchemaForUseImplicitWhenAvailableRuleImpl {
 
   object AvroSchemaForUseImplicitWhenAvailableRule extends SchemaDerivationRule("use implicit when available") {
 
+    /** See [[AvroDecoderUseImplicitWhenAvailableRule.ignoredImplicits]] for the rationale: avro-derivation depends only
+      * on the pure Java `org.apache.avro:avro` library, so no third-party Scala auto-derivation surface needs to be
+      * excluded.
+      */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroSchemaFor.type].methods.collect {
         case method if method.value.isImplicit => method.value.asUntyped

@@ -2,7 +2,6 @@ package hearth.kindlings.avroderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
-import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, DecimalConfig}
@@ -23,7 +22,7 @@ trait DecoderMacrosImpl
     with rules.AvroDecoderHandleAsSingletonRuleImpl
     with rules.AvroDecoderHandleAsCaseClassRuleImpl
     with rules.AvroDecoderHandleAsEnumRuleImpl {
-  this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
+  this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // Entrypoints
 
@@ -78,7 +77,7 @@ trait DecoderMacrosImpl
           val fromCtx: (DecoderCtx[A] => Expr[A]) = (ctx: DecoderCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveDecoderRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)
@@ -153,7 +152,7 @@ trait DecoderMacrosImpl
           val fromCtx: (DecoderCtx[A] => Expr[A]) = (ctx: DecoderCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveDecoderRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)
@@ -352,8 +351,27 @@ trait DecoderMacrosImpl
 
   // Shared field-level helper used by CaseClass and NamedTuple rules
 
+  /** Derive an [[AvroDecoder]] instance for a single case-class / named-tuple field.
+    *
+    * Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration lambdas. This site uses the
+    * def-caching pattern instead (see `docs/contributing/def-caching-skill.md`):
+    *
+    *   1. Drive `deriveDecoderRecursively[Field]` once. That recursive call internally goes through `setHelper`
+    *      (defined on [[DecoderCtx]] and called from the rule chain) which forward-declares and builds a
+    *      `def decode_Field(value: Any, config: AvroConfig): Field` against the shared [[ValDefsCache]] — exactly the
+    *      same `cached-decode-method` entry the case-class rule uses for self-references. No second cache key needed.
+    *   2. Retrieve the helper-call function via [[DecoderCtx.getHelper]].
+    *   3. Wrap it in a fresh `new AvroDecoder[Field] { def decode(value) = helper(value, ctx.config) }`. The
+    *      closed-over `ctx.config` is the call site's config — typically the outer cached body's `config` parameter,
+    *      which is in scope at the call site (where the wrapping `AvroDecoder` is spliced) and gets forwarded into the
+    *      cached field-decode `def`.
+    */
   protected def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[AvroDecoder[Field]]] = {
     implicit val AnyT: Type[Any] = DecTypes.Any
+    @scala.annotation.nowarn("msg=is never used")
+    implicit val AvroConfigT: Type[AvroConfig] = DecTypes.AvroConfig
+    @scala.annotation.nowarn("msg=is never used")
+    implicit val SchemaT: Type[Schema] = DecTypes.Schema
 
     DecTypes
       .AvroDecoder[Field]
@@ -362,25 +380,41 @@ trait DecoderMacrosImpl
       case Right(decoderExpr) =>
         Log.info(s"Found implicit AvroDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
       case Left(_) =>
-        Log.info(s"Building AvroDecoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-          LambdaBuilder
-            .of1[Any]("fieldValue")
-            .traverse { fieldValueExpr =>
-              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldValueExpr))
-            }
-            .flatMap { builder =>
-              val decodeFn = builder.build[Field]
-              deriveSelfContainedSchema[Field](ctx.config).map { schemaExpr =>
-                Expr.quote {
-                  val sch = Expr.splice(schemaExpr)
-                  val fn = Expr.splice(decodeFn)
-                  new AvroDecoder[Field] {
-                    val schema: Schema = sch
-                    def decode(value: Any): Field = fn(value)
-                  }
+        Log.info(s"Building AvroDecoder[${Type[Field].prettyPrint}] via cached def") >> {
+          // Placeholder Expr[Any] for the field's value slot — the rule chain (via setHelper)
+          // immediately overrides it with the cached def's parameter Exprs inside its body builder.
+          val placeholderValue: Expr[Any] = Expr.quote(null.asInstanceOf[Any])
+          for {
+            // NOTE: kept SEQUENTIAL deliberately. Parallelizing decoder + schema derivation
+            // via `parTuple` was attempted but failed Scala 3 parameterized-enum tests —
+            // `parTuple` forks `MLocal` state per branch and the schema branch does not
+            // observe state populated by the decoder branch (or vice versa) for nested
+            // types within the same expansion. The two derivations are not entirely
+            // independent: both go through the rule chain and `deriveSelfContainedSchema`
+            // shares some Hearth-internal MLocal state with `deriveDecoderRecursively`.
+            //
+            // For multi-METHOD aggregation (e.g. Hash's hash + eqv), parTuple is correct
+            // and useful — see HashMacrosImpl. Here the two operations are aspects of one
+            // field handler, not independent methods, so the value of error aggregation is
+            // smaller and the breakage is real. Sequential is the safe choice.
+            _ <- deriveDecoderRecursively[Field](using ctx.nest[Field](placeholderValue))
+            helperOpt <- ctx.getHelper[Field]
+            schemaExpr <- deriveSelfContainedSchema[Field](ctx.config)
+          } yield {
+            val callerFn = helperOpt.get
+            val configExpr: Expr[AvroConfig] = ctx.config
+            Expr.quote {
+              val sch = Expr.splice(schemaExpr)
+              new AvroDecoder[Field] {
+                val schema: Schema = sch
+                def decode(value: Any): Field = {
+                  val _ = value
+                  Expr.splice(callerFn(Expr.quote(value), configExpr))
                 }
               }
             }
+          }
+        }
     }
   }
 

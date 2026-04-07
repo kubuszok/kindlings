@@ -7,6 +7,7 @@ import scala.quoted.*
 final private[avroderivation] class DecoderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupportScala3,
+      LoadStandardExtensionsOnce,
       SchemaForMacrosImpl,
       DecoderMacrosImpl
 private[avroderivation] object DecoderMacros {

@@ -26,19 +26,19 @@ trait MonoidKMacrosImpl { this: MacroCommons & StdExtensions =>
         CaseClass.parse[F[Any]].toEither match {
           case Right(caseClass) =>
             MIO.scoped { runSafe =>
+              // Load standard extensions exactly once for this derivation, before deriving
+              // either the empty or the combineK body (issue kubuszok/kindlings#65).
+              val _ = runSafe {
+                Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              }
+
               val doEmpty: Expr[F[Any]] = runSafe {
-                for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                  result <- deriveMonoidKEmptyBody[F](caseClass)
-                } yield result
+                deriveMonoidKEmptyBody[F](caseClass)
               }
 
               val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
                 runSafe {
-                  for {
-                    _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                    result <- deriveMonoidKCombineBody[F](caseClass, xExpr, yExpr)
-                  } yield result
+                  deriveMonoidKCombineBody[F](caseClass, xExpr, yExpr)
                 }
 
               Expr.quote {

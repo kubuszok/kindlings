@@ -88,19 +88,20 @@ trait EncoderHandleAsMapRuleImpl {
       }
     }
 
-    /** Try to derive a K => String function for map keys. Returns None if derivation fails. */
+    /** Try to derive a K => String function for map keys. Returns None if derivation fails.
+      *
+      * Per project rule 5, [[LambdaBuilder]] is reserved for lambdas passed to collection / Optional iteration helpers.
+      * The functions returned here are pre-built once during macro expansion and spliced as plain `Expr[K => String]`
+      * values into a runtime helper, so we use direct cross-quotes function literals (`Expr.quote { (k: K) => ... }`)
+      * instead.
+      */
     @scala.annotation.nowarn("msg=is never used")
     private def deriveKeyEncoder[K: Type](implicit ctx: EncoderCtx[?]): MIO[Option[Expr[K => String]]] =
       Log.info(s"Attempting to derive key encoder for ${Type[K].prettyPrint}") >> {
         // 1. Built-in types — inline key.toString (same as circe's KeyEncoder[Int] etc.)
-        val builtIn: Option[MIO[Option[Expr[K => String]]]] = {
-          def makeToStringKeyEncoder: MIO[Option[Expr[K => String]]] =
-            LambdaBuilder
-              .of1[K]("key")
-              .traverse { keyExpr =>
-                MIO.pure(Expr.quote(Expr.splice(keyExpr).toString))
-              }
-              .map(builder => Some(builder.build[String]): Option[Expr[K => String]])
+        val builtIn: Option[Expr[K => String]] = {
+          def makeToStringKeyEncoder: Expr[K => String] =
+            Expr.quote((k: K) => k.toString)
 
           if (Type[K] =:= Type.of[Int]) Some(makeToStringKeyEncoder)
           else if (Type[K] =:= Type.of[Long]) Some(makeToStringKeyEncoder)
@@ -110,68 +111,62 @@ trait EncoderHandleAsMapRuleImpl {
           else None
         }
 
-        builtIn.getOrElse {
-          // 2. Try summoning user-provided KeyEncoder[K]
-          Types.KeyEncoder[K].summonExprIgnoring().toEither match {
-            case Right(keyEncoderExpr) =>
-              Log.info(s"Found implicit KeyEncoder[${Type[K].prettyPrint}]") >>
-                LambdaBuilder
-                  .of1[K]("key")
-                  .traverse { keyExpr =>
-                    MIO.pure(Expr.quote {
-                      Expr.splice(keyEncoderExpr).apply(Expr.splice(keyExpr))
-                    })
-                  }
-                  .map { builder =>
-                    Some(builder.build[String]): Option[Expr[K => String]]
-                  }
-            case Left(_) =>
-              // 3. Try value type — unwrap to inner, recurse
-              Type[K] match {
-                case IsValueType(isValueType) =>
-                  import isValueType.Underlying as Inner
-                  deriveKeyEncoder[Inner].flatMap {
-                    case Some(innerKeyEncoder) =>
-                      LambdaBuilder
-                        .of1[K]("key")
-                        .traverse { keyExpr =>
-                          val unwrapped = isValueType.value.unwrap(keyExpr)
-                          MIO.pure(Expr.quote {
-                            Expr.splice(innerKeyEncoder).apply(Expr.splice(unwrapped))
-                          })
+        builtIn match {
+          case Some(fn) => MIO.pure(Some(fn))
+          case None     =>
+            // 2. Try summoning user-provided KeyEncoder[K] — splice it directly,
+            //    no LambdaBuilder needed.
+            Types.KeyEncoder[K].summonExprIgnoring().toEither match {
+              case Right(keyEncoderExpr) =>
+                Log.info(s"Found implicit KeyEncoder[${Type[K].prettyPrint}]") >>
+                  MIO.pure(Some(Expr.quote { (k: K) =>
+                    Expr.splice(keyEncoderExpr).apply(k)
+                  }))
+              case Left(_) =>
+                // 3. Try value type — unwrap to inner, recurse
+                Type[K] match {
+                  case IsValueType(isValueType) =>
+                    import isValueType.Underlying as Inner
+                    deriveKeyEncoder[Inner].map {
+                      case Some(innerKeyEncoder) =>
+                        // We need a `K => String` that unwraps to `Inner` then applies the
+                        // inner encoder. The unwrap helper is path-dependent on `isValueType`,
+                        // so we route through a local helper closing over its `value`.
+                        Some(buildValueTypeKeyEncoder[K, Inner](isValueType.value, innerKeyEncoder))
+                      case None => None
+                    }
+                  case _ =>
+                    // 4. Try enum (all case objects) — use toString for key
+                    Enum.parse[K].toOption match {
+                      case Some(enumm) =>
+                        val childrenList = enumm.directChildren.toList
+                        val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                          case (_, child) =>
+                            SingletonValue.unapply(child.Underlying).isDefined
                         }
-                        .map { builder =>
-                          Some(builder.build[String]): Option[Expr[K => String]]
-                        }
-                    case None => MIO.pure(None)
-                  }
-                case _ =>
-                  // 4. Try enum (all case objects) — use toString for key
-                  // Uses .toString to avoid Scala 3 staging issues with singleton expressions in LambdaBuilder
-                  Enum.parse[K].toOption match {
-                    case Some(enumm) =>
-                      val childrenList = enumm.directChildren.toList
-                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
-                        case (_, child) =>
-                          SingletonValue.unapply(child.Underlying).isDefined
-                      }
-                      if (allCaseObjects) {
-                        LambdaBuilder
-                          .of1[K]("key")
-                          .traverse { keyExpr =>
-                            MIO.pure(Expr.quote {
-                              Expr.splice(ctx.config).transformConstructorNames(Expr.splice(keyExpr).toString)
-                            })
-                          }
-                          .map { builder =>
-                            Some(builder.build[String]): Option[Expr[K => String]]
-                          }
-                      } else MIO.pure(None)
-                    case None => MIO.pure(None)
-                  }
-              }
-          }
+                        if (allCaseObjects) {
+                          val configExpr = ctx.config
+                          MIO.pure(Some(Expr.quote { (k: K) =>
+                            Expr.splice(configExpr).transformConstructorNames(k.toString)
+                          }))
+                        } else MIO.pure(None)
+                      case None => MIO.pure(None)
+                    }
+                }
+            }
         }
+      }
+
+    /** Build a K => String function that unwraps a value type to its inner representation and applies an inner encoder.
+      * Extracted as a helper because the unwrap closure captures path-dependent state from the [[IsValueType]]
+      * instance.
+      */
+    private def buildValueTypeKeyEncoder[K: Type, Inner: Type](
+        isValueType: IsValueTypeOf[K, Inner],
+        innerKeyEncoder: Expr[Inner => String]
+    ): Expr[K => String] =
+      Expr.quote { (k: K) =>
+        Expr.splice(innerKeyEncoder).apply(Expr.splice(isValueType.unwrap(Expr.quote(k))))
       }
   }
 }

@@ -22,7 +22,7 @@ trait EncoderMacrosImpl
     with rules.AvroEncoderHandleAsSingletonRuleImpl
     with rules.AvroEncoderHandleAsCaseClassRuleImpl
     with rules.AvroEncoderHandleAsEnumRuleImpl {
-  this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
+  this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // Entrypoints
 
@@ -73,7 +73,7 @@ trait EncoderMacrosImpl
           val fromCtx: (EncoderCtx[A] => Expr[Any]) = (ctx: EncoderCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveEncoderRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)
@@ -148,7 +148,7 @@ trait EncoderMacrosImpl
           val fromCtx: (EncoderCtx[A] => Expr[Any]) = (ctx: EncoderCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveEncoderRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)

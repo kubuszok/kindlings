@@ -53,47 +53,36 @@ trait DecoderHandleAsEnumRuleImpl {
               import child.Underlying as ChildType
               deriveChildDecoderLambda[A, ChildType](childName)
             }
-            .flatMap { childLambdas =>
+            .map { childLambdas =>
               val childNames: List[String] = childLambdas.toList.map(_._1)
               val childDecoderExprs: List[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
                 childLambdas.toList.map(_._2)
 
-              // Wrap the final assembly in a LambdaBuilder to get a proper runSafe context
-              // for creating Expr(childNames) — this avoids Scala 3 splice isolation issues
-              LambdaBuilder
-                .of1[scala.xml.Elem]("dispatchElem")
-                .traverse { elemExpr =>
-                  // Create the names list inside runSafe context
-                  val namesListExpr: Expr[List[String]] = Expr(childNames)
-
-                  // Build the decoders list expression using foldRight
-                  val decodersListExpr: Expr[List[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
-                    childDecoderExprs.foldRight(
-                      Expr.quote(List.empty[scala.xml.Elem => Either[XmlDecodingError, Any]])
-                    ) { (decoder, acc) =>
-                      Expr.quote(Expr.splice(decoder) :: Expr.splice(acc))
-                    }
-
-                  MIO.pure(Expr.quote {
-                    XmlDerivationUtils.getAttribute(Expr.splice(elemExpr), "type") match {
-                      case Right(typeName) =>
-                        XmlDerivationUtils.dispatchByName[A](
-                          typeName,
-                          Expr.splice(elemExpr),
-                          Expr.splice(namesListExpr),
-                          Expr.splice(decodersListExpr)
-                        )
-                      case Left(_) =>
-                        Left(XmlDecodingError.MissingDiscriminator("type", Expr.splice(elemExpr).label))
-                    }
-                  })
+              // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration
+              // lambdas. The previous LambdaBuilder here built an `Elem => Either[…]` lambda only to
+              // immediately invoke it on `dctx.elem` — equivalent to inlining the body against
+              // `dctx.elem` directly, which is what we now do.
+              val namesListExpr: Expr[List[String]] = Expr(childNames)
+              val decodersListExpr: Expr[List[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
+                childDecoderExprs.foldRight(
+                  Expr.quote(List.empty[scala.xml.Elem => Either[XmlDecodingError, Any]])
+                ) { (decoder, acc) =>
+                  Expr.quote(Expr.splice(decoder) :: Expr.splice(acc))
                 }
-                .map { builder =>
-                  val dispatchLambda = builder.build[Either[XmlDecodingError, A]]
-                  Expr.quote {
-                    Expr.splice(dispatchLambda)(Expr.splice(dctx.elem))
-                  }
+
+              Expr.quote {
+                XmlDerivationUtils.getAttribute(Expr.splice(dctx.elem), "type") match {
+                  case Right(typeName) =>
+                    XmlDerivationUtils.dispatchByName[A](
+                      typeName,
+                      Expr.splice(dctx.elem),
+                      Expr.splice(namesListExpr),
+                      Expr.splice(decodersListExpr)
+                    )
+                  case Left(_) =>
+                    Left(XmlDecodingError.MissingDiscriminator("type", Expr.splice(dctx.elem).label))
                 }
+              }
             }
       }
     }
@@ -113,20 +102,18 @@ trait DecoderHandleAsEnumRuleImpl {
       deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.elem)).flatMap { _ =>
         dctx.getHelper[ChildType].flatMap {
           case Some(helper) =>
-            // Build a lambda that calls the cached helper
-            LambdaBuilder
-              .of1[scala.xml.Elem]("childElem")
-              .traverse { childElemExpr =>
-                val helperCallExpr: Expr[Either[XmlDecodingError, ChildType]] =
-                  helper(childElemExpr, dctx.config)
-                MIO.pure(Expr.quote {
-                  Expr.splice(helperCallExpr).asInstanceOf[Either[XmlDecodingError, Any]]
-                })
+            // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration
+            // lambdas. This site builds an `Elem => Either[…, Any]` value spliced into the runtime
+            // dispatch helper; the helper-call function builds its body using the active Quotes when
+            // invoked, so a direct cross-quotes function literal works.
+            val configExpr = dctx.config
+            val lambda: Expr[scala.xml.Elem => Either[XmlDecodingError, Any]] =
+              Expr.quote { (childElem: scala.xml.Elem) =>
+                Expr
+                  .splice(helper(Expr.quote(childElem), configExpr))
+                  .asInstanceOf[Either[XmlDecodingError, Any]]
               }
-              .map { builder =>
-                val lambda = builder.build[Either[XmlDecodingError, Any]]
-                (childName, lambda)
-              }
+            MIO.pure((childName, lambda))
           case None =>
             MIO.fail(
               new RuntimeException(s"No helper found for enum case ${Type[ChildType].prettyPrint}")

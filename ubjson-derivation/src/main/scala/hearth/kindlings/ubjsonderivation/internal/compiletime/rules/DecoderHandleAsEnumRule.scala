@@ -82,17 +82,21 @@ trait DecoderHandleAsEnumRuleImpl {
                   ): A
               }
 
+              // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration lambdas.
+              // The enum dispatch function we build here is a `String => A` value spliced into a runtime
+              // helper call (`readEnumAsString` etc.); each `dispatcher` is itself a closure over Exprs that
+              // composes its body using the active Quotes when invoked, so a direct cross-quotes function
+              // literal works.
               def buildDispatchLambda(
                   dispatchers: List[(Expr[String], Expr[UBJsonReader], Expr[A]) => Expr[A]]
               ): MIO[Expr[String => A]] =
-                LambdaBuilder
-                  .of1[String]("typeName")
-                  .traverse { typeNameExpr =>
-                    MIO.pure(dispatchers.foldRight(buildErrorExpr(typeNameExpr)) { case (dispatcher, elseExpr) =>
-                      dispatcher(typeNameExpr, dctx.reader, elseExpr)
-                    })
+                MIO.pure(Expr.quote { (typeName: String) =>
+                  Expr.splice {
+                    dispatchers.foldRight(buildErrorExpr(Expr.quote(typeName))) { case (dispatcher, elseExpr) =>
+                      dispatcher(Expr.quote(typeName), dctx.reader, elseExpr)
+                    }
                   }
-                  .map(_.build[A])
+                })
 
               for {
                 wrapperDispatchFn <- buildDispatchLambda(wrapperDispatchers)

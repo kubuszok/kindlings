@@ -8,7 +8,8 @@ import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{YamlDecoder, YamlEncoder}
 
 trait CodecMacrosImpl {
-  this: MacroCommons & StdExtensions & AnnotationSupport & EncoderMacrosImpl & DecoderMacrosImpl =>
+  this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce & EncoderMacrosImpl &
+    DecoderMacrosImpl =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveCodecTypeClass[A: Type](configExpr: Expr[YamlConfig]): Expr[KindlingsYamlCodec[A]] = {

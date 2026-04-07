@@ -22,7 +22,8 @@ trait DecoderMacrosImpl
     with rules.DecoderHandleAsNamedTupleRuleImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
-    with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+    with rules.DecoderHandleAsEnumRuleImpl {
+  this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // Entrypoints
 
@@ -87,7 +88,7 @@ trait DecoderMacrosImpl
           )
           runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               _ <- deriveDecoderRecursively[A](using ctx)
             } yield ()
           }
@@ -107,7 +108,7 @@ trait DecoderMacrosImpl
                   .traverse { cursorExpr =>
                     val freshCtx = DecoderCtx.from[A](cursorExpr, configExpr, Expr.quote(true), derivedType = selfType)
                     for {
-                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                      _ <- ensureStandardExtensionsLoaded()
                       result <- deriveDecoderRecursively[A](using freshCtx)
                       freshCache <- freshCtx.cache.get
                     } yield freshCache.toValDefs.use(_ => result)
@@ -220,7 +221,7 @@ trait DecoderMacrosImpl
             (ctx: DecoderCtx[A]) =>
               runSafe {
                 for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                  _ <- ensureStandardExtensionsLoaded()
                   result <- deriveDecoderRecursively[A](using ctx)
                   cache <- ctx.cache.get
                 } yield cache.toValDefs.use(_ => result)
