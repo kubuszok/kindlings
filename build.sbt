@@ -36,6 +36,9 @@ val versions = new {
   val scalaYaml = "0.3.1"
   val scalaXml = "2.4.0"
   val scalaSaxParser = "0.1.0"
+  val pureconfig = "0.17.10"
+  val sconfig = "1.8.1"
+  val scalaJavaTime = "2.6.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -287,10 +290,11 @@ val al = new {
       "refinedIntegration",
       "xmlDerivation",
       "catsDerivation",
-      "catsIntegration"
+      "catsIntegration",
+      "sconfigDerivation"
     )
 
-  private val jvmOnlyProdProjects = Vector("avroDerivation")
+  private val jvmOnlyProdProjects = Vector("avroDerivation", "pureconfigDerivation")
 
   private val scala3OnlyProdProjects = Vector("ironIntegration")
 
@@ -362,6 +366,8 @@ lazy val root = project
   .aggregate(ubjsonDerivation.projectRefs *)
   .aggregate(yamlDerivation.projectRefs *)
   .aggregate(avroDerivation.projectRefs *)
+  .aggregate(pureconfigDerivation.projectRefs *)
+  .aggregate(sconfigDerivation.projectRefs *)
   .aggregate(jsonSchemaConfigMacroProviders.projectRefs *)
   .aggregate(tapirSchemaDerivation.projectRefs *)
   .aggregate(refinedIntegration.projectRefs *)
@@ -584,6 +590,66 @@ lazy val avroDerivation = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.apache.avro" % "avro" % versions.avro
+    )
+  )
+
+lazy val pureconfigDerivation = projectMatrix
+  .in(file("pureconfig-derivation"))
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-pureconfig-derivation",
+    name := "kindlings-pureconfig-derivation",
+    description := "PureConfig ConfigReader/ConfigWriter/ConfigConvert derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.github.pureconfig" %% "pureconfig-core" % versions.pureconfig
+    )
+  )
+
+// sconfig pulls in `java.time.Duration` references that need a polyfill on Scala.js /
+// Scala Native. Add scala-java-time as a test-time dependency on those platforms so the
+// linker can resolve them.
+val sconfigJavaTimePolyfill = List(
+  MatrixAction
+    .ForPlatform(VirtualAxis.js)
+    .Configure(
+      _.settings(
+        libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % versions.scalaJavaTime % Test
+      )
+    ),
+  MatrixAction
+    .ForPlatform(VirtualAxis.native)
+    .Configure(
+      _.settings(
+        libraryDependencies += "io.github.cquiroz" %%% "scala-java-time" % versions.scalaJavaTime % Test
+      )
+    )
+)
+
+lazy val sconfigDerivation = projectMatrix
+  .in(file("sconfig-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE ++ sconfigJavaTimePolyfill) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-sconfig-derivation",
+    name := "kindlings-sconfig-derivation",
+    description := "sconfig (HOCON) ConfigReader/ConfigWriter/ConfigCodec derivation using Hearth macros — cross-platform"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.ekrich" %%% "sconfig" % versions.sconfig
     )
   )
 
