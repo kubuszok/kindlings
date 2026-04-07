@@ -20,5 +20,7 @@ project/metals.sbt
 .vscode
 
 # other
+.claude/settings.local.json
+.claude/worktrees
 .scala-build
 *.log
