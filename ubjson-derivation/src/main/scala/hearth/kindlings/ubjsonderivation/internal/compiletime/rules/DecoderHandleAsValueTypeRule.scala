@@ -3,8 +3,9 @@ package rules
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
-import hearth.fp.syntax.*
 import hearth.std.*
+
+import hearth.kindlings.ubjsonderivation.UBJsonReader
 
 trait DecoderHandleAsValueTypeRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -17,36 +18,46 @@ trait DecoderHandleAsValueTypeRuleImpl {
         Type[A] match {
           case IsValueType(isValueType) =>
             import isValueType.Underlying as Inner
-
-            LambdaBuilder
-              .of1[Inner]("inner")
-              .traverse { innerExpr =>
-                isValueType.value.wrap match {
-                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                    val wrapResult = isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
-                    MIO.pure(Expr.quote {
-                      Expr.splice(wrapResult) match {
-                        case scala.Right(v)  => v
-                        case scala.Left(msg) => Expr.splice(dctx.reader).decodeError(msg)
-                      }
-                    })
-                  case _ =>
-                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
-                }
-              }
-              .flatMap { builder =>
-                val wrapLambda = builder.build[A]
-                deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.reader)).map { innerDecoded =>
-                  Rule.matched(Expr.quote {
-                    Expr.splice(wrapLambda).apply(Expr.splice(innerDecoded))
-                  })
-                }
-              }
+            // Per project rule 5, [[LambdaBuilder]] is reserved for lambdas passed into
+            // collection / Optional iteration helpers. The wrap is a pre-derived value used
+            // once, so we build a direct cross-quotes function literal instead.
+            val wrapLambda: Expr[Inner => A] = buildWrap[A, Inner](isValueType.value, dctx.reader)
+            deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.reader)).map { innerDecoded =>
+              Rule.matched(Expr.quote {
+                Expr.splice(wrapLambda).apply(Expr.splice(innerDecoded))
+              })
+            }
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
         }
       }
+
+    /** Build an `Inner => A` lambda that applies the value type's `wrap`. For value types whose `wrap` is partial
+      * (returns `Either[String, A]`), report parse failures via the supplied [[UBJsonReader]]. Extracted as a helper
+      * because the `wrap` closure captures path-dependent state from the [[IsValueTypeOf]] instance.
+      */
+    private def buildWrap[A: Type, Inner: Type](
+        isValueType: IsValueTypeOf[A, Inner],
+        readerExpr: Expr[UBJsonReader]
+    ): Expr[Inner => A] = {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
+      isValueType.wrap match {
+        case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[String, A]]]) match {
+              case scala.Right(v)  => v
+              case scala.Left(msg) => Expr.splice(readerExpr).decodeError(msg)
+            }
+          }
+        case _ =>
+          Expr.quote { (inner: Inner) =>
+            Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[A]])
+          }
+      }
+    }
   }
 
 }

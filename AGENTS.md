@@ -49,28 +49,54 @@ Code uses `Expr`, `Type`, etc. from **Hearth's API**, NOT `scala.quoted.Expr` or
 
 ## Cross-Compilation Pitfalls
 
-Full details in `docs/contributing/type-class-derivation-skill.md` § "Cross-compilation pitfalls":
+See `docs/contributing/cross-compilation-pitfalls-skill.md` for the full live list.
+The most load-bearing entries to keep in mind for any macro work:
 
-- **Path-dependent types in `Expr.quote`** — fails on Scala 2; use `LambdaBuilder`, runtime type witness, or helper method pattern (see `collection-integration-skill.md` §3a)
-- **Macro-internal types leak** — `??`, `Expr_??` inside `Expr.quote` cause reification failures; extract to `val` before quote
-- **`Array` needs `ClassTag`** — Hearth's `IsCollectionProviderForArray` summons `ClassTag[T]` via `Expr.summonImplicit[ClassTag[T]]` at macro expansion time. If the ClassTag is available in the user's implicit scope, `Array[T]` works automatically. If not, the `IsCollection` match silently skips and derivation fails. For macro-internal arrays (e.g., building `Array` inside `Expr.quote`), use `List` and `::` instead
-- **`Expr.upcast` only widens** — use `.asInstanceOf` inside `Expr.quote` for narrowing; also needs `Type[A]` in scope
-- **Macro methods need concrete types** — don't wrap macro calls in generic helpers
-- **Phantom type param inference** — unconstrained `A` (not in params/return type) infers `Nothing` on Scala 2, `Any` on Scala 3; guard against both
-- **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; pre-derive with `LambdaBuilder` in one `runSafe` call
-- **`IsMap`/`IsCollection` path-dependent types** — `import isMap.{Key, Value, CtorResult}` before `Expr.quote`
-- **`Type.of[A]` bootstrap cycle in extensions** — cross-quotes `Type.of[A]` resolves `implicit Type[A]` at evaluation time; when defining that implicit, causes SOE. Bypass cross-quotes: Scala 2 use `UntypedType.toTyped[A](sc2.c.universe.typeOf[A])`, Scala 3 use `scala.quoted.Type.of[A].asInstanceOf[Type[A]]`; for shared code, move `Type.of` into a helper object where the self-referential implicit is not in scope
-- **`ValDefsCache` wrapping scope** — `vals.toValDefs.use` must wrap the outermost expression containing all references
-- **`MacroExtension` ClassTag erasure** — `MacroExtension[A & B & C]` ClassTag only preserves first component; use runtime `match`/`asInstanceOf` in `extend()` for custom traits
-- **Cross-quotes unused `Type` implicit warnings** — implicit `Type[X]` for `Expr.quote` flagged as "never used" with `-Xfatal-warnings`; wrap in `@nowarn("msg=is never used") def`
-- **`IsMap` before `IsCollection` ordering** — `Map <: Iterable` so `IsCollection` matches maps; always check `IsMap` first
-- **`summonExprIgnoring` vs OOM** — `Expr.summonImplicit` without ignoring library auto-derivation methods causes infinite macro expansion → OOM → SBT crash; always use `summonExprIgnoring`
-- **Newtype aliases in `Expr.quote`** — cats Newtype types (`NonEmptyChain`, `NonEmptyMap`, `NonEmptySet`) fail on Scala 2 with "not found: value data"; use runtime helper pattern (see `collection-integration-skill.md` §3b)
-- **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — `Impl.unapply` returns `Nothing` for first type arg of `Function1[Int, Boolean]`; always wrap with `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)` for reliable decomposition
-- **`primaryConstructor` strict type checking** — `primaryConstructor(Map[String, Expr_??])` checks `Underlying <:< paramType`; can't pass `Expr[Any]` for non-`Any` fields; use helper method pattern to preserve field type through transformations
-- **HKT type constructor summoning across compilation boundary** — summoning `ConsK[G]` where `G` is a field's type constructor (e.g., `List` from `List[A]`) requires platform-specific APIs to extract the constructor and build the type; use an abstract bridge method implemented in Scala 2/3 bridges (see `ConsKMacrosImpl.scala`)
-- **Erased approach for polymorphic type classes** — Scala 2 macros can't handle free type variables in generated trees; work with `F[Any]` and `Any => Any`, cast with `asInstanceOf` at boundaries; safe due to JVM type erasure (see `FunctorMacrosImpl.scala`)
-- **`parTraverse` and `ValDefsCache` (fixed in Hearth 0.2.0-268+)** — prior versions forked cache state per branch, causing exponential re-derivation and 100% CPU hangs on large type graphs; fixed by `MLocal.unsafeSharedParallel` which threads cache writes between branches
+- **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; for
+  multi-method type-class instances **derive everything at `Q0` using `ValDefsCache`,
+  then call cached `def`s by name from inside each splice**. See
+  `docs/contributing/def-caching-skill.md`. Do **not** use `LambdaBuilder` as a
+  workaround — that was a misdiagnosis; the real fix is `cache.toValDefs.use` placement.
+- **`summonExprIgnoring` vs OOM** — always pass the library auto-derivation methods to
+  ignore, otherwise summoning recurses into them and OOMs the compiler.
+- **`IsMap` before `IsCollection`** — `Map <: Iterable`, so check `IsMap` first.
+- **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — wrap with
+  `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)`.
+- **`Type.of[A]` bootstrap cycle in extensions** — see the pitfalls skill.
+
+## Standard extensions, `LambdaBuilder`, and def-caching rules
+
+- **Load standard extensions exactly once per macro bundle.** See
+  `docs/contributing/load-standard-extensions-skill.md`. Use the per-module
+  `LoadStandardExtensionsOnce` trait + `ensureStandardExtensionsLoaded()` instead of
+  calling `Environment.loadStandardExtensions()` directly. Issue
+  `kubuszok/kindlings#65`.
+- **`LambdaBuilder` only for collection/Optional iteration lambdas.** Strict rule, no
+  exceptions. See `docs/contributing/lambda-builder-when-to-use-skill.md`. For
+  multi-method type-class instances or any other shape that needs pre-derived helper
+  functions, use the def-caching pattern instead.
+- **Def-caching is the answer to multi-method instances and sibling-splice isolation.**
+  See `docs/contributing/def-caching-skill.md`. The recipe: shared `ValDefsCache`,
+  derivation in `Q0` via `forwardDeclare` + `buildCachedWith`, helper-call functions
+  retrieved via `cache.getNAry`, outer `cacheState.toValDefs.use` wrapping the entire
+  `Expr.quote { new T[A] { … } }`. Reference implementations: `cats-derivation`
+  `HashMacrosImpl` (two-method) and `jsoniter-derivation`
+  `deriveCombinedCodecTypeClass` (five-method, parallel derivation via `parTuple`).
+- **Multi-method derivation must use `parTuple` for error aggregation.** Sequential
+  `for`-comprehensions short-circuit on the first failure, hiding errors from
+  later-derived method bodies. `parTuple` (on `MIO`) runs both derivations and
+  aggregates errors. The exception is when two derivations share `MLocal` state via the
+  rule chain — parallel branches fork `MLocal`, so a branch that reads state populated
+  by another branch will silently see a stale fork. See
+  `def-caching-skill.md` § "Deriving multiple method bodies in PARALLEL via parTuple".
+- **User-provided implicits must override built-in derivation rules.** Order rules so
+  that `*UseImplicitWhenAvailableRule` runs before any built-in / value-type / collection
+  rules; always go through `summonExprIgnoring` with the library's auto-derivation
+  methods passed in.
+- **Cache summoned implicits as `lazy val`s, intermediate recursive derivations as
+  `def`s.** Use `ValDefBuilder.ofLazy` for summoned/standalone instances and
+  `ValDefBuilder.ofDef*` (with `cache.forwardDeclare` + `cache.buildCachedWith`) for
+  recursive helpers.
 
 Hearth source is at `../hearth/` when documentation is insufficient.
 See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.
