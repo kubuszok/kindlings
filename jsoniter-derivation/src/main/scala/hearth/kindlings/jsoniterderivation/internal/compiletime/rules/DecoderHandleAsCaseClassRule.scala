@@ -7,6 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
+import hearth.kindlings.jsoniterderivation.JsoniterConfig
 import hearth.kindlings.jsoniterderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
@@ -541,12 +542,24 @@ trait DecoderHandleAsCaseClassRuleImpl {
 
   }
 
-  /** Derive a decode function for a case class field. Tries implicit summoning first, falls back to recursive
-    * derivation via the full rule chain.
+  /** Derive a decode function for a case class field. Tries implicit summoning first, falls back to a forward-declared
+    * cached `def`.
+    *
+    * Per project rule 5, [[LambdaBuilder]] is reserved for lambdas passed into collection / Optional iteration helpers.
+    * The recursive fallback uses the def-caching pattern (see `docs/contributing/def-caching-skill.md`):
+    *
+    *   - Forward-declare `def decode_field_X(reader: JsonReader, config: JsoniterConfig): Field` against the shared
+    *     [[ValDefsCache]] (the same one populated by the surrounding codec entry point).
+    *   - Populate it via `buildCachedWith`, building a *fresh* `DecoderCtx` from the def's own parameter Exprs so the
+    *     body never references outer-scope-bound names (which would not resolve once the def is hoisted to the outer
+    *     scope by `vals.toValDefs.use`).
+    *   - Wrap the resulting helper-call function in a direct cross-quotes lambda so callers still get the expected
+    *     `Expr[JsonReader => Field]` shape.
     */
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   protected def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[JsonReader => Field]] = {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
 
     Log.namedScope(s"deriveFieldDecoder:${Type[Field].prettyPrint}") {
       summonJsonValueCodecCached[Field] match {
@@ -557,15 +570,40 @@ trait DecoderHandleAsCaseClassRuleImpl {
             }
           )
         case Left(_) =>
-          Log.info(s"Building decoder for ${Type[Field].prettyPrint} via recursive derivation") >>
-            LambdaBuilder
-              .of1[JsonReader]("fieldReader")
-              .traverse { fieldReaderExpr =>
-                deriveDecoderRecursively[Field](using ctx.nest[Field](fieldReaderExpr))
+          Log.info(s"Building decoder for ${Type[Field].prettyPrint} via cached def") >> {
+            val cacheKey = s"jsoniter-field-decode:${Type[Field].prettyPrint}"
+            val defBuilder =
+              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, Field](s"decode_field_${Type[Field].shortName}")
+            for {
+              // Memoize: case classes can have multiple fields of the same type, and the
+              // case-class rule iterates them sequentially. Without this guard, the second
+              // field of the same type would re-enter `buildCachedWith` for an already-built
+              // key and trigger `HearthRequirementError("key+signature already built")`.
+              cacheState <- ctx.cache.get
+              _ <-
+                if (defBuilder.isBuilt(cacheState, cacheKey)) MIO.pure(())
+                else
+                  for {
+                    _ <- ctx.cache.forwardDeclare(cacheKey, defBuilder)
+                    _ <- MIO.scoped { rs =>
+                      rs(ctx.cache.buildCachedWith(cacheKey, defBuilder) { case (_, (readerExpr, configExpr)) =>
+                        rs(
+                          deriveDecoderRecursively[Field](using
+                            DecoderCtx.from(readerExpr, configExpr, ctx.cache, ctx.derivedType)
+                          )
+                        )
+                      })
+                    }
+                  } yield ()
+              callerOpt <- ctx.cache.get2Ary[JsonReader, JsoniterConfig, Field](cacheKey)
+            } yield {
+              val callerFn = callerOpt.get
+              val configExpr: Expr[JsoniterConfig] = ctx.config
+              Expr.quote { (r: JsonReader) =>
+                Expr.splice(callerFn(Expr.quote(r), configExpr))
               }
-              .map { builder =>
-                builder.build[Field]
-              }
+            }
+          }
       }
     }
   }

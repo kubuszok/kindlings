@@ -7,6 +7,7 @@ import scala.quoted.*
 final private[avroderivation] class EncoderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupportScala3,
+      LoadStandardExtensionsOnce,
       SchemaForMacrosImpl,
       EncoderMacrosImpl
 private[avroderivation] object EncoderMacros {

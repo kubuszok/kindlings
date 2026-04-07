@@ -8,6 +8,7 @@ import scala.quoted.*
 final private[circederivation] class DecoderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupportScala3,
+      LoadStandardExtensionsOnce,
       DecoderMacrosImpl
 private[circederivation] object DecoderMacros {
 
