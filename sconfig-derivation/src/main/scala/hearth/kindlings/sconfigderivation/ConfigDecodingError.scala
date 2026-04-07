@@ -2,9 +2,8 @@ package hearth.kindlings.sconfigderivation
 
 import hearth.fp.data.NonEmptyList
 
-/** Error type for kindlings sconfig readers. Failures carry a path component list so
-  * downstream tooling can pinpoint the offending field; multiple failures may be
-  * aggregated via [[ConfigDecodingError.Multiple]].
+/** Error type for kindlings sconfig readers. Failures carry a path component list so downstream tooling can pinpoint
+  * the offending field; multiple failures may be aggregated via [[ConfigDecodingError.Multiple]].
   */
 sealed trait ConfigDecodingError extends Throwable {
   def message: String
@@ -28,9 +27,9 @@ object ConfigDecodingError {
       extends ConfigDecodingError {
     override def withParentPath(parent: String): ConfigDecodingError = copy(path = parent :: path)
   }
-  /** Strict-mode failure: the input HOCON object had a key that's not part of the case
-    * class being decoded, and `allowUnknownKeys = false` was active (matches PureConfig's
-    * `pureconfig.error.UnknownKey`).
+
+  /** Strict-mode failure: the input HOCON object had a key that's not part of the case class being decoded, and
+    * `allowUnknownKeys = false` was active (matches PureConfig's `pureconfig.error.UnknownKey`).
     */
   final case class UnknownKey(path: List[String], key: String) extends ConfigDecodingError {
     override def message: String = s"Unknown key '$key'"

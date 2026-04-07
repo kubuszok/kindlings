@@ -33,7 +33,15 @@
       "WebFetch(domain:sttp.softwaremill.com)",
       "WebFetch(domain:tapir.softwaremill.com)",
       "WebFetch(domain:virtuslab.github.io)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(gh issue:*)",
+      "WebFetch(domain:pureconfig.github.io)",
+      "WebFetch(domain:www.javadoc.io)",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(done)",
+      "Bash(find /Users/dev/Workspaces/GitHub/kindlings -maxdepth 2 -type f \\\\\\(-name README* -o -name FEATURE_PARITY* -o -name FEATURES* -o -name CHANGELOG* \\\\\\))",
+      "Bash(curl:*)"
     ]
   }
 }

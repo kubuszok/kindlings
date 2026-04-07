@@ -14,20 +14,18 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
 
   object ReaderUseImplicitWhenAvailableRule extends ReaderDerivationRule("use implicit when available") {
 
-    /** Methods to exclude from `summonExprIgnoring` so that the macro never finds and reuses
-      * its own auto-derivation entry points (which would cause infinite expansion).
+    /** Methods to exclude from `summonExprIgnoring` so that the macro never finds and reuses its own auto-derivation
+      * entry points (which would cause infinite expansion).
       *
       * **Important**: this filter only covers our own `KindlingsConfigReader.derived` /
-      * `KindlingsConfigConvert.derived` companion methods. PureConfig also ships several
-      * auto-derivation surfaces of its own — `pureconfig.generic.auto._` (Scala 2,
-      * Shapeless-based) and `pureconfig.generic.derivation.default._` (Scala 3 native
-      * `derives`). Users who want **kindlings derivation** should NOT also import those
-      * pureconfig packages, otherwise pureconfig's implicit will win during
-      * `summonExpr` and our rule chain will never run.
+      * `KindlingsConfigConvert.derived` companion methods. PureConfig also ships several auto-derivation surfaces of
+      * its own — `pureconfig.generic.auto._` (Scala 2, Shapeless-based) and `pureconfig.generic.derivation.default._`
+      * (Scala 3 native `derives`). Users who want **kindlings derivation** should NOT also import those pureconfig
+      * packages, otherwise pureconfig's implicit will win during `summonExpr` and our rule chain will never run.
       *
-      * If a user imports both, the resulting `ConfigReader[A]` will be the one provided
-      * by whichever import is "more specific" in implicit-resolution rules (typically
-      * pureconfig's), which will silently bypass kindlings annotations / config knobs.
+      * If a user imports both, the resulting `ConfigReader[A]` will be the one provided by whichever import is "more
+      * specific" in implicit-resolution rules (typically pureconfig's), which will silently bypass kindlings
+      * annotations / config knobs.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsConfigReader.type].methods.collect {

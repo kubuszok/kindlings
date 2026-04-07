@@ -4,7 +4,12 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.pureconfigderivation.{KindlingsConfigReader, KindlingsCoproductHint, KindlingsProductHint, PureConfig}
+import hearth.kindlings.pureconfigderivation.{
+  KindlingsConfigReader,
+  KindlingsCoproductHint,
+  KindlingsProductHint,
+  PureConfig
+}
 import hearth.kindlings.pureconfigderivation.annotations.{configKey, transientField}
 import pureconfig.ConfigReader
 import pureconfig.ConfigCursor
