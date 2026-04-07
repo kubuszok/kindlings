@@ -4,13 +4,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.sconfigderivation.{
-  ConfigDecodingError,
-  ConfigReader,
-  CoproductHint,
-  ProductHint,
-  SConfig
-}
+import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint, ProductHint, SConfig}
 import hearth.kindlings.sconfigderivation.annotations.{configKey, transientField}
 import org.ekrich.config.ConfigValue
 
@@ -85,12 +79,14 @@ trait ReaderMacrosImpl
         infoRendering = if (shouldWeLogReaderDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogReaderDerivation) RenderFrom(Log.Level.Info) else DontRender
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors.map { e =>
-          e.getMessage.split("\n").toList match {
-            case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-            case _            => "  - " + e.getMessage
+        val errorsRendered = errors
+          .map { e =>
+            e.getMessage.split("\n").toList match {
+              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
+              case _            => "  - " + e.getMessage
+            }
           }
-        }.mkString("\n")
+          .mkString("\n")
         val hint =
           "Enable debug logging with: import hearth.kindlings.sconfigderivation.debug.logDerivationForConfigReader or scalac option -Xmacro-settings:sconfigDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)
@@ -154,8 +150,7 @@ trait ReaderMacrosImpl
         )(_ => instance)
     }
 
-    def getHelper[B: Type]
-        : MIO[Option[(Expr[ConfigValue], Expr[SConfig]) => Expr[Either[ConfigDecodingError, B]]]] = {
+    def getHelper[B: Type]: MIO[Option[(Expr[ConfigValue], Expr[SConfig]) => Expr[Either[ConfigDecodingError, B]]]] = {
       implicit val ResultB: Type[Either[ConfigDecodingError, B]] = RTypes.ReaderResult[B]
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
       implicit val SConfigT: Type[SConfig] = RTypes.SConfig

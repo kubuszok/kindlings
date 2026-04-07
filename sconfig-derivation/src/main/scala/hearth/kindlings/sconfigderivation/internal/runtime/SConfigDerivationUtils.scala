@@ -19,7 +19,7 @@ object SConfigDerivationUtils {
   def asObject(value: ConfigValue): Either[ConfigDecodingError, ConfigObject] =
     value.valueType match {
       case ConfigValueType.OBJECT => Right(value.asInstanceOf[ConfigObject])
-      case other =>
+      case other                  =>
         Left(ConfigDecodingError.WrongType(Nil, ConfigValueType.OBJECT.toString, other.toString))
     }
 
@@ -27,7 +27,7 @@ object SConfigDerivationUtils {
   def asList(value: ConfigValue): Either[ConfigDecodingError, ConfigList] =
     value.valueType match {
       case ConfigValueType.LIST => Right(value.asInstanceOf[ConfigList])
-      case other =>
+      case other                =>
         Left(ConfigDecodingError.WrongType(Nil, ConfigValueType.LIST.toString, other.toString))
     }
 
@@ -35,7 +35,7 @@ object SConfigDerivationUtils {
   def asString(value: ConfigValue): Either[ConfigDecodingError, String] =
     value.valueType match {
       case ConfigValueType.STRING => Right(value.unwrapped.asInstanceOf[String])
-      case other =>
+      case other                  =>
         Left(ConfigDecodingError.WrongType(Nil, ConfigValueType.STRING.toString, other.toString))
     }
 
@@ -61,7 +61,7 @@ object SConfigDerivationUtils {
     val keys = obj.keySet().iterator().asScala.toList
     keys match {
       case key :: Nil => Right((key, obj.get(key)))
-      case _ =>
+      case _          =>
         Left(
           ConfigDecodingError.CannotConvert(
             Nil,
@@ -135,10 +135,9 @@ object SConfigDerivationUtils {
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, reader: ConfigReader[A]): A = value.asInstanceOf[A]
 
-  /** Strict-mode check for `allowUnknownKeys = false`. After the decode result has been
-    * computed, this verifies that the input object has no keys other than the ones the
-    * derivation expected. If unknown keys remain, the result is replaced with a failure
-    * (mirrors PureConfig's `ProductHint.bottom`).
+  /** Strict-mode check for `allowUnknownKeys = false`. After the decode result has been computed, this verifies that
+    * the input object has no keys other than the ones the derivation expected. If unknown keys remain, the result is
+    * replaced with a failure (mirrors PureConfig's `ProductHint.bottom`).
     */
   def checkUnknownKeys[A](
       cursor: ConfigValue,
@@ -149,7 +148,9 @@ object SConfigDerivationUtils {
     if (allowUnknownKeys) result
     else
       asObject(cursor).flatMap { obj =>
-        val unknown: List[String] = obj.entrySet.iterator.asScala.map(_.getKey).toList
+        val unknown: List[String] = obj.entrySet.iterator.asScala
+          .map(_.getKey)
+          .toList
           .filterNot(expectedKeys.contains)
         unknown match {
           case Nil          => result

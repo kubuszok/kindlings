@@ -1,8 +1,8 @@
 package hearth.kindlings.sconfigderivation
 
-/** Combined reader + writer in a single instance. The hierarchy is what the user explicitly
-  * asked for: `Codec extends Reader with Writer`, no wrapping or subtype gymnastics
-  * (since we own all three traits in this module).
+/** Combined reader + writer in a single instance. The hierarchy is what the user explicitly asked for:
+  * `Codec extends Reader with Writer`, no wrapping or subtype gymnastics (since we own all three traits in this
+  * module).
   */
 trait ConfigCodec[A] extends ConfigReader[A] with ConfigWriter[A]
 object ConfigCodec extends ConfigCodecCompanionCompat {

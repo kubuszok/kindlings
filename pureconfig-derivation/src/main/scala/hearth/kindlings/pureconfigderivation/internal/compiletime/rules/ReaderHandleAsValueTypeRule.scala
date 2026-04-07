@@ -50,12 +50,12 @@ trait ReaderHandleAsValueTypeRuleImpl {
         }
       }
 
-    /** Build an `Inner => Either[ConfigReaderFailures, A]` lambda for value types whose `wrap`
-      * returns `Either[String, A]` (e.g. refined types). The path-dependent inner type is
-      * isolated behind a regular type parameter so it never appears inside an `Expr.quote` body.
+    /** Build an `Inner => Either[ConfigReaderFailures, A]` lambda for value types whose `wrap` returns
+      * `Either[String, A]` (e.g. refined types). The path-dependent inner type is isolated behind a regular type
+      * parameter so it never appears inside an `Expr.quote` body.
       *
-      * The `cursorExpr` parameter is captured from the enclosing context's `rctx.cursor` and
-      * used inside the quote to materialise origin/path metadata for the failure record.
+      * The `cursorExpr` parameter is captured from the enclosing context's `rctx.cursor` and used inside the quote to
+      * materialise origin/path metadata for the failure record.
       */
     private def buildEitherWrap[A: Type, Inner: Type](
         isValueType: IsValueTypeOf[A, Inner],

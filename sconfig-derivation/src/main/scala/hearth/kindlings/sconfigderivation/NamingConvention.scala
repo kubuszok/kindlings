@@ -2,33 +2,31 @@ package hearth.kindlings.sconfigderivation
 
 import scala.collection.compat.immutable.ArraySeq
 
-/** Bidirectional naming convention used by [[ConfigFieldMapping]] to translate between
-  * Scala identifier styles and HOCON key conventions. The implementation mirrors
-  * `pureconfig.NamingConvention` exactly so the two modules behave identically when
-  * users expect the same field-name transformations.
+/** Bidirectional naming convention used by [[ConfigFieldMapping]] to translate between Scala identifier styles and
+  * HOCON key conventions. The implementation mirrors `pureconfig.NamingConvention` exactly so the two modules behave
+  * identically when users expect the same field-name transformations.
   *
-  * Each convention can `toTokens(s)` parse an identifier into its underlying word list,
-  * and `fromTokens(words)` render that word list back into the convention's preferred
-  * spelling. Composing two conventions (`source.toTokens andThen target.fromTokens`)
-  * gives a one-way `String => String` transformation suitable for the `transformMemberNames`
-  * / `transformConstructorNames` slots on [[SConfig]].
+  * Each convention can `toTokens(s)` parse an identifier into its underlying word list, and `fromTokens(words)` render
+  * that word list back into the convention's preferred spelling. Composing two conventions (`source.toTokens andThen
+  * target.fromTokens`) gives a one-way `String => String` transformation suitable for the `transformMemberNames` /
+  * `transformConstructorNames` slots on [[SConfig]].
   */
 trait NamingConvention {
   def toTokens(s: String): Seq[String]
   def fromTokens(l: Seq[String]): String
 }
 
-/** Marker trait for `CamelCase` / `PascalCase` style conventions. Both share the same
-  * tokeniser; they differ only in how they recombine tokens.
+/** Marker trait for `CamelCase` / `PascalCase` style conventions. Both share the same tokeniser; they differ only in
+  * how they recombine tokens.
   *
   * The tokeniser splits on the same boundaries as `pureconfig.CapitalizedWordsNamingConvention`:
-  *  - acronym → word: `XMLParser` → `XML | Parser` (uppercase followed by uppercase+lowercase)
-  *  - lower → upper: `myField` → `my | Field`
-  *  - letter → non-letter: `field2name` → `field | 2 | name`
+  *   - acronym → word: `XMLParser` → `XML | Parser` (uppercase followed by uppercase+lowercase)
+  *   - lower → upper: `myField` → `my | Field`
+  *   - letter → non-letter: `field2name` → `field | 2 | name`
   *
-  * Implemented with a manual char-by-char loop instead of a lookbehind regex so it works
-  * on Scala.js without requiring ES2018+ mode (lookbehind assertions are an ES2018 feature
-  * and would otherwise force every downstream Scala.js build to opt in).
+  * Implemented with a manual char-by-char loop instead of a lookbehind regex so it works on Scala.js without requiring
+  * ES2018+ mode (lookbehind assertions are an ES2018 feature and would otherwise force every downstream Scala.js build
+  * to opt in).
   */
 trait CapitalizedWordsNamingConvention extends NamingConvention {
   override def toTokens(s: String): Seq[String] = {

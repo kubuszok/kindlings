@@ -40,8 +40,7 @@ trait ReaderUseCachedDefWhenAvailableRuleImpl {
         Rule.matched(helperCall(rctx.value, rctx.config))
       )
 
-    private def yieldUnsupported[A: ReaderCtx]
-        : MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] =
+    private def yieldUnsupported[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] =
       MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} does not have a cached reader"))
   }
 }

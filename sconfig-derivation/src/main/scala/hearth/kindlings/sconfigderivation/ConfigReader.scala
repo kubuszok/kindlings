@@ -4,10 +4,9 @@ import org.ekrich.config.{ConfigValue, ConfigValueType}
 
 /** Type class for decoding a [[org.ekrich.config.ConfigValue]] into a value of type `A`.
   *
-  * Unlike [[hearth.kindlings.pureconfigderivation.KindlingsConfigReader]], this trait
-  * is owned by the kindlings sconfig module — it does not extend any third-party type,
-  * and the `ConfigCodec[A]` companion forms a clean three-trait hierarchy
-  * (`Reader`, `Writer`, `Codec extends Reader with Writer`).
+  * Unlike [[hearth.kindlings.pureconfigderivation.KindlingsConfigReader]], this trait is owned by the kindlings sconfig
+  * module — it does not extend any third-party type, and the `ConfigCodec[A]` companion forms a clean three-trait
+  * hierarchy (`Reader`, `Writer`, `Codec extends Reader with Writer`).
   */
 trait ConfigReader[A] {
   def from(value: ConfigValue): Either[ConfigDecodingError, A]
@@ -23,10 +22,9 @@ trait ConfigReader[A] {
   }
 }
 
-/** Companion. Built-in instances live here directly (not in mixed-in traits) because
-  * Scala 2's macro `Implicits.search` is unreliable about picking up `implicit val`s
-  * declared in inherited traits — defining them in the companion body itself works on
-  * both Scala 2 and Scala 3.
+/** Companion. Built-in instances live here directly (not in mixed-in traits) because Scala 2's macro `Implicits.search`
+  * is unreliable about picking up `implicit val`s declared in inherited traits — defining them in the companion body
+  * itself works on both Scala 2 and Scala 3.
   */
 object ConfigReader extends ConfigReaderCompanionCompat {
 

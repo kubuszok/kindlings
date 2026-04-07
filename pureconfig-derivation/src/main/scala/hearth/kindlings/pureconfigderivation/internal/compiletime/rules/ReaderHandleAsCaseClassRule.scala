@@ -281,9 +281,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
       }
     }
 
-    /** Derive a `ConfigReader[Field]` for a case-class field, either by summoning an
-      * implicit (filtered against our auto-derivation entry points) or by recursively
-      * driving the rule chain on the field type.
+    /** Derive a `ConfigReader[Field]` for a case-class field, either by summoning an implicit (filtered against our
+      * auto-derivation entry points) or by recursively driving the rule chain on the field type.
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveFieldReader[Field: Type](implicit ctx: ReaderCtx[?]): MIO[Expr[ConfigReader[Field]]] = {

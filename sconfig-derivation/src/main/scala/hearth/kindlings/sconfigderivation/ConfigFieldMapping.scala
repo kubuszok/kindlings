@@ -1,11 +1,11 @@
 package hearth.kindlings.sconfigderivation
 
-/** A function `String => String` that translates Scala identifier names into HOCON keys
-  * (or HOCON keys into Scala names — both directions are achievable by swapping the
-  * source and target conventions). Mirrors `pureconfig.ConfigFieldMapping` exactly.
+/** A function `String => String` that translates Scala identifier names into HOCON keys (or HOCON keys into Scala names
+  * — both directions are achievable by swapping the source and target conventions). Mirrors
+  * `pureconfig.ConfigFieldMapping` exactly.
   *
-  * The function is intentionally one-way: writers and readers both call the same forward
-  * function so that encoding round-trips through decoding without needing an inverse.
+  * The function is intentionally one-way: writers and readers both call the same forward function so that encoding
+  * round-trips through decoding without needing an inverse.
   *
   * Build via `ConfigFieldMapping(source, target)`:
   * {{{
@@ -40,8 +40,8 @@ object ConfigFieldMapping {
       override def apply(fieldName: String): String = f(fieldName)
     }
 
-  /** Compose two naming conventions: `source.toTokens andThen target.fromTokens`.
-    * If both conventions are equal, returns the identity mapping for free.
+  /** Compose two naming conventions: `source.toTokens andThen target.fromTokens`. If both conventions are equal,
+    * returns the identity mapping for free.
     */
   def apply(typeFieldConvention: NamingConvention, configFieldConvention: NamingConvention): ConfigFieldMapping =
     if (typeFieldConvention == configFieldConvention) apply(identity[String])

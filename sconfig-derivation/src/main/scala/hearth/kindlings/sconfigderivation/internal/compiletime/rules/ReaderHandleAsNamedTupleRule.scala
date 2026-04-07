@@ -145,7 +145,7 @@ trait ReaderHandleAsNamedTupleRuleImpl {
         .summonExprIgnoring(ReaderUseImplicitWhenAvailableRule.ignoredImplicits*)
         .toEither match {
         case Right(readerExpr) => MIO.pure(readerExpr)
-        case Left(_) =>
+        case Left(_)           =>
           LambdaBuilder
             .of1[ConfigValue]("fieldValue")
             .traverse { fieldValueExpr =>

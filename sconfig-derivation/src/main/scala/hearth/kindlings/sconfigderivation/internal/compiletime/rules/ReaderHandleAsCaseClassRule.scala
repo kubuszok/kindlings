@@ -189,7 +189,9 @@ trait ReaderHandleAsCaseClassRuleImpl {
                           SConfigDerivationUtils
                             .asObject(v)
                             .flatMap { obj =>
-                              Expr.splice(readerExpr).from(SConfigDerivationUtils.readOptionalField(obj, Expr.splice(keyExpr)))
+                              Expr
+                                .splice(readerExpr)
+                                .from(SConfigDerivationUtils.readOptionalField(obj, Expr.splice(keyExpr)))
                             }
                             .asInstanceOf[Either[ConfigDecodingError, Any]]
                         }

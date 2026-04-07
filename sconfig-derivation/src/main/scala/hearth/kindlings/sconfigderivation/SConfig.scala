@@ -3,24 +3,22 @@ package hearth.kindlings.sconfigderivation
 /** Compile-time configuration knobs that drive kindlings sconfig derivation.
   *
   * Defaults match PureConfig's `ProductHint` defaults exactly so users can move between
-  * `kindlings-pureconfig-derivation` and `kindlings-sconfig-derivation` without rethinking
-  * naming or strictness:
+  * `kindlings-pureconfig-derivation` and `kindlings-sconfig-derivation` without rethinking naming or strictness:
   *
-  *  - `transformMemberNames = ConfigFieldMapping(CamelCase, KebabCase)` — case-class
-  *    fields like `myFieldName` map to HOCON keys like `my-field-name`.
-  *  - `transformConstructorNames = ConfigFieldMapping(PascalCase, KebabCase)` — sealed
-  *    trait subtypes like `MyVariant` map to discriminator values like `my-variant`.
-  *  - `discriminator = Some("type")` — sealed traits encode as `{"type": "variant", …}`
-  *    by default; set to `None` to switch to single-key wrapping (`{"variant": {…}}`).
-  *  - `useDefaults = true` — fall back to a case-class field's compile-time default value
-  *    when the corresponding HOCON key is missing.
-  *  - `allowUnknownKeys = true` — HOCON objects may contain keys that aren't fields of
-  *    the case class. Set to `false` for strict mode (fail on unknown keys).
+  *   - `transformMemberNames = ConfigFieldMapping(CamelCase, KebabCase)` — case-class fields like `myFieldName` map to
+  *     HOCON keys like `my-field-name`.
+  *   - `transformConstructorNames = ConfigFieldMapping(PascalCase, KebabCase)` — sealed trait subtypes like `MyVariant`
+  *     map to discriminator values like `my-variant`.
+  *   - `discriminator = Some("type")` — sealed traits encode as `{"type": "variant", …}` by default; set to `None` to
+  *     switch to single-key wrapping (`{"variant": {…}}`).
+  *   - `useDefaults = true` — fall back to a case-class field's compile-time default value when the corresponding HOCON
+  *     key is missing.
+  *   - `allowUnknownKeys = true` — HOCON objects may contain keys that aren't fields of the case class. Set to `false`
+  *     for strict mode (fail on unknown keys).
   *
-  * For per-type customization (e.g. one case class wants `SnakeCase` while everything
-  * else stays kebab-case), define an implicit [[ProductHint]] / [[CoproductHint]] for
-  * the specific type. The macro looks them up at derivation time and falls back to this
-  * global config when no per-type hint is in scope.
+  * For per-type customization (e.g. one case class wants `SnakeCase` while everything else stays kebab-case), define an
+  * implicit [[ProductHint]] / [[CoproductHint]] for the specific type. The macro looks them up at derivation time and
+  * falls back to this global config when no per-type hint is in scope.
   */
 final case class SConfig(
     transformMemberNames: String => String = ConfigFieldMapping(CamelCase, KebabCase),

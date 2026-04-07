@@ -12,13 +12,12 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
 
   object ReaderUseImplicitWhenAvailableRule extends ReaderDerivationRule("use implicit when available") {
 
-    /** Filter out our own auto-derivation entry points (`derived` methods) so that the
-      * macro never finds and reuses them, which would cause infinite expansion. We
-      * deliberately do NOT filter the built-in primitive / collection instances on the
-      * companions — those are exactly what we want implicit search to find first.
+    /** Filter out our own auto-derivation entry points (`derived` methods) so that the macro never finds and reuses
+      * them, which would cause infinite expansion. We deliberately do NOT filter the built-in primitive / collection
+      * instances on the companions — those are exactly what we want implicit search to find first.
       *
-      * Filter strictly by `isImplicit && name == "derived"` so we never accidentally drop
-      * a non-implicit `derive` helper or one of the built-in instances.
+      * Filter strictly by `isImplicit && name == "derived"` so we never accidentally drop a non-implicit `derive`
+      * helper or one of the built-in instances.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[ConfigReader.type].methods.collect {

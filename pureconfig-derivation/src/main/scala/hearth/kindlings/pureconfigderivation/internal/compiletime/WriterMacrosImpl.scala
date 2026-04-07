@@ -5,7 +5,12 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 import com.typesafe.config.ConfigValue
-import hearth.kindlings.pureconfigderivation.{KindlingsConfigWriter, KindlingsCoproductHint, KindlingsProductHint, PureConfig}
+import hearth.kindlings.pureconfigderivation.{
+  KindlingsConfigWriter,
+  KindlingsCoproductHint,
+  KindlingsProductHint,
+  PureConfig
+}
 import hearth.kindlings.pureconfigderivation.annotations.{configKey, transientField}
 import pureconfig.ConfigWriter
 

@@ -11,8 +11,7 @@ trait ConfigWriter[A] {
   }
 }
 
-/** Companion. Built-in instances live here directly (not in mixed-in traits). See
-  * [[ConfigReader]] for the rationale.
+/** Companion. Built-in instances live here directly (not in mixed-in traits). See [[ConfigReader]] for the rationale.
   */
 object ConfigWriter extends ConfigWriterCompanionCompat {
 
