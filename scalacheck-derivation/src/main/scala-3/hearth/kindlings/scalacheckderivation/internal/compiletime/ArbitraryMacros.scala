@@ -6,7 +6,8 @@ import scala.quoted.*
 
 final private[scalacheckderivation] class ArbitraryMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      ArbitraryMacrosImpl
+      ArbitraryMacrosImpl,
+      LoadStandardExtensionsOnce
 
 private[scalacheckderivation] object ArbitraryMacros {
 

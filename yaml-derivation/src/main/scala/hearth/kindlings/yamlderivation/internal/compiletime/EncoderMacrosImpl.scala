@@ -20,7 +20,8 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsNamedTupleRuleImpl
     with rules.EncoderHandleAsSingletonRuleImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
-    with rules.EncoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+    with rules.EncoderHandleAsEnumRuleImpl {
+  this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // Entrypoints
 
@@ -104,7 +105,7 @@ trait EncoderMacrosImpl
           val fromCtx: (EncoderCtx[A] => Expr[Node]) = (ctx: EncoderCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveEncoderRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)

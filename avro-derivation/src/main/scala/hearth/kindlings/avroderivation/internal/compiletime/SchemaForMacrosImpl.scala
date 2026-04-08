@@ -35,7 +35,8 @@ trait SchemaForMacrosImpl
     with rules.AvroSchemaForHandleAsNamedTupleRuleImpl
     with rules.AvroSchemaForHandleAsSingletonRuleImpl
     with rules.AvroSchemaForHandleAsCaseClassRuleImpl
-    with rules.AvroSchemaForHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+    with rules.AvroSchemaForHandleAsEnumRuleImpl {
+  this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // Entrypoints
 
@@ -93,7 +94,7 @@ trait SchemaForMacrosImpl
           val fromCtx: (SchemaForCtx[A] => Expr[Schema]) = (ctx: SchemaForCtx[A]) =>
             runSafe {
               for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                _ <- ensureStandardExtensionsLoaded()
                 result <- deriveSchemaRecursively[A](using ctx)
                 cache <- ctx.cache.get
               } yield cache.toValDefs.use(_ => result)
@@ -232,7 +233,7 @@ trait SchemaForMacrosImpl
     val localCache = ValDefsCache.mlocal
     val ctx = SchemaForCtx[B](Type[B], config, localCache, derivedType = None)
     for {
-      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+      _ <- ensureStandardExtensionsLoaded()
       result <- deriveSchemaRecursively[B](using ctx)
       cache <- localCache.get
     } yield cache.toValDefs.use(_ => result)
