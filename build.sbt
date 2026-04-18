@@ -37,7 +37,7 @@ val versions = new {
   val scalaXml = "2.4.0"
   val scalaSaxParser = "0.1.0"
   val pureconfig = "0.17.10"
-  val sconfig = "1.8.1"
+  val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
