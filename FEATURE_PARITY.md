@@ -428,6 +428,63 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 
 ---
 
+## scalacheck-derivation
+
+**Replaces:** manual `Arbitrary` instance writing, [`scalacheck-shapeless`](https://github.com/alexarchambault/scalacheck-shapeless) (Scala 2 only, Shapeless-based)
+
+### Type classes
+
+| Feature | Manual / scalacheck-shapeless | Kindlings | Status |
+|---|---|---|---|
+| `Arbitrary[A]` | Manual or Shapeless-derived | Yes | Parity |
+
+### Derivation API
+
+| Feature | scalacheck-shapeless | Kindlings | Status |
+|---|---|---|---|
+| Semi-automatic (`DeriveArbitrary.derived[A]`) | No | Yes | Improvement |
+| `Arbitrary.derived[A]` extension | No | Yes (via `import extensions._`) | Improvement |
+| `derives Arbitrary` (Scala 3) | No | Yes | Improvement |
+| Automatic (fully implicit) | Yes (import and forget) | No — sanely-automatic via `.derived` | Trade-off |
+| Unified Scala 2+3 API | No (Scala 2 only) | Yes | Improvement |
+| Cross-platform (JVM/JS/Native) | JVM only | JVM + JS + Native | Improvement |
+
+### Type support
+
+| Feature | Manual / scalacheck-shapeless | Kindlings | Status |
+|---|---|---|---|
+| Primitives (`Boolean`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`, `Char`, `String`, `Unit`) | ScalaCheck built-in | Yes (built-in rule) | Parity |
+| `BigInt`, `BigDecimal` | ScalaCheck built-in | Yes (built-in rule) | Parity |
+| Case classes | scalacheck-shapeless: yes; manual: tedious | Yes | Parity |
+| Sealed traits (case objects only) | scalacheck-shapeless: yes | Yes (`Gen.oneOf`) | Parity |
+| Sealed traits (mixed case objects + case classes) | scalacheck-shapeless: yes | Yes | Parity |
+| Zero-field case classes | Manual: trivial | Yes (`Gen.const`) | Parity |
+| Nested case classes | scalacheck-shapeless: yes | Yes | Parity |
+| `Option[A]` | ScalaCheck built-in | Yes (`Gen.option`) | Parity |
+| Collections (`List`, `Vector`, `Set`, …) | ScalaCheck built-in for some | Yes (via Hearth `IsCollection`) | Parity |
+| Recursive types | scalacheck-shapeless: needs `Lazy` | Yes (no wrappers needed) | Improvement |
+| User-provided implicits | Implicit search | Yes (checked before derivation) | Parity |
+
+### Not supported
+
+| Feature | Notes |
+|---|---|
+| Value classes / opaque types | Not yet handled — user can provide an implicit `Arbitrary` for these |
+| Refined types / Iron types | Not yet handled — user can provide an implicit `Arbitrary` for these |
+| `Map[K, V]` | Not yet handled — user can provide an implicit `Arbitrary` for these |
+| Java enums | Not yet handled |
+| Configuration class | No configuration knobs (no field name transforms, etc. — generators don't need them) |
+| Annotations (`@fieldName`, `@transientField`) | Not applicable — generators don't interact with serialized field names |
+
+### Debugging
+
+| Feature | Description |
+|---|---|
+| Debug logging (import) | `import hearth.kindlings.scalacheckderivation.debug.logDerivationForScalaCheckDerivation` |
+| Debug logging (scalac option) | `-Xmacro-settings:scalacheckDerivation.logDerivation=true` |
+
+---
+
 ## sconfig-derivation
 
 **Original type class** — no replacement target. PureConfig's underlying parser, `com.typesafe:config`, is JVM-only, which locks PureConfig out of Scala.js and Scala Native projects. `sconfig-derivation` fills that gap by deriving config readers/writers/codecs against [`org.ekrich:sconfig`](https://github.com/ekrich/sconfig) — a Scala port of typesafe-config that runs on JVM, Scala.js, and Scala Native — while sharing the same HOCON syntax, the same `Config` / `ConfigValue` shape, and the same derivation knobs as `kindlings-pureconfig-derivation` (so users can mentally swap between the two depending on their target platform).
