@@ -1,6 +1,6 @@
 package hearth.kindlings.sconfigderivation
 
-import scala.collection.compat.immutable.ArraySeq
+import scala.collection.immutable.ArraySeq
 
 /** Bidirectional naming convention used by [[ConfigFieldMapping]] to translate between Scala identifier styles and
   * HOCON key conventions. The implementation mirrors `pureconfig.NamingConvention` exactly so the two modules behave
