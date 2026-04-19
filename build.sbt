@@ -37,7 +37,7 @@ val versions = new {
   val scalaXml = "2.4.0"
   val scalaSaxParser = "0.1.0"
   val pureconfig = "0.17.10"
-  val scalacheck = "1.18.1"
+  val scalacheck = "1.19.0"
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
 
