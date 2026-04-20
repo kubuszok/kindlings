@@ -11,7 +11,8 @@ import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 
 trait DecoderMacrosImpl
-    extends rules.DecoderUseCachedDefWhenAvailableRuleImpl
+    extends YamlDerivationTimeout
+    with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
     with rules.DecoderHandleAsValueTypeRuleImpl
@@ -153,7 +154,8 @@ trait DecoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

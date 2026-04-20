@@ -38,7 +38,8 @@ trait HashMacrosImpl
     with rules.HashBuiltInRuleImpl
     with rules.HashSingletonRuleImpl
     with rules.HashCaseClassRuleImpl
-    with rules.HashEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.HashEnumRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveHash[A: Type]: Expr[cats.kernel.Hash[A]] = {
@@ -167,7 +168,8 @@ trait HashMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

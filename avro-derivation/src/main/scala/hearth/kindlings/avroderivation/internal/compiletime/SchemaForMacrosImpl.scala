@@ -22,7 +22,8 @@ import hearth.kindlings.avroderivation.annotations.{
 import org.apache.avro.Schema
 
 trait SchemaForMacrosImpl
-    extends rules.AvroSchemaForUseCachedDefWhenAvailableRuleImpl
+    extends AvroDerivationTimeout
+    with rules.AvroSchemaForUseCachedDefWhenAvailableRuleImpl
     with rules.AvroSchemaForCheckSelfRecordRuleImpl
     with rules.AvroSchemaForUseImplicitWhenAvailableRuleImpl
     with rules.AvroSchemaForHandleAsLiteralTypeRuleImpl
@@ -109,7 +110,8 @@ trait SchemaForMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

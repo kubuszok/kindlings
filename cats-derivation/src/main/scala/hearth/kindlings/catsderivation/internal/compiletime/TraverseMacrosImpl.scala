@@ -16,7 +16,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * These are spliced at the top level of the traverse method body, then used with Applicative[G] operations at runtime.
   */
-trait TraverseMacrosImpl { this: MacroCommons & StdExtensions =>
+trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveTraverse[F[_]](
@@ -186,7 +186,8 @@ trait TraverseMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogTraverseDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogTraverseDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogTraverseDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

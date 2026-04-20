@@ -16,7 +16,8 @@ import pureconfig.ConfigCursor
 import pureconfig.error.ConfigReaderFailures
 
 trait ReaderMacrosImpl
-    extends rules.ReaderUseCachedDefWhenAvailableRuleImpl
+    extends PureconfigDerivationTimeout
+    with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsValueTypeRuleImpl
     with rules.ReaderHandleAsOptionRuleImpl
@@ -91,7 +92,8 @@ trait ReaderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogReaderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogReaderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogReaderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

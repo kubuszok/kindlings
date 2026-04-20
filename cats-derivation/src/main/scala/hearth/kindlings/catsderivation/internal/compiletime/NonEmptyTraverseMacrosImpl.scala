@@ -15,7 +15,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * For nonEmptyTraverse, instead of seeding with G.pure (which requires Applicative), we seed with the first field
   * mapped through f (giving G[B]), then combine remaining fields using G.map2.
   */
-trait NonEmptyTraverseMacrosImpl { this: MacroCommons & StdExtensions =>
+trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveNonEmptyTraverse[F[_]](
@@ -255,7 +255,8 @@ trait NonEmptyTraverseMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogNETDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogNETDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogNETDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

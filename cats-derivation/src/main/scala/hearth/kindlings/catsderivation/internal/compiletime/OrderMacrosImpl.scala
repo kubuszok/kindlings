@@ -14,7 +14,8 @@ trait OrderMacrosImpl
     with rules.OrderValueTypeRuleImpl
     with rules.OrderSingletonRuleImpl
     with rules.OrderCaseClassRuleImpl
-    with rules.OrderEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.OrderEnumRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveOrder[A: Type]: Expr[cats.kernel.Order[A]] = {
@@ -64,7 +65,8 @@ trait OrderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogOrderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogOrderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogOrderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

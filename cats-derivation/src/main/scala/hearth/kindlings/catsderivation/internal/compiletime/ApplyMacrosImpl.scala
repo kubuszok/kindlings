@@ -12,7 +12,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach since both
   * ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
+trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveApply[F[_]](FCtor0: Type.Ctor1[F], ApplyFType: Type[cats.Apply[F]]): Expr[cats.Apply[F]] = {
@@ -108,7 +108,8 @@ trait ApplyMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogApplyDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogApplyDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogApplyDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

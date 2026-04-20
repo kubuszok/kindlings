@@ -11,7 +11,8 @@ import sttp.tapir.{Schema, SchemaType}
 import sttp.tapir.Schema.SName
 
 trait SchemaMacrosImpl
-    extends rules.SchemaUseCachedWhenAvailableRuleImpl
+    extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with rules.SchemaUseCachedWhenAvailableRuleImpl
     with rules.SchemaUseSelfRefWhenRecursiveRuleImpl
     with rules.SchemaUseImplicitWhenAvailableRuleImpl
     with rules.SchemaHandleAsOptionRuleImpl
@@ -22,6 +23,8 @@ trait SchemaMacrosImpl
     with rules.SchemaHandleAsCaseClassRuleImpl
     with rules.SchemaHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
+
+  override protected def derivationSettingsNamespace: String = "tapirSchemaDerivation"
 
   // Type helpers
 
@@ -117,7 +120,8 @@ trait SchemaMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

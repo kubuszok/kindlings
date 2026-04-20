@@ -10,7 +10,8 @@ trait MonoidMacrosImpl
     with rules.MonoidUseCachedRuleImpl
     with rules.MonoidUseImplicitRuleImpl
     with rules.MonoidBuiltInRuleImpl
-    with rules.MonoidCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.MonoidCaseClassRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   final case class MonoidDerivationResult[A](empty: Expr[A], combine: (Expr[A], Expr[A]) => MIO[Expr[A]])
 
@@ -109,7 +110,8 @@ trait MonoidMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

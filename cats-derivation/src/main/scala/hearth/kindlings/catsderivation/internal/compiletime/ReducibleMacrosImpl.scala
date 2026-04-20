@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Requires at least one direct field (non-empty guarantee).
   */
-trait ReducibleMacrosImpl { this: MacroCommons & StdExtensions =>
+trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveReducible[F[_]](
@@ -157,7 +157,8 @@ trait ReducibleMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogReducibleDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogReducibleDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogReducibleDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =
