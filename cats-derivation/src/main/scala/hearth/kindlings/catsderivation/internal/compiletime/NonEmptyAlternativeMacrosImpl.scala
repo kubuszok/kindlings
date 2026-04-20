@@ -15,7 +15,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *   - ap[A, B]: needs F[Any] erasure because ff: F[A => B] and fa: F[A] have different type parameters
   *   - combineK[A]: summons Semigroup for field types at macro time, needs concrete types
   */
-trait NonEmptyAlternativeMacrosImpl { this: MacroCommons & StdExtensions =>
+trait NonEmptyAlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveNonEmptyAlternative[F[_]](
@@ -134,7 +134,8 @@ trait NonEmptyAlternativeMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogNEADerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogNEADerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogNEADerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

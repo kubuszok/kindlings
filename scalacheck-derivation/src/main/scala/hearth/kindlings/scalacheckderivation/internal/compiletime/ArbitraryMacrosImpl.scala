@@ -7,7 +7,8 @@ import hearth.std.*
 import org.scalacheck.{Arbitrary, Gen}
 
 trait ArbitraryMacrosImpl
-    extends rules.ArbitraryUseCachedRuleImpl
+    extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with rules.ArbitraryUseCachedRuleImpl
     with rules.ArbitraryUseImplicitRuleImpl
     with rules.ArbitraryBuiltInRuleImpl
     with rules.ArbitraryHandleAsOptionRuleImpl
@@ -15,6 +16,8 @@ trait ArbitraryMacrosImpl
     with rules.ArbitraryHandleAsSingletonRuleImpl
     with rules.ArbitraryHandleAsCaseClassRuleImpl
     with rules.ArbitraryHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
+
+  override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 
   // Entrypoint
   @scala.annotation.nowarn("msg=is never used")
@@ -85,7 +88,8 @@ trait ArbitraryMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogArbitraryDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogArbitraryDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogArbitraryDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

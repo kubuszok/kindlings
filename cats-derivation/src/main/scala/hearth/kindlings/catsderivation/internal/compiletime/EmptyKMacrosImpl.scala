@@ -7,7 +7,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** EmptyK derivation: constructs empty F[A] by summoning Empty for each field type in F[Any]. */
-trait EmptyKMacrosImpl { this: MacroCommons & StdExtensions =>
+trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveEmptyK[F[_]](FCtor0: Type.Ctor1[F], EmptyKFType: Type[alleycats.EmptyK[F]]): Expr[alleycats.EmptyK[F]] = {
@@ -48,7 +48,8 @@ trait EmptyKMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEmptyKDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEmptyKDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEmptyKDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

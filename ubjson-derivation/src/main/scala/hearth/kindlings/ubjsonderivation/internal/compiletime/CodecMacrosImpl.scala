@@ -9,7 +9,8 @@ import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader, UBJsonValu
 import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
 
 trait CodecMacrosImpl
-    extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
+    extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
@@ -29,6 +30,8 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  override protected def derivationSettingsNamespace: String = "ubjsonDerivation"
 
   // Entrypoints
 
@@ -139,7 +142,8 @@ trait CodecMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

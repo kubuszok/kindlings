@@ -67,10 +67,11 @@ The most load-bearing entries to keep in mind for any macro work:
 ## Standard extensions, `LambdaBuilder`, and def-caching rules
 
 - **Load standard extensions exactly once per macro bundle.** See
-  `docs/contributing/load-standard-extensions-skill.md`. Use the per-module
-  `LoadStandardExtensionsOnce` trait + `ensureStandardExtensionsLoaded()` instead of
-  calling `Environment.loadStandardExtensions()` directly. Issue
-  `kubuszok/kindlings#65`.
+  `docs/contributing/load-standard-extensions-skill.md`. The shared implementation
+  lives in `derivation-commons` (`hearth.kindlings.derivation.compiletime.LoadStandardExtensionsOnce`);
+  per-module thin delegates re-export it in each module's `internal.compiletime` package.
+  Use `ensureStandardExtensionsLoaded()` instead of calling
+  `Environment.loadStandardExtensions()` directly. Issue `kubuszok/kindlings#65`.
 - **`LambdaBuilder` only for collection/Optional iteration lambdas.** Strict rule, no
   exceptions. See `docs/contributing/lambda-builder-when-to-use-skill.md`. For
   multi-method type-class instances or any other shape that needs pre-derived helper
@@ -97,6 +98,22 @@ The most load-bearing entries to keep in mind for any macro work:
   `def`s.** Use `ValDefBuilder.ofLazy` for summoned/standalone instances and
   `ValDefBuilder.ofDef*` (with `cache.forwardDeclare` + `cache.buildCachedWith`) for
   recursive helpers.
+
+## Configurable derivation timeout
+
+All derivation modules use `DerivationTimeout` from `derivation-commons`
+(`hearth.kindlings.derivation.compiletime.DerivationTimeout`). Default: 120 seconds.
+Override per-module via `-Xmacro-settings`:
+
+```
+-Xmacro-settings:jsoniterDerivation.timeout=300s
+-Xmacro-settings:catsDerivation.timeout=5m
+-Xmacro-settings:circeDerivation.timeout=5000ms
+```
+
+Supported formats: plain integer (seconds), `Ns`/`Nseconds`, `Nms`/`Nmilliseconds`, `Nm`/`Nminutes`.
+Each module reads from its own settings namespace (e.g. `jsoniterDerivation`, `catsDerivation`).
+Invalid values emit a compiler warning and fall back to default.
 
 Hearth source is at `../hearth/` when documentation is insufficient.
 See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.

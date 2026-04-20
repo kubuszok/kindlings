@@ -12,7 +12,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * for method-level type parameters inside Expr.quote/Expr.splice. Supports direct A fields (covariant), Function1[A,
   * R] fields (contravariant), Function1[R, A] fields (covariant), and Function1[A, A] fields (both).
   */
-trait InvariantMacrosImpl { this: MacroCommons & StdExtensions =>
+trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveInvariant[F[_]](
@@ -114,7 +114,8 @@ trait InvariantMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogInvariantDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogInvariantDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogInvariantDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

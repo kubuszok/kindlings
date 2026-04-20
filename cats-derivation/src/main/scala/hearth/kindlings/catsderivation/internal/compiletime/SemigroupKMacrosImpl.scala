@@ -7,7 +7,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** SemigroupK derivation: combines F[A] values field-wise by summoning Semigroup for each field type in F[Any]. */
-trait SemigroupKMacrosImpl { this: MacroCommons & StdExtensions =>
+trait SemigroupKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveSemigroupK[F[_]](
@@ -58,7 +58,8 @@ trait SemigroupKMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogSemigroupKDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogSemigroupKDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogSemigroupKDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

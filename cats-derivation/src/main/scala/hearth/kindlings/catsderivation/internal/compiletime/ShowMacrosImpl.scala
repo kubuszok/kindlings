@@ -16,7 +16,8 @@ trait ShowMacrosImpl
     with rules.ShowCollectionRuleImpl
     with rules.ShowSingletonRuleImpl
     with rules.ShowCaseClassRuleImpl
-    with rules.ShowEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.ShowEnumRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   // Entrypoint
 
@@ -73,7 +74,8 @@ trait ShowMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogShowDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogShowDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogShowDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =
