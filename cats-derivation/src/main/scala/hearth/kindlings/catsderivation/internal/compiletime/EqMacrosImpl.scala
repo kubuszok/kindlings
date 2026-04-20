@@ -14,7 +14,8 @@ trait EqMacrosImpl
     with rules.EqOptionRuleImpl
     with rules.EqSingletonRuleImpl
     with rules.EqCaseClassRuleImpl
-    with rules.EqEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.EqEnumRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEq[A: Type]: Expr[cats.kernel.Eq[A]] = {
@@ -64,7 +65,8 @@ trait EqMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEqDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

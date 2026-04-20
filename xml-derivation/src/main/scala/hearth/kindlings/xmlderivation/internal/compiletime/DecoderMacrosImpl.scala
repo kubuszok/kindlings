@@ -8,7 +8,8 @@ import hearth.kindlings.xmlderivation.{KindlingsXmlDecoder, XmlConfig, XmlDecodi
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait DecoderMacrosImpl
-    extends rules.DecoderUseCachedDefWhenAvailableRuleImpl
+    extends XmlDerivationTimeout
+    with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsBuiltInRuleImpl
     with rules.DecoderHandleAsValueTypeRuleImpl
@@ -165,7 +166,8 @@ trait DecoderMacrosImpl
       .runToExprOrFail(
         "KindlingsXmlDecoder.derived",
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>
@@ -225,7 +227,8 @@ trait DecoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

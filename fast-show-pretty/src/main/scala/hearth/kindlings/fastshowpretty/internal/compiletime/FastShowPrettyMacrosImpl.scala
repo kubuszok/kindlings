@@ -7,7 +7,8 @@ import hearth.std.*
 import hearth.kindlings.fastshowpretty.{FastShowPretty, RenderConfig}
 
 trait FastShowPrettyMacrosImpl
-    extends rules.FastShowPrettyUseCachedDefWhenAvailableRuleImpl
+    extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with rules.FastShowPrettyUseCachedDefWhenAvailableRuleImpl
     with rules.FastShowPrettyUseImplicitWhenAvailableRuleImpl
     with rules.FastShowPrettyUseBuiltInSupportRuleImpl
     with rules.FastShowPrettyHandleAsValueTypeRuleImpl
@@ -18,6 +19,8 @@ trait FastShowPrettyMacrosImpl
     with rules.FastShowPrettyHandleAsSingletonRuleImpl
     with rules.FastShowPrettyHandleAsCaseClassRuleImpl
     with rules.FastShowPrettyHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
+
+  override protected def derivationSettingsNamespace: String = "fastShowPrettyDerivation"
 
   // Entrypoints to the macro
 
@@ -117,7 +120,8 @@ trait FastShowPrettyMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

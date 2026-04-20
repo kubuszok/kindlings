@@ -11,7 +11,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FoldableMacrosImpl { this: MacroCommons & StdExtensions =>
+trait FoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveFoldable[F[_]](
@@ -106,7 +106,8 @@ trait FoldableMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogFoldableDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogFoldableDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogFoldableDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

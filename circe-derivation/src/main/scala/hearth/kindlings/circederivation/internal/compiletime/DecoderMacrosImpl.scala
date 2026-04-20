@@ -12,7 +12,8 @@ import cats.data.ValidatedNel
 import io.circe.{Decoder, DecodingFailure, HCursor, Json, KeyDecoder}
 
 trait DecoderMacrosImpl
-    extends rules.DecoderUseCachedDefWhenAvailableRuleImpl
+    extends CirceDerivationTimeout
+    with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
     with rules.DecoderHandleAsValueTypeRuleImpl
@@ -176,7 +177,8 @@ trait DecoderMacrosImpl
       .runToExprOrFail(
         "KindlingsDecoder.derived",
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>
@@ -236,7 +238,8 @@ trait DecoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

@@ -18,7 +18,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
 }
 
 trait CodecMacrosImpl
-    extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
+    extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -42,6 +43,8 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  override protected def derivationSettingsNamespace: String = "jsoniterDerivation"
 
   // Shared type representations — centralized here so all rules access them consistently.
   private[compiletime] object CTypes {
@@ -302,7 +305,7 @@ trait CodecMacrosImpl
         "KindlingsJsonCodec.deriveKeyCodec",
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+        timeout = derivationTimeout
       )(renderDerivationErrorMessage)
   }
 
@@ -427,7 +430,7 @@ trait CodecMacrosImpl
         "KindlingsJsonCodec.derive",
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+        timeout = derivationTimeout
       )(renderDerivationErrorMessage)
   }
 
@@ -491,7 +494,7 @@ trait CodecMacrosImpl
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+        timeout = derivationTimeout
       )(renderDerivationErrorMessage)
   }
 
@@ -555,7 +558,7 @@ trait CodecMacrosImpl
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+        timeout = derivationTimeout
       )(renderDerivationErrorMessage)
   }
 
@@ -647,7 +650,7 @@ trait CodecMacrosImpl
         macroName,
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+        timeout = derivationTimeout
       )(renderDerivationErrorMessage)
   }
 

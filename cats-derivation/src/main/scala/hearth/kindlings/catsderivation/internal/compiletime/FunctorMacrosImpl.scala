@@ -11,7 +11,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
+trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivationTimeout {
+  this: MacroCommons & StdExtensions =>
 
   final case class FunctorCaseClassResult[F[_]](FCtor: Type.Ctor1[F], directFieldSet: Set[String])
 
@@ -78,7 +79,8 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl { this: MacroComm
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogFunctorDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogFunctorDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogFunctorDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

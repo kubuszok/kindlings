@@ -10,7 +10,8 @@ import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{Node, YamlEncoder}
 
 trait EncoderMacrosImpl
-    extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
+    extends YamlDerivationTimeout
+    with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
@@ -120,7 +121,8 @@ trait EncoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

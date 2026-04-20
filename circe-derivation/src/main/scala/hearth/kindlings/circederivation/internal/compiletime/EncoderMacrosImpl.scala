@@ -9,7 +9,8 @@ import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 
 trait EncoderMacrosImpl
-    extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
+    extends CirceDerivationTimeout
+    with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
@@ -146,7 +147,8 @@ trait EncoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

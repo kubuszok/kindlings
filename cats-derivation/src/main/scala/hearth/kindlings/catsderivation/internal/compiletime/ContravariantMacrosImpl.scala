@@ -12,7 +12,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * for method-level type parameters inside Expr.quote/Expr.splice. Supports Function1[A, R] fields where A is the type
   * parameter (contravariant position).
   */
-trait ContravariantMacrosImpl { this: MacroCommons & StdExtensions =>
+trait ContravariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveContravariant[F[_]](
@@ -118,7 +118,8 @@ trait ContravariantMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogContravariantDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogContravariantDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogContravariantDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

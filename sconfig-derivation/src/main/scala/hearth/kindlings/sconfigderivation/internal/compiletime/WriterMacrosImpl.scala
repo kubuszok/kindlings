@@ -9,7 +9,8 @@ import hearth.kindlings.sconfigderivation.annotations.{configKey, transientField
 import org.ekrich.config.ConfigValue
 
 trait WriterMacrosImpl
-    extends rules.WriterUseCachedDefWhenAvailableRuleImpl
+    extends SconfigDerivationTimeout
+    with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
     with rules.WriterHandleAsValueTypeRuleImpl
     with rules.WriterHandleAsOptionRuleImpl
@@ -75,7 +76,8 @@ trait WriterMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

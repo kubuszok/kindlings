@@ -12,7 +12,8 @@ trait EmptyMacrosImpl
     with rules.EmptyUseImplicitRuleImpl
     with rules.EmptyBuiltInRuleImpl
     with rules.EmptyCaseClassRuleImpl
-    with rules.EmptyEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.EmptyEnumRuleImpl
+    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEmpty[A: Type]: Expr[alleycats.Empty[A]] = {
@@ -54,7 +55,8 @@ trait EmptyMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEmptyDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEmptyDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEmptyDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

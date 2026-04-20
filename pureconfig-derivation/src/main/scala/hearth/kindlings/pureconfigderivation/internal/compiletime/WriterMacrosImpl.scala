@@ -15,7 +15,8 @@ import hearth.kindlings.pureconfigderivation.annotations.{configKey, transientFi
 import pureconfig.ConfigWriter
 
 trait WriterMacrosImpl
-    extends rules.WriterUseCachedDefWhenAvailableRuleImpl
+    extends PureconfigDerivationTimeout
+    with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
     with rules.WriterHandleAsValueTypeRuleImpl
     with rules.WriterHandleAsOptionRuleImpl
@@ -88,7 +89,8 @@ trait WriterMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogWriterDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

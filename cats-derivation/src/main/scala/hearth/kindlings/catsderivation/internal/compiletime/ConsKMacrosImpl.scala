@@ -17,7 +17,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Uses erased approach: builds body for F[Any] with Any, wraps with asInstanceOf.
   */
-trait ConsKMacrosImpl { this: MacroCommons & StdExtensions =>
+trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   /** Bridge method: summon ConsK for the type constructor of a nested field type.
     *
@@ -119,7 +119,8 @@ trait ConsKMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogConsKDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogConsKDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogConsKDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

@@ -7,7 +7,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** MonoidK derivation: combines EmptyK + SemigroupK by summoning Monoid for each field type in F[Any]. */
-trait MonoidKMacrosImpl { this: MacroCommons & StdExtensions =>
+trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveMonoidK[F[_]](
@@ -66,7 +66,8 @@ trait MonoidKMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogMonoidKDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogMonoidKDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogMonoidKDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

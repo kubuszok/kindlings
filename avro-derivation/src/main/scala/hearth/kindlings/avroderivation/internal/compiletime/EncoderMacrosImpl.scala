@@ -9,7 +9,8 @@ import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transi
 import org.apache.avro.Schema
 
 trait EncoderMacrosImpl
-    extends rules.AvroEncoderUseCachedDefWhenAvailableRuleImpl
+    extends AvroDerivationTimeout
+    with rules.AvroEncoderUseCachedDefWhenAvailableRuleImpl
     with rules.AvroEncoderUseImplicitWhenAvailableRuleImpl
     with rules.AvroEncoderHandleAsLiteralTypeRuleImpl
     with rules.AvroEncoderUseBuiltInSupportRuleImpl
@@ -104,7 +105,8 @@ trait EncoderMacrosImpl
       .runToExprOrFail(
         "AvroEncoder.derived",
         infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>
@@ -163,7 +165,8 @@ trait EncoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

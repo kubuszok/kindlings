@@ -280,6 +280,7 @@ val al = new {
 
   private val prodProjects =
     Vector(
+      "derivationCommons",
       "fastShowPretty",
       "circeDerivation",
       "jsoniterDerivation",
@@ -361,6 +362,7 @@ lazy val root = project
   .settings(settings)
   .settings(publishSettings)
   .settings(noPublishSettings)
+  .aggregate(derivationCommons.projectRefs *)
   .aggregate(fastShowPretty.projectRefs *)
   .aggregate(circeDerivation.projectRefs *)
   .aggregate(jsoniterDerivation.projectRefs *)
@@ -426,6 +428,7 @@ lazy val root = project
 lazy val fastShowPretty = projectMatrix
   .in(file("fast-show-pretty"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -441,7 +444,7 @@ lazy val fastShowPretty = projectMatrix
 lazy val circeDerivation = projectMatrix
   .in(file("circe-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonSchemaConfigMacroProviders)
+  .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -464,7 +467,7 @@ lazy val circeDerivation = projectMatrix
 lazy val jsoniterDerivation = projectMatrix
   .in(file("jsoniter-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonSchemaConfigMacroProviders)
+  .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -523,6 +526,7 @@ lazy val jsoniterJson = projectMatrix
 lazy val ubjsonDerivation = projectMatrix
   .in(file("ubjson-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -538,6 +542,7 @@ lazy val ubjsonDerivation = projectMatrix
 lazy val yamlDerivation = projectMatrix
   .in(file("yaml-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -558,6 +563,7 @@ lazy val yamlDerivation = projectMatrix
 lazy val xmlDerivation = projectMatrix
   .in(file("xml-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -579,6 +585,7 @@ lazy val xmlDerivation = projectMatrix
 lazy val avroDerivation = projectMatrix
   .in(file("avro-derivation"))
   .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -599,6 +606,7 @@ lazy val avroDerivation = projectMatrix
 lazy val pureconfigDerivation = projectMatrix
   .in(file("pureconfig-derivation"))
   .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -641,6 +649,7 @@ lazy val sconfigDerivation = projectMatrix
   .someVariations(versions.scalas, versions.platforms)(
     (useCrossQuotes ++ only1VersionInIDE ++ sconfigJavaTimePolyfill) *
   )
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -657,6 +666,21 @@ lazy val sconfigDerivation = projectMatrix
       "org.ekrich" %%% "sconfig" % versions.sconfig
     )
   )
+
+lazy val derivationCommons = projectMatrix
+  .in(file("derivation-commons"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-derivation-commons",
+    name := "kindlings-derivation-commons",
+    description := "Shared compile-time utilities for Kindlings derivation modules"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(versionSchemeSettings *)
+  .settings(publishSettings *)
 
 lazy val jsonSchemaConfigMacroProviders = projectMatrix
   .in(file("json-schema-config-macro-providers"))
@@ -676,7 +700,7 @@ lazy val jsonSchemaConfigMacroProviders = projectMatrix
 lazy val tapirSchemaDerivation = projectMatrix
   .in(file("tapir-schema-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .dependsOn(jsonSchemaConfigMacroProviders)
+  .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -736,6 +760,7 @@ lazy val ironIntegration = projectMatrix
 lazy val catsDerivation = projectMatrix
   .in(file("cats-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
@@ -757,6 +782,7 @@ lazy val catsDerivation = projectMatrix
 lazy val scalacheckDerivation = projectMatrix
   .in(file("scalacheck-derivation"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
   .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(

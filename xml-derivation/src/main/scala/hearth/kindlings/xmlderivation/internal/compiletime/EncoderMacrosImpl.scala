@@ -8,7 +8,8 @@ import hearth.kindlings.xmlderivation.{KindlingsXmlEncoder, XmlConfig}
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait EncoderMacrosImpl
-    extends rules.EncoderUseCachedDefWhenAvailableRuleImpl
+    extends XmlDerivationTimeout
+    with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
@@ -138,7 +139,8 @@ trait EncoderMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogEncoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>

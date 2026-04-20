@@ -12,7 +12,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * cross-quotes support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach
   * since both ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl { this: MacroCommons & StdExtensions =>
+trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with CatsDerivationTimeout {
+  this: MacroCommons & StdExtensions =>
 
   final case class ApplicativeCaseClassResult[F[_]](
       FCtor: Type.Ctor1[F],
@@ -103,7 +104,8 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl { this: M
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogApplicativeDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogApplicativeDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogApplicativeDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

@@ -11,7 +11,8 @@ trait SemigroupMacrosImpl
     extends rules.SemigroupUseCachedRuleImpl
     with rules.SemigroupUseImplicitRuleImpl
     with rules.SemigroupBuiltInRuleImpl
-    with rules.SemigroupCaseClassRuleImpl {
+    with rules.SemigroupCaseClassRuleImpl
+    with CatsDerivationTimeout {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
@@ -110,7 +111,8 @@ trait SemigroupMacrosImpl
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogSemigroupDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =

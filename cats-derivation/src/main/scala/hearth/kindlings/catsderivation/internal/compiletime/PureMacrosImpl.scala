@@ -12,7 +12,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * method-level type parameters inside Expr.quote/Expr.splice. All type-parameter-dependent fields are filled with the
   * provided value. Invariant fields cause a derivation error.
   */
-trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
+trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def derivePure[F[_]](FCtor0: Type.Ctor1[F], PureFType: Type[alleycats.Pure[F]]): Expr[alleycats.Pure[F]] = {
@@ -92,7 +92,8 @@ trait PureMacrosImpl { this: MacroCommons & StdExtensions =>
       .runToExprOrFail(
         macroName,
         infoRendering = if (shouldWeLogPureDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogPureDerivation) RenderFrom(Log.Level.Info) else DontRender
+        errorRendering = if (shouldWeLogPureDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
         val hint =
