@@ -5,6 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
 trait AvroSchemaForHandleAsEitherRuleImpl {
@@ -22,7 +23,7 @@ trait AvroSchemaForHandleAsEitherRuleImpl {
               leftSchema <- deriveSchemaRecursively[LeftValue](using sfctx.nest[LeftValue])
               rightSchema <- deriveSchemaRecursively[RightValue](using sfctx.nest[RightValue])
             } yield Rule.matched(Expr.quote {
-              Schema.createUnion(
+              AvroDerivationUtils.createSafeUnion(
                 Expr.splice(leftSchema),
                 Expr.splice(rightSchema)
               )

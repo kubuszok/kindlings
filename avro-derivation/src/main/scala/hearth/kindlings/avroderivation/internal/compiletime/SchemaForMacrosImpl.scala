@@ -162,16 +162,20 @@ trait SchemaForMacrosImpl
       tpe = Type[B]
     )
 
+    /** Sanitize a type's plainPrint for use as a Scala identifier in generated code. */
+    private def sanitizedTypeName[B: Type]: String =
+      Type[B].plainPrint.replaceAll("[^a-zA-Z0-9_]", "_")
+
     def getCachedSchema[B: Type]: MIO[Option[Expr[Schema]]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      cache.get0Ary[Schema](s"cached-schema-for-${Type[B].shortName}")
+      cache.get0Ary[Schema](s"cached-schema-for-${Type[B].plainPrint}")
     }
     def setCachedSchema[B: Type](instance: Expr[Schema]): MIO[Unit] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       Log.info(s"Caching schema for ${Type[B].prettyPrint}") >>
         cache.buildCachedWith(
-          s"cached-schema-for-${Type[B].shortName}",
-          ValDefBuilder.ofLazy[Schema](s"schema_${Type[B].shortName}")
+          s"cached-schema-for-${Type[B].plainPrint}",
+          ValDefBuilder.ofLazy[Schema](s"schema_${sanitizedTypeName[B]}")
         )(_ => instance)
     }
 
@@ -183,14 +187,14 @@ trait SchemaForMacrosImpl
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       Log.info(s"Registering self-record schema for ${Type[B].prettyPrint}") >>
         cache.buildCachedWith(
-          s"self-record-for-${Type[B].shortName}",
-          ValDefBuilder.ofVal[Schema](s"selfRecord_${Type[B].shortName}")
+          s"self-record-for-${Type[B].plainPrint}",
+          ValDefBuilder.ofVal[Schema](s"selfRecord_${sanitizedTypeName[B]}")
         )(_ => emptyRecord)
     }
 
     def getSelfRecordSchema[B: Type]: MIO[Option[Expr[Schema]]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      cache.get0Ary[Schema](s"self-record-for-${Type[B].shortName}")
+      cache.get0Ary[Schema](s"self-record-for-${Type[B].plainPrint}")
     }
 
     override def toString: String =

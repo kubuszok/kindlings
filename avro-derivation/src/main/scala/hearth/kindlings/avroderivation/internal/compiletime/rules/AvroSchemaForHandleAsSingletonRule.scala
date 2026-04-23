@@ -6,6 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.AvroConfig
+import hearth.kindlings.avroderivation.annotations.avroNamespace
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
@@ -22,11 +23,17 @@ trait AvroSchemaForHandleAsSingletonRuleImpl {
             implicit val SchemaT: Type[Schema] = SfTypes.Schema
             implicit val StringT: Type[String] = SfTypes.String
             implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+            implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
             val typeName = Type[A].shortName
+            val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+            val namespaceExpr: Expr[String] = classNamespace match {
+              case Some(ns) => Expr(ns)
+              case None     => Expr.quote(Expr.splice(sfctx.config).namespace.getOrElse(""))
+            }
             val schemaExpr = Expr.quote {
               AvroDerivationUtils.createRecord(
                 Expr.splice(Expr(typeName)),
-                Expr.splice(sfctx.config).namespace.getOrElse(""),
+                Expr.splice(namespaceExpr),
                 java.util.Collections.emptyList[Schema.Field]()
               )
             }
