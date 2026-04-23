@@ -36,6 +36,16 @@ case class WithMap(metadata: Map[String, String])
 
 case class RecursiveTree(value: Int, children: List[RecursiveTree])
 
+// Value class
+final case class WrappedId(value: Int) extends AnyVal
+case class WithWrappedId(id: WrappedId, name: String)
+
+// Annotation inheritance on sealed traits
+@description("A shape type")
+sealed trait AnnotatedShape
+case class ACircle(radius: Double) extends AnnotatedShape
+case class ARect(width: Double, height: Double) extends AnnotatedShape
+
 case class Box[A](value: A)
 
 case class Pair[A, B](first: A, second: B)

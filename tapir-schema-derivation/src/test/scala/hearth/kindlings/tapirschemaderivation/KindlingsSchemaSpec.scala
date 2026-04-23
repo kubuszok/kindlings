@@ -559,6 +559,31 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
   }
 
+  group("value class schemas") {
+
+    test("value class produces SProduct wrapping") {
+      val schema = KindlingsSchema.derive[WithWrappedId]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[WithWrappedId] =>
+          val fieldNames = p.fields.map(_.name.name)
+          assert(fieldNames.contains("id"))
+          assert(fieldNames.contains("name"))
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+  }
+
+  group("parent annotation inheritance") {
+
+    test("sealed trait @description propagates to coproduct schema") {
+      val schema = KindlingsSchema.derive[AnnotatedShape]
+      // The description annotation on the sealed trait should be set
+      assert(schema.description.isDefined, "Sealed trait should have description from annotation")
+      schema.description.get ==> "A shape type"
+    }
+  }
+
   group("discriminator child metadata") {
 
     test("discriminator adds field to child schemas") {
