@@ -7,7 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.{avroEnumDefault, avroSortPriority}
+import hearth.kindlings.avroderivation.AvroConfig
+import hearth.kindlings.avroderivation.annotations.{avroEnumDefault, avroNamespace, avroSortPriority}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
@@ -40,11 +41,19 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val avroSortPriorityT: Type[avroSortPriority] = SfTypes.AvroSortPriority
       implicit val avroEnumDefaultT: Type[avroEnumDefault] = SfTypes.AvroEnumDefault
+      implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
       implicit val StringT: Type[String] = SfTypes.String
+      implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       val childrenList = enumm.directChildren.toList
       val typeName = Type[A].shortName
       val enumDefault: Option[String] = getTypeAnnotationStringArg[avroEnumDefault, A]
+      val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+
+      val namespaceExpr: Expr[String] = classNamespace match {
+        case Some(ns) => Expr(ns)
+        case None     => Expr.quote(Expr.splice(sfctx.config).namespace.getOrElse(""))
+      }
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
@@ -82,7 +91,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
                   symbols.foreach(javaSymbols.add)
                   AvroDerivationUtils.createEnumWithDefault(
                     Expr.splice(Expr(typeName)),
-                    Expr.splice(sfctx.config).namespace.getOrElse(""),
+                    Expr.splice(namespaceExpr),
                     javaSymbols,
                     Expr.splice(Expr(default))
                   )
@@ -94,7 +103,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
                   symbols.foreach(javaSymbols.add)
                   AvroDerivationUtils.createEnum(
                     Expr.splice(Expr(typeName)),
-                    Expr.splice(sfctx.config).namespace.getOrElse(""),
+                    Expr.splice(namespaceExpr),
                     javaSymbols
                   )
                 }

@@ -197,5 +197,59 @@ case class Error(message: String) extends MixedEvent
 // Option[SealedTrait] test
 case class WithOptionalShape(shape: Option[Shape])
 
+// Issue #78: Option[SealedTrait] — must flatten union
+case class WithOptionalAnimal(animal: Option[Animal])
+case class WithOptionalColor(color: Option[Color])
+case class WithOptionalEither(value: Option[Either[String, Int]])
+
+// Issue #79: Same-name types in different namespaces
+object nsA {
+  @avroNamespace("a")
+  case class Foo(int: Int)
+}
+object nsB {
+  @avroNamespace("b")
+  case class Foo(str: String)
+}
+@avroNamespace("c")
+case class BarWithDuplicateNames(fooA: nsA.Foo, fooB: nsB.Foo)
+
+// Issue #80: @avroNamespace on sealed trait enum
+@avroNamespace("com.example.colors")
+sealed trait NamespacedColor
+case object NRed extends NamespacedColor
+case object NGreen extends NamespacedColor
+case object NBlue extends NamespacedColor
+
+@avroNamespace("com.example.container")
+case class WithNamespacedEnum(color: NamespacedColor)
+
+// @avroNamespace + @avroEnumDefault combined
+object NamespacedSizeTypes {
+  @avroNamespace("com.example.sizes")
+  @avroEnumDefault("Mid")
+  sealed trait NamespacedSizeWithDefault
+  case object Sm extends NamespacedSizeWithDefault
+  case object Mid extends NamespacedSizeWithDefault
+  case object Lg extends NamespacedSizeWithDefault
+}
+
+// Ported from avro4s: Either[T, Option[U]] union flattening
+case class WithEitherAndOption(value: Either[String, Option[Int]])
+
+// Ported from avro4s: @avroNamespace on nested types
+@avroNamespace("com.outer")
+case class OuterNamespaced(name: String, inner: InnerNamespaced)
+@avroNamespace("com.inner")
+case class InnerNamespaced(value: Int)
+
+// Ported from avro4s: sealed trait of case objects with @avroNamespace at trait level
+@avroNamespace("com.example.continents")
+sealed trait Continent
+case object Africa extends Continent
+case object Asia extends Continent
+case object Europe extends Continent
+case class WithContinent(continent: Continent)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

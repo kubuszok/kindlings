@@ -740,5 +740,115 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getField("id").doc() ==> "The identifier"
       }
     }
+
+    group("Issue #78: Option[SealedTrait] union flattening") {
+
+      test("Option[sealed trait with case classes] flattens to UNION(null, A, B)") {
+        val schema = AvroSchemaFor.schemaOf[WithOptionalAnimal]
+        val fieldSchema = schema.getField("animal").schema()
+        fieldSchema.getType ==> Schema.Type.UNION
+        // Should be [null, Dog, Cat], not [null, [Dog, Cat]]
+        fieldSchema.getTypes.size() ==> 3
+        fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        fieldSchema.getTypes.get(1).getName ==> "Dog"
+        fieldSchema.getTypes.get(2).getName ==> "Cat"
+      }
+
+      test("Option[sealed trait with case objects] wraps to UNION(null, ENUM)") {
+        val schema = AvroSchemaFor.schemaOf[WithOptionalColor]
+        val fieldSchema = schema.getField("color").schema()
+        fieldSchema.getType ==> Schema.Type.UNION
+        fieldSchema.getTypes.size() ==> 2
+        fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        fieldSchema.getTypes.get(1).getType ==> Schema.Type.ENUM
+      }
+
+      test("Option[Either[L, R]] flattens to UNION(null, L, R)") {
+        val schema = AvroSchemaFor.schemaOf[WithOptionalEither]
+        val fieldSchema = schema.getField("value").schema()
+        fieldSchema.getType ==> Schema.Type.UNION
+        fieldSchema.getTypes.size() ==> 3
+        fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        fieldSchema.getTypes.get(1).getType ==> Schema.Type.STRING
+        fieldSchema.getTypes.get(2).getType ==> Schema.Type.INT
+      }
+    }
+
+    group("Issue #79: same-name types in different namespaces") {
+
+      test("two classes with same name but different @avroNamespace get distinct schemas") {
+        val schema = AvroSchemaFor.schemaOf[BarWithDuplicateNames]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getNamespace ==> "c"
+
+        val fooASchema = schema.getField("fooA").schema()
+        fooASchema.getType ==> Schema.Type.RECORD
+        fooASchema.getName ==> "Foo"
+        fooASchema.getNamespace ==> "a"
+        fooASchema.getField("int").schema().getType ==> Schema.Type.INT
+
+        val fooBSchema = schema.getField("fooB").schema()
+        fooBSchema.getType ==> Schema.Type.RECORD
+        fooBSchema.getName ==> "Foo"
+        fooBSchema.getNamespace ==> "b"
+        fooBSchema.getField("str").schema().getType ==> Schema.Type.STRING
+      }
+    }
+
+    group("Issue #80: @avroNamespace on enums") {
+
+      test("@avroNamespace on sealed trait enum applies namespace to ENUM schema") {
+        val schema = AvroSchemaFor.schemaOf[NamespacedColor]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getNamespace ==> "com.example.colors"
+        schema.getEnumSymbols.size() ==> 3
+      }
+
+      test("@avroNamespace on sealed trait enum is preserved when used as field") {
+        val schema = AvroSchemaFor.schemaOf[WithNamespacedEnum]
+        val colorSchema = schema.getField("color").schema()
+        colorSchema.getType ==> Schema.Type.ENUM
+        colorSchema.getNamespace ==> "com.example.colors"
+      }
+
+      test("@avroNamespace combined with @avroEnumDefault works correctly") {
+        val schema = AvroSchemaFor.schemaOf[NamespacedSizeTypes.NamespacedSizeWithDefault]
+        schema.getType ==> Schema.Type.ENUM
+        schema.getNamespace ==> "com.example.sizes"
+        schema.getEnumDefault ==> "Mid"
+      }
+
+      test("@avroNamespace on sealed trait enum used as field preserves namespace") {
+        val schema = AvroSchemaFor.schemaOf[WithContinent]
+        val continentSchema = schema.getField("continent").schema()
+        continentSchema.getType ==> Schema.Type.ENUM
+        continentSchema.getNamespace ==> "com.example.continents"
+        continentSchema.getEnumSymbols.size() ==> 3
+      }
+    }
+
+    group("Ported from avro4s: union flattening edge cases") {
+
+      test("Either[T, Option[U]] flattens nested unions with null first") {
+        val schema = AvroSchemaFor.schemaOf[WithEitherAndOption]
+        val fieldSchema = schema.getField("value").schema()
+        fieldSchema.getType ==> Schema.Type.UNION
+        // Either[String, Option[Int]] should flatten to ["null", "string", "int"]
+        fieldSchema.getTypes.size() ==> 3
+        fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        fieldSchema.getTypes.get(1).getType ==> Schema.Type.STRING
+        fieldSchema.getTypes.get(2).getType ==> Schema.Type.INT
+      }
+    }
+
+    group("Ported from avro4s: namespace on nested types") {
+
+      test("@avroNamespace on outer and inner types preserved independently") {
+        val schema = AvroSchemaFor.schemaOf[OuterNamespaced]
+        schema.getNamespace ==> "com.outer"
+        val innerSchema = schema.getField("inner").schema()
+        innerSchema.getNamespace ==> "com.inner"
+      }
+    }
   }
 }

@@ -22,7 +22,7 @@ trait AvroSchemaForHandleAsOptionRuleImpl {
             for {
               innerSchema <- deriveSchemaRecursively[Inner](using sfctx.nest[Inner])
             } yield Rule.matched(Expr.quote {
-              AvroDerivationUtils.createUnion(
+              AvroDerivationUtils.createSafeUnion(
                 AvroDerivationUtils.nullSchema,
                 Expr.splice(innerSchema)
               )
