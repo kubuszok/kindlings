@@ -958,5 +958,205 @@ final class KindlingsDecoderSpec extends MacroSuite {
         assert(error.message.contains("foo"))
       }
     }
+
+    group("null discriminator handling") {
+
+      test("null discriminator in discriminator-style decoding produces error") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val json = Json.obj(
+          "type" -> Json.Null,
+          "name" -> Json.fromString("Rex"),
+          "breed" -> Json.fromString("Labrador")
+        )
+        val result = KindlingsDecoder.decode[Animal](json)
+        assert(result.isLeft)
+      }
+
+      test("missing discriminator field produces error") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val json = Json.obj(
+          "name" -> Json.fromString("Rex"),
+          "breed" -> Json.fromString("Labrador")
+        )
+        val result = KindlingsDecoder.decode[Animal](json)
+        assert(result.isLeft)
+      }
+    }
+
+    group("Option null vs missing exhaustive matrix") {
+
+      test("Option field present with value") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "opt" -> Json.fromString("hello"))
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", Some("hello")))
+      }
+
+      test("Option field present with null") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "opt" -> Json.Null)
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", None))
+      }
+
+      test("Option field absent") {
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[WithOptionalField](json) ==> Right(WithOptionalField("Alice", None))
+      }
+
+      test("Option with default: field absent uses default") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[OptionMatrix](json) ==> Right(OptionMatrix(None, Some("default-b"), "default-c"))
+      }
+
+      test("Option with default: field null overrides default to None") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"), "b" -> Json.Null)
+        KindlingsDecoder.decode[OptionMatrix](json) ==> Right(OptionMatrix(None, None, "default-c"))
+      }
+
+      test("Option with default: field present overrides default") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"), "b" -> Json.fromString("custom"))
+        KindlingsDecoder.decode[OptionMatrix](json) ==> Right(OptionMatrix(None, Some("custom"), "default-c"))
+      }
+    }
+
+    group("strict mode + error accumulation") {
+
+      test("decodeAccumulating in strict mode rejects on type error") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj(
+          "name" -> Json.fromInt(42), // wrong type
+          "age" -> Json.fromInt(30),
+          "extra" -> Json.fromString("unexpected") // unknown field
+        )
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        // At minimum, the type error for "name" must be reported
+        result.fold(
+          errors => assert(errors.size >= 1),
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("decodeAccumulating in strict mode rejects on unknown fields only") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj(
+          "name" -> Json.fromString("Alice"),
+          "age" -> Json.fromInt(30),
+          "extra" -> Json.fromString("unexpected")
+        )
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+      }
+    }
+
+    group("recursive types + discriminator") {
+
+      test("recursive sealed trait with discriminator round-trips") {
+        implicit val config: Configuration = Configuration(discriminator = Some("kind"))
+        val original: RecursiveAnimal = Pack("wolves", List(Lone("alpha"), Lone("beta")))
+        val encoded = KindlingsEncoder.encode[RecursiveAnimal](original)
+        KindlingsDecoder.decode[RecursiveAnimal](encoded) ==> Right(original)
+      }
+
+      test("deeply nested recursive with discriminator") {
+        implicit val config: Configuration = Configuration(discriminator = Some("kind"))
+        val deep: RecursiveAnimal = Pack("outer", List(Pack("inner", List(Lone("leaf")))))
+        val encoded = KindlingsEncoder.encode[RecursiveAnimal](deep)
+        KindlingsDecoder.decode[RecursiveAnimal](encoded) ==> Right(deep)
+      }
+    }
+
+    group("large products (macro scalability)") {
+
+      test("33-field case class round-trips") {
+        val large = LargeProduct(
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          "last"
+        )
+        val encoded = KindlingsEncoder.encode[LargeProduct](large)
+        KindlingsDecoder.decode[LargeProduct](encoded) ==> Right(large)
+      }
+    }
+
+    group("large enums (macro scalability)") {
+
+      test("33-variant sealed trait round-trips (wrapper style)") {
+        val v: LargeEnum = V17
+        val encoded = KindlingsEncoder.encode[LargeEnum](v)
+        KindlingsDecoder.decode[LargeEnum](encoded) ==> Right(V17: LargeEnum)
+      }
+
+      test("33-variant sealed trait round-trips (string enum)") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        val v: LargeEnum = V33
+        val encoded = KindlingsEncoder.encode[LargeEnum](v)
+        encoded ==> Json.fromString("V33")
+        KindlingsDecoder.decode[LargeEnum](encoded) ==> Right(V33: LargeEnum)
+      }
+    }
+
+    group("multi-level hierarchy field collision") {
+
+      test("sealed trait subtype with field name matching another subtype") {
+        // Garage has a field named "car" which matches the subtype name "Car"
+        val garage: Transport = Garage(Car(100), Some(Bicycle(20)))
+        val encoded = KindlingsEncoder.encode[Transport](garage)
+        KindlingsDecoder.decode[Transport](encoded) ==> Right(garage)
+      }
+
+      test("decoding Car subtype is not confused by Garage.car field") {
+        val car: Transport = Car(120)
+        val encoded = KindlingsEncoder.encode[Transport](car)
+        KindlingsDecoder.decode[Transport](encoded) ==> Right(car)
+      }
+    }
+
+    group("generics + defaults combined") {
+
+      test("generic case class with all fields present") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("value" -> Json.fromInt(42), "label" -> Json.fromString("custom"))
+        KindlingsDecoder.decode[BoxWithDefault[Int]](json) ==> Right(BoxWithDefault(42, "custom"))
+      }
+
+      test("non-generic case class with defaults and missing field") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("name" -> Json.fromString("Alice"))
+        KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 25))
+      }
+    }
   }
 }
