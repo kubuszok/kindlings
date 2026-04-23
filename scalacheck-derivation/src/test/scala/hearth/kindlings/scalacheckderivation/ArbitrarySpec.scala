@@ -177,4 +177,41 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(samples.nonEmpty, "Should generate User samples using Arbitrary.derived")
     assert(samples.forall(u => u.name != null && u.email != null), "Fields should not be null")
   }
+
+  test("generators work in Prop.forAll") {
+    import org.scalacheck.Prop
+    case class Point(x: Int, y: Int)
+    implicit val arb: Arbitrary[Point] = DeriveArbitrary.derived[Point]
+
+    val prop = Prop.forAll { (p: Point) =>
+      p.x == p.x && p.y == p.y // trivial property
+    }
+    val result = org.scalacheck.Test.check(org.scalacheck.Test.Parameters.default, prop)
+    assert(result.passed, s"Property check failed: ${result.status}")
+  }
+
+  // Known limitation: recursive types (both direct sealed trait recursion and
+  // recursion via List) cause StackOverflowError in scalacheck-derivation.
+  // This is tracked as a known gap in docs/research/TEST_COVERAGE_GAPS.md.
+
+  test("singleton case objects generate correctly") {
+    sealed trait Singleton
+    case object Only extends Singleton
+
+    val arb: Arbitrary[Singleton] = DeriveArbitrary.derived[Singleton]
+    val samples = List.fill(5)(arb.arbitrary.sample).flatten
+    assert(samples.nonEmpty, "Should generate singleton samples")
+    assert(samples.forall(_ == Only), "All samples should be Only")
+  }
+
+  test("deeply nested case class generates correctly") {
+    case class Inner(value: Int)
+    case class Middle(inner: Inner, flag: Boolean)
+    case class Outer(middle: Middle, name: String)
+
+    val arb: Arbitrary[Outer] = DeriveArbitrary.derived[Outer]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+    assert(samples.nonEmpty, "Should generate deeply nested samples")
+    assert(samples.forall(_.middle.inner != null), "Nested fields should not be null")
+  }
 }
