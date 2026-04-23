@@ -850,5 +850,75 @@ final class AvroSchemaForSpec extends MacroSuite {
         innerSchema.getNamespace ==> "com.inner"
       }
     }
+
+    group("Map with optional values") {
+
+      test("Map[String, Option[Int]] schema") {
+        val schema = AvroSchemaFor.schemaOf[WithMapOptionalValue]
+        val mapSchema = schema.getField("data").schema()
+        mapSchema.getType ==> Schema.Type.MAP
+        val valueSchema = mapSchema.getValueType
+        valueSchema.getType ==> Schema.Type.UNION
+        valueSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        valueSchema.getTypes.get(1).getType ==> Schema.Type.INT
+      }
+    }
+
+    group("top-level collections") {
+
+      test("List[Int] as root type") {
+        val schema = AvroSchemaFor.schemaOf[List[Int]]
+        schema.getType ==> Schema.Type.ARRAY
+        schema.getElementType.getType ==> Schema.Type.INT
+      }
+
+      test("Set[String] as root type") {
+        val schema = AvroSchemaFor.schemaOf[Set[String]]
+        schema.getType ==> Schema.Type.ARRAY
+        schema.getElementType.getType ==> Schema.Type.STRING
+      }
+
+      test("Vector[Double] as root type") {
+        val schema = AvroSchemaFor.schemaOf[Vector[Double]]
+        schema.getType ==> Schema.Type.ARRAY
+        schema.getElementType.getType ==> Schema.Type.DOUBLE
+      }
+    }
+
+    group("complex default values") {
+
+      test("@avroDefault with Map JSON") {
+        val schema = AvroSchemaFor.schemaOf[WithMapDefault]
+        val field = schema.getField("data")
+        assert(field.hasDefaultValue)
+      }
+
+      test("@avroDefault with List JSON") {
+        val schema = AvroSchemaFor.schemaOf[WithListDefault]
+        val field = schema.getField("items")
+        assert(field.hasDefaultValue)
+      }
+    }
+
+    group("custom SchemaFor override") {
+
+      test("user-provided implicit AvroSchemaFor takes priority") {
+        implicit val customSchema: AvroSchemaFor[CustomSchemaType] = new AvroSchemaFor[CustomSchemaType] {
+          val schema: Schema = Schema.create(Schema.Type.STRING)
+        }
+        val schema = AvroSchemaFor.schemaOf[CustomSchemaType]
+        // Should use the custom schema (STRING) not derive a RECORD
+        schema.getType ==> Schema.Type.STRING
+      }
+    }
+
+    group("recursive with Either") {
+
+      test("recursive type using Either") {
+        val schema = AvroSchemaFor.schemaOf[EitherNode]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "EitherNode"
+      }
+    }
   }
 }

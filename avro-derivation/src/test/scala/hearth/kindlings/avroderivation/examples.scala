@@ -251,5 +251,18 @@ case object Asia extends Continent
 case object Europe extends Continent
 case class WithContinent(continent: Continent)
 
+// Map with optional values
+case class WithMapOptionalValue(data: Map[String, Option[Int]])
+
+// Recursive with Either
+case class EitherNode(value: Either[String, EitherNode])
+
+// Complex default values
+case class WithMapDefault(@avroDefault("""{"x": 1}""") data: Map[String, Int] = Map("x" -> 1))
+case class WithListDefault(@avroDefault("[1,2,3]") items: List[Int] = List(1, 2, 3))
+
+// Custom SchemaFor override test
+case class CustomSchemaType(value: String)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType
