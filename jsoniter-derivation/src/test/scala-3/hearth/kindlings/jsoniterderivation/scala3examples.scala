@@ -94,3 +94,18 @@ final case class CompModel(
 object CompModel {
   val codec: TestJsonCodec[CompModel] = KindlingsJsonValueCodec.derive[CompModel]
 }
+
+// Simple Scala 3 enum (case objects only)
+enum Color {
+  case Red, Green, Blue
+}
+
+// Parameterized Scala 3 enum (mixed)
+enum JsoniterVehicle {
+  case Car(make: String, year: Int)
+  case Bike(gears: Int)
+}
+
+// Scala 3 enum used in a case class
+case class WithColor(name: String, color: Color)
+case class WithVehicle(owner: String, vehicle: JsoniterVehicle)
