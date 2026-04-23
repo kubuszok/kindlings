@@ -1719,5 +1719,106 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         decoded ==> value
       }
     }
+
+    group("Array[T] support") {
+
+      test("Array[Int] round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithIntArray]
+        val value = WithIntArray(Array(1, 2, 3))
+        val json = writeToString(value)(codec)
+        json ==> """{"values":[1,2,3]}"""
+        val decoded = readFromString[WithIntArray](json)(codec)
+        decoded ==> value
+      }
+
+      test("Array[String] round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithStringArray]
+        val value = WithStringArray(Array("a", "b", "c"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithStringArray](json)(codec)
+        decoded ==> value
+      }
+
+      test("empty Array round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithIntArray]
+        val value = WithIntArray(Array.empty[Int])
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithIntArray](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("advanced collection types") {
+
+      test("HashMap round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithHashMap]
+        val value = WithHashMap(scala.collection.immutable.HashMap("a" -> 1, "b" -> 2))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithHashMap](json)(codec)
+        decoded.data ==> value.data
+      }
+
+      test("TreeMap round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithTreeMap]
+        val value = WithTreeMap(scala.collection.immutable.TreeMap("a" -> 1, "b" -> 2))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithTreeMap](json)(codec)
+        decoded.data ==> value.data
+      }
+
+      test("ArrayBuffer round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithArrayBuffer]
+        val value = WithArrayBuffer(scala.collection.mutable.ArrayBuffer(1, 2, 3))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithArrayBuffer](json)(codec)
+        decoded.items ==> value.items
+      }
+    }
+
+    group("nested sealed trait hierarchies") {
+
+      test("intermediate sealed trait round-trip (leaf under MotorVehicle)") {
+        val codec = KindlingsJsonValueCodec.derive[Vehicle]
+        val value: Vehicle = Truck(5000)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Vehicle](json)(codec)
+        decoded ==> value
+      }
+
+      test("direct child of top-level trait round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[Vehicle]
+        val value: Vehicle = Bicycle(21)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[Vehicle](json)(codec)
+        decoded ==> value
+      }
+
+      test("all leaf variants round-trip (wrapper style)") {
+        val codec = KindlingsJsonValueCodec.derive[Vehicle]
+        val variants: List[Vehicle] = List(Truck(3000), Motorcycle(600), Bicycle(7))
+        for (v <- variants) {
+          val json = writeToString(v)(codec)
+          readFromString[Vehicle](json)(codec) ==> v
+        }
+      }
+    }
+
+    group("error message quality") {
+
+      test("wrong type for field reports useful error") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        val ex = intercept[JsonReaderException] {
+          readFromString[SimplePerson]("""{"name":"Alice","age":"not-a-number"}""")(codec)
+        }
+        assert(ex.getMessage.nonEmpty)
+      }
+
+      test("completely invalid JSON throws") {
+        val codec = KindlingsJsonValueCodec.derive[SimplePerson]
+        intercept[JsonReaderException] {
+          readFromString[SimplePerson]("""not json at all""")(codec)
+        }
+      }
+    }
   }
 }

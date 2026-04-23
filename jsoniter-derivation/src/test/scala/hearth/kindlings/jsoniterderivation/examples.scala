@@ -132,3 +132,33 @@ case class RecursiveParent(name: String, nodes: List[RecursiveNode])
 case class WrappedString(value: String) extends AnyVal
 case class WithOptionalWrapped(item: Option[WrappedInt])
 case class WithWrappedList(items: List[WrappedInt])
+
+// Array[T] test types
+case class WithIntArray(values: Array[Int]) {
+  override def equals(o: Any): Boolean = o match {
+    case that: WithIntArray => java.util.Arrays.equals(values, that.values)
+    case _                  => false
+  }
+}
+case class WithStringArray(values: Array[String]) {
+  override def equals(o: Any): Boolean = o match {
+    case that: WithStringArray =>
+      java.util.Arrays.equals(values.asInstanceOf[Array[AnyRef]], that.values.asInstanceOf[Array[AnyRef]])
+    case _ => false
+  }
+}
+
+// UUID test type
+case class WithUUID(id: java.util.UUID, name: String)
+
+// Nested sealed trait hierarchy
+sealed trait Vehicle
+sealed trait MotorVehicle extends Vehicle
+case class Truck(payload: Int) extends MotorVehicle
+case class Motorcycle(cc: Int) extends MotorVehicle
+case class Bicycle(gears: Int) extends Vehicle
+
+// HashMap / TreeMap test types
+case class WithHashMap(data: scala.collection.immutable.HashMap[String, Int])
+case class WithTreeMap(data: scala.collection.immutable.TreeMap[String, Int])
+case class WithArrayBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
