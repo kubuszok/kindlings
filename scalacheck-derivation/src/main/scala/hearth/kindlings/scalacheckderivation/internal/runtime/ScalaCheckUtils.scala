@@ -64,4 +64,8 @@ object ScalaCheckUtils {
     */
   @scala.annotation.nowarn("msg=unused")
   def unsafeCast[A](value: Any, gen: Gen[A]): A = value.asInstanceOf[A]
+
+  /** Runtime type cast helper using Shrink as type witness. Same pattern as unsafeCast but for Shrink derivation. */
+  @scala.annotation.nowarn("msg=unused")
+  def unsafeCastViaShrink[A](value: Any, shrink: org.scalacheck.Shrink[A]): A = value.asInstanceOf[A]
 }
