@@ -459,5 +459,30 @@ final class AvroDecoderSpec extends MacroSuite {
         )
       }
     }
+
+    group("field reordering on decode") {
+
+      test("decode GenericRecord with fields in different order") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        val record = new GenericData.Record(schema)
+        // Put fields in reverse order
+        record.put("age", 30)
+        record.put("name", "Alice")
+        val result = AvroDecoder.decode[SimplePerson](record: Any)
+        result ==> SimplePerson("Alice", 30)
+      }
+    }
+
+    group("Map with optional values decode") {
+
+      test("Map[String, Option[Int]] round-trip") {
+        val value = WithMapOptionalValue(Map("a" -> Some(1), "b" -> None, "c" -> Some(3)))
+        val encoded = AvroEncoder.encode(value)
+        val decoded = AvroDecoder.decode[WithMapOptionalValue](encoded)
+        decoded.data("a") ==> Some(1)
+        decoded.data("b") ==> None
+        decoded.data("c") ==> Some(3)
+      }
+    }
   }
 }
