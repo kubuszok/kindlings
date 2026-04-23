@@ -249,6 +249,47 @@ final class AvroScala3Spec extends MacroSuite {
     }
   }
 
+  group("Issue #80: @avroNamespace on Scala 3 enum") {
+
+    test("@avroNamespace on Scala 3 enum applies namespace to ENUM schema") {
+      val schema = AvroSchemaFor.schemaOf[NamespacedFruit]
+      schema.getType ==> Schema.Type.ENUM
+      schema.getNamespace ==> "com.example.fruit"
+      schema.getEnumSymbols.size() ==> 3
+    }
+
+    test("@avroNamespace on Scala 3 enum is preserved when used as field") {
+      val schema = AvroSchemaFor.schemaOf[MealWithNamespacedFruit]
+      schema.getType ==> Schema.Type.RECORD
+      schema.getNamespace ==> "com.example.meal"
+      val fruitSchema = schema.getField("fruit").schema()
+      fruitSchema.getType ==> Schema.Type.ENUM
+      fruitSchema.getNamespace ==> "com.example.fruit"
+    }
+  }
+
+  group("Issue #78: Option[Scala 3 enum] union flattening") {
+
+    test("Option[simple Scala 3 enum] wraps to UNION(null, ENUM)") {
+      val schema = AvroSchemaFor.schemaOf[WithOptionalFruit]
+      val fieldSchema = schema.getField("fruit").schema()
+      fieldSchema.getType ==> Schema.Type.UNION
+      fieldSchema.getTypes.size() ==> 2
+      fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+      fieldSchema.getTypes.get(1).getType ==> Schema.Type.ENUM
+    }
+
+    test("Option[parameterized Scala 3 enum] flattens to UNION(null, A, B)") {
+      val schema = AvroSchemaFor.schemaOf[WithOptionalVehicle]
+      val fieldSchema = schema.getField("vehicle").schema()
+      fieldSchema.getType ==> Schema.Type.UNION
+      fieldSchema.getTypes.size() ==> 3
+      fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+      fieldSchema.getTypes.get(1).getName ==> "Car"
+      fieldSchema.getTypes.get(2).getName ==> "Bike"
+    }
+  }
+
   group("union types (Scala 3)") {
 
     test("schema for case class union is UNION") {

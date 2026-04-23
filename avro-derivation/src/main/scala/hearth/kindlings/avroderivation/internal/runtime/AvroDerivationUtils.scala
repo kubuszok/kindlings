@@ -132,6 +132,33 @@ object AvroDerivationUtils {
   def createUnion(schemas: Schema*): Schema =
     Schema.createUnion(schemas*)
 
+  /** Creates a union schema that flattens nested unions and deduplicates nulls. Avro does not allow nested unions, so
+    * when creating Option[SealedTrait] or Option[Either[A, B]], the inner union must be flattened into the outer one.
+    * Null schemas are deduplicated and moved to the front.
+    */
+  def createSafeUnion(schemas: Schema*): Schema = {
+    val flat = new java.util.ArrayList[Schema]()
+    schemas.foreach { s =>
+      if (s.getType == Schema.Type.UNION) {
+        val iter = s.getTypes.iterator()
+        while (iter.hasNext) { val _ = flat.add(iter.next()) }
+      } else {
+        val _ = flat.add(s)
+      }
+    }
+    // Deduplicate nulls and move null to front
+    val deduped = new java.util.ArrayList[Schema]()
+    var hasNull = false
+    val iter = flat.iterator()
+    while (iter.hasNext) {
+      val s = iter.next()
+      if (s.getType == Schema.Type.NULL) hasNull = true
+      else { val _ = deduped.add(s) }
+    }
+    if (hasNull) { val _ = deduped.add(0, Schema.create(Schema.Type.NULL)) }
+    Schema.createUnion(deduped)
+  }
+
   def nullSchema: Schema = Schema.create(Schema.Type.NULL)
 
   // Primitive schema constructors — Java enum constants don't reify inside Scala 2 macro quotes

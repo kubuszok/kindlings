@@ -29,3 +29,16 @@ type StringOrInt = String | Int
 case class Parrot(name: String, vocabulary: Int)
 case class Hamster(name: String, wheelSize: Double)
 type ParrotOrHamster = Parrot | Hamster
+
+// Issue #80: @avroNamespace on Scala 3 enum
+@annotations.avroNamespace("com.example.fruit")
+enum NamespacedFruit {
+  case Apple, Banana, Cherry
+}
+
+@annotations.avroNamespace("com.example.meal")
+case class MealWithNamespacedFruit(fruit: NamespacedFruit)
+
+// Option[Scala 3 enum] — must flatten or wrap correctly
+case class WithOptionalFruit(fruit: Option[Fruit])
+case class WithOptionalVehicle(vehicle: Option[Vehicle])
