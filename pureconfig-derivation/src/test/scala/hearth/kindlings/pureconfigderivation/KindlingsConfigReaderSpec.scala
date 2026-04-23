@@ -209,5 +209,86 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
         innerCur.flatMap(r.from) ==> Right(North)
       }
     }
+
+    group("value classes") {
+
+      test("value class field read") {
+        val r = KindlingsConfigReader.derive[WithWrappedInt]
+        r.from(cursor("{ value = 42 }")) ==> Right(WithWrappedInt(WrappedInt(42)))
+      }
+    }
+
+    group("recursive product types") {
+
+      test("recursive via Option") {
+        val r = KindlingsConfigReader.derive[LinkedNode]
+        r.from(cursor("{ value = a, next = { value = b } }")) ==>
+          Right(LinkedNode("a", Some(LinkedNode("b", None))))
+      }
+
+      test("recursive tree") {
+        val r = KindlingsConfigReader.derive[RecursiveTree]
+        r.from(cursor("{ value = 1, children = [{ value = 2, children = [] }] }")) ==>
+          Right(RecursiveTree(1, List(RecursiveTree(2, Nil))))
+      }
+    }
+
+    group("complex defaults") {
+
+      test("missing fields with List/Map defaults") {
+        val r = KindlingsConfigReader.derive[WithComplexDefaults]
+        r.from(cursor("{ name = Alice }")) ==> Right(WithComplexDefaults("Alice"))
+      }
+
+      test("provided fields override defaults") {
+        val r = KindlingsConfigReader.derive[WithComplexDefaults]
+        r.from(cursor("{ name = Alice, tags = [a, b] }")) ==>
+          Right(WithComplexDefaults("Alice", List("a", "b")))
+      }
+    }
+
+    group("Option field handling") {
+
+      test("missing Option field reads as None") {
+        val r = KindlingsConfigReader.derive[WithOption]
+        r.from(cursor("{ name = Alice }")) ==> Right(WithOption("Alice", None))
+      }
+
+      test("present Option field reads as Some") {
+        val r = KindlingsConfigReader.derive[WithOption]
+        r.from(cursor("{ name = Alice, nickname = Bob }")) ==> Right(WithOption("Alice", Some("Bob")))
+      }
+
+      test("Option with default: missing uses default None") {
+        val r = KindlingsConfigReader.derive[WithOptionDefault]
+        r.from(cursor("{ name = Alice }")) ==> Right(WithOptionDefault("Alice", None))
+      }
+    }
+
+    group("failure accumulation") {
+
+      test("multiple errors reported for wrong types") {
+        val r = KindlingsConfigReader.derive[SimplePerson]
+        val result = r.from(cursor("{ name = 42, age = hello }"))
+        assert(result.isLeft)
+      }
+
+      test("missing required field reports error") {
+        val r = KindlingsConfigReader.derive[SimplePerson]
+        val result = r.from(cursor("{ name = Alice }"))
+        assert(result.isLeft)
+      }
+    }
+
+    group("enum error messages") {
+
+      test("unknown enum value produces error") {
+        val r = KindlingsConfigReader.derive[CardinalDirection]
+        val rootCur = cursor("{ direction = northwest }")
+        val innerCur = rootCur.asObjectCursor.flatMap(_.atKey("direction"))
+        val result = innerCur.flatMap(r.from)
+        assert(result.isLeft)
+      }
+    }
   }
 }

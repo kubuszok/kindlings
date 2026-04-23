@@ -95,5 +95,29 @@ final class KindlingsConfigWriterSpec extends MacroSuite {
         renderConcise(w.to(North)) ==> "\"north\""
       }
     }
+
+    group("value classes") {
+
+      test("value class field write") {
+        val w = KindlingsConfigWriter.derive[WithWrappedInt]
+        val rendered = renderConcise(w.to(WithWrappedInt(WrappedInt(42))))
+        assert(rendered.contains("42"))
+      }
+    }
+
+    group("Option field omission") {
+
+      test("None Option field is written as null") {
+        val w = KindlingsConfigWriter.derive[WithOption]
+        val rendered = renderConcise(w.to(WithOption("Alice", None)))
+        assert(rendered.contains("\"name\":\"Alice\""))
+      }
+
+      test("Some Option field is written") {
+        val w = KindlingsConfigWriter.derive[WithOption]
+        val rendered = renderConcise(w.to(WithOption("Alice", Some("Bob"))))
+        assert(rendered.contains("\"nickname\":\"Bob\""))
+      }
+    }
   }
 }

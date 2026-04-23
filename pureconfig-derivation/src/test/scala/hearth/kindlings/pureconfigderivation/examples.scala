@@ -62,3 +62,27 @@ case class PersonFull(name: String, address: FullAddress)
 case class WithOption(name: String, nickname: Option[String])
 case class WithList(items: List[Int])
 case class WithMap(scores: Map[String, Int])
+
+// --- Value class ---
+
+case class WithWrappedInt(value: WrappedInt)
+
+// --- Recursive Option ---
+
+case class LinkedNode(value: String, next: Option[LinkedNode])
+
+// --- Complex defaults ---
+
+case class WithComplexDefaults(
+    name: String,
+    tags: List[String] = List("default"),
+    scores: Map[String, Int] = Map("init" -> 0)
+)
+
+// --- Option with None default ---
+
+case class WithOptionDefault(name: String, extra: Option[String] = None)
+
+// --- Discriminator field collision ---
+
+case class WithTypeField(`type`: String, name: String)
