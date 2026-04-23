@@ -585,4 +585,63 @@ final class CatsDerivationSpec extends MacroSuite {
       result ==> examples.NamedList(List(1, 2, 3), "test")
     }
   }
+
+  group("PartialOrder") {
+
+    test("equal values have partialCompare 0.0") {
+      val a = examples.Point(1, 2)
+      examples.Point.partialOrderPoint.partialCompare(a, a) ==> 0.0
+    }
+
+    test("different values have non-zero partialCompare") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      assert(examples.Point.partialOrderPoint.partialCompare(a, b) != 0.0)
+    }
+
+    test("PartialOrder on sealed trait") {
+      val c = examples.Circle(1.0): examples.Shape
+      val r = examples.Rectangle(2.0, 3.0): examples.Shape
+      assert(examples.Shape.partialOrderShape.partialCompare(c, c) == 0.0)
+      assert(examples.Shape.partialOrderShape.partialCompare(c, r) != 0.0)
+    }
+
+    test("PartialOrder consistent with Eq") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(1, 2)
+      assert(examples.Point.partialOrderPoint.partialCompare(a, b) == 0.0)
+      assert(examples.Point.eqPoint.eqv(a, b))
+    }
+  }
+
+  group("recursive types") {
+
+    test("Show on recursive tree") {
+      val tree = examples.Tree(1, List(examples.Tree(2, Nil), examples.Tree(3, List(examples.Tree(4, Nil)))))
+      val shown = examples.Tree.showTree.show(tree)
+      assert(shown.contains("1"))
+      assert(shown.contains("2"))
+      assert(shown.contains("3"))
+      assert(shown.contains("4"))
+    }
+
+    test("Eq on recursive tree") {
+      val tree1 = examples.Tree(1, List(examples.Tree(2, Nil)))
+      val tree2 = examples.Tree(1, List(examples.Tree(2, Nil)))
+      val tree3 = examples.Tree(1, List(examples.Tree(3, Nil)))
+      assert(examples.Tree.eqTree.eqv(tree1, tree2))
+      assert(!examples.Tree.eqTree.eqv(tree1, tree3))
+    }
+  }
+
+  group("respecting existing instances") {
+
+    test("user-provided Eq takes priority in derived Show") {
+      // Person has an explicit Eq instance — verify it works and is the one being used
+      val a = examples.Person("Alice", 30)
+      val b = examples.Person("Alice", 30)
+      assert(examples.Person.eqPerson.eqv(a, b))
+      assert(!examples.Person.eqPerson.eqv(a, examples.Person("Bob", 30)))
+    }
+  }
 }

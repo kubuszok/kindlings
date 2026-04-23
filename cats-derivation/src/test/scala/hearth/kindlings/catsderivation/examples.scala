@@ -9,6 +9,7 @@ object examples {
     implicit val showPoint: cats.Show[Point] = cats.Show.derived
     implicit val eqPoint: cats.kernel.Eq[Point] = cats.kernel.Eq.derived
     implicit val orderPoint: cats.kernel.Order[Point] = cats.kernel.Order.derived
+    implicit val partialOrderPoint: cats.kernel.PartialOrder[Point] = cats.kernel.PartialOrder.derived
     implicit val hashPoint: cats.kernel.Hash[Point] = cats.kernel.Hash.derived
     implicit val semigroupPoint: cats.kernel.Semigroup[Point] = cats.kernel.Semigroup.derived
     implicit val monoidPoint: cats.kernel.Monoid[Point] = cats.kernel.Monoid.derived
@@ -43,7 +44,15 @@ object examples {
     implicit val showShape: cats.Show[Shape] = cats.Show.derived
     implicit val eqShape: cats.kernel.Eq[Shape] = cats.kernel.Eq.derived
     implicit val orderShape: cats.kernel.Order[Shape] = cats.kernel.Order.derived
+    implicit val partialOrderShape: cats.kernel.PartialOrder[Shape] = cats.kernel.PartialOrder.derived
     implicit val hashShape: cats.kernel.Hash[Shape] = cats.kernel.Hash.derived
+  }
+
+  // Recursive tree for Show/Eq tests
+  final case class Tree(value: Int, children: List[Tree])
+  object Tree {
+    implicit val showTree: cats.Show[Tree] = cats.Show.derived
+    implicit val eqTree: cats.kernel.Eq[Tree] = cats.kernel.Eq.derived
   }
 
   // Parameterized case classes for Functor/Apply/Applicative/Foldable derivation
