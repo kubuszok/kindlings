@@ -12,8 +12,10 @@ object DeriveShrink {
     *   - Collections and Option types
     *   - Singletons (empty shrink stream)
     *
-    * @tparam A the type for which to derive a Shrink instance
-    * @return a Shrink[A] instance
+    * @tparam A
+    *   the type for which to derive a Shrink instance
+    * @return
+    *   a Shrink[A] instance
     */
   inline def derived[A]: ScalaCheckShrink[A] = ${ internal.compiletime.ShrinkMacros.deriveShrink[A] }
 }
