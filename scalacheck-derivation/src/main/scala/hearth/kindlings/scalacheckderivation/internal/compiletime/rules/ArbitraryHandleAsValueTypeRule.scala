@@ -27,9 +27,12 @@ trait ArbitraryHandleAsValueTypeRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                 Expr.quote(Expr.splice(raw.asInstanceOf[Expr[Any]]).asInstanceOf[A])
               }
               Rule.matched(Expr.quote {
-                Expr.splice(innerGen).map { inner =>
-                  Expr.splice(wrapExprBuilder(Expr.quote(inner)))
-                }.asInstanceOf[Gen[A]]
+                Expr
+                  .splice(innerGen)
+                  .map { inner =>
+                    Expr.splice(wrapExprBuilder(Expr.quote(inner)))
+                  }
+                  .asInstanceOf[Gen[A]]
               })
             }
         case _ =>

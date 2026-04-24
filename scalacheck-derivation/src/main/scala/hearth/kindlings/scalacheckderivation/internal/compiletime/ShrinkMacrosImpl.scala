@@ -17,7 +17,7 @@ trait ShrinkMacrosImpl
     with rules.ShrinkHandleAsCollectionRuleImpl
     with rules.ShrinkHandleAsSingletonRuleImpl
     with rules.ShrinkHandleAsCaseClassRuleImpl
-    with rules.ShrinkHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.ShrinkHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 
@@ -43,7 +43,7 @@ trait ShrinkMacrosImpl
           val ctx = ShrinkCtx.from[A](derivedType = selfType)
           runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               _ <- deriveShrinkRecursively[A](using ctx)
             } yield ()
           }
@@ -59,7 +59,7 @@ trait ShrinkMacrosImpl
               Some(runSafe {
                 val freshCtx = ShrinkCtx.from[A](derivedType = selfType)
                 for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                  _ <- ensureStandardExtensionsLoaded()
                   result <- deriveShrinkRecursively[A](using freshCtx)
                   freshCache <- freshCtx.cache.get
                 } yield freshCache.toValDefs.use(_ => result)
