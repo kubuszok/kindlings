@@ -52,8 +52,8 @@ object ShrinkUtils {
     }
 
   /** Shrinks an enum/sealed trait value by delegating to the Shrink for the actual runtime type. The list of Shrink
-    * instances corresponds to the enum cases in declaration order. We try each one (catching ClassCastException) to find
-    * the right variant.
+    * instances corresponds to the enum cases in declaration order. We try each one (catching ClassCastException) to
+    * find the right variant.
     */
   def shrinkEnum[A](caseShrinks: List[Shrink[A]]): Shrink[A] =
     Shrink { value =>
@@ -81,7 +81,7 @@ object ShrinkUtils {
 
   /** Shrink one element at a time in a list. */
   private def shrinkOne[A](xs: List[A], shrink: Shrink[A]): Stream[List[A]] = xs match {
-    case Nil => Stream.empty
+    case Nil          => Stream.empty
     case head :: tail =>
       shrink.shrink(head).map(_ :: tail) #::: shrinkOne(tail, shrink).map(head :: _)
   }

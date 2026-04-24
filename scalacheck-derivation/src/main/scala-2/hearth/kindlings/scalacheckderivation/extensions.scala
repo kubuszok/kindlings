@@ -1,6 +1,6 @@
 package hearth.kindlings.scalacheckderivation
 
-import org.scalacheck.{Arbitrary, Shrink}
+import org.scalacheck.{Arbitrary, Cogen, Shrink}
 import scala.language.experimental.macros
 
 trait ScalaCheckDerivationScala2Extensions {
@@ -11,6 +11,10 @@ trait ScalaCheckDerivationScala2Extensions {
 
   implicit class ShrinkDerived(private val companion: Shrink.type) {
     def derived[A]: Shrink[A] = macro internal.compiletime.ShrinkMacros.deriveShrinkImpl[A]
+  }
+
+  implicit class CogenDerived(private val companion: Cogen.type) {
+    def derived[A]: Cogen[A] = macro internal.compiletime.CogenMacros.deriveCogenImpl[A]
   }
 }
 

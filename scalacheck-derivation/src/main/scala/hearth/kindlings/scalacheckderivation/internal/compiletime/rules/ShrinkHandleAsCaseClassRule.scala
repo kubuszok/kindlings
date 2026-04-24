@@ -88,7 +88,7 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
                   }.toMap
                   caseClass.primaryConstructor(fieldMap) match {
                     case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error) =>
+                    case Left(error)          =>
                       MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
                   }
                 }
