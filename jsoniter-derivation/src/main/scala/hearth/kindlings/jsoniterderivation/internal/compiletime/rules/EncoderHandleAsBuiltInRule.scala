@@ -54,6 +54,10 @@ trait EncoderHandleAsBuiltInRuleImpl {
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Duration])))
           else if (Type[A] =:= CTypes.Period)
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Period])))
+          else if (Type[A] =:= CTypes.UUID)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.util.UUID])))
+          else if (Type[A] =:= Type.of[Unit])
+            Some(Expr.quote(Expr.splice(writer).writeObjectStart()))
           else
             None
 

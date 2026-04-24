@@ -12,8 +12,10 @@ object DeriveCogen {
     *   - Collections and Option types
     *   - Singletons (identity seed)
     *
-    * @tparam A the type for which to derive a Cogen instance
-    * @return a Cogen[A] instance
+    * @tparam A
+    *   the type for which to derive a Cogen instance
+    * @return
+    *   a Cogen[A] instance
     */
   inline def derived[A]: ScalaCheckCogen[A] = ${ internal.compiletime.CogenMacros.deriveCogen[A] }
 }

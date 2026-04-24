@@ -73,6 +73,13 @@ trait DecoderHandleAsBuiltInRuleImpl {
             Some(Expr.quote(Expr.splice(reader).readDuration(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.Period)
             Some(Expr.quote(Expr.splice(reader).readPeriod(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.UUID)
+            Some(Expr.quote(Expr.splice(reader).readUUID(null).asInstanceOf[A]))
+          else if (Type[A] =:= Type.of[Unit])
+            Some(Expr.quote {
+              Expr.splice(reader).skip()
+              ().asInstanceOf[A]
+            })
           else
             None
 

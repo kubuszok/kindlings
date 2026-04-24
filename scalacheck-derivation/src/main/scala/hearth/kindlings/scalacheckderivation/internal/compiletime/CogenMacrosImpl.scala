@@ -73,7 +73,8 @@ trait CogenMacrosImpl
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
         val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
-        val hint = "Enable debug logging with: import hearth.kindlings.scalacheckderivation.debug.logDerivationForScalaCheckDerivation"
+        val hint =
+          "Enable debug logging with: import hearth.kindlings.scalacheckderivation.debug.logDerivationForScalaCheckDerivation"
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }
@@ -120,7 +121,9 @@ trait CogenMacrosImpl
         case Right(result) =>
           Log.info(s"Derived Cogen for ${Type[A].prettyPrint}") >> MIO.pure(result)
         case Left(reasons) =>
-          val reasonsStrings = reasons.toListMap.removed(CogenUseCachedRule).view
+          val reasonsStrings = reasons.toListMap
+            .removed(CogenUseCachedRule)
+            .view
             .map { case (rule, reasons) =>
               if (reasons.isEmpty) s"The rule ${rule.name} was not applicable"
               else s" - ${rule.name}: ${reasons.mkString(", ")}"
@@ -151,7 +154,10 @@ trait CogenMacrosImpl
   }
 }
 
-sealed private[compiletime] trait CogenDerivationError extends util.control.NoStackTrace with Product with Serializable {
+sealed private[compiletime] trait CogenDerivationError
+    extends util.control.NoStackTrace
+    with Product
+    with Serializable {
   def message: String
   override def getMessage(): String = message
 }

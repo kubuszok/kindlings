@@ -1748,6 +1748,27 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("UUID support") {
+
+      test("UUID round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[WithUUID]
+        val id = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+        val value = WithUUID(id, "test")
+        val json = writeToString(value)(codec)
+        assert(json.contains("550e8400-e29b-41d4-a716-446655440000"))
+        val decoded = readFromString[WithUUID](json)(codec)
+        decoded ==> value
+      }
+
+      test("standalone UUID round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[java.util.UUID]
+        val id = java.util.UUID.fromString("123e4567-e89b-12d3-a456-426614174000")
+        val json = writeToString(id)(codec)
+        json ==> "\"123e4567-e89b-12d3-a456-426614174000\""
+        readFromString[java.util.UUID](json)(codec) ==> id
+      }
+    }
+
     group("advanced collection types") {
 
       test("HashMap round-trip") {
