@@ -1,6 +1,6 @@
 package hearth.kindlings.scalacheckderivation
 
-import org.scalacheck.{Arbitrary, Shrink}
+import org.scalacheck.{Arbitrary, Cogen, Shrink}
 
 object extensions {
 
@@ -10,5 +10,9 @@ object extensions {
 
   extension (companion: Shrink.type) {
     inline def derived[A]: Shrink[A] = ${ internal.compiletime.ShrinkMacros.deriveShrink[A] }
+  }
+
+  extension (companion: Cogen.type) {
+    inline def derived[A]: Cogen[A] = ${ internal.compiletime.CogenMacros.deriveCogen[A] }
   }
 }
