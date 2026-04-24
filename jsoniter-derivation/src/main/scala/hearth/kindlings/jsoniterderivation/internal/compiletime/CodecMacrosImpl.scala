@@ -89,6 +89,7 @@ trait CodecMacrosImpl
     val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
     val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
     val Period: Type[java.time.Period] = Type.of[java.time.Period]
+    val UUID: Type[java.util.UUID] = Type.of[java.util.UUID]
   }
 
   // Entrypoints

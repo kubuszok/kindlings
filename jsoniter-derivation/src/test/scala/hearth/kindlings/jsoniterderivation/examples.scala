@@ -148,8 +148,11 @@ case class WithStringArray(values: Array[String]) {
   }
 }
 
-// UUID test type
+// UUID test type (now supported as built-in)
 case class WithUUID(id: java.util.UUID, name: String)
+
+// Unit test type
+case class WithUnit(value: Unit, name: String)
 
 // Nested sealed trait hierarchy
 sealed trait Vehicle
