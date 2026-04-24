@@ -20,12 +20,10 @@ trait CogenHandleAsValueTypeRuleImpl { this: CogenMacrosImpl & MacroCommons & St
           Log.info(s"Handling ${Type[A].prettyPrint} as value type wrapping ${Inner.prettyPrint}") >>
             deriveCogenRecursively[Inner](using cogenctx.nest[Inner]).map { innerCogen =>
               Rule.matched(Expr.quote {
-                _root_.org.scalacheck.Cogen[A](
-                  (seed: _root_.org.scalacheck.rng.Seed, a: A) => {
-                    val inner: Inner = Expr.splice(isValueType.value.unwrap(Expr.quote(a)))
-                    Expr.splice(innerCogen).perturb(seed, inner)
-                  }
-                )
+                _root_.org.scalacheck.Cogen[A] { (seed: _root_.org.scalacheck.rng.Seed, a: A) =>
+                  val inner: Inner = Expr.splice(isValueType.value.unwrap(Expr.quote(a)))
+                  Expr.splice(innerCogen).perturb(seed, inner)
+                }
               })
             }
         case _ =>

@@ -51,7 +51,10 @@ object CogenUtils {
 
   def cogenEnum[A](caseCogens: List[Cogen[A]]): Cogen[A] = {
     def perturbEnum(seed: org.scalacheck.rng.Seed, value: A): org.scalacheck.rng.Seed = {
-      val ordinalSeed = Cogen.cogenLong.perturb(seed, value.getClass.getName.hashCode.toLong)
+      // Perturb with both class name (type discriminator) and value hash (instance discriminator).
+      // Class name alone is insufficient for Java enums where all constants share the same class.
+      val typeSeed = Cogen.cogenLong.perturb(seed, value.getClass.getName.hashCode.toLong)
+      val ordinalSeed = Cogen.cogenLong.perturb(typeSeed, value.hashCode().toLong)
       val iter = caseCogens.iterator
       while (iter.hasNext) {
         val caseCogen = iter.next()

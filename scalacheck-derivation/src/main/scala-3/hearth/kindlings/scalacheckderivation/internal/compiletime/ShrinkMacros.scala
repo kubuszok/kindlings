@@ -4,7 +4,10 @@ package internal.compiletime
 import hearth.MacroCommonsScala3
 import scala.quoted.*
 
-final private[scalacheckderivation] class ShrinkMacros(q: Quotes) extends MacroCommonsScala3(using q), ShrinkMacrosImpl
+final private[scalacheckderivation] class ShrinkMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      LoadStandardExtensionsOnce,
+      ShrinkMacrosImpl
 
 private[scalacheckderivation] object ShrinkMacros {
 

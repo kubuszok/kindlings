@@ -4,7 +4,10 @@ package internal.compiletime
 import hearth.MacroCommonsScala3
 import scala.quoted.*
 
-final private[scalacheckderivation] class CogenMacros(q: Quotes) extends MacroCommonsScala3(using q), CogenMacrosImpl
+final private[scalacheckderivation] class CogenMacros(q: Quotes)
+    extends MacroCommonsScala3(using q),
+      LoadStandardExtensionsOnce,
+      CogenMacrosImpl
 
 private[scalacheckderivation] object CogenMacros {
 

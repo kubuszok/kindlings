@@ -17,7 +17,7 @@ trait ArbitraryMacrosImpl
     with rules.ArbitraryHandleAsCollectionRuleImpl
     with rules.ArbitraryHandleAsSingletonRuleImpl
     with rules.ArbitraryHandleAsCaseClassRuleImpl
-    with rules.ArbitraryHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.ArbitraryHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 
@@ -44,7 +44,7 @@ trait ArbitraryMacrosImpl
           val ctx = ArbitraryCtx.from[A](derivedType = selfType)
           runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               _ <- deriveArbitraryRecursively[A](using ctx)
             } yield ()
           }
@@ -62,7 +62,7 @@ trait ArbitraryMacrosImpl
               Some(runSafe {
                 val freshCtx = ArbitraryCtx.from[A](derivedType = selfType)
                 for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                  _ <- ensureStandardExtensionsLoaded()
                   result <- deriveArbitraryRecursively[A](using freshCtx)
                   freshCache <- freshCtx.cache.get
                 } yield freshCache.toValDefs.use(_ => result)
