@@ -12,6 +12,7 @@ trait ShrinkMacrosImpl
     with rules.ShrinkUseImplicitRuleImpl
     with rules.ShrinkBuiltInRuleImpl
     with rules.ShrinkHandleAsOptionRuleImpl
+    with rules.ShrinkHandleAsMapRuleImpl
     with rules.ShrinkHandleAsCollectionRuleImpl
     with rules.ShrinkHandleAsSingletonRuleImpl
     with rules.ShrinkHandleAsCaseClassRuleImpl
@@ -129,6 +130,7 @@ trait ShrinkMacrosImpl
         ShrinkUseImplicitRule,
         ShrinkBuiltInRule,
         ShrinkHandleAsOptionRule,
+        ShrinkHandleAsMapRule,
         ShrinkHandleAsCollectionRule,
         ShrinkHandleAsSingletonRule,
         ShrinkHandleAsCaseClassRule,

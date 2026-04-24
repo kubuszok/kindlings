@@ -34,6 +34,21 @@ object CogenUtils {
       s
     }
 
+  /** Cogen for Map: perturbs seed with each key-value pair. */
+  def cogenMap(keyCogen: Cogen[Any], valueCogen: Cogen[Any]): Cogen[Any] =
+    Cogen { (seed, value) =>
+      val map = value.asInstanceOf[Map[Any, Any]]
+      map.foldLeft(seed) { case (s, (k, v)) =>
+        valueCogen.perturb(keyCogen.perturb(s, k), v)
+      }
+    }
+
+  /** Cogen for value types: unwrap to inner type and delegate to inner Cogen. */
+  def cogenMapped(innerCogen: Cogen[Any], unwrap: Any => Any): Cogen[Any] =
+    Cogen { (seed, value) =>
+      innerCogen.perturb(seed, unwrap(value))
+    }
+
   def cogenEnum[A](caseCogens: List[Cogen[A]]): Cogen[A] = {
     def perturbEnum(seed: org.scalacheck.rng.Seed, value: A): org.scalacheck.rng.Seed = {
       val ordinalSeed = Cogen.cogenLong.perturb(seed, value.getClass.getName.hashCode.toLong)

@@ -85,4 +85,25 @@ object ShrinkUtils {
     case head :: tail =>
       shrink.shrink(head).map(_ :: tail) #::: shrinkOne(tail, shrink).map(head :: _)
   }
+
+  /** Shrinks a Map by shrinking its entries as a list of pairs. */
+  def shrinkMap(keyShrink: Shrink[Any], valueShrink: Shrink[Any]): Shrink[Any] =
+    Shrink { value =>
+      val entries = value.asInstanceOf[Map[Any, Any]].toList
+      if (entries.isEmpty) Stream.empty
+      else {
+        val pairShrink: Shrink[(Any, Any)] = Shrink { case (k, v) =>
+          keyShrink.shrink(k).map((_, v)) #::: valueShrink.shrink(v).map((k, _))
+        }
+        val removeStreams = removeChunks(entries).map(_.toMap)
+        val shrinkEntryStreams = shrinkOne(entries, pairShrink).map(_.toMap)
+        (removeStreams #::: shrinkEntryStreams).asInstanceOf[Stream[Any]]
+      }
+    }
+
+  /** Shrinks a value by unwrapping, shrinking the inner value, and re-wrapping. */
+  def shrinkMapped(innerShrink: Shrink[Any], unwrap: Any => Any, wrap: Any => Any): Shrink[Any] =
+    Shrink { value =>
+      innerShrink.shrink(unwrap(value)).map(wrap)
+    }
 }
