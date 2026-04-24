@@ -190,9 +190,21 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(result.passed, s"Property check failed: ${result.status}")
   }
 
-  // Known limitation: recursive types (both direct sealed trait recursion and
-  // recursion via List) cause StackOverflowError in scalacheck-derivation.
-  // This is tracked as a known gap in docs/research/TEST_COVERAGE_GAPS.md.
+  test("recursive case class via List generates finite structures") {
+    case class TreeNode(value: Int, children: List[TreeNode])
+
+    val arb: Arbitrary[TreeNode] = DeriveArbitrary.derived[TreeNode]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+    assert(samples.nonEmpty, "Should generate finite tree node samples")
+  }
+
+  test("recursive case class via Option generates finite structures") {
+    case class LinkedNode(value: String, next: Option[LinkedNode])
+
+    val arb: Arbitrary[LinkedNode] = DeriveArbitrary.derived[LinkedNode]
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+    assert(samples.nonEmpty, "Should generate finite linked node samples")
+  }
 
   test("singleton case objects generate correctly") {
     sealed trait Singleton

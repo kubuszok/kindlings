@@ -23,9 +23,15 @@ trait ArbitraryHandleAsCollectionRuleImpl { this: ArbitraryMacrosImpl & MacroCom
               val factoryExpr = isCollection.value.factory
 
               MIO.pure(Rule.matched(Expr.quote {
-                // Use listOf and convert to target collection type using the factory
+                // Use Gen.sized to halve the size budget for element generation,
+                // preventing infinite recursion on types like List[TreeNode]
                 _root_.org.scalacheck.Gen
-                  .listOf(Expr.splice(elemGen))
+                  .sized { n =>
+                    _root_.org.scalacheck.Gen.resize(
+                      scala.math.max(n / 2, 0),
+                      _root_.org.scalacheck.Gen.listOf(Expr.splice(elemGen))
+                    )
+                  }
                   .map { list =>
                     Expr.splice(factoryExpr).fromSpecific(list).asInstanceOf[CtorResult]
                   }
