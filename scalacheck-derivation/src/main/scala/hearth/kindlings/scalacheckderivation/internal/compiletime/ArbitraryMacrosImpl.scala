@@ -11,6 +11,7 @@ trait ArbitraryMacrosImpl
     with rules.ArbitraryUseCachedRuleImpl
     with rules.ArbitraryUseImplicitRuleImpl
     with rules.ArbitraryBuiltInRuleImpl
+    with rules.ArbitraryHandleAsValueTypeRuleImpl
     with rules.ArbitraryHandleAsOptionRuleImpl
     with rules.ArbitraryHandleAsMapRuleImpl
     with rules.ArbitraryHandleAsCollectionRuleImpl
@@ -137,6 +138,7 @@ trait ArbitraryMacrosImpl
         ArbitraryUseCachedRule,
         ArbitraryUseImplicitRule,
         ArbitraryBuiltInRule,
+        ArbitraryHandleAsValueTypeRule,
         ArbitraryHandleAsOptionRule,
         ArbitraryHandleAsMapRule,
         ArbitraryHandleAsCollectionRule,

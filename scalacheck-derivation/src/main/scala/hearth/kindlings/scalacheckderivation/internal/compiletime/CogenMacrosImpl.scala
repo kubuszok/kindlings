@@ -11,6 +11,7 @@ trait CogenMacrosImpl
     with rules.CogenUseCachedRuleImpl
     with rules.CogenUseImplicitRuleImpl
     with rules.CogenBuiltInRuleImpl
+    with rules.CogenHandleAsValueTypeRuleImpl
     with rules.CogenHandleAsOptionRuleImpl
     with rules.CogenHandleAsMapRuleImpl
     with rules.CogenHandleAsCollectionRuleImpl
@@ -113,6 +114,7 @@ trait CogenMacrosImpl
         CogenUseCachedRule,
         CogenUseImplicitRule,
         CogenBuiltInRule,
+        CogenHandleAsValueTypeRule,
         CogenHandleAsOptionRule,
         CogenHandleAsMapRule,
         CogenHandleAsCollectionRule,

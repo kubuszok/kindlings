@@ -29,16 +29,14 @@ trait CogenHandleAsMapRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExten
       for {
         keyCogen <- deriveCogenRecursively[Key](using cogenctx.nest[Key])
         valueCogen <- deriveCogenRecursively[Value](using cogenctx.nest[Value])
-      } yield {
-        Rule.matched(Expr.quote {
-          hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-            .cogenMap(
-              Expr.splice(keyCogen).asInstanceOf[Cogen[Any]],
-              Expr.splice(valueCogen).asInstanceOf[Cogen[Any]]
-            )
-            .asInstanceOf[Cogen[A]]
-        })
-      }
+      } yield Rule.matched(Expr.quote {
+        hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+          .cogenMap(
+            Expr.splice(keyCogen).asInstanceOf[Cogen[Any]],
+            Expr.splice(valueCogen).asInstanceOf[Cogen[Any]]
+          )
+          .asInstanceOf[Cogen[A]]
+      })
     }
   }
 }

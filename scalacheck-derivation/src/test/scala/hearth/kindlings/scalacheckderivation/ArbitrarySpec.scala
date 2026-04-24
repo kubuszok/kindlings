@@ -224,6 +224,12 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(samples.nonEmpty, "Should generate Map samples")
   }
 
+  test("derives Arbitrary for value class (AnyVal) field") {
+    val arb = examples.WithWrappedId.arb
+    val samples = List.fill(10)(arb.arbitrary.sample).flatten
+    assert(samples.nonEmpty, "Should generate value class samples")
+  }
+
   test("deeply nested case class generates correctly") {
     case class Inner(value: Int)
     case class Middle(inner: Inner, flag: Boolean)
