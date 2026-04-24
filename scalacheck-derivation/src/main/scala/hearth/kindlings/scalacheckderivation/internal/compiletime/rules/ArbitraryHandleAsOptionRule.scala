@@ -19,7 +19,14 @@ trait ArbitraryHandleAsOptionRuleImpl { this: ArbitraryMacrosImpl & MacroCommons
           Log.info(s"Handling ${Type[A].prettyPrint} as Option") >>
             deriveArbitraryRecursively[Inner](using arbctx.nest[Inner]).flatMap { elemGen =>
               MIO.pure(Rule.matched(Expr.quote {
-                _root_.org.scalacheck.Gen.option(Expr.splice(elemGen)).asInstanceOf[Gen[A]]
+                // Use Gen.sized to favor None at small sizes, preventing infinite
+                // recursion on types like Option[RecursiveNode]
+                _root_.org.scalacheck.Gen
+                  .sized { n =>
+                    if (n <= 0) _root_.org.scalacheck.Gen.const(None)
+                    else _root_.org.scalacheck.Gen.resize(n - 1, _root_.org.scalacheck.Gen.option(Expr.splice(elemGen)))
+                  }
+                  .asInstanceOf[Gen[A]]
               }))
             }
         case _ =>
