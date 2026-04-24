@@ -160,4 +160,11 @@ object examples {
       implicit val arbAccount: Arbitrary[Account] = DeriveArbitrary.derived
     }
   }
+
+  // ==Value Class Support==
+  final case class WrappedId(value: Int) extends AnyVal
+  case class WithWrappedId(id: WrappedId, name: String)
+  object WithWrappedId {
+    implicit val arb: Arbitrary[WithWrappedId] = DeriveArbitrary.derived
+  }
 }

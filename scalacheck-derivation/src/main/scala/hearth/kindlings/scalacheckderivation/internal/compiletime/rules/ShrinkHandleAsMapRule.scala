@@ -29,16 +29,14 @@ trait ShrinkHandleAsMapRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExt
       for {
         keyShrink <- deriveShrinkRecursively[Key](using shrinkctx.nest[Key])
         valueShrink <- deriveShrinkRecursively[Value](using shrinkctx.nest[Value])
-      } yield {
-        Rule.matched(Expr.quote {
-          hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
-            .shrinkMap(
-              Expr.splice(keyShrink).asInstanceOf[Shrink[Any]],
-              Expr.splice(valueShrink).asInstanceOf[Shrink[Any]]
-            )
-            .asInstanceOf[Shrink[A]]
-        })
-      }
+      } yield Rule.matched(Expr.quote {
+        hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
+          .shrinkMap(
+            Expr.splice(keyShrink).asInstanceOf[Shrink[Any]],
+            Expr.splice(valueShrink).asInstanceOf[Shrink[Any]]
+          )
+          .asInstanceOf[Shrink[A]]
+      })
     }
   }
 }
