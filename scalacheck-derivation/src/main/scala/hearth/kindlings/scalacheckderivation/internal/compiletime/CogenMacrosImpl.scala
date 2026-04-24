@@ -17,7 +17,7 @@ trait CogenMacrosImpl
     with rules.CogenHandleAsCollectionRuleImpl
     with rules.CogenHandleAsSingletonRuleImpl
     with rules.CogenHandleAsCaseClassRuleImpl
-    with rules.CogenHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions =>
+    with rules.CogenHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 
@@ -39,7 +39,7 @@ trait CogenMacrosImpl
           val ctx = CogenCtx.from[A](derivedType = selfType)
           runSafe {
             for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+              _ <- ensureStandardExtensionsLoaded()
               _ <- deriveCogenRecursively[A](using ctx)
             } yield ()
           }
@@ -52,7 +52,7 @@ trait CogenMacrosImpl
               Some(runSafe {
                 val freshCtx = CogenCtx.from[A](derivedType = selfType)
                 for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                  _ <- ensureStandardExtensionsLoaded()
                   result <- deriveCogenRecursively[A](using freshCtx)
                   freshCache <- freshCtx.cache.get
                 } yield freshCache.toValDefs.use(_ => result)

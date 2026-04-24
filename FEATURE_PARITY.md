@@ -437,14 +437,22 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 | Feature | Manual / scalacheck-shapeless | Kindlings | Status |
 |---|---|---|---|
 | `Arbitrary[A]` | Manual or Shapeless-derived | Yes | Parity |
+| `Shrink[A]` | Manual only | Yes | Improvement |
+| `Cogen[A]` | Manual only | Yes | Improvement |
 
 ### Derivation API
 
 | Feature | scalacheck-shapeless | Kindlings | Status |
 |---|---|---|---|
 | Semi-automatic (`DeriveArbitrary.derived[A]`) | No | Yes | Improvement |
+| Semi-automatic (`DeriveShrink.derived[A]`) | No | Yes | Improvement |
+| Semi-automatic (`DeriveCogen.derived[A]`) | No | Yes | Improvement |
 | `Arbitrary.derived[A]` extension | No | Yes (via `import extensions._`) | Improvement |
+| `Shrink.derived[A]` extension | No | Yes (via `import extensions._`) | Improvement |
+| `Cogen.derived[A]` extension | No | Yes (via `import extensions._`) | Improvement |
 | `derives Arbitrary` (Scala 3) | No | Yes | Improvement |
+| `derives Shrink` (Scala 3) | No | Yes | Improvement |
+| `derives Cogen` (Scala 3) | No | Yes | Improvement |
 | Automatic (fully implicit) | Yes (import and forget) | No — sanely-automatic via `.derived` | Trade-off |
 | Unified Scala 2+3 API | No (Scala 2 only) | Yes | Improvement |
 | Cross-platform (JVM/JS/Native) | JVM only | JVM + JS + Native | Improvement |
@@ -460,19 +468,21 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 | Sealed traits (mixed case objects + case classes) | scalacheck-shapeless: yes | Yes | Parity |
 | Zero-field case classes | Manual: trivial | Yes (`Gen.const`) | Parity |
 | Nested case classes | scalacheck-shapeless: yes | Yes | Parity |
-| `Option[A]` | ScalaCheck built-in | Yes (`Gen.option`) | Parity |
+| `Option[A]` | ScalaCheck built-in | Yes (`Gen.option` / `Shrink` / `Cogen`) | Parity |
 | Collections (`List`, `Vector`, `Set`, …) | ScalaCheck built-in for some | Yes (via Hearth `IsCollection`) | Parity |
-| Recursive types | scalacheck-shapeless: needs `Lazy` | Yes (no wrappers needed) | Improvement |
+| `Map[K, V]` and map-like types | ScalaCheck built-in for `Map` | Yes (via Hearth `IsMap`) | Parity |
+| Value classes / opaque types | Manual only | Yes (via Hearth `IsValueType`) | Improvement |
+| Refined types | Manual only | Yes (via `kindlings-refined-integration` + `IsValueType`) | Improvement |
+| Iron types (Scala 3) | Manual only | Yes (via `kindlings-iron-integration` + `IsValueType`) | Improvement |
+| Java enums (Scala 3) | Manual only | Yes (via Hearth `Enum.parse`, Scala 3 only) | Improvement |
+| Recursive types | scalacheck-shapeless: needs `Lazy` | Yes (no wrappers needed, size-based termination) | Improvement |
 | User-provided implicits | Implicit search | Yes (checked before derivation) | Parity |
 
 ### Not supported
 
 | Feature | Notes |
 |---|---|
-| Value classes / opaque types | Not yet handled — user can provide an implicit `Arbitrary` for these |
-| Refined types / Iron types | Not yet handled — user can provide an implicit `Arbitrary` for these |
-| `Map[K, V]` | Not yet handled — user can provide an implicit `Arbitrary` for these |
-| Java enums | Not yet handled |
+| Java enums (Scala 2) | Macro expansion fails on Scala 2.13 due to a Hearth/Scala 2 codegen limitation (`not found: value rassoc$1`) |
 | Configuration class | No configuration knobs (no field name transforms, etc. — generators don't need them) |
 | Annotations (`@fieldName`, `@transientField`) | Not applicable — generators don't interact with serialized field names |
 

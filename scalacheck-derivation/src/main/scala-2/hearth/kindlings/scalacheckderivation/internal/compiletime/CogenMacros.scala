@@ -6,6 +6,7 @@ import scala.reflect.macros.blackbox
 
 final private[scalacheckderivation] class CogenMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
+    with LoadStandardExtensionsOnce
     with CogenMacrosImpl {
 
   def deriveCogenImpl[A: c.WeakTypeTag]: c.Expr[org.scalacheck.Cogen[A]] = deriveCogen[A]
