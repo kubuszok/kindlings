@@ -1,0 +1,108 @@
+package hearth.kindlings.benchmarks
+
+import io.circe.{Decoder, Json}
+import org.openjdk.jmh.annotations._
+import java.util.concurrent.TimeUnit
+
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.Throughput))
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
+@Fork(2)
+class CirceEncodeBenchmark {
+
+  @Benchmark def kindlingsSemiAutoSimpleCC(): Json =
+    KindlingsCirceInstances.simpleCCSemiAutoEncoder(BenchmarkData.simpleCC)
+
+  @Benchmark def kindlingsAutoSimpleCC(): Json =
+    KindlingsCirceInstances.simpleCCAutoEncoder(BenchmarkData.simpleCC)
+
+  @Benchmark def originalSimpleCC(): Json =
+    OriginalCirceInstances.simpleCCEncoder(BenchmarkData.simpleCC)
+
+  @Benchmark def kindlingsSemiAutoPerson(): Json =
+    KindlingsCirceInstances.personSemiAutoEncoder(BenchmarkData.person)
+
+  @Benchmark def kindlingsAutoPerson(): Json =
+    KindlingsCirceInstances.personAutoEncoder(BenchmarkData.person)
+
+  @Benchmark def originalPerson(): Json =
+    OriginalCirceInstances.personEncoder(BenchmarkData.person)
+
+  @Benchmark def kindlingsSemiAutoSimpleADT(): Json =
+    KindlingsCirceInstances.simpleADTSemiAutoEncoder(BenchmarkData.simpleADT)
+
+  @Benchmark def kindlingsAutoSimpleADT(): Json =
+    KindlingsCirceInstances.simpleADTAutoEncoder(BenchmarkData.simpleADT)
+
+  @Benchmark def originalSimpleADT(): Json =
+    OriginalCirceInstances.simpleADTEncoder(BenchmarkData.simpleADT)
+
+  @Benchmark def kindlingsSemiAutoEvent(): Json =
+    KindlingsCirceInstances.eventSemiAutoEncoder(BenchmarkData.event)
+
+  @Benchmark def kindlingsAutoEvent(): Json =
+    KindlingsCirceInstances.eventAutoEncoder(BenchmarkData.event)
+
+  @Benchmark def originalEvent(): Json =
+    OriginalCirceInstances.eventEncoder(BenchmarkData.event)
+}
+
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.Throughput))
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
+@Fork(2)
+class CirceDecodeBenchmark {
+
+  private var simpleCCJson: Json = _
+  private var personJson: Json = _
+  private var simpleADTJson: Json = _
+  private var eventJson: Json = _
+
+  @Setup(Level.Trial)
+  def setup(): Unit = {
+    simpleCCJson = KindlingsCirceInstances.simpleCCSemiAutoEncoder(BenchmarkData.simpleCC)
+    personJson = KindlingsCirceInstances.personSemiAutoEncoder(BenchmarkData.person)
+    simpleADTJson = KindlingsCirceInstances.simpleADTSemiAutoEncoder(BenchmarkData.simpleADT)
+    eventJson = KindlingsCirceInstances.eventSemiAutoEncoder(BenchmarkData.event)
+  }
+
+  @Benchmark def kindlingsSemiAutoSimpleCC(): Decoder.Result[SimpleCC] =
+    KindlingsCirceInstances.simpleCCSemiAutoDecoder.decodeJson(simpleCCJson)
+
+  @Benchmark def kindlingsAutoSimpleCC(): Decoder.Result[SimpleCC] =
+    KindlingsCirceInstances.simpleCCAutoDecoder.decodeJson(simpleCCJson)
+
+  @Benchmark def originalSimpleCC(): Decoder.Result[SimpleCC] =
+    OriginalCirceInstances.simpleCCDecoder.decodeJson(simpleCCJson)
+
+  @Benchmark def kindlingsSemiAutoPerson(): Decoder.Result[Person] =
+    KindlingsCirceInstances.personSemiAutoDecoder.decodeJson(personJson)
+
+  @Benchmark def kindlingsAutoPerson(): Decoder.Result[Person] =
+    KindlingsCirceInstances.personAutoDecoder.decodeJson(personJson)
+
+  @Benchmark def originalPerson(): Decoder.Result[Person] =
+    OriginalCirceInstances.personDecoder.decodeJson(personJson)
+
+  @Benchmark def kindlingsSemiAutoSimpleADT(): Decoder.Result[SimpleADT] =
+    KindlingsCirceInstances.simpleADTSemiAutoDecoder.decodeJson(simpleADTJson)
+
+  @Benchmark def kindlingsAutoSimpleADT(): Decoder.Result[SimpleADT] =
+    KindlingsCirceInstances.simpleADTAutoDecoder.decodeJson(simpleADTJson)
+
+  @Benchmark def originalSimpleADT(): Decoder.Result[SimpleADT] =
+    OriginalCirceInstances.simpleADTDecoder.decodeJson(simpleADTJson)
+
+  @Benchmark def kindlingsSemiAutoEvent(): Decoder.Result[Event] =
+    KindlingsCirceInstances.eventSemiAutoDecoder.decodeJson(eventJson)
+
+  @Benchmark def kindlingsAutoEvent(): Decoder.Result[Event] =
+    KindlingsCirceInstances.eventAutoDecoder.decodeJson(eventJson)
+
+  @Benchmark def originalEvent(): Decoder.Result[Event] =
+    OriginalCirceInstances.eventDecoder.decodeJson(eventJson)
+}

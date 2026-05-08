@@ -40,6 +40,7 @@ val versions = new {
   val scalacheck = "1.19.0"
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
+  val kittens = "3.4.0"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -301,6 +302,8 @@ val al = new {
 
   private val scala3OnlyProdProjects = Vector("ironIntegration")
 
+  private val jvmOnlyCompileOnlyProjects = Vector("benchmarks")
+
   private def isJVM(platform: String): Boolean = platform == "JVM"
 
   private def isScala3(scalaSuffix: String): Boolean = scalaSuffix == "3"
@@ -322,8 +325,12 @@ val al = new {
       Vector(s"$project/$name")
     }
 
+    val benchmarkCompileTasks =
+      if (isJVM(platform)) jvmOnlyCompileOnlyProjects.map(name => s"$name$scalaSuffix/compile")
+      else Vector.empty
+
     val clean = Vector("clean")
-    val compileAndTest = tasksOf("compile") ++ tasksOf("test")
+    val compileAndTest = tasksOf("compile") ++ benchmarkCompileTasks ++ tasksOf("test")
     val coverageCompileAndTest =
       if (isJVM(platform)) "coverage" +: compileAndTest :+ "coverageAggregate" :+ "coverageOff" else compileAndTest
     // val mimaReport = tasksOf("mimaReportBinaryIssues")
@@ -381,6 +388,7 @@ lazy val root = project
   .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
+  .aggregate(benchmarks.projectRefs *)
   .settings(
     moduleName := "kindlings",
     name := "kindlings",
@@ -859,5 +867,39 @@ lazy val integrationTests = projectMatrix
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),
       for2_13 = Seq.empty
+    )
+  )
+
+lazy val benchmarks = projectMatrix
+  .in(file("benchmarks"))
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))(only1VersionInIDE *)
+  .enablePlugins(JmhPlugin)
+  .dependsOn(
+    fastShowPretty,
+    circeDerivation,
+    jsoniterDerivation,
+    catsDerivation,
+    scalacheckDerivation
+  )
+  .disablePlugins(WelcomePlugin)
+  .settings(noPublishSettings *)
+  .settings(settings *)
+  .settings(
+    moduleName := "kindlings-benchmarks",
+    name := "kindlings-benchmarks",
+    description := "JMH benchmarks comparing Kindlings derivation against original library derivation",
+    scalacOptions --= Seq("-Werror", "-Xfatal-warnings"),
+    resolvers += mavenCentralSnapshots,
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-parser" % versions.circe,
+      "io.circe" %% "circe-generic" % versions.circe,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Provided,
+      "org.typelevel" %% "kittens" % versions.kittens
+    ),
+    libraryDependencies ++= versions.fold(scalaVersion.value)(
+      for2_13 = Seq(
+        compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
+      ),
+      for3 = Seq.empty
     )
   )
