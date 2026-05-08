@@ -879,7 +879,14 @@ lazy val benchmarks = projectMatrix
     circeDerivation,
     jsoniterDerivation,
     catsDerivation,
-    scalacheckDerivation
+    scalacheckDerivation,
+    ubjsonDerivation,
+    yamlDerivation,
+    xmlDerivation,
+    avroDerivation,
+    pureconfigDerivation,
+    sconfigDerivation,
+    tapirSchemaDerivation
   )
   .disablePlugins(WelcomePlugin)
   .settings(noPublishSettings *)
@@ -898,7 +905,8 @@ lazy val benchmarks = projectMatrix
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for2_13 = Seq(
-        compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
+        compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
       ),
       for3 = Seq.empty
     )

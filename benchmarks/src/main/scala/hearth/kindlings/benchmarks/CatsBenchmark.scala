@@ -1,6 +1,6 @@
 package hearth.kindlings.benchmarks
 
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 @State(Scope.Benchmark)
@@ -87,4 +87,3 @@ class CatsOrderBenchmark {
   @Benchmark def originalSimpleCCCompare(): Int =
     OriginalCatsInstances.simpleCCOrder.compare(simpleCCPair._1, simpleCCPair._2)
 }
-
