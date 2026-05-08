@@ -1,6 +1,6 @@
 package hearth.kindlings.benchmarks
 
-import hearth.kindlings.catsderivation.extensions._
+import hearth.kindlings.catsderivation.extensions.*
 
 object KindlingsCatsInstances {
 

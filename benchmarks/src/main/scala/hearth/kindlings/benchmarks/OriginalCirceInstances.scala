@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
 import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto._
+import io.circe.generic.semiauto.*
 
 object OriginalCirceInstances {
 

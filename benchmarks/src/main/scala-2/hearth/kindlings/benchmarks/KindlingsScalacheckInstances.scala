@@ -1,6 +1,6 @@
 package hearth.kindlings.benchmarks
 
-import hearth.kindlings.scalacheckderivation.extensions._
+import hearth.kindlings.scalacheckderivation.extensions.*
 import org.scalacheck.{Arbitrary, Cogen, Shrink}
 
 object KindlingsScalacheckInstances {

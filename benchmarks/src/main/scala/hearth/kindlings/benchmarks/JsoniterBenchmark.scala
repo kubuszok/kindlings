@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
-import com.github.plokhotnyuk.jsoniter_scala.core._
-import org.openjdk.jmh.annotations._
+import com.github.plokhotnyuk.jsoniter_scala.core.*
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 @State(Scope.Benchmark)
