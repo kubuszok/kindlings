@@ -5,7 +5,7 @@ import org.apache.avro.generic.GenericRecord
 // avro4s 5.x (Scala 3) has an incompatible API with avro4s 4.x (Scala 2.13).
 // On Scala 3 the "original" avro benchmarks delegate to kindlings, so the
 // comparison is only meaningful on Scala 2.13 where avro4s 4.x is used.
-object OriginalAvroInstances {
+object OriginalAvroAutoInstances {
 
   val simpleCCFormat: Avro4sCompat[SimpleCC] = Avro4sCompat(
     KindlingsAvroInstances.simpleCCEncoder,

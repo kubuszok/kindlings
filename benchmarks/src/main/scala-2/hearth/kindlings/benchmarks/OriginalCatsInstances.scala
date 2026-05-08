@@ -2,7 +2,7 @@ package hearth.kindlings.benchmarks
 
 import cats.derived.semiauto
 
-object OriginalCatsInstances {
+object OriginalCatsSemiAutoInstances {
 
   implicit val simpleCCShow: cats.Show[SimpleCC] = semiauto.show
   implicit val simpleCCEq: cats.kernel.Eq[SimpleCC] = semiauto.eq

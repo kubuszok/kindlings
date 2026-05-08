@@ -897,7 +897,7 @@ lazy val benchmarks = projectMatrix
     moduleName := "kindlings-benchmarks",
     name := "kindlings-benchmarks",
     description := "JMH benchmarks comparing Kindlings derivation against original library derivation",
-    scalacOptions --= Seq("-Werror", "-Xfatal-warnings"),
+    scalacOptions --= Seq("-Werror", "-Xfatal-warnings", "-Xcheck-macros"),
     resolvers += mavenCentralSnapshots,
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-parser" % versions.circe,

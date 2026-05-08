@@ -27,14 +27,20 @@ class AvroEncodeBenchmark {
   @Benchmark def kindlingsSimpleCC(): Any =
     KindlingsAvroInstances.simpleCCEncoder.encode(BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCC(): GenericRecord =
-    OriginalAvroInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCC(): GenericRecord =
+    OriginalAvroSemiAutoInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
+
+  @Benchmark def originalAutoSimpleCC(): GenericRecord =
+    OriginalAvroAutoInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
 
   @Benchmark def kindlingsPerson(): Any =
     KindlingsAvroInstances.personEncoder.encode(BenchmarkData.person)
 
-  @Benchmark def originalPerson(): GenericRecord =
-    OriginalAvroInstances.personFormat.to(BenchmarkData.person)
+  @Benchmark def originalSemiAutoPerson(): GenericRecord =
+    OriginalAvroSemiAutoInstances.personFormat.to(BenchmarkData.person)
+
+  @Benchmark def originalAutoPerson(): GenericRecord =
+    OriginalAvroAutoInstances.personFormat.to(BenchmarkData.person)
 
   @Benchmark def kindlingsEvent(): Any =
     KindlingsAvroInstances.eventEncoder.encode(BenchmarkData.event)
@@ -64,21 +70,27 @@ class AvroDecodeBenchmark {
     personRecord = KindlingsAvroInstances.personEncoder.encode(BenchmarkData.person)
     eventRecord = KindlingsAvroInstances.eventEncoder.encode(BenchmarkData.event)
     simpleADTRecord = KindlingsAvroInstances.simpleADTEncoder.encode(BenchmarkData.simpleADT)
-    simpleCCGenericRecord = OriginalAvroInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
-    personGenericRecord = OriginalAvroInstances.personFormat.to(BenchmarkData.person)
+    simpleCCGenericRecord = OriginalAvroAutoInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
+    personGenericRecord = OriginalAvroAutoInstances.personFormat.to(BenchmarkData.person)
   }
 
   @Benchmark def kindlingsSimpleCC(): SimpleCC =
     KindlingsAvroInstances.simpleCCDecoder.decode(simpleCCRecord)
 
-  @Benchmark def originalSimpleCC(): SimpleCC =
-    OriginalAvroInstances.simpleCCFormat.from(simpleCCGenericRecord)
+  @Benchmark def originalSemiAutoSimpleCC(): SimpleCC =
+    OriginalAvroSemiAutoInstances.simpleCCFormat.from(simpleCCGenericRecord)
+
+  @Benchmark def originalAutoSimpleCC(): SimpleCC =
+    OriginalAvroAutoInstances.simpleCCFormat.from(simpleCCGenericRecord)
 
   @Benchmark def kindlingsPerson(): Person =
     KindlingsAvroInstances.personDecoder.decode(personRecord)
 
-  @Benchmark def originalPerson(): Person =
-    OriginalAvroInstances.personFormat.from(personGenericRecord)
+  @Benchmark def originalSemiAutoPerson(): Person =
+    OriginalAvroSemiAutoInstances.personFormat.from(personGenericRecord)
+
+  @Benchmark def originalAutoPerson(): Person =
+    OriginalAvroAutoInstances.personFormat.from(personGenericRecord)
 
   @Benchmark def kindlingsEvent(): Event =
     KindlingsAvroInstances.eventDecoder.decode(eventRecord)

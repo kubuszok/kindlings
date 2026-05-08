@@ -14,23 +14,35 @@ class CatsShowBenchmark {
   @Benchmark def kindlingsSimpleCC(): String =
     KindlingsCatsInstances.simpleCCShow.show(BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCC(): String =
-    OriginalCatsInstances.simpleCCShow.show(BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCC(): String =
+    OriginalCatsSemiAutoInstances.simpleCCShow.show(BenchmarkData.simpleCC)
+
+  @Benchmark def originalAutoSimpleCC(): String =
+    OriginalCatsAutoInstances.simpleCCShow.show(BenchmarkData.simpleCC)
 
   @Benchmark def kindlingsPerson(): String =
     KindlingsCatsInstances.personShow.show(BenchmarkData.person)
 
+  @Benchmark def originalAutoPerson(): String =
+    OriginalCatsAutoInstances.personShow.show(BenchmarkData.person)
+
   @Benchmark def kindlingsSimpleADT(): String =
     KindlingsCatsInstances.simpleADTShow.show(BenchmarkData.simpleADT)
 
-  @Benchmark def originalSimpleADT(): String =
-    OriginalCatsInstances.simpleADTShow.show(BenchmarkData.simpleADT)
+  @Benchmark def originalSemiAutoSimpleADT(): String =
+    OriginalCatsSemiAutoInstances.simpleADTShow.show(BenchmarkData.simpleADT)
+
+  @Benchmark def originalAutoSimpleADT(): String =
+    OriginalCatsAutoInstances.simpleADTShow.show(BenchmarkData.simpleADT)
 
   @Benchmark def kindlingsEvent(): String =
     KindlingsCatsInstances.eventShow.show(BenchmarkData.event)
 
-  @Benchmark def originalEvent(): String =
-    OriginalCatsInstances.eventShow.show(BenchmarkData.event)
+  @Benchmark def originalSemiAutoEvent(): String =
+    OriginalCatsSemiAutoInstances.eventShow.show(BenchmarkData.event)
+
+  @Benchmark def originalAutoEvent(): String =
+    OriginalCatsAutoInstances.eventShow.show(BenchmarkData.event)
 }
 
 @State(Scope.Benchmark)
@@ -49,11 +61,11 @@ class CatsEqBenchmark {
   @Benchmark def kindlingsSimpleCCNotEqual(): Boolean =
     KindlingsCatsInstances.simpleCCEq.eqv(simpleCCPair._1, simpleCCPair._2)
 
-  @Benchmark def originalSimpleCCEqual(): Boolean =
-    OriginalCatsInstances.simpleCCEq.eqv(BenchmarkData.simpleCC, BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCCEqual(): Boolean =
+    OriginalCatsSemiAutoInstances.simpleCCEq.eqv(BenchmarkData.simpleCC, BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCCNotEqual(): Boolean =
-    OriginalCatsInstances.simpleCCEq.eqv(simpleCCPair._1, simpleCCPair._2)
+  @Benchmark def originalAutoSimpleCCEqual(): Boolean =
+    OriginalCatsAutoInstances.simpleCCEq.eqv(BenchmarkData.simpleCC, BenchmarkData.simpleCC)
 }
 
 @State(Scope.Benchmark)
@@ -67,8 +79,11 @@ class CatsHashBenchmark {
   @Benchmark def kindlingsSimpleCC(): Int =
     KindlingsCatsInstances.simpleCCHash.hash(BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCC(): Int =
-    OriginalCatsInstances.simpleCCHash.hash(BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCC(): Int =
+    OriginalCatsSemiAutoInstances.simpleCCHash.hash(BenchmarkData.simpleCC)
+
+  @Benchmark def originalAutoSimpleCC(): Int =
+    OriginalCatsAutoInstances.simpleCCHash.hash(BenchmarkData.simpleCC)
 }
 
 @State(Scope.Benchmark)
@@ -84,6 +99,9 @@ class CatsOrderBenchmark {
   @Benchmark def kindlingsSimpleCCCompare(): Int =
     KindlingsCatsInstances.simpleCCOrder.compare(simpleCCPair._1, simpleCCPair._2)
 
-  @Benchmark def originalSimpleCCCompare(): Int =
-    OriginalCatsInstances.simpleCCOrder.compare(simpleCCPair._1, simpleCCPair._2)
+  @Benchmark def originalSemiAutoSimpleCCCompare(): Int =
+    OriginalCatsSemiAutoInstances.simpleCCOrder.compare(simpleCCPair._1, simpleCCPair._2)
+
+  @Benchmark def originalAutoSimpleCCCompare(): Int =
+    OriginalCatsAutoInstances.simpleCCOrder.compare(simpleCCPair._1, simpleCCPair._2)
 }
