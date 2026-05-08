@@ -905,7 +905,8 @@ lazy val benchmarks = projectMatrix
       "io.circe" %% "circe-generic" % versions.circe,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Provided,
       "org.typelevel" %% "kittens" % versions.kittens,
-      "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3 else versions.avro4s213)
+      "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3
+                                                else versions.avro4s213)
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for2_13 = Seq(
