@@ -15,7 +15,7 @@ object KindlingsTapirInstances {
   val simpleADTSchema: Schema[SimpleADT] = KindlingsSchema.derive[SimpleADT]
 }
 
-object OriginalTapirInstances {
+object OriginalTapirSemiAutoInstances {
   implicit val addressSchema: Schema[Address] = Schema.derived[Address]
   implicit val simpleCCSchema: Schema[SimpleCC] = Schema.derived[SimpleCC]
   implicit val personSchema: Schema[Person] = Schema.derived[Person]
@@ -30,6 +30,14 @@ object OriginalTapirInstances {
   implicit val eventSchema: Schema[Event] = Schema.derived[Event]
 }
 
+object OriginalTapirAutoInstances {
+  import sttp.tapir.generic.auto.*
+  val simpleCCSchema: Schema[SimpleCC] = implicitly
+  val personSchema: Schema[Person] = implicitly
+  val eventSchema: Schema[Event] = implicitly
+  val simpleADTSchema: Schema[SimpleADT] = implicitly
+}
+
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.Throughput))
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -41,18 +49,27 @@ class TapirSchemaBenchmark {
   @Benchmark def kindlingsSimpleCC(): SchemaType[SimpleCC] =
     KindlingsTapirInstances.simpleCCSchema.schemaType
 
-  @Benchmark def originalSimpleCC(): SchemaType[SimpleCC] =
-    OriginalTapirInstances.simpleCCSchema.schemaType
+  @Benchmark def originalSemiAutoSimpleCC(): SchemaType[SimpleCC] =
+    OriginalTapirSemiAutoInstances.simpleCCSchema.schemaType
+
+  @Benchmark def originalAutoSimpleCC(): SchemaType[SimpleCC] =
+    OriginalTapirAutoInstances.simpleCCSchema.schemaType
 
   @Benchmark def kindlingsPerson(): SchemaType[Person] =
     KindlingsTapirInstances.personSchema.schemaType
 
-  @Benchmark def originalPerson(): SchemaType[Person] =
-    OriginalTapirInstances.personSchema.schemaType
+  @Benchmark def originalSemiAutoPerson(): SchemaType[Person] =
+    OriginalTapirSemiAutoInstances.personSchema.schemaType
+
+  @Benchmark def originalAutoPerson(): SchemaType[Person] =
+    OriginalTapirAutoInstances.personSchema.schemaType
 
   @Benchmark def kindlingsEvent(): SchemaType[Event] =
     KindlingsTapirInstances.eventSchema.schemaType
 
-  @Benchmark def originalEvent(): SchemaType[Event] =
-    OriginalTapirInstances.eventSchema.schemaType
+  @Benchmark def originalSemiAutoEvent(): SchemaType[Event] =
+    OriginalTapirSemiAutoInstances.eventSchema.schemaType
+
+  @Benchmark def originalAutoEvent(): SchemaType[Event] =
+    OriginalTapirAutoInstances.eventSchema.schemaType
 }

@@ -2,7 +2,7 @@ package hearth.kindlings.benchmarks
 
 import pureconfig.{ConfigReader, ConfigWriter}
 
-object OriginalPureconfigInstances {
+object OriginalPureconfigSemiAutoInstances {
 
   given addressReader: ConfigReader[Address] = ConfigReader.derived
   given simpleCCReader: ConfigReader[SimpleCC] = ConfigReader.derived

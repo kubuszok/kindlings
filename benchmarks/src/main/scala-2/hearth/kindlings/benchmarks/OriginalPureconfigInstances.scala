@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import pureconfig.{ConfigReader, ConfigWriter}
 import pureconfig.generic.semiauto.*
 
-object OriginalPureconfigInstances {
+object OriginalPureconfigSemiAutoInstances {
 
   implicit val addressReader: ConfigReader[Address] = deriveReader[Address]
   implicit val addressWriter: ConfigWriter[Address] = deriveWriter[Address]

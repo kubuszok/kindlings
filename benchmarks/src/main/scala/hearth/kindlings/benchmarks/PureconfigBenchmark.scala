@@ -24,14 +24,14 @@ class PureconfigWriteBenchmark {
   @Benchmark def kindlingsSimpleCC(): ConfigValue =
     KindlingsPureconfigInstances.simpleCCWriter.to(BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCC(): ConfigValue =
-    OriginalPureconfigInstances.simpleCCWriter.to(BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCC(): ConfigValue =
+    OriginalPureconfigSemiAutoInstances.simpleCCWriter.to(BenchmarkData.simpleCC)
 
   @Benchmark def kindlingsPerson(): ConfigValue =
     KindlingsPureconfigInstances.personWriter.to(BenchmarkData.person)
 
-  @Benchmark def originalPerson(): ConfigValue =
-    OriginalPureconfigInstances.personWriter.to(BenchmarkData.person)
+  @Benchmark def originalSemiAutoPerson(): ConfigValue =
+    OriginalPureconfigSemiAutoInstances.personWriter.to(BenchmarkData.person)
 }
 
 @State(Scope.Benchmark)
@@ -54,12 +54,12 @@ class PureconfigReadBenchmark {
   @Benchmark def kindlingsSimpleCC(): ConfigReader.Result[SimpleCC] =
     KindlingsPureconfigInstances.simpleCCReader.from(pureconfig.ConfigCursor(simpleCCValue, Nil))
 
-  @Benchmark def originalSimpleCC(): ConfigReader.Result[SimpleCC] =
-    OriginalPureconfigInstances.simpleCCReader.from(pureconfig.ConfigCursor(simpleCCValue, Nil))
+  @Benchmark def originalSemiAutoSimpleCC(): ConfigReader.Result[SimpleCC] =
+    OriginalPureconfigSemiAutoInstances.simpleCCReader.from(pureconfig.ConfigCursor(simpleCCValue, Nil))
 
   @Benchmark def kindlingsPerson(): ConfigReader.Result[Person] =
     KindlingsPureconfigInstances.personReader.from(pureconfig.ConfigCursor(personValue, Nil))
 
-  @Benchmark def originalPerson(): ConfigReader.Result[Person] =
-    OriginalPureconfigInstances.personReader.from(pureconfig.ConfigCursor(personValue, Nil))
+  @Benchmark def originalSemiAutoPerson(): ConfigReader.Result[Person] =
+    OriginalPureconfigSemiAutoInstances.personReader.from(pureconfig.ConfigCursor(personValue, Nil))
 }

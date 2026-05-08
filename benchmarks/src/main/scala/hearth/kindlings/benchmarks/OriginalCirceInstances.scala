@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto.*
 
-object OriginalCirceInstances {
+object OriginalCirceSemiAutoInstances {
 
   implicit val simpleCCEncoder: Encoder[SimpleCC] = deriveEncoder[SimpleCC]
   implicit val simpleCCDecoder: Decoder[SimpleCC] = deriveDecoder[SimpleCC]

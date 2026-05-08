@@ -18,8 +18,11 @@ class CirceEncodeBenchmark {
   @Benchmark def kindlingsAutoSimpleCC(): Json =
     KindlingsCirceInstances.simpleCCAutoEncoder(BenchmarkData.simpleCC)
 
-  @Benchmark def originalSimpleCC(): Json =
-    OriginalCirceInstances.simpleCCEncoder(BenchmarkData.simpleCC)
+  @Benchmark def originalSemiAutoSimpleCC(): Json =
+    OriginalCirceSemiAutoInstances.simpleCCEncoder(BenchmarkData.simpleCC)
+
+  @Benchmark def originalAutoSimpleCC(): Json =
+    OriginalCirceAutoInstances.simpleCCEncoder(BenchmarkData.simpleCC)
 
   @Benchmark def kindlingsSemiAutoPerson(): Json =
     KindlingsCirceInstances.personSemiAutoEncoder(BenchmarkData.person)
@@ -27,8 +30,11 @@ class CirceEncodeBenchmark {
   @Benchmark def kindlingsAutoPerson(): Json =
     KindlingsCirceInstances.personAutoEncoder(BenchmarkData.person)
 
-  @Benchmark def originalPerson(): Json =
-    OriginalCirceInstances.personEncoder(BenchmarkData.person)
+  @Benchmark def originalSemiAutoPerson(): Json =
+    OriginalCirceSemiAutoInstances.personEncoder(BenchmarkData.person)
+
+  @Benchmark def originalAutoPerson(): Json =
+    OriginalCirceAutoInstances.personEncoder(BenchmarkData.person)
 
   @Benchmark def kindlingsSemiAutoSimpleADT(): Json =
     KindlingsCirceInstances.simpleADTSemiAutoEncoder(BenchmarkData.simpleADT)
@@ -36,8 +42,11 @@ class CirceEncodeBenchmark {
   @Benchmark def kindlingsAutoSimpleADT(): Json =
     KindlingsCirceInstances.simpleADTAutoEncoder(BenchmarkData.simpleADT)
 
-  @Benchmark def originalSimpleADT(): Json =
-    OriginalCirceInstances.simpleADTEncoder(BenchmarkData.simpleADT)
+  @Benchmark def originalSemiAutoSimpleADT(): Json =
+    OriginalCirceSemiAutoInstances.simpleADTEncoder(BenchmarkData.simpleADT)
+
+  @Benchmark def originalAutoSimpleADT(): Json =
+    OriginalCirceAutoInstances.simpleADTEncoder(BenchmarkData.simpleADT)
 
   @Benchmark def kindlingsSemiAutoEvent(): Json =
     KindlingsCirceInstances.eventSemiAutoEncoder(BenchmarkData.event)
@@ -45,8 +54,11 @@ class CirceEncodeBenchmark {
   @Benchmark def kindlingsAutoEvent(): Json =
     KindlingsCirceInstances.eventAutoEncoder(BenchmarkData.event)
 
-  @Benchmark def originalEvent(): Json =
-    OriginalCirceInstances.eventEncoder(BenchmarkData.event)
+  @Benchmark def originalSemiAutoEvent(): Json =
+    OriginalCirceSemiAutoInstances.eventEncoder(BenchmarkData.event)
+
+  @Benchmark def originalAutoEvent(): Json =
+    OriginalCirceAutoInstances.eventEncoder(BenchmarkData.event)
 }
 
 @State(Scope.Benchmark)
@@ -76,8 +88,11 @@ class CirceDecodeBenchmark {
   @Benchmark def kindlingsAutoSimpleCC(): Decoder.Result[SimpleCC] =
     KindlingsCirceInstances.simpleCCAutoDecoder.decodeJson(simpleCCJson)
 
-  @Benchmark def originalSimpleCC(): Decoder.Result[SimpleCC] =
-    OriginalCirceInstances.simpleCCDecoder.decodeJson(simpleCCJson)
+  @Benchmark def originalSemiAutoSimpleCC(): Decoder.Result[SimpleCC] =
+    OriginalCirceSemiAutoInstances.simpleCCDecoder.decodeJson(simpleCCJson)
+
+  @Benchmark def originalAutoSimpleCC(): Decoder.Result[SimpleCC] =
+    OriginalCirceAutoInstances.simpleCCDecoder.decodeJson(simpleCCJson)
 
   @Benchmark def kindlingsSemiAutoPerson(): Decoder.Result[Person] =
     KindlingsCirceInstances.personSemiAutoDecoder.decodeJson(personJson)
@@ -85,8 +100,11 @@ class CirceDecodeBenchmark {
   @Benchmark def kindlingsAutoPerson(): Decoder.Result[Person] =
     KindlingsCirceInstances.personAutoDecoder.decodeJson(personJson)
 
-  @Benchmark def originalPerson(): Decoder.Result[Person] =
-    OriginalCirceInstances.personDecoder.decodeJson(personJson)
+  @Benchmark def originalSemiAutoPerson(): Decoder.Result[Person] =
+    OriginalCirceSemiAutoInstances.personDecoder.decodeJson(personJson)
+
+  @Benchmark def originalAutoPerson(): Decoder.Result[Person] =
+    OriginalCirceAutoInstances.personDecoder.decodeJson(personJson)
 
   @Benchmark def kindlingsSemiAutoSimpleADT(): Decoder.Result[SimpleADT] =
     KindlingsCirceInstances.simpleADTSemiAutoDecoder.decodeJson(simpleADTJson)
@@ -94,8 +112,11 @@ class CirceDecodeBenchmark {
   @Benchmark def kindlingsAutoSimpleADT(): Decoder.Result[SimpleADT] =
     KindlingsCirceInstances.simpleADTAutoDecoder.decodeJson(simpleADTJson)
 
-  @Benchmark def originalSimpleADT(): Decoder.Result[SimpleADT] =
-    OriginalCirceInstances.simpleADTDecoder.decodeJson(simpleADTJson)
+  @Benchmark def originalSemiAutoSimpleADT(): Decoder.Result[SimpleADT] =
+    OriginalCirceSemiAutoInstances.simpleADTDecoder.decodeJson(simpleADTJson)
+
+  @Benchmark def originalAutoSimpleADT(): Decoder.Result[SimpleADT] =
+    OriginalCirceAutoInstances.simpleADTDecoder.decodeJson(simpleADTJson)
 
   @Benchmark def kindlingsSemiAutoEvent(): Decoder.Result[Event] =
     KindlingsCirceInstances.eventSemiAutoDecoder.decodeJson(eventJson)
@@ -103,6 +124,9 @@ class CirceDecodeBenchmark {
   @Benchmark def kindlingsAutoEvent(): Decoder.Result[Event] =
     KindlingsCirceInstances.eventAutoDecoder.decodeJson(eventJson)
 
-  @Benchmark def originalEvent(): Decoder.Result[Event] =
-    OriginalCirceInstances.eventDecoder.decodeJson(eventJson)
+  @Benchmark def originalSemiAutoEvent(): Decoder.Result[Event] =
+    OriginalCirceSemiAutoInstances.eventDecoder.decodeJson(eventJson)
+
+  @Benchmark def originalAutoEvent(): Decoder.Result[Event] =
+    OriginalCirceAutoInstances.eventDecoder.decodeJson(eventJson)
 }
