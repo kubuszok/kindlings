@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
 import hearth.kindlings.ubjsonderivation.{UBJsonReader, UBJsonValueCodec, UBJsonWriter}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsUbjsonInstances {

@@ -41,6 +41,7 @@ val versions = new {
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
   val kittens = "3.4.0"
+  val avro4s = "4.1.2"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -906,7 +907,8 @@ lazy val benchmarks = projectMatrix
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for2_13 = Seq(
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
-        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig,
+        "com.sksamuel.avro4s" %% "avro4s-core" % versions.avro4s
       ),
       for3 = Seq.empty
     )

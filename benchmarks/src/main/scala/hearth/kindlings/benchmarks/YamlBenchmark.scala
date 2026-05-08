@@ -2,7 +2,7 @@ package hearth.kindlings.benchmarks
 
 import hearth.kindlings.yamlderivation.{KindlingsYamlDecoder, KindlingsYamlEncoder}
 import org.virtuslab.yaml.{Node, YamlDecoder, YamlEncoder}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsYamlInstances {
