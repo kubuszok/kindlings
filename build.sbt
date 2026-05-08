@@ -331,12 +331,13 @@ val al = new {
       else Vector.empty
 
     val clean = Vector("clean")
-    val compileAndTest = tasksOf("compile") ++ benchmarkCompileTasks ++ tasksOf("test")
+    val compileAndTest = tasksOf("compile") ++ tasksOf("test")
     val coverageCompileAndTest =
-      if (isJVM(platform)) "coverage" +: compileAndTest :+ "coverageAggregate" :+ "coverageOff" else compileAndTest
+      if (isJVM(platform)) "coverage" +: compileAndTest :+ "coverageAggregate" :+ "coverageOff"
+      else compileAndTest
     // val mimaReport = tasksOf("mimaReportBinaryIssues")
 
-    val tasks = clean ++ coverageCompileAndTest // ++ mimaReport
+    val tasks = clean ++ coverageCompileAndTest ++ benchmarkCompileTasks // ++ mimaReport
     tasks.mkString(" ; ")
   }
 
