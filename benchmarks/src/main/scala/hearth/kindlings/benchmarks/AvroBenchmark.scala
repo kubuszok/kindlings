@@ -1,7 +1,8 @@
 package hearth.kindlings.benchmarks
 
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder}
-import org.openjdk.jmh.annotations._
+import org.apache.avro.generic.GenericRecord
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsAvroInstances {
@@ -26,8 +27,14 @@ class AvroEncodeBenchmark {
   @Benchmark def kindlingsSimpleCC(): Any =
     KindlingsAvroInstances.simpleCCEncoder.encode(BenchmarkData.simpleCC)
 
+  @Benchmark def originalSimpleCC(): GenericRecord =
+    OriginalAvroInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
+
   @Benchmark def kindlingsPerson(): Any =
     KindlingsAvroInstances.personEncoder.encode(BenchmarkData.person)
+
+  @Benchmark def originalPerson(): GenericRecord =
+    OriginalAvroInstances.personFormat.to(BenchmarkData.person)
 
   @Benchmark def kindlingsEvent(): Any =
     KindlingsAvroInstances.eventEncoder.encode(BenchmarkData.event)
@@ -48,6 +55,8 @@ class AvroDecodeBenchmark {
   private var personRecord: Any = _
   private var eventRecord: Any = _
   private var simpleADTRecord: Any = _
+  private var simpleCCGenericRecord: GenericRecord = _
+  private var personGenericRecord: GenericRecord = _
 
   @Setup(Level.Trial)
   def setup(): Unit = {
@@ -55,13 +64,21 @@ class AvroDecodeBenchmark {
     personRecord = KindlingsAvroInstances.personEncoder.encode(BenchmarkData.person)
     eventRecord = KindlingsAvroInstances.eventEncoder.encode(BenchmarkData.event)
     simpleADTRecord = KindlingsAvroInstances.simpleADTEncoder.encode(BenchmarkData.simpleADT)
+    simpleCCGenericRecord = OriginalAvroInstances.simpleCCFormat.to(BenchmarkData.simpleCC)
+    personGenericRecord = OriginalAvroInstances.personFormat.to(BenchmarkData.person)
   }
 
   @Benchmark def kindlingsSimpleCC(): SimpleCC =
     KindlingsAvroInstances.simpleCCDecoder.decode(simpleCCRecord)
 
+  @Benchmark def originalSimpleCC(): SimpleCC =
+    OriginalAvroInstances.simpleCCFormat.from(simpleCCGenericRecord)
+
   @Benchmark def kindlingsPerson(): Person =
     KindlingsAvroInstances.personDecoder.decode(personRecord)
+
+  @Benchmark def originalPerson(): Person =
+    OriginalAvroInstances.personFormat.from(personGenericRecord)
 
   @Benchmark def kindlingsEvent(): Event =
     KindlingsAvroInstances.eventDecoder.decode(eventRecord)

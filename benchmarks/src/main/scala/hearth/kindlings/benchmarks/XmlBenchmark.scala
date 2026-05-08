@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
 import hearth.kindlings.xmlderivation.{KindlingsXmlDecoder, KindlingsXmlEncoder, XmlDecoder, XmlEncoder}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsXmlInstances {

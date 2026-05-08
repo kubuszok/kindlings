@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import com.typesafe.config.ConfigValue
 import hearth.kindlings.pureconfigderivation.{KindlingsConfigReader, KindlingsConfigWriter}
 import pureconfig.{ConfigReader, ConfigWriter}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsPureconfigInstances {

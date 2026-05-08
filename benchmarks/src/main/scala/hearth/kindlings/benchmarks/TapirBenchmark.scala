@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import hearth.kindlings.tapirschemaderivation.{KindlingsSchema, PreferSchemaConfig}
 import hearth.kindlings.circederivation.Configuration
 import sttp.tapir.{Schema, SchemaType}
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsTapirInstances {

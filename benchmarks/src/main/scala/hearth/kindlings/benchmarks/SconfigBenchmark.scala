@@ -2,7 +2,7 @@ package hearth.kindlings.benchmarks
 
 import hearth.kindlings.sconfigderivation.ConfigCodec
 import org.ekrich.config.ConfigValue
-import org.openjdk.jmh.annotations._
+import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsSconfigInstances {

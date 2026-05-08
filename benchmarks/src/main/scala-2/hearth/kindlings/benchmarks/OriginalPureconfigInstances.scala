@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
 import pureconfig.{ConfigReader, ConfigWriter}
-import pureconfig.generic.semiauto._
+import pureconfig.generic.semiauto.*
 
 object OriginalPureconfigInstances {
 
