@@ -41,7 +41,8 @@ val versions = new {
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
   val kittens = "3.4.0"
-  val avro4s = "4.1.2"
+  val avro4s213 = "4.1.2"
+  val avro4s3 = "5.0.15"
 
   // Explicitly handle Scala 2.13 and Scala 3 separately.
   def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
@@ -903,13 +904,13 @@ lazy val benchmarks = projectMatrix
       "io.circe" %% "circe-parser" % versions.circe,
       "io.circe" %% "circe-generic" % versions.circe,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Provided,
-      "org.typelevel" %% "kittens" % versions.kittens
+      "org.typelevel" %% "kittens" % versions.kittens,
+      "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3 else versions.avro4s213)
     ),
     libraryDependencies ++= versions.fold(scalaVersion.value)(
       for2_13 = Seq(
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
-        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig,
-        "com.sksamuel.avro4s" %% "avro4s-core" % versions.avro4s
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
       ),
       for3 = Seq.empty
     )
