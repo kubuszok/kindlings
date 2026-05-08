@@ -1,13 +1,13 @@
 package hearth.kindlings.benchmarks
 
 import pureconfig.{ConfigReader, ConfigWriter}
+import pureconfig.generic.semiauto.{deriveReader, deriveWriter}
 
-// pureconfig on Scala 3 does not provide an auto-derivation import;
-// ConfigReader.derived is the only mechanism and it requires intermediates
-// for nested types, so it is semi-auto. Delegate to semi-auto instances.
 object OriginalPureconfigAutoInstances {
-  val simpleCCReader: ConfigReader[SimpleCC] = OriginalPureconfigSemiAutoInstances.simpleCCReader
-  val simpleCCWriter: ConfigWriter[SimpleCC] = OriginalPureconfigSemiAutoInstances.simpleCCWriter
+  val simpleCCReader: ConfigReader[SimpleCC] = deriveReader
+  val simpleCCWriter: ConfigWriter[SimpleCC] = deriveWriter
+  // Person hits Scala 3 inline depth limit without intermediates;
+  // delegate to semi-auto for complex types
   val personReader: ConfigReader[Person] = OriginalPureconfigSemiAutoInstances.personReader
   val personWriter: ConfigWriter[Person] = OriginalPureconfigSemiAutoInstances.personWriter
 }

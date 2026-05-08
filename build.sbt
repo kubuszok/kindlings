@@ -912,6 +912,8 @@ lazy val benchmarks = projectMatrix
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
         "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
       ),
-      for3 = Seq.empty
+      for3 = Seq(
+        "com.github.pureconfig" %% "pureconfig-generic-scala3" % versions.pureconfig
+      )
     )
   )
