@@ -40,7 +40,7 @@ val versions = new {
   val scalacheck = "1.19.0"
   val sconfig = "1.12.4"
   val scalaJavaTime = "2.6.0"
-  val kittens = "3.4.0"
+  val kittens = "3.5.0"
   val avro4s213 = "4.1.2"
   val avro4s3 = "5.0.15"
 
