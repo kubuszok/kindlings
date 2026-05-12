@@ -101,67 +101,164 @@ object CatsDerivationFactories {
   // Arbitrary witness types for erasure-based polymorphic factories.
   // These are never instantiated — they exist only to give the lambda a concrete type signature
   // that the JVM erases to the same representation as any other type argument.
-  sealed trait Witness1
-  sealed trait Witness2
+  sealed trait W1
+  sealed trait W2
 
   def functorInstance[F[_]](
-    mapFn: (F[Witness1], Witness1 => Witness2) => F[Witness2]
+    mapFn: (F[W1], W1 => W2) => F[W2]
   ): cats.Functor[F] = new cats.Functor[F] {
     def map[A, B](fa: F[A])(f: A => B): F[B] =
-      mapFn
-        .asInstanceOf[(F[A], A => B) => F[B]]
-        .apply(fa, f)
+      mapFn.asInstanceOf[(F[A], A => B) => F[B]].apply(fa, f)
   }
 }
 ```
 
-**Why this is safe:** At the JVM level, `F[Witness1]` and `F[A]` are both `Object` (or the
+**Why this is safe:** At the JVM level, `F[W1]` and `F[A]` are both `Object` (or the
 erasure of `F`). The `asInstanceOf` cast is a no-op at runtime — it only satisfies the compiler's
 type checker. This is the same erasure trick used throughout the polymorphic derivation code
-(see `ConsKMacrosImpl` line 101: `hd.asInstanceOf[Any]`, `tl.asInstanceOf[F[Any]]`).
+(see `ConsKMacrosImpl`: `hd.asInstanceOf[Any]`, `tl.asInstanceOf[F[Any]]`).
 
-### Scala 2 cross-quotes requirement: `Type.Ctor1[F]` in implicit scope
+### Macro codegen for polymorphic types — complete worked example
+
+**Before** (anonymous class with method-level type params `A`, `B`):
+```scala
+protected def deriveFunctorForCaseClass[F[_]](
+    result: FunctorCaseClassResult[F],
+    runSafe: RunSafe[MIO]
+)(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] =
+  Expr.quote {
+    new cats.Functor[F] {
+      def map[A, B](fa: F[A])(f: A => B): F[B] =
+        Expr.splice {
+          runSafe(deriveFunctorMapBody[F, A, B](
+            result.FCtor, result.directFieldSet,
+            Expr.quote(fa), Expr.quote(f)
+          )(Type.of[A], Type.of[B]))
+        }
+    }
+  }
+```
+
+**After** (factory + lambda with witness types `W1`, `W2`):
+```scala
+protected def deriveFunctorForCaseClass[F[_]](
+    result: FunctorCaseClassResult[F],
+    runSafe: RunSafe[MIO]
+)(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] = {
+  import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+  Expr.quote {
+    CatsDerivationFactories.functorInstance[F] {
+      (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+        val _ = fa
+        val _ = f
+        Expr.splice {
+          runSafe(deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+            result.FCtor, result.directFieldSet,
+            Expr.quote(fa), Expr.quote(f)
+          )(Type.of[CatsDerivationFactories.W1], Type.of[CatsDerivationFactories.W2]))
+        }
+    }
+  }
+}
+```
+
+Key changes:
+1. Method-level type params `A`, `B` are replaced by witness types `W1`, `W2` everywhere
+2. `Type.of[A]` / `Type.of[B]` become `Type.of[CatsDerivationFactories.W1]` / `Type.of[CatsDerivationFactories.W2]`
+3. The derive method (e.g. `deriveFunctorMapBody`) is called with `W1`/`W2` — it generates code
+   for `F[W1]` which is a valid case class. Due to erasure, the bytecode works for any `A`/`B`.
+
+### Three rules for polymorphic factories
+
+#### Rule 1: `Type.Ctor1[F]` must be an implicit in scope
 
 Hearth's `Expr.quote` on Scala 2 substitutes `F[_]` type constructors inside lambda parameter
 type annotations **only when `Type.Ctor1[F]` is available as an implicit**. All polymorphic
 macro methods already have `implicit FCtor: Type.Ctor1[F]`, so the factory pattern works.
 
-### Sealed trait checkcast caveat
+Without this implicit, Scala 2 generates a raw tree with `Ident(TypeName("F"))` that fails
+at the macro expansion site with `not found: type F`.
 
-On Scala 3, `W1`/`W2` must **never appear as direct lambda parameter types** — only as type
-arguments to other types (`F[W1]`, `W1 => W2`, etc.). When `W1` is used directly as a parameter
-type, Scala 3 generates `checkcast` instructions for the sealed trait in lambda bridge methods,
-which fail at runtime when the actual argument is e.g. `Integer`.
+#### Rule 2: `W1`/`W2` must never be direct lambda parameter types
 
-For methods where values pass through as raw `A`/`B` (e.g., `pure`, `foldLeft`, `cons`), use
-`Any` as the lambda parameter type in the factory and cast inside the body:
+On Scala 3, sealed traits used as direct lambda parameter types generate JVM `checkcast`
+instructions in lambda bridge methods. These fail at runtime when the actual argument is e.g.
+`Integer` instead of `W1`.
 
+**Safe** — `W1`/`W2` as type arguments (erased to `Object`/`Function1`):
 ```scala
-// Factory definition:
-def pureInstance[F[_]](pureFn: Any => F[W1]): alleycats.Pure[F] = ...
-
-// In macro Expr.quote:
-CatsDerivationFactories.pureInstance[F] { (a: Any) =>
-  Expr.splice { ... /* a is already Any, cast as needed */ }
-}
+(fa: F[W1], f: W1 => W2) => ...       // F[W1] erases to F, W1 => W2 erases to Function1
 ```
 
-### HKT erasure for Traverse/NonEmptyTraverse
+**Unsafe** — `W1`/`W2` as direct parameter types (generates checkcast):
+```scala
+(a: W1) => ...                         // FAILS: checkcast to W1 at runtime
+(b: W2, a: W1) => ...                  // FAILS: checkcast to W2, W1
+```
 
-Methods with additional `G[_]` type constructors (e.g., `traverse[G[_]: Applicative, A, B]`)
-use `type AnyF[A] = Any` for kind-correct erasure:
+**Fix:** Use `Any` for positions where values pass through as raw `A`/`B`:
+
+```scala
+// Factory definition — pure takes a raw value, so use Any:
+def pureInstance[F[_]](pureFn: Any => F[W1]): alleycats.Pure[F] =
+  new alleycats.Pure[F] {
+    def pure[A](a: A): F[A] = pureFn.asInstanceOf[Any => F[A]].apply(a)
+  }
+
+// foldLeft passes raw A and B values, so use Any:
+def foldableInstance[F[_]](
+    foldLeftFn: (F[W1], Any, (Any, Any) => Any) => Any,
+    foldRightFn: (F[W1], Eval[Any], (Any, Eval[Any]) => Eval[Any]) => Eval[Any]
+): cats.Foldable[F] = ...
+
+// consK passes a raw A as head element:
+def consKInstance[F[_]](consFn: (Any, F[W1]) => F[W1]): alleycats.ConsK[F] = ...
+```
+
+In the macro's `Expr.quote` block, the lambda parameter is `Any` and the splice body
+builds the erased code accordingly.
+
+#### Rule 3: Extra `G[_]` type constructors use `type AnyF[A] = Any`
+
+Methods like `traverse[G[_]: Applicative, A, B](fa: F[A])(f: A => G[B]): G[F[B]]`
+have an additional type constructor `G[_]` that the factory doesn't know about.
+
+Use `type AnyF[A] = Any` for kind-correct erasure — it has kind `* → *` so it can be used
+with `Applicative[AnyF]` (unlike `Applicative[Any]` which fails on Scala 3 due to kind mismatch):
 
 ```scala
 type AnyF[A] = Any  // kind * -> *, erases G[_]
 
 def traverseInstance[F[_]](
   traverseFn: (F[W1], Any, Any) => Any,  // erased: (F[A], A => G[B], Applicative[G]) => G[F[B]]
-  ...
-): cats.Traverse[F]
+  foldLeftFn: (F[W1], Any, (Any, Any) => Any) => Any,
+  foldRightFn: (F[W1], Eval[Any], (Any, Eval[Any]) => Eval[Any]) => Eval[Any]
+): cats.Traverse[F] = new cats.Traverse[F] {
+  def traverse[G[_], A, B](fa: F[A])(f: A => G[B])(implicit G: cats.Applicative[G]): G[F[B]] =
+    traverseFn.asInstanceOf[(F[A], A => G[B], cats.Applicative[G]) => G[F[B]]].apply(fa, f, G)
+  // ...
+}
 ```
 
-Inside the splice, use `cats.Applicative[CatsDerivationFactories.AnyF]` instead of
-`cats.Applicative[Any]` (which fails on Scala 3 due to kind mismatch).
+Inside the macro splice, use `cats.Applicative[CatsDerivationFactories.AnyF]` when the
+original code used `cats.Applicative[G]`:
+
+```scala
+// In the macro splice, the Applicative[G] implicit becomes Applicative[AnyF]:
+implicit val GAnyF: Type[cats.Applicative[CatsDerivationFactories.AnyF]] = ...
+```
+
+### Deciding which parameter positions need `Any` vs `W1`/`W2`
+
+| Position | Use `W1`/`W2` | Use `Any` |
+|---|---|---|
+| `F[_]` applied: `fa: F[W1]` | Yes | — |
+| Function args: `f: W1 => W2` | Yes | — |
+| `F[_ => _]` applied: `ff: F[W1 => W2]` | Yes | — |
+| Raw value: `a: A` (pure, cons) | — | Yes (`a: Any`) |
+| Accumulator: `b: B` (foldLeft) | — | Yes (`b: Any`) |
+| Fold function: `(B, A) => B` | — | Yes (`(Any, Any) => Any`) |
+| Extra HK: `G[B]`, `Applicative[G]` | — | Yes (`Any`, use `AnyF` for kind) |
 
 ### Alternative: Scala 3 polymorphic functions (NOT recommended)
 
@@ -186,7 +283,9 @@ See `cats.arrow.FunctionKMacroMethods`. This approach:
 - Adds macro complexity without measurable benefit over the erasure approach
 - The erasure approach is simpler and proven safe by JVM specification
 
-## Inventory of sites to migrate
+## Inventory of migrated sites
+
+All sites below have been migrated. Listed for reference when adding new type classes.
 
 ### Monomorphic (kind `*`) — straightforward lambda factories
 
@@ -215,6 +314,12 @@ See `cats.arrow.FunctionKMacroMethods`. This approach:
 | xml-derivation | XmlEncoder | 1: encode | EncoderMacrosImpl.scala:91 |
 | xml-derivation | XmlDecoder | 1-2: decode | DecoderMacrosImpl.scala:131,151 |
 | tapir-schema-derivation | Schema | 1: schemaType | SchemaMacrosImpl.scala:75 |
+| ubjson-derivation | UBJsonValueCodec | 3: nullValue, decode, encode | CodecMacrosImpl.scala:50 |
+| avro-derivation | AvroSchemaFor | 1: schema | SchemaForMacrosImpl.scala:69 |
+| avro-derivation | AvroDecoder | 1: decode | DecoderMacrosImpl.scala:92,411 |
+| avro-derivation | AvroEncoder | 1: encode | EncoderMacrosImpl.scala:88 |
+| sconfig-derivation | ConfigReader | 1: from | ReaderMacrosImpl.scala:40 |
+| sconfig-derivation | ConfigWriter | 1: to | WriterMacrosImpl.scala:38 |
 
 ### Polymorphic (kind `* → *`) — erasure-based factories
 
