@@ -37,9 +37,7 @@ object FactoryInstances {
   // --- Functor (polymorphic, erasure-based factory) ---
 
   val functorSimpleCCBox: cats.Functor[SimpleCCBox] =
-    TypeClassFactories.functorInstance[SimpleCCBox](
-      (fa, f) => HandWrittenImpls.mapSimpleCCBox(fa, f)
-    )
+    TypeClassFactories.functorInstance[SimpleCCBox]((fa, f) => HandWrittenImpls.mapSimpleCCBox(fa, f))
 
   // --- JsonValueCodec (3 methods → 2 lambdas + 1 value) ---
 

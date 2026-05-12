@@ -3,7 +3,7 @@ package hearth.kindlings.benchmarks
 import cats.Show
 import cats.kernel.Hash
 import io.circe.{Encoder, Json}
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonWriter, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
 
 object AnonClassInstances {
 
