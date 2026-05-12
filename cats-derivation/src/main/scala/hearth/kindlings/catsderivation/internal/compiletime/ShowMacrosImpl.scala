@@ -30,12 +30,10 @@ trait ShowMacrosImpl
 
     deriveShowFromCtxAndAdaptForEntrypoint[A, cats.Show[A]](macroName) { fromCtx =>
       Expr.quote {
-        new cats.Show[A] {
-          def show(value: A): String = {
-            val _ = value
-            Expr.splice {
-              fromCtx(ShowCtx.from(Expr.quote(value), derivedType = selfType))
-            }
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.showInstance[A] { (value: A) =>
+          val _ = value
+          Expr.splice {
+            fromCtx(ShowCtx.from(Expr.quote(value), derivedType = selfType))
           }
         }
       }

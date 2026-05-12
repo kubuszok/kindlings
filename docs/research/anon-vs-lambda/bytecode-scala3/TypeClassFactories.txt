@@ -1,0 +1,62 @@
+Compiled from "TypeClassFactories.scala"
+public final class hearth.kindlings.benchmarks.TypeClassFactories$ implements java.io.Serializable {
+  public static final hearth.kindlings.benchmarks.TypeClassFactories$ MODULE$;
+
+  private hearth.kindlings.benchmarks.TypeClassFactories$();
+    Code:
+         0: aload_0
+         1: invokespecial #21                 // Method java/lang/Object."<init>":()V
+         4: return
+
+  public static {};
+    Code:
+         0: new           #2                  // class hearth/kindlings/benchmarks/TypeClassFactories$
+         3: dup
+         4: invokespecial #24                 // Method "<init>":()V
+         7: putstatic     #26                 // Field MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        10: return
+
+  private java.lang.Object writeReplace();
+    Code:
+         0: new           #30                 // class scala/runtime/ModuleSerializationProxy
+         3: dup
+         4: ldc           #2                  // class hearth/kindlings/benchmarks/TypeClassFactories$
+         6: invokespecial #33                 // Method scala/runtime/ModuleSerializationProxy."<init>":(Ljava/lang/Class;)V
+         9: areturn
+
+  public <A> cats.Show<A> showInstance(scala.Function1<A, java.lang.String>);
+    Code:
+         0: new           #9                  // class hearth/kindlings/benchmarks/TypeClassFactories$$anon$1
+         3: dup
+         4: aload_1
+         5: invokespecial #40                 // Method hearth/kindlings/benchmarks/TypeClassFactories$$anon$1."<init>":(Lscala/Function1;)V
+         8: areturn
+
+  public <A> cats.kernel.Hash<A> hashInstance(scala.Function1<A, java.lang.Object>, scala.Function2<A, A, java.lang.Object>);
+    Code:
+         0: new           #11                 // class hearth/kindlings/benchmarks/TypeClassFactories$$anon$2
+         3: dup
+         4: aload_1
+         5: aload_2
+         6: invokespecial #49                 // Method hearth/kindlings/benchmarks/TypeClassFactories$$anon$2."<init>":(Lscala/Function1;Lscala/Function2;)V
+         9: checkcast     #51                 // class cats/kernel/Hash
+        12: areturn
+
+  public <A> io.circe.Encoder<A> encoderInstance(scala.Function1<A, io.circe.Json>);
+    Code:
+         0: new           #13                 // class hearth/kindlings/benchmarks/TypeClassFactories$$anon$3
+         3: dup
+         4: aload_1
+         5: invokespecial #56                 // Method hearth/kindlings/benchmarks/TypeClassFactories$$anon$3."<init>":(Lscala/Function1;)V
+         8: areturn
+
+  public <A> com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<A> codecInstance(A, scala.Function2<com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, A, A>, scala.Function2<A, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter, scala.runtime.BoxedUnit>);
+    Code:
+         0: new           #15                 // class hearth/kindlings/benchmarks/TypeClassFactories$$anon$4
+         3: dup
+         4: aload_1
+         5: aload_2
+         6: aload_3
+         7: invokespecial #65                 // Method hearth/kindlings/benchmarks/TypeClassFactories$$anon$4."<init>":(Ljava/lang/Object;Lscala/Function2;Lscala/Function2;)V
+        10: areturn
+}

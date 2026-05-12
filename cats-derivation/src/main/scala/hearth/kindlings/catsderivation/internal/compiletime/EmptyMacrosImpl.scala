@@ -23,9 +23,9 @@ trait EmptyMacrosImpl
 
     deriveEmptyEntrypoint[A, alleycats.Empty[A]](macroName, selfType) { emptyExpr =>
       Expr.quote {
-        new alleycats.Empty[A] {
-          def empty: A = Expr.splice(emptyExpr)
-        }
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.emptyInstance[A](
+          Expr.splice(emptyExpr)
+        )
       }
     }
   }

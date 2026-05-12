@@ -13,14 +13,14 @@ trait CommutativeMonoidMacrosImpl extends MonoidMacrosImpl { this: MacroCommons 
 
     deriveMonoidEntrypoint[A, cats.kernel.CommutativeMonoid[A]](macroName) { (doEmpty, doCombine) =>
       Expr.quote {
-        new cats.kernel.CommutativeMonoid[A] {
-          def empty: A = Expr.splice(doEmpty)
-          def combine(x: A, y: A): A = {
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.commutativeMonoidInstance[A](
+          Expr.splice(doEmpty),
+          (x: A, y: A) => {
             val _ = x
             val _ = y
             Expr.splice(doCombine(Expr.quote(x), Expr.quote(y)))
           }
-        }
+        )
       }
     }
   }

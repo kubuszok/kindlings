@@ -22,12 +22,10 @@ trait SemigroupMacrosImpl
 
     deriveSemigroupEntrypoint[A, cats.kernel.Semigroup[A]](macroName) { doCombine =>
       Expr.quote {
-        new cats.kernel.Semigroup[A] {
-          def combine(x: A, y: A): A = {
-            val _ = x
-            val _ = y
-            Expr.splice(doCombine(Expr.quote(x), Expr.quote(y)))
-          }
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.semigroupInstance[A] { (x: A, y: A) =>
+          val _ = x
+          val _ = y
+          Expr.splice(doCombine(Expr.quote(x), Expr.quote(y)))
         }
       }
     }

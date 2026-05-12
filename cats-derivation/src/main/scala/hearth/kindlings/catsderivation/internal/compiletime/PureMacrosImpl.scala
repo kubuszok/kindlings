@@ -74,16 +74,19 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
             Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
           }
 
+          implicit val AnyType: Type[Any] = PureTypes.Any
+          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+
+          val doPure: Expr[Any] => Expr[F[Any]] = (aExpr: Expr[Any]) =>
+            runSafe {
+              derivePureBody[F, Any](FCtor, directFieldSet, aExpr)(Type.of[Any])
+            }
+
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new alleycats.Pure[F] {
-              def pure[A](a: A): F[A] =
-                Expr.splice {
-                  runSafe {
-                    derivePureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(
-                      Type.of[A]
-                    )
-                  }
-                }
+            CatsDerivationFactories.pureInstance[F] { (aAny: Any) =>
+              val _ = aAny
+              Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
             }
           }
         }
@@ -130,6 +133,7 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
   }
 
   protected object PureTypes {
+    val Any: Type[Any] = Type.of[Any]
     val Int: Type[Int] = Type.of[Int]
     val String: Type[String] = Type.of[String]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =

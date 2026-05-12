@@ -1,0 +1,235 @@
+Compiled from "FactoryInstances.scala"
+public final class hearth.kindlings.benchmarks.FactoryInstances$ {
+  public static final hearth.kindlings.benchmarks.FactoryInstances$ MODULE$;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.SimpleCC> showSimpleCC;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.Person> showPerson;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.Event> showEvent;
+
+  private static final cats.kernel.Hash<hearth.kindlings.benchmarks.SimpleCC> hashSimpleCC;
+
+  private static final cats.kernel.Hash<hearth.kindlings.benchmarks.Person> hashPerson;
+
+  private static final io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> encoderSimpleCC;
+
+  private static final io.circe.Encoder<hearth.kindlings.benchmarks.Person> encoderPerson;
+
+  private static final com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<hearth.kindlings.benchmarks.SimpleCC> codecSimpleCC;
+
+  public static {};
+    Code:
+         0: new           #2                  // class hearth/kindlings/benchmarks/FactoryInstances$
+         3: dup
+         4: invokespecial #37                 // Method "<init>":()V
+         7: putstatic     #39                 // Field MODULE$:Lhearth/kindlings/benchmarks/FactoryInstances$;
+        10: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        13: invokedynamic #65,  0             // InvokeDynamic #0:apply:()Lscala/Function1;
+        18: invokevirtual #69                 // Method hearth/kindlings/benchmarks/TypeClassFactories$.showInstance:(Lscala/Function1;)Lcats/Show;
+        21: putstatic     #71                 // Field showSimpleCC:Lcats/Show;
+        24: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        27: invokedynamic #78,  0             // InvokeDynamic #1:apply:()Lscala/Function1;
+        32: invokevirtual #69                 // Method hearth/kindlings/benchmarks/TypeClassFactories$.showInstance:(Lscala/Function1;)Lcats/Show;
+        35: putstatic     #80                 // Field showPerson:Lcats/Show;
+        38: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        41: invokedynamic #87,  0             // InvokeDynamic #2:apply:()Lscala/Function1;
+        46: invokevirtual #69                 // Method hearth/kindlings/benchmarks/TypeClassFactories$.showInstance:(Lscala/Function1;)Lcats/Show;
+        49: putstatic     #89                 // Field showEvent:Lcats/Show;
+        52: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        55: invokedynamic #96,  0             // InvokeDynamic #3:apply:()Lscala/Function1;
+        60: invokedynamic #107,  0            // InvokeDynamic #4:apply:()Lscala/Function2;
+        65: invokevirtual #111                // Method hearth/kindlings/benchmarks/TypeClassFactories$.hashInstance:(Lscala/Function1;Lscala/Function2;)Lcats/kernel/Hash;
+        68: putstatic     #113                // Field hashSimpleCC:Lcats/kernel/Hash;
+        71: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        74: invokedynamic #120,  0            // InvokeDynamic #5:apply:()Lscala/Function1;
+        79: invokedynamic #127,  0            // InvokeDynamic #6:apply:()Lscala/Function2;
+        84: invokevirtual #111                // Method hearth/kindlings/benchmarks/TypeClassFactories$.hashInstance:(Lscala/Function1;Lscala/Function2;)Lcats/kernel/Hash;
+        87: putstatic     #129                // Field hashPerson:Lcats/kernel/Hash;
+        90: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+        93: invokedynamic #136,  0            // InvokeDynamic #7:apply:()Lscala/Function1;
+        98: invokevirtual #140                // Method hearth/kindlings/benchmarks/TypeClassFactories$.encoderInstance:(Lscala/Function1;)Lio/circe/Encoder;
+       101: putstatic     #142                // Field encoderSimpleCC:Lio/circe/Encoder;
+       104: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+       107: invokedynamic #149,  0            // InvokeDynamic #8:apply:()Lscala/Function1;
+       112: invokevirtual #140                // Method hearth/kindlings/benchmarks/TypeClassFactories$.encoderInstance:(Lscala/Function1;)Lio/circe/Encoder;
+       115: putstatic     #151                // Field encoderPerson:Lio/circe/Encoder;
+       118: getstatic     #44                 // Field hearth/kindlings/benchmarks/TypeClassFactories$.MODULE$:Lhearth/kindlings/benchmarks/TypeClassFactories$;
+       121: aconst_null
+       122: invokedynamic #158,  0            // InvokeDynamic #9:apply:()Lscala/Function2;
+       127: invokedynamic #165,  0            // InvokeDynamic #10:apply:()Lscala/Function2;
+       132: invokevirtual #169                // Method hearth/kindlings/benchmarks/TypeClassFactories$.codecInstance:(Ljava/lang/Object;Lscala/Function2;Lscala/Function2;)Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;
+       135: putstatic     #171                // Field codecSimpleCC:Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;
+       138: return
+
+  public cats.Show<hearth.kindlings.benchmarks.SimpleCC> showSimpleCC();
+    Code:
+         0: getstatic     #71                 // Field showSimpleCC:Lcats/Show;
+         3: areturn
+
+  public cats.Show<hearth.kindlings.benchmarks.Person> showPerson();
+    Code:
+         0: getstatic     #80                 // Field showPerson:Lcats/Show;
+         3: areturn
+
+  public cats.Show<hearth.kindlings.benchmarks.Event> showEvent();
+    Code:
+         0: getstatic     #89                 // Field showEvent:Lcats/Show;
+         3: areturn
+
+  public cats.kernel.Hash<hearth.kindlings.benchmarks.SimpleCC> hashSimpleCC();
+    Code:
+         0: getstatic     #113                // Field hashSimpleCC:Lcats/kernel/Hash;
+         3: areturn
+
+  public cats.kernel.Hash<hearth.kindlings.benchmarks.Person> hashPerson();
+    Code:
+         0: getstatic     #129                // Field hashPerson:Lcats/kernel/Hash;
+         3: areturn
+
+  public io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> encoderSimpleCC();
+    Code:
+         0: getstatic     #142                // Field encoderSimpleCC:Lio/circe/Encoder;
+         3: areturn
+
+  public io.circe.Encoder<hearth.kindlings.benchmarks.Person> encoderPerson();
+    Code:
+         0: getstatic     #151                // Field encoderPerson:Lio/circe/Encoder;
+         3: areturn
+
+  public com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<hearth.kindlings.benchmarks.SimpleCC> codecSimpleCC();
+    Code:
+         0: getstatic     #171                // Field codecSimpleCC:Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;
+         3: areturn
+
+  public static final java.lang.String $anonfun$showSimpleCC$1(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #192                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)Ljava/lang/String;
+         7: areturn
+
+  public static final java.lang.String $anonfun$showPerson$1(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #195                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showPerson:(Lhearth/kindlings/benchmarks/Person;)Ljava/lang/String;
+         7: areturn
+
+  public static final java.lang.String $anonfun$showEvent$1(hearth.kindlings.benchmarks.Event);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #198                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showEvent:(Lhearth/kindlings/benchmarks/Event;)Ljava/lang/String;
+         7: areturn
+
+  public static final int $anonfun$hashSimpleCC$1(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #203                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.hashSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)I
+         7: ireturn
+
+  public static final boolean $anonfun$hashSimpleCC$2(hearth.kindlings.benchmarks.SimpleCC, hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: aload_1
+         5: invokevirtual #210                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.eqvSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;Lhearth/kindlings/benchmarks/SimpleCC;)Z
+         8: ireturn
+
+  public static final int $anonfun$hashPerson$1(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #214                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.hashPerson:(Lhearth/kindlings/benchmarks/Person;)I
+         7: ireturn
+
+  public static final boolean $anonfun$hashPerson$2(hearth.kindlings.benchmarks.Person, hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: aload_1
+         5: invokevirtual #219                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.eqvPerson:(Lhearth/kindlings/benchmarks/Person;Lhearth/kindlings/benchmarks/Person;)Z
+         8: ireturn
+
+  public static final io.circe.Json $anonfun$encoderSimpleCC$1(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #222                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodeSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)Lio/circe/Json;
+         7: areturn
+
+  public static final io.circe.Json $anonfun$encoderPerson$1(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: invokevirtual #225                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodePerson:(Lhearth/kindlings/benchmarks/Person;)Lio/circe/Json;
+         7: areturn
+
+  public static final hearth.kindlings.benchmarks.SimpleCC $anonfun$codecSimpleCC$1(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: aload_1
+         5: invokevirtual #230                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.decodeSimpleCCJsoniter:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;Lhearth/kindlings/benchmarks/SimpleCC;)Lhearth/kindlings/benchmarks/SimpleCC;
+         8: areturn
+
+  public static final void $anonfun$codecSimpleCC$2(hearth.kindlings.benchmarks.SimpleCC, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: getstatic     #190                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_0
+         4: aload_1
+         5: invokevirtual #237                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodeSimpleCCJsoniter:(Lhearth/kindlings/benchmarks/SimpleCC;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         8: return
+
+  private hearth.kindlings.benchmarks.FactoryInstances$();
+    Code:
+         0: aload_0
+         1: invokespecial #239                // Method java/lang/Object."<init>":()V
+         4: return
+
+  public static final java.lang.Object $anonfun$hashSimpleCC$1$adapted(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: aload_0
+         1: invokestatic  #241                // Method $anonfun$hashSimpleCC$1:(Lhearth/kindlings/benchmarks/SimpleCC;)I
+         4: invokestatic  #247                // Method scala/runtime/BoxesRunTime.boxToInteger:(I)Ljava/lang/Integer;
+         7: areturn
+
+  public static final java.lang.Object $anonfun$hashSimpleCC$2$adapted(hearth.kindlings.benchmarks.SimpleCC, hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #249                // Method $anonfun$hashSimpleCC$2:(Lhearth/kindlings/benchmarks/SimpleCC;Lhearth/kindlings/benchmarks/SimpleCC;)Z
+         5: invokestatic  #253                // Method scala/runtime/BoxesRunTime.boxToBoolean:(Z)Ljava/lang/Boolean;
+         8: areturn
+
+  public static final java.lang.Object $anonfun$hashPerson$1$adapted(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: aload_0
+         1: invokestatic  #255                // Method $anonfun$hashPerson$1:(Lhearth/kindlings/benchmarks/Person;)I
+         4: invokestatic  #247                // Method scala/runtime/BoxesRunTime.boxToInteger:(I)Ljava/lang/Integer;
+         7: areturn
+
+  public static final java.lang.Object $anonfun$hashPerson$2$adapted(hearth.kindlings.benchmarks.Person, hearth.kindlings.benchmarks.Person);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #257                // Method $anonfun$hashPerson$2:(Lhearth/kindlings/benchmarks/Person;Lhearth/kindlings/benchmarks/Person;)Z
+         5: invokestatic  #253                // Method scala/runtime/BoxesRunTime.boxToBoolean:(Z)Ljava/lang/Boolean;
+         8: areturn
+
+  public static final java.lang.Object $anonfun$codecSimpleCC$2$adapted(hearth.kindlings.benchmarks.SimpleCC, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #259                // Method $anonfun$codecSimpleCC$2:(Lhearth/kindlings/benchmarks/SimpleCC;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         5: getstatic     #265                // Field scala/runtime/BoxedUnit.UNIT:Lscala/runtime/BoxedUnit;
+         8: areturn
+
+  private static java.lang.Object $deserializeLambda$(java.lang.invoke.SerializedLambda);
+    Code:
+         0: aload_0
+         1: invokedynamic #277,  0            // InvokeDynamic #11:lambdaDeserialize:(Ljava/lang/invoke/SerializedLambda;)Ljava/lang/Object;
+         6: areturn
+}

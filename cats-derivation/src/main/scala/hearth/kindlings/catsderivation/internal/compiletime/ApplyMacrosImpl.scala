@@ -82,25 +82,36 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
               deriveApplyApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
             }
 
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new cats.Apply[F] {
-              def map[A, B](fa: F[A])(f: A => B): F[B] =
-                Expr.splice {
-                  runSafe {
-                    deriveApplyMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
-                      Type.of[A],
-                      Type.of[B]
-                    )
+            CatsDerivationFactories.applyInstance[F](
+              mapFn = {
+                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                  val _ = fa
+                  val _ = f
+                  Expr.splice {
+                    runSafe {
+                      deriveApplyMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                        FCtor,
+                        directFieldSet,
+                        Expr.quote(fa),
+                        Expr.quote(f)
+                      )(
+                        Type.of[CatsDerivationFactories.W1],
+                        Type.of[CatsDerivationFactories.W2]
+                      )
+                    }
                   }
-                }
-              def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
-                val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFf
-                val _ = anyFa
-                Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
+              },
+              apFn = {
+                (ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2], fa: F[CatsDerivationFactories.W1]) =>
+                  val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFf
+                  val _ = anyFa
+                  Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
               }
-            }
+            )
           }
         }
       }

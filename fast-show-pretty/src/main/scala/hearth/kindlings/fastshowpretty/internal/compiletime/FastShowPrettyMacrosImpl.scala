@@ -58,9 +58,8 @@ trait FastShowPrettyMacrosImpl
 
     deriveFromCtxAndAdaptForEntrypoint[A, FastShowPretty[A]]("FastShowPretty.derived") { fromCtx =>
       Expr.quote {
-        new FastShowPretty[A] {
-
-          def render(sb: StringBuilder, config: RenderConfig, level: Int)(value: A): StringBuilder = {
+        hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyFactories.instance[A] {
+          (sb: StringBuilder, config: RenderConfig, level: Int, value: A) =>
             val _ = sb
             val _ = config
             val _ = level
@@ -76,7 +75,6 @@ trait FastShowPrettyMacrosImpl
                 )
               )
             }
-          }
         }
       }
     }

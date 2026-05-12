@@ -88,8 +88,8 @@ trait EncoderMacrosImpl
       ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsXmlEncoder[A] {
-            def encode(value: A, elementName: String): scala.xml.Elem = {
+          hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.encoderInstance[A] {
+            (value: A, elementName: String) =>
               val _ = value
               val _ = elementName
               val _ = cfg
@@ -98,7 +98,6 @@ trait EncoderMacrosImpl
                   EncoderCtx.from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType)
                 )
               }
-            }
           }
         }
       }

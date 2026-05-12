@@ -41,17 +41,22 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & Std
                   deriveMonoidKCombineBody[F](caseClass, xExpr, yExpr)
                 }
 
+              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
               Expr.quote {
-                new cats.MonoidK[F] {
-                  def empty[A]: F[A] = Expr.splice(doEmpty).asInstanceOf[F[A]]
-                  def combineK[A](x: F[A], y: F[A]): F[A] = {
+                CatsDerivationFactories.monoidKInstance[F](
+                  emptyKFn = { () =>
+                    Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+                  },
+                  combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
                     val anyX: F[Any] = x.asInstanceOf[F[Any]]
                     val anyY: F[Any] = y.asInstanceOf[F[Any]]
                     val _ = anyX
                     val _ = anyY
-                    Expr.splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY))).asInstanceOf[F[A]]
+                    Expr
+                      .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
+                      .asInstanceOf[F[CatsDerivationFactories.W1]]
                   }
-                }
+                )
               }
             }
           case Left(reason) =>

@@ -67,14 +67,14 @@ trait MonoidMacrosImpl
 
     deriveMonoidEntrypoint[A, cats.kernel.Monoid[A]](macroName) { (doEmpty, doCombine) =>
       Expr.quote {
-        new cats.kernel.Monoid[A] {
-          def empty: A = Expr.splice(doEmpty)
-          def combine(x: A, y: A): A = {
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.monoidInstance[A](
+          Expr.splice(doEmpty),
+          (x: A, y: A) => {
             val _ = x
             val _ = y
             Expr.splice(doCombine(Expr.quote(x), Expr.quote(y)))
           }
-        }
+        )
       }
     }
   }

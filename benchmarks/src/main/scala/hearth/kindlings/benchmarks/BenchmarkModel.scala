@@ -9,6 +9,8 @@ object SimpleADT {
   case object Baz extends SimpleADT
 }
 
+case class SimpleCCBox[A](name: String, age: Int, value: A)
+
 case class Address(street: String, city: String, zip: String, country: String)
 
 case class Person(
@@ -43,6 +45,8 @@ object BenchmarkData {
   )
 
   val event: Event = Event.UserCreated(person, 1700000000000L)
+
+  val simpleCCBox: SimpleCCBox[Int] = SimpleCCBox("Alice", 30, 42)
 
   val personPair: (Person, Person) = (person, person.copy(name = "Bob", age = 31))
 }

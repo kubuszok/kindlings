@@ -1,0 +1,1460 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCodecReadBenchmark.anonSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.063656927372708E7,
+            "scoreError" : 1692805.8092012696,
+            "scoreConfidence" : [
+                8943763.46452581,
+                1.232937508292835E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.0107392482120505E7,
+                "50.0" : 1.0499166151603851E7,
+                "90.0" : 1.1104896449884122E7,
+                "95.0" : 1.1104896449884122E7,
+                "99.0" : 1.1104896449884122E7,
+                "99.9" : 1.1104896449884122E7,
+                "99.99" : 1.1104896449884122E7,
+                "99.999" : 1.1104896449884122E7,
+                "99.9999" : 1.1104896449884122E7,
+                "100.0" : 1.1104896449884122E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.1078594918784214E7,
+                    1.0499166151603851E7,
+                    1.1104896449884122E7,
+                    1.0107392482120505E7,
+                    1.0392796366242707E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCodecReadBenchmark.factorySimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.08509173845271E7,
+            "scoreError" : 1547471.2433015597,
+            "scoreConfidence" : [
+                9303446.141225541,
+                1.239838862782866E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.0326961882227879E7,
+                "50.0" : 1.1032640902316086E7,
+                "90.0" : 1.1207033350223325E7,
+                "95.0" : 1.1207033350223325E7,
+                "99.0" : 1.1207033350223325E7,
+                "99.9" : 1.1207033350223325E7,
+                "99.99" : 1.1207033350223325E7,
+                "99.999" : 1.1207033350223325E7,
+                "99.9999" : 1.1207033350223325E7,
+                "100.0" : 1.1207033350223325E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.1169199198262552E7,
+                    1.1032640902316086E7,
+                    1.0518751589605669E7,
+                    1.0326961882227879E7,
+                    1.1207033350223325E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCodecWriteBenchmark.anonSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 6.209795674243788E7,
+            "scoreError" : 2468590.1882703323,
+            "scoreConfidence" : [
+                5.962936655416755E7,
+                6.456654693070821E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 6.1272643961130574E7,
+                "50.0" : 6.207832361298973E7,
+                "90.0" : 6.291920783057593E7,
+                "95.0" : 6.291920783057593E7,
+                "99.0" : 6.291920783057593E7,
+                "99.9" : 6.291920783057593E7,
+                "99.99" : 6.291920783057593E7,
+                "99.999" : 6.291920783057593E7,
+                "99.9999" : 6.291920783057593E7,
+                "100.0" : 6.291920783057593E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6.207832361298973E7,
+                    6.173052895221174E7,
+                    6.1272643961130574E7,
+                    6.248907935528143E7,
+                    6.291920783057593E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCodecWriteBenchmark.factorySimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 5.6341367961333945E7,
+            "scoreError" : 3.848520789255596E7,
+            "scoreConfidence" : [
+                1.7856160068777986E7,
+                9.482657585388991E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.960840090004267E7,
+                "50.0" : 6.135146551063132E7,
+                "90.0" : 6.357832918727363E7,
+                "95.0" : 6.357832918727363E7,
+                "99.0" : 6.357832918727363E7,
+                "99.9" : 6.357832918727363E7,
+                "99.99" : 6.357832918727363E7,
+                "99.999" : 6.357832918727363E7,
+                "99.9999" : 6.357832918727363E7,
+                "100.0" : 6.357832918727363E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    6.258622571953429E7,
+                    6.357832918727363E7,
+                    5.458241848918778E7,
+                    3.960840090004267E7,
+                    6.135146551063132E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonCodecCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.110411283625181E8,
+            "scoreError" : 2.554434888293683E7,
+            "scoreConfidence" : [
+                2.8549677947958124E8,
+                3.365854772454549E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.0033471650002515E8,
+                "50.0" : 3.1142551373554146E8,
+                "90.0" : 3.1837050176053643E8,
+                "95.0" : 3.1837050176053643E8,
+                "99.0" : 3.1837050176053643E8,
+                "99.9" : 3.1837050176053643E8,
+                "99.99" : 3.1837050176053643E8,
+                "99.999" : 3.1837050176053643E8,
+                "99.9999" : 3.1837050176053643E8,
+                "100.0" : 3.1837050176053643E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.113013776121967E8,
+                    3.0033471650002515E8,
+                    3.1142551373554146E8,
+                    3.1377353220429075E8,
+                    3.1837050176053643E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonHashCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.137300098028897E8,
+            "scoreError" : 1.0094380330315873E7,
+            "scoreConfidence" : [
+                3.036356294725738E8,
+                3.238243901332056E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.1027709511845374E8,
+                "50.0" : 3.1497924316646725E8,
+                "90.0" : 3.160083129633301E8,
+                "95.0" : 3.160083129633301E8,
+                "99.0" : 3.160083129633301E8,
+                "99.9" : 3.160083129633301E8,
+                "99.99" : 3.160083129633301E8,
+                "99.999" : 3.160083129633301E8,
+                "99.9999" : 3.160083129633301E8,
+                "100.0" : 3.160083129633301E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.1027709511845374E8,
+                    3.115936580166326E8,
+                    3.160083129633301E8,
+                    3.1497924316646725E8,
+                    3.157917397495649E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonShowCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.1244383973269856E8,
+            "scoreError" : 1.2946285699619632E7,
+            "scoreConfidence" : [
+                2.994975540330789E8,
+                3.253901254323182E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.0870723096955603E8,
+                "50.0" : 3.116833476741667E8,
+                "90.0" : 3.1698445885225695E8,
+                "95.0" : 3.1698445885225695E8,
+                "99.0" : 3.1698445885225695E8,
+                "99.9" : 3.1698445885225695E8,
+                "99.99" : 3.1698445885225695E8,
+                "99.999" : 3.1698445885225695E8,
+                "99.9999" : 3.1698445885225695E8,
+                "100.0" : 3.1698445885225695E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.116833476741667E8,
+                    3.0870723096955603E8,
+                    3.1698445885225695E8,
+                    3.1017972097757643E8,
+                    3.1466444018993664E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryCodecCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 8.261965623033768E8,
+            "scoreError" : 4.968867814845795E7,
+            "scoreConfidence" : [
+                7.765078841549188E8,
+                8.758852404518348E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 8.101875478459321E8,
+                "50.0" : 8.300894143216182E8,
+                "90.0" : 8.390884075048325E8,
+                "95.0" : 8.390884075048325E8,
+                "99.0" : 8.390884075048325E8,
+                "99.9" : 8.390884075048325E8,
+                "99.99" : 8.390884075048325E8,
+                "99.999" : 8.390884075048325E8,
+                "99.9999" : 8.390884075048325E8,
+                "100.0" : 8.390884075048325E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    8.101875478459321E8,
+                    8.151290983918205E8,
+                    8.364883434526802E8,
+                    8.390884075048325E8,
+                    8.300894143216182E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryHashCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 8.14363166050511E8,
+            "scoreError" : 3.338411729663583E7,
+            "scoreConfidence" : [
+                7.809790487538751E8,
+                8.477472833471469E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 8.031205179031262E8,
+                "50.0" : 8.131290716567248E8,
+                "90.0" : 8.26264162701866E8,
+                "95.0" : 8.26264162701866E8,
+                "99.0" : 8.26264162701866E8,
+                "99.9" : 8.26264162701866E8,
+                "99.99" : 8.26264162701866E8,
+                "99.999" : 8.26264162701866E8,
+                "99.9999" : 8.26264162701866E8,
+                "100.0" : 8.26264162701866E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    8.031205179031262E8,
+                    8.18584143282362E8,
+                    8.131290716567248E8,
+                    8.26264162701866E8,
+                    8.107179347084755E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryShowCreation",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 9.688407962060881E8,
+            "scoreError" : 4.151832382521429E7,
+            "scoreConfidence" : [
+                9.273224723808738E8,
+                1.0103591200313023E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 9.500281563954399E8,
+                "50.0" : 9.714751076497054E8,
+                "90.0" : 9.765326191996044E8,
+                "95.0" : 9.765326191996044E8,
+                "99.0" : 9.765326191996044E8,
+                "99.9" : 9.765326191996044E8,
+                "99.99" : 9.765326191996044E8,
+                "99.999" : 9.765326191996044E8,
+                "99.9999" : 9.765326191996044E8,
+                "100.0" : 9.765326191996044E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    9.714751076497054E8,
+                    9.765326191996044E8,
+                    9.709636940394918E8,
+                    9.752044037461985E8,
+                    9.500281563954399E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.anonPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3650698.317921751,
+            "scoreError" : 277753.3963445663,
+            "scoreConfidence" : [
+                3372944.921577185,
+                3928451.7142663174
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3532288.377349628,
+                "50.0" : 3663750.5057537733,
+                "90.0" : 3717299.7774969484,
+                "95.0" : 3717299.7774969484,
+                "99.0" : 3717299.7774969484,
+                "99.9" : 3717299.7774969484,
+                "99.99" : 3717299.7774969484,
+                "99.999" : 3717299.7774969484,
+                "99.9999" : 3717299.7774969484,
+                "100.0" : 3717299.7774969484
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3696852.0220588236,
+                    3717299.7774969484,
+                    3663750.5057537733,
+                    3532288.377349628,
+                    3643300.906949582
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.anonSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.11734556944143E7,
+            "scoreError" : 442288.8831992868,
+            "scoreConfidence" : [
+                3.0731166811215013E7,
+                3.1615744577613585E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.1032754685763773E7,
+                "50.0" : 3.1224140496444188E7,
+                "90.0" : 3.1294698912233215E7,
+                "95.0" : 3.1294698912233215E7,
+                "99.0" : 3.1294698912233215E7,
+                "99.9" : 3.1294698912233215E7,
+                "99.99" : 3.1294698912233215E7,
+                "99.999" : 3.1294698912233215E7,
+                "99.9999" : 3.1294698912233215E7,
+                "100.0" : 3.1294698912233215E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.1294698912233215E7,
+                    3.1032754685763773E7,
+                    3.1245074666239027E7,
+                    3.1070609711391285E7,
+                    3.1224140496444188E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.factoryPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3556892.801768145,
+            "scoreError" : 309536.2618714367,
+            "scoreConfidence" : [
+                3247356.5398967084,
+                3866429.0636395817
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3428420.9073043186,
+                "50.0" : 3574621.119556871,
+                "90.0" : 3647013.7660322534,
+                "95.0" : 3647013.7660322534,
+                "99.0" : 3647013.7660322534,
+                "99.9" : 3647013.7660322534,
+                "99.99" : 3647013.7660322534,
+                "99.999" : 3647013.7660322534,
+                "99.9999" : 3647013.7660322534,
+                "100.0" : 3647013.7660322534
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3574621.119556871,
+                    3428420.9073043186,
+                    3585826.8550893962,
+                    3647013.7660322534,
+                    3548581.3608578867
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.factorySimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.1422559860675626E7,
+            "scoreError" : 1060276.0149209944,
+            "scoreConfidence" : [
+                3.036228384575463E7,
+                3.248283587559662E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.102042440022679E7,
+                "50.0" : 3.1461693841588236E7,
+                "90.0" : 3.1707569673943702E7,
+                "95.0" : 3.1707569673943702E7,
+                "99.0" : 3.1707569673943702E7,
+                "99.9" : 3.1707569673943702E7,
+                "99.99" : 3.1707569673943702E7,
+                "99.999" : 3.1707569673943702E7,
+                "99.9999" : 3.1707569673943702E7,
+                "100.0" : 3.1707569673943702E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.1294590366484378E7,
+                    3.1707569673943702E7,
+                    3.1628521021135025E7,
+                    3.102042440022679E7,
+                    3.1461693841588236E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonEqvPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.731622360482268E9,
+            "scoreError" : 3.2129330869876254E7,
+            "scoreConfidence" : [
+                3.6994930296123915E9,
+                3.7637516913521442E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.7179150780851426E9,
+                "50.0" : 3.7320265281750336E9,
+                "90.0" : 3.7396710042156086E9,
+                "95.0" : 3.7396710042156086E9,
+                "99.0" : 3.7396710042156086E9,
+                "99.9" : 3.7396710042156086E9,
+                "99.99" : 3.7396710042156086E9,
+                "99.999" : 3.7396710042156086E9,
+                "99.9999" : 3.7396710042156086E9,
+                "100.0" : 3.7396710042156086E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.7366830441250653E9,
+                    3.7318161478104873E9,
+                    3.7179150780851426E9,
+                    3.7396710042156086E9,
+                    3.7320265281750336E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonEqvSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.3162066564559817E9,
+            "scoreError" : 4.32103031380524E7,
+            "scoreConfidence" : [
+                1.2729963533179293E9,
+                1.3594169595940342E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.2982187326928735E9,
+                "50.0" : 1.3179982579712625E9,
+                "90.0" : 1.3291816162783206E9,
+                "95.0" : 1.3291816162783206E9,
+                "99.0" : 1.3291816162783206E9,
+                "99.9" : 1.3291816162783206E9,
+                "99.99" : 1.3291816162783206E9,
+                "99.999" : 1.3291816162783206E9,
+                "99.9999" : 1.3291816162783206E9,
+                "100.0" : 1.3291816162783206E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.3165169744642694E9,
+                    1.3291816162783206E9,
+                    1.3179982579712625E9,
+                    1.3191177008731833E9,
+                    1.2982187326928735E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonHashPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.7757702358391687E7,
+            "scoreError" : 513915.2672610111,
+            "scoreConfidence" : [
+                1.7243787091130678E7,
+                1.8271617625652697E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.7601848404833224E7,
+                "50.0" : 1.7760186193886153E7,
+                "90.0" : 1.7896098609510202E7,
+                "95.0" : 1.7896098609510202E7,
+                "99.0" : 1.7896098609510202E7,
+                "99.9" : 1.7896098609510202E7,
+                "99.99" : 1.7896098609510202E7,
+                "99.999" : 1.7896098609510202E7,
+                "99.9999" : 1.7896098609510202E7,
+                "100.0" : 1.7896098609510202E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.7896098609510202E7,
+                    1.7601848404833224E7,
+                    1.7882846294961803E7,
+                    1.7760186193886153E7,
+                    1.7647532288767055E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonHashSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.757756598431961E9,
+            "scoreError" : 5.932507016745253E7,
+            "scoreConfidence" : [
+                3.6984315282645087E9,
+                3.8170816685994134E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.7387589183554015E9,
+                "50.0" : 3.7610567823090243E9,
+                "90.0" : 3.77227491155147E9,
+                "95.0" : 3.77227491155147E9,
+                "99.0" : 3.77227491155147E9,
+                "99.9" : 3.77227491155147E9,
+                "99.99" : 3.77227491155147E9,
+                "99.999" : 3.77227491155147E9,
+                "99.9999" : 3.77227491155147E9,
+                "100.0" : 3.77227491155147E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.7610567823090243E9,
+                    3.7448153873473086E9,
+                    3.7718769925966005E9,
+                    3.7387589183554015E9,
+                    3.77227491155147E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryEqvPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.568568280349542E9,
+            "scoreError" : 1.4832276281758816E9,
+            "scoreConfidence" : [
+                2.0853406521736605E9,
+                5.051795908525424E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 2.8828799946650686E9,
+                "50.0" : 3.7580608736072536E9,
+                "90.0" : 3.768980135790647E9,
+                "95.0" : 3.768980135790647E9,
+                "99.0" : 3.768980135790647E9,
+                "99.9" : 3.768980135790647E9,
+                "99.99" : 3.768980135790647E9,
+                "99.999" : 3.768980135790647E9,
+                "99.9999" : 3.768980135790647E9,
+                "100.0" : 3.768980135790647E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.7580608736072536E9,
+                    2.8828799946650686E9,
+                    3.768980135790647E9,
+                    3.758287221432708E9,
+                    3.674633176252035E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryEqvSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.326817486320113E9,
+            "scoreError" : 5.4764364153494276E7,
+            "scoreConfidence" : [
+                1.2720531221666186E9,
+                1.3815818504736073E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.3028134077969973E9,
+                "50.0" : 1.3341688059868963E9,
+                "90.0" : 1.3373849078147607E9,
+                "95.0" : 1.3373849078147607E9,
+                "99.0" : 1.3373849078147607E9,
+                "99.9" : 1.3373849078147607E9,
+                "99.99" : 1.3373849078147607E9,
+                "99.999" : 1.3373849078147607E9,
+                "99.9999" : 1.3373849078147607E9,
+                "100.0" : 1.3373849078147607E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.3028134077969973E9,
+                    1.3347923119281833E9,
+                    1.3373849078147607E9,
+                    1.3249279980737267E9,
+                    1.3341688059868963E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryHashPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.7737957487936467E7,
+            "scoreError" : 645994.9791478037,
+            "scoreConfidence" : [
+                1.7091962508788664E7,
+                1.838395246708427E7
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.7475868603295926E7,
+                "50.0" : 1.7773978593004346E7,
+                "90.0" : 1.791141846960081E7,
+                "95.0" : 1.791141846960081E7,
+                "99.0" : 1.791141846960081E7,
+                "99.9" : 1.791141846960081E7,
+                "99.99" : 1.791141846960081E7,
+                "99.999" : 1.791141846960081E7,
+                "99.9999" : 1.791141846960081E7,
+                "100.0" : 1.791141846960081E7
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.791141846960081E7,
+                    1.7838816017334353E7,
+                    1.7689705756446894E7,
+                    1.7773978593004346E7,
+                    1.7475868603295926E7
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryHashSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3.765400867632798E9,
+            "scoreError" : 1.8662355492100838E8,
+            "scoreConfidence" : [
+                3.5787773127117896E9,
+                3.952024422553807E9
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3.693410341031345E9,
+                "50.0" : 3.7714522871462784E9,
+                "90.0" : 3.8152439825017414E9,
+                "95.0" : 3.8152439825017414E9,
+                "99.0" : 3.8152439825017414E9,
+                "99.9" : 3.8152439825017414E9,
+                "99.99" : 3.8152439825017414E9,
+                "99.999" : 3.8152439825017414E9,
+                "99.9999" : 3.8152439825017414E9,
+                "100.0" : 3.8152439825017414E9
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3.7454979795107594E9,
+                    3.801399747973866E9,
+                    3.7714522871462784E9,
+                    3.8152439825017414E9,
+                    3.693410341031345E9
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonEvent",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 2695180.1549021704,
+            "scoreError" : 129625.80028500603,
+            "scoreConfidence" : [
+                2565554.3546171645,
+                2824805.9551871764
+            ],
+            "scorePercentiles" : {
+                "0.0" : 2643221.2855787934,
+                "50.0" : 2711246.7735943403,
+                "90.0" : 2727176.39649634,
+                "95.0" : 2727176.39649634,
+                "99.0" : 2727176.39649634,
+                "99.9" : 2727176.39649634,
+                "99.99" : 2727176.39649634,
+                "99.999" : 2727176.39649634,
+                "99.9999" : 2727176.39649634,
+                "100.0" : 2727176.39649634
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    2727176.39649634,
+                    2643221.2855787934,
+                    2711246.7735943403,
+                    2713615.8985243468,
+                    2680640.4203170314
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3092520.6091102376,
+            "scoreError" : 105366.35171872618,
+            "scoreConfidence" : [
+                2987154.2573915115,
+                3197886.9608289637
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3056828.882871933,
+                "50.0" : 3100831.984418715,
+                "90.0" : 3126678.339794417,
+                "95.0" : 3126678.339794417,
+                "99.0" : 3126678.339794417,
+                "99.9" : 3126678.339794417,
+                "99.99" : 3126678.339794417,
+                "99.999" : 3126678.339794417,
+                "99.9999" : 3126678.339794417,
+                "100.0" : 3126678.339794417
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3073928.1864532116,
+                    3100831.984418715,
+                    3104335.6520129126,
+                    3056828.882871933,
+                    3126678.339794417
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonSimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.2271452249774134E8,
+            "scoreError" : 7601958.432943255,
+            "scoreConfidence" : [
+                1.1511256406479809E8,
+                1.303164809306846E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.1995686509546918E8,
+                "50.0" : 1.2287598200296232E8,
+                "90.0" : 1.2479741405551599E8,
+                "95.0" : 1.2479741405551599E8,
+                "99.0" : 1.2479741405551599E8,
+                "99.9" : 1.2479741405551599E8,
+                "99.99" : 1.2479741405551599E8,
+                "99.999" : 1.2479741405551599E8,
+                "99.9999" : 1.2479741405551599E8,
+                "100.0" : 1.2479741405551599E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.2165037844564743E8,
+                    1.1995686509546918E8,
+                    1.2287598200296232E8,
+                    1.2479741405551599E8,
+                    1.2429197288911174E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factoryEvent",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 2822197.235825753,
+            "scoreError" : 46161.3957265006,
+            "scoreConfidence" : [
+                2776035.8400992523,
+                2868358.6315522534
+            ],
+            "scorePercentiles" : {
+                "0.0" : 2808408.547943352,
+                "50.0" : 2820460.158588962,
+                "90.0" : 2838138.053508374,
+                "95.0" : 2838138.053508374,
+                "99.0" : 2838138.053508374,
+                "99.9" : 2838138.053508374,
+                "99.99" : 2838138.053508374,
+                "99.999" : 2838138.053508374,
+                "99.9999" : 2838138.053508374,
+                "100.0" : 2838138.053508374
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    2820460.158588962,
+                    2814005.2138849036,
+                    2838138.053508374,
+                    2829974.2052031728,
+                    2808408.547943352
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factoryPerson",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 3064384.235027835,
+            "scoreError" : 69980.82616304322,
+            "scoreConfidence" : [
+                2994403.4088647915,
+                3134365.061190878
+            ],
+            "scorePercentiles" : {
+                "0.0" : 3038106.9536385816,
+                "50.0" : 3063509.4078065515,
+                "90.0" : 3083431.123977155,
+                "95.0" : 3083431.123977155,
+                "99.0" : 3083431.123977155,
+                "99.9" : 3083431.123977155,
+                "99.99" : 3083431.123977155,
+                "99.999" : 3083431.123977155,
+                "99.9999" : 3083431.123977155,
+                "100.0" : 3083431.123977155
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    3083431.123977155,
+                    3057614.2834649314,
+                    3063509.4078065515,
+                    3079259.4062519544,
+                    3038106.9536385816
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factorySimpleCC",
+        "mode" : "thrpt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/dev/.sdkman/candidates/java/25.0.1-graalce/bin/java",
+        "jvmArgs" : [
+            "-XX:StartFlightRecording=filename=/Users/dev/Workspaces/GitHub/kindlings/docs/research/anon-vs-lambda/jfr/benchmark-scala3.jfr,settings=profile"
+        ],
+        "jdkVersion" : "25.0.1",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "25.0.1+8-jvmci-b01",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "primaryMetric" : {
+            "score" : 1.2300815767385812E8,
+            "scoreError" : 7419179.084432935,
+            "scoreConfidence" : [
+                1.1558897858942519E8,
+                1.3042733675829105E8
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.2062845583478552E8,
+                "50.0" : 1.2284402364789194E8,
+                "90.0" : 1.25645668952062E8,
+                "95.0" : 1.25645668952062E8,
+                "99.0" : 1.25645668952062E8,
+                "99.9" : 1.25645668952062E8,
+                "99.99" : 1.25645668952062E8,
+                "99.999" : 1.25645668952062E8,
+                "99.9999" : 1.25645668952062E8,
+                "100.0" : 1.25645668952062E8
+            },
+            "scoreUnit" : "ops/s",
+            "rawData" : [
+                [
+                    1.25645668952062E8,
+                    1.2284402364789194E8,
+                    1.2400976919824591E8,
+                    1.2062845583478552E8,
+                    1.2191287073630512E8
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+

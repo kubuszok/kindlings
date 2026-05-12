@@ -26,13 +26,11 @@ trait EqMacrosImpl
 
     deriveEqFromCtxAndAdaptForEntrypoint[A, cats.kernel.Eq[A]](macroName) { fromCtx =>
       Expr.quote {
-        new cats.kernel.Eq[A] {
-          def eqv(x: A, y: A): Boolean = {
-            val _ = x
-            val _ = y
-            Expr.splice {
-              fromCtx(EqCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
-            }
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.eqInstance[A] { (x: A, y: A) =>
+          val _ = x
+          val _ = y
+          Expr.splice {
+            fromCtx(EqCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
           }
         }
       }

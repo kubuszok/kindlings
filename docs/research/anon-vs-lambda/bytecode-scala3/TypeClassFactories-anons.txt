@@ -1,0 +1,159 @@
+=== TypeClassFactories$$anon$1 ===
+Compiled from "TypeClassFactories.scala"
+public final class hearth.kindlings.benchmarks.TypeClassFactories$$anon$1 implements cats.Show<A> {
+  private final scala.Function1 f$1;
+
+  public hearth.kindlings.benchmarks.TypeClassFactories$$anon$1(scala.Function1);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: putfield      #20                 // Field f$1:Lscala/Function1;
+         5: aload_0
+         6: invokespecial #23                 // Method java/lang/Object."<init>":()V
+         9: return
+
+  public java.lang.String show(java.lang.Object);
+    Code:
+         0: aload_0
+         1: getfield      #20                 // Field f$1:Lscala/Function1;
+         4: aload_1
+         5: invokeinterface #34,  2           // InterfaceMethod scala/Function1.apply:(Ljava/lang/Object;)Ljava/lang/Object;
+        10: checkcast     #36                 // class java/lang/String
+        13: areturn
+}
+
+=== TypeClassFactories$$anon$2 ===
+Compiled from "TypeClassFactories.scala"
+public final class hearth.kindlings.benchmarks.TypeClassFactories$$anon$2 implements cats.kernel.Hash<A> {
+  private final scala.Function1 hashFn$1;
+
+  private final scala.Function2 eqvFn$1;
+
+  public hearth.kindlings.benchmarks.TypeClassFactories$$anon$2(scala.Function1, scala.Function2);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: putfield      #25                 // Field hashFn$1:Lscala/Function1;
+         5: aload_0
+         6: aload_2
+         7: putfield      #27                 // Field eqvFn$1:Lscala/Function2;
+        10: aload_0
+        11: invokespecial #30                 // Method java/lang/Object."<init>":()V
+        14: return
+
+  public boolean neqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #40                 // InterfaceMethod cats/kernel/Eq.neqv$:(Lcats/kernel/Eq;Ljava/lang/Object;Ljava/lang/Object;)Z
+         6: ireturn
+
+  public int hash(java.lang.Object);
+    Code:
+         0: aload_0
+         1: getfield      #25                 // Field hashFn$1:Lscala/Function1;
+         4: aload_1
+         5: invokeinterface #49,  2           // InterfaceMethod scala/Function1.apply:(Ljava/lang/Object;)Ljava/lang/Object;
+        10: invokestatic  #54                 // Method scala/runtime/BoxesRunTime.unboxToInt:(Ljava/lang/Object;)I
+        13: ireturn
+
+  public boolean eqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field eqvFn$1:Lscala/Function2;
+         4: aload_1
+         5: aload_2
+         6: invokeinterface #60,  3           // InterfaceMethod scala/Function2.apply:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        11: invokestatic  #64                 // Method scala/runtime/BoxesRunTime.unboxToBoolean:(Ljava/lang/Object;)Z
+        14: ireturn
+}
+
+=== TypeClassFactories$$anon$3 ===
+Compiled from "TypeClassFactories.scala"
+public final class hearth.kindlings.benchmarks.TypeClassFactories$$anon$3 implements io.circe.Encoder<A> {
+  private final scala.Function1 f$2;
+
+  public hearth.kindlings.benchmarks.TypeClassFactories$$anon$3(scala.Function1);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: putfield      #20                 // Field f$2:Lscala/Function1;
+         5: aload_0
+         6: invokespecial #23                 // Method java/lang/Object."<init>":()V
+         9: return
+
+  public final io.circe.Encoder contramap(scala.Function1);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #31                 // InterfaceMethod io/circe/Encoder.contramap$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public final io.circe.Encoder mapJson(scala.Function1);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #35                 // InterfaceMethod io/circe/Encoder.mapJson$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public io.circe.Json apply(java.lang.Object);
+    Code:
+         0: aload_0
+         1: getfield      #20                 // Field f$2:Lscala/Function1;
+         4: aload_1
+         5: invokeinterface #43,  2           // InterfaceMethod scala/Function1.apply:(Ljava/lang/Object;)Ljava/lang/Object;
+        10: checkcast     #45                 // class io/circe/Json
+        13: areturn
+}
+
+=== TypeClassFactories$$anon$4 ===
+Compiled from "TypeClassFactories.scala"
+public final class hearth.kindlings.benchmarks.TypeClassFactories$$anon$4 implements com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<A> {
+  private final java.lang.Object nullVal$1;
+
+  private final scala.Function2 decodeFn$1;
+
+  private final scala.Function2 encodeFn$1;
+
+  public hearth.kindlings.benchmarks.TypeClassFactories$$anon$4(java.lang.Object, scala.Function2, scala.Function2);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: putfield      #25                 // Field nullVal$1:Ljava/lang/Object;
+         5: aload_0
+         6: aload_2
+         7: putfield      #27                 // Field decodeFn$1:Lscala/Function2;
+        10: aload_0
+        11: aload_3
+        12: putfield      #29                 // Field encodeFn$1:Lscala/Function2;
+        15: aload_0
+        16: invokespecial #32                 // Method java/lang/Object."<init>":()V
+        19: return
+
+  public java.lang.Object nullValue();
+    Code:
+         0: aload_0
+         1: getfield      #25                 // Field nullVal$1:Ljava/lang/Object;
+         4: areturn
+
+  public java.lang.Object decodeValue(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, java.lang.Object);
+    Code:
+         0: aload_0
+         1: getfield      #27                 // Field decodeFn$1:Lscala/Function2;
+         4: aload_1
+         5: aload_2
+         6: invokeinterface #46,  3           // InterfaceMethod scala/Function2.apply:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        11: areturn
+
+  public void encodeValue(java.lang.Object, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: getfield      #29                 // Field encodeFn$1:Lscala/Function2;
+         4: aload_1
+         5: aload_2
+         6: invokeinterface #46,  3           // InterfaceMethod scala/Function2.apply:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+        11: pop
+        12: return
+}
+

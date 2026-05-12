@@ -72,9 +72,9 @@ trait SchemaMacrosImpl
     deriveFromCtxAndAdaptForEntrypoint[A, KindlingsSchema[A]]("KindlingsSchema.derived", derivedType = selfType) {
       fromCtx =>
         Expr.quote {
-          new KindlingsSchema[A] {
-            val schema: Schema[A] = Expr.splice(fromCtx())
-          }
+          hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaDerivationFactories.instance[A](
+            Expr.splice(fromCtx())
+          )
         }
     }
   }

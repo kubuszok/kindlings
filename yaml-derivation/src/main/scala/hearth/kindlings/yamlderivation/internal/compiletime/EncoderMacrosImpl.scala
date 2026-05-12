@@ -74,12 +74,10 @@ trait EncoderMacrosImpl
       ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsYamlEncoder[A] {
-            def asNode(obj: A): Node = {
-              val _ = obj
-              Expr.splice {
-                fromCtx(EncoderCtx.from(Expr.quote(obj), Expr.quote(cfg), derivedType = selfType))
-              }
+          hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.encoderInstance[A] { (obj: A) =>
+            val _ = obj
+            Expr.splice {
+              fromCtx(EncoderCtx.from(Expr.quote(obj), Expr.quote(cfg), derivedType = selfType))
             }
           }
         }

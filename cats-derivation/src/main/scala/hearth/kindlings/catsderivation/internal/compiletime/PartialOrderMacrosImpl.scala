@@ -17,15 +17,14 @@ trait PartialOrderMacrosImpl extends OrderMacrosImpl { this: MacroCommons & StdE
     // PartialOrder can be derived from Order — same lexicographic comparison, just wrapped in toDouble
     deriveOrderEntrypoint[A, cats.kernel.PartialOrder[A]](macroName) { fromCtx =>
       Expr.quote {
-        new cats.kernel.PartialOrder[A] {
-          def partialCompare(x: A, y: A): Double = {
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.partialOrderInstance[A] {
+          (x: A, y: A) =>
             val _ = x
             val _ = y
             Expr.splice {
               val result = fromCtx(OrderCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
               Expr.quote(Expr.splice(result).toDouble)
             }
-          }
         }
       }
     }

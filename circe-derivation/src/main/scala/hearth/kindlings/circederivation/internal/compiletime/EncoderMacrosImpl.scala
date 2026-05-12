@@ -54,12 +54,10 @@ trait EncoderMacrosImpl
       ValDefs.createVal[Configuration](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsEncoder[A] {
-            def apply(a: A): Json = {
-              val _ = a
-              Expr.splice {
-                fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
-              }
+          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
+            val _ = a
+            Expr.splice {
+              fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
             }
           }
         }
@@ -92,8 +90,8 @@ trait EncoderMacrosImpl
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
           Expr.quote {
             val cfg = Expr.splice(configVal)
-            new KindlingsEncoderAsObject[A] {
-              def encodeObject(a: A): JsonObject = {
+            hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderAsObjectInstance[A] {
+              (a: A) =>
                 val _ = a
                 val json: Json = Expr.splice {
                   fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
@@ -106,7 +104,6 @@ trait EncoderMacrosImpl
                         "with a sealed trait of case objects. Use KindlingsEncoder.derive instead."
                     )
                 }
-              }
             }
           }
         }

@@ -127,43 +127,34 @@ trait DecoderMacrosImpl
             ValDefs.createVal[Configuration](configExpr).use { configVal =>
               Expr.quote {
                 val cfg = Expr.splice(configVal)
-                new KindlingsDecoder[A] {
-                  def apply(c: HCursor): Decoder.Result[A] = {
-                    val _ = c
-                    Expr.splice {
-                      helperOpt match {
-                        case Some(helper) =>
-                          Expr.quote {
-                            Expr
-                              .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
-                              .asInstanceOf[Either[DecodingFailure, A]]
-                          }
-                        case None =>
-                          // Fallback for types handled without a cached helper (value types,
-                          // options, collections, maps). Delegate to a direct decoder.
-                          Expr.quote {
+                Expr.splice {
+                  helperOpt match {
+                    case Some(helper) =>
+                      Expr.quote {
+                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                          .decoderWithAccInstance[A](
+                            (c: HCursor) => {
+                              val _ = c
+                              Expr
+                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
+                                .asInstanceOf[Either[DecodingFailure, A]]
+                            },
+                            (c: HCursor) => {
+                              val _ = c
+                              Expr
+                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
+                                .asInstanceOf[ValidatedNel[DecodingFailure, A]]
+                            }
+                          )
+                      }
+                    case None =>
+                      Expr.quote {
+                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                          .decoderInstance[A] { (c: HCursor) =>
+                            val _ = c
                             Expr.splice(directDecoderOpt.get).apply(c)
                           }
                       }
-                    }
-                  }
-                  override def decodeAccumulating(c: HCursor): Decoder.AccumulatingResult[A] = {
-                    val _ = c
-                    Expr.splice {
-                      helperOpt match {
-                        case Some(helper) =>
-                          Expr.quote {
-                            Expr
-                              .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
-                              .asInstanceOf[ValidatedNel[DecodingFailure, A]]
-                          }
-                        case None =>
-                          // Fallback: delegate to the direct decoder's decodeAccumulating
-                          Expr.quote {
-                            Expr.splice(directDecoderOpt.get).decodeAccumulating(c)
-                          }
-                      }
-                    }
                   }
                 }
               }

@@ -1,0 +1,930 @@
+=== AnonClassInstances$$anon$1 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$1 implements cats.Show<hearth.kindlings.benchmarks.SimpleCC> {
+  public java.lang.String show(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #19                 // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #22                 // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)Ljava/lang/String;
+         7: areturn
+
+  public java.lang.String show(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #29                 // class hearth/kindlings/benchmarks/SimpleCC
+         5: invokevirtual #31                 // Method show:(Lhearth/kindlings/benchmarks/SimpleCC;)Ljava/lang/String;
+         8: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$1();
+    Code:
+         0: aload_0
+         1: invokespecial #36                 // Method java/lang/Object."<init>":()V
+         4: return
+}
+
+=== AnonClassInstances$$anon$2 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$2 implements cats.Show<hearth.kindlings.benchmarks.Person> {
+  public java.lang.String show(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #19                 // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #22                 // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showPerson:(Lhearth/kindlings/benchmarks/Person;)Ljava/lang/String;
+         7: areturn
+
+  public java.lang.String show(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #29                 // class hearth/kindlings/benchmarks/Person
+         5: invokevirtual #31                 // Method show:(Lhearth/kindlings/benchmarks/Person;)Ljava/lang/String;
+         8: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$2();
+    Code:
+         0: aload_0
+         1: invokespecial #36                 // Method java/lang/Object."<init>":()V
+         4: return
+}
+
+=== AnonClassInstances$$anon$3 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$3 implements cats.Show<hearth.kindlings.benchmarks.Event> {
+  public java.lang.String show(hearth.kindlings.benchmarks.Event);
+    Code:
+         0: getstatic     #19                 // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #22                 // Method hearth/kindlings/benchmarks/HandWrittenImpls$.showEvent:(Lhearth/kindlings/benchmarks/Event;)Ljava/lang/String;
+         7: areturn
+
+  public java.lang.String show(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #29                 // class hearth/kindlings/benchmarks/Event
+         5: invokevirtual #31                 // Method show:(Lhearth/kindlings/benchmarks/Event;)Ljava/lang/String;
+         8: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$3();
+    Code:
+         0: aload_0
+         1: invokespecial #36                 // Method java/lang/Object."<init>":()V
+         4: return
+}
+
+=== AnonClassInstances$$anon$4 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$4 implements cats.kernel.Hash<hearth.kindlings.benchmarks.SimpleCC> {
+  public int hash$mcZ$sp(boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #17                 // InterfaceMethod cats/kernel/Hash.hash$mcZ$sp$:(Lcats/kernel/Hash;Z)I
+         5: ireturn
+
+  public int hash$mcB$sp(byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #26                 // InterfaceMethod cats/kernel/Hash.hash$mcB$sp$:(Lcats/kernel/Hash;B)I
+         5: ireturn
+
+  public int hash$mcC$sp(char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #33                 // InterfaceMethod cats/kernel/Hash.hash$mcC$sp$:(Lcats/kernel/Hash;C)I
+         5: ireturn
+
+  public int hash$mcD$sp(double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: invokestatic  #40                 // InterfaceMethod cats/kernel/Hash.hash$mcD$sp$:(Lcats/kernel/Hash;D)I
+         5: ireturn
+
+  public int hash$mcF$sp(float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: invokestatic  #47                 // InterfaceMethod cats/kernel/Hash.hash$mcF$sp$:(Lcats/kernel/Hash;F)I
+         5: ireturn
+
+  public int hash$mcI$sp(int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #54                 // InterfaceMethod cats/kernel/Hash.hash$mcI$sp$:(Lcats/kernel/Hash;I)I
+         5: ireturn
+
+  public int hash$mcJ$sp(long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: invokestatic  #61                 // InterfaceMethod cats/kernel/Hash.hash$mcJ$sp$:(Lcats/kernel/Hash;J)I
+         5: ireturn
+
+  public int hash$mcS$sp(short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #68                 // InterfaceMethod cats/kernel/Hash.hash$mcS$sp$:(Lcats/kernel/Hash;S)I
+         5: ireturn
+
+  public int hash$mcV$sp(scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #75                 // InterfaceMethod cats/kernel/Hash.hash$mcV$sp$:(Lcats/kernel/Hash;Lscala/runtime/BoxedUnit;)I
+         5: ireturn
+
+  public boolean eqv$mcZ$sp(boolean, boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #85                 // InterfaceMethod cats/kernel/Eq.eqv$mcZ$sp$:(Lcats/kernel/Eq;ZZ)Z
+         6: ireturn
+
+  public boolean eqv$mcB$sp(byte, byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #91                 // InterfaceMethod cats/kernel/Eq.eqv$mcB$sp$:(Lcats/kernel/Eq;BB)Z
+         6: ireturn
+
+  public boolean eqv$mcC$sp(char, char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #97                 // InterfaceMethod cats/kernel/Eq.eqv$mcC$sp$:(Lcats/kernel/Eq;CC)Z
+         6: ireturn
+
+  public boolean eqv$mcD$sp(double, double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: dload_3
+         3: invokestatic  #103                // InterfaceMethod cats/kernel/Eq.eqv$mcD$sp$:(Lcats/kernel/Eq;DD)Z
+         6: ireturn
+
+  public boolean eqv$mcF$sp(float, float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: fload_2
+         3: invokestatic  #109                // InterfaceMethod cats/kernel/Eq.eqv$mcF$sp$:(Lcats/kernel/Eq;FF)Z
+         6: ireturn
+
+  public boolean eqv$mcI$sp(int, int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #115                // InterfaceMethod cats/kernel/Eq.eqv$mcI$sp$:(Lcats/kernel/Eq;II)Z
+         6: ireturn
+
+  public boolean eqv$mcJ$sp(long, long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: lload_3
+         3: invokestatic  #121                // InterfaceMethod cats/kernel/Eq.eqv$mcJ$sp$:(Lcats/kernel/Eq;JJ)Z
+         6: ireturn
+
+  public boolean eqv$mcS$sp(short, short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #127                // InterfaceMethod cats/kernel/Eq.eqv$mcS$sp$:(Lcats/kernel/Eq;SS)Z
+         6: ireturn
+
+  public boolean eqv$mcV$sp(scala.runtime.BoxedUnit, scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #133                // InterfaceMethod cats/kernel/Eq.eqv$mcV$sp$:(Lcats/kernel/Eq;Lscala/runtime/BoxedUnit;Lscala/runtime/BoxedUnit;)Z
+         6: ireturn
+
+  public boolean neqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #139                // InterfaceMethod cats/kernel/Eq.neqv$:(Lcats/kernel/Eq;Ljava/lang/Object;Ljava/lang/Object;)Z
+         6: ireturn
+
+  public boolean neqv$mcZ$sp(boolean, boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #144                // InterfaceMethod cats/kernel/Eq.neqv$mcZ$sp$:(Lcats/kernel/Eq;ZZ)Z
+         6: ireturn
+
+  public boolean neqv$mcB$sp(byte, byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #148                // InterfaceMethod cats/kernel/Eq.neqv$mcB$sp$:(Lcats/kernel/Eq;BB)Z
+         6: ireturn
+
+  public boolean neqv$mcC$sp(char, char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #152                // InterfaceMethod cats/kernel/Eq.neqv$mcC$sp$:(Lcats/kernel/Eq;CC)Z
+         6: ireturn
+
+  public boolean neqv$mcD$sp(double, double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: dload_3
+         3: invokestatic  #156                // InterfaceMethod cats/kernel/Eq.neqv$mcD$sp$:(Lcats/kernel/Eq;DD)Z
+         6: ireturn
+
+  public boolean neqv$mcF$sp(float, float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: fload_2
+         3: invokestatic  #160                // InterfaceMethod cats/kernel/Eq.neqv$mcF$sp$:(Lcats/kernel/Eq;FF)Z
+         6: ireturn
+
+  public boolean neqv$mcI$sp(int, int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #164                // InterfaceMethod cats/kernel/Eq.neqv$mcI$sp$:(Lcats/kernel/Eq;II)Z
+         6: ireturn
+
+  public boolean neqv$mcJ$sp(long, long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: lload_3
+         3: invokestatic  #168                // InterfaceMethod cats/kernel/Eq.neqv$mcJ$sp$:(Lcats/kernel/Eq;JJ)Z
+         6: ireturn
+
+  public boolean neqv$mcS$sp(short, short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #172                // InterfaceMethod cats/kernel/Eq.neqv$mcS$sp$:(Lcats/kernel/Eq;SS)Z
+         6: ireturn
+
+  public boolean neqv$mcV$sp(scala.runtime.BoxedUnit, scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #176                // InterfaceMethod cats/kernel/Eq.neqv$mcV$sp$:(Lcats/kernel/Eq;Lscala/runtime/BoxedUnit;Lscala/runtime/BoxedUnit;)Z
+         6: ireturn
+
+  public int hash(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #184                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #187                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.hashSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)I
+         7: ireturn
+
+  public boolean eqv(hearth.kindlings.benchmarks.SimpleCC, hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #184                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: aload_2
+         5: invokevirtual #193                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.eqvSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;Lhearth/kindlings/benchmarks/SimpleCC;)Z
+         8: ireturn
+
+  public boolean eqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #195                // class hearth/kindlings/benchmarks/SimpleCC
+         5: aload_2
+         6: checkcast     #195                // class hearth/kindlings/benchmarks/SimpleCC
+         9: invokevirtual #197                // Method eqv:(Lhearth/kindlings/benchmarks/SimpleCC;Lhearth/kindlings/benchmarks/SimpleCC;)Z
+        12: ireturn
+
+  public int hash(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #195                // class hearth/kindlings/benchmarks/SimpleCC
+         5: invokevirtual #200                // Method hash:(Lhearth/kindlings/benchmarks/SimpleCC;)I
+         8: ireturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$4();
+    Code:
+         0: aload_0
+         1: invokespecial #204                // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: invokestatic  #208                // InterfaceMethod cats/kernel/Eq.$init$:(Lcats/kernel/Eq;)V
+         8: return
+}
+
+=== AnonClassInstances$$anon$5 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$5 implements cats.kernel.Hash<hearth.kindlings.benchmarks.Person> {
+  public int hash$mcZ$sp(boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #17                 // InterfaceMethod cats/kernel/Hash.hash$mcZ$sp$:(Lcats/kernel/Hash;Z)I
+         5: ireturn
+
+  public int hash$mcB$sp(byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #26                 // InterfaceMethod cats/kernel/Hash.hash$mcB$sp$:(Lcats/kernel/Hash;B)I
+         5: ireturn
+
+  public int hash$mcC$sp(char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #33                 // InterfaceMethod cats/kernel/Hash.hash$mcC$sp$:(Lcats/kernel/Hash;C)I
+         5: ireturn
+
+  public int hash$mcD$sp(double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: invokestatic  #40                 // InterfaceMethod cats/kernel/Hash.hash$mcD$sp$:(Lcats/kernel/Hash;D)I
+         5: ireturn
+
+  public int hash$mcF$sp(float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: invokestatic  #47                 // InterfaceMethod cats/kernel/Hash.hash$mcF$sp$:(Lcats/kernel/Hash;F)I
+         5: ireturn
+
+  public int hash$mcI$sp(int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #54                 // InterfaceMethod cats/kernel/Hash.hash$mcI$sp$:(Lcats/kernel/Hash;I)I
+         5: ireturn
+
+  public int hash$mcJ$sp(long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: invokestatic  #61                 // InterfaceMethod cats/kernel/Hash.hash$mcJ$sp$:(Lcats/kernel/Hash;J)I
+         5: ireturn
+
+  public int hash$mcS$sp(short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: invokestatic  #68                 // InterfaceMethod cats/kernel/Hash.hash$mcS$sp$:(Lcats/kernel/Hash;S)I
+         5: ireturn
+
+  public int hash$mcV$sp(scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #75                 // InterfaceMethod cats/kernel/Hash.hash$mcV$sp$:(Lcats/kernel/Hash;Lscala/runtime/BoxedUnit;)I
+         5: ireturn
+
+  public boolean eqv$mcZ$sp(boolean, boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #85                 // InterfaceMethod cats/kernel/Eq.eqv$mcZ$sp$:(Lcats/kernel/Eq;ZZ)Z
+         6: ireturn
+
+  public boolean eqv$mcB$sp(byte, byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #91                 // InterfaceMethod cats/kernel/Eq.eqv$mcB$sp$:(Lcats/kernel/Eq;BB)Z
+         6: ireturn
+
+  public boolean eqv$mcC$sp(char, char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #97                 // InterfaceMethod cats/kernel/Eq.eqv$mcC$sp$:(Lcats/kernel/Eq;CC)Z
+         6: ireturn
+
+  public boolean eqv$mcD$sp(double, double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: dload_3
+         3: invokestatic  #103                // InterfaceMethod cats/kernel/Eq.eqv$mcD$sp$:(Lcats/kernel/Eq;DD)Z
+         6: ireturn
+
+  public boolean eqv$mcF$sp(float, float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: fload_2
+         3: invokestatic  #109                // InterfaceMethod cats/kernel/Eq.eqv$mcF$sp$:(Lcats/kernel/Eq;FF)Z
+         6: ireturn
+
+  public boolean eqv$mcI$sp(int, int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #115                // InterfaceMethod cats/kernel/Eq.eqv$mcI$sp$:(Lcats/kernel/Eq;II)Z
+         6: ireturn
+
+  public boolean eqv$mcJ$sp(long, long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: lload_3
+         3: invokestatic  #121                // InterfaceMethod cats/kernel/Eq.eqv$mcJ$sp$:(Lcats/kernel/Eq;JJ)Z
+         6: ireturn
+
+  public boolean eqv$mcS$sp(short, short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #127                // InterfaceMethod cats/kernel/Eq.eqv$mcS$sp$:(Lcats/kernel/Eq;SS)Z
+         6: ireturn
+
+  public boolean eqv$mcV$sp(scala.runtime.BoxedUnit, scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #133                // InterfaceMethod cats/kernel/Eq.eqv$mcV$sp$:(Lcats/kernel/Eq;Lscala/runtime/BoxedUnit;Lscala/runtime/BoxedUnit;)Z
+         6: ireturn
+
+  public boolean neqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #139                // InterfaceMethod cats/kernel/Eq.neqv$:(Lcats/kernel/Eq;Ljava/lang/Object;Ljava/lang/Object;)Z
+         6: ireturn
+
+  public boolean neqv$mcZ$sp(boolean, boolean);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #144                // InterfaceMethod cats/kernel/Eq.neqv$mcZ$sp$:(Lcats/kernel/Eq;ZZ)Z
+         6: ireturn
+
+  public boolean neqv$mcB$sp(byte, byte);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #148                // InterfaceMethod cats/kernel/Eq.neqv$mcB$sp$:(Lcats/kernel/Eq;BB)Z
+         6: ireturn
+
+  public boolean neqv$mcC$sp(char, char);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #152                // InterfaceMethod cats/kernel/Eq.neqv$mcC$sp$:(Lcats/kernel/Eq;CC)Z
+         6: ireturn
+
+  public boolean neqv$mcD$sp(double, double);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: dload_3
+         3: invokestatic  #156                // InterfaceMethod cats/kernel/Eq.neqv$mcD$sp$:(Lcats/kernel/Eq;DD)Z
+         6: ireturn
+
+  public boolean neqv$mcF$sp(float, float);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: fload_2
+         3: invokestatic  #160                // InterfaceMethod cats/kernel/Eq.neqv$mcF$sp$:(Lcats/kernel/Eq;FF)Z
+         6: ireturn
+
+  public boolean neqv$mcI$sp(int, int);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #164                // InterfaceMethod cats/kernel/Eq.neqv$mcI$sp$:(Lcats/kernel/Eq;II)Z
+         6: ireturn
+
+  public boolean neqv$mcJ$sp(long, long);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: lload_3
+         3: invokestatic  #168                // InterfaceMethod cats/kernel/Eq.neqv$mcJ$sp$:(Lcats/kernel/Eq;JJ)Z
+         6: ireturn
+
+  public boolean neqv$mcS$sp(short, short);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: iload_2
+         3: invokestatic  #172                // InterfaceMethod cats/kernel/Eq.neqv$mcS$sp$:(Lcats/kernel/Eq;SS)Z
+         6: ireturn
+
+  public boolean neqv$mcV$sp(scala.runtime.BoxedUnit, scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #176                // InterfaceMethod cats/kernel/Eq.neqv$mcV$sp$:(Lcats/kernel/Eq;Lscala/runtime/BoxedUnit;Lscala/runtime/BoxedUnit;)Z
+         6: ireturn
+
+  public int hash(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #184                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #187                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.hashPerson:(Lhearth/kindlings/benchmarks/Person;)I
+         7: ireturn
+
+  public boolean eqv(hearth.kindlings.benchmarks.Person, hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #184                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: aload_2
+         5: invokevirtual #193                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.eqvPerson:(Lhearth/kindlings/benchmarks/Person;Lhearth/kindlings/benchmarks/Person;)Z
+         8: ireturn
+
+  public boolean eqv(java.lang.Object, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #195                // class hearth/kindlings/benchmarks/Person
+         5: aload_2
+         6: checkcast     #195                // class hearth/kindlings/benchmarks/Person
+         9: invokevirtual #197                // Method eqv:(Lhearth/kindlings/benchmarks/Person;Lhearth/kindlings/benchmarks/Person;)Z
+        12: ireturn
+
+  public int hash(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #195                // class hearth/kindlings/benchmarks/Person
+         5: invokevirtual #200                // Method hash:(Lhearth/kindlings/benchmarks/Person;)I
+         8: ireturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$5();
+    Code:
+         0: aload_0
+         1: invokespecial #204                // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: invokestatic  #208                // InterfaceMethod cats/kernel/Eq.$init$:(Lcats/kernel/Eq;)V
+         8: return
+}
+
+=== AnonClassInstances$$anon$6 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$6 implements io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> {
+  public final <B> io.circe.Encoder<B> contramap(scala.Function1<B, hearth.kindlings.benchmarks.SimpleCC>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #18                 // InterfaceMethod io/circe/Encoder.contramap$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public final io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> mapJson(scala.Function1<io.circe.Json, io.circe.Json>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #26                 // InterfaceMethod io/circe/Encoder.mapJson$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public io.circe.Json apply(hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #35                 // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #38                 // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodeSimpleCC:(Lhearth/kindlings/benchmarks/SimpleCC;)Lio/circe/Json;
+         7: areturn
+
+  public io.circe.Json apply(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #42                 // class hearth/kindlings/benchmarks/SimpleCC
+         5: invokevirtual #44                 // Method apply:(Lhearth/kindlings/benchmarks/SimpleCC;)Lio/circe/Json;
+         8: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$6();
+    Code:
+         0: aload_0
+         1: invokespecial #49                 // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: invokestatic  #53                 // InterfaceMethod io/circe/Encoder.$init$:(Lio/circe/Encoder;)V
+         8: return
+}
+
+=== AnonClassInstances$$anon$7 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$7 implements io.circe.Encoder<hearth.kindlings.benchmarks.Person> {
+  public final <B> io.circe.Encoder<B> contramap(scala.Function1<B, hearth.kindlings.benchmarks.Person>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #18                 // InterfaceMethod io/circe/Encoder.contramap$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public final io.circe.Encoder<hearth.kindlings.benchmarks.Person> mapJson(scala.Function1<io.circe.Json, io.circe.Json>);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: invokestatic  #26                 // InterfaceMethod io/circe/Encoder.mapJson$:(Lio/circe/Encoder;Lscala/Function1;)Lio/circe/Encoder;
+         5: areturn
+
+  public io.circe.Json apply(hearth.kindlings.benchmarks.Person);
+    Code:
+         0: getstatic     #35                 // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: invokevirtual #38                 // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodePerson:(Lhearth/kindlings/benchmarks/Person;)Lio/circe/Json;
+         7: areturn
+
+  public io.circe.Json apply(java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #42                 // class hearth/kindlings/benchmarks/Person
+         5: invokevirtual #44                 // Method apply:(Lhearth/kindlings/benchmarks/Person;)Lio/circe/Json;
+         8: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$7();
+    Code:
+         0: aload_0
+         1: invokespecial #49                 // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: invokestatic  #53                 // InterfaceMethod io/circe/Encoder.$init$:(Lio/circe/Encoder;)V
+         8: return
+}
+
+=== AnonClassInstances$$anon$8 ===
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$$anon$8 implements com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<hearth.kindlings.benchmarks.SimpleCC> {
+  public boolean decodeValue$mcZ$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, boolean);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokestatic  #18                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcZ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;Z)Z
+         6: ireturn
+
+  public byte decodeValue$mcB$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, byte);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokestatic  #28                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcB$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;B)B
+         6: ireturn
+
+  public char decodeValue$mcC$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, char);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokestatic  #35                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcC$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;C)C
+         6: ireturn
+
+  public double decodeValue$mcD$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, double);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: dload_2
+         3: invokestatic  #42                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcD$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;D)D
+         6: dreturn
+
+  public float decodeValue$mcF$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, float);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: fload_2
+         3: invokestatic  #49                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcF$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;F)F
+         6: freturn
+
+  public int decodeValue$mcI$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, int);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokestatic  #56                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcI$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;I)I
+         6: ireturn
+
+  public long decodeValue$mcJ$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, long);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: lload_2
+         3: invokestatic  #63                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcJ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;J)J
+         6: lreturn
+
+  public short decodeValue$mcS$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, short);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: iload_2
+         3: invokestatic  #70                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcS$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;S)S
+         6: ireturn
+
+  public void decodeValue$mcV$sp(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, scala.runtime.BoxedUnit);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #77                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.decodeValue$mcV$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;Lscala/runtime/BoxedUnit;)V
+         6: return
+
+  public void encodeValue$mcZ$sp(boolean, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: aload_2
+         3: invokestatic  #86                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcZ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;ZLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcB$sp(byte, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: aload_2
+         3: invokestatic  #93                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcB$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;BLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcC$sp(char, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: aload_2
+         3: invokestatic  #99                 // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcC$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;CLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcD$sp(double, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: dload_1
+         2: aload_3
+         3: invokestatic  #105                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcD$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;DLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcF$sp(float, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: fload_1
+         2: aload_2
+         3: invokestatic  #111                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcF$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;FLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcI$sp(int, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: aload_2
+         3: invokestatic  #117                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcI$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;ILcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcJ$sp(long, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: lload_1
+         2: aload_3
+         3: invokestatic  #123                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcJ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;JLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcS$sp(short, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: iload_1
+         2: aload_2
+         3: invokestatic  #129                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcS$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;SLcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public void encodeValue$mcV$sp(scala.runtime.BoxedUnit, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: invokestatic  #135                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.encodeValue$mcV$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;Lscala/runtime/BoxedUnit;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         6: return
+
+  public boolean nullValue$mcZ$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #141                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcZ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)Z
+         4: ireturn
+
+  public byte nullValue$mcB$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #147                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcB$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)B
+         4: ireturn
+
+  public char nullValue$mcC$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #153                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcC$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)C
+         4: ireturn
+
+  public double nullValue$mcD$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #159                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcD$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)D
+         4: dreturn
+
+  public float nullValue$mcF$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #165                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcF$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)F
+         4: freturn
+
+  public int nullValue$mcI$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #171                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcI$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)I
+         4: ireturn
+
+  public long nullValue$mcJ$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #177                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcJ$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)J
+         4: lreturn
+
+  public short nullValue$mcS$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #183                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcS$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)S
+         4: ireturn
+
+  public void nullValue$mcV$sp();
+    Code:
+         0: aload_0
+         1: invokestatic  #189                // InterfaceMethod com/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec.nullValue$mcV$sp$:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;)V
+         4: return
+
+  public hearth.kindlings.benchmarks.SimpleCC nullValue();
+    Code:
+         0: aconst_null
+         1: areturn
+
+  public hearth.kindlings.benchmarks.SimpleCC decodeValue(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, hearth.kindlings.benchmarks.SimpleCC);
+    Code:
+         0: getstatic     #199                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: aload_2
+         5: invokevirtual #202                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.decodeSimpleCCJsoniter:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;Lhearth/kindlings/benchmarks/SimpleCC;)Lhearth/kindlings/benchmarks/SimpleCC;
+         8: areturn
+
+  public void encodeValue(hearth.kindlings.benchmarks.SimpleCC, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: getstatic     #199                // Field hearth/kindlings/benchmarks/HandWrittenImpls$.MODULE$:Lhearth/kindlings/benchmarks/HandWrittenImpls$;
+         3: aload_1
+         4: aload_2
+         5: invokevirtual #208                // Method hearth/kindlings/benchmarks/HandWrittenImpls$.encodeSimpleCCJsoniter:(Lhearth/kindlings/benchmarks/SimpleCC;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         8: return
+
+  public void encodeValue(java.lang.Object, com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: checkcast     #211                // class hearth/kindlings/benchmarks/SimpleCC
+         5: aload_2
+         6: invokevirtual #213                // Method encodeValue:(Lhearth/kindlings/benchmarks/SimpleCC;Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonWriter;)V
+         9: return
+
+  public java.lang.Object decodeValue(com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, java.lang.Object);
+    Code:
+         0: aload_0
+         1: aload_1
+         2: aload_2
+         3: checkcast     #211                // class hearth/kindlings/benchmarks/SimpleCC
+         6: invokevirtual #217                // Method decodeValue:(Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonReader;Lhearth/kindlings/benchmarks/SimpleCC;)Lhearth/kindlings/benchmarks/SimpleCC;
+         9: areturn
+
+  public java.lang.Object nullValue();
+    Code:
+         0: aload_0
+         1: invokevirtual #220                // Method nullValue:()Lhearth/kindlings/benchmarks/SimpleCC;
+         4: areturn
+
+  public hearth.kindlings.benchmarks.AnonClassInstances$$anon$8();
+    Code:
+         0: aload_0
+         1: invokespecial #223                // Method java/lang/Object."<init>":()V
+         4: return
+}
+
