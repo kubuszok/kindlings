@@ -89,16 +89,16 @@ trait DecoderMacrosImpl
             Expr.quote {
               val cfg = Expr.splice(configVal)
               val sch = Expr.splice(schemaExpr)
-              (new AvroDecoder[A] {
-                val schema: Schema = sch
-                def decode(value: Any): A = {
+              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.decoderInstance[A](
+                sch,
+                (value: Any) => {
                   val _ = value
                   val _ = cfg
                   Expr.splice {
                     fromCtx(DecoderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType))
                   }
                 }
-              }): AvroDecoder[A]
+              )): AvroDecoder[A]
             }
           }
         }
@@ -408,13 +408,13 @@ trait DecoderMacrosImpl
             val configExpr: Expr[AvroConfig] = ctx.config
             Expr.quote {
               val sch = Expr.splice(schemaExpr)
-              new AvroDecoder[Field] {
-                val schema: Schema = sch
-                def decode(value: Any): Field = {
+              hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.decoderInstance[Field](
+                sch,
+                (value: Any) => {
                   val _ = value
                   Expr.splice(callerFn(Expr.quote(value), configExpr))
                 }
-              }
+              )
             }
           }
         }

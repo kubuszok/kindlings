@@ -37,13 +37,12 @@ trait ReaderMacrosImpl
       ValDefs.createVal[SConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new ConfigReader[A] {
-            def from(value: ConfigValue): Either[ConfigDecodingError, A] = {
+          hearth.kindlings.sconfigderivation.internal.runtime.SconfigDerivationFactories.readerInstance[A] {
+            (value: ConfigValue) =>
               val _ = value
               Expr.splice {
                 fromCtx(ReaderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType))
               }
-            }
           }
         }
       }
