@@ -85,16 +85,16 @@ trait EncoderMacrosImpl
             Expr.quote {
               val cfg = Expr.splice(configVal)
               val sch = Expr.splice(schemaExpr)
-              (new AvroEncoder[A] {
-                val schema: Schema = sch
-                def encode(value: A): Any = {
+              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.encoderInstance[A](
+                sch,
+                (value: A) => {
                   val _ = value
                   val _ = cfg
                   Expr.splice {
                     fromCtx(EncoderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType))
                   }
                 }
-              }): AvroEncoder[A]
+              )): AvroEncoder[A]
             }
           }
         }

@@ -66,11 +66,11 @@ trait SchemaForMacrosImpl
       ValDefs.createVal[AvroConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new AvroSchemaFor[A] {
-            val schema: Schema = Expr.splice {
+          hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.schemaForInstance[A](
+            Expr.splice {
               fromCtx(SchemaForCtx.from[A](Expr.quote(cfg), derivedType = selfType))
             }
-          }
+          )
         }
       }
     }

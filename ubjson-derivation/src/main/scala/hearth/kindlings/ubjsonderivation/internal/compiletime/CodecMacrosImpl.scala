@@ -47,13 +47,11 @@ trait CodecMacrosImpl
     deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]]("UBJsonValueCodec.derived") {
       case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
-          new UBJsonValueCodec[A] {
-            def nullValue: A = Expr.splice(nullValueExpr)
-            def decode(reader: UBJsonReader): A =
-              Expr.splice(decodeFn(Expr.quote(reader), configExpr))
-            def encode(writer: UBJsonWriter, value: A): Unit =
-              Expr.splice(encodeFn(Expr.quote(value), Expr.quote(writer), configExpr))
-          }
+          hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationFactories.codecInstance[A](
+            Expr.splice(nullValueExpr),
+            (reader: UBJsonReader) => Expr.splice(decodeFn(Expr.quote(reader), configExpr)),
+            (writer: UBJsonWriter, value: A) => Expr.splice(encodeFn(Expr.quote(value), Expr.quote(writer), configExpr))
+          )
         }
     }
   }
