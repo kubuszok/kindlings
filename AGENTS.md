@@ -98,6 +98,11 @@ The most load-bearing entries to keep in mind for any macro work:
   `def`s.** Use `ValDefBuilder.ofLazy` for summoned/standalone instances and
   `ValDefBuilder.ofDef*` (with `cache.forwardDeclare` + `cache.buildCachedWith`) for
   recursive helpers.
+- **Use factory methods instead of anonymous classes for final instances.** See
+  `docs/contributing/factory-instance-pattern-skill.md`. For monomorphic type classes
+  (kind `*`), use lambda factories. For polymorphic type classes (kind `* → *`), use the
+  erasure-based factory with `Witness1`/`Witness2` witness types. Factory methods live in
+  each module's `internal/runtime/` package. Issue `kubuszok/kindlings#86`.
 
 ## Configurable derivation timeout
 
@@ -133,6 +138,11 @@ See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as refer
 - `jsoniter-derivation/CodecMacrosImpl.scala` — reference for **combined codec** (encoder + decoder, `LambdaBuilder` pattern)
 
 Also in `type-class-derivation-skill.md`: "Implementing a new module", "Debugging derivation", "Syncing from Hearth", "Polymorphic (HKT) type class derivation".
+
+### Factory instance pattern — follow `docs/contributing/factory-instance-pattern-skill.md`
+
+When generating the final `new TypeClass[A] { ... }` expression, use factory methods + lambdas
+instead of anonymous classes. Benchmark data: `docs/research/anon-vs-lambda/analysis.md`.
 
 ### Cats type class derivation — `cats-derivation/` module
 

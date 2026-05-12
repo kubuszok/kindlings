@@ -42,13 +42,12 @@ trait WriterMacrosImpl
       ValDefs.createVal[PureConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsConfigWriter[A] {
-            def to(a: A): ConfigValue = {
+          hearth.kindlings.pureconfigderivation.internal.runtime.PureconfigDerivationFactories.writerInstance[A] {
+            (a: A) =>
               val _ = a
               Expr.splice {
                 fromCtx(WriterCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
               }
-            }
           }
         }
       }

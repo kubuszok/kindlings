@@ -70,35 +70,74 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
             Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
           }
 
+          implicit val AnyType: Type[Any] = FoldableTypes.Any
+          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+          implicit val EvalAnyType: Type[cats.Eval[Any]] = FoldableTypes.EvalCtor.apply[Any]
+
+          val ccAny = CaseClass.parse[F[Any]].toEither match {
+            case Right(cc) => cc
+            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Any]: $e")
+          }
+
+          val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+            (faExpr, bExpr, fExpr) =>
+              runSafe {
+                val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                val directFieldExprs: List[Expr[Any]] = fields.collect {
+                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                    import fieldValue.Underlying as Field
+                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                }
+                val result = directFieldExprs.foldLeft(bExpr) { (acc, fieldExpr) =>
+                  Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
+                }
+                MIO.pure(result)
+              }
+
+          val doFoldRight: (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+            cats.Eval[Any]
+          ] =
+            (faExpr, lbExpr, fExpr) =>
+              runSafe {
+                val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                val directFieldExprs: List[Expr[Any]] = fields.collect {
+                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                    import fieldValue.Underlying as Field
+                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                }
+                val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
+                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                }
+                MIO.pure(result)
+              }
+
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new cats.Foldable[F] {
-              def foldLeft[A, B](fa: F[A], b: B)(f: (B, A) => B): B =
-                Expr.splice {
-                  runSafe {
-                    deriveFoldLeftBody[F, A, B](
-                      FCtor,
-                      directFieldSet,
-                      Expr.quote(fa),
-                      Expr.quote(b),
-                      Expr.quote(f)
-                    )(Type.of[A], Type.of[B])
-                  }
-                }
-              def foldRight[A, B](fa: F[A], lb: cats.Eval[B])(
-                  f: (A, cats.Eval[B]) => cats.Eval[B]
-              ): cats.Eval[B] =
-                Expr.splice {
-                  runSafe {
-                    deriveFoldRightBody[F, A, B](
-                      FCtor,
-                      directFieldSet,
-                      Expr.quote(fa),
-                      Expr.quote(lb),
-                      Expr.quote(f)
-                    )(Type.of[A], Type.of[B])
-                  }
-                }
-            }
+            CatsDerivationFactories.foldableInstance[F](
+              foldLeftFn = { (fa: F[CatsDerivationFactories.W1], bAny: Any, fAny: (Any, Any) => Any) =>
+                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                val _ = anyFa
+                val _ = bAny
+                val _ = fAny
+                Expr
+                  .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(bAny), Expr.quote(fAny)))
+                  .asInstanceOf[Any]
+              },
+              foldRightFn = {
+                (
+                    fa: F[CatsDerivationFactories.W1],
+                    lbAny: cats.Eval[Any],
+                    fAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                ) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFa
+                  val _ = lbAny
+                  val _ = fAny
+                  Expr
+                    .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(lbAny), Expr.quote(fAny)))
+                    .asInstanceOf[cats.Eval[Any]]
+              }
+            )
           }
         }
       }
@@ -115,65 +154,6 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }
-  }
-
-  @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
-  private def deriveFoldLeftBody[F[_], A, B](
-      FCtor: Type.Ctor1[F],
-      directFields: Set[String],
-      faExpr: Expr[F[A]],
-      bExpr: Expr[B],
-      fExpr: Expr[(B, A) => B]
-  )(implicit AType: Type[A], BType: Type[B]): MIO[Expr[B]] = {
-    implicit val FAType: Type[F[A]] = FCtor.apply[A]
-
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
-
-    val directFieldExprs: List[Expr[A]] = fields.collect {
-      case (fieldName, fieldValue) if directFields.contains(fieldName) =>
-        import fieldValue.Underlying as Field
-        fieldValue.value.asInstanceOf[Expr[Field]].asInstanceOf[Expr[A]]
-    }
-
-    val result = directFieldExprs.foldLeft(bExpr) { (acc, fieldExpr) =>
-      Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
-    }
-
-    MIO.pure(result)
-  }
-
-  @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
-  private def deriveFoldRightBody[F[_], A, B](
-      FCtor: Type.Ctor1[F],
-      directFields: Set[String],
-      faExpr: Expr[F[A]],
-      lbExpr: Expr[cats.Eval[B]],
-      fExpr: Expr[(A, cats.Eval[B]) => cats.Eval[B]]
-  )(implicit AType: Type[A], BType: Type[B]): MIO[Expr[cats.Eval[B]]] = {
-    implicit val FAType: Type[F[A]] = FCtor.apply[A]
-    implicit val EvalBType: Type[cats.Eval[B]] = FoldableTypes.EvalCtor.apply[B]
-
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
-
-    val directFieldExprs: List[Expr[A]] = fields.collect {
-      case (fieldName, fieldValue) if directFields.contains(fieldName) =>
-        import fieldValue.Underlying as Field
-        fieldValue.value.asInstanceOf[Expr[Field]].asInstanceOf[Expr[A]]
-    }
-
-    val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
-      Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
-    }
-
-    MIO.pure(result)
   }
 
   protected object FoldableTypes {

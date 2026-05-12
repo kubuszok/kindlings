@@ -101,17 +101,10 @@ trait DecoderMacrosImpl
       ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsYamlDecoder[A] {
-            def construct(
-                node: Node
-            )(implicit
-                settings: org.virtuslab.yaml.LoadSettings = org.virtuslab.yaml.LoadSettings.empty
-            ): Either[ConstructError, A] = {
-              val _ = node
-              val _ = settings
-              Expr.splice {
-                fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = selfType))
-              }
+          hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.decoderInstance[A] { (node: Node) =>
+            val _ = node
+            Expr.splice {
+              fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = selfType))
             }
           }
         }

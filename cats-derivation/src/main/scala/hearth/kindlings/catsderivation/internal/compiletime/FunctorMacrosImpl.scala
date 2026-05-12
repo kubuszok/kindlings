@@ -41,21 +41,26 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
   protected def deriveFunctorForCaseClass[F[_]](
       result: FunctorCaseClassResult[F],
       runSafe: hearth.fp.DirectStyle.RunSafe[hearth.fp.effect.MIO]
-  )(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] =
+  )(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] = {
+    import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
     Expr.quote {
-      new cats.Functor[F] {
-        def map[A, B](fa: F[A])(f: A => B): F[B] =
+      CatsDerivationFactories.functorInstance[F] {
+        (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+          val _ = fa
+          val _ = f
           Expr.splice {
-            val body: MIO[Expr[F[B]]] = deriveFunctorMapBody[F, A, B](
-              result.FCtor,
-              result.directFieldSet,
-              Expr.quote(fa),
-              Expr.quote(f)
-            )(Type.of[A], Type.of[B])
+            val body: MIO[Expr[F[CatsDerivationFactories.W2]]] =
+              deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                result.FCtor,
+                result.directFieldSet,
+                Expr.quote(fa),
+                Expr.quote(f)
+              )(Type.of[CatsDerivationFactories.W1], Type.of[CatsDerivationFactories.W2])
             runSafe(body)
           }
       }
     }
+  }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   def deriveFunctor[F[_]](FCtor0: Type.Ctor1[F], FunctorFType: Type[cats.Functor[F]]): Expr[cats.Functor[F]] = {

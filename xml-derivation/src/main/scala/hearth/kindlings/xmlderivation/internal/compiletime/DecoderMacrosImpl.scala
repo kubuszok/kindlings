@@ -128,8 +128,8 @@ trait DecoderMacrosImpl
               // Type has a cached def — call it directly (no lambda allocation)
               cache.toValDefs.use { _ =>
                 Expr.quote {
-                  new KindlingsXmlDecoder[A] {
-                    def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] =
+                  hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.decoderInstance[A] {
+                    (elem: scala.xml.Elem) =>
                       Expr.splice(helper(Expr.quote(elem), configExpr))
                   }
                 }
@@ -148,13 +148,12 @@ trait DecoderMacrosImpl
                     } yield freshCache.toValDefs.use(_ => result)
                   }
               Expr.quote {
-                new KindlingsXmlDecoder[A] {
-                  def decode(elem: scala.xml.Elem): Either[XmlDecodingError, A] = {
+                hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.decoderInstance[A] {
+                  (elem: scala.xml.Elem) =>
                     val _ = elem
                     Expr.splice {
                       fromCtx(DecoderCtx.from[A](Expr.quote(elem), configExpr, derivedType = selfType))
                     }
-                  }
                 }
               }
           }

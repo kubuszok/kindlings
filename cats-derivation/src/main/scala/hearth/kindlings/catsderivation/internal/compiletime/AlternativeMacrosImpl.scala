@@ -98,41 +98,55 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
               deriveAltCombineKBody[F](caseClassAny, xExpr, yExpr)
             }
 
+          val doPure: Expr[Any] => Expr[F[Any]] =
+            (aExpr: Expr[Any]) => runSafe(deriveAltPureBody[F, Any](FCtor, directFieldSet, aExpr)(AnyType))
+
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new cats.Alternative[F] {
-              def empty[A]: F[A] = Expr.splice(doEmpty).asInstanceOf[F[A]]
-              def pure[A](a: A): F[A] =
-                Expr.splice {
-                  runSafe {
-                    deriveAltPureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(
-                      Type.of[A]
-                    )
+            CatsDerivationFactories.alternativeInstance[F](
+              pureFn = { (aAny: Any) =>
+                val _ = aAny
+                Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
+              },
+              mapFn = {
+                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                  val _ = fa
+                  val _ = f
+                  Expr.splice {
+                    runSafe {
+                      deriveAltMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                        FCtor,
+                        directFieldSet,
+                        Expr.quote(fa),
+                        Expr.quote(f)
+                      )(
+                        Type.of[CatsDerivationFactories.W1],
+                        Type.of[CatsDerivationFactories.W2]
+                      )
+                    }
                   }
-                }
-              override def map[A, B](fa: F[A])(f: A => B): F[B] =
-                Expr.splice {
-                  runSafe {
-                    deriveAltMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
-                      Type.of[A],
-                      Type.of[B]
-                    )
-                  }
-                }
-              def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
-                val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFf
-                val _ = anyFa
-                Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
-              }
-              def combineK[A](x: F[A], y: F[A]): F[A] = {
+              },
+              apFn = {
+                (ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2], fa: F[CatsDerivationFactories.W1]) =>
+                  val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFf
+                  val _ = anyFa
+                  Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
+              },
+              emptyKFn = { () =>
+                Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+              },
+              combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
                 val anyX: F[Any] = x.asInstanceOf[F[Any]]
                 val anyY: F[Any] = y.asInstanceOf[F[Any]]
                 val _ = anyX
                 val _ = anyY
-                Expr.splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY))).asInstanceOf[F[A]]
+                Expr
+                  .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
+                  .asInstanceOf[F[CatsDerivationFactories.W1]]
               }
-            }
+            )
           }
         }
       }

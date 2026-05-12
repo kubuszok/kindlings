@@ -95,14 +95,28 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
             Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
           }
 
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new cats.Invariant[F] {
-              def imap[A, B](fa: F[A])(f: A => B)(g: B => A): F[B] =
+            CatsDerivationFactories.invariantInstance[F] {
+              (
+                  fa: F[CatsDerivationFactories.W1],
+                  f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2,
+                  g: CatsDerivationFactories.W2 => CatsDerivationFactories.W1
+              ) =>
+                val _ = fa
+                val _ = f
+                val _ = g
                 Expr.splice {
                   runSafe {
-                    deriveImapBody[F, A, B](FCtor, fieldKindsMap, Expr.quote(fa), Expr.quote(f), Expr.quote(g))(
-                      Type.of[A],
-                      Type.of[B]
+                    deriveImapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                      FCtor,
+                      fieldKindsMap,
+                      Expr.quote(fa),
+                      Expr.quote(f),
+                      Expr.quote(g)
+                    )(
+                      Type.of[CatsDerivationFactories.W1],
+                      Type.of[CatsDerivationFactories.W2]
                     )
                   }
                 }

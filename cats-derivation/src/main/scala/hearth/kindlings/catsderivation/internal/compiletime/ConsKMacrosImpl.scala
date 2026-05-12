@@ -95,15 +95,15 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
                   } yield result
                 }
 
+              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
               Expr.quote {
-                new alleycats.ConsK[F] {
-                  def cons[A](hd: A, tl: F[A]): F[A] = {
-                    val anyHd: Any = hd.asInstanceOf[Any]
-                    val anyTl: F[Any] = tl.asInstanceOf[F[Any]]
-                    val _ = anyHd
-                    val _ = anyTl
-                    Expr.splice(doCons(Expr.quote(anyHd), Expr.quote(anyTl))).asInstanceOf[F[A]]
-                  }
+                CatsDerivationFactories.consKInstance[F] { (anyHd: Any, tl: F[CatsDerivationFactories.W1]) =>
+                  val anyTl: F[Any] = tl.asInstanceOf[F[Any]]
+                  val _ = anyHd
+                  val _ = anyTl
+                  Expr
+                    .splice(doCons(Expr.quote(anyHd), Expr.quote(anyTl)))
+                    .asInstanceOf[F[CatsDerivationFactories.W1]]
                 }
               }
             }

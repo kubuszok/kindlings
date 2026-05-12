@@ -45,13 +45,12 @@ trait ReaderMacrosImpl
       ValDefs.createVal[PureConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          new KindlingsConfigReader[A] {
-            def from(cur: ConfigCursor): Either[ConfigReaderFailures, A] = {
+          hearth.kindlings.pureconfigderivation.internal.runtime.PureconfigDerivationFactories.readerInstance[A] {
+            (cur: ConfigCursor) =>
               val _ = cur
               Expr.splice {
                 fromCtx(ReaderCtx.from(Expr.quote(cur), Expr.quote(cfg), derivedType = selfType))
               }
-            }
           }
         }
       }

@@ -1,0 +1,106 @@
+Compiled from "AnonClassInstances.scala"
+public final class hearth.kindlings.benchmarks.AnonClassInstances$ {
+  public static final hearth.kindlings.benchmarks.AnonClassInstances$ MODULE$;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.SimpleCC> showSimpleCC;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.Person> showPerson;
+
+  private static final cats.Show<hearth.kindlings.benchmarks.Event> showEvent;
+
+  private static final cats.kernel.Hash<hearth.kindlings.benchmarks.SimpleCC> hashSimpleCC;
+
+  private static final cats.kernel.Hash<hearth.kindlings.benchmarks.Person> hashPerson;
+
+  private static final io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> encoderSimpleCC;
+
+  private static final io.circe.Encoder<hearth.kindlings.benchmarks.Person> encoderPerson;
+
+  private static final com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<hearth.kindlings.benchmarks.SimpleCC> codecSimpleCC;
+
+  public static {};
+    Code:
+         0: new           #2                  // class hearth/kindlings/benchmarks/AnonClassInstances$
+         3: dup
+         4: invokespecial #48                 // Method "<init>":()V
+         7: putstatic     #50                 // Field MODULE$:Lhearth/kindlings/benchmarks/AnonClassInstances$;
+        10: new           #7                  // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$1
+        13: dup
+        14: invokespecial #51                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$1."<init>":()V
+        17: putstatic     #53                 // Field showSimpleCC:Lcats/Show;
+        20: new           #9                  // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$2
+        23: dup
+        24: invokespecial #54                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$2."<init>":()V
+        27: putstatic     #56                 // Field showPerson:Lcats/Show;
+        30: new           #11                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$3
+        33: dup
+        34: invokespecial #57                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$3."<init>":()V
+        37: putstatic     #59                 // Field showEvent:Lcats/Show;
+        40: new           #13                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$4
+        43: dup
+        44: invokespecial #60                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$4."<init>":()V
+        47: putstatic     #62                 // Field hashSimpleCC:Lcats/kernel/Hash;
+        50: new           #15                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$5
+        53: dup
+        54: invokespecial #63                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$5."<init>":()V
+        57: putstatic     #65                 // Field hashPerson:Lcats/kernel/Hash;
+        60: new           #17                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$6
+        63: dup
+        64: invokespecial #66                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$6."<init>":()V
+        67: putstatic     #68                 // Field encoderSimpleCC:Lio/circe/Encoder;
+        70: new           #19                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$7
+        73: dup
+        74: invokespecial #69                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$7."<init>":()V
+        77: putstatic     #71                 // Field encoderPerson:Lio/circe/Encoder;
+        80: new           #21                 // class hearth/kindlings/benchmarks/AnonClassInstances$$anon$8
+        83: dup
+        84: invokespecial #72                 // Method hearth/kindlings/benchmarks/AnonClassInstances$$anon$8."<init>":()V
+        87: putstatic     #74                 // Field codecSimpleCC:Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;
+        90: return
+
+  public cats.Show<hearth.kindlings.benchmarks.SimpleCC> showSimpleCC();
+    Code:
+         0: getstatic     #53                 // Field showSimpleCC:Lcats/Show;
+         3: areturn
+
+  public cats.Show<hearth.kindlings.benchmarks.Person> showPerson();
+    Code:
+         0: getstatic     #56                 // Field showPerson:Lcats/Show;
+         3: areturn
+
+  public cats.Show<hearth.kindlings.benchmarks.Event> showEvent();
+    Code:
+         0: getstatic     #59                 // Field showEvent:Lcats/Show;
+         3: areturn
+
+  public cats.kernel.Hash<hearth.kindlings.benchmarks.SimpleCC> hashSimpleCC();
+    Code:
+         0: getstatic     #62                 // Field hashSimpleCC:Lcats/kernel/Hash;
+         3: areturn
+
+  public cats.kernel.Hash<hearth.kindlings.benchmarks.Person> hashPerson();
+    Code:
+         0: getstatic     #65                 // Field hashPerson:Lcats/kernel/Hash;
+         3: areturn
+
+  public io.circe.Encoder<hearth.kindlings.benchmarks.SimpleCC> encoderSimpleCC();
+    Code:
+         0: getstatic     #68                 // Field encoderSimpleCC:Lio/circe/Encoder;
+         3: areturn
+
+  public io.circe.Encoder<hearth.kindlings.benchmarks.Person> encoderPerson();
+    Code:
+         0: getstatic     #71                 // Field encoderPerson:Lio/circe/Encoder;
+         3: areturn
+
+  public com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec<hearth.kindlings.benchmarks.SimpleCC> codecSimpleCC();
+    Code:
+         0: getstatic     #74                 // Field codecSimpleCC:Lcom/github/plokhotnyuk/jsoniter_scala/core/JsonValueCodec;
+         3: areturn
+
+  private hearth.kindlings.benchmarks.AnonClassInstances$();
+    Code:
+         0: aload_0
+         1: invokespecial #88                 // Method java/lang/Object."<init>":()V
+         4: return
+}

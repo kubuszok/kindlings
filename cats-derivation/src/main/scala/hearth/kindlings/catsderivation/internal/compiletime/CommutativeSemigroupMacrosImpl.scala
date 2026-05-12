@@ -13,12 +13,11 @@ trait CommutativeSemigroupMacrosImpl extends SemigroupMacrosImpl { this: MacroCo
 
     deriveSemigroupEntrypoint[A, cats.kernel.CommutativeSemigroup[A]](macroName) { doCombine =>
       Expr.quote {
-        new cats.kernel.CommutativeSemigroup[A] {
-          def combine(x: A, y: A): A = {
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.commutativeSemigroupInstance[A] {
+          (x: A, y: A) =>
             val _ = x
             val _ = y
             Expr.splice(doCombine(Expr.quote(x), Expr.quote(y)))
-          }
         }
       }
     }

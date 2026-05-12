@@ -99,14 +99,22 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons
             Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
           }
 
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
           Expr.quote {
-            new cats.Contravariant[F] {
-              def contramap[A, B](fa: F[A])(f: B => A): F[B] =
+            CatsDerivationFactories.contravariantInstance[F] {
+              (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W2 => CatsDerivationFactories.W1) =>
+                val _ = fa
+                val _ = f
                 Expr.splice {
                   runSafe {
-                    deriveContramapBody[F, A, B](FCtor, contravariantFieldSet, Expr.quote(fa), Expr.quote(f))(
-                      Type.of[A],
-                      Type.of[B]
+                    deriveContramapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                      FCtor,
+                      contravariantFieldSet,
+                      Expr.quote(fa),
+                      Expr.quote(f)
+                    )(
+                      Type.of[CatsDerivationFactories.W1],
+                      Type.of[CatsDerivationFactories.W2]
                     )
                   }
                 }

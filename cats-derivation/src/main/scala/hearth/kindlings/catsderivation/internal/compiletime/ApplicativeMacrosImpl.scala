@@ -53,29 +53,40 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with Cats
     val caseClass = result.caseClass
     val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
       runSafe(deriveApplicativeApBody[F](caseClass, directFieldSet, ffExpr, faExpr))
+    val doPure: Expr[Any] => Expr[F[Any]] = (aExpr: Expr[Any]) =>
+      runSafe(deriveApplicativePureBody[F, Any](FCtor, directFieldSet, aExpr)(AnyType))
+    import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
     Expr.quote {
-      new cats.Applicative[F] {
-        def pure[A](a: A): F[A] =
-          Expr.splice {
-            runSafe(deriveApplicativePureBody[F, A](FCtor, directFieldSet, Expr.quote(a))(Type.of[A]))
-          }
-        override def map[A, B](fa: F[A])(f: A => B): F[B] =
+      CatsDerivationFactories.applicativeInstance[F](
+        pureFn = { (aAny: Any) =>
+          val _ = aAny
+          Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
+        },
+        mapFn = { (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+          val _ = fa
+          val _ = f
           Expr.splice {
             runSafe {
-              deriveApplicativeMapBody[F, A, B](FCtor, directFieldSet, Expr.quote(fa), Expr.quote(f))(
-                Type.of[A],
-                Type.of[B]
+              deriveApplicativeMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                FCtor,
+                directFieldSet,
+                Expr.quote(fa),
+                Expr.quote(f)
+              )(
+                Type.of[CatsDerivationFactories.W1],
+                Type.of[CatsDerivationFactories.W2]
               )
             }
           }
-        def ap[A, B](ff: F[A => B])(fa: F[A]): F[B] = {
+        },
+        apFn = { (ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2], fa: F[CatsDerivationFactories.W1]) =>
           val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
           val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
           val _ = anyFf
           val _ = anyFa
-          Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[B]]
+          Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
         }
-      }
+      )
     }
   }
 

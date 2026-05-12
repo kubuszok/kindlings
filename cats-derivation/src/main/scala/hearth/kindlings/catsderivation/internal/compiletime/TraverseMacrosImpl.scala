@@ -93,12 +93,6 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
                 deriveReconstructFromList[F](caseClass, directFieldSet)
               }
 
-              // Map body (same as Functor)
-              val doMap: (Expr[F[Any]], Expr[Any => Any]) => Expr[F[Any]] = (faExpr, fExpr) =>
-                runSafe {
-                  deriveTraverseMapBody[F](caseClass, directFieldSet, faExpr, fExpr)
-                }
-
               // FoldLeft body (same as Foldable)
               val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
                 (faExpr, bExpr, fExpr) =>
@@ -116,62 +110,53 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
                     deriveTraverseFoldRightBody[F](caseClass, directFieldSet, faExpr, lbExpr, fExpr)
                   }
 
+              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
               Expr.quote {
-                new cats.Traverse[F] {
-                  def traverse[G[_], A, B](fa: F[A])(f: A => G[B])(implicit
-                      G: cats.Applicative[G]
-                  ): G[F[B]] = {
+                CatsDerivationFactories.traverseInstance[F](
+                  traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
                     val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
+                    val G = gAny.asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
                     val _ = anyFa
+                    val _ = f
+                    val _ = G
                     val extract: Any => List[Any] = Expr.splice(extractDirect)
                     val _ = extract
                     val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
                     val _ = recon
                     val directValues: List[Any] = extract(anyFa)
-                    val gList: G[List[Any]] =
+                    val gList: CatsDerivationFactories.AnyF[List[Any]] =
                       directValues.foldRight(G.pure(Nil: List[Any])) { (v, gacc) =>
-                        G.map2(f(v.asInstanceOf[A]).asInstanceOf[G[Any]], gacc) { (a, acc) =>
-                          (a: Any) :: acc
+                        G.map2[Any, List[Any], List[Any]](f(v), gacc) { (a, acc) =>
+                          a :: acc
                         }
                       }
-                    G.map(gList)(newVals => recon(newVals, anyFa)).asInstanceOf[G[F[B]]]
-                  }
-
-                  override def map[A, B](fa: F[A])(f: A => B): F[B] = {
+                    G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFa))
+                  },
+                  foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
                     val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyF: Any => Any = f.asInstanceOf[Any => Any]
-                    val _ = anyFa
-                    val _ = anyF
-                    Expr.splice(doMap(Expr.quote(anyFa), Expr.quote(anyF))).asInstanceOf[F[B]]
-                  }
-
-                  def foldLeft[A, B](fa: F[A], b: B)(f: (B, A) => B): B = {
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyB: Any = b.asInstanceOf[Any]
-                    val anyF: (Any, Any) => Any = f.asInstanceOf[(Any, Any) => Any]
                     val _ = anyFa
                     val _ = anyB
                     val _ = anyF
                     Expr
                       .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF)))
-                      .asInstanceOf[B]
+                      .asInstanceOf[Any]
+                  },
+                  foldRightFn = {
+                    (
+                        fa: F[CatsDerivationFactories.W1],
+                        anyLb: cats.Eval[Any],
+                        anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                    ) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val _ = anyFa
+                      val _ = anyLb
+                      val _ = anyF
+                      Expr
+                        .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
+                        .asInstanceOf[cats.Eval[Any]]
                   }
-
-                  def foldRight[A, B](fa: F[A], lb: cats.Eval[B])(
-                      f: (A, cats.Eval[B]) => cats.Eval[B]
-                  ): cats.Eval[B] = {
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyLb: cats.Eval[Any] = lb.asInstanceOf[cats.Eval[Any]]
-                    val anyF: (Any, cats.Eval[Any]) => cats.Eval[Any] =
-                      f.asInstanceOf[(Any, cats.Eval[Any]) => cats.Eval[Any]]
-                    val _ = anyFa
-                    val _ = anyLb
-                    val _ = anyF
-                    Expr
-                      .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
-                      .asInstanceOf[cats.Eval[B]]
-                  }
-                }
+                )
               }
             }
           case Left(reason) =>
@@ -258,34 +243,6 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
         }
       }
     MIO.pure(lambda)
-  }
-
-  @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
-  private def deriveTraverseMapBody[F[_]](
-      caseClass: CaseClass[F[Any]],
-      directFields: Set[String],
-      faExpr: Expr[F[Any]],
-      fExpr: Expr[Any => Any]
-  )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
-
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-
-      if (directFields.contains(fieldName)) {
-        val mapped: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
-        (fieldName, mapped.as_??)
-      } else {
-        (fieldName, fieldExpr.as_??)
-      }
-    }
-
-    caseClass.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
-        MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
-    }
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")

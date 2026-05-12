@@ -26,13 +26,11 @@ trait OrderMacrosImpl
 
     deriveOrderEntrypoint[A, cats.kernel.Order[A]](macroName) { fromCtx =>
       Expr.quote {
-        new cats.kernel.Order[A] {
-          def compare(x: A, y: A): Int = {
-            val _ = x
-            val _ = y
-            Expr.splice {
-              fromCtx(OrderCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
-            }
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.orderInstance[A] { (x: A, y: A) =>
+          val _ = x
+          val _ = y
+          Expr.splice {
+            fromCtx(OrderCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
           }
         }
       }

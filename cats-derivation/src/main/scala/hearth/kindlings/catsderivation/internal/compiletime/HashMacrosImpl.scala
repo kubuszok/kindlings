@@ -148,17 +148,17 @@ trait HashMacrosImpl
           cacheState.toValDefs.use { _ =>
             Expr
               .quote {
-                new cats.kernel.Hash[A] {
-                  def hash(value: A): Int = {
+                hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.hashInstance[A](
+                  (value: A) => {
                     val _ = value
                     Expr.splice(hashCallFor(Expr.quote(value)))
-                  }
-                  def eqv(x: A, y: A): Boolean = {
+                  },
+                  (x: A, y: A) => {
                     val _ = x
                     val _ = y
                     Expr.splice(eqCallFor(Expr.quote(x), Expr.quote(y)))
                   }
-                }
+                )
               }
               .asInstanceOf[Expr[cats.kernel.Hash[A]]]
           }

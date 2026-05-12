@@ -30,9 +30,10 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdE
                 } yield result
               }
 
+              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
               Expr.quote {
-                new alleycats.EmptyK[F] {
-                  def empty[A]: F[A] = Expr.splice(doEmpty).asInstanceOf[F[A]]
+                CatsDerivationFactories.emptyKInstance[F] { () =>
+                  Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
                 }
               }
             }

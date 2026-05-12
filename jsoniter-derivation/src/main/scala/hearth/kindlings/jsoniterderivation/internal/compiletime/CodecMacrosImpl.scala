@@ -112,20 +112,20 @@ trait CodecMacrosImpl
     deriveCodecFromCtxAndAdaptForEntrypoint[A, KindlingsJsonValueCodec[A]]("KindlingsJsonValueCodec.derived") {
       case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
-          new KindlingsJsonValueCodec[A] {
-            def nullValue: A = Expr.splice(nullValueExpr)
-            def decodeValue(in: JsonReader, default: A): A = {
+          hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.codecInstance[A](
+            Expr.splice(nullValueExpr),
+            (in: JsonReader, default: A) => {
               val _ = default
               if (Expr.splice(configExpr).encodingOnly)
                 throw new UnsupportedOperationException("encoding-only codec cannot decode")
               Expr.splice(decodeFn(Expr.quote(in), configExpr))
-            }
-            def encodeValue(x: A, out: JsonWriter): Unit =
+            },
+            (x: A, out: JsonWriter) =>
               if (Expr.splice(configExpr).decodingOnly)
                 throw new UnsupportedOperationException("decoding-only codec cannot encode")
               else
                 Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
-          }
+          )
         }
     }
   }
@@ -408,18 +408,17 @@ trait CodecMacrosImpl
 
           val vals = runSafe(cache.get)
           val resultExpr = Expr.quote {
-            new KindlingsJsonCodec[A] {
-              def nullValue: A = Expr.splice(nullVal)
-              def decodeValue(in: JsonReader, default: A): A = {
+            hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.jsonCodecInstance[A](
+              Expr.splice(nullVal),
+              (in: JsonReader, default: A) => {
                 val _ = default
                 Expr.splice(decFn(Expr.quote(in), configExpr))
-              }
-              def encodeValue(x: A, out: JsonWriter): Unit =
-                Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr))
-              def decodeKey(in: JsonReader): A = Expr.splice(keyDecFn).apply(Expr.splice(Expr.quote(in)))
-              def encodeKey(x: A, out: JsonWriter): Unit =
+              },
+              (x: A, out: JsonWriter) => Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr)),
+              (in: JsonReader) => Expr.splice(keyDecFn).apply(Expr.splice(Expr.quote(in))),
+              (x: A, out: JsonWriter) =>
                 Expr.splice(keyEncFn).apply(Expr.splice(Expr.quote(x)), Expr.splice(Expr.quote(out)))
-            }
+            )
           }
           vals.toValDefs.use(_ => resultExpr)
         }
