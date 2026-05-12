@@ -1,7 +1,12 @@
 package hearth.kindlings.circederivation.internal.runtime
 
 import cats.data.ValidatedNel
-import hearth.kindlings.circederivation.{KindlingsCodecAsObject, KindlingsDecoder, KindlingsEncoder, KindlingsEncoderAsObject}
+import hearth.kindlings.circederivation.{
+  KindlingsCodecAsObject,
+  KindlingsDecoder,
+  KindlingsEncoder,
+  KindlingsEncoderAsObject
+}
 import io.circe.{Decoder, DecodingFailure, HCursor, Json, JsonObject}
 
 object CirceDerivationFactories {
