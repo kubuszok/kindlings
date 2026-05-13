@@ -41,6 +41,14 @@ trait WriterHandleAsEnumRuleImpl {
       val maybeWrappedHint: Option[Expr[KindlingsCoproductHint.Wrapped[A]]] =
         Expr.summonImplicit[KindlingsCoproductHint.Wrapped[A]].toOption
 
+      // When no per-type hint is present and the global config was evaluable at compile time,
+      // we can pre-compute transformConstructorNames(childName) as constant strings.
+      val preComputedConstructorTransform: Option[String => String] =
+        (maybeFieldHint, maybeWrappedHint) match {
+          case (None, None) => wctx.evaluatedConfig.map(_.transformConstructorNames)
+          case _            => None
+        }
+
       val transformConstructorNamesExpr: Expr[String => String] = maybeFieldHint match {
         case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
         case None    =>
@@ -55,7 +63,15 @@ trait WriterHandleAsEnumRuleImpl {
         case None    =>
           maybeWrappedHint match {
             case Some(_) => Expr.quote(None: Option[String])
-            case None    => Expr.quote(Expr.splice(wctx.config).discriminator)
+            case None    =>
+              wctx.evaluatedConfig match {
+                case Some(evConfig) =>
+                  evConfig.discriminator match {
+                    case Some(d) => Expr.quote((Some(Expr.splice(Expr(d))): Option[String]))
+                    case None    => Expr.quote(None: Option[String])
+                  }
+                case None => Expr.quote(Expr.splice(wctx.config).discriminator)
+              }
           }
       }
 
@@ -81,9 +97,14 @@ trait WriterHandleAsEnumRuleImpl {
                 }
                 .map(_._1)
                 .getOrElse(Type[EnumCase].shortName)
+              // Pre-compute the transformed constructor name when possible.
+              val nameExpr: Expr[String] = preComputedConstructorTransform match {
+                case Some(transform) => Expr(transform(caseName))
+                case None => Expr.quote(Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName))))
+              }
               if (allCaseObjects) {
                 Expr.quote {
-                  val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
+                  val name = Expr.splice(nameExpr)
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
                       PureConfigDerivationUtils.addDiscriminator(
@@ -97,7 +118,7 @@ trait WriterHandleAsEnumRuleImpl {
                 }
               } else {
                 Expr.quote {
-                  val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
+                  val name = Expr.splice(nameExpr)
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
                       PureConfigDerivationUtils.addDiscriminator(

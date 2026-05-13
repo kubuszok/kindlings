@@ -197,6 +197,35 @@ object JsoniterDerivationUtils {
     construct(arr)
   }
 
+  def readObjectOptimized[A](
+      in: JsonReader,
+      fieldCount: Int,
+      construct: Array[Any] => A
+  )(dispatch: (String, Array[Any], JsonReader) => Unit): A = {
+    val arr = new Array[Any](fieldCount)
+    if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{'")
+    if (!in.isNextToken('}'.toByte)) {
+      in.rollbackToken()
+      dispatch(in.readKeyAsString(), arr, in)
+      while (in.isNextToken(','.toByte))
+        dispatch(in.readKeyAsString(), arr, in)
+      if (!in.isCurrentToken('}'.toByte)) in.objectEndOrCommaError()
+    }
+    construct(arr)
+  }
+
+  def readObjectDirect[A](in: JsonReader, construct: => A)(dispatch: (String, JsonReader) => Unit): A = {
+    if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{'")
+    if (!in.isNextToken('}'.toByte)) {
+      in.rollbackToken()
+      dispatch(in.readKeyAsString(), in)
+      while (in.isNextToken(','.toByte))
+        dispatch(in.readKeyAsString(), in)
+      if (!in.isCurrentToken('}'.toByte)) in.objectEndOrCommaError()
+    }
+    construct
+  }
+
   /** Read remaining fields of an already-opened object (e.g., after discriminator field was consumed). */
   def readObjectInline[A](
       in: JsonReader,

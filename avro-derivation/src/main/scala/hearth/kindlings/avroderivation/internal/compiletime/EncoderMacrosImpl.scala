@@ -85,16 +85,25 @@ trait EncoderMacrosImpl
             Expr.quote {
               val cfg = Expr.splice(configVal)
               val sch = Expr.splice(schemaExpr)
-              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.encoderInstance[A](
-                sch,
-                (value: A) => {
-                  val _ = value
-                  val _ = cfg
-                  Expr.splice {
-                    fromCtx(EncoderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType))
+              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories
+                .encoderInstanceWithSchema[A](
+                  sch,
+                  (value: A, cachedSchema: Schema) => {
+                    val _ = value
+                    val _ = cfg
+                    val _ = cachedSchema
+                    Expr.splice {
+                      fromCtx(
+                        EncoderCtx.from(
+                          Expr.quote(value),
+                          Expr.quote(cfg),
+                          derivedType = selfType,
+                          precomputedSchema = Some(Expr.quote(cachedSchema))
+                        )
+                      )
+                    }
                   }
-                }
-              )): AvroEncoder[A]
+                )): AvroEncoder[A]
             }
           }
         }
@@ -211,12 +220,14 @@ trait EncoderMacrosImpl
       value: Expr[A],
       config: Expr[AvroConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
       tpe = Type[B],
-      value = newValue
+      value = newValue,
+      precomputedSchema = None
     )
 
     def nestInCache(
@@ -272,13 +283,15 @@ trait EncoderMacrosImpl
     def from[A: Type](
         value: Expr[A],
         config: Expr[AvroConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      precomputedSchema = precomputedSchema
     )
   }
 

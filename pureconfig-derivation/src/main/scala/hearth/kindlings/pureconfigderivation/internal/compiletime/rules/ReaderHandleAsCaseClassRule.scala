@@ -49,13 +49,33 @@ trait ReaderHandleAsCaseClassRuleImpl {
       // global `PureConfig` config in scope at the entry point.
       val maybeHint: Option[Expr[KindlingsProductHint[A]]] = Expr.summonImplicit[KindlingsProductHint[A]].toOption
 
+      // When no per-type hint is present and the global config was evaluable at compile time,
+      // we can pre-compute transformMemberNames(fieldName) as constant strings — eliminating
+      // the expensive runtime regex in CapitalizedWordsNamingConvention.toTokens on every decode.
+      val preComputedTransform: Option[String => String] = maybeHint match {
+        case Some(_) => None // per-type hint: can't evaluate at compile time
+        case None    => rctx.evaluatedConfig.map(_.transformMemberNames)
+      }
+
       val transformExpr: Expr[String => String] = maybeHint match {
         case Some(h) => Expr.quote(Expr.splice(h).transformMemberNames)
         case None    => Expr.quote(Expr.splice(rctx.config).transformMemberNames)
       }
+
+      // Static knowledge of useDefaults: when evaluable + no hint, we know at compile time
+      // whether default-value branches are needed.
+      val staticUseDefaults: Option[Boolean] = maybeHint match {
+        case Some(_) => None
+        case None    => rctx.evaluatedConfig.map(_.useDefaults)
+      }
       val useDefaultsExpr: Expr[Boolean] = maybeHint match {
         case Some(h) => Expr.quote(Expr.splice(h).useDefaults)
         case None    => Expr.quote(Expr.splice(rctx.config).useDefaults)
+      }
+
+      val staticAllowUnknownKeys: Option[Boolean] = maybeHint match {
+        case Some(_) => None
+        case None    => rctx.evaluatedConfig.map(_.allowUnknownKeys)
       }
       val allowUnknownKeysExpr: Expr[Boolean] = maybeHint match {
         case Some(h) => Expr.quote(Expr.splice(h).allowUnknownKeys)
@@ -148,11 +168,16 @@ trait ReaderHandleAsCaseClassRuleImpl {
                 deriveFieldReader[Field].map { readerExpr =>
                   // Resolve the HOCON key for this field. `@configKey("custom")` always wins;
                   // otherwise apply the resolved transform (from per-type ProductHint or the
-                  // global PureConfig).
+                  // global PureConfig). When the config was evaluable at compile time, we
+                  // pre-compute the mapped name as a constant string — eliminating the
+                  // expensive runtime regex in CapitalizedWordsNamingConvention.toTokens.
                   val keyExpr: Expr[String] = nameOverride match {
                     case Some(customName) => Expr(customName)
                     case None             =>
-                      Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                      preComputedTransform match {
+                        case Some(transform) => Expr(transform(fName))
+                        case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                      }
                   }
                   // Option fields must use atKeyOrUndefined so missing keys propagate as an
                   // `isUndefined` cursor that the option rule turns into `None`. For non-option
@@ -166,8 +191,49 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   // type parameter. This keeps the path-dependent `Field` type out of the
                   // quote (Scala 2's macro backend chokes on it via `asInstanceOf[Reader[Any]]`)
                   // and only casts the *result* of the reader call to `Either[…, Any]`.
-                  val decodeExpr: Expr[Either[ConfigReaderFailures, Any]] = defaultAsAnyOpt match {
+                  // When we statically know useDefaults is false, defaults are never used even
+                  // if the field has one — skip the useDefaults branch entirely. When statically
+                  // true, unconditionally use the default on missing key (no runtime boolean check).
+                  val effectiveDefault: Option[Expr[Any]] = defaultAsAnyOpt.flatMap { d =>
+                    staticUseDefaults match {
+                      case Some(false) => None // statically disabled: drop the default branch
+                      case _           => Some(d) // statically true or unknown: keep it
+                    }
+                  }
+                  val useDefaultsIsStaticallyTrue = staticUseDefaults.contains(true)
+
+                  val decodeExpr: Expr[Either[ConfigReaderFailures, Any]] = effectiveDefault match {
+                    case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
+                      // useDefaults is statically true: no runtime boolean check needed
+                      if (isOptionField)
+                        Expr.quote {
+                          val cur = Expr.splice(rctx.cursor)
+                          cur.asObjectCursor
+                            .flatMap { obj =>
+                              val keyCur = obj.atKeyOrUndefined(Expr.splice(keyExpr))
+                              if (keyCur.isUndefined)
+                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                              else
+                                Expr.splice(readerExpr).from(keyCur)
+                            }
+                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                        }
+                      else
+                        Expr.quote {
+                          val cur = Expr.splice(rctx.cursor)
+                          cur.asObjectCursor
+                            .flatMap { obj =>
+                              val key = Expr.splice(keyExpr)
+                              val keyCur = obj.atKeyOrUndefined(key)
+                              if (keyCur.isUndefined)
+                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                              else
+                                obj.atKey(key).flatMap(c => Expr.splice(readerExpr).from(c))
+                            }
+                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                        }
                     case Some(defaultAnyExpr) =>
+                      // useDefaults is unknown at compile time: keep runtime check
                       if (isOptionField)
                         Expr.quote {
                           val cur = Expr.splice(rctx.cursor)
@@ -240,10 +306,14 @@ trait ReaderHandleAsCaseClassRuleImpl {
 
               // Build the runtime expected-keys set from the per-field key expressions.
               // Used by the strict-mode (`allowUnknownKeys = false`) check at the end.
+              // When we statically know allowUnknownKeys is true, skip building this set
+              // entirely — it's never checked.
               val expectedKeysExpr: Expr[Set[String]] =
-                keyExprs.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
-                  Expr.quote(Expr.splice(acc) + Expr.splice(k))
-                }
+                if (staticAllowUnknownKeys.contains(true)) Expr.quote(Set.empty[String])
+                else
+                  keyExprs.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
+                    Expr.quote(Expr.splice(acc) + Expr.splice(k))
+                  }
 
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
@@ -264,18 +334,27 @@ trait ReaderHandleAsCaseClassRuleImpl {
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
-                  Expr.quote {
-                    val coreResult: Either[ConfigReaderFailures, A] =
+                  // When allowUnknownKeys is statically true, skip the checkUnknownKeys
+                  // call entirely — it's a no-op that just returns coreResult.
+                  if (staticAllowUnknownKeys.contains(true))
+                    Expr.quote {
                       PureConfigDerivationUtils
                         .sequenceResults(Expr.splice(listExpr))
                         .map(Expr.splice(constructLambda))
-                    PureConfigDerivationUtils.checkUnknownKeys[A](
-                      Expr.splice(rctx.cursor),
-                      coreResult,
-                      Expr.splice(expectedKeysExpr),
-                      Expr.splice(allowUnknownKeysExpr)
-                    )
-                  }
+                    }
+                  else
+                    Expr.quote {
+                      val coreResult: Either[ConfigReaderFailures, A] =
+                        PureConfigDerivationUtils
+                          .sequenceResults(Expr.splice(listExpr))
+                          .map(Expr.splice(constructLambda))
+                      PureConfigDerivationUtils.checkUnknownKeys[A](
+                        Expr.splice(rctx.cursor),
+                        coreResult,
+                        Expr.splice(expectedKeysExpr),
+                        Expr.splice(allowUnknownKeysExpr)
+                      )
+                    }
                 }
             }
       }

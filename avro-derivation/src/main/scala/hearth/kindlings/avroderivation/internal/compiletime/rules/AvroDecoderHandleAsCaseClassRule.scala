@@ -99,127 +99,54 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
             }
 
         case Some(fields) =>
-          implicit val ArrayAnyT: Type[Array[Any]] = DecTypes.ArrayAny
-
           val indexedFields = fields.toList.zipWithIndex
 
-          // Step 1: For each non-transient field, derive a decode expression and build accessor
           NonEmptyList
             .fromList(indexedFields)
             .get
-            .parTraverse { case ((fName, param), reindex) =>
+            .parTraverse { case ((fName, param), fieldIndex) =>
               import param.tpe.Underlying as Field
-              val nameOverride = getAnnotationStringArg[fieldName](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 avroFixedSize match {
                   case Some(_) =>
-                    // Decode GenericFixed -> Array[Byte] directly, no AvroDecoder needed
                     val arrayByteType: Type[Array[Byte]] = DecTypes.ArrayByte
                     MIO.pure {
                       implicit val ArrayByteT: Type[Array[Byte]] = arrayByteType
-                      val decodeExpr: Expr[Any] = nameOverride match {
-                        case Some(customName) =>
-                          Expr.quote {
-                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                            val fieldValue = AvroDerivationUtils.decodeRecord(
-                              record,
-                              Expr.splice(Expr(customName))
-                            )
-                            AvroDerivationUtils.decodeFixed(fieldValue): Any
-                          }
-                        case None =>
-                          Expr.quote {
-                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                            val fieldValue = AvroDerivationUtils.decodeRecord(
-                              record,
-                              Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
-                            )
-                            AvroDerivationUtils.decodeFixed(fieldValue): Any
-                          }
-                      }
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr = Expr.quote {
-                          Expr.splice(arrExpr)(Expr.splice(Expr(reindex))).asInstanceOf[Array[Byte]]
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      (decodeExpr, makeAccessor)
+                      val decodedExpr: Expr_?? = Expr.quote {
+                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                        AvroDerivationUtils.decodeFixed(record.get(Expr.splice(Expr(fieldIndex)))): Array[Byte]
+                      }.as_??
+                      (fName, decodedExpr)
                     }
                   case None =>
                     deriveFieldDecoder[Field].map { decoderExpr =>
-                      val decodeExpr: Expr[Any] = nameOverride match {
-                        case Some(customName) =>
-                          Expr.quote {
-                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                            val fieldValue = AvroDerivationUtils.decodeRecord(
-                              record,
-                              Expr.splice(Expr(customName))
-                            )
-                            Expr.splice(decoderExpr).decode(fieldValue): Any
-                          }
-                        case None =>
-                          Expr.quote {
-                            val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                            val fieldValue = AvroDerivationUtils.decodeRecord(
-                              record,
-                              Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
-                            )
-                            Expr.splice(decoderExpr).decode(fieldValue): Any
-                          }
-                      }
-                      val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                        val typedExpr = Expr.quote {
-                          AvroDerivationUtils.unsafeCast(
-                            Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
-                            Expr.splice(decoderExpr)
-                          )
-                        }
-                        (fName, typedExpr.as_??)
-                      }
-                      (decodeExpr, makeAccessor)
+                      val decodedExpr: Expr_?? = Expr.quote {
+                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                        Expr.splice(decoderExpr).decode(record.get(Expr.splice(Expr(fieldIndex))))
+                      }.as_??
+                      (fName, decodedExpr)
                     }
                 }
               }
             }
             .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
-
-              // Step 2: Build List literal from the decode expressions
-              val listExpr: Expr[List[Any]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Any])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
-                }
-
-              // Step 3: Build the constructor lambda
-              LambdaBuilder
-                .of1[Array[Any]]("decodedValues")
-                .traverse { decodedValuesExpr =>
-                  val nonTransientFieldMap: Map[String, Expr_??] =
-                    makeAccessors.map(_(decodedValuesExpr)).toMap
-                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                  caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
-                    case Left(error)          =>
-                      val err = DecoderDerivationError.CannotConstructType(
-                        Type[A].prettyPrint,
-                        isSingleton = false,
-                        Some(error)
-                      )
-                      Log.error(err.message) >> MIO.fail(err)
-                  }
-                }
-                .map { builder =>
-                  val constructLambda = builder.build[A]
-                  Expr.quote {
-                    Expr
-                      .splice(constructLambda)
-                      .apply(
-                        AvroDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr))
-                      )
-                  }
-                }
+              val fieldMap: Map[String, Expr_??] =
+                fieldData.toList.map { case (fName, decodedExpr) => (fName, decodedExpr) }.toMap ++ transientDefaults
+              caseClass.primaryConstructor(fieldMap) match {
+                case Right(constructExpr) =>
+                  MIO.pure(Expr.quote {
+                    val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
+                    Expr.splice(constructExpr)
+                  })
+                case Left(error) =>
+                  val err = DecoderDerivationError.CannotConstructType(
+                    Type[A].prettyPrint,
+                    isSingleton = false,
+                    Some(error)
+                  )
+                  Log.error(err.message) >> MIO.fail(err)
+              }
             }
       }
     }

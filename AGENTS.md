@@ -139,6 +139,18 @@ See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as refer
 
 Also in `type-class-derivation-skill.md`: "Implementing a new module", "Debugging derivation", "Syncing from Hearth", "Polymorphic (HKT) type class derivation".
 
+### Runtime performance — follow `docs/contributing/runtime-performance-skill.md`
+
+When optimizing the runtime performance of generated codecs/encoders/decoders. Key techniques:
+- `semiEval` for compile-time config evaluation (eliminate runtime `config.fieldNameMapper(name)` calls)
+- `ValDefs.createVar` for typed local vars (eliminate `Array[Any]` boxing of primitives)
+- Sentinel loop pattern (`var l = -1; while (l < 0 || ...)`) to avoid dispatch duplication
+- Inline built-in decoding (direct `reader.readInt()` instead of function indirection)
+- Position-based record access (`record.put(index, value)` instead of string-keyed lookups)
+- `writeNonEscapedAsciiKey` for known ASCII field names
+
+Reference analysis: `docs/research/jsoniter-codegen-techniques.md`, `docs/research/perf-regression-analysis.md`
+
 ### Factory instance pattern — follow `docs/contributing/factory-instance-pattern-skill.md`
 
 When generating the final `new TypeClass[A] { ... }` expression, use factory methods + lambdas

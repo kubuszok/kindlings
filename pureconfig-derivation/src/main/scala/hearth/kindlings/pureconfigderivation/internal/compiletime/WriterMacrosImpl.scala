@@ -38,6 +38,11 @@ trait WriterMacrosImpl
     implicit val PureConfigT: Type[PureConfig] = WTypes.PureConfig
     val selfType: Option[??] = Some(Type[A].as_??)
 
+    // semiEval: evaluate config at compile time for optimized codegen (pre-computed field names).
+    // KNOWN ISSUE (hearth): semiEval fails on Inlined(...) wrapping module field access
+    // like PureConfig.default. Pending fix in hearth 0.3.1.
+    val evConfig: Option[PureConfig] = configExpr.semiEval.toOption
+
     deriveWriterFromCtxAndAdaptForEntrypoint[A, KindlingsConfigWriter[A]]("KindlingsConfigWriter.derived") { fromCtx =>
       ValDefs.createVal[PureConfig](configExpr).use { configVal =>
         Expr.quote {
@@ -46,7 +51,9 @@ trait WriterMacrosImpl
             (a: A) =>
               val _ = a
               Expr.splice {
-                fromCtx(WriterCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
+                fromCtx(
+                  WriterCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evaluatedConfig = evConfig)
+                )
               }
           }
         }
@@ -134,7 +141,8 @@ trait WriterMacrosImpl
       value: Expr[A],
       config: Expr[PureConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[PureConfig] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): WriterCtx[B] = copy[B](
@@ -195,13 +203,15 @@ trait WriterMacrosImpl
     def from[A: Type](
         value: Expr[A],
         config: Expr[PureConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[PureConfig] = None
     ): WriterCtx[A] = WriterCtx(
       tpe = Type[A],
       value = value,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

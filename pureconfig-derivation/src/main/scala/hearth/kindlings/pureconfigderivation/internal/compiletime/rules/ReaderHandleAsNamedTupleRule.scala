@@ -72,6 +72,12 @@ trait ReaderHandleAsNamedTupleRuleImpl {
               import param.tpe.Underlying as Field
               Log.namedScope(s"Deriving reader for named tuple field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldReaderForNT[Field].map { readerExpr =>
+                  // Pre-compute the field name when the config was evaluable at compile time.
+                  val keyExpr: Expr[String] = rctx.evaluatedConfig match {
+                    case Some(evConfig) => Expr(evConfig.transformMemberNames(fName))
+                    case None           =>
+                      Expr.quote(Expr.splice(rctx.config).transformMemberNames(Expr.splice(Expr(fName))))
+                  }
                   val decodeExpr: Expr[Either[ConfigReaderFailures, Any]] = Expr.quote {
                     Expr
                       .splice(rctx.cursor)
@@ -79,7 +85,7 @@ trait ReaderHandleAsNamedTupleRuleImpl {
                       .flatMap { obj =>
                         PureConfigDerivationUtils.readRequiredField[Any](
                           obj,
-                          Expr.splice(rctx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                          Expr.splice(keyExpr),
                           Expr.splice(readerExpr).asInstanceOf[ConfigReader[Any]]
                         )
                       }

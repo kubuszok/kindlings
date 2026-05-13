@@ -28,6 +28,7 @@ trait EncoderMacrosImpl
   def deriveInlineEncode[A: Type](valueExpr: Expr[A], configExpr: Expr[Configuration]): Expr[Json] = {
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
+    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Json]("KindlingsEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -35,7 +36,7 @@ trait EncoderMacrosImpl
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None)))
+            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
           }
         }
       }
@@ -49,6 +50,7 @@ trait EncoderMacrosImpl
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoder[A]]("KindlingsEncoder.derived") { fromCtx =>
       ValDefs.createVal[Configuration](configExpr).use { configVal =>
@@ -57,7 +59,7 @@ trait EncoderMacrosImpl
           hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
             val _ = a
             Expr.splice {
-              fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
+              fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
             }
           }
         }
@@ -84,6 +86,7 @@ trait EncoderMacrosImpl
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoderAsObject[A]]("KindlingsEncoder.deriveAsObject") {
       fromCtx =>
@@ -94,7 +97,7 @@ trait EncoderMacrosImpl
               (a: A) =>
                 val _ = a
                 val json: Json = Expr.splice {
-                  fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType))
+                  fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
                 }
                 json.asObject match {
                   case Some(obj) => obj
@@ -190,7 +193,8 @@ trait EncoderMacrosImpl
       value: Expr[A],
       config: Expr[Configuration],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[Configuration] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -251,13 +255,15 @@ trait EncoderMacrosImpl
     def from[A: Type](
         value: Expr[A],
         config: Expr[Configuration],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[Configuration] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

@@ -67,10 +67,15 @@ trait EncoderHandleAsCaseClassRuleImpl {
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
 
-                      val unconditionalWrite: Expr[Unit] = nameOverride match {
-                        case Some(customName) =>
+                      // Pre-compute mapped field name when config is statically known
+                      val mappedFieldName: Option[String] = nameOverride.orElse(
+                        ectx.evaluatedConfig.map(_.fieldNameMapper(fName))
+                      )
+
+                      val unconditionalWrite: Expr[Unit] = mappedFieldName match {
+                        case Some(resolvedName) =>
                           Expr.quote {
-                            Expr.splice(ectx.writer).writeFieldName(Expr.splice(Expr(customName)))
+                            Expr.splice(ectx.writer).writeFieldName(Expr.splice(Expr(resolvedName)))
                             Expr.splice(fieldEnc)
                           }
                         case None =>
@@ -82,72 +87,81 @@ trait EncoderHandleAsCaseClassRuleImpl {
                           }
                       }
 
-                      // Determine transient skip conditions
-                      val param = paramsByName.get(fName)
-                      val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
-                        p.defaultValue.flatMap { existentialOuter =>
-                          val methodOf = existentialOuter.value
-                          methodOf.value match {
-                            case noInstance: Method.NoInstance[?] =>
-                              import noInstance.Returned
-                              noInstance(Map.empty).toOption.map(_.upcast[Any])
-                            case _ => None
-                          }
-                        }
+                      // Skip all transient checks when config is known and all flags are false
+                      val noTransientChecksNeeded = ectx.evaluatedConfig.exists { c =>
+                        !c.transientDefault && !c.transientNone && !c.transientEmpty
                       }
 
-                      val isOptionField = Type[Field] match {
-                        case IsOption(_) => true
-                        case _           => false
-                      }
-                      val isStringField = Type[Field] =:= CTypes.String
-                      val isCollectionField = !isOptionField && {
-                        val isMapF = Type[Field] match { case IsMap(_) => true; case _ => false }
-                        val isCollF = Type[Field] match { case IsCollection(_) => true; case _ => false }
-                        isMapF || isCollF
-                      }
-                      val isEmptyCapable = isStringField || isCollectionField
-
-                      val conditions = List.newBuilder[Expr[Boolean]]
-
-                      defaultAsAnyOpt.foreach { defaultExpr =>
-                        conditions += Expr.quote {
-                          Expr.splice(ectx.config).transientDefault &&
-                          Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
-                        }
-                      }
-
-                      if (isOptionField) {
-                        conditions += Expr.quote {
-                          Expr.splice(ectx.config).transientNone &&
-                          !Expr.splice(fieldExpr).asInstanceOf[Option[Any]].isDefined
-                        }
-                      }
-
-                      if (isEmptyCapable) {
-                        if (isStringField) {
-                          conditions += Expr.quote {
-                            Expr.splice(ectx.config).transientEmpty &&
-                            Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
-                          }
-                        } else {
-                          conditions += Expr.quote {
-                            Expr.splice(ectx.config).transientEmpty &&
-                            Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
-                          }
-                        }
-                      }
-
-                      val condList = conditions.result()
-                      if (condList.isEmpty) {
+                      if (noTransientChecksNeeded) {
                         unconditionalWrite
                       } else {
-                        val skipExpr = condList.reduce { (a, b) =>
-                          Expr.quote(Expr.splice(a) || Expr.splice(b))
+                        // Determine transient skip conditions
+                        val param = paramsByName.get(fName)
+                        val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
+                          p.defaultValue.flatMap { existentialOuter =>
+                            val methodOf = existentialOuter.value
+                            methodOf.value match {
+                              case noInstance: Method.NoInstance[?] =>
+                                import noInstance.Returned
+                                noInstance(Map.empty).toOption.map(_.upcast[Any])
+                              case _ => None
+                            }
+                          }
                         }
-                        Expr.quote {
-                          if (!Expr.splice(skipExpr)) {
-                            Expr.splice(unconditionalWrite)
+
+                        val isOptionField = Type[Field] match {
+                          case IsOption(_) => true
+                          case _           => false
+                        }
+                        val isStringField = Type[Field] =:= CTypes.String
+                        val isCollectionField = !isOptionField && {
+                          val isMapF = Type[Field] match { case IsMap(_) => true; case _ => false }
+                          val isCollF = Type[Field] match { case IsCollection(_) => true; case _ => false }
+                          isMapF || isCollF
+                        }
+                        val isEmptyCapable = isStringField || isCollectionField
+
+                        val conditions = List.newBuilder[Expr[Boolean]]
+
+                        defaultAsAnyOpt.foreach { defaultExpr =>
+                          conditions += Expr.quote {
+                            Expr.splice(ectx.config).transientDefault &&
+                            Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
+                          }
+                        }
+
+                        if (isOptionField) {
+                          conditions += Expr.quote {
+                            Expr.splice(ectx.config).transientNone &&
+                            !Expr.splice(fieldExpr).asInstanceOf[Option[Any]].isDefined
+                          }
+                        }
+
+                        if (isEmptyCapable) {
+                          if (isStringField) {
+                            conditions += Expr.quote {
+                              Expr.splice(ectx.config).transientEmpty &&
+                              Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
+                            }
+                          } else {
+                            conditions += Expr.quote {
+                              Expr.splice(ectx.config).transientEmpty &&
+                              Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
+                            }
+                          }
+                        }
+
+                        val condList = conditions.result()
+                        if (condList.isEmpty) {
+                          unconditionalWrite
+                        } else {
+                          val skipExpr = condList.reduce { (a, b) =>
+                            Expr.quote(Expr.splice(a) || Expr.splice(b))
+                          }
+                          Expr.quote {
+                            if (!Expr.splice(skipExpr)) {
+                              Expr.splice(unconditionalWrite)
+                            }
                           }
                         }
                       }

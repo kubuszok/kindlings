@@ -44,7 +44,7 @@ trait CodecMacrosImpl
     implicit val UBJsonWriterT: Type[UBJsonWriter] = CTypes.UBJsonWriter
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
-    deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]]("UBJsonValueCodec.derived") {
+    deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]]("UBJsonValueCodec.derived", configExpr) {
       case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
           hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationFactories.codecInstance[A](
@@ -58,7 +58,10 @@ trait CodecMacrosImpl
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
-  def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+  def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[UBJsonConfig]
+  )(
       provideCtxAndAdapt: (
           (Expr[A], Expr[UBJsonWriter], Expr[UBJsonConfig]) => Expr[Unit],
           (Expr[UBJsonReader], Expr[UBJsonConfig]) => Expr[A],
@@ -84,6 +87,9 @@ trait CodecMacrosImpl
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = Some(Type[A].as_??)
 
+          // semiEval: evaluate config at compile time for optimized codegen.
+          val evConfig: Option[UBJsonConfig] = configExpr.semiEval.toOption
+
           // Encoder
           val encMIO: MIO[(Expr[A], Expr[UBJsonWriter], Expr[UBJsonConfig]) => Expr[Unit]] = {
             val defBuilder =
@@ -92,7 +98,7 @@ trait CodecMacrosImpl
               _ <- Log.info(s"Forward-declaring codec encode body for ${Type[A].prettyPrint}")
               _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
               builtEnc <- defBuilder.traverse { case (_, (v, w, c)) =>
-                deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType))
+                deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig))
               }
               encCache <- cache.get
               _ <- cache.set(builtEnc.buildCached(encCache, "codec-encode-body"))
@@ -109,7 +115,7 @@ trait CodecMacrosImpl
               _ <- Log.info(s"Forward-declaring codec decode body for ${Type[A].prettyPrint}")
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               builtDec <- defBuilder.traverse { case (_, (r, c)) =>
-                deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType))
+                deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig))
               }
               decCache <- cache.get
               _ <- cache.set(builtDec.buildCached(decCache, "codec-decode-body"))
@@ -203,7 +209,8 @@ trait CodecMacrosImpl
       writer: Expr[UBJsonWriter],
       config: Expr[UBJsonConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[UBJsonConfig] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -270,14 +277,16 @@ trait CodecMacrosImpl
         writer: Expr[UBJsonWriter],
         config: Expr[UBJsonConfig],
         cache: MLocal[ValDefsCache],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[UBJsonConfig] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       writer = writer,
       config = config,
       cache = cache,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 
@@ -343,7 +352,8 @@ trait CodecMacrosImpl
       reader: Expr[UBJsonReader],
       config: Expr[UBJsonConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[UBJsonConfig] = None
   ) {
 
     def nest[B: Type](newReader: Expr[UBJsonReader]): DecoderCtx[B] = copy[B](
@@ -405,13 +415,15 @@ trait CodecMacrosImpl
         reader: Expr[UBJsonReader],
         config: Expr[UBJsonConfig],
         cache: MLocal[ValDefsCache],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[UBJsonConfig] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       reader = reader,
       config = config,
       cache = cache,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

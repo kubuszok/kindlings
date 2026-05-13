@@ -65,9 +65,15 @@ trait WriterHandleAsNamedTupleRuleImpl {
             .map { fieldData =>
               fieldData.toList.foldRight(Expr.quote(List.empty[(String, ConfigValue)])) {
                 case ((fName, fieldValueExpr), acc) =>
+                  // Pre-compute the field name when the config was evaluable at compile time.
+                  val keyExpr: Expr[String] = wctx.evaluatedConfig match {
+                    case Some(evConfig) => Expr(evConfig.transformMemberNames(fName))
+                    case None           =>
+                      Expr.quote(Expr.splice(wctx.config).transformMemberNames(Expr.splice(Expr(fName))))
+                  }
                   Expr.quote {
                     (
-                      Expr.splice(wctx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                      Expr.splice(keyExpr),
                       Expr.splice(fieldValueExpr)
                     ) ::
                       Expr.splice(acc)

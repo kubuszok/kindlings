@@ -62,6 +62,14 @@ trait ReaderHandleAsEnumRuleImpl {
       //  - Wrapped hint       → wrapping mode with hint's transform
       //  - no hint            → use global config (`PureConfig.discriminator` /
       //                          `PureConfig.transformConstructorNames`)
+      // When no per-type hint is present and the global config was evaluable at compile time,
+      // we can pre-compute transformConstructorNames(childName) as constant strings.
+      val preComputedConstructorTransform: Option[String => String] =
+        (maybeFirstSuccessHint, maybeFieldHint, maybeWrappedHint) match {
+          case (None, None, None) => rctx.evaluatedConfig.map(_.transformConstructorNames)
+          case _                  => None
+        }
+
       val transformConstructorNamesExpr: Expr[String => String] = maybeFirstSuccessHint match {
         case Some(_) =>
           // FirstSuccess does not use a name transform; we still need a value here for
@@ -103,7 +111,11 @@ trait ReaderHandleAsEnumRuleImpl {
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
               Log.namedScope(s"Deriving reader for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                deriveChildReader[A, ChildType](childName, transformConstructorNamesExpr)
+                deriveChildReader[A, ChildType](
+                  childName,
+                  transformConstructorNamesExpr,
+                  preComputedConstructorTransform
+                )
               }
             }
             .map { childDispatchers =>
@@ -146,7 +158,15 @@ trait ReaderHandleAsEnumRuleImpl {
                 case None    =>
                   maybeWrappedHint match {
                     case Some(_) => Expr.quote(None: Option[String])
-                    case None    => Expr.quote(Expr.splice(rctx.config).discriminator)
+                    case None    =>
+                      rctx.evaluatedConfig match {
+                        case Some(evConfig) =>
+                          evConfig.discriminator match {
+                            case Some(d) => Expr.quote((Some(Expr.splice(Expr(d))): Option[String]))
+                            case None    => Expr.quote(None: Option[String])
+                          }
+                        case None => Expr.quote(Expr.splice(rctx.config).discriminator)
+                      }
                   }
               }
 
@@ -214,7 +234,8 @@ trait ReaderHandleAsEnumRuleImpl {
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildReader[A: ReaderCtx, ChildType: Type](
         childName: String,
-        transformConstructorNamesExpr: Expr[String => String]
+        transformConstructorNamesExpr: Expr[String => String],
+        preComputedConstructorTransform: Option[String => String]
     ): MIO[
       (Expr[String], Expr[ConfigCursor], Expr[Either[ConfigReaderFailures, A]]) => Expr[
         Either[ConfigReaderFailures, A]
@@ -227,6 +248,12 @@ trait ReaderHandleAsEnumRuleImpl {
       implicit val ReaderResultA: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
       implicit val ReaderResultChild: Type[Either[ConfigReaderFailures, ChildType]] = RTypes.ReaderResult[ChildType]
       implicit val ReaderChild: Type[ConfigReader[ChildType]] = RTypes.ConfigReader[ChildType]
+
+      // Pre-compute the transformed constructor name when possible.
+      val transformedNameExpr: Expr[String] = preComputedConstructorTransform match {
+        case Some(transform) => Expr(transform(childName))
+        case None            => Expr.quote(Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))))
+      }
 
       RTypes
         .ConfigReader[ChildType]
@@ -241,10 +268,7 @@ trait ReaderHandleAsEnumRuleImpl {
                   elseExpr: Expr[Either[ConfigReaderFailures, A]]
               ) =>
                 Expr.quote {
-                  if (
-                    Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))) ==
-                      Expr.splice(typeNameExpr)
-                  )
+                  if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
                     Expr
                       .splice(readerExpr)
                       .from(Expr.splice(innerCurExpr))
@@ -265,10 +289,7 @@ trait ReaderHandleAsEnumRuleImpl {
                       elseExpr: Expr[Either[ConfigReaderFailures, A]]
                   ) =>
                     Expr.quote {
-                      if (
-                        Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))) ==
-                          Expr.splice(typeNameExpr)
-                      )
+                      if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
                         Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigReaderFailures, A]
                       else
                         Expr.splice(elseExpr)
@@ -285,10 +306,7 @@ trait ReaderHandleAsEnumRuleImpl {
                     ) => {
                       val helperCallExpr = helper(innerCurExpr, rctx.config)
                       Expr.quote {
-                        if (
-                          Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))) ==
-                            Expr.splice(typeNameExpr)
-                        )
+                        if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
                           Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigReaderFailures, A]]
                         else
                           Expr.splice(elseExpr)
