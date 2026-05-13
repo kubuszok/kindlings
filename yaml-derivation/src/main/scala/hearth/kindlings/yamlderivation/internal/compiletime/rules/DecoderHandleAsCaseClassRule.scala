@@ -120,16 +120,61 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 else None
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Either[ConstructError, Any]] = nameOverride match {
-                    case Some(customName) =>
-                      defaultAsAnyOpt match {
-                        case Some(defaultAnyExpr) =>
+                  // Pre-compute the resolved field name when possible
+                  val resolvedFieldName: Either[Expr[String], String] = nameOverride match {
+                    case Some(customName) => Right(customName)
+                    case None             =>
+                      dctx.evaluatedConfig match {
+                        case Some(evConfig) => Right(evConfig.transformMemberNames(fName))
+                        case None           =>
+                          Left(Expr.quote(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))))
+                      }
+                  }
+                  val fieldNameExpr: Expr[String] = resolvedFieldName match {
+                    case Right(s)   => Expr(s)
+                    case Left(expr) => expr
+                  }
+
+                  // Check useDefaults statically when possible
+                  val useDefaultsStaticallyFalse: Boolean =
+                    dctx.evaluatedConfig.exists(!_.useDefaults)
+
+                  val decodeExpr: Expr[Either[ConstructError, Any]] = defaultAsAnyOpt match {
+                    case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
+                      // useDefaults is statically false: skip the default branch entirely
+                      Expr.quote {
+                        YamlDerivationUtils
+                          .getField(
+                            Expr.splice(dctx.node),
+                            Expr.splice(fieldNameExpr)
+                          )
+                          .flatMap(fieldNode =>
+                            Expr
+                              .splice(decoderExpr)
+                              .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
+                          )
+                          .asInstanceOf[Either[ConstructError, Any]]
+                      }
+                    case Some(defaultAnyExpr) =>
+                      dctx.evaluatedConfig match {
+                        case Some(evConfig) if evConfig.useDefaults =>
+                          // useDefaults is statically true: always use default path
+                          Expr.quote {
+                            YamlDerivationUtils.decodeFieldWithDefault(
+                              Expr.splice(dctx.node),
+                              Expr.splice(fieldNameExpr),
+                              Expr.splice(decoderExpr),
+                              Expr.splice(defaultAnyExpr)
+                            )
+                          }
+                        case _ =>
+                          // useDefaults not statically known: runtime check
                           Expr.quote {
                             val config = Expr.splice(dctx.config)
                             if (config.useDefaults)
                               YamlDerivationUtils.decodeFieldWithDefault(
                                 Expr.splice(dctx.node),
-                                Expr.splice(Expr(customName)),
+                                Expr.splice(fieldNameExpr),
                                 Expr.splice(decoderExpr),
                                 Expr.splice(defaultAnyExpr)
                               )
@@ -137,7 +182,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                               YamlDerivationUtils
                                 .getField(
                                   Expr.splice(dctx.node),
-                                  Expr.splice(Expr(customName))
+                                  Expr.splice(fieldNameExpr)
                                 )
                                 .flatMap(fieldNode =>
                                   Expr
@@ -145,62 +190,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                     .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
                                 )
                                 .asInstanceOf[Either[ConstructError, Any]]
-                          }
-                        case None =>
-                          Expr.quote {
-                            YamlDerivationUtils
-                              .getField(
-                                Expr.splice(dctx.node),
-                                Expr.splice(Expr(customName))
-                              )
-                              .flatMap(fieldNode =>
-                                Expr
-                                  .splice(decoderExpr)
-                                  .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                              )
-                              .asInstanceOf[Either[ConstructError, Any]]
                           }
                       }
                     case None =>
-                      defaultAsAnyOpt match {
-                        case Some(defaultAnyExpr) =>
-                          Expr.quote {
-                            val config = Expr.splice(dctx.config)
-                            val fn = config.transformMemberNames(Expr.splice(Expr(fName)))
-                            if (config.useDefaults)
-                              YamlDerivationUtils.decodeFieldWithDefault(
-                                Expr.splice(dctx.node),
-                                fn,
-                                Expr.splice(decoderExpr),
-                                Expr.splice(defaultAnyExpr)
-                              )
-                            else
-                              YamlDerivationUtils
-                                .getField(
-                                  Expr.splice(dctx.node),
-                                  fn
-                                )
-                                .flatMap(fieldNode =>
-                                  Expr
-                                    .splice(decoderExpr)
-                                    .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                                )
-                                .asInstanceOf[Either[ConstructError, Any]]
-                          }
-                        case None =>
-                          Expr.quote {
-                            YamlDerivationUtils
-                              .getField(
-                                Expr.splice(dctx.node),
-                                Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
-                              )
-                              .flatMap(fieldNode =>
-                                Expr
-                                  .splice(decoderExpr)
-                                  .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                              )
-                              .asInstanceOf[Either[ConstructError, Any]]
-                          }
+                      Expr.quote {
+                        YamlDerivationUtils
+                          .getField(
+                            Expr.splice(dctx.node),
+                            Expr.splice(fieldNameExpr)
+                          )
+                          .flatMap(fieldNode =>
+                            Expr
+                              .splice(decoderExpr)
+                              .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
+                          )
+                          .asInstanceOf[Either[ConstructError, Any]]
                       }
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>

@@ -155,6 +155,8 @@ trait EncoderHandleAsCaseClassRuleImpl {
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
                     val hasStringifiedAnnotation =
                       paramsByName.get(fName).exists(p => hasAnnotationType[stringified](p))
+                    val isStringifiedStaticallyFalse =
+                      ectx.evaluatedConfig.exists(!_.isStringified)
                     val fieldEncMIO: MIO[Expr[Unit]] = if (hasStringifiedAnnotation) {
                       deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
                         case Some(enc) => MIO.pure(enc)
@@ -163,6 +165,8 @@ trait EncoderHandleAsCaseClassRuleImpl {
                             .StringifiedOnNonNumeric(fName, Type[A].prettyPrint, Type[Field].prettyPrint)
                           Log.error(err.message) >> MIO.fail(err)
                       }
+                    } else if (isStringifiedStaticallyFalse) {
+                      deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
                     } else {
                       // When no @stringified annotation, check if global isStringified applies
                       deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
@@ -185,11 +189,22 @@ trait EncoderHandleAsCaseClassRuleImpl {
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
 
-                      // Build the writeKey + encode expression
-                      val unconditionalWrite: Expr[Unit] = nameOverride match {
-                        case Some(customName) =>
+                      val mappedFieldName: Option[String] = nameOverride.orElse(
+                        ectx.evaluatedConfig.map(_.fieldNameMapper(fName))
+                      )
+
+                      val isAsciiSafe =
+                        mappedFieldName.exists(_.forall(c => c >= 0x20 && c < 0x7f && c != '"' && c != '\\'))
+
+                      val unconditionalWrite: Expr[Unit] = mappedFieldName match {
+                        case Some(resolvedName) if isAsciiSafe =>
                           Expr.quote {
-                            Expr.splice(ectx.writer).writeKey(Expr.splice(Expr(customName)))
+                            Expr.splice(ectx.writer).writeNonEscapedAsciiKey(Expr.splice(Expr(resolvedName)))
+                            Expr.splice(fieldEnc)
+                          }
+                        case Some(resolvedName) =>
+                          Expr.quote {
+                            Expr.splice(ectx.writer).writeKey(Expr.splice(Expr(resolvedName)))
                             Expr.splice(fieldEnc)
                           }
                         case None =>
@@ -200,7 +215,12 @@ trait EncoderHandleAsCaseClassRuleImpl {
                             Expr.splice(fieldEnc)
                           }
                       }
-                      val condList = buildFieldSkipConditions[Field](fieldExpr, paramsByName.get(fName), ectx.config)
+                      val noTransientChecksNeeded = ectx.evaluatedConfig.exists { c =>
+                        !c.transientDefault && !c.transientNone && !c.transientEmpty
+                      }
+                      val condList =
+                        if (noTransientChecksNeeded) Nil
+                        else buildFieldSkipConditions[Field](fieldExpr, paramsByName.get(fName), ectx.config)
                       applySkipConditions(unconditionalWrite, condList)
                     }
                   }

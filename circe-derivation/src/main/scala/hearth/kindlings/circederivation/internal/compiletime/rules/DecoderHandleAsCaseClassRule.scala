@@ -109,30 +109,51 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 implicit val ValidatedNelDFA: Type[ValidatedNel[DecodingFailure, A]] = DTypes.ValidatedNelDF[A]
                 implicit val ValidatedNelDFUnitT: Type[ValidatedNel[DecodingFailure, Unit]] =
                   DTypes.ValidatedNelDFUnit
-                MIO.pure(Expr.quote {
-                  (if (Expr.splice(dctx.failFast)) {
-                     CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).flatMap { _ =>
-                       val config = Expr.splice(dctx.config)
-                       if (config.strictDecoding)
+                val strictDecodingStaticallyFalse: Boolean =
+                  dctx.evaluatedConfig.exists(!_.strictDecoding)
+                MIO.pure(
+                  if (strictDecodingStaticallyFalse) {
+                    // strictDecoding is statically false — skip the strict decoding check entirely
+                    Expr.quote {
+                      (if (Expr.splice(dctx.failFast)) {
+                         CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).map { _ =>
+                           Expr.splice(expr)
+                         }
+                       } else {
                          CirceDerivationUtils
-                           .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
-                           .map(_ => Expr.splice(expr))
-                       else
-                         Right(Expr.splice(expr)): Either[DecodingFailure, A]
-                     }
-                   } else {
-                     CirceDerivationUtils
-                       .checkIsObjectAccumulating(Expr.splice(dctx.cursor))
-                       .andThen { _ =>
-                         if (Expr.splice(dctx.config).strictDecoding)
-                           CirceDerivationUtils
-                             .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
-                             .map(_ => Expr.splice(expr))
-                         else
-                           Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
-                       }
-                   }): Any
-                })
+                           .checkIsObjectAccumulating(Expr.splice(dctx.cursor))
+                           .map { _ =>
+                             Expr.splice(expr)
+                           }
+                       }): Any
+                    }
+                  } else {
+                    Expr.quote {
+                      (if (Expr.splice(dctx.failFast)) {
+                         CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).flatMap { _ =>
+                           val config = Expr.splice(dctx.config)
+                           if (config.strictDecoding)
+                             CirceDerivationUtils
+                               .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                               .map(_ => Expr.splice(expr))
+                           else
+                             Right(Expr.splice(expr)): Either[DecodingFailure, A]
+                         }
+                       } else {
+                         CirceDerivationUtils
+                           .checkIsObjectAccumulating(Expr.splice(dctx.cursor))
+                           .andThen { _ =>
+                             if (Expr.splice(dctx.config).strictDecoding)
+                               CirceDerivationUtils
+                                 .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
+                                 .map(_ => Expr.splice(expr))
+                             else
+                               Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
+                           }
+                       }): Any
+                    }
+                  }
+                )
               case None =>
                 val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
                 Log.error(err.message) >> MIO.fail(err)
@@ -170,6 +191,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       }
                     else None
 
+                  // Pre-compute field name when evaluatedConfig is available and no @fieldName override
+                  val resolvedFieldName: Option[String] = nameOverride.orElse(
+                    dctx.evaluatedConfig.map(_.transformMemberNames(fName))
+                  )
+                  val useDefaultsStaticallyFalse: Boolean =
+                    dctx.evaluatedConfig.exists(!_.useDefaults)
+
                   // --- Fail-fast decode expression ---
                   val ffExpr: Expr[Either[DecodingFailure, Any]] =
                     if (isTransient) {
@@ -178,14 +206,23 @@ trait DecoderHandleAsCaseClassRuleImpl {
                         case None    => Expr.quote(Right(null): Either[DecodingFailure, Any])
                       }
                     } else {
-                      nameOverride match {
-                        case Some(customName) =>
+                      resolvedFieldName match {
+                        case Some(resolvedName) =>
                           defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
+                              // useDefaults is statically false — skip the defaults branch entirely
+                              Expr.quote {
+                                Expr
+                                  .splice(dctx.cursor)
+                                  .downField(Expr.splice(Expr(resolvedName)))
+                                  .as(Expr.splice(decoderExpr))
+                                  .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
                             case Some(defaultAnyExpr) =>
                               Expr.quote {
                                 val config = Expr.splice(dctx.config)
                                 if (config.useDefaults) {
-                                  val field = Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                  val field = Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
                                   if (field.failed)
                                     Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
                                   else
@@ -193,7 +230,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                 } else
                                   Expr
                                     .splice(dctx.cursor)
-                                    .downField(Expr.splice(Expr(customName)))
+                                    .downField(Expr.splice(Expr(resolvedName)))
                                     .as(Expr.splice(decoderExpr))
                                     .asInstanceOf[Either[DecodingFailure, Any]]
                               }
@@ -201,7 +238,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                               Expr.quote {
                                 Expr
                                   .splice(dctx.cursor)
-                                  .downField(Expr.splice(Expr(customName)))
+                                  .downField(Expr.splice(Expr(resolvedName)))
                                   .as(Expr.splice(decoderExpr))
                                   .asInstanceOf[Either[DecodingFailure, Any]]
                               }
@@ -247,16 +284,26 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           Expr.quote(Validated.valid(null): ValidatedNel[DecodingFailure, Any])
                       }
                     } else {
-                      nameOverride match {
-                        case Some(customName) =>
+                      resolvedFieldName match {
+                        case Some(resolvedName) =>
                           defaultAsAnyOpt match {
+                            case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
+                              // useDefaults is statically false — skip the defaults branch entirely
+                              Expr.quote {
+                                Expr
+                                  .splice(decoderExpr)
+                                  .tryDecodeAccumulating(
+                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
+                                  )
+                                  .map(x => x: Any)
+                              }
                             case Some(defaultAnyExpr) =>
                               Expr.quote {
                                 val config = Expr.splice(dctx.config)
                                 if (config.useDefaults)
                                   CirceDerivationUtils.decodeFieldWithDefaultAccumulating(
                                     Expr.splice(dctx.cursor),
-                                    Expr.splice(Expr(customName)),
+                                    Expr.splice(Expr(resolvedName)),
                                     Expr.splice(decoderExpr),
                                     Expr.splice(defaultAnyExpr)
                                   )
@@ -264,7 +311,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                   Expr
                                     .splice(decoderExpr)
                                     .tryDecodeAccumulating(
-                                      Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                      Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
                                     )
                                     .map(x => x: Any)
                               }
@@ -273,7 +320,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                 Expr
                                   .splice(decoderExpr)
                                   .tryDecodeAccumulating(
-                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(customName)))
+                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
                                   )
                                   .map(x => x: Any)
                               }
@@ -361,66 +408,99 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
-                  // Step 4: Wrap with if(failFast) branching and strictDecoding check
-                  val resolvedFieldNames: Option[Expr[Set[String]]] =
-                    if (hasAnyFieldNameAnnotation) {
-                      val nameExprs = fieldsList
-                        .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
-                        .map { case (name, p) =>
-                          getAnnotationStringArg[fieldName](p) match {
-                            case Some(custom) => (custom, true)
-                            case None         => (name, false)
-                          }
-                        }
-                      val resolvedList = nameExprs.foldRight(Expr.quote(List.empty[String])) {
-                        case ((name, true), acc) =>
-                          Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
-                        case ((name, false), acc) =>
-                          Expr.quote {
-                            Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(name))) ::
-                              Expr.splice(acc)
-                          }
-                      }
-                      Some(Expr.quote(Expr.splice(resolvedList).toSet))
-                    } else None
+                  val strictDecodingStaticallyFalse: Boolean =
+                    dctx.evaluatedConfig.exists(!_.strictDecoding)
 
-                  Expr.quote {
-                    val config = Expr.splice(dctx.config)
-                    (if (Expr.splice(dctx.failFast)) {
-                       // --- Fail-fast path ---
-                       val decoded = CirceDerivationUtils
-                         .sequenceDecodeResults(Expr.splice(ffListExpr))
-                         .map(Expr.splice(constructLambda))
-                       if (config.strictDecoding) {
-                         val expectedFields = Expr.splice(
-                           resolvedFieldNames.getOrElse(
-                             Expr.quote {
-                               Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
-                             }
-                           )
-                         )
+                  // Step 4: Wrap with if(failFast) branching and strictDecoding check
+                  // When evaluatedConfig is available, pre-compute all field names as constants
+                  val resolvedFieldNames: Option[Expr[Set[String]]] =
+                    dctx.evaluatedConfig match {
+                      case Some(evCfg) =>
+                        // Pre-compute all field names at compile time
+                        val names = fieldsList
+                          .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+                          .map { case (name, p) =>
+                            getAnnotationStringArg[fieldName](p).getOrElse(evCfg.transformMemberNames(name))
+                          }
+                        val setExpr = names.foldRight(Expr.quote(Set.empty[String])) { (name, acc) =>
+                          Expr.quote(Expr.splice(acc) + Expr.splice(Expr(name)))
+                        }
+                        Some(setExpr)
+                      case None =>
+                        if (hasAnyFieldNameAnnotation) {
+                          val nameExprs = fieldsList
+                            .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+                            .map { case (name, p) =>
+                              getAnnotationStringArg[fieldName](p) match {
+                                case Some(custom) => (custom, true)
+                                case None         => (name, false)
+                              }
+                            }
+                          val resolvedList = nameExprs.foldRight(Expr.quote(List.empty[String])) {
+                            case ((name, true), acc) =>
+                              Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
+                            case ((name, false), acc) =>
+                              Expr.quote {
+                                Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(name))) ::
+                                  Expr.splice(acc)
+                              }
+                          }
+                          Some(Expr.quote(Expr.splice(resolvedList).toSet))
+                        } else None
+                    }
+
+                  if (strictDecodingStaticallyFalse) {
+                    // strictDecoding is statically false — skip the strict decoding check entirely
+                    Expr.quote {
+                      (if (Expr.splice(dctx.failFast)) {
                          CirceDerivationUtils
-                           .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
-                           .flatMap(_ => decoded)
-                       } else decoded
-                     } else {
-                       // --- Accumulating path ---
-                       val decoded = CirceDerivationUtils
-                         .sequenceDecodeResultsAccumulating(Expr.splice(accListExpr))
-                         .map(Expr.splice(constructLambda))
-                       if (config.strictDecoding) {
-                         val expectedFields = Expr.splice(
-                           resolvedFieldNames.getOrElse(
-                             Expr.quote {
-                               Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
-                             }
-                           )
-                         )
+                           .sequenceDecodeResults(Expr.splice(ffListExpr))
+                           .map(Expr.splice(constructLambda))
+                       } else {
                          CirceDerivationUtils
-                           .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), expectedFields)
-                           .andThen(_ => decoded)
-                       } else decoded
-                     }): Any
+                           .sequenceDecodeResultsAccumulating(Expr.splice(accListExpr))
+                           .map(Expr.splice(constructLambda))
+                       }): Any
+                    }
+                  } else {
+                    Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      (if (Expr.splice(dctx.failFast)) {
+                         // --- Fail-fast path ---
+                         val decoded = CirceDerivationUtils
+                           .sequenceDecodeResults(Expr.splice(ffListExpr))
+                           .map(Expr.splice(constructLambda))
+                         if (config.strictDecoding) {
+                           val expectedFields = Expr.splice(
+                             resolvedFieldNames.getOrElse(
+                               Expr.quote {
+                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                               }
+                             )
+                           )
+                           CirceDerivationUtils
+                             .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
+                             .flatMap(_ => decoded)
+                         } else decoded
+                       } else {
+                         // --- Accumulating path ---
+                         val decoded = CirceDerivationUtils
+                           .sequenceDecodeResultsAccumulating(Expr.splice(accListExpr))
+                           .map(Expr.splice(constructLambda))
+                         if (config.strictDecoding) {
+                           val expectedFields = Expr.splice(
+                             resolvedFieldNames.getOrElse(
+                               Expr.quote {
+                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                               }
+                             )
+                           )
+                           CirceDerivationUtils
+                             .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), expectedFields)
+                             .andThen(_ => decoded)
+                         } else decoded
+                       }): Any
+                    }
                   }
                 }
             }

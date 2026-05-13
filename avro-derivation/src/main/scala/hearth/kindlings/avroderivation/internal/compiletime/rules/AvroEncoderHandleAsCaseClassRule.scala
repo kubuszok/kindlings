@@ -15,6 +15,15 @@ import org.apache.avro.generic.GenericData
 trait AvroEncoderHandleAsCaseClassRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
+  private def cachedSchemaForEncode[A: Type](implicit ctx: EncoderCtx[A]): MIO[Expr[Schema]] =
+    ctx.precomputedSchema match {
+      case Some(schemaExpr) =>
+        Log.info(s"Using precomputed schema for ${Type[A].prettyPrint}") >>
+          MIO.pure(schemaExpr)
+      case None =>
+        deriveSelfContainedSchema[A](ctx.config)
+    }
+
   object AvroEncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
@@ -85,39 +94,29 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                   }
                 }
                 .flatMap { fieldPairs =>
-                  val fieldsListExpr = fieldPairs.toList.foldRight(
-                    Expr.quote(List.empty[(String, Any)])
-                  ) {
-                    case ((fName, fieldEncoded, Some(customName)), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(Expr(customName)),
-                          Expr.splice(fieldEncoded)
-                        ) :: Expr.splice(acc)
-                      }
-                    case ((fName, fieldEncoded, None), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(ectx.config).transformFieldNames(Expr.splice(Expr(fName))),
-                          Expr.splice(fieldEncoded)
-                        ) :: Expr.splice(acc)
-                      }
-                  }
+                  val fieldPutExprs: List[(Int, Expr[Any])] =
+                    fieldPairs.toList.zipWithIndex.map { case ((_, fieldEncoded, _), idx) =>
+                      (idx, fieldEncoded)
+                    }
 
-                  deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
-                    Expr.quote {
-                      val schema = Expr.splice(schemaExpr)
-                      val fields = Expr.splice(fieldsListExpr)
-                      val record = new GenericData.Record(schema)
-                      fields.foreach { case (name, value) =>
-                        record.put(name, value)
+                  cachedSchemaForEncode[A].map { schemaExpr =>
+                    val recordPuts: Expr[GenericData.Record] => Expr[Unit] = { recordExpr =>
+                      fieldPutExprs.foldLeft(Expr.quote(()): Expr[Unit]) { case (acc, (idx, fieldEncoded)) =>
+                        Expr.quote {
+                          Expr.splice(acc)
+                          Expr.splice(recordExpr).put(Expr.splice(Expr(idx)), Expr.splice(fieldEncoded))
+                        }
                       }
+                    }
+                    Expr.quote {
+                      val record = new GenericData.Record(Expr.splice(schemaExpr))
+                      Expr.splice(recordPuts(Expr.quote(record)))
                       record: Any
                     }
                   }
                 }
             case None =>
-              deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
+              cachedSchemaForEncode[A].map { schemaExpr =>
                 Expr.quote {
                   val record = new GenericData.Record(Expr.splice(schemaExpr))
                   record: Any

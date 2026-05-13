@@ -77,12 +77,24 @@ trait EncoderHandleAsCaseClassRuleImpl {
                           Expr.splice(acc)
                       }
                     case ((fName, fieldNode, None), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                          Expr.splice(fieldNode)
-                        ) ::
-                          Expr.splice(acc)
+                      ectx.evaluatedConfig match {
+                        case Some(evConfig) =>
+                          val mappedName = evConfig.transformMemberNames(fName)
+                          Expr.quote {
+                            (
+                              Expr.splice(Expr(mappedName)),
+                              Expr.splice(fieldNode)
+                            ) ::
+                              Expr.splice(acc)
+                          }
+                        case None =>
+                          Expr.quote {
+                            (
+                              Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                              Expr.splice(fieldNode)
+                            ) ::
+                              Expr.splice(acc)
+                          }
                       }
                   }
                 }

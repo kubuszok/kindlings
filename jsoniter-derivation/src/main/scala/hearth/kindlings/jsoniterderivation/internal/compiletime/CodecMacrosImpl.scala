@@ -109,24 +109,26 @@ trait CodecMacrosImpl
     implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
-    deriveCodecFromCtxAndAdaptForEntrypoint[A, KindlingsJsonValueCodec[A]]("KindlingsJsonValueCodec.derived") {
-      case (encodeFn, decodeFn, nullValueExpr) =>
-        Expr.quote {
-          hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.codecInstance[A](
-            Expr.splice(nullValueExpr),
-            (in: JsonReader, default: A) => {
-              val _ = default
-              if (Expr.splice(configExpr).encodingOnly)
-                throw new UnsupportedOperationException("encoding-only codec cannot decode")
-              Expr.splice(decodeFn(Expr.quote(in), configExpr))
-            },
-            (x: A, out: JsonWriter) =>
-              if (Expr.splice(configExpr).decodingOnly)
-                throw new UnsupportedOperationException("decoding-only codec cannot encode")
-              else
-                Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
-          )
-        }
+    deriveCodecFromCtxAndAdaptForEntrypoint[A, KindlingsJsonValueCodec[A]](
+      "KindlingsJsonValueCodec.derived",
+      configExpr
+    ) { case (encodeFn, decodeFn, nullValueExpr) =>
+      Expr.quote {
+        hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.codecInstance[A](
+          Expr.splice(nullValueExpr),
+          (in: JsonReader, default: A) => {
+            val _ = default
+            if (Expr.splice(configExpr).encodingOnly)
+              throw new UnsupportedOperationException("encoding-only codec cannot decode")
+            Expr.splice(decodeFn(Expr.quote(in), configExpr))
+          },
+          (x: A, out: JsonWriter) =>
+            if (Expr.splice(configExpr).decodingOnly)
+              throw new UnsupportedOperationException("decoding-only codec cannot encode")
+            else
+              Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
+        )
+      }
     }
   }
 
@@ -337,6 +339,7 @@ trait CodecMacrosImpl
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = Some(Type[A].as_??)
+          val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
 
           // Value codec parts — same as deriveCodecTypeClass
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
@@ -347,7 +350,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined json codec encode body for ${Type[A].prettyPrint}")
@@ -363,7 +366,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined json codec decode body for ${Type[A].prettyPrint}")
@@ -377,14 +380,15 @@ trait CodecMacrosImpl
           val keyEncMIO: MIO[Option[Expr[(A, JsonWriter) => Unit]]] = {
             val stubValue = Expr.quote(null.asInstanceOf[A])
             val stubWriter = Expr.quote(null.asInstanceOf[JsonWriter])
-            implicit val ctx: EncoderCtx[A] = EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType)
+            implicit val ctx: EncoderCtx[A] =
+              EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType, evConfig)
             EncoderHandleAsMapRule.deriveKeyEncoding[A]
           }
 
           val keyDecMIO: MIO[Option[Expr[JsonReader => A]]] = {
             implicit val StringT: Type[String] = CTypes.String
             val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
-            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType)
+            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType, evConfig)
             DecoderHandleAsMapRule.deriveKeyDecoding[A]
           }
 
@@ -562,7 +566,10 @@ trait CodecMacrosImpl
       )(renderDerivationErrorMessage)
   }
 
-  def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+  def deriveCodecFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[JsoniterConfig]
+  )(
       provideCtxAndAdapt: (
           (Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit],
           (Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A],
@@ -593,6 +600,11 @@ trait CodecMacrosImpl
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = Some(Type[A].as_??)
 
+          // semiEval: evaluate config at compile time for optimized codegen.
+          // KNOWN ISSUE (hearth): semiEval fails on Inlined(...) wrapping module field access
+          // like JsoniterConfig.default. Pending fix in hearth 0.3.1.
+          val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
+
           // Encoder: cache as def, derive body inside, extract function from cache
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
             val defBuilder =
@@ -602,7 +614,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined codec encode body for ${Type[A].prettyPrint}")
@@ -619,7 +631,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined codec decode body for ${Type[A].prettyPrint}")
@@ -714,7 +726,8 @@ trait CodecMacrosImpl
       writer: Expr[JsonWriter],
       config: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[JsoniterConfig] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -781,14 +794,16 @@ trait CodecMacrosImpl
         writer: Expr[JsonWriter],
         config: Expr[JsoniterConfig],
         cache: MLocal[ValDefsCache],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[JsoniterConfig] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       writer = writer,
       config = config,
       cache = cache,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 
@@ -859,7 +874,8 @@ trait CodecMacrosImpl
       reader: Expr[JsonReader],
       config: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[JsoniterConfig] = None
   ) {
 
     def nest[B: Type](newReader: Expr[JsonReader]): DecoderCtx[B] = copy[B](
@@ -921,13 +937,15 @@ trait CodecMacrosImpl
         reader: Expr[JsonReader],
         config: Expr[JsoniterConfig],
         cache: MLocal[ValDefsCache],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[JsoniterConfig] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       reader = reader,
       config = config,
       cache = cache,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

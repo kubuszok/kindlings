@@ -41,6 +41,11 @@ trait ReaderMacrosImpl
     implicit val ResultA: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
     val selfType: Option[??] = Some(Type[A].as_??)
 
+    // semiEval: evaluate config at compile time for optimized codegen (pre-computed field names).
+    // KNOWN ISSUE (hearth): semiEval fails on Inlined(...) wrapping module field access
+    // like PureConfig.default. Pending fix in hearth 0.3.1.
+    val evConfig: Option[PureConfig] = configExpr.semiEval.toOption
+
     deriveReaderFromCtxAndAdaptForEntrypoint[A, KindlingsConfigReader[A]]("KindlingsConfigReader.derived") { fromCtx =>
       ValDefs.createVal[PureConfig](configExpr).use { configVal =>
         Expr.quote {
@@ -49,7 +54,9 @@ trait ReaderMacrosImpl
             (cur: ConfigCursor) =>
               val _ = cur
               Expr.splice {
-                fromCtx(ReaderCtx.from(Expr.quote(cur), Expr.quote(cfg), derivedType = selfType))
+                fromCtx(
+                  ReaderCtx.from(Expr.quote(cur), Expr.quote(cfg), derivedType = selfType, evaluatedConfig = evConfig)
+                )
               }
           }
         }
@@ -137,7 +144,8 @@ trait ReaderMacrosImpl
       cursor: Expr[ConfigCursor],
       config: Expr[PureConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[PureConfig] = None
   ) {
 
     def nest[B: Type](newCursor: Expr[ConfigCursor]): ReaderCtx[B] = copy[B](
@@ -201,13 +209,15 @@ trait ReaderMacrosImpl
     def from[A: Type](
         cursor: Expr[ConfigCursor],
         config: Expr[PureConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[PureConfig] = None
     ): ReaderCtx[A] = ReaderCtx(
       tpe = Type[A],
       cursor = cursor,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

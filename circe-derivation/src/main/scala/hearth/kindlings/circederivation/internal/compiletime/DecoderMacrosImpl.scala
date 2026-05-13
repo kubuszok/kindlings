@@ -39,6 +39,8 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[Configuration] = DTypes.Configuration
     implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
 
+    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
+
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[DecodingFailure, A]]("KindlingsDecoder.decode") { fromCtx =>
       ValDefs.createVal[Json](jsonExpr).use { jsonVal =>
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
@@ -47,7 +49,7 @@ trait DecoderMacrosImpl
             val _ = Expr.splice(configVal)
             Expr.splice {
               val cursorExpr: Expr[HCursor] = Expr.quote(Expr.splice(jsonVal).hcursor)
-              fromCtx(DecoderCtx.from(cursorExpr, configVal, Expr.quote(true), derivedType = None))
+              fromCtx(DecoderCtx.from(cursorExpr, configVal, Expr.quote(true), derivedType = None, evConfig))
             }
           }
         }
@@ -75,6 +77,8 @@ trait DecoderMacrosImpl
           "or add a type ascription to the result variable."
       )
 
+    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
+
     Log
       .namedScope(
         s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
@@ -85,7 +89,8 @@ trait DecoderMacrosImpl
             cursor = Expr.quote(null.asInstanceOf[HCursor]), // placeholder — real cursor comes from cached def params
             config = Expr.quote(null.asInstanceOf[Configuration]), // placeholder
             failFast = Expr.quote(true), // placeholder
-            derivedType = selfType
+            derivedType = selfType,
+            evaluatedConfig = evConfig
           )
           runSafe {
             for {
@@ -107,7 +112,8 @@ trait DecoderMacrosImpl
                 LambdaBuilder
                   .of1[HCursor]("directCursor")
                   .traverse { cursorExpr =>
-                    val freshCtx = DecoderCtx.from[A](cursorExpr, configExpr, Expr.quote(true), derivedType = selfType)
+                    val freshCtx =
+                      DecoderCtx.from[A](cursorExpr, configExpr, Expr.quote(true), derivedType = selfType, evConfig)
                     for {
                       _ <- ensureStandardExtensionsLoaded()
                       result <- deriveDecoderRecursively[A](using freshCtx)
@@ -276,7 +282,8 @@ trait DecoderMacrosImpl
       config: Expr[Configuration],
       failFast: Expr[Boolean],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[Configuration] = None
   ) {
 
     def nest[B: Type](newCursor: Expr[HCursor]): DecoderCtx[B] = copy[B](
@@ -365,14 +372,16 @@ trait DecoderMacrosImpl
         cursor: Expr[HCursor],
         config: Expr[Configuration],
         failFast: Expr[Boolean],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[Configuration] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       cursor = cursor,
       config = config,
       failFast = failFast,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

@@ -42,6 +42,14 @@ trait WriterHandleAsCaseClassRuleImpl {
       // Per-type override mirrors the reader: if `KindlingsProductHint[A]` is in scope,
       // use it; otherwise fall back to the global `PureConfig` config.
       val maybeHint: Option[Expr[KindlingsProductHint[A]]] = Expr.summonImplicit[KindlingsProductHint[A]].toOption
+
+      // When no per-type hint is present and the global config was evaluable at compile time,
+      // we can pre-compute transformMemberNames(fieldName) as constant strings.
+      val preComputedTransform: Option[String => String] = maybeHint match {
+        case Some(_) => None
+        case None    => wctx.evaluatedConfig.map(_.transformMemberNames)
+      }
+
       val transformExpr: Expr[String => String] = maybeHint match {
         case Some(h) => Expr.quote(Expr.splice(h).transformMemberNames)
         case None    => Expr.quote(Expr.splice(wctx.config).transformMemberNames)
@@ -88,9 +96,15 @@ trait WriterHandleAsCaseClassRuleImpl {
                           Expr.splice(acc)
                       }
                     case ((fName, fieldValueExpr, None), acc) =>
+                      // When the config was evaluable at compile time, pre-compute the
+                      // mapped name as a constant string.
+                      val keyExpr: Expr[String] = preComputedTransform match {
+                        case Some(transform) => Expr(transform(fName))
+                        case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                      }
                       Expr.quote {
                         (
-                          Expr.splice(transformExpr)(Expr.splice(Expr(fName))),
+                          Expr.splice(keyExpr),
                           Expr.splice(fieldValueExpr)
                         ) ::
                           Expr.splice(acc)

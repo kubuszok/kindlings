@@ -89,16 +89,25 @@ trait DecoderMacrosImpl
             Expr.quote {
               val cfg = Expr.splice(configVal)
               val sch = Expr.splice(schemaExpr)
-              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.decoderInstance[A](
-                sch,
-                (value: Any) => {
-                  val _ = value
-                  val _ = cfg
-                  Expr.splice {
-                    fromCtx(DecoderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType))
+              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories
+                .decoderInstanceWithSchema[A](
+                  sch,
+                  (value: Any, cachedSchema: Schema) => {
+                    val _ = value
+                    val _ = cfg
+                    val _ = cachedSchema
+                    Expr.splice {
+                      fromCtx(
+                        DecoderCtx.from(
+                          Expr.quote(value),
+                          Expr.quote(cfg),
+                          derivedType = selfType,
+                          precomputedSchema = Some(Expr.quote(cachedSchema))
+                        )
+                      )
+                    }
                   }
-                }
-              )): AvroDecoder[A]
+                )): AvroDecoder[A]
             }
           }
         }
@@ -215,12 +224,14 @@ trait DecoderMacrosImpl
       avroValue: Expr[Any],
       config: Expr[AvroConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
   ) {
 
     def nest[B: Type](newValue: Expr[Any]): DecoderCtx[B] = copy[B](
       tpe = Type[B],
-      avroValue = newValue
+      avroValue = newValue,
+      precomputedSchema = None
     )
 
     def nestInCache(
@@ -276,13 +287,15 @@ trait DecoderMacrosImpl
     def from[A: Type](
         avroValue: Expr[Any],
         config: Expr[AvroConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       avroValue = avroValue,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      precomputedSchema = precomputedSchema
     )
   }
 

@@ -16,9 +16,21 @@ object AvroDerivationFactories {
       def decode(value: Any): A = decodeFn(value)
     }
 
+  def decoderInstanceWithSchema[A](schemaVal: Schema, decodeFn: (Any, Schema) => A): AvroDecoder[A] =
+    new AvroDecoder[A] {
+      val schema: Schema = schemaVal
+      def decode(value: Any): A = decodeFn(value, schemaVal)
+    }
+
   def encoderInstance[A](schemaVal: Schema, encodeFn: A => Any): AvroEncoder[A] =
     new AvroEncoder[A] {
       val schema: Schema = schemaVal
       def encode(value: A): Any = encodeFn(value)
+    }
+
+  def encoderInstanceWithSchema[A](schemaVal: Schema, encodeFn: (A, Schema) => Any): AvroEncoder[A] =
+    new AvroEncoder[A] {
+      val schema: Schema = schemaVal
+      def encode(value: A): Any = encodeFn(value, schemaVal)
     }
 }

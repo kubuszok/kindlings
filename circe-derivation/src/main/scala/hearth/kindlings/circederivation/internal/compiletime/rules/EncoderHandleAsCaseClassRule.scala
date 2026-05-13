@@ -65,16 +65,20 @@ trait EncoderHandleAsCaseClassRuleImpl {
                     deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldJson =>
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
-                      (fName, fieldJson, nameOverride)
+                      // When evaluatedConfig is available and no @fieldName annotation, pre-compute the mapped name
+                      val resolvedName: Option[String] = nameOverride.orElse(
+                        ectx.evaluatedConfig.map(_.transformMemberNames(fName))
+                      )
+                      (fName, fieldJson, resolvedName)
                     }
                   }
                 }
                 .map { fieldPairs =>
                   fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) {
-                    case ((fName, fieldJson, Some(customName)), acc) =>
+                    case ((fName, fieldJson, Some(resolvedName)), acc) =>
                       Expr.quote {
                         (
-                          Expr.splice(Expr(customName)),
+                          Expr.splice(Expr(resolvedName)),
                           Expr.splice(fieldJson)
                         ) ::
                           Expr.splice(acc)

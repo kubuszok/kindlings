@@ -29,6 +29,7 @@ trait EncoderMacrosImpl
   def deriveInlineEncode[A: Type](valueExpr: Expr[A], configExpr: Expr[YamlConfig]): Expr[Node] = {
     implicit val NodeT: Type[Node] = Types.Node
     implicit val ConfigT: Type[YamlConfig] = Types.YamlConfig
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Node]("KindlingsYamlEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -36,7 +37,7 @@ trait EncoderMacrosImpl
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None)))
+            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
           }
         }
       }
@@ -47,6 +48,7 @@ trait EncoderMacrosImpl
   def deriveInlineToYamlString[A: Type](valueExpr: Expr[A], configExpr: Expr[YamlConfig]): Expr[String] = {
     implicit val ConfigT: Type[YamlConfig] = Types.YamlConfig
     implicit val StringT: Type[String] = Types.String
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, String]("KindlingsYamlEncoder.toYamlString") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -54,7 +56,7 @@ trait EncoderMacrosImpl
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            val node = Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None)))
+            val node = Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
             YamlDerivationUtils.nodeToYaml(node)
           }
         }
@@ -69,6 +71,7 @@ trait EncoderMacrosImpl
     implicit val NodeT: Type[Node] = Types.Node
     implicit val ConfigT: Type[YamlConfig] = Types.YamlConfig
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsYamlEncoder[A]]("KindlingsYamlEncoder.derived") { fromCtx =>
       ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
@@ -77,7 +80,7 @@ trait EncoderMacrosImpl
           hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.encoderInstance[A] { (obj: A) =>
             val _ = obj
             Expr.splice {
-              fromCtx(EncoderCtx.from(Expr.quote(obj), Expr.quote(cfg), derivedType = selfType))
+              fromCtx(EncoderCtx.from(Expr.quote(obj), Expr.quote(cfg), derivedType = selfType, evConfig))
             }
           }
         }
@@ -165,7 +168,8 @@ trait EncoderMacrosImpl
       value: Expr[A],
       config: Expr[YamlConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[YamlConfig] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -226,13 +230,15 @@ trait EncoderMacrosImpl
     def from[A: Type](
         value: Expr[A],
         config: Expr[YamlConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[YamlConfig] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

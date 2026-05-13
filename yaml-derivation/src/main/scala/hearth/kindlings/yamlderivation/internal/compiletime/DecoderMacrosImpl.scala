@@ -36,6 +36,7 @@ trait DecoderMacrosImpl
     implicit val NodeT: Type[Node] = DTypes.Node
     implicit val ConfigT: Type[YamlConfig] = DTypes.YamlConfig
     implicit val ConstructErrorT: Type[ConstructError] = DTypes.ConstructError
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[ConstructError, A]]("KindlingsYamlDecoder.decode") { fromCtx =>
       ValDefs.createVal[Node](nodeExpr).use { nodeVal =>
@@ -44,7 +45,7 @@ trait DecoderMacrosImpl
             val _ = Expr.splice(nodeVal)
             val _ = Expr.splice(configVal)
             Expr.splice {
-              fromCtx(DecoderCtx.from(nodeVal, configVal, derivedType = None))
+              fromCtx(DecoderCtx.from(nodeVal, configVal, derivedType = None, evConfig))
             }
           }
         }
@@ -63,6 +64,7 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[YamlConfig] = DTypes.YamlConfig
     implicit val ConstructErrorT: Type[ConstructError] = DTypes.ConstructError
     implicit val StringT: Type[String] = DTypes.String
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[YamlError, A]]("KindlingsYamlDecoder.fromYamlString") {
       fromCtx =>
@@ -77,7 +79,7 @@ trait DecoderMacrosImpl
                   val _ = node
                   val _ = cfg
                   Expr.splice {
-                    fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = None))
+                    fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = None, evConfig))
                   }
                 }
               )
@@ -96,6 +98,7 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[YamlConfig] = DTypes.YamlConfig
     implicit val ConstructErrorT: Type[ConstructError] = DTypes.ConstructError
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, KindlingsYamlDecoder[A]]("KindlingsYamlDecoder.derived") { fromCtx =>
       ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
@@ -104,7 +107,7 @@ trait DecoderMacrosImpl
           hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.decoderInstance[A] { (node: Node) =>
             val _ = node
             Expr.splice {
-              fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = selfType))
+              fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = selfType, evConfig))
             }
           }
         }
@@ -193,7 +196,8 @@ trait DecoderMacrosImpl
       node: Expr[Node],
       config: Expr[YamlConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[YamlConfig] = None
   ) {
 
     def nest[B: Type](newNode: Expr[Node]): DecoderCtx[B] = copy[B](
@@ -256,13 +260,15 @@ trait DecoderMacrosImpl
     def from[A: Type](
         node: Expr[Node],
         config: Expr[YamlConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[YamlConfig] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       node = node,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

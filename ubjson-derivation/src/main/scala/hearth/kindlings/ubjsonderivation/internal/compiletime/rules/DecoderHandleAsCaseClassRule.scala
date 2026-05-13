@@ -122,39 +122,44 @@ trait DecoderHandleAsCaseClassRuleImpl {
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  // Require check
+                  // Require check — skip entirely when config is known and both require flags are false
+                  val skipRequireChecks = dctx.evaluatedConfig.exists { c =>
+                    !c.requireDefaultFields && !c.requireCollectionFields
+                  }
                   val requireCheckExprs: List[Expr[Unit]] =
-                    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
-                      import param.tpe.Underlying as Field
-                      val checks = List.newBuilder[Expr[Unit]]
+                    if (skipRequireChecks) Nil
+                    else
+                      nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
+                        import param.tpe.Underlying as Field
+                        val checks = List.newBuilder[Expr[Unit]]
 
-                      if (param.hasDefault) {
-                        checks += Expr.quote {
-                          if (
-                            Expr.splice(dctx.config).requireDefaultFields &&
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                          )
-                            UBJsonDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                        if (param.hasDefault) {
+                          checks += Expr.quote {
+                            if (
+                              Expr.splice(dctx.config).requireDefaultFields &&
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                            )
+                              UBJsonDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                          }
                         }
-                      }
 
-                      val isCollOrMap = Type[Field] match {
-                        case IsMap(_)        => true
-                        case IsCollection(_) => true
-                        case _               => false
-                      }
-                      if (isCollOrMap) {
-                        checks += Expr.quote {
-                          if (
-                            Expr.splice(dctx.config).requireCollectionFields &&
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                          )
-                            UBJsonDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                        val isCollOrMap = Type[Field] match {
+                          case IsMap(_)        => true
+                          case IsCollection(_) => true
+                          case _               => false
                         }
-                      }
+                        if (isCollOrMap) {
+                          checks += Expr.quote {
+                            if (
+                              Expr.splice(dctx.config).requireCollectionFields &&
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                            )
+                              UBJsonDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
+                          }
+                        }
 
-                      checks.result()
-                    }
+                        checks.result()
+                      }
 
                   val requireCheckAll: Expr[Unit] =
                     requireCheckExprs.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
@@ -164,87 +169,92 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       }
                     }
 
-                  // Transient init
+                  // Transient init — skip entirely when config is known and all transient flags are false
+                  val skipTransientInit = dctx.evaluatedConfig.exists { c =>
+                    !c.transientDefault && !c.transientNone && !c.transientEmpty
+                  }
                   val transientInitExprs: List[Expr[Unit]] =
-                    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
-                      import param.tpe.Underlying as Field
-                      val initSteps = List.newBuilder[Expr[Unit]]
+                    if (skipTransientInit) Nil
+                    else
+                      nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
+                        import param.tpe.Underlying as Field
+                        val initSteps = List.newBuilder[Expr[Unit]]
 
-                      if (param.hasDefault) {
-                        param.defaultValue
-                          .flatMap { existentialOuter =>
-                            val methodOf = existentialOuter.value
-                            methodOf.value match {
-                              case noInstance: Method.NoInstance[?] =>
-                                import noInstance.Returned
-                                noInstance(Map.empty).toOption.map(_.upcast[Any])
-                              case _ => None
+                        if (param.hasDefault) {
+                          param.defaultValue
+                            .flatMap { existentialOuter =>
+                              val methodOf = existentialOuter.value
+                              methodOf.value match {
+                                case noInstance: Method.NoInstance[?] =>
+                                  import noInstance.Returned
+                                  noInstance(Map.empty).toOption.map(_.upcast[Any])
+                                case _ => None
+                              }
                             }
-                          }
-                          .foreach { defaultExpr =>
-                            initSteps += Expr.quote {
-                              if (
-                                Expr.splice(dctx.config).transientDefault &&
-                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                              )
-                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
+                            .foreach { defaultExpr =>
+                              initSteps += Expr.quote {
+                                if (
+                                  Expr.splice(dctx.config).transientDefault &&
+                                  Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                                )
+                                  Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
+                              }
                             }
-                          }
-                      }
-
-                      val isOpt = Type[Field] match {
-                        case IsOption(_) => true; case _ => false
-                      }
-                      if (isOpt) {
-                        initSteps += Expr.quote {
-                          if (
-                            Expr.splice(dctx.config).transientNone &&
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                          )
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = (None: Any)
                         }
-                      }
 
-                      if (Type[Field] =:= CTypes.String) {
-                        initSteps += Expr.quote {
-                          if (
-                            Expr.splice(dctx.config).transientEmpty &&
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                          )
-                            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = ("": Any)
+                        val isOpt = Type[Field] match {
+                          case IsOption(_) => true; case _ => false
                         }
-                      }
-
-                      // For collections/maps, use default value when transientEmpty and field is missing
-                      val isCollOrMapField = !isOpt && {
-                        val isMapF = Type[Field] match { case IsMap(_) => true; case _ => false }
-                        val isCollF = Type[Field] match { case IsCollection(_) => true; case _ => false }
-                        isMapF || isCollF
-                      }
-                      if (isCollOrMapField && param.hasDefault) {
-                        param.defaultValue
-                          .flatMap { existentialOuter =>
-                            val methodOf = existentialOuter.value
-                            methodOf.value match {
-                              case noInstance: Method.NoInstance[?] =>
-                                import noInstance.Returned
-                                noInstance(Map.empty).toOption.map(_.upcast[Any])
-                              case _ => None
-                            }
+                        if (isOpt) {
+                          initSteps += Expr.quote {
+                            if (
+                              Expr.splice(dctx.config).transientNone &&
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                            )
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = (None: Any)
                           }
-                          .foreach { defaultExpr =>
-                            initSteps += Expr.quote {
-                              if (
-                                Expr.splice(dctx.config).transientEmpty &&
-                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-                              )
-                                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
-                            }
-                          }
-                      }
+                        }
 
-                      initSteps.result()
-                    }
+                        if (Type[Field] =:= CTypes.String) {
+                          initSteps += Expr.quote {
+                            if (
+                              Expr.splice(dctx.config).transientEmpty &&
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                            )
+                              Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = ("": Any)
+                          }
+                        }
+
+                        // For collections/maps, use default value when transientEmpty and field is missing
+                        val isCollOrMapField = !isOpt && {
+                          val isMapF = Type[Field] match { case IsMap(_) => true; case _ => false }
+                          val isCollF = Type[Field] match { case IsCollection(_) => true; case _ => false }
+                          isMapF || isCollF
+                        }
+                        if (isCollOrMapField && param.hasDefault) {
+                          param.defaultValue
+                            .flatMap { existentialOuter =>
+                              val methodOf = existentialOuter.value
+                              methodOf.value match {
+                                case noInstance: Method.NoInstance[?] =>
+                                  import noInstance.Returned
+                                  noInstance(Map.empty).toOption.map(_.upcast[Any])
+                                case _ => None
+                              }
+                            }
+                            .foreach { defaultExpr =>
+                              initSteps += Expr.quote {
+                                if (
+                                  Expr.splice(dctx.config).transientEmpty &&
+                                  Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
+                                )
+                                  Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
+                              }
+                            }
+                        }
+
+                        initSteps.result()
+                      }
 
                   val transientInitAll: Expr[Unit] =
                     transientInitExprs.foldLeft(Expr.quote(()): Expr[Unit]) { (acc, step) =>
@@ -273,47 +283,102 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 .map { builder =>
                   val constructLambda = builder.build[A]
 
+                  // Pre-compute mapped field names when config is statically known
                   val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _, nameOverride) =>
-                    (name, index, decodeFnErased, nameOverride)
+                    val mappedName: Option[String] = nameOverride.orElse(
+                      dctx.evaluatedConfig.map(_.fieldNameMapper(name))
+                    )
+                    (name, index, decodeFnErased, mappedName)
                   }
 
-                  Expr.quote {
-                    val _seen: Array[Boolean] =
-                      if (Expr.splice(dctx.config).checkFieldDuplication)
-                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
-                      else null
-                    UBJsonDerivationUtils.readObject[A](
-                      Expr.splice(dctx.reader),
-                      Expr.splice(Expr(fieldMappings.size)),
-                      Expr.splice(constructLambda)
-                    ) { case (fieldName, arr, reader) =>
-                      Expr.splice {
-                        fieldMappings.foldRight(Expr.quote {
-                          if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
-                          else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) {
-                          case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
-                            Expr.quote {
-                              if (fieldName == Expr.splice(Expr(customName))) {
-                                if (_seen != null) {
-                                  if (_seen(Expr.splice(Expr(index))))
-                                    UBJsonDerivationUtils.throwDuplicateField(reader, fieldName)
-                                  _seen(Expr.splice(Expr(index))) = true
-                                }
-                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
-                              } else Expr.splice(elseExpr)
-                            }
-                          case ((name, index, decodeFnErased, None), elseExpr) =>
-                            Expr.quote {
-                              if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
-                                if (_seen != null) {
-                                  if (_seen(Expr.splice(Expr(index))))
-                                    UBJsonDerivationUtils.throwDuplicateField(reader, fieldName)
-                                  _seen(Expr.splice(Expr(index))) = true
-                                }
-                                arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
-                              } else Expr.splice(elseExpr)
-                            }
+                  val skipCheckFieldDuplication = dctx.evaluatedConfig.exists(!_.checkFieldDuplication)
+                  val skipUnexpectedStatically = dctx.evaluatedConfig.map(_.skipUnexpectedFields)
+
+                  if (skipCheckFieldDuplication) {
+                    // Optimized: no _seen array needed
+                    Expr.quote {
+                      UBJsonDerivationUtils.readObject[A](
+                        Expr.splice(dctx.reader),
+                        Expr.splice(Expr(fieldMappings.size)),
+                        Expr.splice(constructLambda)
+                      ) { case (fieldName, arr, reader) =>
+                        Expr.splice {
+                          val fallback: Expr[Unit] = skipUnexpectedStatically match {
+                            case Some(true) =>
+                              Expr.quote(reader.skip())
+                            case Some(false) =>
+                              Expr.quote(reader.decodeError("unexpected field: " + fieldName))
+                            case None =>
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
+                                else reader.decodeError("unexpected field: " + fieldName)
+                              }
+                          }
+                          fieldMappings.foldRight(fallback) {
+                            case ((name, index, decodeFnErased, Some(resolvedName)), elseExpr) =>
+                              Expr.quote {
+                                if (fieldName == Expr.splice(Expr(resolvedName))) {
+                                  arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                                } else Expr.splice(elseExpr)
+                              }
+                            case ((name, index, decodeFnErased, None), elseExpr) =>
+                              Expr.quote {
+                                if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                  arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                                } else Expr.splice(elseExpr)
+                              }
+                          }
+                        }
+                      }
+                    }
+                  } else {
+                    // Full path with _seen array
+                    Expr.quote {
+                      val _seen: Array[Boolean] =
+                        if (Expr.splice(dctx.config).checkFieldDuplication)
+                          new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
+                        else null
+                      UBJsonDerivationUtils.readObject[A](
+                        Expr.splice(dctx.reader),
+                        Expr.splice(Expr(fieldMappings.size)),
+                        Expr.splice(constructLambda)
+                      ) { case (fieldName, arr, reader) =>
+                        Expr.splice {
+                          val fallback: Expr[Unit] = skipUnexpectedStatically match {
+                            case Some(true) =>
+                              Expr.quote(reader.skip())
+                            case Some(false) =>
+                              Expr.quote(reader.decodeError("unexpected field: " + fieldName))
+                            case None =>
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
+                                else reader.decodeError("unexpected field: " + fieldName)
+                              }
+                          }
+                          fieldMappings.foldRight(fallback) {
+                            case ((name, index, decodeFnErased, Some(resolvedName)), elseExpr) =>
+                              Expr.quote {
+                                if (fieldName == Expr.splice(Expr(resolvedName))) {
+                                  if (_seen != null) {
+                                    if (_seen(Expr.splice(Expr(index))))
+                                      UBJsonDerivationUtils.throwDuplicateField(reader, fieldName)
+                                    _seen(Expr.splice(Expr(index))) = true
+                                  }
+                                  arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                                } else Expr.splice(elseExpr)
+                              }
+                            case ((name, index, decodeFnErased, None), elseExpr) =>
+                              Expr.quote {
+                                if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {
+                                  if (_seen != null) {
+                                    if (_seen(Expr.splice(Expr(index))))
+                                      UBJsonDerivationUtils.throwDuplicateField(reader, fieldName)
+                                    _seen(Expr.splice(Expr(index))) = true
+                                  }
+                                  arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
+                                } else Expr.splice(elseExpr)
+                              }
+                          }
                         }
                       }
                     }
@@ -434,9 +499,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 .map { builder =>
                   val constructLambda = builder.build[A]
 
+                  // Pre-compute mapped field names when config is statically known
                   val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _, nameOverride) =>
-                    (name, index, decodeFnErased, nameOverride)
+                    val mappedName: Option[String] = nameOverride.orElse(
+                      dctx.evaluatedConfig.map(_.fieldNameMapper(name))
+                    )
+                    (name, index, decodeFnErased, mappedName)
                   }
+
+                  val skipUnexpectedStatically = dctx.evaluatedConfig.map(_.skipUnexpectedFields)
 
                   Expr.quote {
                     UBJsonDerivationUtils.readObjectInline[A](
@@ -445,13 +516,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       Expr.splice(constructLambda)
                     ) { case (fieldName, arr, reader) =>
                       Expr.splice {
-                        fieldMappings.foldRight(Expr.quote {
-                          if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
-                          else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) {
-                          case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
+                        val fallback: Expr[Unit] = skipUnexpectedStatically match {
+                          case Some(true) =>
+                            Expr.quote(reader.skip())
+                          case Some(false) =>
+                            Expr.quote(reader.decodeError("unexpected field: " + fieldName))
+                          case None =>
                             Expr.quote {
-                              if (fieldName == Expr.splice(Expr(customName))) {
+                              if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
+                              else reader.decodeError("unexpected field: " + fieldName)
+                            }
+                        }
+                        fieldMappings.foldRight(fallback) {
+                          case ((name, index, decodeFnErased, Some(resolvedName)), elseExpr) =>
+                            Expr.quote {
+                              if (fieldName == Expr.splice(Expr(resolvedName))) {
                                 arr(Expr.splice(Expr(index))) = Expr.splice(decodeFnErased).apply(reader)
                               } else Expr.splice(elseExpr)
                             }
@@ -509,7 +588,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               _ <- ctx.cache.forwardDeclare("field-decode-method", defBuilder)
               builtBuilder <- defBuilder.traverse { case (_, (reader, config)) =>
                 val nestedCtx =
-                  DecoderCtx.from[Field](reader, config, ctx.cache, ctx.derivedType)
+                  DecoderCtx.from[Field](reader, config, ctx.cache, ctx.derivedType, ctx.evaluatedConfig)
                 deriveDecoderRecursively[Field](using nestedCtx)
               }
               currentCache <- ctx.cache.get
