@@ -42,13 +42,13 @@ trait AvroSchemaForHandleAsNamedTupleRuleImpl {
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       val fields = constructor.parameters.flatten.toList
-      val typeName = Type[A].shortName
+      val typeNameExpr = computeAvroNameExpr[A]
 
       NonEmptyList.fromList(fields) match {
         case None =>
           MIO.pure(Expr.quote {
             AvroDerivationUtils.createRecord(
-              Expr.splice(Expr(typeName)),
+              Expr.splice(typeNameExpr),
               Expr.splice(sfctx.config).namespace.getOrElse(""),
               java.util.Collections.emptyList[Schema.Field]()
             )
@@ -86,7 +86,7 @@ trait AvroSchemaForHandleAsNamedTupleRuleImpl {
               }
               Expr.quote {
                 AvroDerivationUtils.createRecord(
-                  Expr.splice(Expr(typeName)),
+                  Expr.splice(typeNameExpr),
                   Expr.splice(sfctx.config).namespace.getOrElse(""),
                   Expr.splice(fieldsExpr)
                 )

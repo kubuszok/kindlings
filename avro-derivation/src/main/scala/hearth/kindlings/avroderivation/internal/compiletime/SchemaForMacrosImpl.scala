@@ -10,6 +10,7 @@ import hearth.kindlings.avroderivation.annotations.{
   avroDefault,
   avroDoc,
   avroEnumDefault,
+  avroErasedName,
   avroError,
   avroFixed,
   avroNamespace,
@@ -19,6 +20,7 @@ import hearth.kindlings.avroderivation.annotations.{
   fieldName,
   transientField
 }
+import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 
 trait SchemaForMacrosImpl
@@ -293,6 +295,41 @@ trait SchemaForMacrosImpl
         }
       }
 
+  // Avro name computation
+
+  @scala.annotation.nowarn("msg=is never used")
+  protected def computeAvroNameExpr[A: SchemaForCtx]: Expr[String] = {
+    implicit val avroErasedNameT: Type[avroErasedName] = SfTypes.AvroErasedName
+    if (hasTypeAnnotation[avroErasedName, A]) {
+      Expr(Type[A].shortName)
+    } else {
+      implicit val SchemaT: Type[Schema] = SfTypes.Schema
+      implicit val StringT: Type[String] = SfTypes.String
+      val ignoredImplicits = AvroSchemaForUseImplicitWhenAvailableRule.ignoredImplicits
+      val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
+        import tpe.Underlying
+        if (tpe.Underlying =:= Type[A]) None
+        else if (sfctx.derivedType.exists(_.Underlying =:= tpe.Underlying)) None
+        else {
+          implicit val AvroSchemaForT: Type[AvroSchemaFor[tpe.Underlying]] = SfTypes.AvroSchemaFor[tpe.Underlying]
+          Type[AvroSchemaFor[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
+            case Right(schemaForExpr) =>
+              val fallback = Expr(Type.plainPrint[tpe.Underlying])
+              Some(Expr.quote {
+                val s = Expr.splice(schemaForExpr).schema
+                val t = s.getType
+                if (t == Schema.Type.RECORD || t == Schema.Type.ENUM || t == Schema.Type.FIXED)
+                  s.getFullName
+                else Expr.splice(fallback)
+              })
+            case Left(_) => None
+          }
+        }
+      }
+      Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
+    }
+  }
+
   // Types
 
   private[compiletime] object SfTypes {
@@ -316,5 +353,6 @@ trait SchemaForMacrosImpl
     val AvroSortPriority: Type[avroSortPriority] = Type.of[avroSortPriority]
     val AvroNoDefault: Type[avroNoDefault] = Type.of[avroNoDefault]
     val AvroEnumDefault: Type[avroEnumDefault] = Type.of[avroEnumDefault]
+    val AvroErasedName: Type[avroErasedName] = Type.of[avroErasedName]
   }
 }

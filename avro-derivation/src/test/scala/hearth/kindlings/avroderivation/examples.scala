@@ -264,5 +264,15 @@ case class WithListDefault(@avroDefault("[1,2,3]") items: List[Int] = List(1, 2,
 // Custom SchemaFor override test
 case class CustomSchemaType(value: String)
 
+// Issue #91: Generic type name encoding
+case class Audited[T](data: T, createdBy: String)
+case class Message(foo: Audited[SimplePerson], bar: Audited[Address])
+
+// Issue #92: Nested null in @avroDefault
+case class InnerWithOption(a: Option[String])
+case class OuterWithNestedNullDefault(
+    @avroDefault("""{"a": null}""") b: InnerWithOption = InnerWithOption(a = None)
+)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

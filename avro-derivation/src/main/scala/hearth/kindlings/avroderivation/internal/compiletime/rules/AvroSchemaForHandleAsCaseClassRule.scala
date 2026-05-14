@@ -66,7 +66,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
-      val typeName = Type[A].shortName
+      val typeNameExpr = computeAvroNameExpr[A]
 
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList.collectFirst {
@@ -109,7 +109,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
       // Recursive field derivation finds this via SfCheckSelfRecordRule.
       val emptyRecordExpr: Expr[Schema] = Expr.quote {
         AvroDerivationUtils.createEmptyRecord(
-          Expr.splice(Expr(typeName)),
+          Expr.splice(typeNameExpr),
           Expr.splice(docExprOrNull),
           Expr.splice(namespaceExpr),
           Expr.splice(Expr(isError))
