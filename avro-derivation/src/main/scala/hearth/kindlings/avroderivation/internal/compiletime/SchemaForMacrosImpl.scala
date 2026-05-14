@@ -14,9 +14,11 @@ import hearth.kindlings.avroderivation.annotations.{
   avroError,
   avroFixed,
   avroFqnParamNames,
+  avroName,
   avroNamespace,
   avroNoDefault,
   avroProp,
+  avroScalePrecision,
   avroSortPriority,
   fieldName,
   transientField
@@ -300,37 +302,39 @@ trait SchemaForMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used")
   protected def computeAvroNameExpr[A: SchemaForCtx]: Expr[String] = {
+    implicit val avroNameT: Type[avroName] = SfTypes.AvroName
     implicit val avroErasedNameT: Type[avroErasedName] = SfTypes.AvroErasedName
-    if (hasTypeAnnotation[avroErasedName, A]) {
-      Expr(Type[A].shortName)
-    } else {
-      implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      implicit val StringT: Type[String] = SfTypes.String
-      implicit val avroFqnParamNamesT: Type[avroFqnParamNames] = SfTypes.AvroFqnParamNames
-      val useFqn = hasTypeAnnotation[avroFqnParamNames, A]
-      val ignoredImplicits = AvroSchemaForUseImplicitWhenAvailableRule.ignoredImplicits
-      val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
-        import tpe.Underlying
-        if (tpe.Underlying =:= Type[A]) None
-        else if (sfctx.derivedType.exists(_.Underlying =:= tpe.Underlying)) None
-        else {
-          implicit val AvroSchemaForT: Type[AvroSchemaFor[tpe.Underlying]] = SfTypes.AvroSchemaFor[tpe.Underlying]
-          Type[AvroSchemaFor[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
-            case Right(schemaForExpr) =>
-              val fallback = Expr(Type.plainPrint[tpe.Underlying])
-              Some(Expr.quote {
-                val s = Expr.splice(schemaForExpr).schema
-                val t = s.getType
-                if (t == Schema.Type.RECORD || t == Schema.Type.ENUM || t == Schema.Type.FIXED)
-                  s.getFullName
-                else Expr.splice(fallback)
-              })
-            case Left(_) => None
+    getTypeAnnotationStringArg[avroName, A] match {
+      case Some(explicitName)                           => Expr(explicitName)
+      case None if hasTypeAnnotation[avroErasedName, A] => Expr(Type[A].shortName)
+      case None                                         =>
+        implicit val SchemaT: Type[Schema] = SfTypes.Schema
+        implicit val StringT: Type[String] = SfTypes.String
+        implicit val avroFqnParamNamesT: Type[avroFqnParamNames] = SfTypes.AvroFqnParamNames
+        val useFqn = hasTypeAnnotation[avroFqnParamNames, A]
+        val ignoredImplicits = AvroSchemaForUseImplicitWhenAvailableRule.ignoredImplicits
+        val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
+          import tpe.Underlying
+          if (tpe.Underlying =:= Type[A]) None
+          else if (sfctx.derivedType.exists(_.Underlying =:= tpe.Underlying)) None
+          else {
+            implicit val AvroSchemaForT: Type[AvroSchemaFor[tpe.Underlying]] = SfTypes.AvroSchemaFor[tpe.Underlying]
+            Type[AvroSchemaFor[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
+              case Right(schemaForExpr) =>
+                val fallback = Expr(Type.plainPrint[tpe.Underlying])
+                Some(Expr.quote {
+                  val s = Expr.splice(schemaForExpr).schema
+                  val t = s.getType
+                  if (t == Schema.Type.RECORD || t == Schema.Type.ENUM || t == Schema.Type.FIXED)
+                    s.getFullName
+                  else Expr.splice(fallback)
+                })
+              case Left(_) => None
+            }
           }
         }
-      }
-      if (useFqn) Expr.quote(AvroDerivationUtils.parseAvroNameFqn(Expr.splice(fullNameExpr)))
-      else Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
+        if (useFqn) Expr.quote(AvroDerivationUtils.parseAvroNameFqn(Expr.splice(fullNameExpr)))
+        else Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
     }
   }
 
@@ -359,5 +363,7 @@ trait SchemaForMacrosImpl
     val AvroEnumDefault: Type[avroEnumDefault] = Type.of[avroEnumDefault]
     val AvroErasedName: Type[avroErasedName] = Type.of[avroErasedName]
     val AvroFqnParamNames: Type[avroFqnParamNames] = Type.of[avroFqnParamNames]
+    val AvroName: Type[avroName] = Type.of[avroName]
+    val AvroScalePrecision: Type[avroScalePrecision] = Type.of[avroScalePrecision]
   }
 }

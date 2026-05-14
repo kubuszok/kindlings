@@ -280,5 +280,15 @@ case class OuterWithNestedNullDefault(
     @avroDefault("""{"a": null}""") b: InnerWithOption = InnerWithOption(a = None)
 )
 
+// @avroName test types
+@annotations.avroName("CustomRecord")
+case class NamedRecord(x: Int)
+
+// @avroScalePrecision test types
+case class WithPerFieldDecimal(
+    @annotations.avroScalePrecision(12, 4) price: BigDecimal,
+    label: String
+)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

@@ -49,4 +49,10 @@ trait AnnotationSupportScala3 extends AnnotationSupport { this: MacroCommonsScal
       case Apply(_, List(Literal(StringConstant(v1)), Literal(StringConstant(v2)))) => Some((v1, v2))
       case _                                                                        => None
     }
+
+  override protected def extractTwoIntLiteralsFromAnnotation(annotation: UntypedExpr): Option[(Int, Int)] =
+    annotation match {
+      case Apply(_, List(Literal(IntConstant(v1)), Literal(IntConstant(v2)))) => Some((v1, v2))
+      case _                                                                  => None
+    }
 }

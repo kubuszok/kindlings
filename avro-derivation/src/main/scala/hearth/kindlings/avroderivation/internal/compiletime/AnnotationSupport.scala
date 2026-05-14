@@ -19,6 +19,8 @@ trait AnnotationSupport { this: MacroCommons & StdExtensions =>
 
   protected def extractTwoStringLiteralsFromAnnotation(annotation: UntypedExpr): Option[(String, String)]
 
+  protected def extractTwoIntLiteralsFromAnnotation(annotation: UntypedExpr): Option[(Int, Int)]
+
   final def hasAnnotationType[Ann: Type](param: Parameter): Boolean =
     findAnnotationOfType[Ann](param).isDefined
 
@@ -42,6 +44,9 @@ trait AnnotationSupport { this: MacroCommons & StdExtensions =>
 
   final def getAllTypeAnnotationStringArgs[Ann: Type, A: Type]: List[String] =
     findAllTypeAnnotationsOfType[Ann, A].flatMap(extractStringLiteralFromAnnotation)
+
+  final def getAnnotationTwoIntArgs[Ann: Type](param: Parameter): Option[(Int, Int)] =
+    findAnnotationOfType[Ann](param).flatMap(extractTwoIntLiteralsFromAnnotation)
 
   final def getAllAnnotationTwoStringArgs[Ann: Type](param: Parameter): List[(String, String)] =
     findAllAnnotationsOfType[Ann](param).flatMap(extractTwoStringLiteralsFromAnnotation)
