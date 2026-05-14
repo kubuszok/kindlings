@@ -104,7 +104,7 @@ object AvroDerivationUtils {
   private def jsonNodeToObject(node: com.fasterxml.jackson.databind.JsonNode): Any = {
     import com.fasterxml.jackson.databind.node.*
     node match {
-      case _: NullNode                                        => org.apache.avro.Schema.Field.NULL_DEFAULT_VALUE
+      case _: NullNode                                        => org.apache.avro.JsonProperties.NULL_VALUE
       case n: BooleanNode                                     => java.lang.Boolean.valueOf(n.booleanValue())
       case n: IntNode                                         => java.lang.Integer.valueOf(n.intValue())
       case n: LongNode                                        => java.lang.Long.valueOf(n.longValue())
@@ -382,4 +382,44 @@ object AvroDerivationUtils {
     throw new IllegalArgumentException(
       s"Unknown Avro record type: $name. Expected one of: ${knownSubtypes.mkString(", ")}"
     )
+
+  // --- Type name helpers ---
+
+  def parseAvroName(fullTypeName: String): String = {
+    val bracketIdx = fullTypeName.indexOf('[')
+    if (bracketIdx < 0) shortenToAvroName(fullTypeName)
+    else {
+      val baseName = shortenToAvroName(fullTypeName.substring(0, bracketIdx))
+      val paramsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
+      val params = splitTopLevelTypeParams(paramsStr).map(parseAvroName)
+      if (params.isEmpty) baseName else (baseName :: params).mkString("__")
+    }
+  }
+
+  private def splitTopLevelTypeParams(s: String): List[String] = {
+    val result = List.newBuilder[String]
+    var depth = 0
+    var start = 0
+    var i = 0
+    while (i < s.length) {
+      s.charAt(i) match {
+        case '['               => depth += 1
+        case ']'               => depth -= 1
+        case ',' if depth == 0 =>
+          result += s.substring(start, i).trim
+          start = i + 1
+        case _ =>
+      }
+      i += 1
+    }
+    if (start < s.length) result += s.substring(start).trim
+    result.result()
+  }
+
+  private def shortenToAvroName(fullName: String): String = {
+    val stripped = if (fullName.endsWith(".type")) fullName.substring(0, fullName.length - 5) else fullName
+    val dotIdx = stripped.lastIndexOf('.')
+    val name = if (dotIdx < 0) stripped else stripped.substring(dotIdx + 1)
+    name.replaceAll("[^A-Za-z0-9_]", "_")
+  }
 }

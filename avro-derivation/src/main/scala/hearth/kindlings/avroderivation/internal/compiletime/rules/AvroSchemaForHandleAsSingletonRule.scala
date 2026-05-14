@@ -24,7 +24,7 @@ trait AvroSchemaForHandleAsSingletonRuleImpl {
             implicit val StringT: Type[String] = SfTypes.String
             implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
             implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
-            val typeName = Type[A].shortName
+            val typeNameExpr = computeAvroNameExpr[A]
             val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
             val namespaceExpr: Expr[String] = classNamespace match {
               case Some(ns) => Expr(ns)
@@ -32,7 +32,7 @@ trait AvroSchemaForHandleAsSingletonRuleImpl {
             }
             val schemaExpr = Expr.quote {
               AvroDerivationUtils.createRecord(
-                Expr.splice(Expr(typeName)),
+                Expr.splice(typeNameExpr),
                 Expr.splice(namespaceExpr),
                 java.util.Collections.emptyList[Schema.Field]()
               )

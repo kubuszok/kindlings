@@ -46,7 +46,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
       val childrenList = enumm.directChildren.toList
-      val typeName = Type[A].shortName
+      val typeNameExpr = computeAvroNameExpr[A]
       val enumDefault: Option[String] = getTypeAnnotationStringArg[avroEnumDefault, A]
       val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
 
@@ -90,7 +90,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
                   val javaSymbols = new java.util.ArrayList[String](symbols.size)
                   symbols.foreach(javaSymbols.add)
                   AvroDerivationUtils.createEnumWithDefault(
-                    Expr.splice(Expr(typeName)),
+                    Expr.splice(typeNameExpr),
                     Expr.splice(namespaceExpr),
                     javaSymbols,
                     Expr.splice(Expr(default))
@@ -102,7 +102,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
                   val javaSymbols = new java.util.ArrayList[String](symbols.size)
                   symbols.foreach(javaSymbols.add)
                   AvroDerivationUtils.createEnum(
-                    Expr.splice(Expr(typeName)),
+                    Expr.splice(typeNameExpr),
                     Expr.splice(namespaceExpr),
                     javaSymbols
                   )

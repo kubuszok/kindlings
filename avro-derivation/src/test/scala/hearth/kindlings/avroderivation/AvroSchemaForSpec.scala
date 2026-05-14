@@ -920,5 +920,46 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getName ==> "EitherNode"
       }
     }
+
+    group("Issue #91: generic type name encoding") {
+
+      test("Box[Int] schema name includes type parameter") {
+        val schema = AvroSchemaFor.schemaOf[Box[Int]]
+        schema.getName ==> "Box__Int"
+      }
+
+      test("Pair[String, Int] schema name includes both type parameters") {
+        val schema = AvroSchemaFor.schemaOf[Pair[String, Int]]
+        schema.getName ==> "Pair__String__Int"
+      }
+
+      test("two instantiations of same generic produce distinct schemas") {
+        val schema = AvroSchemaFor.schemaOf[Message]
+        val fooSchema = schema.getField("foo").schema()
+        val barSchema = schema.getField("bar").schema()
+        fooSchema.getName ==> "Audited__SimplePerson"
+        barSchema.getName ==> "Audited__Address"
+        barSchema.getField("data").schema().getName ==> "Address"
+      }
+
+      test("@avroErasedName suppresses type parameter encoding") {
+        val schema = AvroSchemaFor.schemaOf[ErasedBox[Int]]
+        schema.getName ==> "ErasedBox"
+      }
+
+      test("non-generic types keep simple names") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        schema.getName ==> "SimplePerson"
+      }
+    }
+
+    group("Issue #92: nested null in @avroDefault") {
+
+      test("@avroDefault with nested null in JSON object") {
+        val schema = AvroSchemaFor.schemaOf[OuterWithNestedNullDefault]
+        val field = schema.getField("b")
+        assert(field.hasDefaultValue)
+      }
+    }
   }
 }
