@@ -13,6 +13,7 @@ import hearth.kindlings.avroderivation.annotations.{
   avroErasedName,
   avroError,
   avroFixed,
+  avroFqnParamNames,
   avroNamespace,
   avroNoDefault,
   avroProp,
@@ -305,6 +306,8 @@ trait SchemaForMacrosImpl
     } else {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val StringT: Type[String] = SfTypes.String
+      implicit val avroFqnParamNamesT: Type[avroFqnParamNames] = SfTypes.AvroFqnParamNames
+      val useFqn = hasTypeAnnotation[avroFqnParamNames, A]
       val ignoredImplicits = AvroSchemaForUseImplicitWhenAvailableRule.ignoredImplicits
       val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
         import tpe.Underlying
@@ -326,7 +329,8 @@ trait SchemaForMacrosImpl
           }
         }
       }
-      Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
+      if (useFqn) Expr.quote(AvroDerivationUtils.parseAvroNameFqn(Expr.splice(fullNameExpr)))
+      else Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
     }
   }
 
@@ -354,5 +358,6 @@ trait SchemaForMacrosImpl
     val AvroNoDefault: Type[avroNoDefault] = Type.of[avroNoDefault]
     val AvroEnumDefault: Type[avroEnumDefault] = Type.of[avroEnumDefault]
     val AvroErasedName: Type[avroErasedName] = Type.of[avroErasedName]
+    val AvroFqnParamNames: Type[avroFqnParamNames] = Type.of[avroFqnParamNames]
   }
 }

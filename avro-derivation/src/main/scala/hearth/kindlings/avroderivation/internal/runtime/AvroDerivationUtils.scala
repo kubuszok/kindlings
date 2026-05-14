@@ -416,10 +416,38 @@ object AvroDerivationUtils {
     result.result()
   }
 
+  def parseAvroNameFqn(fullTypeName: String): String = {
+    val bracketIdx = fullTypeName.indexOf('[')
+    if (bracketIdx < 0) shortenToAvroName(fullTypeName)
+    else {
+      val baseName = shortenToAvroName(fullTypeName.substring(0, bracketIdx))
+      val paramsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
+      val params = splitTopLevelTypeParams(paramsStr).map(parseAvroParamFqn)
+      if (params.isEmpty) baseName else (baseName :: params).mkString("__")
+    }
+  }
+
+  private def parseAvroParamFqn(fullTypeName: String): String = {
+    val bracketIdx = fullTypeName.indexOf('[')
+    if (bracketIdx < 0) fqnToAvroName(fullTypeName)
+    else {
+      val baseFqn = fqnToAvroName(fullTypeName.substring(0, bracketIdx))
+      val paramsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
+      val params = splitTopLevelTypeParams(paramsStr).map(parseAvroParamFqn)
+      if (params.isEmpty) baseFqn else (baseFqn :: params).mkString("__")
+    }
+  }
+
+  private def stripTypeSuffix(name: String): String =
+    if (name.endsWith(".type")) name.substring(0, name.length - 5) else name
+
   private def shortenToAvroName(fullName: String): String = {
-    val stripped = if (fullName.endsWith(".type")) fullName.substring(0, fullName.length - 5) else fullName
+    val stripped = stripTypeSuffix(fullName)
     val dotIdx = stripped.lastIndexOf('.')
     val name = if (dotIdx < 0) stripped else stripped.substring(dotIdx + 1)
     name.replaceAll("[^A-Za-z0-9_]", "_")
   }
+
+  private def fqnToAvroName(fullName: String): String =
+    stripTypeSuffix(fullName).replaceAll("[^A-Za-z0-9_]", "_")
 }

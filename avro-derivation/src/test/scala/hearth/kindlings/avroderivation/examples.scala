@@ -268,6 +268,12 @@ case class CustomSchemaType(value: String)
 case class Audited[T](data: T, createdBy: String)
 case class Message(foo: Audited[SimplePerson], bar: Audited[Address])
 
+// @avroFqnParamNames test types
+object fqnA { case class Value(x: Int) }
+object fqnB { case class Value(y: String) }
+@annotations.avroFqnParamNames
+case class FqnWrapper[A, B](a: A, b: B)
+
 // Issue #92: Nested null in @avroDefault
 case class InnerWithOption(a: Option[String])
 case class OuterWithNestedNullDefault(

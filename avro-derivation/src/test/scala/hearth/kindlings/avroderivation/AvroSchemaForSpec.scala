@@ -951,6 +951,29 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[SimplePerson]
         schema.getName ==> "SimplePerson"
       }
+
+      test("@avroFqnParamNames uses fully-qualified type parameter names") {
+        val schema = AvroSchemaFor.schemaOf[FqnWrapper[fqnA.Value, fqnB.Value]]
+        val name = schema.getName
+        assert(name.contains("fqnA"), s"Expected FQN containing 'fqnA' but got: $name")
+        assert(name.contains("fqnB"), s"Expected FQN containing 'fqnB' but got: $name")
+      }
+
+      test("@avroFqnParamNames disambiguates same-short-name types") {
+        val schema = AvroSchemaFor.schemaOf[FqnWrapper[fqnA.Value, fqnB.Value]]
+        val name = schema.getName
+        // Without FQN, both would shorten to "Value" causing collision
+        // With FQN, package paths are preserved as underscores
+        assert(name.startsWith("FqnWrapper__"), s"Expected FqnWrapper__ prefix but got: $name")
+        val params = name.stripPrefix("FqnWrapper__").split("__").toList
+        assert(params.size == 2, s"Expected 2 type params but got: $params")
+        assert(params(0) != params(1), s"Type params should be distinct but got: $params")
+      }
+
+      test("@avroErasedName takes priority over @avroFqnParamNames") {
+        val schema = AvroSchemaFor.schemaOf[ErasedBox[Int]]
+        schema.getName ==> "ErasedBox"
+      }
     }
 
     group("Issue #92: nested null in @avroDefault") {
