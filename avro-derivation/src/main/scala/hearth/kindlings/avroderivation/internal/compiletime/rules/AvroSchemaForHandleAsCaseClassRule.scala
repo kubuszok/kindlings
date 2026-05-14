@@ -17,6 +17,7 @@ import hearth.kindlings.avroderivation.annotations.{
   avroNamespace,
   avroNoDefault,
   avroProp,
+  avroScalePrecision,
   fieldName,
   transientField
 }
@@ -51,6 +52,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
       implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
       implicit val avroDefaultT: Type[avroDefault] = SfTypes.AvroDefault
       implicit val avroFixedT: Type[avroFixed] = SfTypes.AvroFixed
+      implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
       implicit val avroErrorT: Type[avroError] = SfTypes.AvroError
       implicit val avroPropT: Type[avroProp] = SfTypes.AvroProp
       implicit val avroAliasT: Type[avroAlias] = SfTypes.AvroAlias
@@ -146,18 +148,19 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                   if (hasAnnotationType[avroNoDefault](param)) None
                   else getAnnotationStringArg[avroDefault](param)
                 val avroFixedSize = getAnnotationIntArg[avroFixed](param)
+                val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
                 val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
                 val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
                 Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
-                  avroFixedSize match {
-                    case Some(_) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
+                  (avroFixedSize, decimalOverride) match {
+                    case (Some(_), _) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
                       val err = SchemaDerivationError.AvroFixedOnNonByteArray(
                         fName,
                         Type[A].prettyPrint,
                         Type[Field].prettyPrint
                       )
                       Log.error(err.message) >> MIO.fail(err)
-                    case Some(size) =>
+                    case (Some(size), _) =>
                       val fixedName = nameOverride.getOrElse(fName)
                       MIO.pure {
                         val fieldSchema = Expr.quote {
@@ -169,7 +172,17 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                         }
                         (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                       }
-                    case None =>
+                    case (_, Some((precision, scale))) =>
+                      MIO.pure {
+                        val fieldSchema = Expr.quote {
+                          AvroDerivationUtils.decimalSchema(
+                            Expr.splice(Expr(precision)),
+                            Expr.splice(Expr(scale))
+                          )
+                        }
+                        (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
+                      }
+                    case _ =>
                       deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
                         (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                       }

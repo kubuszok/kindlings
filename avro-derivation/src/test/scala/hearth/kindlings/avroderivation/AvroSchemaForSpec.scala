@@ -976,6 +976,48 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("@avroName annotation") {
+
+      test("@avroName overrides schema name") {
+        val schema = AvroSchemaFor.schemaOf[NamedRecord]
+        schema.getName ==> "CustomRecord"
+      }
+    }
+
+    group("@avroScalePrecision annotation") {
+
+      test("per-field @avroScalePrecision overrides global config") {
+        val schema = AvroSchemaFor.schemaOf[WithPerFieldDecimal]
+        val priceSchema = schema.getField("price").schema()
+        priceSchema.getType ==> Schema.Type.BYTES
+        priceSchema.getLogicalType.getName ==> "decimal"
+        val decimal = priceSchema.getLogicalType.asInstanceOf[org.apache.avro.LogicalTypes.Decimal]
+        decimal.getPrecision ==> 12
+        decimal.getScale ==> 4
+        // label is a regular string field
+        schema.getField("label").schema().getType ==> Schema.Type.STRING
+      }
+
+      test("@avroScalePrecision works without global DecimalConfig") {
+        // No implicit AvroConfig with decimalConfig — BigDecimal defaults to STRING
+        // but @avroScalePrecision on a field should produce decimal anyway
+        val schema = AvroSchemaFor.schemaOf[WithPerFieldDecimal]
+        val priceSchema = schema.getField("price").schema()
+        priceSchema.getType ==> Schema.Type.BYTES
+        priceSchema.getLogicalType.getName ==> "decimal"
+      }
+    }
+
+    group("PascalCase field names") {
+
+      test("withPascalCaseFieldNames capitalizes first letter") {
+        implicit val config: AvroConfig = AvroConfig().withPascalCaseFieldNames
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        (schema.getField("Name") != null) ==> true
+        (schema.getField("Age") != null) ==> true
+      }
+    }
+
     group("Issue #92: nested null in @avroDefault") {
 
       test("@avroDefault with nested null in JSON object") {

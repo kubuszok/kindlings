@@ -14,6 +14,7 @@ final case class AvroConfig(
   def withTransformConstructorNames(f: String => String): AvroConfig = copy(transformConstructorNames = f)
   def withSnakeCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.snakeCase)
   def withKebabCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.kebabCase)
+  def withPascalCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.pascalCase)
   def withDecimalConfig(precision: Int, scale: Int): AvroConfig =
     copy(decimalConfig = Some(DecimalConfig(precision, scale)))
 }
@@ -47,5 +48,10 @@ object AvroConfig {
       i += 1
     }
     sb.toString
+  }
+
+  private[avroderivation] val pascalCase: String => String = { s =>
+    if (s.isEmpty) s
+    else s.charAt(0).toUpper.toString + s.substring(1)
   }
 }
