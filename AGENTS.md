@@ -107,7 +107,7 @@ The most load-bearing entries to keep in mind for any macro work:
 ## Configurable derivation timeout
 
 All derivation modules use `DerivationTimeout` from `derivation-commons`
-(`hearth.kindlings.derivation.compiletime.DerivationTimeout`). Default: 120 seconds.
+(`hearth.kindlings.derivation.compiletime.DerivationTimeout`). Default: 5 seconds.
 Override per-module via `-Xmacro-settings`:
 
 ```

@@ -904,6 +904,7 @@ lazy val benchmarks = projectMatrix
       "io.circe" %% "circe-parser" % versions.circe,
       "io.circe" %% "circe-generic" % versions.circe,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Provided,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-circe" % versions.jsoniterScala,
       "org.typelevel" %% "kittens" % versions.kittens,
       "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3
                                                 else versions.avro4s213)

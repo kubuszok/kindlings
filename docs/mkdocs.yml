@@ -1,0 +1,133 @@
+site_name: "Kindlings documentation"
+repo_url: https://github.com/kubuszok/kindlings
+edit_uri: edit/master/docs/user-guide/
+docs_dir: "user-guide"
+strict: true
+theme:
+  name: material
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: red
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+  features:
+    - content.action.edit
+    - content.code.copy
+    - content.code.select
+    - content.tabs.link
+    - content.tooltips
+    - navigation.expand
+    - navigation.footer
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+
+  font:
+    code: Fira Code
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - "Welcome": "index.md"
+  - "Modules":
+    - "Avro": "avro-derivation.md"
+    - "Cats": "cats-derivation.md"
+    - "Circe": "circe-derivation.md"
+    - "FastShowPretty": "fast-show-pretty.md"
+    - "Jsoniter Scala": "jsoniter-derivation.md"
+    - "PureConfig": "pureconfig-derivation.md"
+    - "ScalaCheck": "scalacheck-derivation.md"
+    - "sconfig (HOCON)": "sconfig-derivation.md"
+    - "Tapir Schema": "tapir-schema-derivation.md"
+    - "UBJson": "ubjson-derivation.md"
+    - "XML": "xml-derivation.md"
+    - "YAML": "yaml-derivation.md"
+  - "Integration Modules":
+    - "Cats Collections": "cats-integration.md"
+    - "Iron": "iron-integration.md"
+    - "Refined": "refined-integration.md"
+  - "Debugging & Diagnostics": "debugging.md"
+  - "FAQ": "faq.md"
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      clickable_checkbox: true
+      custom_checkbox: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      use_pygments: true
+
+plugins:
+  - macros
+  - search
+
+copyright: |
+  <div style="color: var(--md-footer-fg-color--lighter)">
+  Copyright &copy; 2025-2026, <a href="https://kubuszok.com" target="_blank" rel="noopener">Kubuszok.com</a>.<br />
+  Kindlings is FOSS licensed under Apache 2.0<br />
+  <br />
+  Documentation made with <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a>, <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">Material for MkDocs</a> and <a href="https://mkdocs-macros-plugin.readthedocs.io/" target="_blank" rel="noopener">Mkdocs-Macros</a>, hosted on <a href="https://readthedocs.org/" target="_blank" rel="noopener">Read the Docs</a>
+  </div>
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kubuszok/kindlings
+    - icon: fontawesome/solid/book-bookmark
+      link: https://index.scala-lang.org/kubuszok/kindlings
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/@MateuszKubuszok
+  scala:
+    2_13: "2.13.18"
+    3: "3.8.3"
+  libraries:
+    circe: "0.14.15"
+    jsoniterScala: "2.38.12"
+    cats: "2.13.0"
+    tapir: "1.13.19"
+    avro: "1.12.1"
+    pureconfig: "0.17.10"
+    scalacheck: "1.19.0"
+    refined: "0.11.3"
+    iron: "3.3.1"
+    sconfig: "1.12.4"
+    scalaYaml: "0.3.1"
+    scalaXml: "2.4.0"
+    scalaSaxParser: "0.1.0"
+    kittens: "3.5.0"
+    avro4s213: "4.1.2"
+    avro4s3: "5.0.15"
+  local:
+    tag: !ENV [CI_LATEST_TAG, "latest"]
