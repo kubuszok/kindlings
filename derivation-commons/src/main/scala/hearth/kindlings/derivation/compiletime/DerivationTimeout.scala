@@ -44,7 +44,7 @@ trait DerivationTimeout {
       case _ =>
         Environment.reportWarn(
           s"$derivationSettingsNamespace.timeout: unrecognized format '$str'. " +
-            s"Expected formats: 120, 120s, 5000ms, 5m. " +
+            s"Expected formats: 30, 30s, 5000ms, 1m. " +
             s"Using default of ${DerivationTimeout.Default.toSeconds}s."
         )
         None
@@ -55,7 +55,7 @@ trait DerivationTimeout {
 object DerivationTimeout {
 
   val Default: scala.concurrent.duration.FiniteDuration =
-    scala.concurrent.duration.FiniteDuration(120, java.util.concurrent.TimeUnit.SECONDS)
+    scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
 
   private val DurationPattern = """^\s*(\d+)\s*(ms|millis|milliseconds|s|seconds?|m|minutes?)\s*$""".r
 }

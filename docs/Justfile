@@ -1,0 +1,9 @@
+build:
+  docker build . -t mkdocs-kindlings-docs
+
+serve: build
+  docker run --rm -it -p 8000:8000 -v ${PWD}:/docs --env "CI_LATEST_TAG=$(git describe --tags)" mkdocs-kindlings-docs
+
+test-snippets:
+  cd .. && sbt --client "publish-local-for-tests"
+  cd .. && scala-cli run scripts/test-snippets.scala -- --extra "kindlings-version=$(sbt -batch -error 'print fastShowPretty/version' 2>/dev/null | grep -oE '^[0-9][^ \[]*')" "$PWD/docs/user-guide"
