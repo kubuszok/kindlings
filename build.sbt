@@ -3,7 +3,6 @@ import commandmatrix.extra.*
 import kubuszok.sbt._
 import kubuszok.sbt.KubuszokPlugin.autoImport._
 
-
 // Versions:
 
 val versions = new {
@@ -62,8 +61,6 @@ val logCrossQuotes = {
 
 // Common settings:
 
-
-
 // The hearth-cross-quotes:
 //  - on Scala 2 are macros (defined for all platforms)
 //  - and on Scala 3 are plugins (defined only for JVM).
@@ -73,7 +70,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
       // Enable logging from cross-quotes.
       MatrixAction
         .ForScala(_.isScala2)
-        .Configure(_.settings(scalacOptions += s"-Xmacro-settings:hearth.cross-quotes.logging=${logCrossQuotes}"))
+        .Configure(_.settings(scalacOptions += s"-Xmacro-settings:hearth.cross-quotes.logging=$logCrossQuotes"))
     ),
     for3 = List(
       MatrixAction
@@ -84,7 +81,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
             scalacOptions ++=
               Seq(
                 // Enable logging from cross-quotes.
-                s"-P:hearth.cross-quotes:logging=${logCrossQuotes}"
+                s"-P:hearth.cross-quotes:logging=$logCrossQuotes"
               )
           )
         )
@@ -383,7 +380,7 @@ lazy val fastShowPretty = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
 
 lazy val circeDerivation = projectMatrix
   .in(file("circe-derivation"))
@@ -398,7 +395,7 @@ lazy val circeDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "io.circe" %%% "circe-core" % versions.circe,
@@ -419,7 +416,7 @@ lazy val jsoniterDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala
@@ -446,7 +443,7 @@ lazy val jsoniterJson = projectMatrix
     description := "Minimal JSON AST with optics and JsonValueCodec for jsoniter-scala"
   )
   .settings(settings *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
@@ -473,7 +470,7 @@ lazy val ubjsonDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
 
 lazy val yamlDerivation = projectMatrix
   .in(file("yaml-derivation"))
@@ -487,7 +484,7 @@ lazy val yamlDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml
@@ -506,7 +503,7 @@ lazy val xmlDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
@@ -526,7 +523,7 @@ lazy val avroDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.apache.avro" % "avro" % versions.avro
@@ -545,7 +542,7 @@ lazy val pureconfigDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.pureconfig" %% "pureconfig-core" % versions.pureconfig
@@ -586,7 +583,7 @@ lazy val sconfigDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.ekrich" %%% "sconfig" % versions.sconfig
@@ -604,7 +601,7 @@ lazy val derivationCommons = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
 
 lazy val jsonSchemaConfigMacroProviders = projectMatrix
   .in(file("json-schema-config-macro-providers"))
@@ -617,7 +614,7 @@ lazy val jsonSchemaConfigMacroProviders = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
 
 lazy val tapirSchemaDerivation = projectMatrix
   .in(file("tapir-schema-derivation"))
@@ -631,7 +628,7 @@ lazy val tapirSchemaDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
@@ -655,7 +652,7 @@ lazy val refinedIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(libraryDependencies += "eu.timepit" %%% "refined" % versions.refined)
 
 lazy val ironIntegration = projectMatrix
@@ -670,7 +667,7 @@ lazy val ironIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(libraryDependencies += "io.github.iltotore" %%% "iron" % versions.iron)
 
 lazy val catsDerivation = projectMatrix
@@ -685,7 +682,7 @@ lazy val catsDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % versions.cats,
@@ -705,7 +702,7 @@ lazy val scalacheckDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.scalacheck" %%% "scalacheck" % versions.scalacheck
@@ -724,7 +721,7 @@ lazy val catsIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-    .settings(publishSettings *)
+  .settings(publishSettings *)
   .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
 
 // Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
