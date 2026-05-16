@@ -1,16 +1,8 @@
-import com.jsuereth.sbtpgp.PgpKeys.publishSigned
-//import com.typesafe.tools.mima.core.{Problem, ProblemFilters}
 import sbtwelcome.UsefulTask
 import commandmatrix.extra.*
-import sbt.ThisBuild
-import org.scalafmt.sbt.ScalafmtPlugin.autoImport.scalafmtOnCompile
+import kubuszok.sbt._
+import kubuszok.sbt.KubuszokPlugin.autoImport._
 
-// Used to configure the build so that it would format+compile during development but not on CI.
-lazy val isCI = sys.env.get("CI").contains("true")
-ThisBuild / scalafmtOnCompile := !isCI
-
-// Used to publish snapshots to Maven Central.
-val mavenCentralSnapshots = "Maven Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots"
 
 // Versions:
 
@@ -44,80 +36,44 @@ val versions = new {
   val avro4s213 = "4.1.2"
   val avro4s3 = "5.0.15"
 
-  // Explicitly handle Scala 2.13 and Scala 3 separately.
-  def fold[A](scalaVersion: String)(for2_13: => Seq[A], for3: => Seq[A]): Seq[A] =
-    CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, 13)) => for2_13
-      case Some((3, _))  => for3
-      case _             => Seq.empty // for sbt, apparently
-    }
 }
 
-val dev = new {
+val dev = new DevProperties(
+  scala213 = Some(versions.scala213),
+  scala3 = Some(versions.scala3),
+  platforms = versions.platforms
+)
 
+val logCrossQuotes = {
   val props = scala.util
     .Using(new java.io.FileInputStream("dev.properties")) { fis =>
-      val props = new java.util.Properties()
-      props.load(fis)
-      props
+      val p = new java.util.Properties()
+      p.load(fis)
+      p
     }
-    .get
-
-  // Which version should be used in IntelliJ
-  val ideScala = props.getProperty("ide.scala") match {
-    case "2.13" => versions.scala213
-    case "3"    => versions.scala3
-  }
-  val idePlatform = props.getProperty("ide.platform") match {
-    case "jvm"    => VirtualAxis.jvm
-    case "js"     => VirtualAxis.js
-    case "native" => VirtualAxis.native
-  }
-
-  val logCrossQuotes = props.getProperty("log.cross-quotes") match {
+    .getOrElse(new java.util.Properties())
+  props.getProperty("log.cross-quotes") match {
     case "true"                          => true
     case "false"                         => false
     case otherwise if otherwise.nonEmpty => otherwise
     case _                               => !isCI
   }
-
-  def isIdeScala(scalaVersion: String): Boolean =
-    CrossVersion.partialVersion(scalaVersion) == CrossVersion.partialVersion(ideScala)
-  def isIdePlatform(platform: VirtualAxis): Boolean = platform == idePlatform
 }
 
 // Common settings:
 
-Global / excludeLintKeys += git.useGitDescribe
-Global / excludeLintKeys += ideSkipProject
-val only1VersionInIDE =
-  // For the platform we are working with, show only the project for the Scala version we are working with.
-  MatrixAction
-    .ForPlatform(dev.idePlatform)
-    .Configure(
-      _.settings(
-        ideSkipProject := !dev.isIdeScala(scalaVersion.value),
-        bspEnabled := dev.isIdeScala(scalaVersion.value),
-        scalafmtOnCompile := !isCI
-      )
-    ) +:
-    // Do not show in IDE and BSP projects for the platform we are not working with.
-    versions.platforms.filterNot(dev.isIdePlatform).map { platform =>
-      MatrixAction
-        .ForPlatform(platform)
-        .Configure(_.settings(ideSkipProject := true, bspEnabled := false, scalafmtOnCompile := false))
-    }
+
 
 // The hearth-cross-quotes:
 //  - on Scala 2 are macros (defined for all platforms)
 //  - and on Scala 3 are plugins (defined only for JVM).
 val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
-  versions.fold(scalaVersion)(
+  foldVersion(scalaVersion)(
     for2_13 = List(
       // Enable logging from cross-quotes.
       MatrixAction
         .ForScala(_.isScala2)
-        .Configure(_.settings(scalacOptions += s"-Xmacro-settings:hearth.cross-quotes.logging=${dev.logCrossQuotes}"))
+        .Configure(_.settings(scalacOptions += s"-Xmacro-settings:hearth.cross-quotes.logging=${logCrossQuotes}"))
     ),
     for3 = List(
       MatrixAction
@@ -128,7 +84,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
             scalacOptions ++=
               Seq(
                 // Enable logging from cross-quotes.
-                s"-P:hearth.cross-quotes:logging=${dev.logCrossQuotes}"
+                s"-P:hearth.cross-quotes:logging=${logCrossQuotes}"
               )
           )
         )
@@ -137,9 +93,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
 }
 
 val settings = Seq(
-  git.useGitDescribe := true,
-  git.uncommittedSignifier := None,
-  scalacOptions ++= versions.fold(scalaVersion.value)(
+  scalacOptions ++= foldVersion(scalaVersion.value)(
     for3 = Seq(
       // format: off
       "-encoding", "UTF-8",
@@ -211,7 +165,7 @@ val settings = Seq(
       "-Ytasty-reader"
     )
   ),
-  Compile / doc / scalacOptions ++= versions.fold(scalaVersion.value)(
+  Compile / doc / scalacOptions ++= foldVersion(scalaVersion.value)(
     for3 = Seq("-Ygenerate-inkuire"), // type-based search for Scala 3, this option cannot go into compile
     for2_13 = Seq.empty
   ),
@@ -223,16 +177,14 @@ val dependencies = Seq(
     "com.kubuszok" %%% "hearth" % versions.hearth,
     "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test
   ),
-  libraryDependencies ++= versions.fold(scalaVersion.value)(
+  libraryDependencies ++= foldVersion(scalaVersion.value)(
     for3 = Seq.empty,
     for2_13 = Seq(
       compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
     )
   ),
-  resolvers += mavenCentralSnapshots
+  resolvers += Resolver.mavenLocal
 )
-
-val versionSchemeSettings = Seq(versionScheme := Some("early-semver"))
 
 val publishSettings = Seq(
   organization := "com.kubuszok",
@@ -255,27 +207,11 @@ val publishSettings = Seq(
       <url>https://github.com/kubuszok/kindlings/issues</url>
     </issueManagement>
   ),
-  publishTo := {
-    if (isSnapshot.value) Some(mavenCentralSnapshots)
-    else localStaging.value
-  },
-  publishMavenStyle := true,
-  Test / publishArtifact := false,
-  pomIncludeRepository := { _ =>
-    false
-  },
-  versionScheme := Some("early-semver"),
-  // Sonatype ignores isSnapshot setting and only looks at -SNAPSHOT suffix in version:
-  //   https://central.sonatype.org/publish/publish-maven/#performing-a-snapshot-deployment
-  // meanwhile sbt-git used to set up SNAPSHOT if there were uncommitted changes:
-  //   https://github.com/sbt/sbt-git/issues/164
-  // (now this suffix is empty by default) so we need to fix it manually.
-  git.gitUncommittedChanges := git.gitCurrentTags.value.isEmpty,
-  git.uncommittedSignifier := Some("SNAPSHOT")
+  projectType := ProjectType.ScalaLibrary
 )
 
 val noPublishSettings =
-  Seq(publish / skip := true, publishArtifact := false)
+  Seq(projectType := ProjectType.NonPublished)
 
 // Command generation
 
@@ -368,7 +304,6 @@ val al = new {
 
 lazy val root = project
   .in(file("."))
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .settings(settings)
   .settings(publishSettings)
   .settings(noPublishSettings)
@@ -438,9 +373,8 @@ lazy val root = project
 
 lazy val fastShowPretty = projectMatrix
   .in(file("fast-show-pretty"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-fast-show-pretty",
@@ -449,14 +383,12 @@ lazy val fastShowPretty = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
 
 lazy val circeDerivation = projectMatrix
   .in(file("circe-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-circe-derivation",
@@ -466,8 +398,7 @@ lazy val circeDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "io.circe" %%% "circe-core" % versions.circe,
@@ -477,9 +408,8 @@ lazy val circeDerivation = projectMatrix
 
 lazy val jsoniterDerivation = projectMatrix
   .in(file("jsoniter-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-jsoniter-derivation",
@@ -489,8 +419,7 @@ lazy val jsoniterDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala
@@ -509,8 +438,7 @@ lazy val jsoniterDerivation = projectMatrix
 
 lazy val jsoniterJson = projectMatrix
   .in(file("jsoniter-json"))
-  .someVariations(versions.scalas, versions.platforms)(only1VersionInIDE *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)(dev.only1VersionInIDE *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-jsoniter-json",
@@ -518,27 +446,25 @@ lazy val jsoniterJson = projectMatrix
     description := "Minimal JSON AST with optics and JsonValueCodec for jsoniter-scala"
   )
   .settings(settings *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % versions.jsoniterScala,
       "com.kubuszok" %%% "hearth-munit" % versions.hearth % Test
     ),
-    libraryDependencies ++= versions.fold(scalaVersion.value)(
+    libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq.empty,
       for2_13 = Seq(
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
       )
     ),
-    resolvers += mavenCentralSnapshots
+    resolvers += Resolver.mavenLocal
   )
 
 lazy val ubjsonDerivation = projectMatrix
   .in(file("ubjson-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-ubjson-derivation",
@@ -547,14 +473,12 @@ lazy val ubjsonDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
 
 lazy val yamlDerivation = projectMatrix
   .in(file("yaml-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-yaml-derivation",
@@ -563,8 +487,7 @@ lazy val yamlDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.virtuslab" %%% "scala-yaml" % versions.scalaYaml
@@ -573,9 +496,8 @@ lazy val yamlDerivation = projectMatrix
 
 lazy val xmlDerivation = projectMatrix
   .in(file("xml-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-xml-derivation",
@@ -584,8 +506,7 @@ lazy val xmlDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
@@ -595,9 +516,8 @@ lazy val xmlDerivation = projectMatrix
 
 lazy val avroDerivation = projectMatrix
   .in(file("avro-derivation"))
-  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-avro-derivation",
@@ -606,8 +526,7 @@ lazy val avroDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.apache.avro" % "avro" % versions.avro
@@ -616,9 +535,8 @@ lazy val avroDerivation = projectMatrix
 
 lazy val pureconfigDerivation = projectMatrix
   .in(file("pureconfig-derivation"))
-  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-pureconfig-derivation",
@@ -627,8 +545,7 @@ lazy val pureconfigDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.github.pureconfig" %% "pureconfig-core" % versions.pureconfig
@@ -658,10 +575,9 @@ val sconfigJavaTimePolyfill = List(
 lazy val sconfigDerivation = projectMatrix
   .in(file("sconfig-derivation"))
   .someVariations(versions.scalas, versions.platforms)(
-    (useCrossQuotes ++ only1VersionInIDE ++ sconfigJavaTimePolyfill) *
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ sconfigJavaTimePolyfill) *
   )
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-sconfig-derivation",
@@ -670,8 +586,7 @@ lazy val sconfigDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.ekrich" %%% "sconfig" % versions.sconfig
@@ -680,8 +595,7 @@ lazy val sconfigDerivation = projectMatrix
 
 lazy val derivationCommons = projectMatrix
   .in(file("derivation-commons"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-derivation-commons",
@@ -690,13 +604,11 @@ lazy val derivationCommons = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
 
 lazy val jsonSchemaConfigMacroProviders = projectMatrix
   .in(file("json-schema-config-macro-providers"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-json-schema-config-macro-providers",
@@ -705,14 +617,12 @@ lazy val jsonSchemaConfigMacroProviders = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
 
 lazy val tapirSchemaDerivation = projectMatrix
   .in(file("tapir-schema-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons, jsonSchemaConfigMacroProviders)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-tapir-schema-derivation",
@@ -721,8 +631,7 @@ lazy val tapirSchemaDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
@@ -736,8 +645,7 @@ lazy val tapirSchemaDerivation = projectMatrix
 
 lazy val refinedIntegration = projectMatrix
   .in(file("refined-integration"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-refined-integration",
@@ -747,14 +655,12 @@ lazy val refinedIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(libraryDependencies += "eu.timepit" %%% "refined" % versions.refined)
 
 lazy val ironIntegration = projectMatrix
   .in(file("iron-integration"))
-  .someVariations(List(versions.scala3), versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(List(versions.scala3), versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-iron-integration",
@@ -764,15 +670,13 @@ lazy val ironIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(libraryDependencies += "io.github.iltotore" %%% "iron" % versions.iron)
 
 lazy val catsDerivation = projectMatrix
   .in(file("cats-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-cats-derivation",
@@ -781,8 +685,7 @@ lazy val catsDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % versions.cats,
@@ -792,9 +695,8 @@ lazy val catsDerivation = projectMatrix
 
 lazy val scalacheckDerivation = projectMatrix
   .in(file("scalacheck-derivation"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .dependsOn(derivationCommons)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-scalacheck-derivation",
@@ -803,8 +705,7 @@ lazy val scalacheckDerivation = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
       "org.scalacheck" %%% "scalacheck" % versions.scalacheck
@@ -813,8 +714,7 @@ lazy val scalacheckDerivation = projectMatrix
 
 lazy val catsIntegration = projectMatrix
   .in(file("cats-integration"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-cats-integration",
@@ -824,8 +724,7 @@ lazy val catsIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
-  .settings(publishSettings *)
+    .settings(publishSettings *)
   .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
 
 // Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
@@ -838,8 +737,7 @@ val ironDepForScala3 = List(
 
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE ++ ironDepForScala3) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3) *)
   .disablePlugins(WelcomePlugin)
   .dependsOn(
     fastShowPretty,
@@ -867,7 +765,7 @@ lazy val integrationTests = projectMatrix
       "com.kubuszok" %%% "scala-sax-parser" % versions.scalaSaxParser,
       "org.typelevel" %%% "cats-core" % versions.cats
     ),
-    libraryDependencies ++= versions.fold(scalaVersion.value)(
+    libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),
       for2_13 = Seq.empty
     )
@@ -875,7 +773,7 @@ lazy val integrationTests = projectMatrix
 
 lazy val benchmarks = projectMatrix
   .in(file("benchmarks"))
-  .someVariations(versions.scalas, List(VirtualAxis.jvm))(only1VersionInIDE *)
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))(dev.only1VersionInIDE *)
   .enablePlugins(JmhPlugin)
   .dependsOn(
     fastShowPretty,
@@ -899,7 +797,7 @@ lazy val benchmarks = projectMatrix
     name := "kindlings-benchmarks",
     description := "JMH benchmarks comparing Kindlings derivation against original library derivation",
     scalacOptions --= Seq("-Werror", "-Xfatal-warnings", "-Xcheck-macros"),
-    resolvers += mavenCentralSnapshots,
+    resolvers += Resolver.mavenLocal,
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-parser" % versions.circe,
       "io.circe" %% "circe-generic" % versions.circe,
@@ -909,7 +807,7 @@ lazy val benchmarks = projectMatrix
       "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3
                                                 else versions.avro4s213)
     ),
-    libraryDependencies ++= versions.fold(scalaVersion.value)(
+    libraryDependencies ++= foldVersion(scalaVersion.value)(
       for2_13 = Seq(
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
         "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
