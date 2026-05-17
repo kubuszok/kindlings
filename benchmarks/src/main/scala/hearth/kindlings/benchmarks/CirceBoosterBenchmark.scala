@@ -17,7 +17,7 @@ class CirceBoosterEncodeBenchmark {
   // "Booster" = jsoniter-scala-circe writeToArray (Json → bytes)
   // "NoBooster" = circe .noSpaces (Json → String)
 
-  private implicit val jsonCodec: JsonValueCodec[Json] =
+  implicit private val jsonCodec: JsonValueCodec[Json] =
     new JsoniterScalaCodec(64, 32, _ => true, JsoniterScalaCodec.defaultNumberParser)
 
   // --- SimpleCC ---
@@ -89,7 +89,7 @@ class CirceBoosterDecodeBenchmark {
   // "Booster" = jsoniter-scala-circe readFromArray (bytes → Json)
   // "NoBooster" = circe parser.parse (String → Json)
 
-  private implicit val jsonCodec: JsonValueCodec[Json] =
+  implicit private val jsonCodec: JsonValueCodec[Json] =
     new JsoniterScalaCodec(64, 32, _ => true, JsoniterScalaCodec.defaultNumberParser)
 
   private var simpleCCBytes: Array[Byte] = _
