@@ -27,7 +27,7 @@ Original module -- derives `UBJsonValueCodec` for case classes, sealed traits, S
 ??? example "Deriving a codec for a case class"
 
     ```scala
-    import hearth.kindlings.ubjsonderivation.*
+    import hearth.kindlings.ubjsonderivation._
 
     case class Person(name: String, age: Int)
 
@@ -71,7 +71,7 @@ Import `UBJsonValueCodecExtensions._` for extra combinators on codec instances:
 ## Configuration
 
 ```scala
-import hearth.kindlings.ubjsonderivation.*
+import hearth.kindlings.ubjsonderivation._
 
 implicit val config: UBJsonConfig = UBJsonConfig.default
   .withSnakeCaseFieldNames
@@ -113,7 +113,7 @@ implicit val config: UBJsonConfig = UBJsonConfig.default
 | `@stringified` | `hearth.kindlings.ubjsonderivation.annotations` | Encode numeric/boolean field as a string |
 
 ```scala
-import hearth.kindlings.ubjsonderivation.annotations.*
+import hearth.kindlings.ubjsonderivation.annotations._
 
 case class User(
   @fieldName("user_name") name: String,
@@ -126,7 +126,7 @@ case class User(
 ??? example "Sealed trait with discriminator"
 
     ```scala
-    import hearth.kindlings.ubjsonderivation.*
+    import hearth.kindlings.ubjsonderivation._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -141,7 +141,7 @@ case class User(
 ??? example "Transient fields and defaults"
 
     ```scala
-    import hearth.kindlings.ubjsonderivation.*
+    import hearth.kindlings.ubjsonderivation._
 
     implicit val config: UBJsonConfig = UBJsonConfig.default
       .withTransientDefault
@@ -161,7 +161,7 @@ case class User(
 ??? example "Recursive data types"
 
     ```scala
-    import hearth.kindlings.ubjsonderivation.*
+    import hearth.kindlings.ubjsonderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
 
@@ -172,7 +172,7 @@ case class User(
 ??? example "Field name mapping"
 
     ```scala
-    import hearth.kindlings.ubjsonderivation.*
+    import hearth.kindlings.ubjsonderivation._
 
     implicit val config: UBJsonConfig = UBJsonConfig.default
       .withSnakeCaseFieldNames

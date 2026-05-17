@@ -38,7 +38,7 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
 
     case class Person(name: String, age: Int)
@@ -77,7 +77,7 @@ If both Circe and Jsoniter configurations are on the classpath, the macro finds 
 
 ```scala
 import hearth.kindlings.circederivation.Configuration
-import hearth.kindlings.tapirschemaderivation.*
+import hearth.kindlings.tapirschemaderivation._
 
 implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
 ```
@@ -98,7 +98,7 @@ implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig
 | `@hidden` | Field | Hide field from the schema |
 
 ```scala
-import sttp.tapir.Schema.annotations.*
+import sttp.tapir.Schema.annotations._
 import sttp.tapir.Validator
 
 @description("A user account")
@@ -119,7 +119,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
 
     sealed trait Shape
@@ -138,9 +138,9 @@ case class User(
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
-    import sttp.tapir.Schema.annotations.*
+    import sttp.tapir.Schema.annotations._
     import sttp.tapir.Validator
 
     @description("A person with metadata")
@@ -158,8 +158,8 @@ case class User(
 ??? example "Schema with JSON config discovery"
 
     ```scala
-    import hearth.kindlings.circederivation.*
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.circederivation._
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
 
     // Circe configuration with snake_case
@@ -180,7 +180,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
 
     case class TreeNode(value: Int, children: List[TreeNode])
@@ -196,7 +196,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
-    import hearth.kindlings.tapirschemaderivation.*
+    import hearth.kindlings.tapirschemaderivation._
     import sttp.tapir.Schema
 
     case class Box[A](value: A)
@@ -213,7 +213,7 @@ case class User(
 Import the debug package to log the derivation process at compile time:
 
 ```scala
-import hearth.kindlings.tapirschemaderivation.debug.*
+import hearth.kindlings.tapirschemaderivation.debug._
 ```
 
 This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the derivation steps to the compiler output.

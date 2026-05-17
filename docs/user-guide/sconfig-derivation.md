@@ -41,7 +41,7 @@ Derives `ConfigReader`, `ConfigWriter`, and `ConfigCodec` for HOCON configuratio
     //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
     //> using dep org.ekrich::sconfig:{{ libraries.sconfig }}
 
-    import hearth.kindlings.sconfigderivation.*
+    import hearth.kindlings.sconfigderivation._
     import org.ekrich.config.ConfigFactory
 
     case class DatabaseConfig(hostName: String, portNumber: Int, maxConnections: Int)
@@ -107,7 +107,7 @@ val uuidWriter: ConfigWriter[java.util.UUID] = stringWriter.contramap(_.toString
 All derivation methods accept an implicit `SConfig`. The defaults mirror PureConfig's conventions:
 
 ```scala
-import hearth.kindlings.sconfigderivation.*
+import hearth.kindlings.sconfigderivation._
 
 implicit val config: SConfig = SConfig.default
 // Equivalent to:
@@ -143,7 +143,7 @@ implicit val config: SConfig = SConfig.default
 For fine-grained control over individual types, use `ProductHint` and `CoproductHint`:
 
 ```scala
-import hearth.kindlings.sconfigderivation.*
+import hearth.kindlings.sconfigderivation._
 
 case class MyType(myField: String, otherField: Int)
 
@@ -168,7 +168,7 @@ implicit val myTypeHint: ProductHint[MyType] =
 | `@transientField` | Exclude a field from reading/writing (must have a default value) |
 
 ```scala
-import hearth.kindlings.sconfigderivation.annotations.*
+import hearth.kindlings.sconfigderivation.annotations._
 
 case class AppConfig(
   @configKey("app-name") name: String,
@@ -185,7 +185,7 @@ case class AppConfig(
     //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
     //> using dep org.ekrich::sconfig:{{ libraries.sconfig }}
 
-    import hearth.kindlings.sconfigderivation.*
+    import hearth.kindlings.sconfigderivation._
     import org.ekrich.config.ConfigFactory
 
     sealed trait DbBackend
@@ -211,7 +211,7 @@ case class AppConfig(
     //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
     //> using dep org.ekrich::sconfig:{{ libraries.sconfig }}
 
-    import hearth.kindlings.sconfigderivation.*
+    import hearth.kindlings.sconfigderivation._
     import org.ekrich.config.ConfigFactory
 
     implicit val config: SConfig = SConfig.default.withStrictDecoding
@@ -238,7 +238,7 @@ case class AppConfig(
     //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
     //> using dep org.ekrich::sconfig:{{ libraries.sconfig }}
 
-    import hearth.kindlings.sconfigderivation.*
+    import hearth.kindlings.sconfigderivation._
     import org.ekrich.config.ConfigFactory
 
     case class HttpConfig(host: String = "0.0.0.0", port: Int = 8080)
@@ -269,7 +269,7 @@ case class AppConfig(
     //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
     //> using dep org.ekrich::sconfig:{{ libraries.sconfig }}
 
-    import hearth.kindlings.sconfigderivation.*
+    import hearth.kindlings.sconfigderivation._
 
     case class AppConfig(appName: String, maxRetries: Int, debug: Boolean)
 
@@ -289,7 +289,7 @@ case class AppConfig(
 Enable debug logging to see the derivation process:
 
 ```scala
-import hearth.kindlings.sconfigderivation.debug.*
+import hearth.kindlings.sconfigderivation.debug._
 ```
 
 ## Error handling

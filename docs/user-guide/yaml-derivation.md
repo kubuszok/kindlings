@@ -38,7 +38,7 @@ Drop-in replacement for scala-yaml's built-in `derives` — derives `YamlEncoder
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
 
-    import hearth.kindlings.yamlderivation.*
+    import hearth.kindlings.yamlderivation._
 
     case class Person(name: String, age: Int)
 
@@ -82,7 +82,7 @@ All methods take an implicit/using `YamlConfig` parameter (defaults to `YamlConf
 The `syntax` object provides extension methods for convenient inline usage:
 
 ```scala
-import hearth.kindlings.yamlderivation.syntax.*
+import hearth.kindlings.yamlderivation.syntax._
 
 val yaml: String = Person("Alice", 30).toYamlString
 val result: Either[YamlError, Person] = "name: Bob\nage: 25".fromYamlString[Person]
@@ -93,7 +93,7 @@ val result: Either[YamlError, Person] = "name: Bob\nage: 25".fromYamlString[Pers
 All derivation methods accept an implicit `YamlConfig`:
 
 ```scala
-import hearth.kindlings.yamlderivation.*
+import hearth.kindlings.yamlderivation._
 
 implicit val config: YamlConfig = YamlConfig.default
   .withSnakeCaseMemberNames
@@ -123,7 +123,7 @@ implicit val config: YamlConfig = YamlConfig.default
 | `@transientField` | Exclude a field from encoding/decoding (must have a default value) |
 
 ```scala
-import hearth.kindlings.yamlderivation.annotations.*
+import hearth.kindlings.yamlderivation.annotations._
 
 case class User(
   @fieldName("user_name") name: String,
@@ -140,7 +140,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
 
-    import hearth.kindlings.yamlderivation.*
+    import hearth.kindlings.yamlderivation._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -167,7 +167,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
 
-    import hearth.kindlings.yamlderivation.*
+    import hearth.kindlings.yamlderivation._
 
     implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
 
@@ -185,7 +185,7 @@ case class User(
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep org.virtuslab::scala-yaml:{{ libraries.scalaYaml }}
 
-    import hearth.kindlings.yamlderivation.*
+    import hearth.kindlings.yamlderivation._
 
     implicit val config: YamlConfig = YamlConfig.default
       .withSnakeCaseMemberNames

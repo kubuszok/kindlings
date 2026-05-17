@@ -145,8 +145,8 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe.syntax._
 
     case class Person(name: String, age: Int)
 

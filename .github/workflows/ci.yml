@@ -26,6 +26,46 @@ jobs:
       - name: Check code formatting
         run: scalafmt --check
 
+  check-snippets:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled'
+
+    name: Check Scala CLI snippets from documentation
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cache/coursier/v1
+            ~/.cache/scalacli
+            ~/.sbt
+            ~/.ivy2/cache
+          key: snippets-coursier-${{ runner.os }}-${{ hashFiles('docs/user-guide/*.md') }}
+          restore-keys: |
+            snippets-coursier-${{ runner.os }}-
+      - uses: extractions/setup-just@v4
+      - uses: coursier/setup-action@v3.0.0
+        with:
+          apps: scala-cli sbt
+      - name: Run snippets from documentation
+        working-directory: docs
+        run: |
+          scala-cli config power true
+          just test-snippets
+      - uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: |
+            ~/.cache/coursier/v1
+            ~/.cache/scalacli
+            ~/.sbt
+            ~/.ivy2/cache
+          key: snippets-coursier-${{ runner.os }}-${{ hashFiles('docs/user-guide/*.md') }}
+
   build:
 
     runs-on: ubuntu-latest

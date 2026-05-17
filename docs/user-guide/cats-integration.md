@@ -88,9 +88,9 @@ Each provider teaches all derivation modules how to encode and decode the corres
     //> using dep org.typelevel::cats-core:{{ libraries.cats }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
     import cats.data.NonEmptyList
 
     case class Team(
@@ -120,10 +120,10 @@ Each provider teaches all derivation modules how to encode and decode the corres
     //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
     //> using dep org.typelevel::cats-core:{{ libraries.cats }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
     import cats.data.NonEmptyMap
-    import cats.implicits.*
+    import cats.implicits._
 
     case class Config(
       settings: NonEmptyMap[String, String]
@@ -144,9 +144,9 @@ Each provider teaches all derivation modules how to encode and decode the corres
     //> using dep org.typelevel::cats-core:{{ libraries.cats }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
     import cats.data.Validated
 
     case class FormResult(

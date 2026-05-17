@@ -30,7 +30,7 @@ Original module -- derives `FastShowPretty` instances for pretty-printing case c
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     case class Address(street: String, city: String)
     case class Person(name: String, age: Int, address: Address)
@@ -71,7 +71,7 @@ Original module -- derives `FastShowPretty` instances for pretty-printing case c
 `RenderConfig` controls indentation. Unlike the builder pattern used by other modules, `RenderConfig` is a simple case class with predefined constants:
 
 ```scala
-import hearth.kindlings.fastshowpretty.*
+import hearth.kindlings.fastshowpretty._
 
 // Use a predefined config
 val output = FastShowPretty.render(myValue, RenderConfig.Default)
@@ -105,7 +105,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     case class Point(x: Int, y: Int)
 
@@ -146,7 +146,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     case class Team(name: String, members: List[String])
 
@@ -168,7 +168,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -187,7 +187,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     case class Tree(value: Int, children: List[Tree])
 
@@ -222,7 +222,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
-    import hearth.kindlings.fastshowpretty.*
+    import hearth.kindlings.fastshowpretty._
 
     case class Person(name: String, age: Int)
 

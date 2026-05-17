@@ -70,13 +70,13 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
     //> using dep eu.timepit::refined:{{ libraries.refined }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
     import eu.timepit.refined.api.Refined
     import eu.timepit.refined.numeric.Positive
     import eu.timepit.refined.string.MatchesRegex
-    import eu.timepit.refined.auto.*
+    import eu.timepit.refined.auto._
 
     case class Order(
       quantity: Int Refined Positive,
@@ -102,11 +102,11 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
     //> using dep eu.timepit::refined:{{ libraries.refined }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
     import eu.timepit.refined.api.Refined
     import eu.timepit.refined.collection.NonEmpty
-    import eu.timepit.refined.auto.*
+    import eu.timepit.refined.auto._
 
     case class User(
       name: String Refined NonEmpty,

@@ -23,7 +23,7 @@
 ??? example "Schema generation, encoding, and decoding"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
+    import hearth.kindlings.avroderivation._
 
     case class Person(name: String, age: Int)
 
@@ -89,7 +89,7 @@ All methods take an implicit/using `AvroConfig` parameter (defaults to `AvroConf
 All derivation methods accept an implicit `AvroConfig`:
 
 ```scala
-import hearth.kindlings.avroderivation.*
+import hearth.kindlings.avroderivation._
 
 implicit val config: AvroConfig = AvroConfig.default
   .withNamespace("com.example")
@@ -112,7 +112,7 @@ implicit val config: AvroConfig = AvroConfig.default
 All annotations are in the `hearth.kindlings.avroderivation.annotations` package.
 
 ```scala
-import hearth.kindlings.avroderivation.annotations.*
+import hearth.kindlings.avroderivation.annotations._
 ```
 
 ### Field and type naming
@@ -156,8 +156,8 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Annotated types with documentation and namespaces"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
-    import hearth.kindlings.avroderivation.annotations.*
+    import hearth.kindlings.avroderivation._
+    import hearth.kindlings.avroderivation.annotations._
 
     @avroDoc("A person record")
     @avroNamespace("com.example.models")
@@ -177,8 +177,8 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Sealed trait with sort priority"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
-    import hearth.kindlings.avroderivation.annotations.*
+    import hearth.kindlings.avroderivation._
+    import hearth.kindlings.avroderivation.annotations._
 
     sealed trait Shape
     @avroSortPriority(1)
@@ -193,8 +193,8 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Default values and field annotations"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
-    import hearth.kindlings.avroderivation.annotations.*
+    import hearth.kindlings.avroderivation._
+    import hearth.kindlings.avroderivation.annotations._
 
     case class Settings(
       host: String,
@@ -213,7 +213,7 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Custom field names with snake_case config"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
+    import hearth.kindlings.avroderivation._
 
     implicit val config: AvroConfig = AvroConfig.default
       .withSnakeCaseFieldNames
@@ -228,7 +228,7 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Recursive data types"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
+    import hearth.kindlings.avroderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
 
@@ -245,8 +245,8 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Logical types (UUID, Instant, LocalDate, etc.)"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
-    import java.time.*
+    import hearth.kindlings.avroderivation._
+    import java.time._
     import java.util.UUID
 
     case class EventRecord(
@@ -269,8 +269,8 @@ import hearth.kindlings.avroderivation.annotations.*
 ??? example "Generic types with name encoding"
 
     ```scala
-    import hearth.kindlings.avroderivation.*
-    import hearth.kindlings.avroderivation.annotations.*
+    import hearth.kindlings.avroderivation._
+    import hearth.kindlings.avroderivation.annotations._
 
     case class Audited[T](data: T, createdBy: String)
     case class User(name: String)
@@ -297,7 +297,7 @@ import hearth.kindlings.avroderivation.annotations.*
 Import the debug package to log the derivation process at compile time:
 
 ```scala
-import hearth.kindlings.avroderivation.debug.*
+import hearth.kindlings.avroderivation.debug._
 ```
 
 This enables `LogDerivation` implicits for `AvroSchemaFor`, `AvroEncoder`, and `AvroDecoder`, printing the derivation steps to the compiler output.

@@ -43,8 +43,8 @@ Original module -- derives `XmlEncoder`, `XmlDecoder`, and `XmlCodec` for case c
     //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
     //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
 
-    import hearth.kindlings.xmlderivation.*
-    import hearth.kindlings.xmlderivation.annotations.*
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
 
     case class Book(
       @xmlAttribute isbn: String,
@@ -116,7 +116,7 @@ Import `hearth.kindlings.xmlderivation.syntax.*` for extension methods:
 ## Configuration
 
 ```scala
-import hearth.kindlings.xmlderivation.*
+import hearth.kindlings.xmlderivation._
 
 implicit val config: XmlConfig = XmlConfig.default
   .withAttributesByDefault
@@ -156,7 +156,7 @@ implicit val config: XmlConfig = XmlConfig.default
 | `@transientField` | `hearth.kindlings.xmlderivation.annotations` | Exclude field from encoding/decoding (must have default) |
 
 ```scala
-import hearth.kindlings.xmlderivation.annotations.*
+import hearth.kindlings.xmlderivation.annotations._
 
 case class Article(
   @xmlAttribute id: Int,
@@ -175,7 +175,7 @@ case class Article(
     //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
     //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
 
-    import hearth.kindlings.xmlderivation.*
+    import hearth.kindlings.xmlderivation._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -205,8 +205,8 @@ case class Article(
     //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
     //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
 
-    import hearth.kindlings.xmlderivation.*
-    import hearth.kindlings.xmlderivation.annotations.*
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
 
     implicit val config: XmlConfig = XmlConfig.default.withAttributesByDefault
 
@@ -226,8 +226,8 @@ case class Article(
     //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
     //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
 
-    import hearth.kindlings.xmlderivation.*
-    import hearth.kindlings.xmlderivation.annotations.*
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
 
     case class Product(
       @xmlAttribute id: String,
@@ -256,8 +256,8 @@ case class Article(
     //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
     //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
 
-    import hearth.kindlings.xmlderivation.*
-    import hearth.kindlings.xmlderivation.annotations.*
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
 
     case class Link(
       @xmlAttribute href: String,
@@ -277,7 +277,7 @@ case class Article(
 ??? example "Recursive data types"
 
     ```scala
-    import hearth.kindlings.xmlderivation.*
+    import hearth.kindlings.xmlderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
 

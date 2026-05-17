@@ -38,8 +38,8 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
 
     case class Person(name: String, age: Int)
 
@@ -73,7 +73,7 @@ All methods take an implicit/using `JsoniterConfig` parameter (defaults to `Json
 ## Configuration
 
 ```scala
-import hearth.kindlings.jsoniterderivation.*
+import hearth.kindlings.jsoniterderivation._
 
 implicit val config: JsoniterConfig = JsoniterConfig.default
   .withSnakeCaseFieldNames
@@ -129,8 +129,8 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -155,8 +155,8 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
 
     implicit val config: JsoniterConfig = JsoniterConfig.default
       .withTransientDefault

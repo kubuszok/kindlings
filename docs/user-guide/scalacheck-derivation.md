@@ -38,7 +38,7 @@ Derives `Arbitrary`, `Cogen`, and `Shrink` instances for case classes, sealed tr
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
     //> using dep org.scalacheck::scalacheck:{{ libraries.scalacheck }}
 
-    import hearth.kindlings.scalacheckderivation.*
+    import hearth.kindlings.scalacheckderivation._
     import org.scalacheck.Arbitrary
 
     case class Person(name: String, age: Int)
@@ -91,7 +91,7 @@ No configuration class is needed -- derivation is fully automatic based on the t
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
     //> using dep org.scalacheck::scalacheck:{{ libraries.scalacheck }}
 
-    import hearth.kindlings.scalacheckderivation.*
+    import hearth.kindlings.scalacheckderivation._
     import org.scalacheck.{Arbitrary, Prop}
 
     sealed trait Shape
@@ -118,7 +118,7 @@ No configuration class is needed -- derivation is fully automatic based on the t
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
     //> using dep org.scalacheck::scalacheck:{{ libraries.scalacheck }}
 
-    import hearth.kindlings.scalacheckderivation.*
+    import hearth.kindlings.scalacheckderivation._
     import org.scalacheck.{Arbitrary, Cogen, Gen}
 
     case class Point(x: Int, y: Int)
@@ -139,7 +139,7 @@ No configuration class is needed -- derivation is fully automatic based on the t
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
     //> using dep org.scalacheck::scalacheck:{{ libraries.scalacheck }}
 
-    import hearth.kindlings.scalacheckderivation.*
+    import hearth.kindlings.scalacheckderivation._
     import org.scalacheck.Shrink
 
     case class Config(retries: Int, timeout: Long, label: String)
@@ -159,7 +159,7 @@ No configuration class is needed -- derivation is fully automatic based on the t
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
     //> using dep org.scalacheck::scalacheck:{{ libraries.scalacheck }}
 
-    import hearth.kindlings.scalacheckderivation.*
+    import hearth.kindlings.scalacheckderivation._
     import org.scalacheck.Arbitrary
 
     case class Tree(value: Int, children: List[Tree])
@@ -176,7 +176,7 @@ No configuration class is needed -- derivation is fully automatic based on the t
 Enable debug logging to see the derivation process:
 
 ```scala
-import hearth.kindlings.scalacheckderivation.debug.*
+import hearth.kindlings.scalacheckderivation.debug._
 ```
 
 Or via scalac option:
