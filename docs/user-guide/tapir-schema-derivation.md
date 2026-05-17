@@ -26,6 +26,7 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
 
     ```scala
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
     ```
 
@@ -36,9 +37,11 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
     import hearth.kindlings.tapirschemaderivation._
+    import hearth.kindlings.circederivation._
     import sttp.tapir.Schema
 
     case class Person(name: String, age: Int)
@@ -49,9 +52,6 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
     // Some(SName(Person,List()))
     println(schema.schemaType)
     // SProduct(List(SProductField(FieldName(name,name),Schema(...),...),...))
-
-    // Sanely-automatic — resolved by the compiler
-    implicitly[Schema[Person]]
     ```
 
 ## API
@@ -78,6 +78,7 @@ If both Circe and Jsoniter configurations are on the classpath, the macro finds 
 ```scala
 import hearth.kindlings.circederivation.Configuration
 import hearth.kindlings.tapirschemaderivation._
+import hearth.kindlings.circederivation._
 
 implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
 ```
@@ -117,9 +118,11 @@ case class User(
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
     import hearth.kindlings.tapirschemaderivation._
+    import hearth.kindlings.circederivation._
     import sttp.tapir.Schema
 
     sealed trait Shape
@@ -136,9 +139,11 @@ case class User(
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
     import hearth.kindlings.tapirschemaderivation._
+    import hearth.kindlings.circederivation._
     import sttp.tapir.Schema
     import sttp.tapir.Schema.annotations._
     import sttp.tapir.Validator
@@ -178,9 +183,11 @@ case class User(
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
     import hearth.kindlings.tapirschemaderivation._
+    import hearth.kindlings.circederivation._
     import sttp.tapir.Schema
 
     case class TreeNode(value: Int, children: List[TreeNode])
@@ -194,16 +201,22 @@ case class User(
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.softwaremill.sttp.tapir::tapir-core:{{ libraries.tapir }}
 
     import hearth.kindlings.tapirschemaderivation._
+    import hearth.kindlings.circederivation._
     import sttp.tapir.Schema
 
     case class Box[A](value: A)
     case class Person(name: String, age: Int)
 
     implicit val personSchema: Schema[Person] = KindlingsSchema.derive[Person]
-    val boxSchema: Schema[Box[Person]] = KindlingsSchema.derive[Box[Person]]
+    println(personSchema.name)
+    // Some(SName(Person,List()))
+
+    // Box[Person] picks up the Person schema via implicit
+    lazy val boxSchema: Schema[Box[Person]] = KindlingsSchema.derive[Box[Person]]
     println(boxSchema.name)
     // Some(SName(Box,List(Person)))
     ```

@@ -103,7 +103,7 @@ class KindlingsExtendedRunner(runner: Runner)(
   export runner.{docsDir, filter, tmpDir}
 
   private val ignored = Map(
-    // Dep-only snippets (no actual code)
+    // Dep-only snippets (no actual code, just show how to add the dependency)
     "avro-derivation.md#Installation[2]" -> "Dep-only snippet",
     "cats-derivation.md#Installation[3]" -> "Dep-only snippet",
     "cats-integration.md#Installation[3]" -> "Dep-only snippet",
@@ -120,32 +120,9 @@ class KindlingsExtendedRunner(runner: Runner)(
     "ubjson-derivation.md#Installation[3]" -> "Dep-only snippet",
     "xml-derivation.md#Installation[4]" -> "Dep-only snippet",
     "yaml-derivation.md#Installation[3]" -> "Dep-only snippet",
-    // TODO: fix imports (extension objects, missing type imports, config implicits)
-    "cats-derivation.md#Quick start[1]" -> "TODO: needs extensions._ import",
-    "cats-derivation.md#Usage examples[1]" -> "TODO: needs extensions._ import",
-    "cats-derivation.md#Usage examples[2]" -> "TODO: needs extensions._ import",
-    "cats-derivation.md#Usage examples[3]" -> "TODO: needs extensions._ import",
-    "iron-integration.md#Example[1]" -> "TODO: needs iron constraint imports",
-    "iron-integration.md#Example[2]" -> "TODO: needs iron constraint imports",
-    "refined-integration.md#Example[2]" -> "TODO: needs refined type imports",
-    "scalacheck-derivation.md#Quick start[1]" -> "TODO: needs extensions._ import",
-    "scalacheck-derivation.md#Usage examples[1]" -> "TODO: needs extensions._ import",
-    "scalacheck-derivation.md#Usage examples[2]" -> "TODO: needs extensions._ import",
-    "scalacheck-derivation.md#Usage examples[3]" -> "TODO: needs extensions._ import",
-    "scalacheck-derivation.md#Usage examples[4]" -> "TODO: needs extensions._ import",
-    "tapir-schema-derivation.md#Quick start[1]" -> "TODO: needs circe Configuration implicit",
-    "tapir-schema-derivation.md#Usage examples[1]" -> "TODO: needs circe Configuration implicit",
-    "tapir-schema-derivation.md#Usage examples[2]" -> "TODO: needs circe Configuration implicit",
-    "tapir-schema-derivation.md#Usage examples[4]" -> "TODO: needs circe Configuration implicit",
-    "tapir-schema-derivation.md#Usage examples[5]" -> "TODO: needs circe Configuration implicit",
-    "yaml-derivation.md#Quick start[1]" -> "TODO: needs org.virtuslab.yaml._ import",
-    "yaml-derivation.md#Usage examples[1]" -> "TODO: needs org.virtuslab.yaml._ import",
-    "yaml-derivation.md#Usage examples[2]" -> "TODO: needs org.virtuslab.yaml._ import",
-    "yaml-derivation.md#Usage examples[3]" -> "TODO: needs org.virtuslab.yaml._ import",
-    "index.md#Quick start[3]" -> "TODO: needs explicit encoder for sanely-automatic example",
-    "refined-integration.md#Example[1]" -> "TODO: needs refined predicate imports",
-    "cats-integration.md#Examples[1]" -> "TODO: needs explicit encoder for asJson in script mode",
-    "cats-integration.md#Examples[3]" -> "TODO: needs explicit encoder for asJson in script mode"
+    // Runtime issues in script mode (compilation succeeds)
+    "scalacheck-derivation.md#Usage examples[4]" -> "Recursive Arbitrary may stack overflow in script mode",
+    "tapir-schema-derivation.md#Usage examples[5]" -> "Initialization order issue with implicit val in script wrapper"
   )
 
   extension (snippet: Snippet)

@@ -72,10 +72,8 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
     import eu.timepit.refined.api.Refined
     import eu.timepit.refined.numeric.Positive
-    import eu.timepit.refined.string.MatchesRegex
     import eu.timepit.refined.auto._
 
     case class Order(
@@ -84,10 +82,11 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
     )
 
     val order = Order(3, "widget")
-    println(order.asJson.noSpaces)
+    println(KindlingsEncoder.encode(order).noSpaces)
     // {"quantity":3,"item":"widget"}
 
-    val decoded = io.circe.parser.decode[Order]("""{"quantity":0,"item":"widget"}""")
+    val decoded = io.circe.parser.parse("""{"quantity":0,"item":"widget"}""")
+      .flatMap(KindlingsDecoder.decode[Order](_))
     println(decoded)
     // Left(DecodingFailure(...)) — 0 is not positive
     ```
@@ -97,7 +96,7 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
     The same refined types work transparently with Jsoniter, Avro, YAML, and every other module. No per-module setup is needed:
 
     ```scala
-    //> using scala {{ scala.3 }}
+    //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
     //> using dep eu.timepit::refined:{{ libraries.refined }}
@@ -113,8 +112,8 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
       age: Int
     )
 
-    val codec = KindlingsJsonValueCodec.derive[User]
-    val json = writeToString(User("Alice", 30))(codec)
+    implicit val codec = KindlingsJsonValueCodec.derive[User]
+    val json = writeToString(User("Alice", 30))
     println(json)
     // {"name":"Alice","age":30}
     ```

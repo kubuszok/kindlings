@@ -33,19 +33,17 @@ Drop-in replacement for `circe-generic` / `circe-generic-extras` — derives `En
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
 
     case class Person(name: String, age: Int)
 
-    // Semi-automatic derivation
-    implicit val encoder: Encoder[Person] = KindlingsEncoder.derive[Person]
-    implicit val decoder: Decoder[Person] = KindlingsDecoder.derive[Person]
-
-    val json: Json = Person("Alice", 30).asJson
+    // Inline encoding — no implicit needed
+    val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
     println(json.noSpaces)
     // {"name":"Alice","age":30}
 
-    println(io.circe.parser.decode[Person]("""{"name":"Bob","age":25}"""))
+    // Inline decoding
+    val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
+    println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
     // Right(Person(Bob,25))
     ```
 
@@ -131,7 +129,6 @@ case class User(
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -141,14 +138,12 @@ case class User(
       .withDiscriminator("type")
       .withSnakeCaseConstructorNames
 
-    implicit val encoder: Encoder[Shape] = KindlingsEncoder.derive[Shape]
-    implicit val decoder: Decoder[Shape] = KindlingsDecoder.derive[Shape]
-
     val shape: Shape = Circle(5.0)
-    println(shape.asJson.noSpaces)
+    println(KindlingsEncoder.encode(shape).noSpaces)
     // {"radius":5.0,"type":"circle"}
 
-    val decoded = io.circe.parser.decode[Shape]("""{"width":3,"height":4,"type":"rectangle"}""")
+    val decoded = io.circe.parser.parse("""{"width":3,"height":4,"type":"rectangle"}""")
+      .flatMap(KindlingsDecoder.decode[Shape](_))
     println(decoded)
     // Right(Rectangle(3.0,4.0))
     ```
@@ -158,21 +153,17 @@ case class User(
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
-    //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
 
     case class Tree(value: String, children: List[Tree])
-
-    implicit val encoder: Encoder[Tree] = KindlingsEncoder.derive[Tree]
 
     val tree = Tree("root", List(
       Tree("left", Nil),
       Tree("right", List(Tree("leaf", Nil)))
     ))
-    println(tree.asJson.noSpaces)
+    println(KindlingsEncoder.encode(tree).noSpaces)
     // {"value":"root","children":[{"value":"left","children":[]},{"value":"right","children":[{"value":"leaf","children":[]}]}]}
     ```
 
@@ -190,8 +181,8 @@ case class User(
 
     case class Settings(host: String, port: Int = 8080, debug: Boolean = false)
 
-    val decoder = KindlingsDecoder.derive[Settings]
-    println(io.circe.parser.decode[Settings]("""{"host":"localhost"}""")(decoder))
+    val parsed = io.circe.parser.parse("""{"host":"localhost"}""")
+    println(parsed.flatMap(KindlingsDecoder.decode[Settings](_)))
     // Right(Settings(localhost,8080,false))
     ```
 

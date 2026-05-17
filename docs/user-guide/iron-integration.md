@@ -64,22 +64,21 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
     import io.github.iltotore.iron._
-    import io.github.iltotore.iron.constraint.numeric._
-    import io.github.iltotore.iron.constraint.string._
+    import io.github.iltotore.iron.constraint.all._
 
     case class Product(
       name: String :| Not[Empty],
-      price: Double :| StrictlyPositive,
+      price: Double :| Positive,
       quantity: Int :| Positive
     )
 
     val product = Product("widget".refine, 9.99.refine, 5.refine)
-    println(product.asJson.noSpaces)
+    println(KindlingsEncoder.encode(product).noSpaces)
     // {"name":"widget","price":9.99,"quantity":5}
 
-    val decoded = io.circe.parser.decode[Product]("""{"name":"","price":9.99,"quantity":5}""")
+    val decoded = io.circe.parser.parse("""{"name":"","price":9.99,"quantity":5}""")
+      .flatMap(KindlingsDecoder.decode[Product](_))
     println(decoded)
     // Left(DecodingFailure(...)) — empty string violates Not[Empty]
     ```
@@ -97,10 +96,10 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
     import hearth.kindlings.jsoniterderivation._
     import com.github.plokhotnyuk.jsoniter_scala.core._
     import io.github.iltotore.iron._
-    import io.github.iltotore.iron.constraint.numeric._
+    import io.github.iltotore.iron.constraint.all._
 
     case class Measurement(
-      value: Double :| StrictlyPositive,
+      value: Double :| Positive,
       unit: String
     )
 

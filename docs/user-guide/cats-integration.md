@@ -90,7 +90,6 @@ Each provider teaches all derivation modules how to encode and decode the corres
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
     import cats.data.NonEmptyList
 
     case class Team(
@@ -99,15 +98,17 @@ Each provider teaches all derivation modules how to encode and decode the corres
     )
 
     val team = Team("Backend", NonEmptyList.of("Alice", "Bob", "Carol"))
-    println(team.asJson.noSpaces)
+    println(KindlingsEncoder.encode(team).noSpaces)
     // {"name":"Backend","members":["Alice","Bob","Carol"]}
 
     // Decoding an empty array fails — NonEmptyList requires at least one element
-    val bad = io.circe.parser.decode[Team]("""{"name":"Empty","members":[]}""")
+    val bad = io.circe.parser.parse("""{"name":"Empty","members":[]}""")
+      .flatMap(KindlingsDecoder.decode[Team](_))
     println(bad)
     // Left(DecodingFailure(...))
 
-    val good = io.circe.parser.decode[Team]("""{"name":"Solo","members":["Dave"]}""")
+    val good = io.circe.parser.parse("""{"name":"Solo","members":["Dave"]}""")
+      .flatMap(KindlingsDecoder.decode[Team](_))
     println(good)
     // Right(Team(Solo,NonEmptyList(Dave)))
     ```
@@ -146,7 +147,6 @@ Each provider teaches all derivation modules how to encode and decode the corres
 
     import hearth.kindlings.circederivation._
     import io.circe._
-    import io.circe.syntax._
     import cats.data.Validated
 
     case class FormResult(
@@ -154,11 +154,11 @@ Each provider teaches all derivation modules how to encode and decode the corres
     )
 
     val valid = FormResult(Validated.valid("alice"))
-    println(valid.asJson.noSpaces)
+    println(KindlingsEncoder.encode(valid).noSpaces)
     // {"username":{"Right":"alice"}}
 
     val invalid = FormResult(Validated.invalid("username is required"))
-    println(invalid.asJson.noSpaces)
+    println(KindlingsEncoder.encode(invalid).noSpaces)
     // {"username":{"Left":"username is required"}}
     ```
 
