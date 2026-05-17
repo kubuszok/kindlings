@@ -31,20 +31,22 @@ Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — deri
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.extensions._
     import cats._
     import cats.syntax.all._
 
     case class Person(name: String, age: Int)
 
-    // Sanely-automatic: given/implicit resolved by the compiler
+    implicit val showPerson: Show[Person] = Show.derived[Person]
+    implicit val eqPerson: Eq[Person] = Eq.derived[Person]
+
     println(Person("Alice", 30).show)
     // Person(name = Alice, age = 30)
 
     println(Person("Alice", 30) === Person("Alice", 30))
     // true
 
-    // Semi-automatic
-    val ord: Order[Person] = Order[Person]
+    val ord: Order[Person] = Order.derived[Person]
     println(ord.compare(Person("Alice", 30), Person("Bob", 25)))
     ```
 
@@ -114,6 +116,7 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.extensions._
     import cats._
     import cats.syntax.all._
 
@@ -121,13 +124,16 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     case class Circle(radius: Double) extends Shape
     case class Rectangle(width: Double, height: Double) extends Shape
 
-    println(Show[Shape].show(Circle(5.0)))
+    implicit val showShape: Show[Shape] = Show.derived[Shape]
+    implicit val eqShape: Eq[Shape] = Eq.derived[Shape]
+
+    println(showShape.show(Circle(5.0)))
     // Circle(radius = 5.0)
 
-    println(Circle(3.0) === Circle(3.0))
+    println(eqShape.eqv(Circle(3.0), Circle(3.0)))
     // true
 
-    println(Circle(3.0) === Rectangle(3.0, 4.0))
+    println(eqShape.eqv(Circle(3.0), Rectangle(3.0, 4.0)))
     // false
     ```
 
@@ -138,10 +144,13 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.extensions._
     import cats._
     import cats.syntax.all._
 
     case class Box[A](value: A)
+
+    implicit val functorBox: Functor[Box] = Functor.derived[Box]
 
     val box: Box[Int] = Box(42)
     println(Functor[Box].map(box)(_ * 2))
@@ -155,11 +164,13 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
-    import cats._
-    import cats.kernel._
+    import hearth.kindlings.catsderivation.extensions._
+    import cats.kernel.{Monoid, Semigroup}
     import cats.syntax.all._
 
     case class Stats(count: Int, total: Double)
+
+    implicit val monoidStats: Monoid[Stats] = Monoid.derived[Stats]
 
     val a = Stats(10, 100.0)
     val b = Stats(5, 50.0)

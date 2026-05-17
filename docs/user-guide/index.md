@@ -146,16 +146,16 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
     import hearth.kindlings.circederivation._
-    import io.circe.syntax._
+    import io.circe._
 
     case class Person(name: String, age: Int)
 
-    // sanely-automatic derivation — just have KindlingsEncoder in scope
-    val json = Person("Alice", 30).asJson
+    // inline encoding — no implicit needed
+    val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
     println(json.noSpaces) // {"name":"Alice","age":30}
 
-    // or semi-automatic
-    val decoder = KindlingsDecoder.derive[Person]
-    println(io.circe.parser.decode[Person]("""{"name":"Bob","age":25}""")(using decoder))
+    // inline decoding
+    val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
+    println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
     // Right(Person(Bob,25))
     ```
