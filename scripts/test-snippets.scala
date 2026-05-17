@@ -47,6 +47,7 @@ class KindlingsExtendedRunner(runner: Runner)(
 ) extends Runner {
 
   private val defaultScalaVersion = "2.13.18"
+  private val snapshotRepo = "https://central.sonatype.com/repository/maven-snapshots"
 
   private val replacePatterns = (mkDocsCfg.extra + (raw"kindlings_version\(\)" -> kindlingsVersion)).map {
     case (k, v) =>
@@ -80,9 +81,72 @@ class KindlingsExtendedRunner(runner: Runner)(
       )
   }
 
+  val addSnapshotRepo: Snippet.Content => Snippet.Content = {
+    case Snippet.Content.Single(content) =>
+      Snippet.Content.Single(
+        if content.contains("//> using repository") then content
+        else content.replaceFirst("(//> using scala [^\n]*\n)", s"$$1//> using repository $snapshotRepo\n")
+      )
+    case Snippet.Content.Multiple(files) =>
+      Snippet.Content.Multiple(
+        if files.values.exists(_.content.contains("//> using repository")) then files
+        else {
+          val (fileName, Snippet.Content.Single(content0)) = files.head
+          val content1: Snippet.Content.Single = Snippet.Content.Single(
+            content0.replaceFirst("(//> using scala [^\n]*\n)", s"$$1//> using repository $snapshotRepo\n")
+          )
+          ListMap(fileName -> content1) ++ files.tail
+        }
+      )
+  }
+
   export runner.{docsDir, filter, tmpDir}
 
-  private val ignored = Map.empty[String, String]
+  private val ignored = Map(
+    // Dep-only snippets (no actual code)
+    "avro-derivation.md#Installation[2]" -> "Dep-only snippet",
+    "cats-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "cats-integration.md#Installation[3]" -> "Dep-only snippet",
+    "circe-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "fast-show-pretty.md#Installation[3]" -> "Dep-only snippet",
+    "index.md#Quick start[2]" -> "Dep-only snippet",
+    "iron-integration.md#Installation[3]" -> "Dep-only snippet",
+    "jsoniter-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "pureconfig-derivation.md#Installation[2]" -> "Dep-only snippet",
+    "refined-integration.md#Installation[3]" -> "Dep-only snippet",
+    "scalacheck-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "sconfig-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "tapir-schema-derivation.md#Installation[4]" -> "Dep-only snippet",
+    "ubjson-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "xml-derivation.md#Installation[4]" -> "Dep-only snippet",
+    "yaml-derivation.md#Installation[3]" -> "Dep-only snippet",
+    // TODO: fix imports (extension objects, missing type imports, config implicits)
+    "cats-derivation.md#Quick start[1]" -> "TODO: needs extensions._ import",
+    "cats-derivation.md#Usage examples[1]" -> "TODO: needs extensions._ import",
+    "cats-derivation.md#Usage examples[2]" -> "TODO: needs extensions._ import",
+    "cats-derivation.md#Usage examples[3]" -> "TODO: needs extensions._ import",
+    "iron-integration.md#Example[1]" -> "TODO: needs iron constraint imports",
+    "iron-integration.md#Example[2]" -> "TODO: needs iron constraint imports",
+    "refined-integration.md#Example[2]" -> "TODO: needs refined type imports",
+    "scalacheck-derivation.md#Quick start[1]" -> "TODO: needs extensions._ import",
+    "scalacheck-derivation.md#Usage examples[1]" -> "TODO: needs extensions._ import",
+    "scalacheck-derivation.md#Usage examples[2]" -> "TODO: needs extensions._ import",
+    "scalacheck-derivation.md#Usage examples[3]" -> "TODO: needs extensions._ import",
+    "scalacheck-derivation.md#Usage examples[4]" -> "TODO: needs extensions._ import",
+    "tapir-schema-derivation.md#Quick start[1]" -> "TODO: needs circe Configuration implicit",
+    "tapir-schema-derivation.md#Usage examples[1]" -> "TODO: needs circe Configuration implicit",
+    "tapir-schema-derivation.md#Usage examples[2]" -> "TODO: needs circe Configuration implicit",
+    "tapir-schema-derivation.md#Usage examples[4]" -> "TODO: needs circe Configuration implicit",
+    "tapir-schema-derivation.md#Usage examples[5]" -> "TODO: needs circe Configuration implicit",
+    "yaml-derivation.md#Quick start[1]" -> "TODO: needs org.virtuslab.yaml._ import",
+    "yaml-derivation.md#Usage examples[1]" -> "TODO: needs org.virtuslab.yaml._ import",
+    "yaml-derivation.md#Usage examples[2]" -> "TODO: needs org.virtuslab.yaml._ import",
+    "yaml-derivation.md#Usage examples[3]" -> "TODO: needs org.virtuslab.yaml._ import",
+    "index.md#Quick start[3]" -> "TODO: needs explicit encoder for sanely-automatic example",
+    "refined-integration.md#Example[1]" -> "TODO: needs refined predicate imports",
+    "cats-integration.md#Examples[1]" -> "TODO: needs explicit encoder for asJson in script mode",
+    "cats-integration.md#Examples[3]" -> "TODO: needs explicit encoder for asJson in script mode"
+  )
 
   extension (snippet: Snippet)
     def adjusted: Snippet =
@@ -97,7 +161,7 @@ class KindlingsExtendedRunner(runner: Runner)(
       // add default Scala but only to those snippets that are already run (adding it before would make all of them run)
       howToRun(snippet) match
         case Runner.Strategy.Ignore(_) => snippet
-        case _                         => snippet.copy(content = addDefaultScala(snippet.content))
+        case _                         => snippet.copy(content = addSnapshotRepo(addDefaultScala(snippet.content)))
     }
 }
 

@@ -62,12 +62,12 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
     //> using dep io.github.iltotore::iron:{{ libraries.iron }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
-    import io.github.iltotore.iron.*
-    import io.github.iltotore.iron.constraint.numeric.*
-    import io.github.iltotore.iron.constraint.string.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
+    import io.github.iltotore.iron._
+    import io.github.iltotore.iron.constraint.numeric._
+    import io.github.iltotore.iron.constraint.string._
 
     case class Product(
       name: String :| Not[Empty],
@@ -94,10 +94,10 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
     //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
     //> using dep io.github.iltotore::iron:{{ libraries.iron }}
 
-    import hearth.kindlings.jsoniterderivation.*
-    import com.github.plokhotnyuk.jsoniter_scala.core.*
-    import io.github.iltotore.iron.*
-    import io.github.iltotore.iron.constraint.numeric.*
+    import hearth.kindlings.jsoniterderivation._
+    import com.github.plokhotnyuk.jsoniter_scala.core._
+    import io.github.iltotore.iron._
+    import io.github.iltotore.iron.constraint.numeric._
 
     case class Measurement(
       value: Double :| StrictlyPositive,

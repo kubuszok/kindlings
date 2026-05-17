@@ -29,14 +29,14 @@ If both Kindlings' and the original library's automatic derivation are in scope,
 ## How do I migrate from circe-generic?
 
 1. Replace the dependency: `circe-generic` / `circe-generic-extras` with `kindlings-circe-derivation`
-2. Replace imports: `io.circe.generic.auto._` or `io.circe.generic.semiauto._` with `hearth.kindlings.circederivation.*`
+2. Replace imports: `io.circe.generic.auto._` or `io.circe.generic.semiauto._` with `hearth.kindlings.circederivation._`
 3. Replace `deriveEncoder[A]` / `deriveDecoder[A]` with `KindlingsEncoder.derive[A]` / `KindlingsDecoder.derive[A]`
 4. If using `@ConfiguredJsonCodec` or circe `Configuration`, switch to Kindlings' `Configuration` class (same builder API)
 
 ## How do I migrate from kittens?
 
 1. Replace the dependency: `kittens` with `kindlings-cats-derivation`
-2. Replace imports: `cats.derived._` or `cats.derived.auto.*` with `hearth.kindlings.catsderivation.*`
+2. Replace imports: `cats.derived._` or `cats.derived.auto.*` with `hearth.kindlings.catsderivation._`
 3. For Scala 3 `derives` syntax: replace `derives cats.Show` with `derives cats.Show` (Kindlings provides the `derived` method as an extension, so `derives` just works)
 4. For semi-automatic: replace `cats.derived.semiauto.show[A]` with `cats.Show.derived[A]`
 

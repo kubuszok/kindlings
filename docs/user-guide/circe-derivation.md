@@ -31,20 +31,21 @@ Drop-in replacement for `circe-generic` / `circe-generic-extras` — derives `En
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
 
     case class Person(name: String, age: Int)
 
-    // Sanely-automatic: KindlingsEncoder.derived[Person] is resolved by the compiler
+    // Semi-automatic derivation
+    implicit val encoder: Encoder[Person] = KindlingsEncoder.derive[Person]
+    implicit val decoder: Decoder[Person] = KindlingsDecoder.derive[Person]
+
     val json: Json = Person("Alice", 30).asJson
     println(json.noSpaces)
     // {"name":"Alice","age":30}
 
-    // Semi-automatic:
-    val decoder: Decoder[Person] = KindlingsDecoder.derive[Person]
-    println(io.circe.parser.decode[Person]("""{"name":"Bob","age":25}""")(decoder))
+    println(io.circe.parser.decode[Person]("""{"name":"Bob","age":25}"""))
     // Right(Person(Bob,25))
     ```
 
@@ -75,7 +76,7 @@ All methods take an implicit/using `Configuration` parameter (defaults to `Confi
 All derivation methods accept an implicit `Configuration`:
 
 ```scala
-import hearth.kindlings.circederivation.*
+import hearth.kindlings.circederivation._
 
 implicit val config: Configuration = Configuration.default
   .withSnakeCaseMemberNames
@@ -111,7 +112,7 @@ implicit val config: Configuration = Configuration.default
 | `@transientField` | Exclude a field from encoding/decoding (must have a default value) |
 
 ```scala
-import hearth.kindlings.circederivation.annotations.*
+import hearth.kindlings.circederivation.annotations._
 
 case class User(
   @fieldName("user_name") name: String,
@@ -128,9 +129,9 @@ case class User(
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -139,6 +140,9 @@ case class User(
     implicit val config: Configuration = Configuration.default
       .withDiscriminator("type")
       .withSnakeCaseConstructorNames
+
+    implicit val encoder: Encoder[Shape] = KindlingsEncoder.derive[Shape]
+    implicit val decoder: Decoder[Shape] = KindlingsDecoder.derive[Shape]
 
     val shape: Shape = Circle(5.0)
     println(shape.asJson.noSpaces)
@@ -156,10 +160,13 @@ case class User(
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.syntax.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
+    import io.circe.syntax._
 
     case class Tree(value: String, children: List[Tree])
+
+    implicit val encoder: Encoder[Tree] = KindlingsEncoder.derive[Tree]
 
     val tree = Tree("root", List(
       Tree("left", Nil),
@@ -176,8 +183,8 @@ case class User(
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep io.circe::circe-parser:{{ libraries.circe }}
 
-    import hearth.kindlings.circederivation.*
-    import io.circe.*
+    import hearth.kindlings.circederivation._
+    import io.circe._
 
     implicit val config: Configuration = Configuration.default.withDefaults
 

@@ -30,9 +30,9 @@ Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — deri
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
-    import hearth.kindlings.catsderivation.*
-    import cats.*
-    import cats.syntax.all.*
+    import hearth.kindlings.catsderivation._
+    import cats._
+    import cats.syntax.all._
 
     case class Person(name: String, age: Int)
 
@@ -101,7 +101,7 @@ val eqPerson: Eq[Person] = Eq.derived[Person]
 val functorBox: Functor[Box] = Functor.derived[Box]
 
 // Sanely-automatic — just use the type class
-import hearth.kindlings.catsderivation.*
+import hearth.kindlings.catsderivation._
 Person("Alice", 30).show  // Show.derived[Person] resolved automatically
 ```
 
@@ -113,9 +113,9 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
-    import hearth.kindlings.catsderivation.*
-    import cats.*
-    import cats.syntax.all.*
+    import hearth.kindlings.catsderivation._
+    import cats._
+    import cats.syntax.all._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -137,9 +137,9 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
-    import hearth.kindlings.catsderivation.*
-    import cats.*
-    import cats.syntax.all.*
+    import hearth.kindlings.catsderivation._
+    import cats._
+    import cats.syntax.all._
 
     case class Box[A](value: A)
 
@@ -154,10 +154,10 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
-    import hearth.kindlings.catsderivation.*
-    import cats.*
-    import cats.kernel.*
-    import cats.syntax.all.*
+    import hearth.kindlings.catsderivation._
+    import cats._
+    import cats.kernel._
+    import cats.syntax.all._
 
     case class Stats(count: Int, total: Double)
 

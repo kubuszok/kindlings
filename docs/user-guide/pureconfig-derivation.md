@@ -26,8 +26,8 @@
 ??? example "Reading and writing HOCON configuration"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     case class ServerConfig(host: String, port: Int, debug: Boolean)
 
@@ -73,7 +73,7 @@ All methods take an implicit/using `PureConfig` parameter (defaults to `PureConf
 All derivation methods accept an implicit `PureConfig`:
 
 ```scala
-import hearth.kindlings.pureconfigderivation.*
+import hearth.kindlings.pureconfigderivation._
 
 implicit val config: PureConfig = PureConfig.default
   .withSnakeCaseMemberNames
@@ -113,7 +113,7 @@ For per-type customization (e.g. one case class uses `snake_case` while everythi
 | `@transientField` | Exclude a field from reading/writing (must have a default value) |
 
 ```scala
-import hearth.kindlings.pureconfigderivation.annotations.*
+import hearth.kindlings.pureconfigderivation.annotations._
 
 case class DatabaseConfig(
   @configKey("connection_string") connectionString: String,
@@ -126,8 +126,8 @@ case class DatabaseConfig(
 ??? example "Sealed trait with discriminator"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     sealed trait DatabaseType
     case class Postgres(host: String, port: Int, database: String) extends DatabaseType
@@ -149,8 +149,8 @@ case class DatabaseConfig(
 ??? example "Wrapped subtypes (no discriminator)"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     sealed trait Shape
     case class Circle(radius: Double) extends Shape
@@ -170,8 +170,8 @@ case class DatabaseConfig(
 ??? example "Case class with defaults and strict decoding"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     implicit val config: PureConfig = PureConfig.default
       .withUseDefaults
@@ -202,8 +202,8 @@ case class DatabaseConfig(
 ??? example "Snake case member names"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     implicit val config: PureConfig = PureConfig.default
       .withSnakeCaseMemberNames
@@ -224,8 +224,8 @@ case class DatabaseConfig(
 ??? example "Nested configuration"
 
     ```scala
-    import hearth.kindlings.pureconfigderivation.*
-    import pureconfig.*
+    import hearth.kindlings.pureconfigderivation._
+    import pureconfig._
 
     case class HttpConfig(host: String, port: Int)
     case class DatabaseConfig(url: String, pool: Int)
@@ -252,7 +252,7 @@ case class DatabaseConfig(
 Import the debug package to log the derivation process at compile time:
 
 ```scala
-import hearth.kindlings.pureconfigderivation.debug.*
+import hearth.kindlings.pureconfigderivation.debug._
 ```
 
 This enables `LogDerivation` implicits for `KindlingsConfigReader`, `KindlingsConfigWriter`, and `KindlingsConfigConvert`, printing the derivation steps to the compiler output.
