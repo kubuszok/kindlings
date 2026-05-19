@@ -253,35 +253,48 @@ Pre-compute `fieldNameMapper(fieldName)` for all fields during codec initializat
 
 ---
 
+### Round 2: Nested type optimizations (2026-05-19, hearth 0.3.0-33-SNAPSHOT)
+
+Methodology: Per-benchmark JFR profiling (single fork), production-config verification (2f/5w/10m).
+
+| Benchmark | Before | After | vs Original | Change |
+|-----------|--------|-------|-------------|--------|
+| **Avro Encode** Person | 1.7M | **2.9M** | 5.7M (0.51x) | **+70% — schema caching for nested records** |
+| **Avro Decode** Person | 1.9M | **13.4M** | 4.3M (**3.1x faster**) | **+7x — eliminated per-decode decoderInstance creation** |
+| **Avro Decode** SimpleCC | 53.8M | **470.9M** | 42.6M (**11.1x faster**) | **+8.7x** |
+| **Jsoniter Read** Person | 2.7M | **3.2M** | 3.5M (0.93x) | **+19% — evaluatedConfig propagation to nested types** |
+
+### What was fixed
+
+**Avro Encode Person** (0.30x → 0.51x): Nested record schemas (e.g. Address inside Person) were rebuilt from scratch on every encode call. Fixed by caching schemas as `lazy val`s in the encoder's outer `ValDefsCache` scope, using an `outerConfig` reference to avoid cross-scope config parameter issues. JFR confirmed 52% of samples were in schema reconstruction (regex Pattern compilation, Schema.Field creation, setRecordFieldsFromList). The remaining 0.51x gap is architectural: Kindlings uses def-cached encode methods per type while avro4s uses array-based FieldEncoder dispatch.
+
+**Avro Decode Person** (0.45x → 3.1x faster): Each field in `decode_Person` created a fresh `AvroDecoderFactories.decoderInstance[Field]` wrapper — with a new schema + lambda — on every decode call. For Person's 6 fields, that was 6 decoderInstance allocations + 6 schema derivations per decode. Fixed by calling the decode def directly from the case class rule instead of wrapping each field in a decoderInstance. The field decode defs are already cached via `setHelper`/`getHelper`.
+
+**Jsoniter Read Person** (0.73x → 0.93x): `deriveFieldDecoder` created a new `DecoderCtx` without `evaluatedConfig`, causing nested case class types (Address) to fall back to the non-optimized decode path (readObject + Array[Any] + lambda dispatch + readKeyAsString). Fixed by passing `ctx.evaluatedConfig` through to the nested context. The remaining 0.93x gap is from collection/map decoding using runtime helpers (`readCollection`, `readMap`) with lambda dispatch vs jsoniter-scala's fully inlined loops.
+
+**Jsoniter Write Person** (0.90x → 0.87x, unchanged): JFR analysis confirmed the gap is architectural: def-cached encode methods + runtime helpers (`writeArray`, `writeMapStringKeyed`) vs jsoniter-scala's single-method inlining. No surgical fix available. At 0.87x, this is within the "at parity" target for jsoniter.
+
+**Cats Order/Eq**: Re-benchmarked with production config. Order 2.13 gap is 0.90x (not 0.83x as previously documented — original has ±32M variance). Eq Scala 3 is actually 1.11x faster (not 0.91x). Both are JIT-sensitive at 100M-400M+ ops/s where JMH measurement noise dominates. No code fix needed.
+
+### Key files changed
+
+- `EncoderMacrosImpl.scala`: Added `outerConfig` field to `EncoderCtx`, `getCachedSchemaForEncode`/`setCachedSchemaForEncode` methods
+- `AvroEncoderHandleAsCaseClassRule.scala`: Modified `cachedSchemaForEncode` to use encoder cache with outer config
+- `AvroEncoderHandleAsCollectionRule.scala`: Inlined collection encoding (eliminated `encodeIterable` helper)
+- `AvroEncoderHandleAsMapRule.scala`: Eliminated tuple allocation in map encoding
+- `DecoderMacrosImpl.scala`: Added `getCachedFieldDecoder`/`setCachedFieldDecoder` methods
+- `AvroDecoderHandleAsCaseClassRule.scala`: Call decode defs directly instead of creating decoderInstance wrappers
+- `DecoderHandleAsCaseClassRule.scala` (jsoniter): Pass `evaluatedConfig` through `deriveFieldDecoder`
+
+---
+
 ## Hearth Utilities Validation Status
 
 | Utility | Status | Notes |
 |---------|--------|-------|
-| `Expr.semiEval` | **WORKS** (hearth 0.3.0-31) | Fixed for `Inlined` module field access. Evaluates `JsoniterConfig.default` at compile time. |
+| `Expr.semiEval` | **WORKS** (hearth 0.3.0-31+) | Fixed for `Inlined` module field access. Evaluates `JsoniterConfig.default` at compile time. |
 | `ValDefBuilder.ofVar` | **NOT TESTED** | Not needed for the current optimizations; will be needed for typed-var decode path |
 | `ValDefs.createLazy` | **WORKS** | Tested but not useful for cross-scope caching (lazy val inside lambda is per-invocation) |
-| `encoderInstanceWithSchema` | **WORKS** | New factory for passing schema to encode body |
-| hearth 0.3.0-31-SNAPSHOT | **WORKS** | All 235 jsoniter + 284 avro tests pass on both Scala 2.13 and 3 |
-
----
-
-## Raw Data Locations
-
-| Artifact | Path |
-|----------|------|
-| Kindlings derivation log (all 3 modules) | `/tmp/kindlings-derivation-log-scala3.txt` |
-| Kindlings jsoniter SimpleCC generated code | `/tmp/kindlings-jsoniter-SimpleCC-codec-scala3.txt` |
-| Original jsoniter SimpleCC generated code | `/tmp/original-jsoniter-debug-scala3.txt` |
-| Kindlings jsoniter bytecode | `/tmp/bytecode-kindlings-jsoniter.txt` |
-| Original jsoniter bytecode (anon classes) | `/tmp/bytecode-original-jsoniter.txt` |
-| Original jsoniter bytecode (companion) | `/tmp/bytecode-original-jsoniter-companion.txt` |
-| JFR profiles | `/tmp/jfr/*/profile.jfr` |
-
-## Benchmark Results (this run, JDK 24 GraalVM CE, f=1)
-
-| Benchmark | Kindlings ops/s | Original ops/s | Ratio |
-|-----------|----------------|----------------|-------|
-| Jsoniter Read SimpleCC | 15,149,180 | 33,340,322 | 0.45x |
-| Jsoniter Write SimpleCC | 42,845,903 | 62,589,268 | 0.68x |
-| Avro Encode SimpleCC | 7,889,684 | 46,665,052 | 0.17x |
-| Pureconfig Read SimpleCC | 854,836 | 1,322,197 | 0.65x |
+| `encoderInstanceWithSchema` | **WORKS** | Factory for passing schema to encode body |
+| `ValDefsCache` schema caching | **WORKS** | Used to cache nested record schemas in encoder's outer scope |
+| hearth 0.3.0-33-SNAPSHOT | **WORKS** | All tests pass on both Scala 2.13 and 3 |
