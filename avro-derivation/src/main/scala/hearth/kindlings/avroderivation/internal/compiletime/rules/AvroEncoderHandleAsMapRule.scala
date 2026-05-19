@@ -35,24 +35,20 @@ trait AvroEncoderHandleAsMapRuleImpl {
         MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
       else {
         LambdaBuilder
-          .of1[Pair]("pair")
-          .traverse { pairExpr =>
-            val keyExpr = isMap.key(pairExpr)
-            val valueExpr = isMap.value(pairExpr)
-            deriveEncoderRecursively[Value](using ectx.nest(valueExpr)).map { valueEncoded =>
-              Expr.quote {
-                (Expr.splice(keyExpr).asInstanceOf[String], Expr.splice(valueEncoded))
-              }
-            }
+          .of1[Value]("value")
+          .traverse { valueExpr =>
+            deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
           }
           .map { builder =>
-            val pairLambda = builder.build[(String, Any)]
+            val encodeValueFn = builder.build[Any]
             val iterableExpr = isMap.asIterable(ectx.value)
             Rule.matched(Expr.quote {
               val map = new java.util.HashMap[String, Any]()
-              Expr.splice(iterableExpr).foreach { pair =>
-                val encoded = Expr.splice(pairLambda).apply(pair)
-                map.put(encoded._1, encoded._2)
+              Expr.splice(iterableExpr).foreach { (pair: Pair) =>
+                map.put(
+                  Expr.splice(isMap.key(Expr.quote(pair))).asInstanceOf[String],
+                  Expr.splice(encodeValueFn).apply(Expr.splice(isMap.value(Expr.quote(pair))))
+                )
               }
               map: Any
             })

@@ -6,8 +6,6 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
-
 trait AvroEncoderHandleAsCollectionRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
@@ -25,13 +23,14 @@ trait AvroEncoderHandleAsCollectionRuleImpl {
                 deriveEncoderRecursively[Item](using ectx.nest(itemExpr))
               }
               .map { builder =>
-                val lambda = builder.build[Any]
+                val encodeFn = builder.build[Any]
                 val iterableExpr = isCollection.value.asIterable(ectx.value)
                 Rule.matched(Expr.quote {
-                  AvroDerivationUtils.encodeIterable[Item](
-                    Expr.splice(iterableExpr),
-                    (item: Item) => Expr.splice(lambda).apply(item)
-                  ): Any
+                  val list = new java.util.ArrayList[Any]()
+                  Expr.splice(iterableExpr).foreach { (item: Item) =>
+                    list.add(Expr.splice(encodeFn).apply(item))
+                  }
+                  list: Any
                 })
               }
 
