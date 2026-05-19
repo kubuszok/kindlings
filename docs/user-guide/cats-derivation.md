@@ -226,12 +226,19 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC (eq) | 2.13 | 101.4M | 45.9M | 46.0M | **2.2x faster** |
-| SimpleCC (eq) | 3 | 102.2M | 91.8M | 112.1M | 0.91x |
+| SimpleCC (eq) | 2.13 | 99.9M | 44.9M | 44.3M | **2.2x faster** |
+| SimpleCC (eq) | 3 | 99.5M | 97.1M | 90.3M | **~tied** |
 
 #### Hash
 
 | Type | Scala | Kindlings | Original auto | vs original |
 |------|-------|-----------|--------------|------------|
-| SimpleCC | 2.13 | 836.9M | 27.7M | **30.0x faster** |
-| SimpleCC | 3 | 839.1M | 122.5M | **6.9x faster** |
+| SimpleCC | 2.13 | 806.9M | 26.4M | **30.4x faster** |
+| SimpleCC | 3 | 809.0M | 96.4M | **8.4x faster** |
+
+#### Order
+
+| Type | Scala | Kindlings | Original semi | Original auto | vs best original |
+|------|-------|-----------|--------------|--------------|-----------------|
+| SimpleCC | 2.13 | 386.7M | 460.1M | 412.8M | 0.84x |
+| SimpleCC | 3 | 422.5M | 294.4M | 353.8M | **1.19x faster** |

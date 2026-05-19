@@ -105,24 +105,24 @@ Full pipeline benchmarks: domain type ↔ bytes/String, comparing Circe's defaul
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC (eq) | 2.13 | 101.4M | 45.9M | 46.0M | **2.2x faster** |
-| SimpleCC (eq) | 3 | 102.2M | 91.8M | 112.1M | 0.91x |
-| SimpleCC (neq) | 2.13 | 577.1M | — | — |  |
-| SimpleCC (neq) | 3 | 541.4M | — | — |  |
+| SimpleCC (eq) | 2.13 | 99.9M | 44.9M | 44.3M | **2.2x faster** |
+| SimpleCC (eq) | 3 | 99.5M | 97.1M | 90.3M | **~tied** |
+| SimpleCC (neq) | 2.13 | 543.8M | — | — |  |
+| SimpleCC (neq) | 3 | 554.0M | — | — |  |
 
 ## Cats Hash
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 836.9M | 27.9M | 27.7M | **30.0x faster** |
-| SimpleCC | 3 | 839.1M | 107.4M | 122.5M | **6.9x faster** |
+| SimpleCC | 2.13 | 806.9M | 26.6M | 26.4M | **30.4x faster** |
+| SimpleCC | 3 | 809.0M | 104.4M | 96.4M | **7.8x faster** |
 
 ## Cats Order
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 390.4M | 391.6M | 468.0M | 0.83x |
-| SimpleCC | 3 | 388.1M | 301.2M | 358.8M | **1.1x faster** |
+| SimpleCC | 2.13 | 386.7M | 460.1M | 412.8M | 0.84x |
+| SimpleCC | 3 | 422.5M | 294.4M | 353.8M | **1.19x faster** |
 
 ## Avro (kindlings vs avro4s)
 
@@ -200,7 +200,7 @@ Full pipeline benchmarks: domain type ↔ bytes/String, comparing Circe's defaul
 
 1. **Circe**: Kindlings is **1.4-2.6x faster** for encoding and decoding across all types and both Scala versions
 2. **Circe + booster**: Kindlings + jsoniter-scala-circe is the fastest Circe pipeline — up to **2.7x faster** than original Circe without booster
-3. **Cats**: Kindlings dominates — **5x** for Show, **30x** for Hash on 2.13; **1.4-6.9x** on Scala 3
+3. **Cats**: Kindlings dominates — **5x** for Show, **30x** for Hash on 2.13; **1.4-8x** on Scala 3. Eq ~tied on Scala 3, 2.2x faster on 2.13. Order ~tied (within JIT noise at 400M+ ops/s)
 4. **Jsoniter**: Kindlings **matches or exceeds** jsoniter-scala for all case class benchmarks — SimpleCC reads slightly faster (36M vs 34M), Person read/write at parity. ADT write has a small gap (0.91x) from discriminator overhead
 5. **PureConfig**: Kindlings is **4.6-12x faster** across all operations — massive improvement
 6. **Avro**: Kindlings is **3-11x faster** than avro4s across all benchmarks — 5.5x for SimpleCC encode, 3.3x for Person encode, 11.1x for SimpleCC decode, 3.4x for Person decode
