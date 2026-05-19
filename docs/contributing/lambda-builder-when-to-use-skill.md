@@ -20,6 +20,14 @@ instances or for sibling-splice issues on Scala 3. Those problems exist, but
 via `ValDefsCache` outside any splice. See
 [`def-caching-skill.md`](def-caching-skill.md).
 
+**Performance note**: Even for collection iteration (the legitimate use), `LambdaBuilder`
+introduces `Function1.apply` virtual dispatch per element. When an optimized path is
+available (e.g., `evaluatedConfig` is set), prefer **inline `while` loops** that call
+cached defs directly — see
+[`runtime-performance-skill.md`](runtime-performance-skill.md) § "Inline collection/map
+iteration loops". Keep `LambdaBuilder` + runtime helpers as fallback for the
+non-optimized path.
+
 ## Why the restriction exists
 
 `LambdaBuilder` historically grew because two limitations bit Kindlings macros:
@@ -68,6 +76,17 @@ Examples that pass:
   constructor wrapper for `sequenceDecodeResults`
 - `jsoniter-derivation/.../DecoderHandleAsCaseClassRule.scala:284,464` — `Array[Any]`
   constructor
+- `jsoniter-derivation/.../EncoderHandleAsCollectionRule.scala` — fallback path (non-optimized)
+- `jsoniter-derivation/.../DecoderHandleAsCollectionRule.scala` — fallback path (non-optimized)
+
+Examples that were migrated to inline `while` loops (optimized path):
+
+- `jsoniter-derivation/.../EncoderHandleAsCollectionRule.scala` (`encodeCollectionInline`)
+- `jsoniter-derivation/.../EncoderHandleAsMapRule.scala` (`deriveStringKeyedMapInline`)
+- `jsoniter-derivation/.../DecoderHandleAsCollectionRule.scala` (`decodeCollectionInline`)
+- `jsoniter-derivation/.../DecoderHandleAsMapRule.scala` (`decodeStringKeyedMapInline`)
+- `avro-derivation/.../AvroEncoderHandleAsCollectionRule.scala` (unconditional)
+- `avro-derivation/.../AvroEncoderHandleAsMapRule.scala` (unconditional)
 
 ## How to migrate an inappropriate `LambdaBuilder` usage
 

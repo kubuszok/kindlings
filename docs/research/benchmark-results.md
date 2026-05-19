@@ -66,27 +66,27 @@ Full pipeline benchmarks: domain type ↔ bytes/String, comparing Circe's defaul
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 60.1M | 60.0M | 60.1M | **~tied** |
-| SimpleCC | 3 | 62.8M | 63.4M | 63.5M | **~tied** |
-| SimpleADT | 2.13 | 61.8M | 61.3M | 68.3M | 0.90x |
-| SimpleADT | 3 | 63.6M | 64.8M | 71.5M | 0.91x |
-| Person | 2.13 | 4.3M | 4.4M | 4.7M | 0.94x |
-| Person | 3 | 4.7M | 4.6M | 5.2M | 0.90x |
-| Event | 2.13 | 4.1M | 4.2M | 4.4M | 0.95x |
-| Event | 3 | 4.2M | 4.2M | 4.4M | 0.95x |
+| SimpleCC | 2.13 | 59.8M | 59.5M | 59.7M | **~tied** |
+| SimpleCC | 3 | 62.7M | 62.9M | 63.8M | **~tied** |
+| Person | 2.13 | 4.7M | 4.7M | 4.6M | **~tied** |
+| Person | 3 | 5.3M | 5.3M | 5.2M | **~tied** |
+| SimpleADT | 2.13 | 61.9M | 61.9M | 67.2M | 0.92x |
+| SimpleADT | 3 | 63.3M | 63.3M | 69.5M | 0.91x |
+| Event | 2.13 | 4.3M | 4.2M | 4.0M | **1.08x faster** |
+| Event | 3 | 4.7M | 4.7M | 4.8M | **0.98x** |
 
 ## Jsoniter Read
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 36.2M | 36.2M | 34.9M | **1.04x faster** |
-| SimpleCC | 3 | 36.1M | 35.9M | 34.9M | **1.03x faster** |
-| SimpleADT | 2.13 | 16.8M | 17.4M | — |  |
-| SimpleADT | 3 | 15.3M | 15.0M | — |  |
-| Person | 2.13 | 2.8M | 2.7M | 3.7M | 0.76x |
-| Person | 3 | 2.7M | 2.7M | 3.7M | 0.73x |
-| Event | 2.13 | 2.2M | 2.2M | — |  |
-| Event | 3 | 2.1M | 2.1M | — |  |
+| SimpleCC | 2.13 | 36.1M | 36.0M | 34.8M | **1.04x faster** |
+| SimpleCC | 3 | 35.6M | 35.5M | 34.2M | **1.04x faster** |
+| Person | 2.13 | 3.6M | 3.7M | 3.6M | **~tied** |
+| Person | 3 | 3.6M | 3.6M | 3.6M | **~tied** |
+| SimpleADT | 2.13 | 16.8M | 17.0M | — |  |
+| SimpleADT | 3 | 17.0M | 17.0M | — |  |
+| Event | 2.13 | 3.3M | 3.2M | — |  |
+| Event | 3 | 3.2M | 3.2M | — |  |
 
 ## Cats Show
 
@@ -128,18 +128,18 @@ Full pipeline benchmarks: domain type ↔ bytes/String, comparing Circe's defaul
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| Encode SimpleCC | 2.13 | 329.4M | — | — |  |
-| Encode SimpleCC | 3 | 315.5M | 48.6M | 59.0M | **5.3x faster** |
-| Encode Person | 2.13 | 1.6M | — | 4.7M | 0.34x |
-| Encode Person | 3 | 1.7M | 5.7M | 5.7M | 0.30x |
-| Encode Event | 2.13 | 483.4K | — | — |  |
-| Encode Event | 3 | 473.9K | — | — |  |
-| Decode SimpleCC | 2.13 | 58.1M | — | 16.3M | **3.6x faster** |
-| Decode SimpleCC | 3 | 53.8M | 23.3M | 42.3M | **1.3x faster** |
-| Decode Person | 2.13 | 1.9M | — | 3.6M | 0.53x |
-| Decode Person | 3 | 1.9M | 3.2M | 4.2M | 0.45x |
-| Decode Event | 2.13 | 780.3K | — | — |  |
-| Decode Event | 3 | 794.5K | — | — |  |
+| Encode SimpleCC | 2.13 | 281.7M | — | 45.0M | **6.3x faster** |
+| Encode SimpleCC | 3 | 270.5M | 49.3M | 48.1M | **5.5x faster** |
+| Encode Person | 2.13 | 19.6M | — | 4.6M | **4.3x faster** |
+| Encode Person | 3 | 18.6M | 5.7M | 5.7M | **3.3x faster** |
+| Encode Event | 2.13 | 18.4M | — | — |  |
+| Encode Event | 3 | 17.5M | — | — |  |
+| Decode SimpleCC | 2.13 | 425.3M | — | 17.6M | **24.2x faster** |
+| Decode SimpleCC | 3 | 474.1M | 23.2M | 42.9M | **11.1x faster** |
+| Decode Person | 2.13 | 14.4M | — | 3.5M | **4.1x faster** |
+| Decode Person | 3 | 13.8M | 3.2M | 4.1M | **3.4x faster** |
+| Decode Event | 2.13 | 12.9M | — | — |  |
+| Decode Event | 3 | 13.1M | — | — |  |
 
 ## PureConfig (kindlings vs pureconfig-generic)
 
@@ -201,8 +201,8 @@ Full pipeline benchmarks: domain type ↔ bytes/String, comparing Circe's defaul
 1. **Circe**: Kindlings is **1.4-2.6x faster** for encoding and decoding across all types and both Scala versions
 2. **Circe + booster**: Kindlings + jsoniter-scala-circe is the fastest Circe pipeline — up to **2.7x faster** than original Circe without booster
 3. **Cats**: Kindlings dominates — **5x** for Show, **30x** for Hash on 2.13; **1.4-6.9x** on Scala 3
-4. **Jsoniter**: Kindlings is now **at parity** for SimpleCC writes (60M vs 60M), and reads are **slightly faster** for SimpleCC (36M vs 35M). Complex types still ~0.76-0.95x
+4. **Jsoniter**: Kindlings **matches or exceeds** jsoniter-scala for all case class benchmarks — SimpleCC reads slightly faster (36M vs 34M), Person read/write at parity. ADT write has a small gap (0.91x) from discriminator overhead
 5. **PureConfig**: Kindlings is **4.6-12x faster** across all operations — massive improvement
-6. **Avro**: Mixed — Kindlings SimpleCC encode is **5.3x faster** (Scala 3), SimpleCC decode is **3.6x faster** (2.13); Person encode still slower
+6. **Avro**: Kindlings is **3-11x faster** than avro4s across all benchmarks — 5.5x for SimpleCC encode, 3.3x for Person encode, 11.1x for SimpleCC decode, 3.4x for Person decode
 7. **Tapir Schema**: Tied (~3.8B ops/s) — just a field access at runtime
 8. **Kindlings auto = semi-auto** everywhere, confirming sanely-automatic derivation produces identical runtime instances

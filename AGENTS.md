@@ -145,7 +145,9 @@ When optimizing the runtime performance of generated codecs/encoders/decoders. K
 - `semiEval` for compile-time config evaluation (eliminate runtime `config.fieldNameMapper(name)` calls)
 - `ValDefs.createVar` for typed local vars (eliminate `Array[Any]` boxing of primitives)
 - Sentinel loop pattern (`var l = -1; while (l < 0 || ...)`) to avoid dispatch duplication
-- Inline built-in decoding (direct `reader.readInt()` instead of function indirection)
+- Inline built-in decoding AND encoding (direct `reader.readInt()` / `writer.writeVal(x.name)` instead of def indirection)
+- Inline collection/map loops (direct `while` loop with def calls instead of runtime helpers with `Function1` lambda dispatch)
+- `toValDefs.use` must wrap the entire type class instance, not just a method body (cached `lazy val`s are local and re-init per call otherwise)
 - Position-based record access (`record.put(index, value)` instead of string-keyed lookups)
 - `writeNonEscapedAsciiKey` for known ASCII field names
 
