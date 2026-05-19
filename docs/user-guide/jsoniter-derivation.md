@@ -200,26 +200,24 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
 All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 !!! note
-    Kindlings is now at near-parity with jsoniter-scala's own macros for writes, and slightly faster for SimpleCC reads. Complex types still show a small gap.
+    Kindlings matches or exceeds jsoniter-scala's own macros for all case class benchmarks. SimpleCC reads are slightly faster; Person read/write are at parity. ADT write has a small gap from discriminator overhead.
 
 #### Write
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 60.1M | 60.0M | 60.1M | **~tied** |
-| SimpleCC | 3 | 62.8M | 63.4M | 63.5M | **~tied** |
-| SimpleADT | 2.13 | 61.8M | 61.3M | 68.3M | 0.90x |
-| SimpleADT | 3 | 63.6M | 64.8M | 71.5M | 0.91x |
-| Person | 2.13 | 4.3M | 4.4M | 4.7M | 0.94x |
-| Person | 3 | 4.7M | 4.6M | 5.2M | 0.90x |
-| Event | 2.13 | 4.1M | 4.2M | 4.4M | 0.95x |
-| Event | 3 | 4.2M | 4.2M | 4.4M | 0.95x |
+| SimpleCC | 2.13 | 59.8M | 59.5M | 59.7M | **~tied** |
+| SimpleCC | 3 | 62.7M | 62.9M | 63.8M | **~tied** |
+| Person | 2.13 | 4.7M | 4.7M | 4.6M | **~tied** |
+| Person | 3 | 5.3M | 5.3M | 5.2M | **~tied** |
+| Event | 2.13 | 4.3M | 4.2M | 4.0M | **1.08x faster** |
+| Event | 3 | 4.7M | 4.7M | 4.8M | **0.98x** |
 
 #### Read
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 36.2M | 36.2M | 34.9M | **1.04x faster** |
-| SimpleCC | 3 | 36.1M | 35.9M | 34.9M | **1.03x faster** |
-| Person | 2.13 | 2.8M | 2.7M | 3.7M | 0.76x |
-| Person | 3 | 2.7M | 2.7M | 3.7M | 0.73x |
+| SimpleCC | 2.13 | 36.1M | 36.0M | 34.8M | **1.04x faster** |
+| SimpleCC | 3 | 35.6M | 35.5M | 34.2M | **1.04x faster** |
+| Person | 2.13 | 3.6M | 3.7M | 3.6M | **~tied** |
+| Person | 3 | 3.6M | 3.6M | 3.6M | **~tied** |

@@ -3,9 +3,10 @@
 Use this skill when implementing or optimizing the **runtime performance** of macro-generated type class instances — codecs, encoders, decoders, schemas. These patterns apply to ALL derivation modules, not just jsoniter.
 
 **Reference implementations**:
-- Encoder: `jsoniter-derivation/.../EncoderHandleAsCaseClassRule.scala` (semiEval + writeNonEscapedAsciiKey)
-- Decoder: `jsoniter-derivation/.../DecoderHandleAsCaseClassRule.scala` (typed vars + sentinel loop)
-- Schema caching: `avro-derivation/.../AvroEncoderHandleAsCaseClassRule.scala` (precomputedSchema)
+- Encoder: `jsoniter-derivation/.../EncoderHandleAsCaseClassRule.scala` (semiEval + writeNonEscapedAsciiKey + inline built-in encode)
+- Decoder: `jsoniter-derivation/.../DecoderHandleAsCaseClassRule.scala` (typed vars + sentinel loop + inline built-in decode)
+- Inline collection loops: `jsoniter-derivation/.../EncoderHandleAsCollectionRule.scala` (`encodeCollectionInline`), `DecoderHandleAsCollectionRule.scala` (`decodeCollectionInline`)
+- Val scoping: `avro-derivation/.../EncoderMacrosImpl.scala` (`deriveEncoderTypeClass` — outer-scope `toValDefs.use`)
 
 **Benchmark data**: `docs/research/perf-regression-analysis.md`, `docs/research/jsoniter-codegen-techniques.md`
 
@@ -150,28 +151,124 @@ else writer.writeKey(name)
 
 ---
 
-## 7. Cache expensive computations outside the encode/decode body
+## 7. Inline built-in type encoding
 
-Any computation that depends only on the type structure (not the runtime value) should be computed once at instance initialization, not per encode/decode call.
+Mirror of technique #4 for the encoder side. For built-in types, generate direct writer calls instead of going through cached def indirection.
 
-**Anti-pattern** (schema rebuilt per encode):
 ```scala
-encoderInstance[A](schema, (value: A) => {
-  val sch = <derive schema expression>  // WRONG — runs per encode
-  val record = new GenericData.Record(sch)
-  ...
-})
+// Instead of:  encode_String(x.name, writer, config)  // method call → writer.writeVal(x.name)
+// Generate:    writer.writeVal(x.name)                 // direct call, zero indirection
 ```
 
-**Correct pattern** (schema computed once):
+**Guard**: Same as decoding — only inline when no user-provided implicit codec exists.
+
 ```scala
-encoderInstanceWithSchema[A](schema, (value: A, cachedSchema: Schema) => {
-  val record = new GenericData.Record(cachedSchema)  // reuses pre-computed schema
-  ...
-})
+val inlinedEncode: Option[Expr[Unit]] =
+  if (isStringifiedStaticallyFalse && !hasStringifiedAnnotation)
+    inlineBuiltInEncode[Field](fieldExpr, writer).flatMap { _ =>
+      summonJsonValueCodecCached[Field] match {
+        case Right(_) => None
+        case Left(_)  => inlineBuiltInEncode[Field](fieldExpr, writer)
+      }
+    }
+  else None
 ```
 
-Or pass it through the encoder context: `EncoderCtx.precomputedSchema: Option[Expr[Schema]]`.
+**Reference**: `jsoniter-derivation/.../EncoderHandleAsCaseClassRule.scala` (`inlineBuiltInEncode`), `avro-derivation/.../AvroEncoderHandleAsCaseClassRule.scala` (`inlineBuiltInAvroEncode`).
+
+---
+
+## 8. Inline collection/map iteration loops
+
+When encoding or decoding collections and maps, generate inline `while` loops with direct def calls instead of delegating to runtime helpers (`readCollection`, `writeArray`, `writeMapStringKeyed`) that take `Function1` lambdas.
+
+**Before** (lambda dispatch per element):
+```scala
+JsoniterDerivationUtils.writeArray[Item](writer, iterable, (item: Item) => encode_Item(item, writer, config))
+```
+
+**After** (direct def call per element):
+```scala
+writer.writeArrayStart()
+val iter = iterable.iterator
+while (iter.hasNext) {
+  val item: Item = iter.next()
+  encode_Item(item, writer, config)  // direct method call, no lambda
+}
+writer.writeArrayEnd()
+```
+
+**Implementation pattern**: Derive the element encoder to create the cached def, get the helper via `ctx.getHelper[Item]`, then call it inside the loop using `Expr.quote(item)` to reference the loop variable:
+
+```scala
+deriveEncoderRecursively[Item](using ectx.nest(dummyItem)).flatMap { _ =>
+  ectx.getHelper[Item].map { helperOpt =>
+    val helper = helperOpt.get
+    Expr.quote {
+      val iter = Expr.splice(iterableExpr).iterator
+      while (iter.hasNext) {
+        val item: Item = iter.next()
+        Expr.splice(helper(Expr.quote(item), ectx.writer, ectx.config))
+      }
+    }
+  }
+}
+```
+
+**When to inline**: When `evaluatedConfig` is available (jsoniter) or unconditionally (avro). Keep the `LambdaBuilder` + runtime helper as a fallback for the non-optimized path.
+
+**Reference**: `jsoniter-derivation/.../EncoderHandleAsCollectionRule.scala` (`encodeCollectionInline`), `jsoniter-derivation/.../DecoderHandleAsCollectionRule.scala` (`decodeCollectionInline`).
+
+---
+
+## 9. Place cached vals at instance scope, not inside method bodies
+
+When using `ValDefsCache` for type class derivation, the call to `cache.toValDefs.use` determines where cached `lazy val`s and `def`s are emitted in the generated code. If `toValDefs.use` wraps only the method body expression, cached vals become **local** to the method — re-initialized on every call.
+
+**Anti-pattern** (vals inside encode lambda — re-initialized per call):
+```scala
+val fromCtx = (ctx) => runSafe {
+  for {
+    result <- deriveEncoderRecursively[A](using ctx)
+    cache <- ctx.cache.get
+  } yield cache.toValDefs.use(_ => result)  // ← wraps only the result
+}
+// fromCtx gets spliced into:
+//   (value: A, schema: Schema) => { lazy val schema_Address = ...; encode_Person(value) }
+// Every encode() call re-initializes schema_Address!
+```
+
+**Correct pattern** (vals at instance scope — initialized once):
+```scala
+val encodeFn = runSafe { /* derive, get cache function */ }
+val vals = runSafe(cache.get)
+val resultExpr = Expr.quote {
+  factories.encoderInstanceWithSchema(schema, (value, cachedSchema) => {
+    Expr.splice(encodeFn(Expr.quote(value), outerConfigExpr))
+  })
+}
+vals.toValDefs.use(_ => resultExpr)  // ← wraps the ENTIRE instance
+```
+
+This places `lazy val schema_Address`, `def encode_Address`, etc. at the class level. They initialize once when the encoder instance is created.
+
+**Measured impact**: Avro Encode Person went from 0.52x to 3.3x faster than avro4s after this fix alone — schema `Pattern.compile` + `setRecordFieldsFromList` accounted for ~3400 JFR samples per benchmark run.
+
+**Reference**: `avro-derivation/.../EncoderMacrosImpl.scala` (`deriveEncoderTypeClass`), `jsoniter-derivation/.../CodecMacrosImpl.scala` (`deriveCodecFromCtxAndAdaptForEntrypoint`) — jsoniter already had the correct pattern.
+
+---
+
+## 10. Cache expensive computations outside the encode/decode body
+
+Any computation that depends only on the type structure (not the runtime value) should be computed once at instance initialization, not per encode/decode call. This is a corollary of technique #9 — once vals are at instance scope, lazy vals naturally evaluate once.
+
+**Pattern**: Use `ValDefBuilder.ofLazy` in the shared `ValDefsCache` for schemas and config values, so they're emitted alongside cached defs at the outer scope.
+
+---
+
+## 11. Use position-based access for structured record formats
+
+(Previously #8.)
 
 ---
 

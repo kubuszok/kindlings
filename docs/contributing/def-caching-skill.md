@@ -46,6 +46,15 @@ The recipe is therefore:
 No `Expr` value is smuggled across `Quotes` instances. No splice contains derivation
 logic. No `LambdaBuilder` is involved.
 
+**Performance-critical**: step 4 is not just about correctness — it has a major runtime
+impact. If `toValDefs.use` wraps only a method body (e.g., the encode lambda inside
+`encoderInstanceWithSchema`), all cached `lazy val`s become **local** to the method and
+re-initialize on every call. This caused a 6x slowdown in Avro encoding where schema
+construction (with regex `Pattern.compile`) ran per encode instead of once. Always wrap
+the **entire type class instance expression** with `toValDefs.use`, not just the method
+body. See [`runtime-performance-skill.md`](runtime-performance-skill.md) § "Place cached
+vals at instance scope".
+
 ## Worked example: cats `HashMacrosImpl`
 
 `cats.kernel.Hash[A]` has two abstract methods (`hash: A => Int` and
