@@ -34,6 +34,16 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
         }
     }
 
+  @scala.annotation.nowarn("msg=is never used")
+  private def inlineBuiltInAvroEncode[Field: Type](value: Expr[Field])(implicit AnyT: Type[Any]): Option[Expr[Any]] =
+    if (Type[Field] =:= Type.of[Boolean]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else if (Type[Field] =:= Type.of[Int]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else if (Type[Field] =:= Type.of[Long]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else if (Type[Field] =:= Type.of[Float]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else if (Type[Field] =:= Type.of[Double]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else if (Type[Field] =:= Type.of[String]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
+    else None
+
   object AvroEncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
@@ -95,7 +105,10 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                           ): Any
                         })
                       case None =>
-                        deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                        inlineBuiltInAvroEncode[Field](fieldExpr) match {
+                          case Some(enc) => MIO.pure(enc)
+                          case None      => deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                        }
                     }
                     encodeMIO.map { fieldEncoded =>
                       val nameOverride = param.flatMap(p => getAnnotationStringArg[fieldName](p))

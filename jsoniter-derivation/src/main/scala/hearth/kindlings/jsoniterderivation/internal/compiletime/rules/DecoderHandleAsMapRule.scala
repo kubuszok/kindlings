@@ -37,50 +37,11 @@ trait DecoderHandleAsMapRuleImpl {
       implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
 
       if (Key <:< Type[String]) {
-        // String keys — derive value decoder, plus key-as-value decoder for mapAsArray
-        LambdaBuilder
-          .of1[JsonReader]("valueReader")
-          .traverse { valueReaderExpr =>
-            deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
-          }
-          .flatMap { valueBuilder =>
-            val decodeFn = valueBuilder.build[Value]
-            // Derive key-as-value decoder for String (for mapAsArray mode)
-            LambdaBuilder
-              .of1[JsonReader]("keyValueReader")
-              .traverse { keyReaderExpr =>
-                // String keys: read as string value
-                MIO.pure(Expr.quote {
-                  Expr.splice(keyReaderExpr).readString(null).asInstanceOf[Key]
-                })
-              }
-              .map { keyValueBuilder =>
-                val keyValueDecodeFn = keyValueBuilder.build[Key]
-                val factoryExpr = isMap.factory
-                Rule.matched(Expr.quote {
-                  if (Expr.splice(dctx.config).mapAsArray) {
-                    JsoniterDerivationUtils
-                      .readMapAsArray[Key, Value, A](
-                        Expr.splice(dctx.reader),
-                        Expr.splice(keyValueDecodeFn),
-                        Expr.splice(decodeFn),
-                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
-                        Expr.splice(dctx.config).mapMaxInsertNumber
-                      )
-                      .asInstanceOf[A]
-                  } else {
-                    JsoniterDerivationUtils
-                      .readMap[Value, A](
-                        Expr.splice(dctx.reader),
-                        Expr.splice(decodeFn),
-                        Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]],
-                        Expr.splice(dctx.config).mapMaxInsertNumber
-                      )
-                      .asInstanceOf[A]
-                  }
-                })
-              }
-          }
+        val mapAsArrayStaticallyFalse = dctx.evaluatedConfig.exists(!_.mapAsArray)
+        if (mapAsArrayStaticallyFalse)
+          decodeStringKeyedMapInline[A, Pair, Key, Value](isMap)
+        else
+          decodeStringKeyedMapViaHelper[A, Pair, Key, Value](isMap)
       } else {
         // Non-String keys — try to derive key decoding for object mode
         deriveKeyDecoding[Key].flatMap {
@@ -173,6 +134,94 @@ trait DecoderHandleAsMapRuleImpl {
               }
         }
       }
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def decodeStringKeyedMapInline[A: DecoderCtx, Pair: Type, Key: Type, Value: Type](
+        isMap: IsMapOf[A, Pair]
+    )(implicit
+        StringT: Type[String],
+        JsonReaderT: Type[JsonReader],
+        JsoniterConfigT: Type[JsoniterConfig]
+    ): MIO[Rule.Applicability[Expr[A]]] = {
+      implicit val IntT: Type[Int] = CTypes.Int
+      import isMap.CtorResult
+      val maxInserts = dctx.evaluatedConfig.get.mapMaxInsertNumber
+      deriveDecoderRecursively[Value](using dctx.nest[Value](dctx.reader)).map { decodeValueExpr =>
+        val factoryExpr = isMap.factory
+        Rule.matched(Expr.quote {
+          val reader = Expr.splice(dctx.reader)
+          val builder = Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]].newBuilder
+          if (!reader.isNextToken('{'.toByte)) reader.decodeError("expected '{'")
+          if (!reader.isNextToken('}'.toByte)) {
+            reader.rollbackToken()
+            var count: Int = 1
+            val key = reader.readKeyAsString()
+            builder += ((key, Expr.splice(decodeValueExpr)))
+            while (reader.isNextToken(','.toByte)) {
+              count += 1
+              if (count > Expr.splice(Expr(maxInserts)))
+                reader.decodeError("too many map entries (max: " + Expr.splice(Expr(maxInserts)) + ")")
+              val k = reader.readKeyAsString()
+              builder += ((k, Expr.splice(decodeValueExpr)))
+            }
+            if (!reader.isCurrentToken('}'.toByte)) reader.decodeError("expected '}' or ','")
+          }
+          builder.result().asInstanceOf[A]
+        })
+      }
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def decodeStringKeyedMapViaHelper[A: DecoderCtx, Pair: Type, Key: Type, Value: Type](
+        isMap: IsMapOf[A, Pair]
+    )(implicit
+        StringT: Type[String],
+        JsonReaderT: Type[JsonReader],
+        JsoniterConfigT: Type[JsoniterConfig]
+    ): MIO[Rule.Applicability[Expr[A]]] = {
+      import isMap.CtorResult
+      LambdaBuilder
+        .of1[JsonReader]("valueReader")
+        .traverse { valueReaderExpr =>
+          deriveDecoderRecursively[Value](using dctx.nest[Value](valueReaderExpr))
+        }
+        .flatMap { valueBuilder =>
+          val decodeFn = valueBuilder.build[Value]
+          LambdaBuilder
+            .of1[JsonReader]("keyValueReader")
+            .traverse { keyReaderExpr =>
+              MIO.pure(Expr.quote {
+                Expr.splice(keyReaderExpr).readString(null).asInstanceOf[Key]
+              })
+            }
+            .map { keyValueBuilder =>
+              val keyValueDecodeFn = keyValueBuilder.build[Key]
+              val factoryExpr = isMap.factory
+              Rule.matched(Expr.quote {
+                if (Expr.splice(dctx.config).mapAsArray) {
+                  JsoniterDerivationUtils
+                    .readMapAsArray[Key, Value, A](
+                      Expr.splice(dctx.reader),
+                      Expr.splice(keyValueDecodeFn),
+                      Expr.splice(decodeFn),
+                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(Key, Value), A]],
+                      Expr.splice(dctx.config).mapMaxInsertNumber
+                    )
+                    .asInstanceOf[A]
+                } else {
+                  JsoniterDerivationUtils
+                    .readMap[Value, A](
+                      Expr.splice(dctx.reader),
+                      Expr.splice(decodeFn),
+                      Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), A]],
+                      Expr.splice(dctx.config).mapMaxInsertNumber
+                    )
+                    .asInstanceOf[A]
+                }
+              })
+            }
+        }
     }
 
     /** Try to derive a JsonReader => K function for map key decoding. Returns None if derivation fails. */

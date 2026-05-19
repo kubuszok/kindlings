@@ -37,44 +37,11 @@ trait EncoderHandleAsMapRuleImpl {
       @scala.annotation.nowarn("msg=is never used")
       implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
       if (Key <:< Type[String]) {
-        // String keys — derive value encoder, plus key-as-value encoder for mapAsArray
-        LambdaBuilder
-          .of1[Value]("mapValue")
-          .traverse { valueExpr =>
-            deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
-          }
-          .flatMap { valueBuilder =>
-            val valueLambda = valueBuilder.build[Unit]
-            // Derive a key-as-value encoder for String (for mapAsArray mode)
-            LambdaBuilder
-              .of1[Key]("keyAsValue")
-              .traverse { keyExpr =>
-                // String keys: write as string value
-                MIO.pure(Expr.quote {
-                  Expr.splice(ectx.writer).writeVal(Expr.splice(keyExpr).asInstanceOf[String])
-                })
-              }
-              .map { keyValueBuilder =>
-                val keyValueLambda = keyValueBuilder.build[Unit]
-                val iterableExpr = isMap.asIterable(ectx.value)
-                Rule.matched(Expr.quote {
-                  if (Expr.splice(ectx.config).mapAsArray) {
-                    JsoniterDerivationUtils.writeMapAsArray[Key, Value](
-                      Expr.splice(ectx.writer),
-                      Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
-                      Expr.splice(keyValueLambda),
-                      Expr.splice(valueLambda)
-                    )
-                  } else {
-                    JsoniterDerivationUtils.writeMapStringKeyed[Value](
-                      Expr.splice(ectx.writer),
-                      Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]],
-                      Expr.splice(valueLambda)
-                    )
-                  }
-                })
-              }
-          }
+        val mapAsArrayStaticallyFalse = ectx.evaluatedConfig.exists(!_.mapAsArray)
+        if (mapAsArrayStaticallyFalse)
+          deriveStringKeyedMapInline[A, Pair, Key, Value](isMap)
+        else
+          deriveStringKeyedMapViaHelper[A, Pair, Key, Value](isMap)
       } else {
         // Non-String keys — try to derive key encoding for object mode
         deriveKeyEncoding[Key].flatMap {
@@ -159,6 +126,70 @@ trait EncoderHandleAsMapRuleImpl {
         }
       }
     }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveStringKeyedMapInline[A: EncoderCtx, Pair: Type, Key: Type, Value: Type](
+        isMap: IsMapOf[A, Pair]
+    ): MIO[Rule.Applicability[Expr[Unit]]] = {
+      val dummyValue: Expr[Value] = Expr.quote(null.asInstanceOf[Value])
+      deriveEncoderRecursively[Value](using ectx.nest(dummyValue)).flatMap { _ =>
+        ectx.getHelper[Value].map { helperOpt =>
+          val helper = helperOpt.get
+          val iterableExpr = isMap.asIterable(ectx.value)
+          Rule.matched(Expr.quote {
+            val out = Expr.splice(ectx.writer)
+            out.writeObjectStart()
+            val iter = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]].iterator
+            while (iter.hasNext) {
+              val entry = iter.next()
+              out.writeKey(entry._1)
+              Expr.splice(helper(Expr.quote(entry._2), ectx.writer, ectx.config))
+            }
+            out.writeObjectEnd()
+          })
+        }
+      }
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveStringKeyedMapViaHelper[A: EncoderCtx, Pair: Type, Key: Type, Value: Type](
+        isMap: IsMapOf[A, Pair]
+    ): MIO[Rule.Applicability[Expr[Unit]]] =
+      LambdaBuilder
+        .of1[Value]("mapValue")
+        .traverse { valueExpr =>
+          deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
+        }
+        .flatMap { valueBuilder =>
+          val valueLambda = valueBuilder.build[Unit]
+          LambdaBuilder
+            .of1[Key]("keyAsValue")
+            .traverse { keyExpr =>
+              MIO.pure(Expr.quote {
+                Expr.splice(ectx.writer).writeVal(Expr.splice(keyExpr).asInstanceOf[String])
+              })
+            }
+            .map { keyValueBuilder =>
+              val keyValueLambda = keyValueBuilder.build[Unit]
+              val iterableExpr = isMap.asIterable(ectx.value)
+              Rule.matched(Expr.quote {
+                if (Expr.splice(ectx.config).mapAsArray) {
+                  JsoniterDerivationUtils.writeMapAsArray[Key, Value](
+                    Expr.splice(ectx.writer),
+                    Expr.splice(iterableExpr).asInstanceOf[Iterable[(Key, Value)]],
+                    Expr.splice(keyValueLambda),
+                    Expr.splice(valueLambda)
+                  )
+                } else {
+                  JsoniterDerivationUtils.writeMapStringKeyed[Value](
+                    Expr.splice(ectx.writer),
+                    Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]],
+                    Expr.splice(valueLambda)
+                  )
+                }
+              })
+            }
+        }
 
     /** Try to derive a (K, JsonWriter) => Unit function for map key encoding. Returns None if derivation fails. */
     @scala.annotation.nowarn("msg=is never used")
