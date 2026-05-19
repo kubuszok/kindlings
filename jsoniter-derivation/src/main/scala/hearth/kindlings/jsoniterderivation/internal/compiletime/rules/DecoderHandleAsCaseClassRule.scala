@@ -780,7 +780,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       rs(ctx.cache.buildCachedWith(cacheKey, defBuilder) { case (_, (readerExpr, configExpr)) =>
                         rs(
                           deriveDecoderRecursively[Field](using
-                            DecoderCtx.from(readerExpr, configExpr, ctx.cache, ctx.derivedType)
+                            DecoderCtx.from(
+                              readerExpr,
+                              configExpr,
+                              ctx.cache,
+                              ctx.derivedType,
+                              evaluatedConfig = ctx.evaluatedConfig
+                            )
                           )
                         )
                       })
