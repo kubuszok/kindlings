@@ -120,12 +120,11 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                       (fName, decodedExpr)
                     }
                   case None =>
-                    deriveFieldDecoder[Field].map { decoderExpr =>
-                      val decodedExpr: Expr_?? = Expr.quote {
-                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                        Expr.splice(decoderExpr).decode(record.get(Expr.splice(Expr(fieldIndex))))
-                      }.as_??
-                      (fName, decodedExpr)
+                    val fieldAvroValue: Expr[Any] = Expr.quote {
+                      Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord].get(Expr.splice(Expr(fieldIndex)))
+                    }
+                    deriveDecoderRecursively[Field](using dctx.nest[Field](fieldAvroValue)).map { decoded =>
+                      (fName, decoded.as_??)
                     }
                 }
               }

@@ -21,7 +21,17 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
         Log.info(s"Using precomputed schema for ${Type[A].prettyPrint}") >>
           MIO.pure(schemaExpr)
       case None =>
-        deriveSelfContainedSchema[A](ctx.config)
+        ctx.getCachedSchemaForEncode[A].flatMap {
+          case Some(cached) =>
+            Log.info(s"Using encoder-cached schema for ${Type[A].prettyPrint}") >>
+              MIO.pure(cached)
+          case None =>
+            for {
+              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig)
+              _ <- ctx.setCachedSchemaForEncode[A](schema)
+              result <- ctx.getCachedSchemaForEncode[A]
+            } yield result.get
+        }
     }
 
   object AvroEncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {

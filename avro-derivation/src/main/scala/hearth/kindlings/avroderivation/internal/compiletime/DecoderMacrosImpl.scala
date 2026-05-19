@@ -242,6 +242,32 @@ trait DecoderMacrosImpl
       config = newConfig
     )
 
+    def getCachedSchemaForDecode[B: Type]: MIO[Option[Expr[org.apache.avro.Schema]]] = {
+      implicit val SchemaT: Type[org.apache.avro.Schema] = DecTypes.Schema
+      cache.get0Ary[org.apache.avro.Schema](s"cached-decode-schema-for-${Type[B].plainPrint}")
+    }
+    def setCachedSchemaForDecode[B: Type](schemaExpr: Expr[org.apache.avro.Schema]): MIO[Unit] = {
+      implicit val SchemaT: Type[org.apache.avro.Schema] = DecTypes.Schema
+      Log.info(s"Caching decode schema for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          s"cached-decode-schema-for-${Type[B].plainPrint}",
+          ValDefBuilder.ofLazy[org.apache.avro.Schema](s"decodeSchema_${Type[B].shortName}")
+        )(_ => schemaExpr)
+    }
+
+    def getCachedFieldDecoder[B: Type]: MIO[Option[Expr[AvroDecoder[B]]]] = {
+      implicit val DecoderB: Type[AvroDecoder[B]] = DecTypes.AvroDecoder[B]
+      cache.get0Ary[AvroDecoder[B]](s"cached-field-decoder-for-${Type[B].plainPrint}")
+    }
+    def setCachedFieldDecoder[B: Type](instance: Expr[AvroDecoder[B]]): MIO[Unit] = {
+      implicit val DecoderB: Type[AvroDecoder[B]] = DecTypes.AvroDecoder[B]
+      Log.info(s"Caching field decoder for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          s"cached-field-decoder-for-${Type[B].plainPrint}",
+          ValDefBuilder.ofLazy[AvroDecoder[B]](s"fieldDecoder_${Type[B].shortName}")
+        )(_ => instance)
+    }
+
     def getInstance[B: Type]: MIO[Option[Expr[AvroDecoder[B]]]] = {
       implicit val DecoderB: Type[AvroDecoder[B]] = DecTypes.AvroDecoder[B]
       cache.get0Ary[AvroDecoder[B]]("cached-decoder-instance")

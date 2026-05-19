@@ -37,7 +37,9 @@ trait EncoderMacrosImpl
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None)))
+            Expr.splice(
+              fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, outerConfig = Some(configVal)))
+            )
           }
         }
       }
@@ -98,7 +100,8 @@ trait EncoderMacrosImpl
                           Expr.quote(value),
                           Expr.quote(cfg),
                           derivedType = selfType,
-                          precomputedSchema = Some(Expr.quote(cachedSchema))
+                          precomputedSchema = Some(Expr.quote(cachedSchema)),
+                          outerConfig = Some(Expr.quote(cfg))
                         )
                       )
                     }
@@ -221,8 +224,11 @@ trait EncoderMacrosImpl
       config: Expr[AvroConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
+      precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None,
+      outerConfig: Option[Expr[AvroConfig]] = None
   ) {
+
+    def schemaConfig: Expr[AvroConfig] = outerConfig.getOrElse(config)
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
       tpe = Type[B],
@@ -237,6 +243,19 @@ trait EncoderMacrosImpl
       value = newValue,
       config = newConfig
     )
+
+    def getCachedSchemaForEncode[B: Type]: MIO[Option[Expr[org.apache.avro.Schema]]] = {
+      implicit val SchemaT: Type[org.apache.avro.Schema] = EncTypes.Schema
+      cache.get0Ary[org.apache.avro.Schema](s"cached-encode-schema-for-${Type[B].plainPrint}")
+    }
+    def setCachedSchemaForEncode[B: Type](schemaExpr: Expr[org.apache.avro.Schema]): MIO[Unit] = {
+      implicit val SchemaT: Type[org.apache.avro.Schema] = EncTypes.Schema
+      Log.info(s"Caching encode schema for ${Type[B].prettyPrint}") >>
+        cache.buildCachedWith(
+          s"cached-encode-schema-for-${Type[B].plainPrint}",
+          ValDefBuilder.ofLazy[org.apache.avro.Schema](s"encodeSchema_${Type[B].shortName}")
+        )(_ => schemaExpr)
+    }
 
     def getInstance[B: Type]: MIO[Option[Expr[AvroEncoder[B]]]] = {
       implicit val EncoderB: Type[AvroEncoder[B]] = EncTypes.AvroEncoder[B]
@@ -284,14 +303,16 @@ trait EncoderMacrosImpl
         value: Expr[A],
         config: Expr[AvroConfig],
         derivedType: Option[??],
-        precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None
+        precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None,
+        outerConfig: Option[Expr[AvroConfig]] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       config = config,
       cache = ValDefsCache.mlocal,
       derivedType = derivedType,
-      precomputedSchema = precomputedSchema
+      precomputedSchema = precomputedSchema,
+      outerConfig = outerConfig
     )
   }
 
