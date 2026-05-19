@@ -99,6 +99,32 @@ trait EncoderHandleAsCaseClassRuleImpl {
     }
   }
 
+  @scala.annotation.nowarn("msg=is never used")
+  private def inlineBuiltInEncode[Field: Type](value: Expr[Field], writer: Expr[JsonWriter])(implicit
+      JsonWriterT: Type[JsonWriter],
+      UnitT: Type[Unit]
+  ): Option[Expr[Unit]] =
+    if (Type[Field] =:= Type.of[Int])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Int])))
+    else if (Type[Field] =:= Type.of[Long])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Long])))
+    else if (Type[Field] =:= Type.of[Double])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Double])))
+    else if (Type[Field] =:= Type.of[Float])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Float])))
+    else if (Type[Field] =:= Type.of[Boolean])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Boolean])))
+    else if (Type[Field] =:= Type.of[String])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[String])))
+    else if (Type[Field] =:= Type.of[Byte])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Byte])))
+    else if (Type[Field] =:= Type.of[Short])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Short])))
+    else if (Type[Field] =:= Type.of[Char])
+      Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Char].toString)))
+    else
+      None
+
   object EncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
@@ -166,7 +192,17 @@ trait EncoderHandleAsCaseClassRuleImpl {
                           Log.error(err.message) >> MIO.fail(err)
                       }
                     } else if (isStringifiedStaticallyFalse) {
-                      deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                      val inlined: Option[Expr[Unit]] =
+                        inlineBuiltInEncode[Field](fieldExpr, ectx.writer).flatMap { _ =>
+                          summonJsonValueCodecCached[Field] match {
+                            case Right(_) => None
+                            case Left(_)  => inlineBuiltInEncode[Field](fieldExpr, ectx.writer)
+                          }
+                        }
+                      inlined match {
+                        case Some(enc) => MIO.pure(enc)
+                        case None      => deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
+                      }
                     } else {
                       // When no @stringified annotation, check if global isStringified applies
                       deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {

@@ -3,7 +3,6 @@ package rules
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
-import hearth.fp.syntax.*
 import hearth.std.*
 
 trait AvroEncoderHandleAsMapRuleImpl {
@@ -27,6 +26,7 @@ trait AvroEncoderHandleAsMapRuleImpl {
         }
       }
 
+    @scala.annotation.nowarn("msg=is never used")
     private def deriveMapEntries[A: EncoderCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Any]]] = {
@@ -34,25 +34,22 @@ trait AvroEncoderHandleAsMapRuleImpl {
       if (!(Key <:< Type[String]))
         MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
       else {
-        LambdaBuilder
-          .of1[Value]("value")
-          .traverse { valueExpr =>
-            deriveEncoderRecursively[Value](using ectx.nest(valueExpr))
-          }
-          .map { builder =>
-            val encodeValueFn = builder.build[Any]
+        val dummyValue: Expr[Value] = Expr.quote(null.asInstanceOf[Value])
+        deriveEncoderRecursively[Value](using ectx.nest(dummyValue)).flatMap { _ =>
+          ectx.getHelper[Value].map { helperOpt =>
+            val helper = helperOpt.get
             val iterableExpr = isMap.asIterable(ectx.value)
             Rule.matched(Expr.quote {
               val map = new java.util.HashMap[String, Any]()
-              Expr.splice(iterableExpr).foreach { (pair: Pair) =>
-                map.put(
-                  Expr.splice(isMap.key(Expr.quote(pair))).asInstanceOf[String],
-                  Expr.splice(encodeValueFn).apply(Expr.splice(isMap.value(Expr.quote(pair))))
-                )
+              val iter = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]].iterator
+              while (iter.hasNext) {
+                val entry = iter.next()
+                val _ = map.put(entry._1, Expr.splice(helper(Expr.quote(entry._2), ectx.config)))
               }
               map: Any
             })
           }
+        }
       }
     }
   }

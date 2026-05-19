@@ -288,85 +288,66 @@ Methodology: Per-benchmark JFR profiling (single fork), production-config verifi
 
 ---
 
+### Round 3: Inline built-in encoding + inline collection/map loops (2026-05-19, hearth 0.3.0-33-SNAPSHOT)
+
+Two cross-cutting optimizations applied to both jsoniter and avro modules:
+1. **Inline built-in encode/decode**: For built-in types (String, Int, Double, etc.), emit `writer.writeVal(x.name)` directly instead of calling def-cached `encode_String(x.name, writer, config)`. Mirrors the existing `inlineBuiltInDecode` pattern in the optimized decoder.
+2. **Inline collection/map loops**: Generate `while` loops with direct def calls instead of delegating to `readCollection`/`writeArray`/`writeMapStringKeyed` runtime helpers with `Function1` lambdas.
+
+| Benchmark | Before (Round 2) | After (Round 3) | vs Original | Change |
+|-----------|-------------------|------------------|-------------|--------|
+| **Jsoniter Write** Person (Scala 3) | 0.87x | **5.26M vs 5.37M (0.98x)** | **Gap closed** | Inline built-in encode + inline write loops |
+| **Jsoniter Write** Person (Scala 2.13) | — | **4.73M vs 4.82M (0.98x)** | **Gap closed** | Same |
+| **Jsoniter Write** SimpleCC (Scala 3) | 1.00x | **62.3M vs 62.3M (1.00x)** | At parity | No regression |
+| **Jsoniter Read** Person (Scala 3) | 0.93x | **3.60M vs 3.63M (0.99x)** | **Gap closed** | Inline collection/map decode loops |
+| **Jsoniter Read** Person (Scala 2.13) | — | **3.67M vs 3.64M (1.01x)** | **Faster** | Same |
+| **Jsoniter Read** SimpleCC (Scala 3) | — | **35.8M vs 34.5M (1.03x)** | **Faster** | No regression |
+| **Avro Encode** Person (Scala 3) | 0.51x | **2.99M vs 5.75M (0.52x)** | Unchanged | Inline built-in helped but gap is architectural |
+
+### What was fixed
+
+**Jsoniter Write Person** (0.87x → 0.98x): Two changes. (1) `inlineBuiltInEncode` emits `writer.writeVal(x.name)` directly for String/Int/Double/Boolean fields when `evaluatedConfig` is available and no user-provided `JsonValueCodec` exists — eliminates 575 JFR samples of `encode_String`/`encode_Double` def-call overhead. (2) `EncoderHandleAsCollectionRule` and `EncoderHandleAsMapRule` generate inline `while` loops with direct def calls instead of delegating to `writeArray`/`writeMapStringKeyed` with `Function1` lambdas — eliminates 290 JFR samples of lambda dispatch.
+
+**Jsoniter Read Person** (0.93x → 0.99x): `DecoderHandleAsCollectionRule` and `DecoderHandleAsMapRule` generate inline `while` loops when `evaluatedConfig` is available. Instead of `readCollection(reader, decodeFn, factory, maxLen)` with a `Function1` lambda, the generated code calls `decode_Address(reader, config)` directly in the loop body — eliminates 580 JFR samples of `readCollection`/`readMap`/`Function1.apply` dispatch.
+
+**Avro Encode Person** (0.51x → 0.52x, unchanged): `inlineBuiltInAvroEncode` emits `fieldExpr.asInstanceOf[Any]` directly for String/Int/Long/Float/Double/Boolean fields, and collection/map encoding uses inline `while` loops with direct def calls instead of `LambdaBuilder` lambdas. The improvement is marginal because the dominant cost is `GenericData.Record` creation per nested record type — an architectural limitation of the record-per-type approach vs avro4s's array-based `FieldEncoder` dispatch.
+
+### Key files changed
+
+- `EncoderHandleAsCaseClassRule.scala` (jsoniter): Added `inlineBuiltInEncode[Field]`, integrated into `encodeCaseClassFieldsOnly`
+- `EncoderHandleAsCollectionRule.scala` (jsoniter): Added `encodeCollectionInline` with direct def calls
+- `EncoderHandleAsMapRule.scala` (jsoniter): Added `deriveStringKeyedMapInline` for string-key object mode
+- `DecoderHandleAsCollectionRule.scala` (jsoniter): Added `decodeCollectionInline` with direct decode calls
+- `DecoderHandleAsMapRule.scala` (jsoniter): Added `decodeStringKeyedMapInline` for string-key object mode
+- `AvroEncoderHandleAsCaseClassRule.scala`: Added `inlineBuiltInAvroEncode[Field]` for built-in Avro types
+- `AvroEncoderHandleAsCollectionRule.scala`: Replaced `LambdaBuilder` + `foreach` with inline `while` loop
+- `AvroEncoderHandleAsMapRule.scala`: Replaced `LambdaBuilder` + `foreach` with inline `while` loop
+
+---
+
 ## Remaining Gaps — Root Causes and Fix Strategies
 
-### Avro Encode Person (0.51x vs avro4s)
+> **Post Round 3 status**: Jsoniter Read/Write Person gaps are **closed** (0.98x–1.01x). The only remaining actionable gap is Avro Encode Person (0.52x). Cats Order/Eq gaps are within measurement noise.
 
-**JFR evidence** (hot path only, schema init excluded):
+### Avro Encode Person (0.52x vs avro4s) — PARTIALLY ADDRESSED
 
-| Kindlings hot spot | Samples | avro4s equivalent | Samples |
-|---|---|---|---|
-| `encode_Person` (6 field puts) | 110 | `RecordEncoder.encodeT` (array loop) | 673+69 |
-| `encode_Address` (4 field puts) | 54 | `FieldEncoder.encode` (virtual dispatch) | 424+124 |
-| `encode_String/Int/Double` (identity or box) | 433+142 | Magnolia `Param.deref` | 342 |
-| `encode_List.anonfun` (lambda per Address) | 82 | `CollectionEncoders.encode.anonfun` | 54 |
-| `encode_Map.anonfun` (lambda + foreach) | 75 | `MapEncoder.encode.anonfun` | 189 |
-| `HashMap.put/putVal` (map construction) | 153+89 | `HashMap.put/putVal` | 213+103 |
-| `ArrayList.add` (list/vector construction) | 122+66+56 | `Array.copyOf` (record array) | 133×3 |
-| `List.foreach` / `Map.foreach` | 79+76 | `List.map` / `Map.foreach` | 103+81+124 |
+Round 3 applied inline built-in encoding and eliminated LambdaBuilder for collection/map encoding. The improvement was marginal because the dominant cost is architectural:
 
-**Root causes (ranked by impact):**
+**Remaining root causes (ranked by impact):**
 
-1. **`encode_String` is a def call that does `string.asInstanceOf[Any]` — 433 samples.** For String and Int fields, the encode def is an identity cast wrapped in a method call. avro4s's `FieldEncoder.encode` skips the method for primitive/string fields and puts them directly into the record. **Fix strategy**: add an "inline built-in encode" rule (analogous to jsoniter's `inlineBuiltInDecode`) that emits `record.put(idx, person.name)` directly for String/Int/Long/Double/Boolean fields, bypassing the def-cached encode method entirely.
+1. **`GenericData.Record` creation per nested record type.** Each call to `encode_Address` creates `new GenericData.Record(schema)` + N `record.put()` calls. avro4s uses a pre-allocated `FieldEncoder[]` array and iterates with an index, avoiding per-encode Record allocation. **This is the primary remaining gap.** Fixing requires a fundamentally different codegen approach — either pre-allocated Record pools or an array-based field dispatch like avro4s.
 
-2. **`encode_Address` creates `new GenericData.Record(schema)` per Address — 54 samples in the method, but the `Record` constructor + `record.put` overhead compounds.** avro4s's `RecordEncoder.encodeT` uses a pre-allocated `FieldEncoder[]` array and iterates with an index. **Fix strategy**: this is architectural. The def-cached approach creates a method call per nested record. Making the encode loop index-based (like avro4s) would require a different codegen pattern that doesn't use `CaseClass.caseFieldValuesAt`.
+2. **Def-cached encode method overhead for nested records.** `encode_Address(address, config)` is a method call that creates a Record internally. avro4s's `FieldEncoder.encode` uses virtual dispatch on pre-created encoder instances. Both approaches have similar overhead per nested record; the difference is in the Record allocation pattern.
 
-3. **Lambda dispatch for collection/map encoding — `encode_List.anonfun` (82), `encode_Map.anonfun` (75), `JProcedure` overhead implicit.** The `LambdaBuilder.of1` pattern creates a `Function1` that wraps the encode def call. Each collection element goes through `lambda.apply(item)` → `encode_Address(item, config)`. **Fix strategy**: eliminate the `LambdaBuilder` layer for collection encoding. Instead of `list.foreach(item => lambda.apply(item))`, generate `list.foreach(item => encode_Address(item, config))` directly. This requires the collection rule to directly reference the def-cached encode method without the `LambdaBuilder` indirection.
+3. **`AvroConfig` parameter passed on every encode call.** Already partially mitigated by inline built-in encoding (built-in fields skip the encode def entirely). For nested records, the config parameter is still passed but is architecturally necessary for schema-dependent encoding (e.g., BigDecimal scale).
 
-4. **Unused `AvroConfig` parameter passed on every encode call.** Every `encode_X(value, avroconfig)` def takes an `AvroConfig` parameter even when the config is not used in the body (e.g., `encode_String` just returns `string.asInstanceOf[Any]`). The JIT may or may not eliminate this. **Fix strategy**: split encode defs into config-dependent and config-independent variants. Config-independent defs (builtins) take only the value.
+### ~~Jsoniter Read Person (0.93x)~~ — FIXED in Round 3 (now 0.99x–1.01x)
 
-### Jsoniter Read Person (0.93x vs jsoniter-scala)
-
-**JFR evidence:**
-
-| Kindlings hot spot | Samples | jsoniter-scala equivalent | Samples |
-|---|---|---|---|
-| `JProcedure3.apply` (readObject dispatch) | 198+188 | (none — inlined) | 0 |
-| `readCollection` (List[Address] decode) | 184+107+35+19+18+17 | `d6` (inline loop) | 284 |
-| `readMap` (Map decode) | 61+58+26+19 | `d5` (inline loop) | 213 |
-| `decode_List.anonfun` (per-element lambda) | 143 | (none — inlined) | 0 |
-| `readKeyAsString` | 89+82 | `readKeyAsCharBuf` | 138 |
-
-**Root causes (ranked by impact):**
-
-1. **`readCollection` / `readMap` runtime helpers use `Function1` lambda dispatch — ~580 samples total in Kindlings infrastructure vs 0 in original.** jsoniter-scala generates an inline `while` loop: `while (in.isNextToken(',')) { arr(i) = decodeElement(in); i += 1 }`. Kindlings calls `JsoniterDerivationUtils.readCollection(reader, decodeFn, factory, maxLen)` which iterates with `factory.newBuilder` + `while (in.isNextToken(',')) builder += decodeFn.apply(in)`. **Fix strategy**: generate inline collection/map decode loops in the optimized path. When `evaluatedConfig` is available, emit a `while` loop with direct decode calls instead of delegating to `readCollection`/`readMap`. This is the same pattern as `decodeCaseClassFieldsOptimized` — extend it to handle collection/map fields inline.
-
-2. **`readKeyAsString` for nested Address fields — 171 samples.** The top-level Person uses `readKeyAsCharBuf` (optimized path), but the `readCollection` helper for `List[Address]` internally calls `decode_Address`, which uses `readKeyAsCharBuf` for Address's own fields (since evaluatedConfig now propagates). However, the `readObject` call inside `decode_Address` still uses `readKeyAsString` because... wait, let me re-check. The 189 `readKeyAsString` samples might be from the non-optimized path of the PREVIOUS JFR run (before the evaluatedConfig fix). The current run should have `readKeyAsCharBuf` for Address too. **Action**: re-run JFR after the fix to confirm this is resolved.
-
-3. **`Factory`-based collection builder vs direct `ListBuffer`/`VectorBuilder`.** The `readCollection` helper uses `scala.collection.Factory[Item, Coll]` which goes through the generic builder pattern. jsoniter-scala knows the exact collection type at compile time and uses the specific builder. **Fix strategy**: when generating inline collection decode loops, use the specific builder type (e.g., `ListBuffer[Address]` for `List[Address]`) instead of the generic `Factory`.
-
-### Jsoniter Write Person (0.87x vs jsoniter-scala)
-
-**JFR evidence:**
-
-| Kindlings hot spot | Samples | jsoniter-scala equivalent | Samples |
-|---|---|---|---|
-| `encode_String` (def call for each String field) | 433 | (inlined `writeVal(x.name)`) | 0 |
-| `writeMapStringKeyed` (runtime helper) | 179 | `e12` (inline loop) | 33 |
-| `encode_Double` (def call for each Double) | 142 | (inlined `writeVal(x.score)`) | 0 |
-| `JProcedure1/2.apply` (lambda dispatch) | 132+124 | `JProcedure2.apply` | 96 |
-| `writeArray` (runtime helper) | 111 | `e10`/`e13` (inline loops) | 106+112 |
-| `encode_Address` (def call) | 70 | `e11` (inline body) | 366 |
-| `encode_Option.anonfun` + `Option.fold` | 65+40 | (null check) | 0 |
-| `JFunction1$mcVD$sp.apply` (Double boxing) | 54 | (none — typed) | 0 |
-
-**Root causes (ranked by impact):**
-
-1. **`encode_String` / `encode_Double` / `encode_Int` are def calls that just delegate to `writeVal` — 433+142 = 575 samples.** jsoniter-scala inlines `out.writeNonEscapedAsciiKey("name"); out.writeVal(x.name)` directly. Kindlings generates `out.writeNonEscapedAsciiKey("name"); encode_String(x.name, out, config)` where `encode_String` is `def encode_String(s, w, c) = w.writeVal(s)`. The extra method call + config parameter passing prevents full JIT inlining. **Fix strategy**: add "inline built-in encode" for the encoder optimized path. When `evaluatedConfig` is available and the field type is a built-in (String, Int, Long, Double, Boolean, Float), emit `writer.writeVal(x.fieldName)` directly instead of calling the def-cached encode method.
-
-2. **`writeMapStringKeyed` / `writeArray` runtime helpers — 179+111 = 290 samples.** These are generic runtime methods that take `Function1` lambdas for per-element encoding. jsoniter-scala generates inline loops. **Fix strategy**: generate inline write loops in the optimized encoder path. When encoding a collection field, emit `out.writeArrayStart(); iterable.foreach(item => encode_Item(item, out, config)); out.writeArrayEnd()` directly in the case class encoder body instead of delegating to `writeArray`.
-
-3. **`Option.fold` for Option encoding — 40+65 = 105 samples.** Kindlings uses `option.fold(writeNull)(item => encode_String(item, out, config))`. jsoniter-scala generates `if (x.email ne null) { writeKey("email"); writeVal(x.email) }` (for non-None) or similar pattern. `Option.fold` allocates two lambdas (one for empty, one for Some). **Fix strategy**: generate `if (option.isDefined) { writeKey("email"); encode_String(option.get, out, config) } else { writeKey("email"); out.writeNull() }` or use pattern matching.
-
-4. **`JFunction1$mcVD$sp.apply` for Double encoding — 54 samples.** This is boxing of the `Double` primitive when passing through `Function1[Double, Unit]`. The `writeArray` helper takes `Function1[Item, Unit]` which boxes primitives. **Fix strategy**: inline write loops eliminate this (see #2 above), or add specialized `writeArrayDouble` helper.
+### ~~Jsoniter Write Person (0.87x)~~ — FIXED in Round 3 (now 0.98x)
 
 ### Cats Order SimpleCC (0.90x on Scala 2.13)
 
-**JFR evidence**: At 384M+ ops/s, the operation takes ~2.6ns. The JFR captures almost no samples in the actual compare code — 99.5% of samples are in the JMH harness (`_Throughput`, `_jmhStub`). Only 16 samples total in Kindlings compare code (`compare_SimpleCC`, `order_String`). The original has 2 samples in `MkOrderDerivation.compare`.
-
-**Root cause**: The gap (0.90x, within ±8% error on the original) is **JIT optimization sensitivity**, not a code-level inefficiency. At this throughput, the JIT compiler's inlining decisions for the compare method chain dominate. Kindlings generates `val c = String.compare(x.name, y.name); if (c != 0) c else { val c2 = Int.compare(x.age, y.age); ... }` through def-cached methods with `LazyRef` parameters. The original (kittens/Shapeless) generates a similar chain through `MkOrderDerivation` + `HCons` recursion. Both are trivial for the JIT to inline, but the exact inlining depth and register allocation differ.
-
-**Fix strategy**: no code fix warranted. The gap is within measurement noise (original has ±33M error, i.e. ±8%). If this becomes a concern, profile with `-prof perfasm` to compare generated assembly.
+No code fix warranted. The gap is within measurement noise (original has ±8% error). JFR shows 99.5% of samples in JMH harness at 384M+ ops/s.
 
 ---
 

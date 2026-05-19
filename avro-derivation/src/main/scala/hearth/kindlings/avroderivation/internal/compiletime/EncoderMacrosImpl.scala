@@ -61,54 +61,69 @@ trait EncoderMacrosImpl
           "or add a type ascription to the result variable."
       )
 
-    // Schema and encoder are derived in the same MIO.scoped block to avoid Scala 3 splice isolation issues.
     Log
       .namedScope(
         s"Deriving encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
         MIO.scoped { runSafe =>
-          // Derive schema with its own cache (self-contained)
+          val cache = ValDefsCache.mlocal
+
           val schemaExpr: Expr[Schema] = runSafe {
             deriveSelfContainedSchema[A](configExpr)
           }
 
-          // Create encoder derivation callback
-          val fromCtx: (EncoderCtx[A] => Expr[Any]) = (ctx: EncoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveEncoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          // Assemble the type class instance
-          ValDefs.createVal[AvroConfig](configExpr).use { configVal =>
-            Expr.quote {
-              val cfg = Expr.splice(configVal)
-              val sch = Expr.splice(schemaExpr)
-              (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories
-                .encoderInstanceWithSchema[A](
-                  sch,
-                  (value: A, cachedSchema: Schema) => {
-                    val _ = value
-                    val _ = cfg
-                    val _ = cachedSchema
-                    Expr.splice {
-                      fromCtx(
-                        EncoderCtx.from(
-                          Expr.quote(value),
-                          Expr.quote(cfg),
-                          derivedType = selfType,
-                          precomputedSchema = Some(Expr.quote(cachedSchema)),
-                          outerConfig = Some(Expr.quote(cfg))
-                        )
-                      )
-                    }
-                  }
-                )): AvroEncoder[A]
-            }
+          val outerConfigExpr: Expr[AvroConfig] = runSafe {
+            for {
+              _ <- cache.buildCachedWith(
+                "outer-config",
+                ValDefBuilder.ofLazy[AvroConfig]("outerCfg")
+              )(_ => configExpr)
+              cfgOpt <- cache.get0Ary[AvroConfig]("outer-config")
+            } yield cfgOpt.get
           }
+
+          val defBuilder =
+            ValDefBuilder.ofDef2[A, AvroConfig, Any](s"encode_${Type[A].shortName}")
+
+          val encodeFn: ((Expr[A], Expr[AvroConfig]) => Expr[Any]) = runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
+              _ <- MIO.scoped { rs =>
+                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, c)) =>
+                  rs(
+                    deriveEncoderRecursively[A](using
+                      EncoderCtx(
+                        tpe = Type[A],
+                        value = v,
+                        config = c,
+                        cache = cache,
+                        derivedType = selfType,
+                        outerConfig = Some(outerConfigExpr)
+                      )
+                    )
+                  )
+                })
+              }
+              fn <- cache.get2Ary[A, AvroConfig, Any]("codec-encode-body")
+            } yield fn.get
+          }
+
+          val vals = runSafe(cache.get)
+
+          val resultExpr = Expr.quote {
+            val sch = Expr.splice(schemaExpr)
+            (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories
+              .encoderInstanceWithSchema[A](
+                sch,
+                (value: A, cachedSchema: Schema) => {
+                  val _ = value
+                  val _ = cachedSchema
+                  Expr.splice(encodeFn(Expr.quote(value), outerConfigExpr))
+                }
+              )): AvroEncoder[A]
+          }
+          vals.toValDefs.use(_ => resultExpr)
         }
       }
       .flatTap { result =>
