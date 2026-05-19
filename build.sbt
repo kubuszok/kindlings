@@ -15,7 +15,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.3.0-33-g83c1198-SNAPSHOT"
+  val hearth = "0.3.0-34-g3859901-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val cats = "2.13.0"
