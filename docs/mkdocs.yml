@@ -55,6 +55,7 @@ nav:
     - "Avro": "avro-derivation.md"
     - "Cats": "cats-derivation.md"
     - "Circe": "circe-derivation.md"
+    - "Diff": "diff-derivation.md"
     - "FastShowPretty": "fast-show-pretty.md"
     - "Jsoniter Scala": "jsoniter-derivation.md"
     - "PureConfig": "pureconfig-derivation.md"

@@ -1,0 +1,16 @@
+package hearth.kindlings.diffderivation
+
+case class Person(name: String, age: Int)
+case class Address(street: String, city: String)
+case class PersonWithAddress(person: Person, address: Address)
+case class Team(name: String, members: List[Person])
+case class Config(settings: Map[String, Int])
+case class Tree(value: Int, children: List[Tree])
+
+sealed trait Shape
+case class Circle(radius: Double) extends Shape
+case class Rectangle(width: Double, height: Double) extends Shape
+
+sealed trait SimpleEnum
+case object Yes extends SimpleEnum
+case object No extends SimpleEnum
