@@ -1,6 +1,6 @@
 package hearth.kindlings.diffderivation
 
-import hearth.kindlings.diffderivation.DiffResult._
+import hearth.kindlings.diffderivation.DiffResult.*
 
 object DiffRenderer {
 
@@ -243,9 +243,9 @@ object DiffRenderer {
         case StringChunk.ChangedLine(words) =>
           sb ++= "~ "
           words.foreach {
-            case WordChunk.EqualWord(t)  => sb ++= t
-            case WordChunk.InsertWord(t) => sb ++= colorAdded(t, config)
-            case WordChunk.DeleteWord(t) => sb ++= colorRemoved(t, config)
+            case WordChunk.EqualWord(t)       => sb ++= t
+            case WordChunk.InsertWord(t)      => sb ++= colorAdded(t, config)
+            case WordChunk.DeleteWord(t)      => sb ++= colorRemoved(t, config)
             case WordChunk.ChangedWord(chars) =>
               chars.foreach {
                 case CharChunk.EqualChar(t)  => sb ++= t

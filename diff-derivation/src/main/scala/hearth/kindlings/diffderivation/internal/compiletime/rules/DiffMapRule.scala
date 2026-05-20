@@ -4,8 +4,8 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.internal.runtime._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.internal.runtime.*
 
 trait DiffMapRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -39,7 +39,10 @@ trait DiffMapRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
           val iterRight = isMap.asIterable(dctx.right)
           MIO.pure(Rule.matched(Expr.quote {
             DiffRuntime.diffMap[Key, Value](
-              Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
+              Expr.splice(pn),
+              Expr.splice(fn),
+              Expr.splice(sn),
+              Expr.splice(sn),
               Expr.splice(iterLeft).asInstanceOf[Iterable[(Key, Value)]],
               Expr.splice(iterRight).asInstanceOf[Iterable[(Key, Value)]],
               (k: Key) => k.toString,

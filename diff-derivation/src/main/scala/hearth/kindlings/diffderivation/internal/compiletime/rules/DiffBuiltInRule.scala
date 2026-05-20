@@ -4,8 +4,8 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.internal.runtime._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.internal.runtime.*
 
 trait DiffBuiltInRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -22,8 +22,13 @@ trait DiffBuiltInRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions 
       if (Type[A] <:< DiffTypes.StringType) {
         Rule.matched(Expr.quote {
           DiffRuntime.diffString(
-            Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-            Expr.splice(dctx.left.upcast[String]), Expr.splice(dctx.right.upcast[String]))
+            Expr.splice(pn),
+            Expr.splice(fn),
+            Expr.splice(sn),
+            Expr.splice(sn),
+            Expr.splice(dctx.left.upcast[String]),
+            Expr.splice(dctx.right.upcast[String])
+          )
         })
       } else if (
         Type[A] <:< DiffTypes.BooleanType || Type[A] <:< DiffTypes.ByteType ||
@@ -38,8 +43,8 @@ trait DiffBuiltInRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions 
           if (l == r)
             DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), l.toString)
           else
-            DiffResult.ValueChanged(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-              l.toString, r.toString)
+            DiffResult
+              .ValueChanged(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), l.toString, r.toString)
         })
       } else {
         Rule.yielded(s"${Type[A].prettyPrint} is not a built-in type")

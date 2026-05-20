@@ -4,7 +4,7 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
+import hearth.kindlings.diffderivation.*
 
 trait DiffEnumRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -55,14 +55,31 @@ trait DiffEnumRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
               deriveDiffRecursively[EnumCase](using dctx.nest(caseLeft, caseRight)).map { diffResult =>
                 Expr.quote {
                   if (Expr.splice(isInstance)) {
-                    DiffResult.Variant(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                      Expr.splice(caseName), Expr.splice(diffResult))
+                    DiffResult.Variant(
+                      Expr.splice(pn),
+                      Expr.splice(fn),
+                      Expr.splice(sn),
+                      Expr.splice(sn),
+                      Expr.splice(caseName),
+                      Expr.splice(diffResult)
+                    )
                   } else {
-                    DiffResult.TypeMismatch(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                      Expr.splice(caseName), Expr.splice(leftSnapshotExpr),
+                    DiffResult.TypeMismatch(
+                      Expr.splice(pn),
+                      Expr.splice(fn),
+                      Expr.splice(sn),
+                      Expr.splice(sn),
+                      Expr.splice(caseName),
+                      Expr.splice(leftSnapshotExpr),
                       Expr.splice(right).getClass.getSimpleName.stripSuffix("$"),
-                      DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                        Expr.splice(right).toString))
+                      DiffResult.Identical(
+                        Expr.splice(pn),
+                        Expr.splice(fn),
+                        Expr.splice(sn),
+                        Expr.splice(sn),
+                        Expr.splice(right).toString
+                      )
+                    )
                   }
                 }
               }
@@ -71,10 +88,15 @@ trait DiffEnumRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
         }
         .flatMap {
           case Some(result) => MIO.pure(result)
-          case None =>
+          case None         =>
             MIO.pure(Expr.quote {
-              DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                Expr.splice(left).toString)
+              DiffResult.Identical(
+                Expr.splice(pn),
+                Expr.splice(fn),
+                Expr.splice(sn),
+                Expr.splice(sn),
+                Expr.splice(left).toString
+              )
             })
         }
     }

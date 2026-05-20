@@ -1,7 +1,7 @@
 package hearth.kindlings.diffderivation
 
 import hearth.kindlings.diffderivation.internal.runtime.StringDiffer
-import hearth.kindlings.diffderivation.DiffResult.{StringChunk, WordChunk, CharChunk}
+import hearth.kindlings.diffderivation.DiffResult.{CharChunk, StringChunk, WordChunk}
 
 final class StringDifferSpec extends hearth.MacroSuite {
 

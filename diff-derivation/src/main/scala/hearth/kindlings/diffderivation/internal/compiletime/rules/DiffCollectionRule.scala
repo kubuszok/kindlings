@@ -4,8 +4,8 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.internal.runtime._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.internal.runtime.*
 
 trait DiffCollectionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -30,7 +30,10 @@ trait DiffCollectionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensio
                 val iterRight = isCollection.value.asIterable(dctx.right)
                 MIO.pure(Rule.matched(Expr.quote {
                   DiffRuntime.diffSeq[Item](
-                    Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
+                    Expr.splice(pn),
+                    Expr.splice(fn),
+                    Expr.splice(sn),
+                    Expr.splice(sn),
                     Expr.splice(iterLeft),
                     Expr.splice(iterRight),
                     Expr.splice(ed)

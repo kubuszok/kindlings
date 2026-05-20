@@ -25,7 +25,7 @@ object StringDiffer {
   private def processLineEdits(edits: Vector[Edit[String]]): Vector[StringChunk] = {
     val result = Vector.newBuilder[StringChunk]
     var i = 0
-    while (i < edits.length) {
+    while (i < edits.length)
       edits(i) match {
         case Edit.Equal(line) =>
           result += StringChunk.EqualLine(line)
@@ -35,13 +35,12 @@ object StringDiffer {
           val deletes = new scala.collection.mutable.ArrayBuffer[String]()
           val inserts = new scala.collection.mutable.ArrayBuffer[String]()
           var j = i
-          while (j < edits.length) {
+          while (j < edits.length)
             edits(j) match {
               case Edit.Delete(line) => deletes += line; j += 1
               case Edit.Insert(line) => inserts += line; j += 1
               case _                 => j = edits.length
             }
-          }
           val pairCount = math.min(deletes.length, inserts.length)
           var p = 0
           while (p < pairCount) {
@@ -59,7 +58,6 @@ object StringDiffer {
           }
           i = if (j <= edits.length) i + deletes.length + inserts.length else edits.length
       }
-    }
     result.result()
   }
 
@@ -80,7 +78,7 @@ object StringDiffer {
   private def processWordEdits(edits: Vector[Edit[String]]): Vector[WordChunk] = {
     val result = Vector.newBuilder[WordChunk]
     var i = 0
-    while (i < edits.length) {
+    while (i < edits.length)
       edits(i) match {
         case Edit.Equal(word) =>
           result += WordChunk.EqualWord(word)
@@ -90,13 +88,12 @@ object StringDiffer {
           val deletes = new scala.collection.mutable.ArrayBuffer[String]()
           val inserts = new scala.collection.mutable.ArrayBuffer[String]()
           var j = i
-          while (j < edits.length) {
+          while (j < edits.length)
             edits(j) match {
               case Edit.Delete(w) => deletes += w; j += 1
               case Edit.Insert(w) => inserts += w; j += 1
               case _              => j = edits.length
             }
-          }
           val deleteStr = deletes.mkString
           val insertStr = inserts.mkString
           val pairCount = math.min(deletes.length, inserts.length)
@@ -116,7 +113,6 @@ object StringDiffer {
           }
           i += deletes.length + inserts.length
       }
-    }
     result.result()
   }
 

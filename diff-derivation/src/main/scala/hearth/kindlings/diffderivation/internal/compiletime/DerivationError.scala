@@ -1,9 +1,6 @@
 package hearth.kindlings.diffderivation.internal.compiletime
 
-sealed private[compiletime] trait DiffDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
+sealed private[compiletime] trait DiffDerivationError extends util.control.NoStackTrace with Product with Serializable {
   def message: String
   override def getMessage(): String = message
 }

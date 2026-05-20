@@ -48,7 +48,7 @@ final class DiffSpec extends hearth.MacroSuite {
         assert(!result.isIdentical, s"expected not identical")
         result match {
           case _: DiffResult.TypeMismatch => ()
-          case _ =>
+          case _                          =>
             result match {
               case v: DiffResult.Variant if !v.isIdentical => ()
               case _ => fail(s"expected TypeMismatch or non-identical Variant, got $result")

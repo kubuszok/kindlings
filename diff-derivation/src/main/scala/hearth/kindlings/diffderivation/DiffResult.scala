@@ -174,8 +174,16 @@ object DiffResult {
         rightVariant: String,
         rightSnapshot: DiffResult
     ): TypeMismatch =
-      new TypeMismatch(prettyName, plainName, simpleName, shortName, leftVariant, leftSnapshot, rightVariant,
-        rightSnapshot)
+      new TypeMismatch(
+        prettyName,
+        plainName,
+        simpleName,
+        shortName,
+        leftVariant,
+        leftSnapshot,
+        rightVariant,
+        rightSnapshot
+      )
     def unapply(v: TypeMismatch): Some[(String, DiffResult, String, DiffResult)] =
       Some((v.leftVariant, v.leftSnapshot, v.rightVariant, v.rightSnapshot))
   }

@@ -6,7 +6,7 @@ import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
+import hearth.kindlings.diffderivation.*
 
 trait DiffCaseClassRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -61,14 +61,24 @@ trait DiffCaseClassRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtension
                 Expr.quote(Expr.splice(item) +: Expr.splice(acc))
               }
               Expr.quote {
-                DiffResult.Record(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                  Expr.splice(fieldsVec))
+                DiffResult.Record(
+                  Expr.splice(pn),
+                  Expr.splice(fn),
+                  Expr.splice(sn),
+                  Expr.splice(sn),
+                  Expr.splice(fieldsVec)
+                )
               }
             }
         case None =>
           MIO.pure(Expr.quote {
-            DiffResult.Record(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-              Vector.empty[(String, DiffResult)])
+            DiffResult.Record(
+              Expr.splice(pn),
+              Expr.splice(fn),
+              Expr.splice(sn),
+              Expr.splice(sn),
+              Vector.empty[(String, DiffResult)]
+            )
           })
       }
     }

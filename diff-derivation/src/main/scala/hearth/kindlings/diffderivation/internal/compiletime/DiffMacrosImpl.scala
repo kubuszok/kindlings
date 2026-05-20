@@ -3,8 +3,8 @@ package hearth.kindlings.diffderivation.internal.compiletime
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.internal.runtime._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.internal.runtime.*
 
 trait DiffMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
@@ -147,7 +147,7 @@ trait DiffMacrosImpl
       implicit val DiffA: Type[Diff[A]] = DiffTypes.Diff[A]
       sctx.cache.get1Ary[A, DiffResult]("cached-snapshot-method").flatMap {
         case Some(helper) => MIO.pure(Rule.matched(helper(sctx.value)))
-        case None =>
+        case None         =>
           sctx.cache.get0Ary[Diff[A]]("cached-diff-instance").map {
             case Some(instance) =>
               Rule.matched(Expr.quote(Expr.splice(instance).snapshot(Expr.splice(sctx.value))))
@@ -169,9 +169,11 @@ trait DiffMacrosImpl
         DiffA.summonExprIgnoring(ignoredImplicits*).toEither match {
           case Right(instanceExpr) =>
             val expr = instanceExpr.asInstanceOf[Expr[Diff[A]]]
-            MIO.pure(Rule.matched(
-              Expr.quote(Expr.splice(expr).snapshot(Expr.splice(sctx.value)))
-            ))
+            MIO.pure(
+              Rule.matched(
+                Expr.quote(Expr.splice(expr).snapshot(Expr.splice(sctx.value)))
+              )
+            )
           case Left(_) =>
             MIO.pure(Rule.yielded(s"No implicit Diff[${Type[A].prettyPrint}]"))
         }
@@ -188,8 +190,13 @@ trait DiffMacrosImpl
       val sn = Expr(Type.shortName[A])
       if (Type[A] <:< DiffTypes.StringType) {
         Rule.matched(Expr.quote {
-          DiffRuntime.snapshotString(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-            Expr.splice(sctx.value.upcast[String]))
+          DiffRuntime.snapshotString(
+            Expr.splice(pn),
+            Expr.splice(fn),
+            Expr.splice(sn),
+            Expr.splice(sn),
+            Expr.splice(sctx.value.upcast[String])
+          )
         })
       } else if (
         Type[A] <:< DiffTypes.BooleanType || Type[A] <:< DiffTypes.ByteType ||
@@ -199,8 +206,13 @@ trait DiffMacrosImpl
         Type[A] <:< DiffTypes.BigDecimalType || Type[A] <:< DiffTypes.BigIntType
       ) {
         Rule.matched(Expr.quote {
-          DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-            Expr.splice(sctx.value).toString)
+          DiffResult.Identical(
+            Expr.splice(pn),
+            Expr.splice(fn),
+            Expr.splice(sn),
+            Expr.splice(sn),
+            Expr.splice(sctx.value).toString
+          )
         })
       } else {
         Rule.yielded(s"${Type[A].prettyPrint} is not a built-in type")
@@ -217,8 +229,7 @@ trait DiffMacrosImpl
           val pn = Expr(Type.prettyPrint[A])
           val fn = Expr(Type.plainPrint[A])
           MIO.pure(Rule.matched(Expr.quote {
-            DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-              Expr.splice(sn))
+            DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), Expr.splice(sn))
           }))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
@@ -274,14 +285,24 @@ trait DiffMacrosImpl
                 Expr.quote(Expr.splice(item) +: Expr.splice(acc))
               }
               Expr.quote {
-                DiffResult.Record(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                  Expr.splice(fieldsVec))
+                DiffResult.Record(
+                  Expr.splice(pn),
+                  Expr.splice(fn),
+                  Expr.splice(sn),
+                  Expr.splice(sn),
+                  Expr.splice(fieldsVec)
+                )
               }
             }
         case None =>
           MIO.pure(Expr.quote {
-            DiffResult.Record(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-              Vector.empty[(String, DiffResult)])
+            DiffResult.Record(
+              Expr.splice(pn),
+              Expr.splice(fn),
+              Expr.splice(sn),
+              Expr.splice(sn),
+              Vector.empty[(String, DiffResult)]
+            )
           })
       }
     }
@@ -320,13 +341,18 @@ trait DiffMacrosImpl
         }
         .flatMap {
           case Some(result) => MIO.pure(result)
-          case None =>
+          case None         =>
             val sn = Expr(Type.shortName[A])
             val pn = Expr(Type.prettyPrint[A])
             val fn = Expr(Type.plainPrint[A])
             MIO.pure(Expr.quote {
-              DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-                Expr.splice(value).toString)
+              DiffResult.Identical(
+                Expr.splice(pn),
+                Expr.splice(fn),
+                Expr.splice(sn),
+                Expr.splice(sn),
+                Expr.splice(value).toString
+              )
             })
         }
     }
@@ -341,8 +367,13 @@ trait DiffMacrosImpl
       val pn = Expr(Type.prettyPrint[A])
       val fn = Expr(Type.plainPrint[A])
       MIO.pure(Rule.matched(Expr.quote {
-        DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-          Expr.splice(sctx.value).toString)
+        DiffResult.Identical(
+          Expr.splice(pn),
+          Expr.splice(fn),
+          Expr.splice(sn),
+          Expr.splice(sn),
+          Expr.splice(sctx.value).toString
+        )
       }))
     }
   }
@@ -402,9 +433,7 @@ trait DiffMacrosImpl
               _ <- deriveDiffRecursively[A](using
                 DiffCtx[A](Type[A], placeholderLeft, placeholderRight, sharedCache, selfType)
               ).parTuple(
-                deriveSnapshotRecursively[A](using
-                  SnapshotCtx[A](Type[A], placeholderVal, sharedCache, selfType)
-                )
+                deriveSnapshotRecursively[A](using SnapshotCtx[A](Type[A], placeholderVal, sharedCache, selfType))
               )
             } yield ()
           }
@@ -452,56 +481,59 @@ trait DiffMacrosImpl
           val prettyNameExpr: Expr[String] = Type.runtimePrettyPrint[A] { tpe =>
             import tpe.Underlying
             if (tpe.Underlying =:= Type[A]) None
-            else summonCachedDiffForName[tpe.Underlying].map { d =>
-              Expr.quote(Expr.splice(d).prettyName)
-            }
+            else
+              summonCachedDiffForName[tpe.Underlying].map { d =>
+                Expr.quote(Expr.splice(d).prettyName)
+              }
           }
 
           val plainNameExpr: Expr[String] = Type.runtimePlainPrint[A] { tpe =>
             import tpe.Underlying
             if (tpe.Underlying =:= Type[A]) None
-            else summonCachedDiffForName[tpe.Underlying].map { d =>
-              Expr.quote(Expr.splice(d).plainName)
-            }
+            else
+              summonCachedDiffForName[tpe.Underlying].map { d =>
+                Expr.quote(Expr.splice(d).plainName)
+              }
           }
 
           val simpleNameExpr: Expr[String] = Type.runtimeShortPrint[A] { tpe =>
             import tpe.Underlying
             if (tpe.Underlying =:= Type[A]) None
-            else summonCachedDiffForName[tpe.Underlying] match {
-              case Some(d) => Some(Expr.quote(Expr.splice(d).simpleName))
-              case None =>
-                val plain = Type.plainPrint[tpe.Underlying]
-                if (plain.contains("[")) None
-                else Some(Expr(Type.shortName[tpe.Underlying]))
-            }
+            else
+              summonCachedDiffForName[tpe.Underlying] match {
+                case Some(d) => Some(Expr.quote(Expr.splice(d).simpleName))
+                case None    =>
+                  val plain = Type.plainPrint[tpe.Underlying]
+                  if (plain.contains("[")) None
+                  else Some(Expr(Type.shortName[tpe.Underlying]))
+              }
           }
 
           val shortNameExpr: Expr[String] = Expr(Type.shortName[A])
 
           val cacheState = runSafe(sharedCache.get)
           nameCache.toValDefs.use { _ =>
-          cacheState.toValDefs.use { _ =>
-            Expr
-              .quote {
-                DiffFactories.instance[A](
-                  Expr.splice(prettyNameExpr),
-                  Expr.splice(plainNameExpr),
-                  Expr.splice(simpleNameExpr),
-                  Expr.splice(shortNameExpr),
-                  (left: A, right: A) => {
-                    val _ = left
-                    val _ = right
-                    Expr.splice(diffCallFor(Expr.quote(left), Expr.quote(right)))
-                  },
-                  (value: A) => {
-                    val _ = value
-                    Expr.splice(snapCallFor(Expr.quote(value)))
-                  }
-                )
-              }
-              .asInstanceOf[Expr[Diff[A]]]
-          }
+            cacheState.toValDefs.use { _ =>
+              Expr
+                .quote {
+                  DiffFactories.instance[A](
+                    Expr.splice(prettyNameExpr),
+                    Expr.splice(plainNameExpr),
+                    Expr.splice(simpleNameExpr),
+                    Expr.splice(shortNameExpr),
+                    (left: A, right: A) => {
+                      val _ = left
+                      val _ = right
+                      Expr.splice(diffCallFor(Expr.quote(left), Expr.quote(right)))
+                    },
+                    (value: A) => {
+                      val _ = value
+                      Expr.splice(snapCallFor(Expr.quote(value)))
+                    }
+                  )
+                }
+                .asInstanceOf[Expr[Diff[A]]]
+            }
           }
         }
       }
