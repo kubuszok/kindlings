@@ -4,7 +4,7 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
+import hearth.kindlings.diffderivation.*
 
 trait DiffValueTypeRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 

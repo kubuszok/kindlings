@@ -4,8 +4,8 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.internal.runtime._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.internal.runtime.*
 
 trait DiffOptionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -28,7 +28,10 @@ trait DiffOptionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =
                 val ed = elemDiffExpr.asInstanceOf[Expr[Diff[Inner]]]
                 MIO.pure(Rule.matched(Expr.quote {
                   DiffRuntime.diffOption[Inner](
-                    Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
+                    Expr.splice(pn),
+                    Expr.splice(fn),
+                    Expr.splice(sn),
+                    Expr.splice(sn),
                     Expr.splice(dctx.left).asInstanceOf[Option[Inner]],
                     Expr.splice(dctx.right).asInstanceOf[Option[Inner]],
                     Expr.splice(ed)

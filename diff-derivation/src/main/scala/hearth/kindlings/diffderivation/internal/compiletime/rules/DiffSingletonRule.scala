@@ -4,7 +4,7 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
-import hearth.kindlings.diffderivation._
+import hearth.kindlings.diffderivation.*
 
 trait DiffSingletonRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -17,8 +17,7 @@ trait DiffSingletonRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtension
           val pn = Expr(Type.prettyPrint[A])
           val fn = Expr(Type.plainPrint[A])
           MIO.pure(Rule.matched(Expr.quote {
-            DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn),
-              Expr.splice(sn))
+            DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), Expr.splice(sn))
           }))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))

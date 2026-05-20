@@ -1,7 +1,7 @@
 package hearth.kindlings.diffderivation.internal.runtime
 
-import hearth.kindlings.diffderivation._
-import hearth.kindlings.diffderivation.DiffResult._
+import hearth.kindlings.diffderivation.*
+import hearth.kindlings.diffderivation.DiffResult.*
 
 object DiffRuntime {
 
@@ -148,10 +148,9 @@ object DiffRuntime {
       shortName: => String,
       left: String,
       right: String
-  ): DiffResult = {
+  ): DiffResult =
     if (left == right) Identical(prettyName, plainName, simpleName, shortName, escapeString(left))
     else StringDiff(prettyName, plainName, simpleName, shortName, StringDiffer.diff(left, right))
-  }
 
   def snapshotString(
       prettyName: => String,

@@ -24,7 +24,7 @@ object MyersCleanup {
     while (changed) {
       changed = false
       var i = 1
-      while (i < buf.length - 1) {
+      while (i < buf.length - 1)
         buf(i) match {
           case Edit.Equal(eq) =>
             val deleteBefore = countChars(buf, i, -1)
@@ -44,7 +44,6 @@ object MyersCleanup {
             }
           case _ => i += 1
         }
-      }
 
       if (changed) mergeAdjacentInPlace(buf)
     }
@@ -58,7 +57,7 @@ object MyersCleanup {
     buf ++= edits
 
     var i = 1
-    while (i < buf.length - 1) {
+    while (i < buf.length - 1)
       (buf(i - 1), buf(i + 1)) match {
         case (Edit.Equal(eqBefore), Edit.Equal(eqAfter)) =>
           buf(i) match {
@@ -77,7 +76,6 @@ object MyersCleanup {
           i += 1
         case _ => i += 1
       }
-    }
 
     buf.iterator.filter {
       case Edit.Equal("") => false
@@ -94,7 +92,7 @@ object MyersCleanup {
     while (changed) {
       changed = false
       var i = 1
-      while (i < buf.length - 1) {
+      while (i < buf.length - 1)
         buf(i) match {
           case Edit.Equal(eq) if eq.length < editCost =>
             val hasDeleteNeighbor = isDeleteOrInsert(buf, i - 1) && isDeleteOrInsert(buf, i + 1)
@@ -106,7 +104,6 @@ object MyersCleanup {
             i += 1
           case _ => i += 1
         }
-      }
       if (changed) mergeAdjacentInPlace(buf)
     }
 
@@ -129,9 +126,9 @@ object MyersCleanup {
   ): Int = {
     var count = 0
     var j = from + dir
-    while (j >= 0 && j < buf.length) {
+    while (j >= 0 && j < buf.length)
       buf(j) match {
-        case Edit.Equal(_) => return count
+        case Edit.Equal(_)  => return count
         case Edit.Delete(s) =>
           if (!insertsOnly) count += s.length
           j += dir
@@ -139,13 +136,12 @@ object MyersCleanup {
           count += s.length
           j += dir
       }
-    }
     count
   }
 
   private def mergeAdjacentInPlace(buf: scala.collection.mutable.ArrayBuffer[Edit[String]]): Unit = {
     var i = 0
-    while (i < buf.length - 1) {
+    while (i < buf.length - 1)
       (buf(i), buf(i + 1)) match {
         case (Edit.Equal(a), Edit.Equal(b)) =>
           buf(i) = Edit.Equal(a + b)
@@ -158,7 +154,6 @@ object MyersCleanup {
           val _ = buf.remove(i + 1)
         case _ => i += 1
       }
-    }
   }
 
   private def slideBest(

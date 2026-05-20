@@ -36,7 +36,8 @@ final class DiffRendererSpec extends hearth.MacroSuite {
 
     test("render with FullyQualified name style") {
       val result = DiffResult.Identical(pn, "com.example.Foo", "Foo", "Foo", "42")
-      val rendered = DiffRenderer.render(result, RenderConfig(NameStyle.FullyQualified, ColorMode.Plain, Indent.Spaces(2)))
+      val rendered =
+        DiffRenderer.render(result, RenderConfig(NameStyle.FullyQualified, ColorMode.Plain, Indent.Spaces(2)))
       assertEquals(rendered, "42")
     }
 
