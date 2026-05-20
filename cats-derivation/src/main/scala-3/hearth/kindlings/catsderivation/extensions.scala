@@ -6,6 +6,10 @@ object extensions {
     inline def derived[A]: cats.Show[A] = ${ internal.compiletime.ShowMacros.deriveShowImpl[A] }
   }
 
+  extension (companion: ShowPretty.type) {
+    inline def derived[A]: ShowPretty[A] = ${ internal.compiletime.ShowPrettyMacros.deriveShowPrettyImpl[A] }
+  }
+
   extension (companion: cats.kernel.Eq.type) {
     inline def derived[A]: cats.kernel.Eq[A] = ${ internal.compiletime.EqMacros.deriveEqImpl[A] }
   }
@@ -41,6 +45,32 @@ object extensions {
   extension (companion: cats.kernel.CommutativeMonoid.type) {
     inline def derived[A]: cats.kernel.CommutativeMonoid[A] = ${
       internal.compiletime.CommutativeMonoidMacros.deriveCommutativeMonoidImpl[A]
+    }
+  }
+
+  extension (companion: cats.kernel.Band.type) {
+    inline def derived[A]: cats.kernel.Band[A] = ${ internal.compiletime.BandMacros.deriveBandImpl[A] }
+  }
+
+  extension (companion: cats.kernel.Semilattice.type) {
+    inline def derived[A]: cats.kernel.Semilattice[A] = ${
+      internal.compiletime.SemilatticeMacros.deriveSemilatticeImpl[A]
+    }
+  }
+
+  extension (companion: cats.kernel.BoundedSemilattice.type) {
+    inline def derived[A]: cats.kernel.BoundedSemilattice[A] = ${
+      internal.compiletime.BoundedSemilatticeMacros.deriveBoundedSemilatticeImpl[A]
+    }
+  }
+
+  extension (companion: cats.kernel.Group.type) {
+    inline def derived[A]: cats.kernel.Group[A] = ${ internal.compiletime.GroupMacros.deriveGroupImpl[A] }
+  }
+
+  extension (companion: cats.kernel.CommutativeGroup.type) {
+    inline def derived[A]: cats.kernel.CommutativeGroup[A] = ${
+      internal.compiletime.CommutativeGroupMacros.deriveCommutativeGroupImpl[A]
     }
   }
 
@@ -117,6 +147,24 @@ object extensions {
   extension (companion: cats.Alternative.type) {
     inline def derived[F[_]]: cats.Alternative[F] = ${
       internal.compiletime.AlternativeMacros.deriveAlternativeImpl[F]
+    }
+  }
+
+  extension (companion: cats.Bifunctor.type) {
+    inline def derived[F[_, _]]: cats.Bifunctor[F] = ${
+      internal.compiletime.BifunctorMacros.deriveBifunctorImpl[F]
+    }
+  }
+
+  extension (companion: cats.Bifoldable.type) {
+    inline def derived[F[_, _]]: cats.Bifoldable[F] = ${
+      internal.compiletime.BifoldableMacros.deriveBifoldableImpl[F]
+    }
+  }
+
+  extension (companion: cats.Bitraverse.type) {
+    inline def derived[F[_, _]]: cats.Bitraverse[F] = ${
+      internal.compiletime.BitraverseMacros.deriveBitraverseImpl[F]
     }
   }
 

@@ -8,6 +8,11 @@ trait CatsDerivationScala2Extensions {
     def derived[A]: cats.Show[A] = macro internal.compiletime.ShowMacros.deriveShowImpl[A]
   }
 
+  implicit class ShowPrettyDerived(private val companion: ShowPretty.type) {
+    def derived[A]: ShowPretty[A] =
+      macro internal.compiletime.ShowPrettyMacros.deriveShowPrettyImpl[A]
+  }
+
   implicit class EqDerived(private val companion: cats.kernel.Eq.type) {
     def derived[A]: cats.kernel.Eq[A] = macro internal.compiletime.EqMacros.deriveEqImpl[A]
   }
@@ -41,6 +46,29 @@ trait CatsDerivationScala2Extensions {
   implicit class CommutativeMonoidDerived(private val companion: cats.kernel.CommutativeMonoid.type) {
     def derived[A]: cats.kernel.CommutativeMonoid[A] =
       macro internal.compiletime.CommutativeMonoidMacros.deriveCommutativeMonoidImpl[A]
+  }
+
+  implicit class BandDerived(private val companion: cats.kernel.Band.type) {
+    def derived[A]: cats.kernel.Band[A] = macro internal.compiletime.BandMacros.deriveBandImpl[A]
+  }
+
+  implicit class SemilatticeDerived(private val companion: cats.kernel.Semilattice.type) {
+    def derived[A]: cats.kernel.Semilattice[A] =
+      macro internal.compiletime.SemilatticeMacros.deriveSemilatticeImpl[A]
+  }
+
+  implicit class BoundedSemilatticeDerived(private val companion: cats.kernel.BoundedSemilattice.type) {
+    def derived[A]: cats.kernel.BoundedSemilattice[A] =
+      macro internal.compiletime.BoundedSemilatticeMacros.deriveBoundedSemilatticeImpl[A]
+  }
+
+  implicit class GroupDerived(private val companion: cats.kernel.Group.type) {
+    def derived[A]: cats.kernel.Group[A] = macro internal.compiletime.GroupMacros.deriveGroupImpl[A]
+  }
+
+  implicit class CommutativeGroupDerived(private val companion: cats.kernel.CommutativeGroup.type) {
+    def derived[A]: cats.kernel.CommutativeGroup[A] =
+      macro internal.compiletime.CommutativeGroupMacros.deriveCommutativeGroupImpl[A]
   }
 
   implicit class EmptyDerived(private val companion: alleycats.Empty.type) {
@@ -111,6 +139,18 @@ trait CatsDerivationScala2Extensions {
   implicit class AlternativeDerived(private val companion: cats.Alternative.type) {
     def derived[F[_]]: cats.Alternative[F] =
       macro internal.compiletime.AlternativeMacros.deriveAlternativeImpl[F]
+  }
+
+  implicit class BifunctorDerived(private val companion: cats.Bifunctor.type) {
+    def derived[F[_, _]]: cats.Bifunctor[F] = macro internal.compiletime.BifunctorMacros.deriveBifunctorImpl[F]
+  }
+
+  implicit class BifoldableDerived(private val companion: cats.Bifoldable.type) {
+    def derived[F[_, _]]: cats.Bifoldable[F] = macro internal.compiletime.BifoldableMacros.deriveBifoldableImpl[F]
+  }
+
+  implicit class BitraverseDerived(private val companion: cats.Bitraverse.type) {
+    def derived[F[_, _]]: cats.Bitraverse[F] = macro internal.compiletime.BitraverseMacros.deriveBitraverseImpl[F]
   }
 
   implicit class ConsKDerived(private val companion: alleycats.ConsK.type) {
