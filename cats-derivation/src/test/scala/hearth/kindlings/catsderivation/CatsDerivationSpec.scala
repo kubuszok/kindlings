@@ -103,6 +103,114 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("Band") {
+
+    test("combines fields (idempotent semigroup)") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      examples.Point.bandPoint.combine(a, b) ==> examples.Point(4, 6)
+    }
+  }
+
+  group("Semilattice") {
+
+    test("combines fields (commutative idempotent semigroup)") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      examples.Point.semilatticePoint.combine(a, b) ==> examples.Point(4, 6)
+    }
+  }
+
+  group("BoundedSemilattice") {
+
+    test("empty") {
+      examples.Point.boundedSemilatticePoint.empty ==> examples.Point(0, 0)
+    }
+
+    test("combine") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      examples.Point.boundedSemilatticePoint.combine(a, b) ==> examples.Point(4, 6)
+    }
+  }
+
+  group("Group") {
+
+    test("empty") {
+      examples.Point.groupPoint.empty ==> examples.Point(0, 0)
+    }
+
+    test("combine") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      examples.Point.groupPoint.combine(a, b) ==> examples.Point(4, 6)
+    }
+
+    test("inverse") {
+      val a = examples.Point(3, 7)
+      examples.Point.groupPoint.inverse(a) ==> examples.Point(-3, -7)
+    }
+
+    test("combine with inverse yields empty") {
+      val a = examples.Point(5, 10)
+      val inv = examples.Point.groupPoint.inverse(a)
+      examples.Point.groupPoint.combine(a, inv) ==> examples.Point(0, 0)
+    }
+  }
+
+  group("CommutativeGroup") {
+
+    test("empty") {
+      examples.Point.commGroupPoint.empty ==> examples.Point(0, 0)
+    }
+
+    test("combine") {
+      val a = examples.Point(1, 2)
+      val b = examples.Point(3, 4)
+      examples.Point.commGroupPoint.combine(a, b) ==> examples.Point(4, 6)
+    }
+
+    test("inverse") {
+      val a = examples.Point(3, 7)
+      examples.Point.commGroupPoint.inverse(a) ==> examples.Point(-3, -7)
+    }
+  }
+
+  group("ShowPretty") {
+
+    test("case class") {
+      val result = examples.Person.showPrettyPerson.show(examples.Person("Alice", 30))
+      result ==> "Person(\n  name = Alice,\n  age = 30\n)"
+    }
+
+    test("showLines") {
+      val lines = examples.Person.showPrettyPerson.showLines(examples.Person("Alice", 30))
+      lines ==> List("Person(", "  name = Alice,", "  age = 30", ")")
+    }
+
+    test("nested case class") {
+      val addr = examples.Address("123 Main St", "Springfield")
+      val person = examples.PersonWithAddress("Bob", addr)
+      val result = examples.PersonWithAddress.showPrettyPersonWithAddress.show(person)
+      result ==> "PersonWithAddress(\n  name = Bob,\n  address = Address(\n    street = 123 Main St,\n    city = Springfield\n  )\n)"
+    }
+
+    test("nested showLines") {
+      val addr = examples.Address("123 Main St", "Springfield")
+      val person = examples.PersonWithAddress("Bob", addr)
+      val lines = examples.PersonWithAddress.showPrettyPersonWithAddress.showLines(person)
+      lines ==> List(
+        "PersonWithAddress(",
+        "  name = Bob,",
+        "  address = Address(",
+        "    street = 123 Main St,",
+        "    city = Springfield",
+        "  )",
+        ")"
+      )
+    }
+  }
+
   group("Show enum") {
 
     test("sealed trait with case classes") {
@@ -583,6 +691,101 @@ final class CatsDerivationSpec extends MacroSuite {
     test("nested List with invariant String field") {
       val result = examples.NamedList.consKNamedList.cons(1, examples.NamedList(List(2, 3), "test"))
       result ==> examples.NamedList(List(1, 2, 3), "test")
+    }
+  }
+
+  group("Bifunctor") {
+
+    test("bimap both fields") {
+      val pair = examples.Pair(1, "hello")
+      val result = examples.Pair.bifunctorPair.bimap(pair)(_.toString, _.length)
+      result ==> examples.Pair("1", 5)
+    }
+
+    test("bimap with invariant field") {
+      val tv = examples.TaggedValue(10, 20.0, "test")
+      val result = examples.TaggedValue.bifunctorTaggedValue.bimap(tv)(_.toString, _.toInt)
+      result ==> examples.TaggedValue("10", 20, "test")
+    }
+
+    test("leftMap") {
+      val pair = examples.Pair(1, "hello")
+      val result = examples.Pair.bifunctorPair.leftMap(pair)(_.toString)
+      result ==> examples.Pair("1", "hello")
+    }
+  }
+
+  group("Bifoldable") {
+
+    test("bifoldLeft both fields") {
+      val pair = examples.Pair(1, 2)
+      val result = examples.Pair.bifoldablePair.bifoldLeft(pair, 0)(_ + _, _ + _)
+      result ==> 3
+    }
+
+    test("bifoldLeft with invariant field") {
+      val tv = examples.TaggedValue(10, 20, "test")
+      val result = examples.TaggedValue.bifoldableTaggedValue.bifoldLeft(tv, 0)(_ + _, _ + _)
+      result ==> 30
+    }
+
+    test("bifoldRight") {
+      val pair = examples.Pair(1, 2)
+      val result = examples.Pair.bifoldablePair
+        .bifoldRight(pair, cats.Eval.now(List.empty[Int]))(
+          (a, acc) => acc.map(a :: _),
+          (b, acc) => acc.map(b :: _)
+        )
+        .value
+      result ==> List(1, 2)
+    }
+
+    test("bifoldMap") {
+      val pair = examples.Pair("hello", "world")
+      val result = examples.Pair.bifoldablePair.bifoldMap(pair)(_.length, _.length)(cats.kernel.Monoid[Int])
+      result ==> 10
+    }
+  }
+
+  group("Bitraverse") {
+
+    test("bitraverse with Option") {
+      val pair = examples.Pair(1, "hello")
+      val result = examples.Pair.bitraversePair.bitraverse(pair)(
+        a => Option(a.toString),
+        b => Option(b.length)
+      )
+      result ==> Some(examples.Pair("1", 5))
+    }
+
+    test("bitraverse short-circuits on None") {
+      val pair = examples.Pair(1, "hello")
+      val result = examples.Pair.bitraversePair.bitraverse(pair)(
+        _ => None: Option[String],
+        b => Option(b.length)
+      )
+      result ==> None
+    }
+
+    test("bitraverse with invariant field") {
+      val tv = examples.TaggedValue(10, 20.0, "test")
+      val result = examples.TaggedValue.bitraverseTaggedValue.bitraverse(tv)(
+        a => Option(a.toString),
+        b => Option(b.toInt)
+      )
+      result ==> Some(examples.TaggedValue("10", 20, "test"))
+    }
+
+    test("bimap via Bitraverse") {
+      val pair = examples.Pair(1, "hello")
+      val result = examples.Pair.bitraversePair.bimap(pair)(_.toString, _.length)
+      result ==> examples.Pair("1", 5)
+    }
+
+    test("bisequence") {
+      val pair = examples.Pair(Option(1), Option("hello"))
+      val result = examples.Pair.bitraversePair.bisequence(pair)
+      result ==> Some(examples.Pair(1, "hello"))
     }
   }
 

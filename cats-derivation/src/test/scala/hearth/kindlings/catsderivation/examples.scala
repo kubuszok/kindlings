@@ -16,13 +16,30 @@ object examples {
     implicit val commSemigroupPoint: cats.kernel.CommutativeSemigroup[Point] =
       cats.kernel.CommutativeSemigroup.derived
     implicit val commMonoidPoint: cats.kernel.CommutativeMonoid[Point] = cats.kernel.CommutativeMonoid.derived
+    implicit val bandPoint: cats.kernel.Band[Point] = cats.kernel.Band.derived
+    implicit val semilatticePoint: cats.kernel.Semilattice[Point] = cats.kernel.Semilattice.derived
+    implicit val boundedSemilatticePoint: cats.kernel.BoundedSemilattice[Point] =
+      cats.kernel.BoundedSemilattice.derived
+    implicit val groupPoint: cats.kernel.Group[Point] = cats.kernel.Group.derived
+    implicit val commGroupPoint: cats.kernel.CommutativeGroup[Point] = cats.kernel.CommutativeGroup.derived
     implicit val emptyPoint: alleycats.Empty[Point] = alleycats.Empty.derived
   }
 
   final case class Person(name: String, age: Int)
   object Person {
     implicit val showPerson: cats.Show[Person] = cats.Show.derived
+    implicit val showPrettyPerson: ShowPretty[Person] = ShowPretty.derived
     implicit val eqPerson: cats.kernel.Eq[Person] = cats.kernel.Eq.derived
+  }
+
+  final case class Address(street: String, city: String)
+  object Address {
+    implicit val showPrettyAddress: ShowPretty[Address] = ShowPretty.derived
+  }
+
+  final case class PersonWithAddress(name: String, address: Address)
+  object PersonWithAddress {
+    implicit val showPrettyPersonWithAddress: ShowPretty[PersonWithAddress] = ShowPretty.derived
   }
 
   final case class Wrapper(value: String)
@@ -166,6 +183,21 @@ object examples {
   final case class NamedList[A](items: List[A], name: String)
   object NamedList {
     implicit val consKNamedList: alleycats.ConsK[NamedList] = alleycats.ConsK.derived
+  }
+
+  // Bifunctor examples — case classes with two type parameters
+  final case class Pair[A, B](first: A, second: B)
+  object Pair {
+    implicit val bifunctorPair: cats.Bifunctor[Pair] = cats.Bifunctor.derived
+    implicit val bifoldablePair: cats.Bifoldable[Pair] = cats.Bifoldable.derived
+    implicit val bitraversePair: cats.Bitraverse[Pair] = cats.Bitraverse.derived
+  }
+
+  final case class TaggedValue[A, B](tag: A, value: B, label: String)
+  object TaggedValue {
+    implicit val bifunctorTaggedValue: cats.Bifunctor[TaggedValue] = cats.Bifunctor.derived
+    implicit val bifoldableTaggedValue: cats.Bifoldable[TaggedValue] = cats.Bifoldable.derived
+    implicit val bitraverseTaggedValue: cats.Bitraverse[TaggedValue] = cats.Bitraverse.derived
   }
 
   // Sealed trait with case objects only

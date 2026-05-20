@@ -6,6 +6,8 @@ object CatsDerivationFactories {
 
   sealed trait W1
   sealed trait W2
+  sealed trait W3
+  sealed trait W4
 
   /** Kind-correct alias for erasing higher-kinded type parameters (e.g., G[_] in Traverse). */
   type AnyF[A] = Any
@@ -15,6 +17,18 @@ object CatsDerivationFactories {
   def showInstance[A](showFn: A => String): cats.Show[A] = new cats.Show[A] {
     def show(a: A): String = showFn(a)
   }
+
+  def showPrettyInstance[A](
+      showFn: A => String
+  ): hearth.kindlings.catsderivation.ShowPretty[A] =
+    new hearth.kindlings.catsderivation.ShowPretty[A] {
+      def showLines(a: A): List[String] = {
+        val s = showFn(a)
+        val lines = s.split('\n')
+        if (lines.isEmpty) List("") else lines.toList
+      }
+      override def show(a: A): String = showFn(a)
+    }
 
   def eqInstance[A](eqvFn: (A, A) => Boolean): cats.kernel.Eq[A] = new cats.kernel.Eq[A] {
     def eqv(x: A, y: A): Boolean = eqvFn(x, y)
@@ -55,6 +69,40 @@ object CatsDerivationFactories {
     new cats.kernel.CommutativeMonoid[A] {
       def empty: A = emptyVal
       def combine(x: A, y: A): A = combineFn(x, y)
+    }
+
+  def bandInstance[A](combineFn: (A, A) => A): cats.kernel.Band[A] =
+    new cats.kernel.Band[A] {
+      def combine(x: A, y: A): A = combineFn(x, y)
+    }
+
+  def semilatticeInstance[A](combineFn: (A, A) => A): cats.kernel.Semilattice[A] =
+    new cats.kernel.Semilattice[A] {
+      def combine(x: A, y: A): A = combineFn(x, y)
+    }
+
+  def boundedSemilatticeInstance[A](emptyVal: A, combineFn: (A, A) => A): cats.kernel.BoundedSemilattice[A] =
+    new cats.kernel.BoundedSemilattice[A] {
+      def empty: A = emptyVal
+      def combine(x: A, y: A): A = combineFn(x, y)
+    }
+
+  def groupInstance[A](emptyVal: A, combineFn: (A, A) => A, inverseFn: A => A): cats.kernel.Group[A] =
+    new cats.kernel.Group[A] {
+      def empty: A = emptyVal
+      def combine(x: A, y: A): A = combineFn(x, y)
+      def inverse(a: A): A = inverseFn(a)
+    }
+
+  def commutativeGroupInstance[A](
+      emptyVal: A,
+      combineFn: (A, A) => A,
+      inverseFn: A => A
+  ): cats.kernel.CommutativeGroup[A] =
+    new cats.kernel.CommutativeGroup[A] {
+      def empty: A = emptyVal
+      def combine(x: A, y: A): A = combineFn(x, y)
+      def inverse(a: A): A = inverseFn(a)
     }
 
   def emptyInstance[A](emptyVal: A): alleycats.Empty[A] = new alleycats.Empty[A] {
@@ -220,6 +268,69 @@ object CatsDerivationFactories {
     def empty[A]: F[A] = emptyKFn.asInstanceOf[() => F[A]].apply()
     def combineK[A](x: F[A], y: F[A]): F[A] =
       combineKFn.asInstanceOf[(F[A], F[A]) => F[A]].apply(x, y)
+  }
+
+  // --- Polymorphic (kind (*, *) -> *), erasure-based ---
+
+  def bifunctorInstance[F[_, _]](
+      bimapFn: (F[W1, W2], W1 => W3, W2 => W4) => F[W3, W4]
+  ): cats.Bifunctor[F] = new cats.Bifunctor[F] {
+    def bimap[A, B, C, D](fab: F[A, B])(f: A => C, g: B => D): F[C, D] =
+      bimapFn.asInstanceOf[(F[A, B], A => C, B => D) => F[C, D]].apply(fab, f, g)
+  }
+
+  def bifoldableInstance[F[_, _]](
+      bifoldLeftFn: (F[W1, W2], Any, (Any, Any) => Any, (Any, Any) => Any) => Any,
+      bifoldRightFn: (
+          F[W1, W2],
+          Eval[Any],
+          (Any, Eval[Any]) => Eval[Any],
+          (Any, Eval[Any]) => Eval[Any]
+      ) => Eval[Any]
+  ): cats.Bifoldable[F] = new cats.Bifoldable[F] {
+    def bifoldLeft[A, B, C](fab: F[A, B], c: C)(f: (C, A) => C, g: (C, B) => C): C =
+      bifoldLeftFn
+        .asInstanceOf[(F[A, B], C, (C, A) => C, (C, B) => C) => C]
+        .apply(fab, c, f, g)
+    def bifoldRight[A, B, C](fab: F[A, B], c: Eval[C])(
+        f: (A, Eval[C]) => Eval[C],
+        g: (B, Eval[C]) => Eval[C]
+    ): Eval[C] =
+      bifoldRightFn
+        .asInstanceOf[(F[A, B], Eval[C], (A, Eval[C]) => Eval[C], (B, Eval[C]) => Eval[C]) => Eval[C]]
+        .apply(fab, c, f, g)
+  }
+
+  def bitraverseInstance[F[_, _]](
+      bitraverseFn: (F[W1, W2], Any, Any, Any) => Any,
+      bimapFn: (F[W1, W2], W1 => W3, W2 => W4) => F[W3, W4],
+      bifoldLeftFn: (F[W1, W2], Any, (Any, Any) => Any, (Any, Any) => Any) => Any,
+      bifoldRightFn: (
+          F[W1, W2],
+          Eval[Any],
+          (Any, Eval[Any]) => Eval[Any],
+          (Any, Eval[Any]) => Eval[Any]
+      ) => Eval[Any]
+  ): cats.Bitraverse[F] = new cats.Bitraverse[F] {
+    def bitraverse[G[_], A, B, C, D](fab: F[A, B])(f: A => G[C], g: B => G[D])(implicit
+        G: cats.Applicative[G]
+    ): G[F[C, D]] =
+      bitraverseFn
+        .asInstanceOf[(F[A, B], A => G[C], B => G[D], cats.Applicative[G]) => G[F[C, D]]]
+        .apply(fab, f, g, G)
+    override def bimap[A, B, C, D](fab: F[A, B])(f: A => C, g: B => D): F[C, D] =
+      bimapFn.asInstanceOf[(F[A, B], A => C, B => D) => F[C, D]].apply(fab, f, g)
+    def bifoldLeft[A, B, C](fab: F[A, B], c: C)(f: (C, A) => C, g: (C, B) => C): C =
+      bifoldLeftFn
+        .asInstanceOf[(F[A, B], C, (C, A) => C, (C, B) => C) => C]
+        .apply(fab, c, f, g)
+    def bifoldRight[A, B, C](fab: F[A, B], c: Eval[C])(
+        f: (A, Eval[C]) => Eval[C],
+        g: (B, Eval[C]) => Eval[C]
+    ): Eval[C] =
+      bifoldRightFn
+        .asInstanceOf[(F[A, B], Eval[C], (A, Eval[C]) => Eval[C], (B, Eval[C]) => Eval[C]) => Eval[C]]
+        .apply(fab, c, f, g)
   }
 
   def consKInstance[F[_]](consFn: (Any, F[W1]) => F[W1]): alleycats.ConsK[F] =
