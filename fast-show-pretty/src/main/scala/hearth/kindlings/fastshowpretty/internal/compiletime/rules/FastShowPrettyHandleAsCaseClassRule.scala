@@ -7,8 +7,6 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
-
 trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl & MacroCommons & StdExtensions =>
 
   object FastShowPrettyHandleAsCaseClassRule extends DerivationRule("handle as case class when possible") {
@@ -42,51 +40,43 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
               }
             }
             .map { toAppend =>
-              val renderLeftParenthesisAndHeadField = toAppend.head match {
-                case (fieldName, fieldResult) =>
-                  Expr.quote {
-                    val _ = Expr
-                      .splice(ctx.sb)
-                      .append(Expr.splice(name))
-                      .append("(\n")
-                    val _ = FastShowPrettyUtils
-                      .appendIndent(
-                        Expr.splice(ctx.sb),
-                        Expr.splice(ctx.config).indentString,
-                        Expr.splice(ctx.level) + 1
-                      )
-                      .append(Expr.splice(Expr(fieldName)))
-                      .append(" = ")
-                    Expr.splice(fieldResult)
-                  }
+              implicit val StringType: Type[String] = Types.String
+              val className = Type[A].shortName
+
+              val fieldIndentExpr: Expr[String] = Expr.quote {
+                Expr.splice(ctx.config).indentString * (Expr.splice(ctx.level) + 1)
               }
-              val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
-                case (renderPreviousFields, (fieldName, fieldResult)) =>
-                  Expr.quote {
-                    val _ = Expr
-                      .splice(renderPreviousFields)
-                      .append(",\n")
-                    val _ = FastShowPrettyUtils
-                      .appendIndent(
-                        Expr.splice(ctx.sb),
-                        Expr.splice(ctx.config).indentString,
-                        Expr.splice(ctx.level) + 1
-                      )
-                      .append(Expr.splice(Expr(fieldName)))
-                      .append(" = ")
-                    Expr.splice(fieldResult)
-                  }
+              val closingIndentExpr: Expr[String] = Expr.quote {
+                Expr.splice(ctx.config).indentString * Expr.splice(ctx.level)
               }
 
-              Expr.quote {
-                val _ = Expr.splice(renderAllFields).append("\n")
-                FastShowPrettyUtils
-                  .appendIndent(
-                    Expr.splice(ctx.sb),
-                    Expr.splice(ctx.config).indentString,
-                    Expr.splice(ctx.level)
-                  )
-                  .append(")")
+              ValDefs.createVal[String](fieldIndentExpr).use { fieldIndent =>
+                ValDefs.createVal[String](closingIndentExpr).use { closingIndent =>
+                  val renderLeftParenthesisAndHeadField = toAppend.head match {
+                    case (fieldName, fieldResult) =>
+                      val header = Expr(className + "(\n")
+                      val fieldPrefix = Expr(fieldName + " = ")
+                      Expr.quote {
+                        val _ = Expr.splice(ctx.sb).append(Expr.splice(header))
+                        val _ = Expr.splice(ctx.sb).append(Expr.splice(fieldIndent)).append(Expr.splice(fieldPrefix))
+                        Expr.splice(fieldResult)
+                      }
+                  }
+                  val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
+                    case (renderPreviousFields, (fieldName, fieldResult)) =>
+                      val fieldPrefix = Expr(fieldName + " = ")
+                      Expr.quote {
+                        val _ = Expr.splice(renderPreviousFields).append(",\n")
+                        val _ = Expr.splice(ctx.sb).append(Expr.splice(fieldIndent)).append(Expr.splice(fieldPrefix))
+                        Expr.splice(fieldResult)
+                      }
+                  }
+
+                  Expr.quote {
+                    val _ = Expr.splice(renderAllFields).append("\n")
+                    Expr.splice(ctx.sb).append(Expr.splice(closingIndent)).append(")")
+                  }
+                }
               }
             }
         case None =>

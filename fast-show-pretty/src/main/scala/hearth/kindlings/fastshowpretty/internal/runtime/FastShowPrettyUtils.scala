@@ -18,10 +18,14 @@ object FastShowPrettyUtils {
     sb.append(value.toString).append(".toByte")
   def renderShort(sb: StringBuilder)(value: Short): StringBuilder =
     sb.append(value.toString).append(".toShort")
-  def renderInt(sb: StringBuilder)(value: Int): StringBuilder =
-    sb.append(value.toString)
-  def renderLong(sb: StringBuilder)(value: Long): StringBuilder =
-    sb.append(value.toString).append('L')
+  def renderInt(sb: StringBuilder)(value: Int): StringBuilder = {
+    sb.underlying.append(value)
+    sb
+  }
+  def renderLong(sb: StringBuilder)(value: Long): StringBuilder = {
+    sb.underlying.append(value)
+    sb.append('L')
+  }
   def renderFloat(sb: StringBuilder)(value: Float): StringBuilder = {
     val result = value.toString
     sb.append(result)
@@ -44,20 +48,34 @@ object FastShowPrettyUtils {
     sb.append("'").append(value.toString).append("'")
   def renderString(sb: StringBuilder)(value: String): StringBuilder = {
     sb.append('"')
-    var i = 0
-    while (i < value.length) {
-      val c = value.charAt(i)
-      c match {
-        case '"'  => sb.append("\\\"")
-        case '\\' => sb.append("\\\\")
-        case '\n' => sb.append("\\n")
-        case '\r' => sb.append("\\r")
-        case '\t' => sb.append("\\t")
-        case _    => sb.append(c)
+    if (needsEscaping(value)) {
+      var i = 0
+      while (i < value.length) {
+        val c = value.charAt(i)
+        c match {
+          case '"'  => sb.append("\\\"")
+          case '\\' => sb.append("\\\\")
+          case '\n' => sb.append("\\n")
+          case '\r' => sb.append("\\r")
+          case '\t' => sb.append("\\t")
+          case _    => sb.append(c)
+        }
+        i += 1
       }
-      i += 1
+    } else {
+      sb.append(value)
     }
     sb.append('"')
+  }
+
+  private def needsEscaping(s: String): Boolean = {
+    var i = 0
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t') return true
+      i += 1
+    }
+    false
   }
 
   /** Opens a collection rendering with the collection type name and opening bracket. */

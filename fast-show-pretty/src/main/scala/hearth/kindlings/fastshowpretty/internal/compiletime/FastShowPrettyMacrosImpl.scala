@@ -308,15 +308,36 @@ trait FastShowPrettyMacrosImpl
                   .render(Expr.splice(ctx.sb), Expr.splice(ctx.config), Expr.splice(ctx.level))(Expr.splice(ctx.value))
               })
           case None =>
-            ctx.setHelper[A] { (sb, config, level, value) =>
-              deriveResultRecursivelyViaRules[A](using ctx.nestInCache(sb, value, config, level))
-            } >> ctx.getHelper[A].flatMap {
-              case Some(helperCall) => MIO.pure(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value))
-              case None             =>
-                MIO.fail(new Exception(s"Failed to build render helper for ${Type[A].prettyPrint}"))
+            tryInlineLeafType[A].flatMap {
+              case Some(result) => MIO.pure(result)
+              case None         =>
+                ctx.setHelper[A] { (sb, config, level, value) =>
+                  deriveResultRecursivelyViaRules[A](using ctx.nestInCache(sb, value, config, level))
+                } >> ctx.getHelper[A].flatMap {
+                  case Some(helperCall) => MIO.pure(helperCall(ctx.sb, ctx.config, ctx.level, ctx.value))
+                  case None             =>
+                    MIO.fail(new Exception(s"Failed to build render helper for ${Type[A].prettyPrint}"))
+                }
             }
         }
     }
+
+  private def tryInlineLeafType[A: DerivationCtx]: MIO[Option[Expr[StringBuilder]]] = {
+    implicit val FastShowPrettyA: Type[FastShowPretty[A]] = Types.FastShowPretty[A]
+    if (ctx.derivedType.exists(_.Underlying =:= Type[A]))
+      MIO.pure(None)
+    else
+      FastShowPrettyA.summonExprIgnoring().toEither match {
+        case Right(_) => MIO.pure(None)
+        case Left(_)  =>
+          FastShowPrettyUseBuiltInSupportRule[A].flatMap {
+            case Rule.Applicability.Matched(result) =>
+              Log.info(s"Inlining built-in type ${Type[A].prettyPrint} (no def needed)") >>
+                MIO.pure(Some(result))
+            case _ => MIO.pure(None)
+          }
+      }
+  }
 
   private def deriveResultRecursivelyViaRules[A: DerivationCtx]: MIO[Expr[StringBuilder]] =
     Log
