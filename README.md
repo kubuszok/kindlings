@@ -67,7 +67,7 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 | Module | Replaces | Derived type classes |
 |---|---|---|
 | `kindlings-avro-derivation` | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
-| `kindlings-cats-derivation` | kittens | `Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Functor`, `Foldable`, `Traverse`, and [19 more](FEATURE_PARITY.md#cats-derivation) |
+| `kindlings-cats-derivation` | kittens | `Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Functor`, `Foldable`, `Traverse`, and [26 more](FEATURE_PARITY.md#cats-derivation) |
 | `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
 | `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
 | `kindlings-pureconfig-derivation` | PureConfig `pureconfig.generic.semiauto` / `auto` / `derivation.default` (JVM only) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` (subtypes of `pureconfig.ConfigReader`/`Writer`/`Convert`) |

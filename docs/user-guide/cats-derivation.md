@@ -1,6 +1,6 @@
 # Cats Derivation
 
-Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — derives 26 type classes from Cats and Alleycats for case classes, sealed traits, Scala 3 enums, and more.
+Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — derives 35 type classes from Cats and Alleycats for case classes, sealed traits, Scala 3 enums, and more.
 
 ## Installation
 
@@ -59,6 +59,7 @@ Derived for case classes and sealed traits.
 | Type class | Package |
 |-----------|---------|
 | `Show` | `cats` |
+| `ShowPretty` | `hearth.kindlings.catsderivation` |
 | `Eq` | `cats.kernel` |
 | `Order` | `cats.kernel` |
 | `PartialOrder` | `cats.kernel` |
@@ -67,6 +68,11 @@ Derived for case classes and sealed traits.
 | `Monoid` | `cats.kernel` |
 | `CommutativeSemigroup` | `cats.kernel` |
 | `CommutativeMonoid` | `cats.kernel` |
+| `Band` | `cats.kernel` |
+| `Semilattice` | `cats.kernel` |
+| `BoundedSemilattice` | `cats.kernel` |
+| `Group` | `cats.kernel` |
+| `CommutativeGroup` | `cats.kernel` |
 | `Empty` | `alleycats` |
 
 ### Polymorphic (kind `* → *`)
@@ -91,6 +97,16 @@ Derived for type constructors (case classes with one type parameter).
 | `Pure` | `alleycats` |
 | `EmptyK` | `alleycats` |
 | `ConsK` | `alleycats` |
+
+### Bi-variant (kind `(*, *) → *`)
+
+Derived for type constructors with two type parameters (case classes only).
+
+| Type class | Package |
+|-----------|---------|
+| `Bifunctor` | `cats` |
+| `Bifoldable` | `cats` |
+| `Bitraverse` | `cats` |
 
 ## API
 
@@ -187,58 +203,104 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
 
 | Feature | kittens (Scala 2) | kittens (Scala 3) | Kindlings |
 |---------|-------------------|-------------------|-----------|
-| Show | Yes | Yes | Yes |
-| Eq, Order, Hash | Yes | Yes | Yes |
+| Show, ShowPretty | Yes | Yes | Yes |
+| Eq, Order, PartialOrder, Hash | Yes | Yes | Yes |
 | Semigroup, Monoid | Yes | Yes | Yes |
 | CommutativeSemigroup, CommutativeMonoid | Yes | Yes | Yes |
+| Band, Semilattice, BoundedSemilattice | Yes | Yes | Yes |
+| Group, CommutativeGroup | Yes | Yes | Yes |
 | Empty | Yes | Yes | Yes |
-| Functor | Yes | Yes | Yes |
-| Contravariant | No | Yes | Yes |
-| Invariant | No | Yes | Yes |
+| Functor, Contravariant, Invariant | Yes | Yes | Yes |
+| Apply, Applicative | No | Yes | Yes |
 | Foldable, Traverse | No | Yes | Yes |
 | Reducible, NonEmptyTraverse | No | Yes | Yes |
-| Apply, Applicative | No | Yes | Yes |
 | SemigroupK, MonoidK | No | Yes | Yes |
-| NonEmptyAlternative, Alternative | No | No | Yes |
 | Pure, EmptyK | No | Yes | Yes |
-| ConsK | No | No | Yes |
+| Bifunctor, Bifoldable, Bitraverse | No | Yes | Yes |
+| NonEmptyAlternative, Alternative | No | Yes | Yes |
+| ConsK | Yes | No | Yes |
 | Same API on Scala 2.13 and 3 | No | No | Yes |
 | Sanely-automatic derivation | No | No | Yes |
 
 ### Benchmarks
 
-All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
+All values in ops/s (higher is better). Measured on macOS, JVM GraalVM CE 25, 2 forks / 5 warmup / 10 measurement iterations.
 
 #### Show
 
-| Type | Scala | Kindlings | Original semi | Original auto | vs best original |
-|------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 39.0M | 7.3M | 7.5M | **5.2x faster** |
-| SimpleCC | 3 | 26.8M | 19.6M | 19.7M | **1.4x faster** |
-| SimpleADT | 2.13 | 87.9M | 16.8M | 11.1M | **5.2x faster** |
-| SimpleADT | 3 | 79.8M | 46.1M | 52.5M | **1.5x faster** |
-| Person | 2.13 | 2.0M | — | 829.7K | **2.4x faster** |
-| Person | 3 | 1.6M | — | 1.4M | **1.1x faster** |
-| Event | 2.13 | 1.8M | 643.8K | 576.5K | **2.8x faster** |
-| Event | 3 | 1.5M | 1.2M | 1.2M | **1.3x faster** |
+| Type | Scala | Kindlings | kittens semi | kittens auto | vs best kittens |
+|------|-------|-----------|-------------|-------------|-----------------|
+| SimpleCC | 2.13 | 37.0M | 7.2M | 7.2M | **5.1x faster** |
+| SimpleCC | 3 | 25.7M | 18.6M | 19.2M | **1.3x faster** |
+| SimpleADT | 2.13 | 81.6M | 16.1M | 9.0M | **5.1x faster** |
+| SimpleADT | 3 | 77.5M | 48.8M | 50.9M | **1.5x faster** |
+| Person | 2.13 | 1.9M | — | 784K | **2.4x faster** |
+| Person | 3 | 1.6M | — | 1.3M | **1.2x faster** |
+| Event | 2.13 | 1.8M | 642K | 547K | **2.8x faster** |
+| Event | 3 | 1.5M | 491K | 1.2M | **1.2x faster** |
 
 #### Eq
 
-| Type | Scala | Kindlings | Original semi | Original auto | vs best original |
-|------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC (eq) | 2.13 | 99.9M | 44.9M | 44.3M | **2.2x faster** |
-| SimpleCC (eq) | 3 | 99.5M | 97.1M | 90.3M | **~tied** |
+| Type | Scala | Kindlings | kittens best | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| SimpleCC (eq) | 2.13 | 97.0M | 43.4M | **2.2x faster** |
+| SimpleCC (eq) | 3 | 100.0M | 95.3M | **~tied** |
 
 #### Hash
 
-| Type | Scala | Kindlings | Original auto | vs original |
-|------|-------|-----------|--------------|------------|
-| SimpleCC | 2.13 | 806.9M | 26.4M | **30.4x faster** |
-| SimpleCC | 3 | 809.0M | 96.4M | **8.4x faster** |
+| Type | Scala | Kindlings | kittens best | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| SimpleCC | 2.13 | 793M | 26.5M | **30x faster** |
+| SimpleCC | 3 | 812M | 96.6M | **8.4x faster** |
 
 #### Order
 
-| Type | Scala | Kindlings | Original semi | Original auto | vs best original |
-|------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 386.7M | 460.1M | 412.8M | 0.84x |
-| SimpleCC | 3 | 422.5M | 294.4M | 353.8M | **1.19x faster** |
+| Type | Scala | Kindlings | kittens best | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| SimpleCC | 2.13 | 418M | 384M | **1.1x faster** |
+| SimpleCC | 3 | 386M | 340M | **1.1x faster** |
+
+#### Semigroup
+
+| Type | Scala | Kindlings | kittens semi | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| IntPair | 2.13 | 189M | 50.2M | **3.8x faster** |
+| IntPair | 3 | 192M | 115M | **1.7x faster** |
+
+#### Monoid
+
+| Type | Scala | Kindlings | kittens semi | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| IntPair (combine) | 2.13 | 188M | 47.4M | **4.0x faster** |
+| IntPair (combine) | 3 | 188M | 122M | **1.5x faster** |
+| IntPair (empty) | 2.13 | 3630M | 1635M | **2.2x faster** |
+| IntPair (empty) | 3 | 3645M | 972M | **3.8x faster** |
+
+#### Functor
+
+| Type | Scala | Kindlings | kittens semi | vs kittens |
+|------|-------|-----------|-------------|-----------|
+| SimpleCCBox (map) | 2.13 | 267M | 5.8M | **46x faster** |
+| SimpleCCBox (map) | 3 | 266M | 63.0M | **4.2x faster** |
+
+#### Foldable / Traverse (Scala 3 only — kittens Scala 2 doesn't support these)
+
+| Type class | Kindlings | kittens semi | vs kittens |
+|-----------|-----------|-------------|-----------|
+| Foldable (foldLeft) | 1535M | 107M | **14x faster** |
+| Traverse (traverse) | 68.2M | 18.1M | **3.8x faster** |
+
+#### Show vs ShowPretty vs FastShowPretty
+
+Pretty printing introduces indentation and multi-line output. The table below compares all approaches (Scala 3):
+
+| Approach | SimpleCC | Person | Notes |
+|----------|----------|--------|-------|
+| Kindlings Show | 26.3M | 1.6M | Plain single-line output |
+| Kindlings ShowPretty | 33.3M | 1.7M | Multi-line indented, ~0% overhead vs Show |
+| kittens ShowPretty | 5.1M | 521K | List[String] line accumulation |
+| Kindlings FastShowPretty | 16.8M | 1.3M | StringBuilder + escaped strings |
+
+Kindlings ShowPretty is **6.6x faster** than kittens ShowPretty for SimpleCC and **3.3x** for Person. The overhead vs plain Show is negligible because indentation is handled at runtime by a simple `indentSubsequentLines` helper on the result string.
+
+FastShowPretty uses `StringBuilder` instead of string concatenation and produces a richer format (quoted strings with escape handling, type suffixes on numeric literals). The StringBuilder allocation + `.toString()` copy adds fixed overhead that dominates for small types but amortizes for larger ones (Person: only 1.3x behind ShowPretty).

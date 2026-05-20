@@ -100,6 +100,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Type class | kittens (Scala 2) | kittens (Scala 3) | Kindlings | Status |
 |---|---|---|---|---|
 | `cats.Show` | Yes | Yes | Yes | Parity |
+| `ShowPretty` | Yes | Yes | Yes | Parity |
 | `cats.kernel.Eq` | Yes | Yes | Yes | Parity |
 | `cats.kernel.Order` | Yes | Yes | Yes | Parity |
 | `cats.kernel.PartialOrder` | Yes | Yes | Yes | Parity |
@@ -108,6 +109,11 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.kernel.Monoid` | Yes | Yes | Yes | Parity |
 | `cats.kernel.CommutativeSemigroup` | Yes | Yes | Yes | Parity |
 | `cats.kernel.CommutativeMonoid` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Band` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Semilattice` | Yes | Yes | Yes | Parity |
+| `cats.kernel.BoundedSemilattice` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Group` | Yes | Yes | Yes | Parity |
+| `cats.kernel.CommutativeGroup` | Yes | Yes | Yes | Parity |
 | `alleycats.Empty` | Yes | Yes | Yes | Parity |
 
 ### Type classes — polymorphic (kind `* -> *`)
@@ -127,9 +133,17 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.MonoidK` | Yes | Yes | Yes | Parity |
 | `alleycats.Pure` | Yes | Yes | Yes | Parity |
 | `alleycats.EmptyK` | Yes | Yes | Yes | Parity |
-| `cats.NonEmptyAlternative` | No | No | Yes | Improvement |
-| `cats.Alternative` | No | No | Yes | Improvement |
+| `cats.NonEmptyAlternative` | No | Yes | Yes | Parity+ |
+| `cats.Alternative` | No | Yes | Yes | Parity+ |
 | `alleycats.ConsK` | Yes | No ([#489](https://github.com/typelevel/kittens/issues/489)) | Yes | Improvement |
+
+### Type classes — bi-variant (kind `(*, *) -> *`)
+
+| Type class | kittens (Scala 2) | kittens (Scala 3) | Kindlings | Status |
+|---|---|---|---|---|
+| `cats.Bifunctor` | No | Yes | Yes | Parity+ |
+| `cats.Bifoldable` | No | Yes | Yes | Parity+ |
+| `cats.Bitraverse` | No | Yes | Yes | Parity+ |
 
 ### Type support
 
@@ -150,14 +164,28 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Unified Scala 2+3 API | No — Shapeless on 2, Mirrors on 3 | Yes | Improvement |
 | Cross-platform (JVM/JS/Native) | JVM focus | JVM + JS + Native | Improvement |
 
+### Runtime performance (ops/s, 2f/5w/10m, GraalVM CE 25)
+
+| Type class | Scala | Kindlings | kittens best | vs kittens |
+|---|---|---|---|---|
+| Show (SimpleCC) | 2.13 | 37.0M | 7.2M | **5.1x faster** |
+| Show (SimpleCC) | 3 | 25.7M | 19.2M | **1.3x faster** |
+| Eq (SimpleCC) | 2.13 | 97.0M | 43.4M | **2.2x faster** |
+| Hash (SimpleCC) | 2.13 | 793M | 26.5M | **30x faster** |
+| Hash (SimpleCC) | 3 | 812M | 96.6M | **8.4x faster** |
+| Semigroup (IntPair) | 2.13 | 189M | 50.2M | **3.8x faster** |
+| Monoid (IntPair) | 2.13 | 188M | 47.4M | **4.0x faster** |
+| Functor (map) | 2.13 | 267M | 5.8M | **46x faster** |
+| Functor (map) | 3 | 266M | 63.0M | **4.2x faster** |
+| Foldable (foldLeft) | 3 | 1535M | 107M | **14x faster** |
+| Traverse (traverse) | 3 | 68.2M | 18.1M | **3.8x faster** |
+| ShowPretty (SimpleCC) | 3 | 33.3M | 5.1M | **6.6x faster** |
+
 ### Not ported
 
 | Feature | Notes |
 |---|---|
 | `cats.Show` for enums using ordinal | kittens uses ordinal for Show of coproducts; Kindlings uses class name + fields |
-| `cats.kernel.BoundedSemilattice` | Niche type class — not ported |
-| `cats.kernel.Band` | Niche type class — not ported |
-| `cats.kernel.Group` / `CommutativeGroup` | Would require inverse operation — not derivable from field instances alone |
 | Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
 
 ---

@@ -29,6 +29,8 @@ object Event {
   final case class UserDeleted(personId: String, reason: Option[String]) extends Event
 }
 
+case class IntPair(x: Int, y: Int)
+
 object BenchmarkData {
 
   val simpleCC: SimpleCC = SimpleCC("Alice", 30, active = true)
@@ -49,4 +51,7 @@ object BenchmarkData {
   val simpleCCBox: SimpleCCBox[Int] = SimpleCCBox("Alice", 30, 42)
 
   val personPair: (Person, Person) = (person, person.copy(name = "Bob", age = 31))
+
+  val intPairA: IntPair = IntPair(10, 20)
+  val intPairB: IntPair = IntPair(3, 7)
 }
