@@ -16,21 +16,21 @@ class FastShowPrettyBenchmark {
 
   @Benchmark def kindlingsSimpleCC(): String =
     KindlingsFastShowPrettyInstances.simpleCCInstance
-      .render(new StringBuilder, config, 0)(BenchmarkData.simpleCC)
+      .render(new StringBuilder(128), config, 0)(BenchmarkData.simpleCC)
       .toString
 
   @Benchmark def kindlingsPerson(): String =
     KindlingsFastShowPrettyInstances.personInstance
-      .render(new StringBuilder, config, 0)(BenchmarkData.person)
+      .render(new StringBuilder(1024), config, 0)(BenchmarkData.person)
       .toString
 
   @Benchmark def kindlingsEvent(): String =
     KindlingsFastShowPrettyInstances.eventInstance
-      .render(new StringBuilder, config, 0)(BenchmarkData.event)
+      .render(new StringBuilder(2048), config, 0)(BenchmarkData.event)
       .toString
 
   @Benchmark def kindlingsSimpleADT(): String =
     KindlingsFastShowPrettyInstances.simpleADTInstance
-      .render(new StringBuilder, config, 0)(BenchmarkData.simpleADT)
+      .render(new StringBuilder(128), config, 0)(BenchmarkData.simpleADT)
       .toString
 }

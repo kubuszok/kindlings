@@ -2,6 +2,79 @@
 
 Type class derivation that compiles faster, runs faster, and works the same on Scala 2.13 and Scala 3. Drop-in replacements for derivation in Circe, Jsoniter Scala, Avro, and more — built on [Hearth](https://github.com/kubuszok/hearth), powered by macros, free of the trade-offs you've learned to accept.
 
+## Quick start
+
+!!! example "sbt"
+
+    ```scala
+    // derivations
+    libraryDependencies += "com.kubuszok" %% "kindlings-avro-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-cats-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-fast-show-pretty" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-pureconfig-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-scalacheck-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-sconfig-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-tapir-schema-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-ubjson-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-yaml-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-xml-derivation" % "{{ kindlings_version() }}"
+    // integrations
+    libraryDependencies += "com.kubuszok" %% "kindlings-cats-integration" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-iron-integration" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-refined-integration" % "{{ kindlings_version() }}"
+    // extra
+    libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-json" % "{{ kindlings_version() }}"
+    ```
+
+!!! example "Scala CLI"
+
+    ```scala
+    // derivations
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-sconfig-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-tapir-schema-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
+    // intagrations
+    //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
+    // extra
+    //> using dep com.kubuszok::kindlings-jsoniter-json:{{ kindlings_version() }}
+    ```
+
+??? example "Minimal example"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
+    //> using dep io.circe::circe-parser:{{ libraries.circe }}
+
+    import hearth.kindlings.circederivation._
+    import io.circe._
+
+    case class Person(name: String, age: Int)
+
+    // inline encoding — no implicit needed
+    val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
+    println(json.noSpaces) // {"name":"Alice","age":30}
+
+    // inline decoding
+    val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
+    println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
+    // Right(Person(Bob,25))
+    ```
+
+
 ## Why Kindlings?
 
 Most Scala libraries derive type class instances using Shapeless (Scala 2), Scala 3 Mirrors, or Magnolia. These approaches work, but they come with trade-offs that compound as your project grows: slow compilation, poor error messages, runtime overhead from intermediate representations, and API fragmentation between Scala 2 and Scala 3.
@@ -110,7 +183,7 @@ case class Order(quantity: Int Refined Positive, item: String)
 | Module | Replaces | Derived type classes |
 |---|---|---|
 | [kindlings-avro-derivation](avro-derivation.md) | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
-| [kindlings-cats-derivation](cats-derivation.md) | kittens | `Show`, `Eq`, `Order`, `Hash`, `Functor`, `Traverse`, and [20 more](cats-derivation.md) |
+| [kindlings-cats-derivation](cats-derivation.md) | kittens | `Show`, `Eq`, `Order`, `Hash`, `Functor`, `Traverse`, and [29 more](cats-derivation.md) |
 | [kindlings-circe-derivation](circe-derivation.md) | circe-generic-extras | `Encoder`, `Encoder.AsObject`, `Decoder` |
 | [kindlings-fast-show-pretty](fast-show-pretty.md) | _(original)_ | `FastShowPretty` |
 | [kindlings-jsoniter-derivation](jsoniter-derivation.md) | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
@@ -123,39 +196,3 @@ case class Order(quantity: Int Refined Positive, item: String)
 | [kindlings-yaml-derivation](yaml-derivation.md) | scala-yaml `derives` | `YamlEncoder`, `YamlDecoder` |
 
 All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation`, which are JVM-only.
-
-## Quick start
-
-!!! example "sbt"
-
-    ```scala
-    libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "{{ kindlings_version() }}"
-    ```
-
-!!! example "Scala CLI"
-
-    ```scala
-    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
-    ```
-
-??? example "Minimal example"
-
-    ```scala
-    //> using scala {{ scala.2_13 }}
-    //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
-    //> using dep io.circe::circe-parser:{{ libraries.circe }}
-
-    import hearth.kindlings.circederivation._
-    import io.circe._
-
-    case class Person(name: String, age: Int)
-
-    // inline encoding — no implicit needed
-    val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
-    println(json.noSpaces) // {"name":"Alice","age":30}
-
-    // inline decoding
-    val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
-    println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
-    // Right(Person(Bob,25))
-    ```
