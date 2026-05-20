@@ -230,7 +230,8 @@ val al = new {
       "catsDerivation",
       "scalacheckDerivation",
       "catsIntegration",
-      "sconfigDerivation"
+      "sconfigDerivation",
+      "diffDerivation"
     )
 
   private val jvmOnlyProdProjects = Vector("avroDerivation", "pureconfigDerivation")
@@ -322,6 +323,7 @@ lazy val root = project
   .aggregate(catsDerivation.projectRefs *)
   .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
+  .aggregate(diffDerivation.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
   .settings(
@@ -367,6 +369,20 @@ lazy val root = project
         .alias("publish-local-for-tests")
     )
   )
+
+lazy val diffDerivation = projectMatrix
+  .in(file("diff-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-diff-derivation",
+    name := "kindlings-diff-derivation",
+    description := "Structural Diff type class derivation using Myers algorithm with Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
 
 lazy val fastShowPretty = projectMatrix
   .in(file("fast-show-pretty"))
