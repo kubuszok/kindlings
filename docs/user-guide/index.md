@@ -7,10 +7,11 @@ Type class derivation that compiles faster, runs faster, and works the same on S
 !!! example "sbt"
 
     ```scala
-    // derivations
+    // derivations:
     libraryDependencies += "com.kubuszok" %% "kindlings-avro-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-cats-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-diff-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-fast-show-pretty" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-pureconfig-derivation" % "{{ kindlings_version() }}"
@@ -20,21 +21,24 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     libraryDependencies += "com.kubuszok" %% "kindlings-ubjson-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-yaml-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-xml-derivation" % "{{ kindlings_version() }}"
-    // integrations
+
+    // integrations:
     libraryDependencies += "com.kubuszok" %% "kindlings-cats-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-iron-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-refined-integration" % "{{ kindlings_version() }}"
-    // extra
+    
+    // extra:
     libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-json" % "{{ kindlings_version() }}"
     ```
 
 !!! example "Scala CLI"
 
     ```scala
-    // derivations
+    // derivations:
     //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-diff-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-fast-show-pretty-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
@@ -44,11 +48,13 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
-    // intagrations
+
+    // intagrations:
     //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
-    // extra
+    
+    // extra:
     //> using dep com.kubuszok::kindlings-jsoniter-json:{{ kindlings_version() }}
     ```
 
@@ -66,11 +72,14 @@ Type class derivation that compiles faster, runs faster, and works the same on S
 
     // inline encoding — no implicit needed
     val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
-    println(json.noSpaces) // {"name":"Alice","age":30}
+    println(json.noSpaces)
+    // expected output:
+    // {"name":"Alice","age":30}
 
     // inline decoding
     val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
     println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
+    // expected output:
     // Right(Person(Bob,25))
     ```
 
@@ -196,3 +205,9 @@ case class Order(quantity: Int Refined Positive, item: String)
 | [kindlings-yaml-derivation](yaml-derivation.md) | scala-yaml `derives` | `YamlEncoder`, `YamlDecoder` |
 
 All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation`, which are JVM-only.
+
+## Extra
+
+| Module | Description |
+|---|---|
+| [kindlings-jsoniter-json](jsoniter-json.md) | Minimal JSON AST with optics and `JsonValueCodec` for jsoniter-scala — no Circe/Cats dependencies |

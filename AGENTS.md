@@ -180,6 +180,10 @@ Key reference files:
 
 Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), `fromUntyped` for cross-compilation-boundary matching.
 
+### Documentation maintenance — follow `docs/contributing/documentation-maintenance-skill.md`
+
+When writing or editing documentation snippets in `docs/user-guide/`. Covers: `// expected output:` verification syntax, running snippet tests (`just test-snippets`), template variables, using `FastShowPretty.render` for case class output, adding snippets to the ignore list.
+
 ### Fixing a bug
 
 1. Write a failing test reproducing the bug

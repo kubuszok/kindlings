@@ -36,9 +36,11 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
     import hearth.kindlings.jsoniterderivation._
+    import hearth.kindlings.fastshowpretty._
     import com.github.plokhotnyuk.jsoniter_scala.core._
 
     case class Person(name: String, age: Int)
@@ -47,11 +49,16 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
 
     val bytes = writeToArray(Person("Alice", 30))
     println(new String(bytes))
+    // expected output:
     // {"name":"Alice","age":30}
 
     val person = readFromArray[Person]("""{"name":"Bob","age":25}""".getBytes)
-    println(person)
-    // Person(Bob,25)
+    println(FastShowPretty.render(person, RenderConfig.Default))
+    // expected output:
+    // Person(
+    //   name = "Bob",
+    //   age = 25
+    // )
     ```
 
 ## API
@@ -127,9 +134,11 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
     import hearth.kindlings.jsoniterderivation._
+    import hearth.kindlings.fastshowpretty._
     import com.github.plokhotnyuk.jsoniter_scala.core._
 
     sealed trait Shape
@@ -142,10 +151,16 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     implicit val codec: JsonValueCodec[Shape] = KindlingsJsonValueCodec.derive[Shape]
 
     println(writeToString[Shape](Circle(5.0)))
+    // expected output:
     // {"type":"Circle","radius":5.0}
 
-    println(readFromString[Shape]("""{"type":"Rectangle","width":3,"height":4}"""))
-    // Rectangle(3.0,4.0)
+    val decoded: Shape = readFromString[Shape]("""{"type":"Rectangle","width":3,"height":4}""")
+    println(FastShowPretty.render(decoded, RenderConfig.Default))
+    // expected output:
+    // (Rectangle(
+    //     width = 3.0d,
+    //     height = 4.0d
+    //   )): Shape
     ```
 
 ??? example "Transient fields and defaults"
@@ -153,9 +168,11 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
     //> using dep com.github.plokhotnyuk.jsoniter-scala::jsoniter-scala-core:{{ libraries.jsoniterScala }}
 
     import hearth.kindlings.jsoniterderivation._
+    import hearth.kindlings.fastshowpretty._
     import com.github.plokhotnyuk.jsoniter_scala.core._
 
     implicit val config: JsoniterConfig = JsoniterConfig.default
@@ -172,11 +189,17 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
 
     // Default and None fields are omitted
     println(writeToString(Settings("localhost")))
+    // expected output:
     // {"host":"localhost"}
 
     // Missing fields use defaults
-    println(readFromString[Settings]("""{"host":"example.com"}"""))
-    // Settings(example.com,8080,None)
+    println(FastShowPretty.render(readFromString[Settings]("""{"host":"example.com"}"""), RenderConfig.Default))
+    // expected output:
+    // Settings(
+    //   host = "example.com",
+    //   port = 8080,
+    //   debug = None
+    // )
     ```
 
 ## Comparison with jsoniter-scala macros

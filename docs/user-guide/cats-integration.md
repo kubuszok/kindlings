@@ -99,17 +99,20 @@ Each provider teaches all derivation modules how to encode and decode the corres
 
     val team = Team("Backend", NonEmptyList.of("Alice", "Bob", "Carol"))
     println(KindlingsEncoder.encode(team).noSpaces)
+    // expected output:
     // {"name":"Backend","members":["Alice","Bob","Carol"]}
 
     // Decoding an empty array fails — NonEmptyList requires at least one element
     val bad = io.circe.parser.parse("""{"name":"Empty","members":[]}""")
       .flatMap(KindlingsDecoder.decode[Team](_))
-    println(bad)
-    // Left(DecodingFailure(...))
+    println(bad.isLeft)
+    // expected output:
+    // true
 
     val good = io.circe.parser.parse("""{"name":"Solo","members":["Dave"]}""")
       .flatMap(KindlingsDecoder.decode[Team](_))
     println(good)
+    // expected output:
     // Right(Team(Solo,NonEmptyList(Dave)))
     ```
 
@@ -133,6 +136,7 @@ Each provider teaches all derivation modules how to encode and decode the corres
     val codec = KindlingsJsonValueCodec.derive[Config]
     val config = Config(NonEmptyMap.of("host" -> "localhost", "port" -> "8080"))
     println(writeToString(config)(codec))
+    // expected output:
     // {"settings":{"host":"localhost","port":"8080"}}
     ```
 
@@ -155,11 +159,13 @@ Each provider teaches all derivation modules how to encode and decode the corres
 
     val valid = FormResult(Validated.valid("alice"))
     println(KindlingsEncoder.encode(valid).noSpaces)
-    // {"username":{"Right":"alice"}}
+    // expected output:
+    // {"username":{"Valid":{"a":"alice"}}}
 
     val invalid = FormResult(Validated.invalid("username is required"))
     println(KindlingsEncoder.encode(invalid).noSpaces)
-    // {"username":{"Left":"username is required"}}
+    // expected output:
+    // {"username":{"Invalid":{"e":"username is required"}}}
     ```
 
 ## Combining with other integrations

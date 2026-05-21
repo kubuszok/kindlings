@@ -112,6 +112,7 @@ class KindlingsExtendedRunner(runner: Runner)(
     "index.md#Quick start[2]" -> "Dep-only snippet",
     "iron-integration.md#Installation[3]" -> "Dep-only snippet",
     "jsoniter-derivation.md#Installation[3]" -> "Dep-only snippet",
+    "jsoniter-json.md#Installation[3]" -> "Dep-only snippet",
     "pureconfig-derivation.md#Installation[2]" -> "Dep-only snippet",
     "refined-integration.md#Installation[3]" -> "Dep-only snippet",
     "scalacheck-derivation.md#Installation[3]" -> "Dep-only snippet",

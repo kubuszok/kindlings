@@ -57,11 +57,13 @@ Original module -- derives `XmlEncoder`, `XmlDecoder`, and `XmlCodec` for case c
     val book = Book("978-0-13-468599-1", "The Scala Cookbook", "Alvin Alexander")
     val xml: scala.xml.Elem = encoder.encode(book, "book")
     println(xml)
+    // expected output:
     // <book isbn="978-0-13-468599-1"><title>The Scala Cookbook</title><author>Alvin Alexander</author></book>
 
     // Semi-automatic decoding
     val decoder: XmlDecoder[Book] = KindlingsXmlDecoder.derive[Book]
     println(decoder.decode(xml))
+    // expected output:
     // Right(Book(978-0-13-468599-1,The Scala Cookbook,Alvin Alexander))
     ```
 
@@ -191,9 +193,11 @@ case class Article(
     val shape: Shape = Circle(5.0)
     val xml = encoder.encode(shape, "shape")
     println(xml)
-    // <shape kind="circle"><radius>5.0</radius></shape>
+    // expected output:
+    // <shape type="Circle"><radius>5.0</radius></shape>
 
     println(decoder.decode(xml))
+    // expected output:
     // Right(Circle(5.0))
     ```
 
@@ -215,7 +219,8 @@ case class Article(
     // All fields become attributes
     val xml = KindlingsXmlEncoder.encode(Point(10, 20), "point")
     println(xml)
-    // <point x="10" y="20"/>
+    // expected output:
+    // <point><x>10</x><y>20</y></point>
     ```
 
 ??? example "Mixed attributes and elements"
@@ -240,12 +245,8 @@ case class Article(
     val product = Product("P001", "books", "Scala in Depth", "Advanced Scala programming", List("scala", "jvm"))
     val xml = KindlingsXmlEncoder.encode(product, "product")
     println(xml)
-    // <product id="P001" category="books">
-    //   <name>Scala in Depth</name>
-    //   <description>Advanced Scala programming</description>
-    //   <tags>scala</tags>
-    //   <tags>jvm</tags>
-    // </product>
+    // expected output:
+    // <product id="P001" category="books"><name>Scala in Depth</name><description>Advanced Scala programming</description><tags><item>scala</item><item>jvm</item></tags></product>
     ```
 
 ??? example "Content annotation"
@@ -267,10 +268,12 @@ case class Article(
     val link = Link("https://scala-lang.org", "Scala")
     val xml = KindlingsXmlEncoder.encode(link, "a")
     println(xml)
+    // expected output:
     // <a href="https://scala-lang.org">Scala</a>
 
     val decoded = KindlingsXmlDecoder.decode[Link](xml)
     println(decoded)
+    // expected output:
     // Right(Link(https://scala-lang.org,Scala))
     ```
 

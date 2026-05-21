@@ -39,11 +39,13 @@ Drop-in replacement for `circe-generic` / `circe-generic-extras` — derives `En
     // Inline encoding — no implicit needed
     val json: Json = KindlingsEncoder.encode(Person("Alice", 30))
     println(json.noSpaces)
+    // expected output:
     // {"name":"Alice","age":30}
 
     // Inline decoding
     val parsed = io.circe.parser.parse("""{"name":"Bob","age":25}""")
     println(parsed.flatMap(KindlingsDecoder.decode[Person](_)))
+    // expected output:
     // Right(Person(Bob,25))
     ```
 
@@ -140,11 +142,13 @@ case class User(
 
     val shape: Shape = Circle(5.0)
     println(KindlingsEncoder.encode(shape).noSpaces)
-    // {"radius":5.0,"type":"circle"}
+    // expected output:
+    // {"type":"circle","radius":5.0}
 
     val decoded = io.circe.parser.parse("""{"width":3,"height":4,"type":"rectangle"}""")
       .flatMap(KindlingsDecoder.decode[Shape](_))
     println(decoded)
+    // expected output:
     // Right(Rectangle(3.0,4.0))
     ```
 
@@ -164,6 +168,7 @@ case class User(
       Tree("right", List(Tree("leaf", Nil)))
     ))
     println(KindlingsEncoder.encode(tree).noSpaces)
+    // expected output:
     // {"value":"root","children":[{"value":"left","children":[]},{"value":"right","children":[{"value":"leaf","children":[]}]}]}
     ```
 
@@ -183,6 +188,7 @@ case class User(
 
     val parsed = io.circe.parser.parse("""{"host":"localhost"}""")
     println(parsed.flatMap(KindlingsDecoder.decode[Settings](_)))
+    // expected output:
     // Right(Settings(localhost,8080,false))
     ```
 

@@ -201,6 +201,7 @@ case class AppConfig(
     """)
 
     println(reader.from(config.root))
+    // expected output:
     // Right(Postgres(localhost,5432))
     ```
 
@@ -259,6 +260,7 @@ case class AppConfig(
     """).root)
 
     println(result)
+    // expected output:
     // Right(AppConfig(HttpConfig(0.0.0.0,9090),DbConfig(jdbc:postgresql://localhost/mydb,10)))
     ```
 

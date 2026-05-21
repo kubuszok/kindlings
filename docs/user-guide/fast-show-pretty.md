@@ -37,6 +37,7 @@ Original module -- derives `FastShowPretty` instances for pretty-printing case c
 
     val person = Person("Alice", 30, Address("123 Main St", "New York"))
     println(FastShowPretty.render(person, RenderConfig.Default))
+    // expected output:
     // Person(
     //   name = "Alice",
     //   age = 30,
@@ -113,6 +114,7 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     // 2-space indent (default)
     println(FastShowPretty.render(p, RenderConfig.Default))
+    // expected output:
     // Point(
     //   x = 10,
     //   y = 20
@@ -120,6 +122,7 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     // Tab indent
     println(FastShowPretty.render(p, RenderConfig.Tabs))
+    // expected output:
     // Point(
     // 	x = 10,
     // 	y = 20
@@ -127,6 +130,7 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     // 4-space indent
     println(FastShowPretty.render(p, RenderConfig.FourSpaces))
+    // expected output:
     // Point(
     //     x = 10,
     //     y = 20
@@ -134,6 +138,7 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     // Compact (no indent)
     println(FastShowPretty.render(p, RenderConfig.Compact))
+    // expected output:
     // Point(
     // x = 10,
     // y = 20
@@ -152,6 +157,7 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     val team = Team("Engineering", List("Alice", "Bob", "Charlie"))
     println(FastShowPretty.render(team, RenderConfig.Default))
+    // expected output:
     // Team(
     //   name = "Engineering",
     //   members = List(
@@ -176,9 +182,10 @@ val output2 = FastShowPretty.render(myValue, custom)
 
     val shape: Shape = Circle(5.0)
     println(FastShowPretty.render(shape, RenderConfig.Default))
-    // Circle(
-    //   radius = 5.0d
-    // )
+    // expected output:
+    // (Circle(
+    //     radius = 5.0d
+    //   )): Shape
     ```
 
 ??? example "Recursive data types"
@@ -196,6 +203,7 @@ val output2 = FastShowPretty.render(myValue, custom)
       Tree(3, List(Tree(4, Nil)))
     ))
     println(FastShowPretty.render(tree, RenderConfig.Default))
+    // expected output:
     // Tree(
     //   value = 1,
     //   children = List(
@@ -230,6 +238,7 @@ val output2 = FastShowPretty.render(myValue, custom)
     val instance = implicitly[FastShowPretty[Person]]
     val sb = instance.render(new StringBuilder, RenderConfig.Default, 0)(Person("Alice", 30))
     println(sb.toString)
+    // expected output:
     // Person(
     //   name = "Alice",
     //   age = 30
