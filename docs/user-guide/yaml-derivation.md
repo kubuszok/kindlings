@@ -45,12 +45,14 @@ Drop-in replacement for scala-yaml's built-in `derives` — derives `YamlEncoder
     // Encode to YAML string
     val yaml: String = KindlingsYamlEncoder.toYamlString(Person("Alice", 30))
     println(yaml)
+    // expected output:
     // name: Alice
     // age: 30
 
     // Decode from YAML string
     val result = KindlingsYamlDecoder.fromYamlString[Person]("name: Bob\nage: 25")
     println(result)
+    // expected output:
     // Right(Person(Bob,25))
     ```
 
@@ -152,11 +154,13 @@ case class User(
 
     val yaml = KindlingsYamlEncoder.toYamlString[Shape](Circle(5.0))
     println(yaml)
-    // radius: 5.0
+    // expected output:
     // type: circle
+    // radius: 5.0
 
     val decoded = KindlingsYamlDecoder.fromYamlString[Shape]("width: 3\nheight: 4\ntype: rectangle")
     println(decoded)
+    // expected output:
     // Right(Rectangle(3.0,4.0))
     ```
 
@@ -175,6 +179,7 @@ case class User(
 
     val result = KindlingsYamlDecoder.fromYamlString[Settings]("host: localhost")
     println(result)
+    // expected output:
     // Right(Settings(localhost,8080,false))
     ```
 
@@ -194,6 +199,7 @@ case class User(
 
     val yaml = KindlingsYamlEncoder.toYamlString(DatabaseConfig("localhost", 5432, 10))
     println(yaml)
+    // expected output:
     // host_name: localhost
     // port_number: 5432
     // max_connections: 10

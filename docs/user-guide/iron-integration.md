@@ -75,12 +75,14 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
 
     val product = Product("widget".refine, 9.99.refine, 5.refine)
     println(KindlingsEncoder.encode(product).noSpaces)
+    // expected output:
     // {"name":"widget","price":9.99,"quantity":5}
 
     val decoded = io.circe.parser.parse("""{"name":"","price":9.99,"quantity":5}""")
       .flatMap(KindlingsDecoder.decode[Product](_))
-    println(decoded)
-    // Left(DecodingFailure(...)) — empty string violates Not[Empty]
+    println(decoded.isLeft)
+    // expected output:
+    // true
     ```
 
 ??? example "Works with any derivation module"
@@ -106,6 +108,7 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
     val codec = KindlingsJsonValueCodec.derive[Measurement]
     val json = writeToString(Measurement(42.0.refine, "kg"))(codec)
     println(json)
+    // expected output:
     // {"value":42.0,"unit":"kg"}
     ```
 

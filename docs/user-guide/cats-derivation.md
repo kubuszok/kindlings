@@ -41,9 +41,11 @@ Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — deri
     implicit val eqPerson: Eq[Person] = Eq.derived[Person]
 
     println(Person("Alice", 30).show)
+    // expected output:
     // Person(name = Alice, age = 30)
 
     println(Person("Alice", 30) === Person("Alice", 30))
+    // expected output:
     // true
 
     val ord: Order[Person] = Order.derived[Person]
@@ -144,12 +146,15 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     implicit val eqShape: Eq[Shape] = Eq.derived[Shape]
 
     println(showShape.show(Circle(5.0)))
+    // expected output:
     // Circle(radius = 5.0)
 
     println(eqShape.eqv(Circle(3.0), Circle(3.0)))
+    // expected output:
     // true
 
     println(eqShape.eqv(Circle(3.0), Rectangle(3.0, 4.0)))
+    // expected output:
     // false
     ```
 
@@ -158,9 +163,11 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
     import hearth.kindlings.catsderivation.extensions._
+    import hearth.kindlings.fastshowpretty._
     import cats._
     import cats.syntax.all._
 
@@ -169,8 +176,11 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     implicit val functorBox: Functor[Box] = Functor.derived[Box]
 
     val box: Box[Int] = Box(42)
-    println(Functor[Box].map(box)(_ * 2))
-    // Box(84)
+    println(FastShowPretty.render(Functor[Box].map(box)(_ * 2), RenderConfig.Default))
+    // expected output:
+    // Box(
+    //   value = 84
+    // )
     ```
 
 ??? example "Semigroup and Monoid derivation"
@@ -178,9 +188,11 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     ```scala
     //> using scala {{ scala.2_13 }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
     import hearth.kindlings.catsderivation.extensions._
+    import hearth.kindlings.fastshowpretty._
     import cats.kernel.{Monoid, Semigroup}
     import cats.syntax.all._
 
@@ -190,11 +202,19 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
 
     val a = Stats(10, 100.0)
     val b = Stats(5, 50.0)
-    println(a |+| b)
-    // Stats(15,150.0)
+    println(FastShowPretty.render(a |+| b, RenderConfig.Default))
+    // expected output:
+    // Stats(
+    //   count = 15,
+    //   total = 150.0d
+    // )
 
-    println(Monoid[Stats].empty)
-    // Stats(0,0.0)
+    println(FastShowPretty.render(Monoid[Stats].empty, RenderConfig.Default))
+    // expected output:
+    // Stats(
+    //   count = 0,
+    //   total = 0.0d
+    // )
     ```
 
 ## Comparison with kittens

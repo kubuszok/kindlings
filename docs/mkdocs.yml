@@ -69,6 +69,8 @@ nav:
     - "Cats Collections": "cats-integration.md"
     - "Iron": "iron-integration.md"
     - "Refined": "refined-integration.md"
+  - "Extra":
+    - "Jsoniter JSON": "jsoniter-json.md"
   - "Debugging & Diagnostics": "debugging.md"
   - "FAQ": "faq.md"
 

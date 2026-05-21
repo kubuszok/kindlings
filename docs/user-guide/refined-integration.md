@@ -83,12 +83,14 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
 
     val order = Order(3, "widget")
     println(KindlingsEncoder.encode(order).noSpaces)
+    // expected output:
     // {"quantity":3,"item":"widget"}
 
     val decoded = io.circe.parser.parse("""{"quantity":0,"item":"widget"}""")
       .flatMap(KindlingsDecoder.decode[Order](_))
-    println(decoded)
-    // Left(DecodingFailure(...)) — 0 is not positive
+    println(decoded.isLeft)
+    // expected output:
+    // true
     ```
 
 ??? example "Works with any derivation module"
@@ -115,5 +117,6 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
     implicit val codec = KindlingsJsonValueCodec.derive[User]
     val json = writeToString(User("Alice", 30))
     println(json)
+    // expected output:
     // {"name":"Alice","age":30}
     ```
