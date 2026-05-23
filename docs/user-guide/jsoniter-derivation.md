@@ -202,6 +202,21 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     // )
     ```
 
+## Debugging
+
+Import the debug package to log the derivation process at compile time:
+
+```scala
+import hearth.kindlings.jsoniterderivation.debug._
+```
+
+Or enable project-wide via scalac option:
+
+```scala
+// build.sbt
+scalacOptions += "-Xmacro-settings:jsoniterDerivation.logDerivation=true"
+```
+
 ## Comparison with jsoniter-scala macros
 
 ### Feature differences

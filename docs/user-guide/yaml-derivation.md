@@ -205,6 +205,21 @@ case class User(
     // max_connections: 10
     ```
 
+## Debugging
+
+Import the debug package to log the derivation process at compile time:
+
+```scala
+import hearth.kindlings.yamlderivation.debug._
+```
+
+Or enable project-wide via scalac option:
+
+```scala
+// build.sbt
+scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
+```
+
 ## Comparison with scala-yaml built-in derivation
 
 ### Feature differences

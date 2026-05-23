@@ -206,6 +206,16 @@ case class Order(quantity: Int Refined Positive, item: String)
 
 All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation`, which are JVM-only.
 
+## Integrations
+
+| Module | Description |
+|---|---|
+| [kindlings-cats-integration](cats-integration.md) | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated`, `Const` — handled automatically in all derivation modules |
+| [kindlings-iron-integration](iron-integration.md) | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
+| [kindlings-refined-integration](refined-integration.md) | Refined types (`Refined[A, P]`) — validated on decode, unwrapped on encode |
+
+Add the integration jar to your build and the types work transparently — no imports, no configuration. The macro extension system discovers providers at compile time via SPI.
+
 ## Extra
 
 | Module | Description |

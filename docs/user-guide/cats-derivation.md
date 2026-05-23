@@ -49,7 +49,9 @@ Drop-in replacement for [kittens](https://github.com/typelevel/kittens) — deri
     // true
 
     val ord: Order[Person] = Order.derived[Person]
-    println(ord.compare(Person("Alice", 30), Person("Bob", 25)))
+    println(ord.compare(Person("Alice", 30), Person("Bob", 25)) < 0)
+    // expected output:
+    // true
     ```
 
 ## Supported type classes
@@ -216,6 +218,23 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     //   total = 0.0d
     // )
     ```
+
+## Debugging
+
+Import the debug package to log the derivation process at compile time:
+
+```scala
+import hearth.kindlings.catsderivation.debug._
+```
+
+This enables `LogDerivation` implicits for all derived type classes, printing the derivation steps to the compiler output.
+
+Or enable project-wide via scalac option:
+
+```scala
+// build.sbt
+scalacOptions += "-Xmacro-settings:catsDerivation.logDerivation=true"
+```
 
 ## Comparison with kittens
 

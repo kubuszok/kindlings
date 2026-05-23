@@ -26,6 +26,8 @@
 ??? example "Reading and writing HOCON configuration"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -42,11 +44,8 @@
       debug = false
     """).load[ServerConfig](reader)
     println(result)
+    // expected output:
     // Right(ServerConfig(localhost,8080,false))
-
-    // Write to ConfigValue
-    val config = writer.to(ServerConfig("example.com", 443, true))
-    println(config.render())
     ```
 
 ## API
@@ -126,6 +125,8 @@ case class DatabaseConfig(
 ??? example "Sealed trait with discriminator"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -143,12 +144,15 @@ case class DatabaseConfig(
       database = "mydb"
     """).load[DatabaseType](reader)
     println(result)
+    // expected output:
     // Right(Postgres(localhost,5432,mydb))
     ```
 
 ??? example "Wrapped subtypes (no discriminator)"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -164,12 +168,15 @@ case class DatabaseConfig(
       circle { radius = 5.0 }
     """).load[Shape](reader)
     println(result)
+    // expected output:
     // Right(Circle(5.0))
     ```
 
 ??? example "Case class with defaults and strict decoding"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -188,6 +195,7 @@ case class DatabaseConfig(
     // Missing fields use Scala defaults
     val result = ConfigSource.string("""host = "localhost" """).load[AppSettings](reader)
     println(result)
+    // expected output:
     // Right(AppSettings(localhost,8080,false))
 
     // Unknown keys cause an error in strict mode
@@ -195,13 +203,16 @@ case class DatabaseConfig(
       host = "localhost"
       unknown-key = "oops"
     """).load[AppSettings](reader)
-    println(strict)
-    // Left(ConfigReaderFailures(...))
+    println(strict.isLeft)
+    // expected output:
+    // true
     ```
 
 ??? example "Snake case member names"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -218,12 +229,15 @@ case class DatabaseConfig(
       email_address = "alice@example.com"
     """).load[UserProfile](reader)
     println(result)
+    // expected output:
     // Right(UserProfile(Alice,Smith,alice@example.com))
     ```
 
 ??? example "Nested configuration"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.pureconfigderivation._
     import pureconfig._
 
@@ -244,6 +258,7 @@ case class DatabaseConfig(
       }
     """).load[AppConfig](reader)
     println(result)
+    // expected output:
     // Right(AppConfig(HttpConfig(0.0.0.0,8080),DatabaseConfig(jdbc:postgresql://localhost/mydb,10)))
     ```
 
