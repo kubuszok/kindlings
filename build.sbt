@@ -15,26 +15,25 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.3.0-34-g3859901-SNAPSHOT"
+  val hearth = "0.3.0-36-g41789e7-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
+  val avro4s213 = "4.1.2"
+  val avro4s3 = "5.0.15"
   val cats = "2.13.0"
   val circe = "0.14.15"
   val iron = "3.3.1"
   val jsoniterScala = "2.38.12"
+  val kittens = "3.5.0"
+  val pureconfig = "0.17.10"
   val tapir = "1.13.19"
   val refined = "0.11.3"
+  val scalacheck = "1.19.0"
+  val scalaJavaTime = "2.6.0"
+  val scalaSaxParser = "0.1.0"
   val scalaYaml = "0.3.1"
   val scalaXml = "2.4.0"
-  val scalaSaxParser = "0.1.0"
-  val pureconfig = "0.17.10"
-  val scalacheck = "1.19.0"
   val sconfig = "1.12.4"
-  val scalaJavaTime = "2.6.0"
-  val kittens = "3.5.0"
-  val avro4s213 = "4.1.2"
-  val avro4s3 = "5.0.15"
-
 }
 
 val dev = new DevProperties(
@@ -43,20 +42,11 @@ val dev = new DevProperties(
   platforms = versions.platforms
 )
 
-val logCrossQuotes = {
-  val props = scala.util
-    .Using(new java.io.FileInputStream("dev.properties")) { fis =>
-      val p = new java.util.Properties()
-      p.load(fis)
-      p
-    }
-    .getOrElse(new java.util.Properties())
-  props.getProperty("log.cross-quotes") match {
-    case "true"                          => true
-    case "false"                         => false
-    case otherwise if otherwise.nonEmpty => otherwise
-    case _                               => !isCI
-  }
+val logCrossQuotes = dev.props.getProperty("log.cross-quotes") match {
+  case "true"                          => true
+  case "false"                         => false
+  case otherwise if otherwise.nonEmpty => otherwise
+  case _                               => !isCI
 }
 
 // Common settings:
@@ -161,12 +151,7 @@ val settings = Seq(
       "-Xsource-features:eta-expand-always", // silence warn that appears since 2.13.17
       "-Ytasty-reader"
     )
-  ),
-  Compile / doc / scalacOptions ++= foldVersion(scalaVersion.value)(
-    for3 = Seq("-Ygenerate-inkuire"), // type-based search for Scala 3, this option cannot go into compile
-    for2_13 = Seq.empty
-  ),
-  Compile / console / scalacOptions --= Seq("-Ywarn-unused:imports", "-Xfatal-warnings")
+  )
 )
 
 val dependencies = Seq(
@@ -185,7 +170,7 @@ val dependencies = Seq(
 
 val publishSettings = Seq(
   organization := "com.kubuszok",
-  homepage := Some(url("https://scala-hearth.readthedocs.io")),
+  homepage := Some(url("https://kindlings.readthedocs.io")),
   organizationHomepage := Some(url("https://kubuszok.com")),
   licenses := Seq("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")),
   scmInfo := Some(
@@ -210,95 +195,35 @@ val publishSettings = Seq(
 val noPublishSettings =
   Seq(projectType := ProjectType.NonPublished)
 
+// Modules
+
 // Command generation
 
-val al = new {
-
-  private val prodProjects =
-    Vector(
-      "derivationCommons",
-      "fastShowPretty",
-      "circeDerivation",
-      "jsoniterDerivation",
-      "jsoniterJson",
-      "ubjsonDerivation",
-      "yamlDerivation",
-      "jsonSchemaConfigMacroProviders",
-      "tapirSchemaDerivation",
-      "refinedIntegration",
-      "xmlDerivation",
-      "catsDerivation",
-      "scalacheckDerivation",
-      "catsIntegration",
-      "sconfigDerivation",
-      "diffDerivation"
-    )
-
-  private val jvmOnlyProdProjects = Vector("avroDerivation", "pureconfigDerivation")
-
-  private val scala3OnlyProdProjects = Vector("ironIntegration")
-
-  private val jvmOnlyCompileOnlyProjects = Vector("benchmarks")
-
-  private def isJVM(platform: String): Boolean = platform == "JVM"
-
-  private def isScala3(scalaSuffix: String): Boolean = scalaSuffix == "3"
-
-  private def projects(platform: String, scalaSuffix: String): Vector[String] = {
-    val crossPlatformProjects = for {
-      name <- prodProjects
-    } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix"
-    val jvmOnly = if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix") else Vector.empty
-    val scala3Only =
-      if (isScala3(scalaSuffix))
-        scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix")
-      else Vector.empty
-    crossPlatformProjects ++ jvmOnly ++ scala3Only
-  }
-
-  def ci(platform: String, scalaSuffix: String): String = {
-    def tasksOf(name: String): Vector[String] = projects(platform, scalaSuffix).flatMap { case project =>
-      Vector(s"$project/$name")
-    }
-
-    val benchmarkCompileTasks =
-      if (isJVM(platform)) jvmOnlyCompileOnlyProjects.map(name => s"$name$scalaSuffix/compile")
-      else Vector.empty
-
-    val clean = Vector("clean")
-    val compileAndTest = tasksOf("compile") ++ tasksOf("test")
-    val coverageCompileAndTest =
-      if (isJVM(platform)) "coverage" +: compileAndTest :+ "coverageAggregate" :+ "coverageOff"
-      else compileAndTest
-    // val mimaReport = tasksOf("mimaReportBinaryIssues")
-
-    val tasks = clean ++ coverageCompileAndTest ++ benchmarkCompileTasks // ++ mimaReport
-    tasks.mkString(" ; ")
-  }
-
-  def test(platform: String, scalaSuffix: String): String =
-    projects(platform, scalaSuffix).map(project => s"$project/test").mkString(" ; ")
-
-  def release(tag: Seq[String]): String =
-    if (tag.nonEmpty) "publishSigned ; sonaRelease" else "publishSigned"
-
-  def publishLocal(platform: String, scalaSuffix: String): Vector[String] = {
-    val crossPlatform = for {
-      name <- prodProjects
-    } yield s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix/publishLocal"
-    val jvmOnly =
-      if (isJVM(platform)) jvmOnlyProdProjects.map(name => s"$name$scalaSuffix/publishLocal") else Vector.empty
-    val scala3Only =
-      if (isScala3(scalaSuffix))
-        scala3OnlyProdProjects.map(name => s"$name${if (isJVM(platform)) "" else platform}$scalaSuffix/publishLocal")
-      else Vector.empty
-    crossPlatform ++ jvmOnly ++ scala3Only
-  }
-
-  val publishLocalForTests = (publishLocal("JVM", "") ++ publishLocal("JVM", "3")).mkString(" ; ")
-}
-
-// Modules
+lazy val aliases = new Aliases(
+  published = Seq(
+    derivationCommons,
+    fastShowPretty,
+    circeDerivation,
+    jsoniterDerivation,
+    jsoniterJson,
+    ubjsonDerivation,
+    yamlDerivation,
+    jsonSchemaConfigMacroProviders,
+    tapirSchemaDerivation,
+    refinedIntegration,
+    ironIntegration,
+    xmlDerivation,
+    catsDerivation,
+    scalacheckDerivation,
+    catsIntegration,
+    sconfigDerivation,
+    diffDerivation,
+    avroDerivation,
+    pureconfigDerivation
+  ),
+  testOnly = Seq(integrationTests),
+  compileOnly = Seq(benchmarks)
+)
 
 lazy val root = project
   .in(file("."))
@@ -342,31 +267,10 @@ lazy val root = project
          |
          |When working with IntelliJ or Scala Metals, edit dev.properties to control which Scala version you're currently working with.
          |""".stripMargin,
-    usefulTasks := Seq(
-      UsefulTask("projects", "List all projects generated by the build matrix").noAlias,
-      UsefulTask(
-        "test",
-        "Compile and test all projects in all Scala versions and platforms (beware! it uses a lot of memory and might OOM!)"
-      ).noAlias,
-      UsefulTask(al.release(git.gitCurrentTags.value), "Publish everything to release or snapshot repository")
-        .alias("ci-release"),
-      UsefulTask(al.ci("JVM", "3"), "CI pipeline for Scala 3+JVM").alias("ci-jvm-3"),
-      UsefulTask(al.ci("JVM", ""), "CI pipeline for Scala 2.13+JVM").alias("ci-jvm-2_13"),
-      UsefulTask(al.ci("JS", "3"), "CI pipeline for Scala 3+Scala JS").alias("ci-js-3"),
-      UsefulTask(al.ci("JS", ""), "CI pipeline for Scala 2.13+Scala JS").alias("ci-js-2_13"),
-      UsefulTask(al.ci("Native", "3"), "CI pipeline for Scala 3+Scala Native").alias("ci-native-3"),
-      UsefulTask(al.ci("Native", ""), "CI pipeline for Scala 2.13+Scala Native").alias("ci-native-2_13"),
-      UsefulTask(al.test("JVM", "3"), "Test all projects in Scala 3+JVM").alias("test-jvm-3"),
-      UsefulTask(al.test("JVM", ""), "Test all projects in Scala 2.13+JVM").alias("test-jvm-2_13"),
-      UsefulTask(al.test("JS", "3"), "Test all projects in Scala 3+Scala JS").alias("test-js-3"),
-      UsefulTask(al.test("JS", ""), "Test all projects in Scala 2.13+Scala JS").alias("test-js-2_13"),
-      UsefulTask(al.test("Native", "3"), "Test all projects in Scala 3+Scala Native").alias("test-native-3"),
-      UsefulTask(al.test("Native", ""), "Test all projects in Scala 2.13+Scala Native").alias("test-native-2_13"),
-      UsefulTask(
-        al.publishLocalForTests,
+    usefulTasks := aliases.usefulTasks(
+      publishLocalForTestsFilter = Some((_, platform) => platform == "JVM"),
+      publishLocalForTestsDescription =
         "Publishes all Scala 2.13 and Scala 3 JVM artifacts to test snippets in documentation"
-      )
-        .alias("publish-local-for-tests")
     )
   )
 
@@ -741,6 +645,24 @@ lazy val catsIntegration = projectMatrix
   .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
 
 // Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
+// Avro and PureConfig are JVM-only — add as conditional deps for integration tests
+val jvmOnlyDerivatonsForIntegrationTests = List(
+  MatrixAction.ForPlatform(VirtualAxis.jvm).Configure { project =>
+    val suffix = project.id.stripPrefix("integrationTests") // "" or "3"
+    project
+      .dependsOn(LocalProject(s"avroDerivation$suffix"))
+      .dependsOn(LocalProject(s"pureconfigDerivation$suffix"))
+      .settings(
+        // Add scalajvm-3 test sources for JVM + Scala 3 only (Iron × Avro/PureConfig)
+        Test / unmanagedSourceDirectories ++= foldVersion(scalaVersion.value)(
+          for3 = Seq(baseDirectory.value / "src" / "test" / "scalajvm-3"),
+          for2_13 = Seq.empty
+        )
+      )
+  }
+)
+
+// Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
 val ironDepForScala3 = List(
   MatrixAction.ForScala(_.isScala3).Configure { project =>
     val suffix = project.id.stripPrefix("integrationTests") // "3", "JS3", "Native3"
@@ -750,7 +672,7 @@ val ironDepForScala3 = List(
 
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3) *)
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ jvmOnlyDerivatonsForIntegrationTests) *)
   .disablePlugins(WelcomePlugin)
   .dependsOn(
     fastShowPretty,
@@ -759,6 +681,7 @@ lazy val integrationTests = projectMatrix
     ubjsonDerivation,
     yamlDerivation,
     xmlDerivation,
+    sconfigDerivation,
     tapirSchemaDerivation,
     refinedIntegration,
     catsIntegration
@@ -776,7 +699,8 @@ lazy val integrationTests = projectMatrix
       "com.softwaremill.sttp.tapir" %%% "tapir-core" % versions.tapir,
       "org.scala-lang.modules" %%% "scala-xml" % versions.scalaXml,
       "com.kubuszok" %%% "scala-sax-parser" % versions.scalaSaxParser,
-      "org.typelevel" %%% "cats-core" % versions.cats
+      "org.typelevel" %%% "cats-core" % versions.cats,
+      "org.ekrich" %%% "sconfig" % versions.sconfig
     ),
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %%% "iron" % versions.iron),

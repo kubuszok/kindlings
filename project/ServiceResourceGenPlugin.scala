@@ -112,6 +112,13 @@ object ServiceResourceGenPlugin extends AutoPlugin {
     },
 
     // wire it into resources
-    Compile / resourceGenerators += generateServiceFile.taskValue
+    Compile / resourceGenerators += generateServiceFile.taskValue,
+    // Ensure SPI files are available on the classpath for downstream modules.
+    // compile alone doesn't trigger copyResources, so exported products
+    // (used by dependsOn) won't include SPI files unless we add this.
+    Compile / exportedProducts := {
+      (Compile / copyResources).value
+      (Compile / exportedProducts).value
+    }
   )
 }
