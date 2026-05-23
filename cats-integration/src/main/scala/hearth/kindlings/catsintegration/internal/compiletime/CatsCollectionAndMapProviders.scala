@@ -11,6 +11,8 @@ import hearth.std.{ProviderResult, StandardMacroExtension, StdExtensions}
   */
 final class CatsCollectionAndMapProviders extends StandardMacroExtension { loader =>
 
+  override def priority: Int = 1000
+
   @scala.annotation.nowarn("msg=is never used")
   override def extend(ctx: MacroCommons & StdExtensions): Unit = {
     import ctx.*

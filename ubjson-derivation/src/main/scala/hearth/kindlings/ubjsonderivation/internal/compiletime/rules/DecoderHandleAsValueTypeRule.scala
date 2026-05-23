@@ -18,9 +18,6 @@ trait DecoderHandleAsValueTypeRuleImpl {
         Type[A] match {
           case IsValueType(isValueType) =>
             import isValueType.Underlying as Inner
-            // Per project rule 5, [[LambdaBuilder]] is reserved for lambdas passed into
-            // collection / Optional iteration helpers. The wrap is a pre-derived value used
-            // once, so we build a direct cross-quotes function literal instead.
             val wrapLambda: Expr[Inner => A] = buildWrap[A, Inner](isValueType.value, dctx.reader)
             deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.reader)).map { innerDecoded =>
               Rule.matched(Expr.quote {
@@ -33,10 +30,6 @@ trait DecoderHandleAsValueTypeRuleImpl {
         }
       }
 
-    /** Build an `Inner => A` lambda that applies the value type's `wrap`. For value types whose `wrap` is partial
-      * (returns `Either[String, A]`), report parse failures via the supplied [[UBJsonReader]]. Extracted as a helper
-      * because the `wrap` closure captures path-dependent state from the [[IsValueTypeOf]] instance.
-      */
     private def buildWrap[A: Type, Inner: Type](
         isValueType: IsValueTypeOf[A, Inner],
         readerExpr: Expr[UBJsonReader]
@@ -44,17 +37,41 @@ trait DecoderHandleAsValueTypeRuleImpl {
       @scala.annotation.nowarn("msg=is never used")
       implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
       isValueType.wrap match {
+        case _: CtorLikeOf.PlainValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[A]])
+          }
         case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
           Expr.quote { (inner: Inner) =>
-            Expr
-              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[String, A]]]) match {
+            Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[String, A]]]) match {
               case scala.Right(v)  => v
               case scala.Left(msg) => Expr.splice(readerExpr).decodeError(msg)
             }
           }
-        case _ =>
+        case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
           Expr.quote { (inner: Inner) =>
-            Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[A]])
+            Expr
+              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Iterable[String], A]]]) match {
+              case scala.Right(v)   => v
+              case scala.Left(errs) => Expr.splice(readerExpr).decodeError(errs.mkString("\n"))
+            }
+          }
+        case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Throwable, A]]]) match {
+              case scala.Right(v)  => v
+              case scala.Left(err) => Expr.splice(readerExpr).decodeError(err.getMessage)
+            }
+          }
+        case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(
+                isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+              ) match {
+              case scala.Right(v)   => v
+              case scala.Left(errs) => Expr.splice(readerExpr).decodeError(errs.map(_.getMessage).mkString("\n"))
+            }
           }
       }
     }

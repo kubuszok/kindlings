@@ -321,7 +321,10 @@ trait DecoderMacrosImpl
         _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
         _ <- MIO.scoped { runSafe =>
           runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (elem, config)) =>
-            runSafe(helper(elem, config))
+            val bodyExpr = runSafe(helper(elem, config))
+            Expr.quote {
+              Expr.splice(bodyExpr).asInstanceOf[Either[XmlDecodingError, B]]
+            }
           })
         }
         _ <- Log.info(s"Defined decode helper for ${Type[B].prettyPrint}")
@@ -380,8 +383,8 @@ trait DecoderMacrosImpl
       .namedScope(s"Deriving XML decoder via rules for type ${Type[A].prettyPrint}") {
         Rules(
           DecoderUseImplicitWhenAvailableRule,
-          DecoderHandleAsBuiltInRule,
           DecoderHandleAsValueTypeRule,
+          DecoderHandleAsBuiltInRule,
           DecoderHandleAsOptionRule,
           DecoderHandleAsMapRule,
           DecoderHandleAsCollectionRule,

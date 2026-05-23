@@ -7,4 +7,7 @@ private[ubjsonderivation] trait UBJsonValueCodecCompanionCompat {
 
   def derive[A](implicit config: UBJsonConfig): UBJsonValueCodec[A] =
     macro internal.compiletime.CodecMacros.deriveCodecImpl[A]
+
+  implicit def derived[A](implicit config: UBJsonConfig): UBJsonValueCodec[A] =
+    macro internal.compiletime.CodecMacros.deriveCodecImpl[A]
 }

@@ -19,8 +19,9 @@ trait AvroDecoderHandleAsValueTypeRuleImpl {
             for {
               innerResult <- deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.avroValue))
             } yield isValueType.value.wrap match {
+              case _: CtorLikeOf.PlainValue[?, ?] =>
+                Rule.matched(isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]])
               case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                // Wrap returns Either[String, A] — throw AvroRuntimeException on Left
                 val eitherResult = isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[String, A]]]
                 Rule.matched(Expr.quote {
                   Expr.splice(eitherResult) match {
@@ -28,9 +29,34 @@ trait AvroDecoderHandleAsValueTypeRuleImpl {
                     case scala.Left(msg) => throw new org.apache.avro.AvroRuntimeException(msg)
                   }
                 })
-              case _ =>
-                // PlainValue — original behavior
-                Rule.matched(isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]])
+              case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+                val eitherResult =
+                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[String], A]]]
+                Rule.matched(Expr.quote {
+                  Expr.splice(eitherResult) match {
+                    case scala.Right(v)   => v
+                    case scala.Left(errs) => throw new org.apache.avro.AvroRuntimeException(errs.mkString("\n"))
+                  }
+                })
+              case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+                val eitherResult =
+                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Throwable, A]]]
+                Rule.matched(Expr.quote {
+                  Expr.splice(eitherResult) match {
+                    case scala.Right(v)  => v
+                    case scala.Left(err) => throw new org.apache.avro.AvroRuntimeException(err.getMessage, err)
+                  }
+                })
+              case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+                val eitherResult =
+                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+                Rule.matched(Expr.quote {
+                  Expr.splice(eitherResult) match {
+                    case scala.Right(v)   => v
+                    case scala.Left(errs) =>
+                      throw new org.apache.avro.AvroRuntimeException(errs.map(_.getMessage).mkString("\n"))
+                  }
+                })
             }
 
           case _ =>
