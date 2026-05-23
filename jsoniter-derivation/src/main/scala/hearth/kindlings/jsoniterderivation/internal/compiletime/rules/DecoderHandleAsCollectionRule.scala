@@ -6,7 +6,6 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 
 trait DecoderHandleAsCollectionRuleImpl {
@@ -38,24 +37,71 @@ trait DecoderHandleAsCollectionRuleImpl {
       import isCollection.CtorResult
       deriveDecoderRecursively[Item](using dctx.nest[Item](dctx.reader)).map { decodeItemExpr =>
         val factoryExpr = isCollection.factory
-        Rule.matched(Expr.quote {
+        val buildStep = isCollection.build
+
+        val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
           val reader = Expr.splice(dctx.reader)
-          val builder = Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[Item, A]].newBuilder
+          val collBuilder = Expr.splice(factoryExpr).newBuilder
           if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
           if (!reader.isNextToken(']'.toByte)) {
             reader.rollbackToken()
             var count: Int = 1
-            builder += Expr.splice(decodeItemExpr)
+            collBuilder += Expr.splice(decodeItemExpr)
             while (reader.isNextToken(','.toByte)) {
               count += 1
               if (count > Expr.splice(Expr(maxInserts)))
                 reader.decodeError("too many collection items (max: " + Expr.splice(Expr(maxInserts)) + ")")
-              builder += Expr.splice(decodeItemExpr)
+              collBuilder += Expr.splice(decodeItemExpr)
             }
             if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
           }
-          builder.result().asInstanceOf[A]
-        })
+          collBuilder
+        }
+        val buildResultExpr = buildStep.ctor(readLoop)
+
+        buildStep match {
+          case _: CtorLikeOf.PlainValue[?, ?] =>
+            Rule.matched(buildResultExpr.asInstanceOf[Expr[A]])
+
+          case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+            val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
+            Rule.matched(Expr.quote {
+              Expr.splice(eitherExpr) match {
+                case Right(value) => value
+                case Left(err)    => throw new IllegalArgumentException(err)
+              }
+            })
+
+          case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+            val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
+            Rule.matched(Expr.quote {
+              Expr.splice(eitherExpr) match {
+                case Right(value) => value
+                case Left(errs)   => throw new IllegalArgumentException(errs.mkString(", "))
+              }
+            })
+
+          case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+            val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
+            Rule.matched(Expr.quote {
+              Expr.splice(eitherExpr) match {
+                case Right(value) => value
+                case Left(err)    => throw err
+              }
+            })
+
+          case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+            val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+            Rule.matched(Expr.quote {
+              Expr.splice(eitherExpr) match {
+                case Right(value) => value
+                case Left(errs)   =>
+                  val iter = errs.iterator
+                  if (iter.hasNext) throw iter.next()
+                  else throw new IllegalArgumentException("collection construction failed")
+              }
+            })
+        }
       }
     }
 
@@ -71,16 +117,73 @@ trait DecoderHandleAsCollectionRuleImpl {
         .map { builder =>
           val decodeFn = builder.build[Item]
           val factoryExpr = isCollection.factory
-          Rule.matched(Expr.quote {
-            JsoniterDerivationUtils
-              .readCollection[Item, A](
-                Expr.splice(dctx.reader),
-                Expr.splice(decodeFn),
-                Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[Item, A]],
-                Expr.splice(dctx.config).setMaxInsertNumber
-              )
-              .asInstanceOf[A]
-          })
+          val buildStep = isCollection.build
+
+          val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
+            val decodeFnVal = Expr.splice(decodeFn)
+            val reader = Expr.splice(dctx.reader)
+            val maxInserts = Expr.splice(dctx.config).setMaxInsertNumber
+            val collBuilder = Expr.splice(factoryExpr).newBuilder
+            if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
+            if (!reader.isNextToken(']'.toByte)) {
+              reader.rollbackToken()
+              var count: Int = 1
+              collBuilder += decodeFnVal(reader)
+              while (reader.isNextToken(','.toByte)) {
+                count += 1
+                if (count > maxInserts)
+                  reader.decodeError("too many collection items (max: " + maxInserts + ")")
+                collBuilder += decodeFnVal(reader)
+              }
+              if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
+            }
+            collBuilder
+          }
+          val buildResultExpr = buildStep.ctor(readLoop)
+
+          buildStep match {
+            case _: CtorLikeOf.PlainValue[?, ?] =>
+              Rule.matched(buildResultExpr.asInstanceOf[Expr[A]])
+
+            case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
+              Rule.matched(Expr.quote {
+                Expr.splice(eitherExpr) match {
+                  case Right(value) => value
+                  case Left(err)    => throw new IllegalArgumentException(err)
+                }
+              })
+
+            case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
+              Rule.matched(Expr.quote {
+                Expr.splice(eitherExpr) match {
+                  case Right(value) => value
+                  case Left(errs)   => throw new IllegalArgumentException(errs.mkString(", "))
+                }
+              })
+
+            case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
+              Rule.matched(Expr.quote {
+                Expr.splice(eitherExpr) match {
+                  case Right(value) => value
+                  case Left(err)    => throw err
+                }
+              })
+
+            case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+              Rule.matched(Expr.quote {
+                Expr.splice(eitherExpr) match {
+                  case Right(value) => value
+                  case Left(errs)   =>
+                    val iter = errs.iterator
+                    if (iter.hasNext) throw iter.next()
+                    else throw new IllegalArgumentException("collection construction failed")
+                }
+              })
+          }
         }
     }
   }

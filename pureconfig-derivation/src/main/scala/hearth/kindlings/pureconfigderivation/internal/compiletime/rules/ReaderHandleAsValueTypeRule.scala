@@ -24,25 +24,12 @@ trait ReaderHandleAsValueTypeRuleImpl {
           case IsValueType(isValueType) =>
             import isValueType.Underlying as Inner
             implicit val EitherInnerT: Type[Either[ConfigReaderFailures, Inner]] = RTypes.ReaderResult[Inner]
-            isValueType.value.wrap match {
-              case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                implicit val StringT: Type[String] = RTypes.String
-                implicit val EitherStringA: Type[Either[String, A]] = RTypes.eitherStringType[A]
-                val wrapLambda: Expr[Inner => Either[ConfigReaderFailures, A]] =
-                  buildEitherWrap[A, Inner](isValueType.value, cursorExpr)
-                deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.cursor)).map { innerResult =>
-                  Rule.matched(Expr.quote {
-                    Expr.splice(innerResult).flatMap(Expr.splice(wrapLambda))
-                  })
-                }
-
-              case _ =>
-                val wrapLambda: Expr[Inner => A] = buildPlainWrap[A, Inner](isValueType.value)
-                deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.cursor)).map { innerResult =>
-                  Rule.matched(Expr.quote {
-                    Expr.splice(innerResult).map(Expr.splice(wrapLambda))
-                  })
-                }
+            val wrapLambda: Expr[Inner => Either[ConfigReaderFailures, A]] =
+              buildWrap[A, Inner](isValueType.value, cursorExpr)
+            deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.cursor)).map { innerResult =>
+              Rule.matched(Expr.quote {
+                Expr.splice(innerResult).flatMap(Expr.splice(wrapLambda))
+              })
             }
 
           case _ =>
@@ -50,14 +37,7 @@ trait ReaderHandleAsValueTypeRuleImpl {
         }
       }
 
-    /** Build an `Inner => Either[ConfigReaderFailures, A]` lambda for value types whose `wrap` returns
-      * `Either[String, A]` (e.g. refined types). The path-dependent inner type is isolated behind a regular type
-      * parameter so it never appears inside an `Expr.quote` body.
-      *
-      * The `cursorExpr` parameter is captured from the enclosing context's `rctx.cursor` and used inside the quote to
-      * materialise origin/path metadata for the failure record.
-      */
-    private def buildEitherWrap[A: Type, Inner: Type](
+    private def buildWrap[A: Type, Inner: Type](
         isValueType: IsValueTypeOf[A, Inner],
         cursorExpr: Expr[ConfigCursor]
     ): Expr[Inner => Either[ConfigReaderFailures, A]] = {
@@ -67,32 +47,59 @@ trait ReaderHandleAsValueTypeRuleImpl {
       implicit val EitherT: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
       @scala.annotation.nowarn("msg=is never used")
       implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
-      Expr.quote { (inner: Inner) =>
-        Expr
-          .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[String, A]]])
-          .left
-          .map((msg: String) =>
-            ConfigReaderFailures(
-              ConvertFailure(
-                reason = CannotConvert(
-                  value = Expr.splice(cursorExpr).valueOpt.map(_.render).getOrElse(""),
-                  toType = Expr.splice(Expr(Type[A].prettyPrint)),
-                  because = msg
-                ),
-                origin = Expr.splice(cursorExpr).origin,
-                path = Expr.splice(cursorExpr).path
-              )
-            )
+
+      def makeFailure(msg: Expr[String]): Expr[ConfigReaderFailures] = Expr.quote {
+        ConfigReaderFailures(
+          ConvertFailure(
+            reason = CannotConvert(
+              value = Expr.splice(cursorExpr).valueOpt.map(_.render).getOrElse(""),
+              toType = Expr.splice(Expr(Type[A].prettyPrint)),
+              because = Expr.splice(msg)
+            ),
+            origin = Expr.splice(cursorExpr).origin,
+            path = Expr.splice(cursorExpr).path
           )
+        )
+      }
+
+      isValueType.wrap match {
+        case _: CtorLikeOf.PlainValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Right(Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[A]]))
+          }
+        case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[String, A]]])
+              .left
+              .map((msg: String) => Expr.splice(makeFailure(Expr.quote(msg))))
+          }
+        case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Iterable[String], A]]])
+              .left
+              .map((errs: Iterable[String]) => Expr.splice(makeFailure(Expr.quote(errs.mkString("\n")))))
+          }
+        case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Throwable, A]]])
+              .left
+              .map((err: Throwable) => Expr.splice(makeFailure(Expr.quote(err.getMessage))))
+          }
+        case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+          Expr.quote { (inner: Inner) =>
+            Expr
+              .splice(
+                isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+              )
+              .left
+              .map((errs: Iterable[Throwable]) =>
+                Expr.splice(makeFailure(Expr.quote(errs.map(_.getMessage).mkString("\n"))))
+              )
+          }
       }
     }
-
-    /** Build an `Inner => A` lambda for value types whose `wrap` is total (no error path). */
-    private def buildPlainWrap[A: Type, Inner: Type](
-        isValueType: IsValueTypeOf[A, Inner]
-    ): Expr[Inner => A] =
-      Expr.quote { (inner: Inner) =>
-        Expr.splice(isValueType.wrap.apply(Expr.quote(inner)).asInstanceOf[Expr[A]])
-      }
   }
 }

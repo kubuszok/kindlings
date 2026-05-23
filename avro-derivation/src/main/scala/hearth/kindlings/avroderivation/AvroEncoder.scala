@@ -1,6 +1,7 @@
 package hearth.kindlings.avroderivation
 
-trait AvroEncoder[A] extends AvroSchemaFor[A] {
+trait AvroEncoder[A] {
+  def schema: org.apache.avro.Schema
   def encode(value: A): Any
 }
 object AvroEncoder extends AvroEncoderCompanionCompat {

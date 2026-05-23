@@ -18,12 +18,12 @@ trait DecoderHandleAsValueTypeRuleImpl {
           case IsValueType(isValueType) =>
             import isValueType.Underlying as Inner
 
-            // Build wrap lambda outside quotes to avoid staging issues with wrap.Result type
-            // For EitherStringOrValue wraps, handle the Either and throw on Left
             LambdaBuilder
               .of1[Inner]("inner")
               .traverse { innerExpr =>
                 isValueType.value.wrap match {
+                  case _: CtorLikeOf.PlainValue[?, ?] =>
+                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
                   case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
                     val wrapResult = isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
                     MIO.pure(Expr.quote {
@@ -32,13 +32,38 @@ trait DecoderHandleAsValueTypeRuleImpl {
                         case scala.Left(msg) => Expr.splice(dctx.reader).decodeError(msg)
                       }
                     })
-                  case _ =>
-                    MIO.pure(isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[A]])
+                  case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+                    val wrapResult =
+                      isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Iterable[String], A]]]
+                    MIO.pure(Expr.quote {
+                      Expr.splice(wrapResult) match {
+                        case scala.Right(v)   => v
+                        case scala.Left(errs) => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
+                      }
+                    })
+                  case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+                    val wrapResult =
+                      isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Throwable, A]]]
+                    MIO.pure(Expr.quote {
+                      Expr.splice(wrapResult) match {
+                        case scala.Right(v)  => v
+                        case scala.Left(err) => Expr.splice(dctx.reader).decodeError(err.getMessage)
+                      }
+                    })
+                  case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+                    val wrapResult =
+                      isValueType.value.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+                    MIO.pure(Expr.quote {
+                      Expr.splice(wrapResult) match {
+                        case scala.Right(v)   => v
+                        case scala.Left(errs) =>
+                          Expr.splice(dctx.reader).decodeError(errs.map(_.getMessage).mkString("\n"))
+                      }
+                    })
                 }
               }
               .flatMap { builder =>
                 val wrapLambda = builder.build[A]
-                // Try implicit first, fall back to recursive derivation (includes built-in types)
                 summonJsonValueCodecCached[Inner] match {
                   case Right(innerCodec) =>
                     MIO.pure(Rule.matched(Expr.quote {
@@ -51,7 +76,6 @@ trait DecoderHandleAsValueTypeRuleImpl {
                         )
                     }))
                   case Left(_) =>
-                    // No implicit — derive via recursive rules (includes built-in types)
                     deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.reader)).map { innerDecoded =>
                       Rule.matched(Expr.quote {
                         Expr.splice(wrapLambda).apply(Expr.splice(innerDecoded))

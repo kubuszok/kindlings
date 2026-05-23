@@ -205,6 +205,53 @@ object XmlDerivationUtils {
       case None    => Right(None)
     }
 
+  def decodeCollectionBuilder[Item, CtorResult](
+      parentElem: scala.xml.Elem,
+      decodeItem: scala.xml.Elem => Either[XmlDecodingError, Item],
+      factory: scala.collection.Factory[Item, CtorResult]
+  ): scala.collection.mutable.Builder[Item, CtorResult] = {
+    val builder = factory.newBuilder
+    val childElems = parentElem.child.collect { case e: scala.xml.Elem => e }.toList
+    val errors = new scala.collection.mutable.ListBuffer[XmlDecodingError]()
+    childElems.foreach { childElem =>
+      decodeItem(childElem) match {
+        case Right(v) => builder += v
+        case Left(e)  => errors += e
+      }
+    }
+    if (errors.nonEmpty)
+      throw new XmlCollectionBuildException(errors.toList)
+    builder
+  }
+
+  def decodeMapBuilder[Value, CtorResult](
+      parentElem: scala.xml.Elem,
+      decodeValue: scala.xml.Elem => Either[XmlDecodingError, Value],
+      factory: scala.collection.Factory[(String, Value), CtorResult]
+  ): scala.collection.mutable.Builder[(String, Value), CtorResult] = {
+    val builder = factory.newBuilder
+    val entries = getChildElems(parentElem, "entry")
+    val errors = new scala.collection.mutable.ListBuffer[XmlDecodingError]()
+    entries.foreach { entryElem =>
+      getAttribute(entryElem, "key") match {
+        case Right(key) =>
+          val valueElems = (entryElem \ "value").collect { case e: scala.xml.Elem => e }.toList
+          valueElems.headOption match {
+            case Some(valueElem) =>
+              decodeValue(valueElem) match {
+                case Right(v) => builder += ((key, v))
+                case Left(e)  => errors += e
+              }
+            case None => errors += XmlDecodingError.MissingElement("value", entryElem.label)
+          }
+        case Left(e) => errors += e
+      }
+    }
+    if (errors.nonEmpty)
+      throw new XmlCollectionBuildException(errors.toList)
+    builder
+  }
+
   def decodeCollectionFromElems[Item, Coll](
       elems: List[scala.xml.Elem],
       decodeItem: scala.xml.Elem => Either[XmlDecodingError, Item],

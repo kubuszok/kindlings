@@ -3,12 +3,28 @@ package hearth.kindlings.pureconfigderivation.internal.runtime
 import com.typesafe.config.{ConfigValue, ConfigValueFactory}
 import pureconfig.ConfigCursor
 import pureconfig.ConfigReader.Result
-import pureconfig.error.{ConfigReaderFailures, ConvertFailure, KeyNotFound, WrongType}
+import pureconfig.error.{CannotConvert, ConfigReaderFailures, ConvertFailure, KeyNotFound, WrongType}
 import pureconfig.{ConfigReader, ConfigWriter}
 
 import scala.jdk.CollectionConverters.*
 
 object PureConfigDerivationUtils {
+
+  private[kindlings] class CollectionBuildException(val error: ConfigReaderFailures)
+      extends RuntimeException("pureconfig collection decoding error")
+
+  def liftStringError(cursor: ConfigCursor, msg: String): ConfigReaderFailures =
+    ConfigReaderFailures(
+      ConvertFailure(
+        reason = CannotConvert(
+          value = cursor.valueOpt.map(_.render).getOrElse(""),
+          toType = "validated type",
+          because = msg
+        ),
+        origin = cursor.origin,
+        path = cursor.path
+      )
+    )
 
   // --- Reader helpers ---
 

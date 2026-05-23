@@ -6,6 +6,8 @@ import hearth.std.{ProviderResult, StandardMacroExtension, StdExtensions}
 
 final class IsValueTypeProviderForIron extends StandardMacroExtension { loader =>
 
+  override def priority: Int = 1000
+
   override def extend(ctx: MacroCommons & StdExtensions): Unit = {
     import ctx.*
 
