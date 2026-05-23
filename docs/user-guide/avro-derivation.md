@@ -20,34 +20,31 @@
 
 ## Quick start
 
-??? example "Schema generation, encoding, and decoding"
+??? example "Encoding and decoding a case class"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
 
     case class Person(name: String, age: Int)
-
-    // Schema generation
-    val schema = AvroSchemaFor.schemaOf[Person]
-    println(schema)
-    // {"type":"record","name":"Person","fields":[{"name":"name","type":"string"},{"name":"age","type":"int"}]}
 
     // Semi-automatic derivation
     val encoder: AvroEncoder[Person] = AvroEncoder.derive[Person]
     val decoder: AvroDecoder[Person] = AvroDecoder.derive[Person]
 
-    // Encode to Avro GenericRecord
+    // Encode to Avro GenericRecord and decode back
     val record: Any = encoder.encode(Person("Alice", 30))
-
-    // Decode back
     val person: Person = decoder.decode(record)
     println(person)
+    // expected output:
     // Person(Alice,30)
 
     // Binary serialization via AvroIO
     val bytes: Array[Byte] = AvroIO.toBinary(Person("Bob", 25))(encoder)
     val decoded: Person = AvroIO.fromBinary[Person](bytes)(decoder)
     println(decoded)
+    // expected output:
     // Person(Bob,25)
     ```
 
@@ -156,6 +153,8 @@ import hearth.kindlings.avroderivation.annotations._
 ??? example "Annotated types with documentation and namespaces"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
     import hearth.kindlings.avroderivation.annotations._
 
@@ -166,17 +165,20 @@ import hearth.kindlings.avroderivation.annotations._
       @avroDoc("Age in years") age: Int
     )
 
-    val schema = AvroSchemaFor.schemaOf[Person]
-    println(schema)
-    // {"type":"record","name":"Person","namespace":"com.example.models",
-    //  "doc":"A person record","fields":[
-    //    {"name":"name","type":"string","doc":"The person's full name"},
-    //    {"name":"age","type":"int","doc":"Age in years"}]}
+    val encoder = AvroEncoder.derive[Person]
+    val decoder = AvroDecoder.derive[Person]
+
+    val decoded = decoder.decode(encoder.encode(Person("Alice", 30)))
+    println(decoded)
+    // expected output:
+    // Person(Alice,30)
     ```
 
 ??? example "Sealed trait with sort priority"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
     import hearth.kindlings.avroderivation.annotations._
 
@@ -187,12 +189,20 @@ import hearth.kindlings.avroderivation.annotations._
     case class Circle(radius: Double) extends Shape
 
     // Rectangle appears first in the union schema thanks to @avroSortPriority
-    val schema = AvroSchemaFor.schemaOf[Shape]
+    val encoder = AvroEncoder.derive[Shape]
+    val decoder = AvroDecoder.derive[Shape]
+
+    val decoded = decoder.decode(encoder.encode(Circle(5.0): Shape))
+    println(decoded)
+    // expected output:
+    // Circle(5.0)
     ```
 
 ??? example "Default values and field annotations"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
     import hearth.kindlings.avroderivation.annotations._
 
@@ -206,13 +216,19 @@ import hearth.kindlings.avroderivation.annotations._
     val encoder = AvroEncoder.derive[Settings]
     val decoder = AvroDecoder.derive[Settings]
 
-    // @transientField excludes `cache` from the Avro schema entirely
-    // @avroDefault sets the Avro schema default value
+    // @transientField excludes `cache` — it is not encoded, and gets its default on decode
+    val encoded = encoder.encode(Settings("localhost", cache = Some("hot")))
+    val decoded = decoder.decode(encoded)
+    println(decoded)
+    // expected output:
+    // Settings(localhost,8080,info,None)
     ```
 
 ??? example "Custom field names with snake_case config"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
 
     implicit val config: AvroConfig = AvroConfig.default
@@ -221,13 +237,21 @@ import hearth.kindlings.avroderivation.annotations._
 
     case class UserProfile(firstName: String, lastName: String, emailAddress: String)
 
-    val schema = AvroSchemaFor.schemaOf[UserProfile]
-    // Fields become: first_name, last_name, email_address
+    // Fields become: first_name, last_name, email_address in the Avro schema
+    val encoder = AvroEncoder.derive[UserProfile]
+    val decoder = AvroDecoder.derive[UserProfile]
+
+    val decoded = decoder.decode(encoder.encode(UserProfile("Alice", "Smith", "alice@example.com")))
+    println(decoded)
+    // expected output:
+    // UserProfile(Alice,Smith,alice@example.com)
     ```
 
 ??? example "Recursive data types"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
@@ -237,14 +261,17 @@ import hearth.kindlings.avroderivation.annotations._
     val decoder = AvroDecoder.derive[TreeNode]
 
     val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
-    val record = encoder.encode(tree)
-    val decoded = decoder.decode(record)
-    // decoded == tree
+    val decoded = decoder.decode(encoder.encode(tree))
+    println(decoded)
+    // expected output:
+    // TreeNode(1,List(TreeNode(2,List()), TreeNode(3,List(TreeNode(4,List())))))
     ```
 
 ??? example "Logical types (UUID, Instant, LocalDate, etc.)"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
     import java.time._
     import java.util.UUID
@@ -263,33 +290,42 @@ import hearth.kindlings.avroderivation.annotations._
     // - LocalDate -> int with logicalType "date"
     // - LocalTime -> int with logicalType "time-millis"
     // - LocalDateTime -> long with logicalType "local-timestamp-millis"
-    val schema = AvroSchemaFor.schemaOf[EventRecord]
+    val encoder = AvroEncoder.derive[EventRecord]
+    val decoder = AvroDecoder.derive[EventRecord]
+
+    val event = EventRecord(
+      UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
+      Instant.ofEpochMilli(1700000000000L),
+      LocalDate.of(2024, 1, 15),
+      LocalTime.of(10, 30, 0),
+      LocalDateTime.of(2024, 1, 15, 10, 30, 0)
+    )
+    val decoded = decoder.decode(encoder.encode(event))
+    println(decoded == event)
+    // expected output:
+    // true
     ```
 
 ??? example "Generic types with name encoding"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.avroderivation._
     import hearth.kindlings.avroderivation.annotations._
 
     case class Audited[T](data: T, createdBy: String)
     case class User(name: String)
-    case class Order(id: Int)
 
     // Generic types encode type parameters in the schema name by default:
-    // Audited[User] -> "AuditedUser", Audited[Order] -> "AuditedOrder"
-    val userSchema = AvroSchemaFor.schemaOf[Audited[User]]
-    val orderSchema = AvroSchemaFor.schemaOf[Audited[Order]]
+    // Audited[User] -> "AuditedUser"
+    val encoder = AvroEncoder.derive[Audited[User]]
+    val decoder = AvroDecoder.derive[Audited[User]]
 
-    // Use @avroErasedName to disable parameter encoding
-    @avroErasedName
-    case class Box[A](value: A)
-    // Box[User] and Box[Order] both named "Box"
-
-    // Use @avroFqnParamNames for fully qualified parameter names
-    @avroFqnParamNames
-    case class Wrapper[A, B](a: A, b: B)
-    // Wrapper[mypackage.Foo, mypackage.Bar] -> "Wrapper_mypackage_Foo_mypackage_Bar"
+    val decoded = decoder.decode(encoder.encode(Audited(User("Alice"), "admin")))
+    println(decoded)
+    // expected output:
+    // Audited(User(Alice),admin)
     ```
 
 ## Debugging

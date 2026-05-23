@@ -58,12 +58,8 @@ Derives `ConfigReader`, `ConfigWriter`, and `ConfigCodec` for HOCON configuratio
 
     val result = reader.from(config.root)
     println(result)
+    // expected output:
     // Right(DatabaseConfig(localhost,5432,10))
-
-    // Derive a writer and convert back to HOCON
-    implicit val writer: ConfigWriter[DatabaseConfig] = ConfigWriter.derive[DatabaseConfig]
-    val configValue = writer.to(DatabaseConfig("localhost", 5432, 10))
-    println(configValue.render)
     ```
 
 ## API
@@ -228,8 +224,9 @@ case class AppConfig(
       debug = true
     """).root)
 
-    println(result)
-    // Left(Unknown key 'debug')
+    println(result.isLeft)
+    // expected output:
+    // true
     ```
 
 ??? example "Nested configuration with defaults"

@@ -192,6 +192,21 @@ case class User(
     // Right(Settings(localhost,8080,false))
     ```
 
+## Debugging
+
+Import the debug package to log the derivation process at compile time:
+
+```scala
+import hearth.kindlings.circederivation.debug._
+```
+
+Or enable project-wide via scalac option:
+
+```scala
+// build.sbt
+scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
+```
+
 ## Comparison with circe-generic
 
 ### Feature differences

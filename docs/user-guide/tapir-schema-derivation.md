@@ -49,9 +49,8 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
     // Semi-automatic
     val schema: Schema[Person] = KindlingsSchema.derive[Person]
     println(schema.name)
+    // expected output:
     // Some(SName(Person,List()))
-    println(schema.schemaType)
-    // SProduct(List(SProductField(FieldName(name,name),Schema(...),...),...))
     ```
 
 ## API

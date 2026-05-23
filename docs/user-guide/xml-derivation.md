@@ -280,6 +280,10 @@ case class Article(
 ??? example "Recursive data types"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
+    //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
+    //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
+
     import hearth.kindlings.xmlderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
@@ -289,9 +293,8 @@ case class Article(
 
     val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
     val xml = codec.encode(tree, "tree")
-    println(xml)
-
     println(codec.decode(xml))
+    // expected output:
     // Right(TreeNode(1,List(TreeNode(2,List()), TreeNode(3,List(TreeNode(4,List()))))))
     ```
 

@@ -24,18 +24,27 @@ Original module -- derives `UBJsonValueCodec` for case classes, sealed traits, S
 
 ## Quick start
 
-??? example "Deriving a codec for a case class"
+??? example "Encoding and decoding a case class"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.ubjsonderivation._
 
     case class Person(name: String, age: Int)
 
-    // Semi-automatic
     val codec: UBJsonValueCodec[Person] = UBJsonValueCodec.derive[Person]
 
-    // Sanely-automatic (given/implicit resolved by the compiler)
-    // UBJsonValueCodec.derived[Person] is resolved automatically
+    // Encode to UBJson binary
+    val writer = new UBJsonWriter()
+    codec.encode(writer, Person("Alice", 30))
+    val bytes: Array[Byte] = writer.toByteArray
+
+    // Decode back
+    val decoded: Person = codec.decode(new UBJsonReader(bytes))
+    println(decoded)
+    // expected output:
+    // Person(Alice,30)
     ```
 
 ## API
@@ -126,6 +135,8 @@ case class User(
 ??? example "Sealed trait with discriminator"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.ubjsonderivation._
 
     sealed trait Shape
@@ -136,11 +147,21 @@ case class User(
       .withDiscriminator("type")
 
     val codec: UBJsonValueCodec[Shape] = UBJsonValueCodec.derive[Shape]
+
+    val writer = new UBJsonWriter()
+    codec.encode(writer, Circle(5.0): Shape)
+
+    val decoded = codec.decode(new UBJsonReader(writer.toByteArray))
+    println(decoded)
+    // expected output:
+    // Circle(5.0)
     ```
 
 ??? example "Transient fields and defaults"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.ubjsonderivation._
 
     implicit val config: UBJsonConfig = UBJsonConfig.default
@@ -154,24 +175,45 @@ case class User(
     )
 
     val codec: UBJsonValueCodec[Settings] = UBJsonValueCodec.derive[Settings]
+
     // Default and None fields are omitted during encoding
+    val writer = new UBJsonWriter()
+    codec.encode(writer, Settings("localhost"))
+
     // Missing fields use defaults during decoding
+    val decoded = codec.decode(new UBJsonReader(writer.toByteArray))
+    println(decoded)
+    // expected output:
+    // Settings(localhost,8080,None)
     ```
 
 ??? example "Recursive data types"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.ubjsonderivation._
 
     case class TreeNode(value: Int, children: List[TreeNode])
 
     // Recursive types just work -- no special setup needed
     val codec: UBJsonValueCodec[TreeNode] = UBJsonValueCodec.derive[TreeNode]
+
+    val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
+    val writer = new UBJsonWriter()
+    codec.encode(writer, tree)
+
+    val decoded = codec.decode(new UBJsonReader(writer.toByteArray))
+    println(decoded)
+    // expected output:
+    // TreeNode(1,List(TreeNode(2,List()), TreeNode(3,List(TreeNode(4,List())))))
     ```
 
 ??? example "Field name mapping"
 
     ```scala
+    //> using dep com.kubuszok::kindlings-ubjson-derivation:{{ kindlings_version() }}
+
     import hearth.kindlings.ubjsonderivation._
 
     implicit val config: UBJsonConfig = UBJsonConfig.default
@@ -179,8 +221,16 @@ case class User(
 
     case class UserProfile(firstName: String, lastName: String, emailAddress: String)
 
-    val codec: UBJsonValueCodec[UserProfile] = UBJsonValueCodec.derive[UserProfile]
     // Fields encoded as: first_name, last_name, email_address
+    val codec: UBJsonValueCodec[UserProfile] = UBJsonValueCodec.derive[UserProfile]
+
+    val writer = new UBJsonWriter()
+    codec.encode(writer, UserProfile("Alice", "Smith", "alice@example.com"))
+
+    val decoded = codec.decode(new UBJsonReader(writer.toByteArray))
+    println(decoded)
+    // expected output:
+    // UserProfile(Alice,Smith,alice@example.com)
     ```
 
 ## Debugging

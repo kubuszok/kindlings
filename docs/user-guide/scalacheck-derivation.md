@@ -47,12 +47,11 @@ Derives `Arbitrary`, `Cogen`, and `Shrink` instances for case classes, sealed tr
     // Extension method on Arbitrary companion
     implicit val arbPerson: Arbitrary[Person] = Arbitrary.derived[Person]
 
-    // Generate random samples
-    println(Arbitrary.arbitrary[Person].sample)
-    // Some(Person(abc,42))
-
-    println(Arbitrary.arbitrary[Person].sample)
-    // Some(Person(xyz,-7))
+    // Generate a random sample — derivation produces valid instances
+    val sample = Arbitrary.arbitrary[Person].sample
+    println(sample.isDefined)
+    // expected output:
+    // true
     ```
 
 ## API
