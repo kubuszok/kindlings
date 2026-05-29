@@ -23,7 +23,7 @@ val versions = new {
   val cats = "2.13.0"
   val circe = "0.14.15"
   val iron = "3.3.1"
-  val jsoniterScala = "2.38.12"
+  val jsoniterScala = "2.38.14"
   val kittens = "3.5.0"
   val pureconfig = "0.17.10"
   val tapir = "1.13.19"
@@ -672,7 +672,9 @@ val ironDepForScala3 = List(
 
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ jvmOnlyDerivatonsForIntegrationTests) *)
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ jvmOnlyDerivatonsForIntegrationTests) *
+  )
   .disablePlugins(WelcomePlugin)
   .dependsOn(
     fastShowPretty,
