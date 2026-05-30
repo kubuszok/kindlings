@@ -7,7 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroFixed, avroScalePrecision, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.generic.GenericRecord
 
@@ -36,6 +36,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
       implicit val fieldNameT: Type[fieldName] = DecTypes.FieldName
       implicit val transientFieldT: Type[transientField] = DecTypes.TransientField
       implicit val avroFixedT: Type[avroFixed] = DecTypes.AvroFixed
+      implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -107,9 +108,10 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
             .parTraverse { case ((fName, param), fieldIndex) =>
               import param.tpe.Underlying as Field
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
+              val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                avroFixedSize match {
-                  case Some(_) =>
+                (avroFixedSize, decimalOverride) match {
+                  case (Some(_), _) =>
                     val arrayByteType: Type[Array[Byte]] = DecTypes.ArrayByte
                     MIO.pure {
                       implicit val ArrayByteT: Type[Array[Byte]] = arrayByteType
@@ -119,7 +121,20 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                       }.as_??
                       (fName, decodedExpr)
                     }
-                  case None =>
+                  case (_, Some((_, scale))) =>
+                    val bigDecimalType: Type[BigDecimal] = Type.of[BigDecimal]
+                    MIO.pure {
+                      implicit val BigDecimalT: Type[BigDecimal] = bigDecimalType
+                      val decodedExpr: Expr_?? = Expr.quote {
+                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
+                        AvroDerivationUtils.decodeBigDecimal(
+                          record.get(Expr.splice(Expr(fieldIndex))),
+                          Expr.splice(Expr(scale))
+                        ): BigDecimal
+                      }.as_??
+                      (fName, decodedExpr)
+                    }
+                  case _ =>
                     val fieldAvroValue: Expr[Any] = Expr.quote {
                       Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord].get(Expr.splice(Expr(fieldIndex)))
                     }

@@ -443,6 +443,29 @@ final class AvroRoundTripSpec extends MacroSuite {
           decoded ==> original
         }
       }
+
+      test("@avroScalePrecision on BigDecimal field (issue #110)") {
+        val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derive[WithPerFieldDecimal]
+        val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derive[WithPerFieldDecimal]
+        val original = WithPerFieldDecimal(price = BigDecimal("123.4567"), label = "test")
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithPerFieldDecimal](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("@avroName on sealed trait subtypes (issue #108)") {
+        val encoder: AvroEncoder[OuterWithRenamedInner] = AvroEncoder.derive[OuterWithRenamedInner]
+        val decoder: AvroDecoder[OuterWithRenamedInner] = AvroDecoder.derive[OuterWithRenamedInner]
+        val values = List(
+          OuterWithRenamedInner(RenamedFoo("hello")),
+          OuterWithRenamedInner(RenamedBar("world"))
+        )
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)(encoder)
+          val decoded = AvroIO.fromBinary[OuterWithRenamedInner](bytes)(decoder)
+          decoded ==> original
+        }
+      }
     }
   }
 }

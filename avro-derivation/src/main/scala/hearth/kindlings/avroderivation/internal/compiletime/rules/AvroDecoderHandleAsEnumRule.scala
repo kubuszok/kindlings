@@ -7,6 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
+import hearth.kindlings.avroderivation.annotations.avroName
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.generic.GenericRecord
 
@@ -102,57 +103,95 @@ trait AvroDecoderHandleAsEnumRuleImpl {
             // Mixed sealed trait → dispatch based on record schema name
             // For union types, Hearth returns FQN child names (e.g., "pkg.Parrot"), but Avro schema
             // getName returns simple names (e.g., "Parrot"). Extract simple names for comparison.
+            implicit val avroNameT: Type[avroName] = SfTypes.AvroName
+
             def simpleName(fqn: String): String = fqn.lastIndexOf('.') match {
               case -1 => fqn
               case i  => fqn.substring(i + 1)
             }
-            val knownNames: List[String] = children.toList.map(c => simpleName(c._1))
+
+            // Resolve the effective Avro name for each child: @avroName overrides the Scala class name
+            val childNamesResolved: List[(String, Option[String])] = children.toList.map { case (childName, child) =>
+              import child.Underlying as ChildType
+              val avroNameOverride = getTypeAnnotationStringArg[avroName, ChildType]
+              (simpleName(childName), avroNameOverride)
+            }
+            val knownNames: List[String] = childNamesResolved.map {
+              case (_, Some(overrideName)) => overrideName
+              case (simpleName, None)      => simpleName
+            }
 
             children
               .parTraverse { case (childName, child) =>
                 import child.Underlying as ChildType
                 val simpleChildName = simpleName(childName)
+                val avroNameOverride = getTypeAnnotationStringArg[avroName, ChildType]
                 Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
                   deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.avroValue)).flatMap {
                     decodedExpr =>
                       dctx.getHelper[ChildType].map {
                         case Some(helper) =>
+                          val matchName = avroNameOverride.getOrElse(simpleChildName)
                           (
-                            simpleChildName,
+                            matchName,
                             (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                              Expr.quote {
-                                val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                val recordName = record.getSchema.getName
-                                if (
-                                  Expr
-                                    .splice(dctx.config)
-                                    .transformConstructorNames(
-                                      Expr.splice(Expr(simpleChildName))
-                                    ) == recordName
-                                )
-                                  Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
-                                else
-                                  Expr.splice(elseExpr)
+                              avroNameOverride match {
+                                case Some(explicitName) =>
+                                  Expr.quote {
+                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                    val recordName = record.getSchema.getName
+                                    if (Expr.splice(Expr(explicitName)) == recordName)
+                                      Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
+                                    else
+                                      Expr.splice(elseExpr)
+                                  }
+                                case None =>
+                                  Expr.quote {
+                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                    val recordName = record.getSchema.getName
+                                    if (
+                                      Expr
+                                        .splice(dctx.config)
+                                        .transformConstructorNames(
+                                          Expr.splice(Expr(simpleChildName))
+                                        ) == recordName
+                                    )
+                                      Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
+                                    else
+                                      Expr.splice(elseExpr)
+                                  }
                               }
                           )
                         case None =>
-                          // No helper registered (e.g., built-in types) — use the derived expression directly
+                          val matchName = avroNameOverride.getOrElse(simpleChildName)
                           (
-                            simpleChildName,
+                            matchName,
                             (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                              Expr.quote {
-                                val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                val recordName = record.getSchema.getName
-                                if (
-                                  Expr
-                                    .splice(dctx.config)
-                                    .transformConstructorNames(
-                                      Expr.splice(Expr(simpleChildName))
-                                    ) == recordName
-                                )
-                                  Expr.splice(decodedExpr).asInstanceOf[A]
-                                else
-                                  Expr.splice(elseExpr)
+                              avroNameOverride match {
+                                case Some(explicitName) =>
+                                  Expr.quote {
+                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                    val recordName = record.getSchema.getName
+                                    if (Expr.splice(Expr(explicitName)) == recordName)
+                                      Expr.splice(decodedExpr).asInstanceOf[A]
+                                    else
+                                      Expr.splice(elseExpr)
+                                  }
+                                case None =>
+                                  Expr.quote {
+                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                                    val recordName = record.getSchema.getName
+                                    if (
+                                      Expr
+                                        .splice(dctx.config)
+                                        .transformConstructorNames(
+                                          Expr.splice(Expr(simpleChildName))
+                                        ) == recordName
+                                    )
+                                      Expr.splice(decodedExpr).asInstanceOf[A]
+                                    else
+                                      Expr.splice(elseExpr)
+                                  }
                               }
                           )
                       }

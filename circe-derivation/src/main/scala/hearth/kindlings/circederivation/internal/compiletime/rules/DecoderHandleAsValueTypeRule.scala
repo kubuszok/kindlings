@@ -15,30 +15,33 @@ trait DecoderHandleAsValueTypeRuleImpl {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
 
-            DTypes
-              .Decoder[Inner]
-              .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-              .toEither match {
-              case Right(innerDecoder) =>
-                @scala.annotation.nowarn("msg=is never used")
-                implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
-                buildWrapLambda[A, Inner](isValueType.value).map { builder =>
-                  val wrapLambda = builder.build[Either[DecodingFailure, A]]
-                  Rule.matched(Expr.quote {
-                    Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).flatMap(Expr.splice(wrapLambda))
-                  })
-                }
-              case Left(reason) =>
-                MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no Decoder: $reason"))
-            }
+              DTypes
+                .Decoder[Inner]
+                .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+                .toEither match {
+                case Right(innerDecoder) =>
+                  @scala.annotation.nowarn("msg=is never used")
+                  implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                  buildWrapLambda[A, Inner](isValueType.value).map { builder =>
+                    val wrapLambda = builder.build[Either[DecodingFailure, A]]
+                    Rule.matched(Expr.quote {
+                      Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).flatMap(Expr.splice(wrapLambda))
+                    })
+                  }
+                case Left(reason) =>
+                  MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no Decoder: $reason"))
+              }
 
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
-        }
+            case _ =>
+              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
+          }
       }
 
     @scala.annotation.nowarn("msg=is never used")
