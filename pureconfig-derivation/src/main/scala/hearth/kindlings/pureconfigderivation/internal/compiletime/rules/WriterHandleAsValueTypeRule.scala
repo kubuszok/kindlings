@@ -14,17 +14,20 @@ trait WriterHandleAsValueTypeRuleImpl {
 
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
-            val unwrappedExpr = isValueType.value.unwrap(wctx.value)
-            for {
-              innerResult <- deriveWriterRecursively[Inner](using wctx.nest(unwrappedExpr))
-            } yield Rule.matched(innerResult)
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
+              val unwrappedExpr = isValueType.value.unwrap(wctx.value)
+              for {
+                innerResult <- deriveWriterRecursively[Inner](using wctx.nest(unwrappedExpr))
+              } yield Rule.matched(innerResult)
 
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
-        }
+            case _ =>
+              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
+          }
       }
   }
 }

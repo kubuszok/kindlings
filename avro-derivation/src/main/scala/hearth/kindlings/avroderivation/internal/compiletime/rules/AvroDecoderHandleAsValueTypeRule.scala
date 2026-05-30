@@ -13,55 +13,58 @@ trait AvroDecoderHandleAsValueTypeRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
-            for {
-              innerResult <- deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.avroValue))
-            } yield isValueType.value.wrap match {
-              case _: CtorLikeOf.PlainValue[?, ?] =>
-                Rule.matched(isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]])
-              case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                val eitherResult = isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[String, A]]]
-                Rule.matched(Expr.quote {
-                  Expr.splice(eitherResult) match {
-                    case scala.Right(v)  => v
-                    case scala.Left(msg) => throw new org.apache.avro.AvroRuntimeException(msg)
-                  }
-                })
-              case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                val eitherResult =
-                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[String], A]]]
-                Rule.matched(Expr.quote {
-                  Expr.splice(eitherResult) match {
-                    case scala.Right(v)   => v
-                    case scala.Left(errs) => throw new org.apache.avro.AvroRuntimeException(errs.mkString("\n"))
-                  }
-                })
-              case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                val eitherResult =
-                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Throwable, A]]]
-                Rule.matched(Expr.quote {
-                  Expr.splice(eitherResult) match {
-                    case scala.Right(v)  => v
-                    case scala.Left(err) => throw new org.apache.avro.AvroRuntimeException(err.getMessage, err)
-                  }
-                })
-              case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                val eitherResult =
-                  isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                Rule.matched(Expr.quote {
-                  Expr.splice(eitherResult) match {
-                    case scala.Right(v)   => v
-                    case scala.Left(errs) =>
-                      throw new org.apache.avro.AvroRuntimeException(errs.map(_.getMessage).mkString("\n"))
-                  }
-                })
-            }
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
+              for {
+                innerResult <- deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.avroValue))
+              } yield isValueType.value.wrap match {
+                case _: CtorLikeOf.PlainValue[?, ?] =>
+                  Rule.matched(isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[A]])
+                case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                  val eitherResult = isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[String, A]]]
+                  Rule.matched(Expr.quote {
+                    Expr.splice(eitherResult) match {
+                      case scala.Right(v)  => v
+                      case scala.Left(msg) => throw new org.apache.avro.AvroRuntimeException(msg)
+                    }
+                  })
+                case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+                  val eitherResult =
+                    isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[String], A]]]
+                  Rule.matched(Expr.quote {
+                    Expr.splice(eitherResult) match {
+                      case scala.Right(v)   => v
+                      case scala.Left(errs) => throw new org.apache.avro.AvroRuntimeException(errs.mkString("\n"))
+                    }
+                  })
+                case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+                  val eitherResult =
+                    isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Throwable, A]]]
+                  Rule.matched(Expr.quote {
+                    Expr.splice(eitherResult) match {
+                      case scala.Right(v)  => v
+                      case scala.Left(err) => throw new org.apache.avro.AvroRuntimeException(err.getMessage, err)
+                    }
+                  })
+                case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+                  val eitherResult =
+                    isValueType.value.wrap.apply(innerResult).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+                  Rule.matched(Expr.quote {
+                    Expr.splice(eitherResult) match {
+                      case scala.Right(v)   => v
+                      case scala.Left(errs) =>
+                        throw new org.apache.avro.AvroRuntimeException(errs.map(_.getMessage).mkString("\n"))
+                    }
+                  })
+              }
 
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
-        }
+            case _ =>
+              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
+          }
       }
   }
 }

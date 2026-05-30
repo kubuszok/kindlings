@@ -5,6 +5,24 @@ import hearth.MacroSuite
 
 final class JsoniterScala3Spec extends MacroSuite {
 
+  group("named tuples (Scala 3.7+)") {
+
+    test("single-element named tuple round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(field: Int)]
+      val json = writeToString[((field: Int))](Tuple1(3))(codec)
+      val decoded = readFromString[((field: Int))](json)(codec)
+      decoded ==> Tuple1(3)
+    }
+
+    test("multi-element named tuple round-trip") {
+      val codec = KindlingsJsonValueCodec.derive[(name: String, age: Int)]
+      val nt: (name: String, age: Int) = ("Alice", 42)
+      val json = writeToString(nt)(codec)
+      val decoded = readFromString[((name: String, age: Int))](json)(codec)
+      decoded ==> ("Alice", 42)
+    }
+  }
+
   group("Scala 3 opaque types") {
 
     test("opaque type in case class round-trip") {

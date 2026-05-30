@@ -187,6 +187,15 @@ final class AvroScala3Spec extends MacroSuite {
       val decoded = AvroIO.fromBinary[(name: String, age: Int)](bytes)
       decoded ==> original
     }
+
+    test("single-element named tuple round-trip") {
+      implicit val encoder: AvroEncoder[(field: Int)] = AvroEncoder.derive[(field: Int)]
+      implicit val decoder: AvroDecoder[(field: Int)] = AvroDecoder.derive[(field: Int)]
+      val original: (field: Int) = Tuple1(3)
+      val bytes = AvroIO.toBinary(original)
+      val decoded = AvroIO.fromBinary[(field: Int)](bytes)
+      decoded ==> original
+    }
   }
 
   group("opaque types") {
