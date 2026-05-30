@@ -421,6 +421,53 @@ final class FastShowPrettySpec extends MacroSuite {
       }
     }
 
+    group("@sensitiveData annotation") {
+
+      test("field-level redaction") {
+        val result = FastShowPretty.render(UserWithPassword("Alice", "s3cret"), RenderConfig.Default)
+        result ==>
+          """UserWithPassword(
+            |  name = "Alice",
+            |  password = [redacted]
+            |)""".stripMargin
+      }
+
+      test("field-level redaction with reason") {
+        val result = FastShowPretty.render(UserWithPII("Alice", "alice@example.com", 30), RenderConfig.Default)
+        result ==>
+          """UserWithPII(
+            |  name = "Alice",
+            |  email = [redacted: PII],
+            |  age = 30
+            |)""".stripMargin
+      }
+
+      test("type-level redaction") {
+        val result = FastShowPretty.render(CreditCard("4111-1111-1111-1111", "123"), RenderConfig.Default)
+        result ==> "[redacted]"
+      }
+
+      test("type-level redaction with reason") {
+        val result = FastShowPretty.render(BankAccount("DE89370400440532013000", 1234.56), RenderConfig.Default)
+        result ==> "[redacted: financial data]"
+      }
+
+      test("type-level redaction on sealed trait") {
+        val result = FastShowPretty.render[SecretEnum](SecretA(42), RenderConfig.Default)
+        result ==> "[redacted]"
+      }
+
+      test("type-level redaction as nested field") {
+        case class Checkout(item: String, card: CreditCard)
+        val result = FastShowPretty.render(Checkout("Widget", CreditCard("4111", "123")), RenderConfig.Default)
+        result ==>
+          """Checkout(
+            |  item = "Widget",
+            |  card = [redacted]
+            |)""".stripMargin
+      }
+    }
+
     group("sealed traits") {
 
       test("sealed trait with case class subtypes") {

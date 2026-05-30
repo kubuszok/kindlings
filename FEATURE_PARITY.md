@@ -145,6 +145,13 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.Bifoldable` | No | Yes | Yes | Parity+ |
 | `cats.Bitraverse` | No | Yes | Yes | Parity+ |
 
+### Annotations
+
+| Feature | kittens | Kindlings | Status |
+|---|---|---|---|
+| `@sensitiveData` — redact field or type in Show/ShowPretty | No | Yes | Improvement |
+| `@sensitiveData("reason")` — redact with custom reason | No | Yes | Improvement |
+
 ### Type support
 
 | Feature | kittens | Kindlings | Status |
@@ -920,3 +927,10 @@ Discriminator metadata is fully propagated to child schemas:
 ## fast-show-pretty
 
 **Original type class** — no replacement target. Provides configurable pretty-printing with indentation support for case classes, collections, maps, and primitives. Cross-compiled for Scala 2.13 + 3, JVM + JS + Native.
+
+### Annotations
+
+| Annotation | Target | Description |
+|---|---|---|
+| `@sensitiveData` | Field or type | Replaces the rendered value with `[redacted]` |
+| `@sensitiveData("reason")` | Field or type | Replaces the rendered value with `[redacted: reason]` |

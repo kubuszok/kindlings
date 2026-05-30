@@ -7,7 +7,8 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 trait ShowMacrosImpl
-    extends rules.ShowUseCachedRuleImpl
+    extends AnnotationSupport
+    with rules.ShowUseCachedRuleImpl
     with rules.ShowUseImplicitRuleImpl
     with rules.ShowBuiltInRuleImpl
     with rules.ShowValueTypeRuleImpl
@@ -153,6 +154,8 @@ trait ShowMacrosImpl
     val Double: Type[Double] = Type.of[Double]
     val Char: Type[Char] = Type.of[Char]
     val String: Type[String] = Type.of[String]
+    val SensitiveData: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
+      Type.of[hearth.kindlings.catsderivation.annotations.sensitiveData]
   }
 
   def shouldWeLogShowDerivation: Boolean = {

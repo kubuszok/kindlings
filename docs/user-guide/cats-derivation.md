@@ -219,6 +219,56 @@ Person("Alice", 30).show  // Show.derived[Person] resolved automatically
     // )
     ```
 
+## Annotations
+
+The `Show` and `ShowPretty` type classes support the `@sensitiveData` annotation to redact sensitive values from rendered output.
+
+| Annotation                 | Target        | Description                                           |
+|----------------------------|---------------|-------------------------------------------------------|
+| `@sensitiveData`           | Field or type | Replaces the rendered value with `[redacted]`         |
+| `@sensitiveData("reason")` | Field or type | Replaces the rendered value with `[redacted: reason]` |
+
+Import annotations from `hearth.kindlings.catsderivation.annotations`.
+
+??? example "Redacting sensitive fields in Show"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+
+    import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.extensions._
+    import hearth.kindlings.catsderivation.annotations.sensitiveData
+    import cats._
+    import cats.syntax.all._
+
+    case class User(name: String, @sensitiveData password: String, @sensitiveData("PII") email: String)
+
+    implicit val showUser: Show[User] = Show.derived[User]
+
+    println(User("Alice", "s3cret", "alice@example.com").show)
+    // expected output:
+    // User(name = Alice, password = [redacted], email = [redacted: PII])
+    ```
+
+??? example "Redacting an entire type in ShowPretty"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+
+    import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.annotations.sensitiveData
+
+    @sensitiveData("classified") case class SecretData(code: String, key: Int)
+
+    implicit val showPrettySecret: ShowPretty[SecretData] = ShowPretty.derived[SecretData]
+
+    println(showPrettySecret.show(SecretData("alpha", 42)))
+    // expected output:
+    // [redacted: classified]
+    ```
+
 ## Debugging
 
 Import the debug package to log the derivation process at compile time:

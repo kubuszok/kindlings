@@ -211,6 +211,66 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("Show @sensitiveData") {
+
+    test("field-level redaction") {
+      examples.UserWithPassword.showUserWithPassword.show(
+        examples.UserWithPassword("Alice", "s3cret")
+      ) ==> "UserWithPassword(name = Alice, password = [redacted])"
+    }
+
+    test("field-level redaction with reason") {
+      examples.UserWithPII.showUserWithPII.show(
+        examples.UserWithPII("Alice", "alice@example.com", 30)
+      ) ==> "UserWithPII(name = Alice, email = [redacted: PII], age = 30)"
+    }
+
+    test("type-level redaction") {
+      examples.SecretData.showSecretData.show(examples.SecretData("secret", 42)) ==> "[redacted]"
+    }
+
+    test("type-level redaction with reason") {
+      examples.ClassifiedInfo.showClassifiedInfo.show(
+        examples.ClassifiedInfo("top-secret")
+      ) ==> "[redacted: classified]"
+    }
+
+    test("type-level redaction on sealed trait") {
+      examples.SecretEnum.showSecretEnum.show(examples.SecretCase(42)) ==> "[redacted]"
+    }
+  }
+
+  group("ShowPretty @sensitiveData") {
+
+    test("field-level redaction") {
+      val result = examples.UserWithPassword.showPrettyUserWithPassword.show(
+        examples.UserWithPassword("Alice", "s3cret")
+      )
+      result ==> "UserWithPassword(\n  name = Alice,\n  password = [redacted]\n)"
+    }
+
+    test("field-level redaction with reason") {
+      val result = examples.UserWithPII.showPrettyUserWithPII.show(
+        examples.UserWithPII("Alice", "alice@example.com", 30)
+      )
+      result ==> "UserWithPII(\n  name = Alice,\n  email = [redacted: PII],\n  age = 30\n)"
+    }
+
+    test("type-level redaction") {
+      examples.SecretData.showPrettySecretData.show(examples.SecretData("secret", 42)) ==> "[redacted]"
+    }
+
+    test("type-level redaction with reason") {
+      examples.ClassifiedInfo.showPrettyClassifiedInfo.show(
+        examples.ClassifiedInfo("top-secret")
+      ) ==> "[redacted: classified]"
+    }
+
+    test("type-level redaction on sealed trait") {
+      examples.SecretEnum.showPrettySecretEnum.show(examples.SecretCase(42)) ==> "[redacted]"
+    }
+  }
+
   group("Show enum") {
 
     test("sealed trait with case classes") {

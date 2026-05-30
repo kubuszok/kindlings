@@ -200,6 +200,40 @@ object examples {
     implicit val bitraverseTaggedValue: cats.Bitraverse[TaggedValue] = cats.Bitraverse.derived
   }
 
+  // @sensitiveData examples
+  import hearth.kindlings.catsderivation.annotations.sensitiveData
+
+  final case class UserWithPassword(name: String, @sensitiveData password: String)
+  object UserWithPassword {
+    implicit val showUserWithPassword: cats.Show[UserWithPassword] = cats.Show.derived
+    implicit val showPrettyUserWithPassword: ShowPretty[UserWithPassword] = ShowPretty.derived
+  }
+
+  final case class UserWithPII(name: String, @sensitiveData("PII") email: String, age: Int)
+  object UserWithPII {
+    implicit val showUserWithPII: cats.Show[UserWithPII] = cats.Show.derived
+    implicit val showPrettyUserWithPII: ShowPretty[UserWithPII] = ShowPretty.derived
+  }
+
+  @sensitiveData final case class SecretData(value: String, key: Int)
+  object SecretData {
+    implicit val showSecretData: cats.Show[SecretData] = cats.Show.derived
+    implicit val showPrettySecretData: ShowPretty[SecretData] = ShowPretty.derived
+  }
+
+  @sensitiveData("classified") final case class ClassifiedInfo(code: String)
+  object ClassifiedInfo {
+    implicit val showClassifiedInfo: cats.Show[ClassifiedInfo] = cats.Show.derived
+    implicit val showPrettyClassifiedInfo: ShowPretty[ClassifiedInfo] = ShowPretty.derived
+  }
+
+  @sensitiveData sealed trait SecretEnum
+  final case class SecretCase(value: Int) extends SecretEnum
+  object SecretEnum {
+    implicit val showSecretEnum: cats.Show[SecretEnum] = cats.Show.derived
+    implicit val showPrettySecretEnum: ShowPretty[SecretEnum] = ShowPretty.derived
+  }
+
   // Sealed trait with case objects only
   sealed trait Color
   case object Red extends Color
