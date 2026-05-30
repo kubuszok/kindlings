@@ -258,6 +258,7 @@ Import annotations from `hearth.kindlings.catsderivation.annotations`.
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
 
     import hearth.kindlings.catsderivation._
+    import hearth.kindlings.catsderivation.extensions._
     import hearth.kindlings.catsderivation.annotations.sensitiveData
 
     @sensitiveData("classified") case class SecretData(code: String, key: Int)
