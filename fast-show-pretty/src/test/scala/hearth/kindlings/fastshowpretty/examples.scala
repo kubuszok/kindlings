@@ -11,6 +11,17 @@ final case class ExampleValueClass(a: Int) extends AnyVal
 final case class WrappedString(s: String) extends AnyVal
 class NotAHandledType
 
+import hearth.kindlings.fastshowpretty.annotations.sensitiveData
+
+case class UserWithPassword(name: String, @sensitiveData password: String)
+case class UserWithPII(name: String, @sensitiveData("PII") email: String, age: Int)
+@sensitiveData case class CreditCard(number: String, cvv: String)
+@sensitiveData("financial data") case class BankAccount(iban: String, balance: Double)
+
+@sensitiveData sealed trait SecretEnum
+case class SecretA(value: Int) extends SecretEnum
+case class SecretB(name: String) extends SecretEnum
+
 sealed trait Shape
 case class Circle(radius: Double) extends Shape
 case class Rectangle(width: Double, height: Double) extends Shape

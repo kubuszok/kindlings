@@ -245,6 +245,78 @@ val output2 = FastShowPretty.render(myValue, custom)
     // )
     ```
 
+## Annotations
+
+| Annotation                 | Target        | Description                                           |
+|----------------------------|---------------|-------------------------------------------------------|
+| `@sensitiveData`           | Field or type | Replaces the rendered value with `[redacted]`         |
+| `@sensitiveData("reason")` | Field or type | Replaces the rendered value with `[redacted: reason]` |
+
+Import annotations from `hearth.kindlings.fastshowpretty.annotations`.
+
+??? example "Redacting sensitive fields"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
+
+    import hearth.kindlings.fastshowpretty._
+    import hearth.kindlings.fastshowpretty.annotations.sensitiveData
+
+    case class User(name: String, @sensitiveData password: String)
+
+    println(FastShowPretty.render(User("Alice", "s3cret"), RenderConfig.Default))
+    // expected output:
+    // User(
+    //   name = "Alice",
+    //   password = [redacted]
+    // )
+    ```
+
+??? example "Redacting with a reason"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
+
+    import hearth.kindlings.fastshowpretty._
+    import hearth.kindlings.fastshowpretty.annotations.sensitiveData
+
+    case class User(name: String, @sensitiveData("PII") email: String, age: Int)
+
+    println(FastShowPretty.render(User("Alice", "alice@example.com", 30), RenderConfig.Default))
+    // expected output:
+    // User(
+    //   name = "Alice",
+    //   email = [redacted: PII],
+    //   age = 30
+    // )
+    ```
+
+??? example "Redacting an entire type"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
+
+    import hearth.kindlings.fastshowpretty._
+    import hearth.kindlings.fastshowpretty.annotations.sensitiveData
+
+    @sensitiveData("financial data") case class CreditCard(number: String, cvv: String)
+    case class Checkout(item: String, card: CreditCard)
+
+    println(FastShowPretty.render(CreditCard("4111-1111-1111-1111", "123"), RenderConfig.Default))
+    // expected output:
+    // [redacted: financial data]
+
+    println(FastShowPretty.render(Checkout("Widget", CreditCard("4111", "123")), RenderConfig.Default))
+    // expected output:
+    // Checkout(
+    //   item = "Widget",
+    //   card = [redacted: financial data]
+    // )
+    ```
+
 ## Primitive rendering
 
 FastShowPretty renders primitives with type-disambiguating suffixes, matching Scala literal syntax:

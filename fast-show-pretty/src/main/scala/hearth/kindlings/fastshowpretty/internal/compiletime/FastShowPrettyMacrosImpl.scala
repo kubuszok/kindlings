@@ -8,6 +8,7 @@ import hearth.kindlings.fastshowpretty.{FastShowPretty, RenderConfig}
 
 trait FastShowPrettyMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with AnnotationSupport
     with rules.FastShowPrettyUseCachedDefWhenAvailableRuleImpl
     with rules.FastShowPrettyUseImplicitWhenAvailableRuleImpl
     with rules.FastShowPrettyUseBuiltInSupportRuleImpl
@@ -289,6 +290,8 @@ trait FastShowPrettyMacrosImpl
     val Char: Type[Char] = Type.of[Char]
     val String: Type[String] = Type.of[String]
     val Product: Type[Product] = Type.of[Product]
+    val SensitiveData: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
+      Type.of[hearth.kindlings.fastshowpretty.annotations.sensitiveData]
   }
 
   // The actual derivation logic in the form of DerivationCtx[A] ?=> MIO[Expr[StringBuilder]].

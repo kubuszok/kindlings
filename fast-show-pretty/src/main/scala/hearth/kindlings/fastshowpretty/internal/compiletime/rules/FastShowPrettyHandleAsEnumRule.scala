@@ -13,7 +13,16 @@ trait FastShowPrettyHandleAsEnumRuleImpl { this: FastShowPrettyMacrosImpl & Macr
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            deriveEnumCases[A](enumm).map(Rule.matched)
+            implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
+              Types.SensitiveData
+            if (hasTypeAnnotation[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]) {
+              val reason =
+                getTypeAnnotationStringArg[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]
+              val text = reason.filter(_.nonEmpty).fold("[redacted]")(r => s"[redacted: $r]")
+              MIO.pure(Rule.matched(Expr.quote(Expr.splice(ctx.sb).append(Expr.splice(Expr(text))))))
+            } else {
+              deriveEnumCases[A](enumm).map(Rule.matched)
+            }
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

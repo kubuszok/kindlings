@@ -6,7 +6,8 @@ import scala.reflect.macros.blackbox
 
 final private[catsderivation] class ShowPrettyMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
-    with ShowPrettyMacrosImpl {
+    with ShowPrettyMacrosImpl
+    with AnnotationSupportScala2 {
 
   def deriveShowPrettyImpl[A: c.WeakTypeTag]: c.Expr[hearth.kindlings.catsderivation.ShowPretty[A]] =
     deriveShowPretty[A]

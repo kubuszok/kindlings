@@ -15,17 +15,31 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            deriveCaseClassFields[A](caseClass).map(Rule.matched)
+            implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
+              Types.SensitiveData
+            if (hasTypeAnnotation[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]) {
+              val reason = getTypeAnnotationStringArg[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]
+              val text = redactedText(reason)
+              MIO.pure(Rule.matched(Expr.quote(Expr.splice(ctx.sb).append(Expr.splice(Expr(text))))))
+            } else {
+              deriveCaseClassFields[A](caseClass).map(Rule.matched)
+            }
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }
       }
 
+    private def redactedText(reason: Option[String]): String =
+      reason.filter(_.nonEmpty).fold("[redacted]")(r => s"[redacted: $r]")
+
     private def deriveCaseClassFields[A: DerivationCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[StringBuilder]] = {
       val name = Expr(Type[A].shortName)
+      implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
+        Types.SensitiveData
+      val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.parameters.flatten.toMap
 
       NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
         case Some(fieldValues) =>
@@ -33,9 +47,17 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
             .parTraverse { case (fieldName, fieldValue) =>
               import fieldValue.{Underlying as Field, value as fieldExpr}
               Log.namedScope(s"Deriving the value ${ctx.value.prettyPrint}.$fieldName: ${Field.prettyPrint}") {
-                // Use incrementLevel so nested case classes are indented properly
-                deriveResultRecursively[Field](using ctx.incrementLevel.nest(fieldExpr)).map { fieldResult =>
-                  (fieldName, fieldResult)
+                paramsByName.get(fieldName) match {
+                  case Some(param)
+                      if hasAnnotationType[hearth.kindlings.fastshowpretty.annotations.sensitiveData](param) =>
+                    val reason =
+                      getAnnotationStringArg[hearth.kindlings.fastshowpretty.annotations.sensitiveData](param)
+                    val text = redactedText(reason)
+                    MIO.pure((fieldName, Expr.quote(Expr.splice(ctx.sb).append(Expr.splice(Expr(text))))))
+                  case _ =>
+                    deriveResultRecursively[Field](using ctx.incrementLevel.nest(fieldExpr)).map { fieldResult =>
+                      (fieldName, fieldResult)
+                    }
                 }
               }
             }

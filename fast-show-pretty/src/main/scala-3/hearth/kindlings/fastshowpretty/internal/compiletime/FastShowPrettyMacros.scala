@@ -6,7 +6,8 @@ import scala.quoted.*
 
 final private[fastshowpretty] class FastShowPrettyMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      FastShowPrettyMacrosImpl
+      FastShowPrettyMacrosImpl,
+      AnnotationSupportScala3
 private[fastshowpretty] object FastShowPrettyMacros {
 
   def deriveInlineImpl[A: Type](
