@@ -290,5 +290,13 @@ case class WithPerFieldDecimal(
     label: String
 )
 
+// @avroName on sealed trait subtypes (issue #108)
+case class OuterWithRenamedInner(inner: RenamedInner)
+sealed trait RenamedInner
+@annotations.avroName("FooRenamed")
+case class RenamedFoo(a: String) extends RenamedInner
+@annotations.avroName("BarRenamed")
+case class RenamedBar(b: String) extends RenamedInner
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

@@ -7,7 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroFixed, avroScalePrecision, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
@@ -67,6 +67,7 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
       implicit val fieldNameT: Type[fieldName] = EncTypes.FieldName
       implicit val transientFieldT: Type[transientField] = EncTypes.TransientField
       implicit val avroFixedT: Type[avroFixed] = EncTypes.AvroFixed
+      implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
 
       val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
 
@@ -95,16 +96,24 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   val param = paramsByName.get(fName)
                   val avroFixedSize = param.flatMap(p => getAnnotationIntArg[avroFixed](p))
+                  val decimalOverride = param.flatMap(p => getAnnotationTwoIntArgs[avroScalePrecision](p))
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    val encodeMIO: MIO[Expr[Any]] = avroFixedSize match {
-                      case Some(size) =>
+                    val encodeMIO: MIO[Expr[Any]] = (avroFixedSize, decimalOverride) match {
+                      case (Some(size), _) =>
                         MIO.pure(Expr.quote {
                           AvroDerivationUtils.wrapByteArrayAsFixed(
                             Expr.splice(fieldExpr).asInstanceOf[Array[Byte]],
                             Expr.splice(Expr(size))
                           ): Any
                         })
-                      case None =>
+                      case (_, Some((_, scale))) =>
+                        MIO.pure(Expr.quote {
+                          AvroDerivationUtils.encodeBigDecimal(
+                            Expr.splice(fieldExpr).asInstanceOf[BigDecimal],
+                            Expr.splice(Expr(scale))
+                          ): Any
+                        })
+                      case _ =>
                         inlineBuiltInAvroEncode[Field](fieldExpr) match {
                           case Some(enc) => MIO.pure(enc)
                           case None      => deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))

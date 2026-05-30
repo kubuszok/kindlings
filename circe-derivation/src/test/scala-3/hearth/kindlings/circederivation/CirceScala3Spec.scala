@@ -128,6 +128,12 @@ final class CirceScala3Spec extends MacroSuite {
         KindlingsEncoder.encode(nt) ==>
           Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
       }
+
+      test("single-element named tuple") {
+        val nt: (field: Int) = Tuple1(3)
+        KindlingsEncoder.encode(nt) ==>
+          Json.obj("field" -> Json.fromInt(3))
+      }
     }
 
     group("decoding") {
@@ -149,6 +155,11 @@ final class CirceScala3Spec extends MacroSuite {
         implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
         val json = Json.obj("first_name" -> Json.fromString("Alice"), "last_name" -> Json.fromString("Smith"))
         KindlingsDecoder.decode[(firstName: String, lastName: String)](json) ==> Right(("Alice", "Smith"))
+      }
+
+      test("single-element named tuple") {
+        val json = Json.obj("field" -> Json.fromInt(3))
+        KindlingsDecoder.decode[(field: Int)](json) ==> Right(Tuple1(3))
       }
     }
   }
