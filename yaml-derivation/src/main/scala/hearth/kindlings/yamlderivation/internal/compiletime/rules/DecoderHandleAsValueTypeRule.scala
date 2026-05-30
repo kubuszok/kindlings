@@ -15,33 +15,36 @@ trait DecoderHandleAsValueTypeRuleImpl {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
 
-            DTypes
-              .YamlDecoder[Inner]
-              .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-              .toEither match {
-              case Right(innerDecoder) =>
-                @scala.annotation.nowarn("msg=is never used")
-                implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
-                buildWrapLambda[A, Inner](isValueType.value).map { builder =>
-                  val wrapLambda = builder.build[Either[ConstructError, A]]
-                  Rule.matched(Expr.quote {
-                    Expr
-                      .splice(innerDecoder)
-                      .construct(Expr.splice(dctx.node))(org.virtuslab.yaml.LoadSettings.empty)
-                      .flatMap(Expr.splice(wrapLambda))
-                  })
-                }
-              case Left(reason) =>
-                MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no YamlDecoder: $reason"))
-            }
+              DTypes
+                .YamlDecoder[Inner]
+                .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+                .toEither match {
+                case Right(innerDecoder) =>
+                  @scala.annotation.nowarn("msg=is never used")
+                  implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+                  buildWrapLambda[A, Inner](isValueType.value).map { builder =>
+                    val wrapLambda = builder.build[Either[ConstructError, A]]
+                    Rule.matched(Expr.quote {
+                      Expr
+                        .splice(innerDecoder)
+                        .construct(Expr.splice(dctx.node))(org.virtuslab.yaml.LoadSettings.empty)
+                        .flatMap(Expr.splice(wrapLambda))
+                    })
+                  }
+                case Left(reason) =>
+                  MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no YamlDecoder: $reason"))
+              }
 
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
-        }
+            case _ =>
+              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
+          }
       }
 
     @scala.annotation.nowarn("msg=is never used")

@@ -157,6 +157,18 @@ Scala 2 macros cannot handle free type variables in generated trees. Work with `
 and `(Any => Any)`, cast with `.asInstanceOf` at the boundaries — safe due to JVM type
 erasure. See `FunctorMacrosImpl.scala`.
 
+### `IsValueType` intercepts single-element named tuples (Scala 3)
+
+Named tuples are opaque types in Scala 3. `IsValueTypeProviderForOpaque` matches any
+opaque type that has a suitable constructor, and for single-element named tuples like
+`(field: Int)` the underlying `Tuple1[Int]` has a single-arg ctor that qualifies. Since
+`HandleAsValueTypeRule` runs before `HandleAsNamedTupleRule` in the rule pipeline, it
+intercepts and treats the named tuple as a value type wrapping `Int`.
+
+**Fix:** Guard every `HandleAsValueTypeRule` with `Type[A].isNamedTuple` before the
+`IsValueType` pattern match. The method returns `false` on Scala 2, so it is safe to use
+in cross-compiled code. See `type-class-derivation-skill.md` § REQ-5.
+
 ### `MacroExtension` ClassTag erasure
 
 `MacroExtension[A & B & C]` ClassTag only preserves the first component. Use a runtime

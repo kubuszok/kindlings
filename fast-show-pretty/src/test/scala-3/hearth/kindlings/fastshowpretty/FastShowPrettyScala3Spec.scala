@@ -28,6 +28,15 @@ final class FastShowPrettyScala3Spec extends MacroSuite {
             |)""".stripMargin
       }
 
+      test("single-element named tuple") {
+        val nt: (field: Int) = Tuple1(3)
+        val result = FastShowPretty.render(nt, RenderConfig.Default)
+        result ==>
+          """(
+            |  field = 3
+            |)""".stripMargin
+      }
+
       test("nested named tuple with case class") {
         val nt: (person: Person, score: Int) = (Person("Bob", 25), 100)
         val result = FastShowPretty.render(nt, RenderConfig.Default)

@@ -20,21 +20,24 @@ trait ReaderHandleAsValueTypeRuleImpl {
         implicit val EitherT: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
         implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
         val cursorExpr = rctx.cursor
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
-            implicit val EitherInnerT: Type[Either[ConfigReaderFailures, Inner]] = RTypes.ReaderResult[Inner]
-            val wrapLambda: Expr[Inner => Either[ConfigReaderFailures, A]] =
-              buildWrap[A, Inner](isValueType.value, cursorExpr)
-            deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.cursor)).map { innerResult =>
-              Rule.matched(Expr.quote {
-                Expr.splice(innerResult).flatMap(Expr.splice(wrapLambda))
-              })
-            }
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
+              implicit val EitherInnerT: Type[Either[ConfigReaderFailures, Inner]] = RTypes.ReaderResult[Inner]
+              val wrapLambda: Expr[Inner => Either[ConfigReaderFailures, A]] =
+                buildWrap[A, Inner](isValueType.value, cursorExpr)
+              deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.cursor)).map { innerResult =>
+                Rule.matched(Expr.quote {
+                  Expr.splice(innerResult).flatMap(Expr.splice(wrapLambda))
+                })
+              }
 
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
-        }
+            case _ =>
+              MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a value type"))
+          }
       }
 
     private def buildWrap[A: Type, Inner: Type](

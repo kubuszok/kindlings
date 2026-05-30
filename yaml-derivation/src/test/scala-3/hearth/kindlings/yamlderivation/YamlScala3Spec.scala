@@ -180,6 +180,12 @@ final class YamlScala3Spec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode(nt)
         node ==> mappingOf("first_name" -> scalarNode("Alice"), "last_name" -> scalarNode("Smith"))
       }
+
+      test("single-element named tuple") {
+        val nt: (field: Int) = Tuple1(3)
+        val node = KindlingsYamlEncoder.encode(nt)
+        node ==> mappingOf("field" -> scalarNode("3"))
+      }
     }
 
     group("decoding") {
@@ -201,6 +207,11 @@ final class YamlScala3Spec extends MacroSuite {
         implicit val config: YamlConfig = YamlConfig.default.withSnakeCaseMemberNames
         val node = mappingOf("first_name" -> scalarNode("Alice"), "last_name" -> scalarNode("Smith"))
         KindlingsYamlDecoder.decode[(firstName: String, lastName: String)](node) ==> Right(("Alice", "Smith"))
+      }
+
+      test("single-element named tuple") {
+        val node = mappingOf("field" -> scalarNode("3"))
+        KindlingsYamlDecoder.decode[(field: Int)](node) ==> Right(Tuple1(3))
       }
     }
   }

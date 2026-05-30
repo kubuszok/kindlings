@@ -1725,8 +1725,22 @@ If the type class should support value types (classes extending `AnyVal`), handl
 
 **How to implement:**
 1. Create a `HandleAsValueTypeRule` that pattern-matches `Type[A]` against `IsValueType`
-2. Unwrap the value type via `isValueType.unwrap(ctx.value)` to get the underlying value
-3. Recurse on the underlying type
+2. **Guard against named tuples first:** Before the `IsValueType` match, check `Type[A].isNamedTuple` and yield if true. Named tuples are opaque types in Scala 3, so `IsValueTypeProviderForOpaque` matches single-element named tuples (e.g., `(field: Int)`) and treats them as value types wrapping the inner type. This causes the value type rule to intercept before the named tuple rule, producing incorrect derivation. The guard is cross-platform safe (`isNamedTuple` returns `false` on Scala 2).
+3. Unwrap the value type via `isValueType.unwrap(ctx.value)` to get the underlying value
+4. Recurse on the underlying type
+
+**Pattern:**
+```scala
+def apply[A: Ctx]: MIO[Rule.Applicability[Expr[Result]]] =
+  Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
+    if (Type[A].isNamedTuple)
+      MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+    else Type[A] match {
+      case IsValueType(isValueType) => // ...
+      case _ => MIO.pure(Rule.yielded(...))
+    }
+  }
+```
 
 **Reference:** `FastShowPrettyHandleAsValueTypeRule.scala`.
 
@@ -1734,6 +1748,7 @@ If the type class should support value types (classes extending `AnyVal`), handl
 - Define a value class (e.g., `case class UserId(value: Int) extends AnyVal`)
 - Write a test that derives and uses the type class for it
 - Verify it works on both Scala 2.13 and Scala 3
+- **Test single-element named tuples** (e.g., `(field: Int)`) to ensure they are NOT handled as value types — see REQ-11c
 
 ### REQ-6: Handle optional types via std extensions
 
@@ -1890,6 +1905,8 @@ When the type class is a subtype of an existing type class that has its own auto
 
 Types that only exist in Scala 3 (e.g., Scala 3 `enum` declarations, named tuples) must be tested in `src/test/scala-3/` so they don't break Scala 2.13 compilation.
 
+**Named tuple testing must include single-element tuples.** Single-element named tuples like `(field: Int)` are a critical edge case: they are opaque types in Scala 3 whose underlying type (`Tuple1[Int]`) has a single-argument constructor, causing `IsValueTypeProviderForOpaque` to match them. If the value type rule lacks the `isNamedTuple` guard (see REQ-5), it intercepts before the named tuple rule and produces incorrect derivation. Always include a `(field: Int)` test alongside multi-element named tuple tests.
+
 **Example:**
 ```scala
 // In src/test/scala-3/hearth/kindlings/mymodule/MyTypeClassScala3Spec.scala
@@ -1906,6 +1923,11 @@ final class MyTypeClassScala3Spec extends MacroSuite {
   group("named tuples") {
     test("handles named tuple") {
       val tuple: (name: String, age: Int) = (name = "Alice", age = 30)
+      val result = MyTypeClass.someMethod(tuple)
+      assertEquals(result, /* expected */)
+    }
+    test("handles single-element named tuple") {
+      val tuple: (field: Int) = Tuple1(42)
       val result = MyTypeClass.someMethod(tuple)
       assertEquals(result, /* expected */)
     }

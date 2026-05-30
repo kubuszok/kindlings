@@ -63,6 +63,9 @@ The most load-bearing entries to keep in mind for any macro work:
 - **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — wrap with
   `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)`.
 - **`Type.of[A]` bootstrap cycle in extensions** — see the pitfalls skill.
+- **`IsValueType` intercepts single-element named tuples (Scala 3)** — guard every
+  `HandleAsValueTypeRule` with `if (Type[A].isNamedTuple)` before the `IsValueType`
+  match. See pitfalls skill and `type-class-derivation-skill.md` § REQ-5.
 
 ## Standard extensions, `LambdaBuilder`, and def-caching rules
 

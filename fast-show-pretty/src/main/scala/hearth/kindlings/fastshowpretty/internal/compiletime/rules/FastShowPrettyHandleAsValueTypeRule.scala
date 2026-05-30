@@ -12,14 +12,17 @@ trait FastShowPrettyHandleAsValueTypeRuleImpl { this: FastShowPrettyMacrosImpl &
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a value type") >> {
-        Type[A] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
-            deriveValueTypeUnwrapped[A, Inner](isValueType.value)
+        if (Type[A].isNamedTuple)
+          MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is a named tuple, not a value type"))
+        else
+          Type[A] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
+              deriveValueTypeUnwrapped[A, Inner](isValueType.value)
 
-          case _ =>
-            yieldUnsupportedType[A]
-        }
+            case _ =>
+              yieldUnsupportedType[A]
+          }
       }
 
     private def deriveValueTypeUnwrapped[A: DerivationCtx, Inner: Type](
