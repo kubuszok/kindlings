@@ -4,6 +4,7 @@ import scala.language.experimental.macros
 
 private[avroderivation] trait AvroEncoderCompanionCompat { this: AvroEncoder.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: AvroConfig): AvroEncoder[A] =
     macro internal.compiletime.EncoderMacros.deriveEncoderImpl[A]
 

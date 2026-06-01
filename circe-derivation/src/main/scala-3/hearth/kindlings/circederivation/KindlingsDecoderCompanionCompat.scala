@@ -4,6 +4,7 @@ import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 
 private[circederivation] trait KindlingsDecoderCompanionCompat { this: KindlingsDecoder.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: Configuration): Decoder[A] = ${
     internal.compiletime.DecoderMacros.deriveDecoderImpl[A]('config)
   }

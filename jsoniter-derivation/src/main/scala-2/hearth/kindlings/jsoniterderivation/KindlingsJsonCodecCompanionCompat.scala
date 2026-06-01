@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[jsoniterderivation] trait KindlingsJsonCodecCompanionCompat { this: KindlingsJsonCodec.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: JsoniterConfig): JsonCodec[A] =
     macro internal.compiletime.CodecMacros.deriveJsonCodecImpl[A]
 

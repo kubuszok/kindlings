@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[pureconfigderivation] trait KindlingsConfigWriterCompanionCompat { this: KindlingsConfigWriter.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: PureConfig): ConfigWriter[A] =
     macro internal.compiletime.WriterMacros.deriveWriterImpl[A]
 

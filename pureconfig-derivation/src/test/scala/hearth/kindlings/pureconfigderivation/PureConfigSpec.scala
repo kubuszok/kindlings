@@ -339,35 +339,28 @@ final class PureConfigSpec extends MacroSuite {
   group("combined convenience methods") {
 
     test("snake_case members + custom discriminator") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withSnakeCaseMemberNames
+      implicit val cfg: PureConfig = PureConfig().withSnakeCaseMemberNames
         .withDiscriminator("kind")
       val r = KindlingsConfigReader.derive[Shape]
       r.from(cursor("{ kind = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
     }
 
     test("snake_case members + strict decoding rejects extras") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withSnakeCaseMemberNames
-        .withStrictDecoding
+      implicit val cfg: PureConfig = PureConfig().withSnakeCaseMemberNames.withStrictDecoding
       val r = KindlingsConfigReader.derive[MultiWordFields]
       val result = r.from(cursor("{ first_name = Alice, last_name = Smith, postal_code = 123, extra = fail }"))
       assert(result.isLeft)
     }
 
     test("camelCase members + snake_case constructors + wrapped subtypes") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withCamelCaseMemberNames
-        .withSnakeCaseConstructorNames
-        .withWrappedSubtypes
+      implicit val cfg: PureConfig =
+        PureConfig().withCamelCaseMemberNames.withSnakeCaseConstructorNames.withWrappedSubtypes
       val r = KindlingsConfigReader.derive[ColorChoice]
       r.from(cursor("{ bright_red = { intensity = 10 } }")) ==> Right(BrightRed(10))
     }
 
     test("withoutUseDefaults + PascalCase members") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withoutUseDefaults
-        .withPascalCaseMemberNames
+      implicit val cfg: PureConfig = PureConfig().withoutUseDefaults.withPascalCaseMemberNames
       val r = KindlingsConfigReader.derive[WithDefaultsMultiWord]
       // Must provide all fields, including those with defaults
       r.from(cursor("{ FirstName = Alice, MiddleName = Marie, Age = 30 }")) ==>
@@ -375,18 +368,14 @@ final class PureConfigSpec extends MacroSuite {
     }
 
     test("withoutUseDefaults + PascalCase members fails on missing defaulted field") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withoutUseDefaults
-        .withPascalCaseMemberNames
+      implicit val cfg: PureConfig = PureConfig().withoutUseDefaults.withPascalCaseMemberNames
       val r = KindlingsConfigReader.derive[WithDefaultsMultiWord]
       val result = r.from(cursor("{ FirstName = Alice }"))
       assert(result.isLeft)
     }
 
     test("full round-trip: SCREAMING_SNAKE members + snake_case constructors + custom discriminator") {
-      implicit val cfg: PureConfig = PureConfig()
-        .withScreamingSnakeCaseMemberNames
-        .withSnakeCaseConstructorNames
+      implicit val cfg: PureConfig = PureConfig().withScreamingSnakeCaseMemberNames.withSnakeCaseConstructorNames
         .withDiscriminator("variant")
       val r = KindlingsConfigReader.derive[ColorChoice]
       val w = KindlingsConfigWriter.derive[ColorChoice]

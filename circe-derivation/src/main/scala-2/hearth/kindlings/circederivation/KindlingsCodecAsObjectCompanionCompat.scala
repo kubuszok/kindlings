@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[circederivation] trait KindlingsCodecAsObjectCompanionCompat { this: KindlingsCodecAsObject.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: Configuration): Codec.AsObject[A] =
     macro internal.compiletime.CodecMacros.deriveCodecAsObjectImpl[A]
 

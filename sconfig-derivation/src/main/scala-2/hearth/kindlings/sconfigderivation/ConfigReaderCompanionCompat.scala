@@ -4,6 +4,7 @@ import scala.language.experimental.macros
 
 private[sconfigderivation] trait ConfigReaderCompanionCompat { this: ConfigReader.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: SConfig): ConfigReader[A] =
     macro internal.compiletime.ReaderMacros.deriveReaderImpl[A]
 

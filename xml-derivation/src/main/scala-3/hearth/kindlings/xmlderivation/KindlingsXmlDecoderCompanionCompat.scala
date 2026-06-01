@@ -2,6 +2,7 @@ package hearth.kindlings.xmlderivation
 
 private[xmlderivation] trait KindlingsXmlDecoderCompanionCompat { this: KindlingsXmlDecoder.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: XmlConfig): XmlDecoder[A] = ${
     internal.compiletime.DecoderMacros.deriveDecoderImpl[A]('config)
   }

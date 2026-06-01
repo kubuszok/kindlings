@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[pureconfigderivation] trait KindlingsConfigReaderCompanionCompat { this: KindlingsConfigReader.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: PureConfig): ConfigReader[A] =
     macro internal.compiletime.ReaderMacros.deriveReaderImpl[A]
 

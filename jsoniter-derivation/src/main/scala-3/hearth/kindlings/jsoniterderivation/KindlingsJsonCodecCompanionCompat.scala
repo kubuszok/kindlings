@@ -4,6 +4,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{JsonCodec, JsonKeyCodec}
 
 private[jsoniterderivation] trait KindlingsJsonCodecCompanionCompat { this: KindlingsJsonCodec.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: JsoniterConfig): JsonCodec[A] =
     internal.runtime.JsoniterDerivationUtils.jsonCodec[A](
       KindlingsJsonValueCodec.derive[A],

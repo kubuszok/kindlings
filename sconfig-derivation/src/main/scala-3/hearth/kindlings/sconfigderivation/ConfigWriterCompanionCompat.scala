@@ -2,6 +2,7 @@ package hearth.kindlings.sconfigderivation
 
 private[sconfigderivation] trait ConfigWriterCompanionCompat { this: ConfigWriter.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: SConfig): ConfigWriter[A] = ${
     internal.compiletime.WriterMacros.deriveWriterImpl[A]('config)
   }
