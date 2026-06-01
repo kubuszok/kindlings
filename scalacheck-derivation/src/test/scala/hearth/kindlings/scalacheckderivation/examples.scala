@@ -161,6 +161,17 @@ object examples {
     }
   }
 
+  // ==Recursive Sealed Trait==
+  object RecursiveSealedTrait {
+    sealed trait TreeNode
+    case class Branch(value: Int, children: List[TreeNode]) extends TreeNode
+    case class Leaf(value: Int) extends TreeNode
+
+    object TreeNode {
+      implicit val arbTreeNode: Arbitrary[TreeNode] = DeriveArbitrary.derived
+    }
+  }
+
   // ==Value Class Support==
   final case class WrappedId(value: Int) extends AnyVal
   case class WithWrappedId(id: WrappedId, name: String)

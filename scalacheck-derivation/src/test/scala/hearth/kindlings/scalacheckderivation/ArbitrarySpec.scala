@@ -230,6 +230,19 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(samples.nonEmpty, "Should generate value class samples")
   }
 
+  test("derives Arbitrary for recursive sealed trait (TreeNode)") {
+    sealed trait TreeNode
+    case class Branch(value: Int, children: List[TreeNode]) extends TreeNode
+    case class Leaf(value: Int) extends TreeNode
+
+    val arb: Arbitrary[TreeNode] = DeriveArbitrary.derived[TreeNode]
+    val samples = List.fill(20)(arb.arbitrary.sample).flatten
+
+    assert(samples.nonEmpty, "Should generate some TreeNode samples")
+    assert(samples.forall(_ != null), "All samples should be non-null")
+    assert(samples.exists(_.isInstanceOf[Leaf]), "Should generate Leaf values")
+  }
+
   test("deeply nested case class generates correctly") {
     case class Inner(value: Int)
     case class Middle(inner: Inner, flag: Boolean)

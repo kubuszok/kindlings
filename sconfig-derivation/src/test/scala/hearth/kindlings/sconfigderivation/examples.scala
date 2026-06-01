@@ -31,6 +31,12 @@ case class WithBothAnnotations(
 
 case class WithDefaults(name: String, age: Int = 25, active: Boolean = true)
 
+// --- Recursive sealed trait ---
+
+sealed trait TreeNode
+case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
 case class GeoCoordinates(lat: Double, lon: Double)
 case class FullAddress(street: String, city: String, geo: GeoCoordinates)
 case class PersonFull(name: String, address: FullAddress)

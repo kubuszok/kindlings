@@ -72,6 +72,16 @@ object examples {
     implicit val eqTree: cats.kernel.Eq[Tree] = cats.kernel.Eq.derived
   }
 
+  // Recursive sealed trait for def-caching / UseCached rule coverage
+  sealed trait TreeNode
+  final case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+  final case class Leaf(value: Int) extends TreeNode
+  object TreeNode {
+    implicit val showTreeNode: cats.Show[TreeNode] = cats.Show.derived
+    implicit val eqTreeNode: cats.kernel.Eq[TreeNode] = cats.kernel.Eq.derived
+    implicit val hashTreeNode: cats.kernel.Hash[TreeNode] = cats.kernel.Hash.derived
+  }
+
   // Parameterized case classes for Functor/Apply/Applicative/Foldable derivation
   final case class Box[A](value: A)
   object Box {

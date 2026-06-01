@@ -1008,6 +1008,55 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
+    group("mutually recursive types") {
+
+      test("MutRecA schema with mutual recursion via Option") {
+        val schema = AvroSchemaFor.schemaOf[MutRecA]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "MutRecA"
+        schema.getField("value").schema().getType ==> Schema.Type.INT
+        val bFieldSchema = schema.getField("b").schema()
+        bFieldSchema.getType ==> Schema.Type.UNION
+        // Option[MutRecB] should be UNION(null, MutRecB)
+        bFieldSchema.getTypes.size() ==> 2
+        bFieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        val mutRecBSchema = bFieldSchema.getTypes.get(1)
+        mutRecBSchema.getName ==> "MutRecB"
+        mutRecBSchema.getType ==> Schema.Type.RECORD
+      }
+
+      test("MutRecB schema with mutual recursion via Option") {
+        val schema = AvroSchemaFor.schemaOf[MutRecB]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "MutRecB"
+        schema.getField("value").schema().getType ==> Schema.Type.STRING
+        val aFieldSchema = schema.getField("a").schema()
+        aFieldSchema.getType ==> Schema.Type.UNION
+        aFieldSchema.getTypes.size() ==> 2
+        aFieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        val mutRecASchema = aFieldSchema.getTypes.get(1)
+        mutRecASchema.getName ==> "MutRecA"
+        mutRecASchema.getType ==> Schema.Type.RECORD
+      }
+    }
+
+    group("indirect recursive types via container") {
+
+      test("Forest containing recursive TreeCaseClass produces valid schema") {
+        val schema = AvroSchemaFor.schemaOf[Forest]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getName ==> "Forest"
+        val treesField = schema.getField("trees")
+        treesField.schema().getType ==> Schema.Type.ARRAY
+        val treeSchema = treesField.schema().getElementType
+        treeSchema.getType ==> Schema.Type.RECORD
+        treeSchema.getName ==> "TreeCaseClass"
+        // children field references TreeCaseClass recursively
+        val childrenField = treeSchema.getField("children")
+        childrenField.schema().getType ==> Schema.Type.ARRAY
+      }
+    }
+
     group("PascalCase field names") {
 
       test("withPascalCaseFieldNames capitalizes first letter") {

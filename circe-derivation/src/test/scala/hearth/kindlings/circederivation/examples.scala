@@ -203,3 +203,12 @@ case class OptionMatrix(
     b: Option[String] = Some("default-b"),
     c: String = "default-c"
 )
+
+// Direct recursive sealed trait (triggers UseCachedDefWhenAvailableRule)
+sealed trait TreeNode
+case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
+// Mutual recursion (triggers UseCachedDefWhenAvailableRule for both types)
+case class MutRecA(value: Int, b: Option[MutRecB])
+case class MutRecB(value: String, a: Option[MutRecA])

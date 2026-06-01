@@ -63,6 +63,40 @@ final class DiffSpec extends hearth.MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("identical trees") {
+        val d = Diff.derived[TreeNode]
+        val tree: TreeNode = Branch(Leaf(1), Branch(Leaf(2), Leaf(3)))
+        val result = d.diff(tree, tree)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("different leaf values") {
+        val d = Diff.derived[TreeNode]
+        val left: TreeNode = Branch(Leaf(1), Leaf(2))
+        val right: TreeNode = Branch(Leaf(1), Leaf(99))
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+      }
+
+      test("branch vs leaf") {
+        val d = Diff.derived[TreeNode]
+        val left: TreeNode = Branch(Leaf(1), Leaf(2))
+        val right: TreeNode = Leaf(1)
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case _: DiffResult.TypeMismatch => ()
+          case _                          =>
+            result match {
+              case v: DiffResult.Variant if !v.isIdentical => ()
+              case _ => fail(s"expected TypeMismatch or non-identical Variant, got $result")
+            }
+        }
+      }
+    }
+
     group("snapshot") {
 
       test("snapshot of case class") {

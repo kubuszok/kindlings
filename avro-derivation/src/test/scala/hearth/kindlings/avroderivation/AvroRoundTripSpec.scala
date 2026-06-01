@@ -444,6 +444,47 @@ final class AvroRoundTripSpec extends MacroSuite {
         }
       }
 
+      test("mutually recursive types (MutRecA/MutRecB) binary round-trip") {
+        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derive[MutRecA]
+        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derive[MutRecA]
+        val original = MutRecA(1, Some(MutRecB("x", Some(MutRecA(2, None)))))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[MutRecA](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("mutually recursive types (MutRecA) with None terminators round-trip") {
+        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derive[MutRecA]
+        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derive[MutRecA]
+        val original = MutRecA(99, None)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[MutRecA](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("mutually recursive types (MutRecB) binary round-trip") {
+        val encoder: AvroEncoder[MutRecB] = AvroEncoder.derive[MutRecB]
+        val decoder: AvroDecoder[MutRecB] = AvroDecoder.derive[MutRecB]
+        val original = MutRecB("hello", Some(MutRecA(10, Some(MutRecB("world", None)))))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[MutRecB](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("indirect recursion via container (Forest/TreeCaseClass) binary round-trip") {
+        val encoder: AvroEncoder[Forest] = AvroEncoder.derive[Forest]
+        val decoder: AvroDecoder[Forest] = AvroDecoder.derive[Forest]
+        val original = Forest(
+          List(
+            TreeCaseClass(1, List(TreeCaseClass(2, List()), TreeCaseClass(3, List()))),
+            TreeCaseClass(4, List())
+          )
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Forest](bytes)(decoder)
+        decoded ==> original
+      }
+
       test("@avroScalePrecision on BigDecimal field (issue #110)") {
         val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derive[WithPerFieldDecimal]
         val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derive[WithPerFieldDecimal]

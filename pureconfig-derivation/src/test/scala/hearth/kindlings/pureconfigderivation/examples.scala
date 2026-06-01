@@ -83,6 +83,12 @@ case class WithComplexDefaults(
 
 case class WithOptionDefault(name: String, extra: Option[String] = None)
 
+// --- Recursive sealed trait ---
+
+sealed trait TreeNode
+case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
 // --- Discriminator field collision ---
 
 case class WithTypeField(`type`: String, name: String)

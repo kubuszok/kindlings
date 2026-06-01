@@ -84,6 +84,11 @@ case object Active extends Status
 case object Inactive extends Status
 case class Custom(label: String) extends Status
 
+// Recursive sealed trait hierarchy
+sealed trait TreeNode
+case class Branch(left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
 object GenericDerivation {
 
   implicit val config: Configuration = Configuration.default

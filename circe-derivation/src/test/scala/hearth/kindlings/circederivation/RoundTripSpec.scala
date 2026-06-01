@@ -318,5 +318,44 @@ final class RoundTripSpec extends MacroSuite {
         KindlingsDecoder.decode[RecursiveParent](json) ==> Right(value)
       }
     }
+
+    group("recursive types - def caching") {
+
+      test("direct recursive sealed trait round-trip") {
+        val value: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+        val json = KindlingsEncoder.encode[TreeNode](value)
+        KindlingsDecoder.decode[TreeNode](json) ==> Right(value)
+      }
+
+      test("leaf-only recursive sealed trait round-trip") {
+        val value: TreeNode = Leaf(42)
+        val json = KindlingsEncoder.encode[TreeNode](value)
+        KindlingsDecoder.decode[TreeNode](json) ==> Right(value)
+      }
+
+      test("deeply nested recursive sealed trait round-trip") {
+        val value: TreeNode = Branch(1, Branch(2, Branch(3, Leaf(4), Leaf(5)), Leaf(6)), Branch(7, Leaf(8), Leaf(9)))
+        val json = KindlingsEncoder.encode[TreeNode](value)
+        KindlingsDecoder.decode[TreeNode](json) ==> Right(value)
+      }
+
+      test("mutual recursion round-trip") {
+        val value = MutRecA(1, Some(MutRecB("x", Some(MutRecA(2, None)))))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[MutRecA](json) ==> Right(value)
+      }
+
+      test("mutual recursion round-trip from B side") {
+        val value = MutRecB("root", Some(MutRecA(1, Some(MutRecB("leaf", None)))))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[MutRecB](json) ==> Right(value)
+      }
+
+      test("mutual recursion with no nesting") {
+        val value = MutRecA(42, None)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[MutRecA](json) ==> Right(value)
+      }
+    }
   }
 }

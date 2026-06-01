@@ -897,6 +897,74 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("recursive types - def caching") {
+
+    test("Show on recursive sealed trait") {
+      val tree: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val shown = examples.TreeNode.showTreeNode.show(tree)
+      shown ==> "Branch(value = 1, left = Leaf(value = 2), right = Leaf(value = 3))"
+    }
+
+    test("Show on deeply nested recursive sealed trait") {
+      val tree: examples.TreeNode = examples.Branch(
+        1,
+        examples.Branch(2, examples.Leaf(3), examples.Leaf(4)),
+        examples.Leaf(5)
+      )
+      val shown = examples.TreeNode.showTreeNode.show(tree)
+      assert(shown.contains("1"))
+      assert(shown.contains("2"))
+      assert(shown.contains("3"))
+      assert(shown.contains("4"))
+      assert(shown.contains("5"))
+    }
+
+    test("Show on leaf") {
+      examples.TreeNode.showTreeNode.show(examples.Leaf(42)) ==> "Leaf(value = 42)"
+    }
+
+    test("Eq on equal recursive sealed traits") {
+      val tree1: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val tree2: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      examples.TreeNode.eqTreeNode.eqv(tree1, tree2) ==> true
+    }
+
+    test("Eq on different recursive sealed traits") {
+      val tree1: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val tree2: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(99))
+      examples.TreeNode.eqTreeNode.eqv(tree1, tree2) ==> false
+    }
+
+    test("Eq on different subtypes") {
+      val branch: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val leaf: examples.TreeNode = examples.Leaf(1)
+      examples.TreeNode.eqTreeNode.eqv(branch, leaf) ==> false
+    }
+
+    test("Eq on equal leaves") {
+      examples.TreeNode.eqTreeNode.eqv(examples.Leaf(1), examples.Leaf(1)) ==> true
+    }
+
+    test("Hash produces consistent results") {
+      val leaf = examples.Leaf(1)
+      examples.TreeNode.hashTreeNode.hash(leaf) ==> examples.TreeNode.hashTreeNode.hash(leaf)
+    }
+
+    test("Hash on equal values produces equal hashes") {
+      val tree1: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val tree2: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      examples.TreeNode.hashTreeNode.hash(tree1) ==> examples.TreeNode.hashTreeNode.hash(tree2)
+    }
+
+    test("Hash eqv delegates correctly") {
+      val tree1: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val tree2: examples.TreeNode = examples.Branch(1, examples.Leaf(2), examples.Leaf(3))
+      val tree3: examples.TreeNode = examples.Leaf(1)
+      examples.TreeNode.hashTreeNode.eqv(tree1, tree2) ==> true
+      examples.TreeNode.hashTreeNode.eqv(tree1, tree3) ==> false
+    }
+  }
+
   group("respecting existing instances") {
 
     test("user-provided Eq takes priority in derived Show") {

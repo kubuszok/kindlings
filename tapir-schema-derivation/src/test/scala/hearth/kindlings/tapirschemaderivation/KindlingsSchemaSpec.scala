@@ -534,6 +534,34 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
     }
 
+    test("recursive sealed trait hierarchy uses SRef") {
+      val schema = KindlingsSchema.derive[TreeNode]
+      schema.schemaType match {
+        case c: SchemaType.SCoproduct[TreeNode] =>
+          // Branch has two TreeNode fields — both should resolve to SRef
+          val branchSubtype = c.subtypes.find(_.name.exists(_.fullName.endsWith("Branch")))
+          assert(branchSubtype.isDefined, "Should have a Branch subtype")
+          branchSubtype.get.schemaType match {
+            case p: SchemaType.SProduct[?] =>
+              val leftField = p.fields.find(_.name.name == "left")
+              val rightField = p.fields.find(_.name.name == "right")
+              assert(leftField.isDefined, "Branch should have a 'left' field")
+              assert(rightField.isDefined, "Branch should have a 'right' field")
+              leftField.get.schema.schemaType match {
+                case _: SchemaType.SRef[?] => () // success
+                case other                 => fail(s"Expected SRef for left field, got: $other")
+              }
+              rightField.get.schema.schemaType match {
+                case _: SchemaType.SRef[?] => () // success
+                case other                 => fail(s"Expected SRef for right field, got: $other")
+              }
+            case other => fail(s"Expected SProduct for Branch, got: $other")
+          }
+        case other =>
+          fail(s"Expected SCoproduct for TreeNode, got: $other")
+      }
+    }
+
     test("recursive through Option") {
       val schema = KindlingsSchema.derive[RecursiveOption]
       schema.schemaType match {

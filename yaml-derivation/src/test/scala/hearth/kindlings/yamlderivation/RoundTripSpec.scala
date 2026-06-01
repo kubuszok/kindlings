@@ -249,6 +249,51 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("recursive types - def caching") {
+
+      test("direct recursive sealed trait round-trip") {
+        val value: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+        val node = KindlingsYamlEncoder.encode[TreeNode](value)
+        val decoded = KindlingsYamlDecoder.decode[TreeNode](node)
+        decoded ==> Right(value)
+      }
+
+      test("leaf-only recursive sealed trait round-trip") {
+        val value: TreeNode = Leaf(42)
+        val node = KindlingsYamlEncoder.encode[TreeNode](value)
+        val decoded = KindlingsYamlDecoder.decode[TreeNode](node)
+        decoded ==> Right(value)
+      }
+
+      test("deeply nested recursive sealed trait round-trip") {
+        val value: TreeNode = Branch(1, Branch(2, Branch(3, Leaf(4), Leaf(5)), Leaf(6)), Branch(7, Leaf(8), Leaf(9)))
+        val node = KindlingsYamlEncoder.encode[TreeNode](value)
+        val decoded = KindlingsYamlDecoder.decode[TreeNode](node)
+        decoded ==> Right(value)
+      }
+
+      test("mutual recursion round-trip") {
+        val value = MutRecA(1, Some(MutRecB("x", Some(MutRecA(2, None)))))
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[MutRecA](node)
+        decoded ==> Right(value)
+      }
+
+      test("mutual recursion round-trip from B side") {
+        val value = MutRecB("root", Some(MutRecA(1, Some(MutRecB("leaf", None)))))
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[MutRecB](node)
+        decoded ==> Right(value)
+      }
+
+      test("mutual recursion with no nesting") {
+        val value = MutRecA(42, None)
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[MutRecA](node)
+        decoded ==> Right(value)
+      }
+    }
+
     // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
     // in yaml encoder macro — see KindlingsYamlEncoderSpec.
   }
