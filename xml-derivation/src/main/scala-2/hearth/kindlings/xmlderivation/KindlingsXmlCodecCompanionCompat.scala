@@ -4,6 +4,7 @@ import scala.language.experimental.macros
 
 private[xmlderivation] trait KindlingsXmlCodecCompanionCompat { this: KindlingsXmlCodec.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: XmlConfig): KindlingsXmlCodec[A] =
     macro internal.compiletime.CodecMacros.deriveCodecImpl[A]
 

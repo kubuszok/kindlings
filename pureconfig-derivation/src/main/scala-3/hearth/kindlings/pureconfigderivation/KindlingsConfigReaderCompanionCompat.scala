@@ -4,6 +4,7 @@ import pureconfig.ConfigReader
 
 private[pureconfigderivation] trait KindlingsConfigReaderCompanionCompat { this: KindlingsConfigReader.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: PureConfig): ConfigReader[A] = ${
     internal.compiletime.ReaderMacros.deriveReaderImpl[A]('config)
   }

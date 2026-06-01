@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[circederivation] trait KindlingsDecoderCompanionCompat { this: KindlingsDecoder.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: Configuration): Decoder[A] =
     macro internal.compiletime.DecoderMacros.deriveDecoderImpl[A]
 

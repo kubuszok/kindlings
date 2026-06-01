@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 
 private[avroderivation] trait AvroSchemaForCompanionCompat { this: AvroSchemaFor.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: AvroConfig): AvroSchemaFor[A] =
     macro internal.compiletime.SchemaForMacros.deriveSchemaForImpl[A]
 

@@ -5,6 +5,7 @@ import scala.language.experimental.macros
 private[ubjsonderivation] trait UBJsonValueCodecCompanionCompat {
   this: UBJsonValueCodec.type =>
 
+  @deprecated("Use .derived instead", "next")
   def derive[A](implicit config: UBJsonConfig): UBJsonValueCodec[A] =
     macro internal.compiletime.CodecMacros.deriveCodecImpl[A]
 

@@ -2,6 +2,7 @@ package hearth.kindlings.yamlderivation
 
 private[yamlderivation] trait KindlingsYamlCodecCompanionCompat { this: KindlingsYamlCodec.type =>
 
+  @deprecated("Use .derived instead", "next")
   inline def derive[A](using config: YamlConfig): KindlingsYamlCodec[A] =
     internal.runtime.YamlDerivationUtils.yamlCodec[A](
       KindlingsYamlEncoder.derive[A],
