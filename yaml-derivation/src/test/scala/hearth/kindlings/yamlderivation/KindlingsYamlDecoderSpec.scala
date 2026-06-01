@@ -280,6 +280,28 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       test("empty map") {
         KindlingsYamlDecoder.decode[Map[String, Int]](mappingOf()) ==> Right(Map.empty[String, Int])
       }
+
+      test("case class with Map[String, Int] field") {
+        val node = mappingOf("data" -> mappingOf("x" -> scalarNode("10"), "y" -> scalarNode("20")))
+        KindlingsYamlDecoder.decode[WithMapField](node) ==> Right(WithMapField(Map("x" -> 10, "y" -> 20)))
+      }
+
+      test("case class with empty Map field") {
+        val node = mappingOf("data" -> mappingOf())
+        KindlingsYamlDecoder.decode[WithMapField](node) ==> Right(WithMapField(Map.empty))
+      }
+
+      test("nested Map[String, Map[String, Int]]") {
+        val node = mappingOf(
+          "data" -> mappingOf(
+            "group1" -> mappingOf("a" -> scalarNode("1"), "b" -> scalarNode("2")),
+            "group2" -> mappingOf("c" -> scalarNode("3"))
+          )
+        )
+        KindlingsYamlDecoder.decode[WithNestedMap](node) ==>
+          Right(WithNestedMap(Map("group1" -> Map("a" -> 1, "b" -> 2), "group2" -> Map("c" -> 3))))
+      }
+
     }
 
     group("recursive types") {

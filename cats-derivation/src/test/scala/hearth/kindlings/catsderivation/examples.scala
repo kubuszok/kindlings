@@ -255,4 +255,37 @@ object examples {
     implicit val orderColor: cats.kernel.Order[Color] = cats.kernel.Order.derived
     implicit val hashColor: cats.kernel.Hash[Color] = cats.kernel.Hash.derived
   }
+
+  // Sealed trait with one case class child having Empty instance (for EmptyEnumRule)
+  sealed trait Status
+  case object Active extends Status
+  final case class Suspended(reason: String) extends Status
+  object Suspended {
+    implicit val emptySuspended: alleycats.Empty[Suspended] = alleycats.Empty.derived
+  }
+  object Status {
+    implicit val emptyStatus: alleycats.Empty[Status] = alleycats.Empty.derived
+  }
+
+  // Case classes with Map, List, Option fields for Show/Eq rule coverage
+  final case class WithMapField(data: Map[String, Int])
+  object WithMapField {
+    implicit val showWithMapField: cats.Show[WithMapField] = cats.Show.derived
+  }
+
+  final case class WithListField(items: List[Int])
+  object WithListField {
+    implicit val showWithListField: cats.Show[WithListField] = cats.Show.derived
+  }
+
+  final case class WithOptField(value: Option[String])
+  object WithOptField {
+    implicit val showWithOptField: cats.Show[WithOptField] = cats.Show.derived
+    implicit val eqWithOptField: cats.kernel.Eq[WithOptField] = cats.kernel.Eq.derived
+  }
+
+  // ShowPretty for sealed trait (enum) coverage
+  object ShapeShowPretty {
+    implicit val showPrettyShape: ShowPretty[Shape] = ShowPretty.derived
+  }
 }

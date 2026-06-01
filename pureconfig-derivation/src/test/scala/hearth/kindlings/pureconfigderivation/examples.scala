@@ -89,6 +89,11 @@ sealed trait TreeNode
 case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
 case class Leaf(value: Int) extends TreeNode
 
+// --- Nested / complex maps ---
+
+case class WithNestedMap(data: Map[String, Map[String, Int]])
+case class WithMapOfCaseClass(data: Map[String, SimplePerson])
+
 // --- Discriminator field collision ---
 
 case class WithTypeField(`type`: String, name: String)

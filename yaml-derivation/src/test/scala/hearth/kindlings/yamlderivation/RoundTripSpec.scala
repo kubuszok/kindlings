@@ -143,6 +143,34 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("maps") {
+
+      test("Map[String, Int] roundtrip") {
+        val value = Map("a" -> 1, "b" -> 2)
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[Map[String, Int]](node) ==> Right(value)
+      }
+
+      test("empty map roundtrip") {
+        val value = Map.empty[String, Int]
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[Map[String, Int]](node) ==> Right(value)
+      }
+
+      test("case class with Map field roundtrip") {
+        val value = WithMapField(Map("x" -> 10, "y" -> 20))
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[WithMapField](node) ==> Right(value)
+      }
+
+      test("nested Map[String, Map[String, Int]] roundtrip") {
+        val value = WithNestedMap(Map("group1" -> Map("a" -> 1, "b" -> 2), "group2" -> Map("c" -> 3)))
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[WithNestedMap](node) ==> Right(value)
+      }
+
+    }
+
     group("with configuration") {
 
       test("custom constructor name transform roundtrip") {

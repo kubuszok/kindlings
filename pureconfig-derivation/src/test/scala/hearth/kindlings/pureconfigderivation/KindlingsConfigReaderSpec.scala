@@ -64,10 +64,30 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
           cursor("{ name = Eagles, members = [ { name = A, age = 1 }, { name = B, age = 2 } ] }")
         ) ==> Right(TeamWithMembers("Eagles", List(SimplePerson("A", 1), SimplePerson("B", 2))))
       }
+    }
+
+    group("maps") {
 
       test("Map[String, Int] field") {
         val r = KindlingsConfigReader.derive[WithMap]
         r.from(cursor("{ scores = { a = 1, b = 2 } }")) ==> Right(WithMap(Map("a" -> 1, "b" -> 2)))
+      }
+
+      test("empty Map field") {
+        val r = KindlingsConfigReader.derive[WithMap]
+        r.from(cursor("{ scores = {} }")) ==> Right(WithMap(Map.empty))
+      }
+
+      test("nested Map[String, Map[String, Int]]") {
+        val r = KindlingsConfigReader.derive[WithNestedMap]
+        r.from(cursor("{ data = { group1 = { a = 1, b = 2 }, group2 = { c = 3 } } }")) ==>
+          Right(WithNestedMap(Map("group1" -> Map("a" -> 1, "b" -> 2), "group2" -> Map("c" -> 3))))
+      }
+
+      test("Map[String, CaseClass] with derived inner type") {
+        val r = KindlingsConfigReader.derive[WithMapOfCaseClass]
+        r.from(cursor("{ data = { alice = { name = Alice, age = 30 }, bob = { name = Bob, age = 25 } } }")) ==>
+          Right(WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25))))
       }
     }
 
