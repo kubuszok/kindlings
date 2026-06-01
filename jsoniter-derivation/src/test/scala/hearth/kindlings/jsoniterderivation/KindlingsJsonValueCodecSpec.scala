@@ -1852,8 +1852,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       val vehicleCodec = KindlingsJsonValueCodec.derived[Vehicle]
 
-      // TODO: nested sealed trait hierarchies with wrapper encoding are broken
-      test("intermediate sealed trait round-trip (leaf under MotorVehicle)".ignore) {
+      test("intermediate sealed trait round-trip (leaf under MotorVehicle)") {
         val value: Vehicle = Truck(5000)
         val json = writeToString(value)(vehicleCodec)
         val decoded = readFromString[Vehicle](json)(vehicleCodec)
@@ -1867,7 +1866,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         decoded ==> value
       }
 
-      test("all leaf variants round-trip (wrapper style)".ignore) {
+      test("all leaf variants round-trip (wrapper style)") {
         val variants: List[Vehicle] = List(Truck(3000), Motorcycle(600), Bicycle(7))
         for (v <- variants) {
           val json = writeToString(v)(vehicleCodec)
@@ -1961,7 +1960,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     test("Map[String, Shape] round-trip (recursive sealed trait derivation)") {
       val codec = KindlingsJsonValueCodec.derived[Map[String, Shape]]
-      val value = Map("c" -> Circle(1.0): Shape, "r" -> Rectangle(2.0, 3.0): Shape)
+      val value = Map("c" -> (Circle(1.0): Shape), "r" -> (Rectangle(2.0, 3.0): Shape))
       val json = writeToString(value)(codec)
       val decoded = readFromString[Map[String, Shape]](json)(codec)
       decoded ==> value
@@ -2027,6 +2026,508 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       assert(json.contains("\"is_active\":\"1\""))
       val decoded = readFromString[AnnotatedCaseClass](json)(codec)
       decoded ==> value
+    }
+
+    test("@fieldName on sealed trait subtypes: decode with original keys fails") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedSealedTrait]
+      val jsonOriginalKeys = """{"AnnotatedSubA":{"subName":"hello","value":42}}"""
+      intercept[JsonReaderException] {
+        readFromString[AnnotatedSealedTrait](jsonOriginalKeys)(codec)
+      }
+    }
+
+    test("@fieldName on sealed trait subtypes: JSON keys are renamed, not original") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedSealedTrait]
+      val value: AnnotatedSealedTrait = AnnotatedSubA("data", 7)
+      val json = writeToString(value)(codec)
+      // Positive: renamed keys present
+      assert(json.contains("\"sub_name\""), s"expected 'sub_name' in $json")
+      // Negative: original Scala field names absent
+      assert(!json.contains("\"subName\""), s"unexpected 'subName' in $json")
+    }
+
+    test("@stringified on sealed trait subtypes: encode produces string-wrapped numeric, decode restores") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedSealedTrait]
+      val value: AnnotatedSealedTrait = AnnotatedSubA("x", 999)
+      val json = writeToString(value)(codec)
+      // The numeric field 'value' on AnnotatedSubA must be encoded as a JSON string
+      assert(json.contains("\"999\""), s"expected stringified '999' in $json")
+      // Must NOT contain bare numeric 999 outside of a string
+      assert(
+        !json.contains(":999,") && !json.contains(":999}"),
+        s"value should be stringified, not bare numeric in $json"
+      )
+      // Full round-trip
+      val decoded = readFromString[AnnotatedSealedTrait](json)(codec)
+      decoded ==> value
+    }
+
+    test("@transientField on sealed trait subtypes: field omitted from encoding") {
+      val codec = KindlingsJsonValueCodec.derived[TransientSealedTrait]
+      val valueA: TransientSealedTrait = TransientSubA("hello", "should-be-omitted")
+      val jsonA = writeToString(valueA)(codec)
+      assert(!jsonA.contains("cache"), s"@transientField 'cache' should be absent from $jsonA")
+      assert(jsonA.contains("\"name\":\"hello\""), s"non-transient field missing in $jsonA")
+
+      val valueB: TransientSealedTrait = TransientSubB(42, 999)
+      val jsonB = writeToString(valueB)(codec)
+      assert(!jsonB.contains("temp"), s"@transientField 'temp' should be absent from $jsonB")
+      assert(jsonB.contains("\"value\":42"), s"non-transient field missing in $jsonB")
+    }
+
+    test("@transientField on sealed trait subtypes: decode without transient field uses default") {
+      val codec = KindlingsJsonValueCodec.derived[TransientSealedTrait]
+      // Encode then decode — transient field should get its default value
+      val original = TransientSubA("test", "custom-cache")
+      val json = writeToString[TransientSealedTrait](original)(codec)
+      val decoded = readFromString[TransientSealedTrait](json)(codec)
+      decoded match {
+        case TransientSubA(name, cache) =>
+          name ==> "test"
+          cache ==> "default-cache" // default, not "custom-cache"
+        case other => assert(false, s"expected TransientSubA, got $other")
+      }
+    }
+
+    test("@transientField on sealed trait subtypes: round-trip restores defaults for all subtypes") {
+      val codec = KindlingsJsonValueCodec.derived[TransientSealedTrait]
+      val originalB = TransientSubB(100, 999)
+      val json = writeToString[TransientSealedTrait](originalB)(codec)
+      val decoded = readFromString[TransientSealedTrait](json)(codec)
+      decoded match {
+        case TransientSubB(value, temp) =>
+          value ==> 100
+          temp ==> -1 // default, not 999
+        case other => assert(false, s"expected TransientSubB, got $other")
+      }
+    }
+  }
+
+  group("annotation x type shape: config interactions") {
+
+    test("enumAsStrings + constructorNameMapper: names are transformed AND encoded as strings") {
+      implicit val config: JsoniterConfig =
+        JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toUpperCase)
+      val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
+      // All directions should encode as upper-case strings
+      writeToString[CardinalDirection](North)(codec) ==> "\"NORTH\""
+      writeToString[CardinalDirection](South)(codec) ==> "\"SOUTH\""
+      writeToString[CardinalDirection](East)(codec) ==> "\"EAST\""
+      writeToString[CardinalDirection](West)(codec) ==> "\"WEST\""
+      // Decode must accept transformed names
+      readFromString[CardinalDirection]("\"NORTH\"")(codec) ==> (North: CardinalDirection)
+      readFromString[CardinalDirection]("\"WEST\"")(codec) ==> (West: CardinalDirection)
+    }
+
+    test("enumAsStrings + constructorNameMapper: original untransformed name is rejected") {
+      implicit val config: JsoniterConfig =
+        JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toUpperCase)
+      val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
+      // Original mixed-case name should fail decoding
+      intercept[JsonReaderException] {
+        readFromString[CardinalDirection]("\"North\"")(codec)
+      }
+    }
+
+    test("transientDefault + useDefaults: encode omits defaults, decode restores them") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+      val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
+      val withDefaults = WithDefaultFields("Alice", 25, true) // age=25 and active=true are defaults
+      val withNonDefaults = WithDefaultFields("Bob", 42, false)
+
+      // Encoding: default values are omitted
+      val jsonDefaults = writeToString(withDefaults)(codec)
+      assert(!jsonDefaults.contains("\"age\""), s"default age should be omitted: $jsonDefaults")
+      assert(!jsonDefaults.contains("\"active\""), s"default active should be omitted: $jsonDefaults")
+      jsonDefaults ==> """{"name":"Alice"}"""
+
+      // Encoding: non-default values are present
+      val jsonNonDefaults = writeToString(withNonDefaults)(codec)
+      assert(jsonNonDefaults.contains("\"age\":42"))
+      assert(jsonNonDefaults.contains("\"active\":false"))
+
+      // Decoding: missing fields are restored to defaults
+      val decodedDefaults = readFromString[WithDefaultFields](jsonDefaults)(codec)
+      decodedDefaults ==> withDefaults
+
+      // Decoding: present fields are used as-is
+      val decodedNonDefaults = readFromString[WithDefaultFields](jsonNonDefaults)(codec)
+      decodedNonDefaults ==> withNonDefaults
+    }
+
+    test("transientDefault round-trip preserves identity for default and non-default values") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
+      val codec = KindlingsJsonValueCodec.derived[WithMixedTransient]
+      // All defaults
+      val allDefaults = WithMixedTransient("X", 0, None, Nil)
+      readFromString[WithMixedTransient](writeToString(allDefaults)(codec))(codec) ==> allDefaults
+      // All non-defaults
+      val allNonDefaults = WithMixedTransient("Y", 99, Some("y@test.com"), List("tag1", "tag2"))
+      readFromString[WithMixedTransient](writeToString(allNonDefaults)(codec))(codec) ==> allNonDefaults
+    }
+  }
+
+  group("Either[A, B] codec") {
+
+    test("Either[Int, String] Left round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[Either[Int, String]]
+      val value: Either[Int, String] = Left(42)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[Either[Int, String]](json)(codec)
+      decoded ==> value
+    }
+
+    test("Either[Int, String] Right round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[Either[Int, String]]
+      val value: Either[Int, String] = Right("hello")
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[Either[Int, String]](json)(codec)
+      decoded ==> value
+    }
+
+    test("Either[SimplePerson, String] with derived inner type") {
+      val codec = KindlingsJsonValueCodec.derived[Either[SimplePerson, String]]
+      val left: Either[SimplePerson, String] = Left(SimplePerson("Alice", 30))
+      val jsonLeft = writeToString(left)(codec)
+      readFromString[Either[SimplePerson, String]](jsonLeft)(codec) ==> left
+
+      val right: Either[SimplePerson, String] = Right("error")
+      val jsonRight = writeToString(right)(codec)
+      readFromString[Either[SimplePerson, String]](jsonRight)(codec) ==> right
+    }
+
+    test("case class with Either field round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[WithEitherField]
+      val left = WithEitherField(Left("error"))
+      val jsonLeft = writeToString(left)(codec)
+      readFromString[WithEitherField](jsonLeft)(codec) ==> left
+
+      val right = WithEitherField(Right(42))
+      val jsonRight = writeToString(right)(codec)
+      readFromString[WithEitherField](jsonRight)(codec) ==> right
+    }
+
+    test("nested Either[Either[Int, String], Boolean] round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[Either[Either[Int, String], Boolean]]
+      val leftLeft: Either[Either[Int, String], Boolean] = Left(Left(1))
+      val jsonLL = writeToString(leftLeft)(codec)
+      readFromString[Either[Either[Int, String], Boolean]](jsonLL)(codec) ==> leftLeft
+
+      val leftRight: Either[Either[Int, String], Boolean] = Left(Right("x"))
+      val jsonLR = writeToString(leftRight)(codec)
+      readFromString[Either[Either[Int, String], Boolean]](jsonLR)(codec) ==> leftRight
+
+      val right: Either[Either[Int, String], Boolean] = Right(true)
+      val jsonR = writeToString(right)(codec)
+      readFromString[Either[Either[Int, String], Boolean]](jsonR)(codec) ==> right
+    }
+
+    test("Either with discriminator style") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withDiscriminator("type")
+      val codec = KindlingsJsonValueCodec.derived[Either[Int, String]]
+      val left: Either[Int, String] = Left(42)
+      val json = writeToString(left)(codec)
+      assert(json.contains("\"type\""))
+      readFromString[Either[Int, String]](json)(codec) ==> left
+    }
+
+    test("case class with nested Either field round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[WithNestedEither]
+      val value = WithNestedEither(Left(Left(1)))
+      val json = writeToString(value)(codec)
+      readFromString[WithNestedEither](json)(codec) ==> value
+
+      val value2 = WithNestedEither(Right(true))
+      val json2 = writeToString(value2)(codec)
+      readFromString[WithNestedEither](json2)(codec) ==> value2
+    }
+  }
+
+  group("BitSet codec") {
+
+    test("immutable.BitSet round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val value = scala.collection.immutable.BitSet(1, 5, 10, 42)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[scala.collection.immutable.BitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("mutable.BitSet round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.mutable.BitSet]
+      val value = scala.collection.mutable.BitSet(3, 7, 15)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[scala.collection.mutable.BitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("collection.BitSet round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.BitSet]
+      val value: scala.collection.BitSet = scala.collection.immutable.BitSet(2, 4, 8)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[scala.collection.BitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("empty immutable.BitSet round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val value = scala.collection.immutable.BitSet.empty
+      val json = writeToString(value)(codec)
+      json ==> "[]"
+      val decoded = readFromString[scala.collection.immutable.BitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("empty mutable.BitSet round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.mutable.BitSet]
+      val value = scala.collection.mutable.BitSet.empty
+      val json = writeToString(value)(codec)
+      json ==> "[]"
+      val decoded = readFromString[scala.collection.mutable.BitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("case class with immutable.BitSet field round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[WithImmutableBitSet]
+      val value = WithImmutableBitSet(scala.collection.immutable.BitSet(0, 100, 500))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[WithImmutableBitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("case class with mutable.BitSet field round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[WithMutableBitSet]
+      val value = WithMutableBitSet(scala.collection.mutable.BitSet(1, 2, 3))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[WithMutableBitSet](json)(codec)
+      decoded ==> value
+    }
+
+    test("bitSetValueLimit exceeded is rejected") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withBitSetValueLimit(10)
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val json = "[1,5,10]"
+      intercept[JsonReaderException] {
+        readFromString[scala.collection.immutable.BitSet](json)(codec)
+      }
+    }
+
+    test("bitSetValueLimit boundary accepted") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withBitSetValueLimit(10)
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val json = "[0,5,9]"
+      val decoded = readFromString[scala.collection.immutable.BitSet](json)(codec)
+      decoded ==> scala.collection.immutable.BitSet(0, 5, 9)
+    }
+
+    test("negative value is rejected") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val json = "[1,-3,5]"
+      intercept[JsonReaderException] {
+        readFromString[scala.collection.immutable.BitSet](json)(codec)
+      }
+    }
+
+    test("negative value is rejected for mutable.BitSet") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.mutable.BitSet]
+      val json = "[-1,2]"
+      intercept[JsonReaderException] {
+        readFromString[scala.collection.mutable.BitSet](json)(codec)
+      }
+    }
+
+    test("bitSetValueLimit exceeded is rejected for mutable.BitSet") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withBitSetValueLimit(5)
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.mutable.BitSet]
+      val json = "[1,2,5]"
+      intercept[JsonReaderException] {
+        readFromString[scala.collection.mutable.BitSet](json)(codec)
+      }
+    }
+
+    test("immutable.BitSet encodes as sorted JSON array") {
+      val codec = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
+      val value = scala.collection.immutable.BitSet(10, 1, 5, 3)
+      val json = writeToString(value)(codec)
+      json ==> "[1,3,5,10]"
+    }
+  }
+
+  // Compile-time config conflict validation tests are in JsoniterScala3Spec
+  // because they depend on semiEval succeeding, which requires Scala 3 inline expansion.
+
+  // ---------------------------------------------------------------------------
+  // Default config differences from jsoniter-scala's CodecMakerConfig
+  //
+  // These tests document intentional divergences between Kindlings' JsoniterConfig
+  // defaults and jsoniter-scala's CodecMakerConfig defaults. They serve as living
+  // documentation: if a test here fails after a default change, it signals a
+  // migration-relevant behavioral shift.
+  // ---------------------------------------------------------------------------
+  group("default config differences from jsoniter-scala") {
+
+    // jsoniter-scala: transientDefault = true  (fields at default value are omitted)
+    // Kindlings:      transientDefault = false (all fields are always present in output)
+    group("transientDefault = false (default)") {
+
+      test("field with default value IS included in output") {
+        // Default config — no explicit transientDefault override
+        val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true) // age=25 and active=true are defaults
+        val json = writeToString(value)(codec)
+        // With Kindlings default (transientDefault=false), ALL fields are present
+        assert(json.contains("\"age\":25"), s"default-valued 'age' should be present: $json")
+        assert(json.contains("\"active\":true"), s"default-valued 'active' should be present: $json")
+        assert(json.contains("\"name\":\"Alice\""))
+      }
+
+      test("round-trip preserves all fields including defaults") {
+        val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true)
+        val json = writeToString(value)(codec)
+        readFromString[WithDefaultFields](json)(codec) ==> value
+      }
+    }
+
+    group("transientDefault = true (explicit, matching jsoniter-scala)") {
+
+      test("field with default value is omitted from output") {
+        implicit val config: JsoniterConfig = JsoniterConfig(transientDefault = true)
+        val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
+        val value = WithDefaultFields("Alice", 25, true)
+        val json = writeToString(value)(codec)
+        assert(!json.contains("\"age\""), s"default-valued 'age' should be omitted: $json")
+        assert(!json.contains("\"active\""), s"default-valued 'active' should be omitted: $json")
+        json ==> """{"name":"Alice"}"""
+      }
+    }
+
+    // jsoniter-scala: checkFieldDuplication = true  (duplicate JSON keys rejected)
+    // Kindlings:      checkFieldDuplication = false (duplicate keys accepted, last wins)
+    group("checkFieldDuplication = false (default)") {
+
+      test("duplicate fields accepted, last value wins") {
+        // Default config — no explicit checkFieldDuplication override
+        val codec = KindlingsJsonValueCodec.derived[SimplePerson]
+        val json = """{"name":"Alice","age":30,"name":"Bob"}"""
+        val decoded = readFromString[SimplePerson](json)(codec)
+        // Last value wins
+        decoded ==> SimplePerson("Bob", 30)
+      }
+    }
+
+    group("checkFieldDuplication = true (explicit, matching jsoniter-scala)") {
+
+      test("duplicate fields rejected with error") {
+        implicit val config: JsoniterConfig = JsoniterConfig(checkFieldDuplication = true)
+        val codec = KindlingsJsonValueCodec.derived[SimplePerson]
+        val json = """{"name":"Alice","age":30,"name":"Bob"}"""
+        intercept[JsonReaderException] {
+          readFromString[SimplePerson](json)(codec)
+        }
+      }
+    }
+
+    // jsoniter-scala: discriminatorFieldName = Some("type") (discriminator-style ADT encoding)
+    // Kindlings:      discriminatorFieldName = None          (wrapper-style ADT encoding)
+    group("discriminatorFieldName = None (default)") {
+
+      test("wrapper-style encoding for sealed traits") {
+        // Default config — no explicit discriminatorFieldName override
+        val codec = KindlingsJsonValueCodec.derived[Shape]
+        val value: Shape = Circle(5.0)
+        val json = writeToString(value)(codec)
+        // Wrapper-style: {"Circle":{"radius":5.0}}
+        assert(json.contains("\"Circle\""), s"expected wrapper key 'Circle': $json")
+        assert(json.startsWith("{\"Circle\":{"), s"expected wrapper-style encoding: $json")
+        val decoded = readFromString[Shape](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    group("discriminatorFieldName = Some(\"type\") (explicit, matching jsoniter-scala)") {
+
+      test("discriminator-style encoding for sealed traits") {
+        implicit val config: JsoniterConfig = JsoniterConfig(discriminatorFieldName = Some("type"))
+        val codec = KindlingsJsonValueCodec.derived[Animal]
+        val value: Animal = Dog("Rex", "Labrador")
+        val json = writeToString(value)(codec)
+        // Discriminator-style: {"type":"Dog","name":"Rex","breed":"Labrador"}
+        assert(json.contains("\"type\":\"Dog\""), s"expected discriminator field: $json")
+        assert(!json.startsWith("{\"Dog\":{"), s"should not use wrapper-style: $json")
+        val decoded = readFromString[Animal](json)(codec)
+        decoded ==> value
+      }
+    }
+
+    // jsoniter-scala: mapMaxInsertNumber = 1024      (DoS protection by default)
+    // Kindlings:      mapMaxInsertNumber = Int.MaxValue (no limit by default)
+    group("mapMaxInsertNumber = Int.MaxValue (default)") {
+
+      test("large maps accepted with default config") {
+        // Default config — no explicit mapMaxInsertNumber override
+        val codec = KindlingsJsonValueCodec.derived[WithMapField]
+        // Build a map larger than jsoniter-scala's default 1024 limit
+        val entries = (1 to 1500).map(i => s"key$i" -> i).toMap
+        val value = WithMapField(entries)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithMapField](json)(codec)
+        decoded.data.size ==> 1500
+      }
+    }
+
+    group("mapMaxInsertNumber = 2 (explicit limit)") {
+
+      test("map with 3 entries rejected") {
+        implicit val config: JsoniterConfig = JsoniterConfig(mapMaxInsertNumber = 2)
+        val codec = KindlingsJsonValueCodec.derived[WithMapField]
+        val json = """{"data":{"a":1,"b":2,"c":3}}"""
+        intercept[JsonReaderException] {
+          readFromString[WithMapField](json)(codec)
+        }
+      }
+
+      test("map within limit accepted") {
+        implicit val config: JsoniterConfig = JsoniterConfig(mapMaxInsertNumber = 2)
+        val codec = KindlingsJsonValueCodec.derived[WithMapField]
+        val json = """{"data":{"a":1,"b":2}}"""
+        readFromString[WithMapField](json)(codec) ==> WithMapField(Map("a" -> 1, "b" -> 2))
+      }
+    }
+
+    // jsoniter-scala: setMaxInsertNumber = 1024      (DoS protection by default)
+    // Kindlings:      setMaxInsertNumber = Int.MaxValue (no limit by default)
+    group("setMaxInsertNumber = Int.MaxValue (default)") {
+
+      test("large collections accepted with default config") {
+        // Default config — no explicit setMaxInsertNumber override
+        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        // Build a list larger than jsoniter-scala's default 1024 limit
+        val items = (1 to 1500).toList
+        val value = WithListField(items)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithListField](json)(codec)
+        decoded.items.size ==> 1500
+      }
+    }
+
+    group("setMaxInsertNumber = 2 (explicit limit)") {
+
+      test("collection with 3 elements rejected") {
+        implicit val config: JsoniterConfig = JsoniterConfig(setMaxInsertNumber = 2)
+        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        val json = """{"items":[1,2,3]}"""
+        intercept[JsonReaderException] {
+          readFromString[WithListField](json)(codec)
+        }
+      }
+
+      test("collection within limit accepted") {
+        implicit val config: JsoniterConfig = JsoniterConfig(setMaxInsertNumber = 2)
+        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        val json = """{"items":[1,2]}"""
+        readFromString[WithListField](json)(codec) ==> WithListField(List(1, 2))
+      }
     }
   }
 }

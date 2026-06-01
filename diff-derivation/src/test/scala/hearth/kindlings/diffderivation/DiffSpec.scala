@@ -305,12 +305,14 @@ final class DiffSpec extends hearth.MacroSuite {
 
       test("snapshot of CombOuter") {
         val d = Diff.derived[CombOuter]
-        val snap = d.snapshot(CombOuter(
-          Some(Person("Alice", 30)),
-          Some(Circle(1.0)),
-          List(Person("Bob", 25)),
-          Map("key" -> Person("Carol", 40))
-        ))
+        val snap = d.snapshot(
+          CombOuter(
+            Some(Person("Alice", 30)),
+            Some(Circle(1.0)),
+            List(Person("Bob", 25)),
+            Map("key" -> Person("Carol", 40))
+          )
+        )
         assert(snap.isIdentical, s"snapshot should be identical, got $snap")
       }
     }

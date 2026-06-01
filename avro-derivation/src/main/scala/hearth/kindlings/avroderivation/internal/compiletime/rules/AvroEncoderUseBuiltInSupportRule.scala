@@ -52,6 +52,12 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.wrapByteArray(Expr.splice(value).asInstanceOf[Array[Byte]]): Any))
       else if (tpe =:= Type.of[java.nio.ByteBuffer])
         Some(Expr.quote(Expr.splice(value).asInstanceOf[java.nio.ByteBuffer]: Any))
+      else if (tpe =:= Type.of[Seq[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.wrapByteSeq(Expr.splice(value).asInstanceOf[Seq[Byte]]): Any))
+      else if (tpe =:= Type.of[List[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.wrapByteSeq(Expr.splice(value).asInstanceOf[List[Byte]]): Any))
+      else if (tpe =:= Type.of[Vector[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.wrapByteSeq(Expr.splice(value).asInstanceOf[Vector[Byte]]): Any))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           val bd = Expr.splice(value).asInstanceOf[BigDecimal]

@@ -198,6 +198,14 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   val useDefaultsStaticallyFalse: Boolean =
                     dctx.evaluatedConfig.exists(!_.useDefaults)
 
+                  // Detect Option[_] fields at compile time — absent fields should decode as None,
+                  // not fail (bug #120: circe's .as() on a failed cursor fails immediately without
+                  // calling the decoder, so Decoder[Option[T]] never gets a chance to return None).
+                  val isOptionField: Boolean = Type[Field] match {
+                    case IsOption(_) => true
+                    case _           => false
+                  }
+
                   // --- Fail-fast decode expression ---
                   val ffExpr: Expr[Either[DecodingFailure, Any]] =
                     if (isTransient) {
@@ -234,6 +242,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                     .as(Expr.splice(decoderExpr))
                                     .asInstanceOf[Either[DecodingFailure, Any]]
                               }
+                            case None if isOptionField =>
+                              // Option[T] without default: absent field → Right(None) (bug #120)
+                              Expr.quote {
+                                CirceDerivationUtils.decodeOptionFieldAsAny(
+                                  Expr.splice(dctx.cursor),
+                                  Expr.splice(Expr(resolvedName)),
+                                  Expr.splice(decoderExpr)
+                                )
+                              }
                             case None =>
                               Expr.quote {
                                 Expr
@@ -261,6 +278,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                     .downField(fn)
                                     .as(Expr.splice(decoderExpr))
                                     .asInstanceOf[Either[DecodingFailure, Any]]
+                              }
+                            case None if isOptionField =>
+                              // Option[T] without default, runtime field name: absent field → Right(None) (bug #120)
+                              Expr.quote {
+                                CirceDerivationUtils.decodeOptionFieldAsAny(
+                                  Expr.splice(dctx.cursor),
+                                  Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                                  Expr.splice(decoderExpr)
+                                )
                               }
                             case None =>
                               Expr.quote {
@@ -315,6 +341,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                     )
                                     .map(x => x: Any)
                               }
+                            case None if isOptionField =>
+                              // Option[T] without default: absent field → Valid(None) (bug #120)
+                              Expr.quote {
+                                CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
+                                  Expr.splice(dctx.cursor),
+                                  Expr.splice(Expr(resolvedName)),
+                                  Expr.splice(decoderExpr)
+                                )
+                              }
                             case None =>
                               Expr.quote {
                                 Expr
@@ -343,6 +378,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                     .splice(decoderExpr)
                                     .tryDecodeAccumulating(Expr.splice(dctx.cursor).downField(fn))
                                     .map(x => x: Any)
+                              }
+                            case None if isOptionField =>
+                              // Option[T] without default, runtime field name: absent field → Valid(None) (bug #120)
+                              Expr.quote {
+                                CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
+                                  Expr.splice(dctx.cursor),
+                                  Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                                  Expr.splice(decoderExpr)
+                                )
                               }
                             case None =>
                               Expr.quote {

@@ -59,6 +59,23 @@ final class KindlingsXmlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("@transientField on sealed trait subtype") {
+
+      test("@transientField uses default when decoding sealed trait subtype") {
+        val decoder = KindlingsXmlDecoder.derived[CombTransientST]
+        val elem = parseXml("""<item type="CombTransientA"><name>Alice</name></item>""")
+        val result = decoder.decode(elem)
+        assert(result == Right(CombTransientA("Alice", "")))
+      }
+
+      test("@transientField Option uses default None when decoding sealed trait subtype") {
+        val decoder = KindlingsXmlDecoder.derived[CombTransientST]
+        val elem = parseXml("""<item type="CombTransientB"><value>42</value></item>""")
+        val result = decoder.decode(elem)
+        assert(result == Right(CombTransientB(42, None)))
+      }
+    }
+
     group("sealed traits") {
 
       test("decode with discriminator attribute") {

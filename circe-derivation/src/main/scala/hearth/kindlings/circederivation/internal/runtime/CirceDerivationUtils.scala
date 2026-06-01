@@ -145,6 +145,31 @@ object CirceDerivationUtils {
     else field.as[A](decoder).asInstanceOf[Decoder.Result[Any]]
   }
 
+  /** Decodes an Option field that has no default value. When the field is absent from the JSON, returns Right(None)
+    * instead of failing. When the field is present but null, also returns Right(None). Otherwise decodes normally. Uses
+    * `Any` return type to avoid path-dependent type issues in macros (same pattern as `decodeFieldWithUnsafeDefault`).
+    */
+  def decodeOptionFieldAsAny[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A]
+  ): Decoder.Result[Any] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Right(None)
+    else field.as[A](decoder).asInstanceOf[Decoder.Result[Any]]
+  }
+
+  /** Accumulating variant of `decodeOptionFieldAsAny`. */
+  def decodeOptionFieldAccumulatingAsAny[A](
+      cursor: HCursor,
+      fieldName: String,
+      decoder: Decoder[A]
+  ): ValidatedNel[DecodingFailure, Any] = {
+    val field = cursor.downField(fieldName)
+    if (field.failed) Validated.Valid(None)
+    else decoder.tryDecodeAccumulating(field).map(x => x: Any)
+  }
+
   /** Cast an `Any` value to `A`, using a `Decoder[A]` purely for type inference. The decoder is not called - this is a
     * compile-time trick to avoid path-dependent type aliases in Scala 2 macro-generated code.
     */

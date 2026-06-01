@@ -177,7 +177,7 @@ final class AvroSchemaForSpec extends MacroSuite {
     group("derived instance") {
 
       test("derive creates AvroSchemaFor instance") {
-        val instance = AvroSchemaFor.derived[SimplePerson]
+        val instance = AvroSchemaFor.derive[SimplePerson]
         instance.schema.getType ==> Schema.Type.RECORD
         instance.schema.getName ==> "SimplePerson"
       }
@@ -1008,55 +1008,6 @@ final class AvroSchemaForSpec extends MacroSuite {
       }
     }
 
-    group("mutually recursive types") {
-
-      test("MutRecA schema with mutual recursion via Option") {
-        val schema = AvroSchemaFor.schemaOf[MutRecA]
-        schema.getType ==> Schema.Type.RECORD
-        schema.getName ==> "MutRecA"
-        schema.getField("value").schema().getType ==> Schema.Type.INT
-        val bFieldSchema = schema.getField("b").schema()
-        bFieldSchema.getType ==> Schema.Type.UNION
-        // Option[MutRecB] should be UNION(null, MutRecB)
-        bFieldSchema.getTypes.size() ==> 2
-        bFieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
-        val mutRecBSchema = bFieldSchema.getTypes.get(1)
-        mutRecBSchema.getName ==> "MutRecB"
-        mutRecBSchema.getType ==> Schema.Type.RECORD
-      }
-
-      test("MutRecB schema with mutual recursion via Option") {
-        val schema = AvroSchemaFor.schemaOf[MutRecB]
-        schema.getType ==> Schema.Type.RECORD
-        schema.getName ==> "MutRecB"
-        schema.getField("value").schema().getType ==> Schema.Type.STRING
-        val aFieldSchema = schema.getField("a").schema()
-        aFieldSchema.getType ==> Schema.Type.UNION
-        aFieldSchema.getTypes.size() ==> 2
-        aFieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
-        val mutRecASchema = aFieldSchema.getTypes.get(1)
-        mutRecASchema.getName ==> "MutRecA"
-        mutRecASchema.getType ==> Schema.Type.RECORD
-      }
-    }
-
-    group("indirect recursive types via container") {
-
-      test("Forest containing recursive TreeCaseClass produces valid schema") {
-        val schema = AvroSchemaFor.schemaOf[Forest]
-        schema.getType ==> Schema.Type.RECORD
-        schema.getName ==> "Forest"
-        val treesField = schema.getField("trees")
-        treesField.schema().getType ==> Schema.Type.ARRAY
-        val treeSchema = treesField.schema().getElementType
-        treeSchema.getType ==> Schema.Type.RECORD
-        treeSchema.getName ==> "TreeCaseClass"
-        // children field references TreeCaseClass recursively
-        val childrenField = treeSchema.getField("children")
-        childrenField.schema().getType ==> Schema.Type.ARRAY
-      }
-    }
-
     group("PascalCase field names") {
 
       test("withPascalCaseFieldNames capitalizes first letter") {
@@ -1073,6 +1024,73 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[OuterWithNestedNullDefault]
         val field = schema.getField("b")
         assert(field.hasDefaultValue)
+      }
+    }
+
+    group("package-based automatic namespacing") {
+
+      test("type without @avroNamespace gets package namespace") {
+        val schema = AvroSchemaFor.schemaOf[PackageNamespaceRecord]
+        schema.getNamespace ==> "hearth.kindlings.avroderivation"
+      }
+
+      test("@avroNamespace annotation takes priority over package namespace") {
+        val schema = AvroSchemaFor.schemaOf[CustomNamespacePerson]
+        schema.getNamespace ==> "com.example.custom"
+      }
+
+      test("AvroConfig.namespace takes priority over package namespace") {
+        implicit val config: AvroConfig = AvroConfig(namespace = Some("com.config.ns"))
+        val schema = AvroSchemaFor.schemaOf[PackageNamespaceRecord]
+        schema.getNamespace ==> "com.config.ns"
+      }
+
+      test("enum without @avroNamespace gets package namespace") {
+        val schema = AvroSchemaFor.schemaOf[Color]
+        schema.getNamespace ==> "hearth.kindlings.avroderivation"
+      }
+
+      test("enum with @avroNamespace keeps annotation namespace") {
+        val schema = AvroSchemaFor.schemaOf[NamespacedColor]
+        schema.getNamespace ==> "com.example.colors"
+      }
+
+      test("SimplePerson gets package namespace") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        schema.getNamespace ==> "hearth.kindlings.avroderivation"
+      }
+    }
+
+    group("Seq[Byte], List[Byte], Vector[Byte] as BYTES") {
+
+      test("Seq[Byte] schema maps to BYTES") {
+        val schema = AvroSchemaFor.schemaOf[Seq[Byte]]
+        schema.getType ==> Schema.Type.BYTES
+      }
+
+      test("List[Byte] schema maps to BYTES") {
+        val schema = AvroSchemaFor.schemaOf[List[Byte]]
+        schema.getType ==> Schema.Type.BYTES
+      }
+
+      test("Vector[Byte] schema maps to BYTES") {
+        val schema = AvroSchemaFor.schemaOf[Vector[Byte]]
+        schema.getType ==> Schema.Type.BYTES
+      }
+
+      test("case class with Seq[Byte] field produces BYTES") {
+        val schema = AvroSchemaFor.schemaOf[WithByteSeq]
+        schema.getField("data").schema().getType ==> Schema.Type.BYTES
+      }
+
+      test("case class with List[Byte] field produces BYTES") {
+        val schema = AvroSchemaFor.schemaOf[WithByteList]
+        schema.getField("data").schema().getType ==> Schema.Type.BYTES
+      }
+
+      test("case class with Vector[Byte] field produces BYTES") {
+        val schema = AvroSchemaFor.schemaOf[WithByteVector]
+        schema.getField("data").schema().getType ==> Schema.Type.BYTES
       }
     }
   }

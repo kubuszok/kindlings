@@ -5,6 +5,8 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+
 trait EncoderHandleAsBuiltInRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -52,12 +54,85 @@ trait EncoderHandleAsBuiltInRuleImpl {
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZonedDateTime])))
           else if (Type[A] =:= CTypes.Duration)
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Duration])))
+          else if (Type[A] =:= CTypes.MonthDay)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.MonthDay])))
+          else if (Type[A] =:= CTypes.OffsetTime)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.OffsetTime])))
           else if (Type[A] =:= CTypes.Period)
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Period])))
+          else if (Type[A] =:= CTypes.Year)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.Year])))
+          else if (Type[A] =:= CTypes.YearMonth)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.YearMonth])))
+          else if (Type[A] =:= CTypes.ZoneId)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZoneId])))
+          else if (Type[A] =:= CTypes.ZoneOffset)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.time.ZoneOffset])))
           else if (Type[A] =:= CTypes.UUID)
             Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.util.UUID])))
           else if (Type[A] =:= Type.of[Unit])
             Some(Expr.quote(Expr.splice(writer).writeObjectStart()))
+          // Java boxed primitives — unbox via *Value() methods, then write as primitive
+          else if (Type[A] =:= CTypes.JavaByte)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Byte].byteValue())))
+          else if (Type[A] =:= CTypes.JavaShort)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Short].shortValue()))
+            )
+          else if (Type[A] =:= CTypes.JavaInteger)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Integer].intValue()))
+            )
+          else if (Type[A] =:= CTypes.JavaLong)
+            Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Long].longValue())))
+          else if (Type[A] =:= CTypes.JavaFloat)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Float].floatValue()))
+            )
+          else if (Type[A] =:= CTypes.JavaDouble)
+            Some(
+              Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Double].doubleValue()))
+            )
+          else if (Type[A] =:= CTypes.JavaBoolean)
+            Some(
+              Expr.quote(
+                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Boolean].booleanValue())
+              )
+            )
+          else if (Type[A] =:= CTypes.JavaCharacter)
+            Some(
+              Expr.quote(
+                Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[java.lang.Character].charValue().toString)
+              )
+            )
+          // BitSet types — encode as JSON array of ints
+          else if (Type[A] =:= CTypes.ImmutableBitSet)
+            Some(
+              Expr.quote(
+                JsoniterDerivationUtils.writeBitSet(
+                  Expr.splice(writer),
+                  Expr.splice(value).asInstanceOf[scala.collection.BitSet]
+                )
+              )
+            )
+          else if (Type[A] =:= CTypes.MutableBitSet)
+            Some(
+              Expr.quote(
+                JsoniterDerivationUtils.writeBitSet(
+                  Expr.splice(writer),
+                  Expr.splice(value).asInstanceOf[scala.collection.BitSet]
+                )
+              )
+            )
+          else if (Type[A] =:= CTypes.CollectionBitSet)
+            Some(
+              Expr.quote(
+                JsoniterDerivationUtils.writeBitSet(
+                  Expr.splice(writer),
+                  Expr.splice(value).asInstanceOf[scala.collection.BitSet]
+                )
+              )
+            )
           else
             None
 

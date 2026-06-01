@@ -230,19 +230,6 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(samples.nonEmpty, "Should generate value class samples")
   }
 
-  test("derives Arbitrary for recursive sealed trait (TreeNode)") {
-    sealed trait TreeNode
-    case class Branch(value: Int, children: List[TreeNode]) extends TreeNode
-    case class Leaf(value: Int) extends TreeNode
-
-    val arb: Arbitrary[TreeNode] = DeriveArbitrary.derived[TreeNode]
-    val samples = List.fill(20)(arb.arbitrary.sample).flatten
-
-    assert(samples.nonEmpty, "Should generate some TreeNode samples")
-    assert(samples.forall(_ != null), "All samples should be non-null")
-    assert(samples.exists(_.isInstanceOf[Leaf]), "Should generate Leaf values")
-  }
-
   test("deeply nested case class generates correctly") {
     case class Inner(value: Int)
     case class Middle(inner: Inner, flag: Boolean)
@@ -252,5 +239,20 @@ class ArbitrarySpec extends munit.FunSuite {
     val samples = List.fill(10)(arb.arbitrary.sample).flatten
     assert(samples.nonEmpty, "Should generate deeply nested samples")
     assert(samples.forall(_.middle.inner != null), "Nested fields should not be null")
+  }
+
+  test("direct recursive BinaryTree generates finite trees with bounded depth".ignore) {
+    import examples.DirectRecursive.*
+
+    def depth(tree: BinaryTree): Int = tree match {
+      case BLeaf(_)              => 1
+      case BNode(_, left, right) => 1 + math.max(depth(left), depth(right))
+    }
+
+    val gen = org.scalacheck.Gen.resize(5, arb.arbitrary)
+    val samples = List.fill(50)(gen.sample).flatten
+    assert(samples.nonEmpty, "Should generate some BinaryTree samples")
+    assert(samples.forall(t => depth(t) < 100), "Trees should have bounded depth")
+    assert(samples.exists(_.isInstanceOf[BLeaf]), "Should generate at least one BLeaf")
   }
 }

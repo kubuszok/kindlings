@@ -1,6 +1,6 @@
 package hearth.kindlings.yamlderivation
 
-import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
+import org.virtuslab.yaml.{ConstructError, Node, YamlError}
 import scala.language.experimental.macros
 
 private[yamlderivation] trait KindlingsYamlDecoderCompanionCompat { this: KindlingsYamlDecoder.type =>

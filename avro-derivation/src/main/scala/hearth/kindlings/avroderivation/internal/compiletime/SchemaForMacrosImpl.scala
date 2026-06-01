@@ -298,6 +298,44 @@ trait SchemaForMacrosImpl
         }
       }
 
+  // Avro namespace computation
+
+  /** Extracts the package namespace from a type's fully qualified name.
+    *
+    * For `hearth.kindlings.avroderivation.SimplePerson` this returns `"hearth.kindlings.avroderivation"`. For a
+    * top-level type with no package (e.g. `Foo`) this returns `""`.
+    */
+  protected def extractPackageNamespace[A: Type]: String = {
+    val fqcn = Type[A].plainPrint.takeWhile(_ != '[')
+    val lastDot = fqcn.lastIndexOf('.')
+    if (lastDot < 0) "" else fqcn.substring(0, lastDot)
+  }
+
+  /** Computes the namespace expression for a record or enum type with the following priority:
+    *   1. `@avroNamespace` annotation (highest priority)
+    *   2. `AvroConfig.namespace` (explicit config)
+    *   3. Package name extracted from the type's fully qualified name
+    *   4. `""` (fallback for top-level types)
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def computeNamespaceExpr[A: SchemaForCtx]: Expr[String] = {
+    implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
+    implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+    implicit val StringT: Type[String] = SfTypes.String
+
+    val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+    val packageNamespace: String = extractPackageNamespace[A]
+
+    classNamespace match {
+      case Some(ns) => Expr(ns)
+      case None     =>
+        val packageNsExpr = Expr(packageNamespace)
+        Expr.quote {
+          Expr.splice(sfctx.config).namespace.getOrElse(Expr.splice(packageNsExpr))
+        }
+    }
+  }
+
   // Avro name computation
 
   @scala.annotation.nowarn("msg=is never used")

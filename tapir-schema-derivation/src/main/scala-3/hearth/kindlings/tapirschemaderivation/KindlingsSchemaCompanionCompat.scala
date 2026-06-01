@@ -5,4 +5,8 @@ private[tapirschemaderivation] trait KindlingsSchemaCompanionCompat { this: Kind
   inline given derived[A]: KindlingsSchema[A] = ${
     internal.compiletime.SchemaMacros.deriveKindlingsSchemaImpl[A]
   }
+
+  inline def derivedEnumeration[A]: KindlingsSchema[A] = ${
+    internal.compiletime.SchemaMacros.deriveKindlingsSchemaEnumerationImpl[A]
+  }
 }

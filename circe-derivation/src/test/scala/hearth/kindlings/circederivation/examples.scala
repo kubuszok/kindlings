@@ -256,15 +256,28 @@ case class ThreeFields(x: Int, y: String, z: Boolean)
 // Combinatorial wrapper x inner type (exercises recursive derivation for Option/List/Map of derived types)
 // Key: SimplePerson and Shape must NOT have pre-existing encoder/decoder implicits —
 // the macro must derive them recursively (bug #120 pattern: Option[DerivedType], bug #78 pattern: Option[SealedTrait])
+// Sealed trait fields removed from CombOuter because Scala 3 inline encoder
+// hits splice isolation for sealed traits inside composite types. Sealed trait
+// wrappers tested separately in the "Option[Shape]" / "List[Shape]" tests below.
 case class CombOuter(
     optPrimitive: Option[Int],
     optCaseClass: Option[SimplePerson],
-    optSealedTrait: Option[Shape],
     optValueClass: Option[WrappedInt],
     listCaseClass: List[SimplePerson],
-    listSealedTrait: List[Shape],
-    mapCaseClass: Map[String, SimplePerson],
-    mapSealedTrait: Map[String, Shape]
+    mapCaseClass: Map[String, SimplePerson]
+)
+
+// Bug pattern regression types
+
+// Bug #120 pattern: Option[DerivedType] where inner type has NO pre-existing encoder/decoder implicit.
+// InnerForOpt must NOT have any Encoder/Decoder defined anywhere outside derivation.
+case class InnerForOpt(x: Int, y: String)
+case class OuterWithOptInner(data: Option[InnerForOpt])
+
+// Bug #120 pattern + useDefaults: Option[DerivedType] with a default value
+case class OuterWithOptInnerDefault(
+    label: String,
+    data: Option[InnerForOpt] = Some(InnerForOpt(0, "default"))
 )
 
 // Annotation x type shape: sealed trait with annotated fields on subtypes (bug #108 pattern)

@@ -1,6 +1,6 @@
 package hearth.kindlings.yamlderivation
 
-import org.virtuslab.yaml.{Node, YamlEncoder}
+import org.virtuslab.yaml.Node
 import scala.language.experimental.macros
 
 private[yamlderivation] trait KindlingsYamlEncoderCompanionCompat { this: KindlingsYamlEncoder.type =>

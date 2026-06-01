@@ -35,7 +35,13 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val StringT: Type[String] = DTypes.String
       implicit val AnyT: Type[Any] = DTypes.Any
       implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
+      implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
       val childrenList = enumType.directChildren.toList
+
+      // Pre-compute discriminator attribute name from config
+      val discriminatorAttr: Option[String] = dctx.evaluatedConfig.flatMap(_.discriminatorAttribute)
+      val discriminatorAttrName: String = discriminatorAttr.getOrElse("type")
+      val hasDiscriminator: Option[Boolean] = dctx.evaluatedConfig.map(_.discriminatorAttribute.isDefined)
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
@@ -51,18 +57,29 @@ trait DecoderHandleAsEnumRuleImpl {
           children
             .traverse { case (childName, child) =>
               import child.Underlying as ChildType
-              deriveChildDecoderLambda[A, ChildType](childName)
+              // Apply constructorNameMapper when evaluatedConfig is available
+              val mappedChildName: String = dctx.evaluatedConfig match {
+                case Some(cfg) => cfg.constructorNameMapper(childName)
+                case None      => childName
+              }
+              deriveChildDecoderLambda[A, ChildType](mappedChildName)
             }
             .map { childLambdas =>
               val childNames: List[String] = childLambdas.toList.map(_._1)
               val childDecoderExprs: List[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
                 childLambdas.toList.map(_._2)
 
-              // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration
-              // lambdas. The previous LambdaBuilder here built an `Elem => Either[…]` lambda only to
-              // immediately invoke it on `dctx.elem` — equivalent to inlining the body against
-              // `dctx.elem` directly, which is what we now do.
-              val namesListExpr: Expr[List[String]] = Expr(childNames)
+              // When evaluatedConfig is not available, the child names are unmapped.
+              // Build a runtime-mapped names list using config.constructorNameMapper.
+              val namesListExpr: Expr[List[String]] = dctx.evaluatedConfig match {
+                case Some(_) => Expr(childNames) // Already pre-mapped at compile time
+                case None    =>
+                  // Map child names at runtime via config.constructorNameMapper
+                  val rawNamesExpr: Expr[List[String]] = Expr(childNames)
+                  Expr.quote {
+                    Expr.splice(rawNamesExpr).map(Expr.splice(dctx.config).constructorNameMapper)
+                  }
+              }
               val decodersListExpr: Expr[List[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
                 childDecoderExprs.foldRight(
                   Expr.quote(List.empty[scala.xml.Elem => Either[XmlDecodingError, Any]])
@@ -70,18 +87,75 @@ trait DecoderHandleAsEnumRuleImpl {
                   Expr.quote(Expr.splice(decoder) :: Expr.splice(acc))
                 }
 
-              Expr.quote {
-                XmlDerivationUtils.getAttribute(Expr.splice(dctx.elem), "type") match {
-                  case Right(typeName) =>
-                    XmlDerivationUtils.dispatchByName[A](
-                      typeName,
+              hasDiscriminator match {
+                case Some(true) =>
+                  // Discriminator is statically known to be present
+                  Expr.quote {
+                    XmlDerivationUtils.getAttribute(
                       Expr.splice(dctx.elem),
-                      Expr.splice(namesListExpr),
-                      Expr.splice(decodersListExpr)
-                    )
-                  case Left(_) =>
-                    Left(XmlDecodingError.MissingDiscriminator("type", Expr.splice(dctx.elem).label))
-                }
+                      Expr.splice(Expr(discriminatorAttrName))
+                    ) match {
+                      case Right(typeName) =>
+                        XmlDerivationUtils.dispatchByName[A](
+                          typeName,
+                          Expr.splice(dctx.elem),
+                          Expr.splice(namesListExpr),
+                          Expr.splice(decodersListExpr)
+                        )
+                      case Left(_) =>
+                        Left(
+                          XmlDecodingError
+                            .MissingDiscriminator(
+                              Expr.splice(Expr(discriminatorAttrName)),
+                              Expr.splice(dctx.elem).label
+                            )
+                        )
+                    }
+                  }
+                case Some(false) =>
+                  // No discriminator — try matching by wrapper element name
+                  Expr.quote {
+                    XmlDerivationUtils.decodeWrapped(Expr.splice(dctx.elem)) match {
+                      case Right((typeName, innerElem)) =>
+                        XmlDerivationUtils.dispatchByName[A](
+                          typeName,
+                          innerElem,
+                          Expr.splice(namesListExpr),
+                          Expr.splice(decodersListExpr)
+                        )
+                      case Left(err) => Left(err)
+                    }
+                  }
+                case None =>
+                  // evaluatedConfig not available — use runtime check
+                  Expr.quote {
+                    val config = Expr.splice(dctx.config)
+                    config.discriminatorAttribute match {
+                      case scala.Some(attr) =>
+                        XmlDerivationUtils.getAttribute(Expr.splice(dctx.elem), attr) match {
+                          case Right(typeName) =>
+                            XmlDerivationUtils.dispatchByName[A](
+                              typeName,
+                              Expr.splice(dctx.elem),
+                              Expr.splice(namesListExpr),
+                              Expr.splice(decodersListExpr)
+                            )
+                          case Left(_) =>
+                            Left(XmlDecodingError.MissingDiscriminator(attr, Expr.splice(dctx.elem).label))
+                        }
+                      case scala.None =>
+                        XmlDerivationUtils.decodeWrapped(Expr.splice(dctx.elem)) match {
+                          case Right((typeName, innerElem)) =>
+                            XmlDerivationUtils.dispatchByName[A](
+                              typeName,
+                              innerElem,
+                              Expr.splice(namesListExpr),
+                              Expr.splice(decodersListExpr)
+                            )
+                          case Left(err) => Left(err)
+                        }
+                    }
+                  }
               }
             }
       }
@@ -102,10 +176,6 @@ trait DecoderHandleAsEnumRuleImpl {
       deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.elem)).flatMap { _ =>
         dctx.getHelper[ChildType].flatMap {
           case Some(helper) =>
-            // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration
-            // lambdas. This site builds an `Elem => Either[…, Any]` value spliced into the runtime
-            // dispatch helper; the helper-call function builds its body using the active Quotes when
-            // invoked, so a direct cross-quotes function literal works.
             val configExpr = dctx.config
             val lambda: Expr[scala.xml.Elem => Either[XmlDecodingError, Any]] =
               Expr.quote { (childElem: scala.xml.Elem) =>

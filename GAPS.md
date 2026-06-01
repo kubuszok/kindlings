@@ -574,6 +574,153 @@ Analysis of all 15 GitHub issues revealed systematic patterns:
 
 ---
 
+## 14. Limitation Investigation Results (2025-06-01)
+
+All 6 discovered limitations were investigated in depth. None are Hearth limitations.
+
+### 14.1 HKT derivation for sealed traits — KINDLINGS IMPLEMENTATION GAP
+
+**Affects:** Functor, Foldable, Traverse, Apply, Applicative, Reducible, NonEmptyTraverse,
+NonEmptyAlternative, Alternative for sealed traits like `IList[+A]`.
+
+**Root cause:** All HKT derivations only have a `CaseClassRule`. No `EnumRule` exists for
+HKT type classes. The monomorphic type classes (Show, Eq, Hash, Order, etc.) all have
+enum rules that demonstrate the pattern.
+
+**Hearth APIs available:** `Enum.parse` works with applied types (`IList[Any]`),
+`Enum.matchOn` generates type-match dispatch, `subtypeTypeOf` correctly substitutes type
+parameters for parameterized children.
+
+**Fix:** Add `FunctorEnumRule` (and similar for each HKT type class) that:
+1. Parses `F[Any]` as Enum
+2. Uses `Enum.matchOn` for runtime type dispatch
+3. Recursively derives Functor for each child's type constructor
+4. Uses def-caching for recursive sealed traits
+
+**Precedent:** `ShowEnumRule` for dispatch pattern, `ConsKMacrosImpl` bridge for type
+constructor summoning.
+
+**Effort:** Medium-high per type class (new rule + bridge + caching).
+
+### 14.2 Nested type constructors in Functor — KINDLINGS IMPLEMENTATION GAP
+
+**Affects:** Case classes with `Vector[A]`, `Option[A]`, `List[A]`, `Map[String, A]`
+fields cannot derive Functor/Foldable/Traverse.
+
+**Root cause:** `FunctorCaseClassRule` classifies fields as direct (`A`) or invariant
+(no `A`), and rejects nested fields. The rejection is at lines 44-49 of
+`FunctorCaseClassRule.scala`.
+
+**Hearth APIs available:** Platform-specific `AppliedType` destructuring (Scala 3) and
+`.typeConstructor` (Scala 2) can decompose `Vector[A]` into `Vector` + `A`.
+
+**Fix:** Add a bridge method `summonFunctorForFieldType` (analogous to
+`ConsKMacrosImpl.summonConsKForFieldType`), extend FunctorCaseClassRule to compose
+summoned `Functor[Vector]` with the derived `Functor[F]` for nested fields. Add a
+`FunctorRuntime.map(functor: Any, fa: Any, f: Any): Any` runtime helper.
+
+**Precedent:** `ConsKMacrosImpl.summonConsKForFieldType` lines 30-31.
+
+**Effort:** Medium.
+
+### 14.3 Bifunctor/Bifoldable/Bitraverse for sealed traits — KINDLINGS IMPLEMENTATION GAP
+
+**Affects:** `Result[+A, +E]` and similar bi-variant sealed traits.
+
+**Root cause:** Same as 14.1 — only `CaseClassRule` exists, no enum rule. Additionally,
+Bifoldable and Bitraverse don't even use the rules system (direct `CaseClass.parse`).
+
+**Hearth APIs available:** Same as 14.1 — `Enum.parse[F[Int, Int]]` works,
+`Type.Ctor2.fromUntyped` handles child type constructor extraction.
+
+**Fix:** Add `BifunctorEnumRule` following the `ShowEnumRule` pattern + three-probe
+technique per child.
+
+**Effort:** Medium.
+
+### 14.4 Scala 3 splice isolation for sealed traits in composite types — LIKELY ALREADY FIXED
+
+**Affects:** `KindlingsEncoder.encode(combOuter)` and `KindlingsCodecAsObject.derived[CombOuter]`
+on Scala 3 when `CombOuter` contains sealed trait fields.
+
+**Root cause:** The circe encoder's inline entry points (`encode`, `derived`) expand macros
+that derive sealed trait encoders. On Scala 3, the generated tree for sealed traits
+(using `parMatchOn` in `EncoderHandleAsEnumRule`) may reference expressions across splice
+boundaries.
+
+**Key finding:** The jsoniter-derivation module has the identical pattern (CombOuter with
+sealed trait fields) and it WORKS on Scala 3. The circe encoder already uses the
+def-caching pattern (`forwardDeclare` + `buildCachedWith` + `toValDefs.use`). The issue
+may have been in an earlier version and the workaround was left in place.
+
+**Next step:** Re-add sealed trait fields to circe `CombOuter` and test on Scala 3 to
+verify whether the issue still exists. If it does, investigate `LambdaBuilder.build` +
+`resetOwner.asTerm` interaction with match expressions.
+
+**Effort:** Small (verification) to medium (if LambdaBuilder fix needed).
+
+### 14.5 Order[Shape] transitivity — GENUINE DERIVATION BUG
+
+**Affects:** `Order` and `PartialOrder` for ALL sealed traits.
+
+**Root cause:** `OrderEnumRule.scala` line 46 uses `Integer.compare(x.hashCode(), y.hashCode())`
+for cross-constructor comparison. Hash codes provide NO ordering guarantee — they're not
+monotonic, not transitive, and collide frequently.
+
+**Minimal counterexample:** `a = Circle(100.0)`, `b = Rectangle(0.0, 0.0)`,
+`c = Circle(0.0)` where `a.hashCode() < b.hashCode() < c.hashCode()` but
+`compare(a, c) = Double.compare(100.0, 0.0) > 0`. Transitivity violated.
+
+**How kittens does it correctly:** Uses ordinal indices (position in sealed trait children
+list) for cross-constructor comparison. Ordinals are deterministic and transitive.
+
+**Fix:** Replace `Integer.compare(x.hashCode(), y.hashCode())` with ordinal-based
+comparison in `OrderEnumRule.scala`. Since `Enum.directChildren` returns a `ListMap`
+preserving declaration order, assign each child an ordinal from its position. Generate:
+`Integer.compare(ordinalOf(x), ordinalOf(y))`.
+
+**Also affects:** `PartialOrderMacrosImpl` which delegates to Order.
+
+**Effort:** Small — single line change in the rule + ordinal assignment.
+
+### 14.6 Direct recursive Arbitrary stack overflow — KINDLINGS IMPLEMENTATION GAP
+
+**Affects:** `Arbitrary` for directly recursive sealed traits like
+`BNode(left: BinaryTree, right: BinaryTree)`.
+
+**Root cause:** Neither `ArbitraryHandleAsEnumRule` nor `ArbitraryHandleAsCaseClassRule`
+uses `Gen.sized` or `Gen.resize`. The enum rule produces `Gen.oneOf(genBNode, genBLeaf)`
+without size gating. The case class rule uses `sequenceGens` (plain `flatMap`) without
+size reduction for recursive fields.
+
+**Collections/Options work because:** `ArbitraryHandleAsCollectionRule` wraps in
+`Gen.sized { n => Gen.resize(max(n/2, 0), Gen.listOf(...)) }`. `ArbitraryHandleAsOptionRule`
+uses `Gen.sized { n => if (n <= 0) Gen.const(None) else ... }`.
+
+**How scalacheck-shapeless handles it:** `Recursive[T]` marker + `Gen.sized` in
+`MkRecursiveCoproductArbitrary` (line 170-175). For products, splits size budget:
+`headSize = size / (n + 1)`.
+
+**Fix (two cooperating rules):**
+1. Enum rule: detect self-recursion, wrap in `Gen.sized`, bias toward non-recursive
+   children (leaves) at small sizes via `Gen.frequency`
+2. Case class rule: for fields matching `derivedType`, use `Gen.resize(n/2, fieldGen)`
+
+**Effort:** Small-medium.
+
+### Summary
+
+| # | Limitation | Classification | Effort | Blocks parity? |
+|---|---|---|---|---|
+| 14.1 | HKT for sealed traits | Kindlings gap | Medium-high | Yes (kittens) |
+| 14.2 | Nested type constructors | Kindlings gap | Medium | Yes (kittens) |
+| 14.3 | Bi* for sealed traits | Kindlings gap | Medium | Partial |
+| 14.4 | Splice isolation (circe) | Likely already fixed | Small | No (workaround exists) |
+| 14.5 | Order transitivity | **Derivation bug** | Small | Yes (correctness) |
+| 14.6 | Arbitrary recursion | Kindlings gap | Small-medium | Partial |
+
+---
+
 ## 13. Code Coverage Analysis
 
 **Source:** https://app.codecov.io/gh/kubuszok/kindlings (2025-06-01)

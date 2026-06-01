@@ -61,7 +61,6 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
 
       // Read class-level annotations
       val classDoc: Option[String] = getTypeAnnotationStringArg[avroDoc, A]
-      val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
       val isError: Boolean = hasTypeAnnotation[avroError, A]
       val classProps: List[(String, String)] = getAllTypeAnnotationTwoStringArgs[avroProp, A]
       val classAliases: List[String] = getAllTypeAnnotationStringArgs[avroAlias, A]
@@ -95,11 +94,8 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
       // Filter out transient fields
       val nonTransientFields = fieldsList.filter { case (_, param) => !hasAnnotationType[transientField](param) }
 
-      // Build the namespace expression
-      val namespaceExpr: Expr[String] = classNamespace match {
-        case Some(ns) => Expr(ns)
-        case None     => Expr.quote(Expr.splice(sfctx.config).namespace.getOrElse(""))
-      }
+      // Build the namespace expression: @avroNamespace > config.namespace > package name > ""
+      val namespaceExpr: Expr[String] = computeNamespaceExpr[A]
 
       // Build the doc expression (null if no @avroDoc)
       val docExprOrNull: Expr[String] = classDoc match {

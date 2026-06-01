@@ -193,7 +193,20 @@ sealed trait AnnotatedSealedTrait
 case class AnnotatedSubA(@fieldName("sub_name") subName: String, @stringified value: Int) extends AnnotatedSealedTrait
 case class AnnotatedSubB(@fieldName("sub_label") subLabel: String) extends AnnotatedSealedTrait
 
+// @transientField on sealed trait subtypes
+sealed trait TransientSealedTrait
+case class TransientSubA(name: String, @transientField cache: String = "default-cache") extends TransientSealedTrait
+case class TransientSubB(value: Int, @transientField temp: Int = -1) extends TransientSealedTrait
+
 // HashMap / TreeMap test types
 case class WithHashMap(data: scala.collection.immutable.HashMap[String, Int])
 case class WithTreeMap(data: scala.collection.immutable.TreeMap[String, Int])
 case class WithArrayBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
+
+// Either test types
+case class WithEitherField(result: Either[String, Int])
+case class WithNestedEither(value: Either[Either[Int, String], Boolean])
+
+// BitSet test types
+case class WithImmutableBitSet(bits: scala.collection.immutable.BitSet)
+case class WithMutableBitSet(bits: scala.collection.mutable.BitSet)

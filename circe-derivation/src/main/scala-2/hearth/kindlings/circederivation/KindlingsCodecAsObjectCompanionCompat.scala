@@ -1,6 +1,5 @@
 package hearth.kindlings.circederivation
 
-import io.circe.Codec
 import scala.language.experimental.macros
 
 private[circederivation] trait KindlingsCodecAsObjectCompanionCompat { this: KindlingsCodecAsObject.type =>

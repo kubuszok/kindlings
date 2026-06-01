@@ -270,13 +270,13 @@ trait DecoderMacrosImpl
 
     def getInstance[B: Type]: MIO[Option[Expr[AvroDecoder[B]]]] = {
       implicit val DecoderB: Type[AvroDecoder[B]] = DecTypes.AvroDecoder[B]
-      cache.get0Ary[AvroDecoder[B]]("cached-decoder-instance")
+      cache.get0Ary[AvroDecoder[B]](s"cached-decoder-instance-${Type[B].plainPrint}")
     }
     def setInstance[B: Type](instance: Expr[AvroDecoder[B]]): MIO[Unit] = {
       implicit val DecoderB: Type[AvroDecoder[B]] = DecTypes.AvroDecoder[B]
       Log.info(s"Caching AvroDecoder instance for ${Type[B].prettyPrint}") >>
         cache.buildCachedWith(
-          "cached-decoder-instance",
+          s"cached-decoder-instance-${Type[B].plainPrint}",
           ValDefBuilder.ofLazy[AvroDecoder[B]](s"decoder_${Type[B].shortName}")
         )(_ => instance)
     }
@@ -284,20 +284,21 @@ trait DecoderMacrosImpl
     def getHelper[B: Type]: MIO[Option[(Expr[Any], Expr[AvroConfig]) => Expr[B]]] = {
       implicit val ConfigT: Type[AvroConfig] = DecTypes.AvroConfig
       implicit val AnyT: Type[Any] = DecTypes.Any
-      cache.get2Ary[Any, AvroConfig, B]("cached-decode-method")
+      cache.get2Ary[Any, AvroConfig, B](s"cached-decode-method-${Type[B].plainPrint}")
     }
     def setHelper[B: Type](
         helper: (Expr[Any], Expr[AvroConfig]) => MIO[Expr[B]]
     ): MIO[Unit] = {
       implicit val ConfigT: Type[AvroConfig] = DecTypes.AvroConfig
       implicit val AnyT: Type[Any] = DecTypes.Any
+      val cacheKey = s"cached-decode-method-${Type[B].plainPrint}"
       val defBuilder =
         ValDefBuilder.ofDef2[Any, AvroConfig, B](s"decode_${Type[B].shortName}")
       for {
         _ <- Log.info(s"Forward-declaring decode helper for ${Type[B].prettyPrint}")
-        _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
+        _ <- cache.forwardDeclare(cacheKey, defBuilder)
         _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (value, config)) =>
+          runSafe(cache.buildCachedWith(cacheKey, defBuilder) { case (_, (value, config)) =>
             runSafe(helper(value, config))
           })
         }
@@ -401,7 +402,7 @@ trait DecoderMacrosImpl
     *   1. Drive `deriveDecoderRecursively[Field]` once. That recursive call internally goes through `setHelper`
     *      (defined on [[DecoderCtx]] and called from the rule chain) which forward-declares and builds a
     *      `def decode_Field(value: Any, config: AvroConfig): Field` against the shared [[ValDefsCache]] — exactly the
-    *      same `cached-decode-method` entry the case-class rule uses for self-references. No second cache key needed.
+    *      same type-specific cache key entry the case-class rule uses for self-references. No second cache key needed.
     *   2. Retrieve the helper-call function via [[DecoderCtx.getHelper]].
     *   3. Wrap it in a fresh `new AvroDecoder[Field] { def decode(value) = helper(value, ctx.config) }`. The
     *      closed-over `ctx.config` is the call site's config — typically the outer cached body's `config` parameter,

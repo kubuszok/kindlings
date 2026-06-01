@@ -170,6 +170,19 @@ final class PureConfigSpec extends MacroSuite {
       val r = KindlingsConfigReader.derived[SimplePerson]
       r.from(cursor("{ name = Alice, age = 30 }")) ==> Right(SimplePerson("Alice", 30))
     }
+
+    test("rejects unknown keys in sealed trait subtype") {
+      implicit val cfg: PureConfig = PureConfig().withStrictDecoding
+      val r = KindlingsConfigReader.derived[Shape]
+      val result = r.from(cursor("{ type = circle, radius = 1.5, extra = oops }"))
+      assert(result.isLeft)
+    }
+
+    test("accepts valid sealed trait subtype without extra keys") {
+      implicit val cfg: PureConfig = PureConfig().withStrictDecoding
+      val r = KindlingsConfigReader.derived[Shape]
+      r.from(cursor("{ type = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
+    }
   }
 
   group("withAllowUnknownKeys") {

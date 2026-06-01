@@ -195,6 +195,15 @@ object examples {
     implicit val consKNamedList: alleycats.ConsK[NamedList] = alleycats.ConsK.derived
   }
 
+  // Recursive polymorphic sealed trait for Functor/Foldable/Traverse derivation
+  // IList: Functor/Foldable/Traverse for sealed traits NOT YET SUPPORTED.
+  // Hearth only derives HKT type classes for case classes, not coproducts.
+  // Types defined for future use.
+  sealed trait IList[+A]
+  final case class ICons[+A](head: A, tail: IList[A]) extends IList[A]
+  final case class INil[+A]() extends IList[A]
+  object IList {}
+
   // Bifunctor examples — case classes with two type parameters
   final case class Pair[A, B](first: A, second: B)
   object Pair {
@@ -324,4 +333,54 @@ object examples {
     implicit val monoidDoublePair: cats.kernel.Monoid[DoublePair] = cats.kernel.Monoid.derived
     implicit val groupDoublePair: cats.kernel.Group[DoublePair] = cats.kernel.Group.derived
   }
+
+  // Interleaved invariant + type param fields (kittens-equivalent shape)
+  // Functor/Foldable/Traverse NOT SUPPORTED: Vector[A] is a nested type constructor
+  // (requires ConsK support). Types defined for future use.
+  final case class Interleaved[A](i: Int, a: A, l: Long, as: Vector[A], s: String)
+
+  // Search: multiple recursive positions (kittens-equivalent shape)
+  // Functor/Foldable NOT SUPPORTED: Option[Search[A]] and List[Search[A]] are nested
+  // type constructors with recursion. Types defined for future use.
+  final case class Search[+A](move: A, child: Option[Search[A]], variations: List[Search[A]])
+
+  // CaseClassWOption: Option-wrapped type param in HKT (kittens-equivalent shape)
+  // Functor/Foldable/Traverse NOT SUPPORTED: Option[A] is a nested type constructor.
+  final case class CaseClassWOption[A](value: Option[A])
+
+  // User-provided instance delegation test types
+
+  case class Bogus(x: Int)
+  object Bogus {
+    implicit val show: cats.Show[Bogus] = cats.Show.show(_ => "Blah")
+  }
+  case class BoxOfBogus(content: Bogus)
+  object BoxOfBogus {
+    implicit val showBoxOfBogus: cats.Show[BoxOfBogus] = cats.Show.derived
+  }
+
+  case class Mul(n: Int)
+  object Mul {
+    implicit val sg: cats.kernel.Semigroup[Mul] =
+      cats.kernel.Semigroup.instance((a, b) => Mul(a.n * b.n))
+  }
+  case class BoxOfMul(value: Mul)
+  object BoxOfMul {
+    implicit val semigroupBoxOfMul: cats.kernel.Semigroup[BoxOfMul] = cats.kernel.Semigroup.derived
+  }
+
+  // For negative compilation tests
+  sealed trait Animal
+  case class Dog(name: String) extends Animal
+  case class Cat(name: String) extends Animal
+
+  case class WithStrings(a: String, b: String)
+
+  // Bi-variant Result type — Bifunctor/Bifoldable/Bitraverse for sealed traits
+  // is NOT YET SUPPORTED (only case classes). Types defined for future use.
+  sealed trait Result[+A, +E]
+  case class Success[+A](value: A) extends Result[A, Nothing]
+  case class Failure[+E](error: E) extends Result[Nothing, E]
+  case class Both[+A, +E](value: A, error: E) extends Result[A, E]
+  case object ResultEmpty extends Result[Nothing, Nothing]
 }

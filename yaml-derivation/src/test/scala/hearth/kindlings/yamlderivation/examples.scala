@@ -115,6 +115,10 @@ sealed trait CombAnnotatedST
 case class CombAnnotA(@fieldName("renamed_field") value: String) extends CombAnnotatedST
 case class CombAnnotB(flag: Boolean) extends CombAnnotatedST
 
+sealed trait CombTransientST
+case class CombTransientA(name: String, @transientField cache: String = "") extends CombTransientST
+case class CombTransientB(value: Int, @transientField memo: Option[String] = None) extends CombTransientST
+
 case class CombOuter(
     optPrimitive: Option[Int],
     optCaseClass: Option[CombInnerCC],

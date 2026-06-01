@@ -48,12 +48,9 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
       val childrenList = enumm.directChildren.toList
       val typeNameExpr = computeAvroNameExpr[A]
       val enumDefault: Option[String] = getTypeAnnotationStringArg[avroEnumDefault, A]
-      val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
 
-      val namespaceExpr: Expr[String] = classNamespace match {
-        case Some(ns) => Expr(ns)
-        case None     => Expr.quote(Expr.splice(sfctx.config).namespace.getOrElse(""))
-      }
+      // Build the namespace expression: @avroNamespace > config.namespace > package name > ""
+      val namespaceExpr: Expr[String] = computeNamespaceExpr[A]
 
       NonEmptyList.fromList(childrenList) match {
         case None =>

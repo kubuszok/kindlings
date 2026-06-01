@@ -1,6 +1,6 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonReaderException
 import scala.language.experimental.macros
 
 private[jsoniterderivation] trait KindlingsJsonValueCodecCompanionCompat {

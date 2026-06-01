@@ -85,6 +85,14 @@ case class WithJsoniterTransientField(
 case class RecursiveNode(id: String, children: List[RecursiveNode])
 case class RecursiveParent(name: String, nodes: List[RecursiveNode])
 
+// @default and @encodedExample annotation test types
+case class WithDefaultAnnotation(@default(42) age: Int, name: String)
+case class WithEncodedExampleAnnotation(@encodedExample("example@email.com") email: String, name: String)
+case class WithDefaultAndExample(
+    @default(42) @encodedExample(99) age: Int,
+    @encodedExample("hello") greeting: String
+)
+
 // Recursive through Option
 case class RecursiveOption(value: String, child: Option[RecursiveOption])
 
@@ -109,6 +117,6 @@ object GenericDerivation {
   implicit val schemaSimplePerson: Schema[SimplePerson] = ks.schema
 
   // Non-inline — macro expansion sees abstract A, testing runtimePlainPrint resolution
-  def deriveBoxSchema[A](implicit ev: Schema[A]): Schema[Box[A]] = KindlingsSchema.derived[Box[A]]
+  def deriveBoxSchema[A](implicit ev: Schema[A]): Schema[Box[A]] = KindlingsSchema.derived[Box[A]].schema
   val boxOfPerson: Schema[Box[SimplePerson]] = deriveBoxSchema[SimplePerson]
 }

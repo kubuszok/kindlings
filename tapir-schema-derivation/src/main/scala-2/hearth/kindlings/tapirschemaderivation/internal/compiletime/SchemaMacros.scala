@@ -15,4 +15,9 @@ final private[tapirschemaderivation] class SchemaMacros(val c: blackbox.Context)
   def deriveSchemaImpl[A: c.WeakTypeTag]: c.Expr[Schema[A]] = deriveSchema[A]
 
   def deriveKindlingsSchemaImpl[A: c.WeakTypeTag]: c.Expr[KindlingsSchema[A]] = deriveKindlingsSchema[A]
+
+  def deriveEnumerationImpl[A: c.WeakTypeTag]: c.Expr[Schema[A]] = deriveEnumeration[A]
+
+  def deriveKindlingsSchemaEnumerationImpl[A: c.WeakTypeTag]: c.Expr[KindlingsSchema[A]] =
+    deriveKindlingsSchemaEnumeration[A]
 }

@@ -274,13 +274,13 @@ trait EncoderMacrosImpl
 
     def getInstance[B: Type]: MIO[Option[Expr[AvroEncoder[B]]]] = {
       implicit val EncoderB: Type[AvroEncoder[B]] = EncTypes.AvroEncoder[B]
-      cache.get0Ary[AvroEncoder[B]]("cached-encoder-instance")
+      cache.get0Ary[AvroEncoder[B]](s"cached-encoder-instance-${Type[B].plainPrint}")
     }
     def setInstance[B: Type](instance: Expr[AvroEncoder[B]]): MIO[Unit] = {
       implicit val EncoderB: Type[AvroEncoder[B]] = EncTypes.AvroEncoder[B]
       Log.info(s"Caching AvroEncoder instance for ${Type[B].prettyPrint}") >>
         cache.buildCachedWith(
-          "cached-encoder-instance",
+          s"cached-encoder-instance-${Type[B].plainPrint}",
           ValDefBuilder.ofLazy[AvroEncoder[B]](s"encoder_${Type[B].shortName}")
         )(_ => instance)
     }
@@ -288,20 +288,21 @@ trait EncoderMacrosImpl
     def getHelper[B: Type]: MIO[Option[(Expr[B], Expr[AvroConfig]) => Expr[Any]]] = {
       implicit val AnyT: Type[Any] = EncTypes.Any
       implicit val ConfigT: Type[AvroConfig] = EncTypes.AvroConfig
-      cache.get2Ary[B, AvroConfig, Any]("cached-encode-method")
+      cache.get2Ary[B, AvroConfig, Any](s"cached-encode-method-${Type[B].plainPrint}")
     }
     def setHelper[B: Type](
         helper: (Expr[B], Expr[AvroConfig]) => MIO[Expr[Any]]
     ): MIO[Unit] = {
       implicit val AnyT: Type[Any] = EncTypes.Any
       implicit val ConfigT: Type[AvroConfig] = EncTypes.AvroConfig
+      val cacheKey = s"cached-encode-method-${Type[B].plainPrint}"
       val defBuilder =
         ValDefBuilder.ofDef2[B, AvroConfig, Any](s"encode_${Type[B].shortName}")
       for {
         _ <- Log.info(s"Forward-declaring encode helper for ${Type[B].prettyPrint}")
-        _ <- cache.forwardDeclare("cached-encode-method", defBuilder)
+        _ <- cache.forwardDeclare(cacheKey, defBuilder)
         _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-encode-method", defBuilder) { case (_, (value, config)) =>
+          runSafe(cache.buildCachedWith(cacheKey, defBuilder) { case (_, (value, config)) =>
             runSafe(helper(value, config))
           })
         }

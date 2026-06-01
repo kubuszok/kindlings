@@ -275,148 +275,232 @@ final class XmlConfigSpec extends MacroSuite {
 
   group("XmlConfig with derivation") {
 
-    group("withSnakeCaseFieldNames") {
+    group("fieldNameMapper") {
 
-      test("encoder derives with snake_case config") {
+      test("encoder uses snake_case field names") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames
         val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
         assert(result.label == "person")
+        assert((result \ "first_name").text == "Alice")
+        assert((result \ "last_name").text == "Smith")
+        // Original camelCase names should not be present
+        assert((result \ "firstName").isEmpty)
+        assert((result \ "lastName").isEmpty)
       }
 
-      test("decoder derives with snake_case config") {
+      test("decoder uses snake_case field names") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames
         val decoder = KindlingsXmlDecoder.derived[CamelCasePerson]
-        // The decoder exists and can be called
-        assert(decoder != null)
+        val xml = <person><first_name>Alice</first_name><last_name>Smith</last_name></person>
+        val result = decoder.decode(xml)
+        assert(result == Right(CamelCasePerson("Alice", "Smith")))
       }
-    }
 
-    group("withKebabCaseFieldNames") {
-
-      test("encoder derives with kebab-case config") {
+      test("encoder uses kebab-case field names") {
         implicit val config: XmlConfig = XmlConfig().withKebabCaseFieldNames
         val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
-        assert(result.label == "person")
+        assert((result \ "first-name").text == "Alice")
+        assert((result \ "last-name").text == "Smith")
       }
-    }
 
-    group("withPascalCaseFieldNames") {
-
-      test("encoder derives with PascalCase config") {
+      test("encoder uses PascalCase field names") {
         implicit val config: XmlConfig = XmlConfig().withPascalCaseFieldNames
         val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
-        assert(result.label == "person")
+        assert((result \ "FirstName").text == "Alice")
+        assert((result \ "LastName").text == "Smith")
       }
-    }
 
-    group("withScreamingSnakeCaseFieldNames") {
-
-      test("encoder derives with SCREAMING_SNAKE_CASE config") {
+      test("encoder uses SCREAMING_SNAKE_CASE field names") {
         implicit val config: XmlConfig = XmlConfig().withScreamingSnakeCaseFieldNames
         val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
-        assert(result.label == "person")
+        assert((result \ "FIRST_NAME").text == "Alice")
+        assert((result \ "LAST_NAME").text == "Smith")
+      }
+
+      test("@xmlName annotation overrides fieldNameMapper") {
+        implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames
+        val encoder = KindlingsXmlEncoder.derived[XmlWithFieldName]
+        val result = encoder.encode(XmlWithFieldName("John", 30), "user")
+        // @xmlName("user_name") takes precedence over snake_case mapper
+        assert((result \ "user_name").text == "John")
+        assert((result \ "age").text == "30")
       }
     }
 
-    group("withSnakeCaseConstructorNames") {
+    group("constructorNameMapper") {
 
-      test("encoder derives sealed trait with snake_case constructor names") {
+      test("encoder uses snake_case constructor names in discriminator") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseConstructorNames
         val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
-        assert(result.label == "shape")
+        assert(result.attribute("type").map(_.text) == Some("circle"))
       }
-    }
 
-    group("withKebabCaseConstructorNames") {
-
-      test("encoder derives sealed trait with kebab-case constructor names") {
+      test("encoder uses kebab-case constructor names in discriminator") {
         implicit val config: XmlConfig = XmlConfig().withKebabCaseConstructorNames
         val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
-        assert(result.label == "shape")
+        assert(result.attribute("type").map(_.text) == Some("circle"))
+      }
+
+      test("decoder uses snake_case constructor names") {
+        implicit val config: XmlConfig = XmlConfig().withSnakeCaseConstructorNames
+        val decoder = KindlingsXmlDecoder.derived[Shape]
+        val xml = <shape type="circle"><radius>5.0</radius></shape>
+        val result = decoder.decode(xml)
+        assert(result == Right(Circle(5.0)))
       }
     }
 
-    group("withNoDiscriminator") {
+    group("discriminatorAttribute") {
 
-      test("encoder derives sealed trait without discriminator") {
+      test("encoder uses custom discriminator attribute name") {
+        implicit val config: XmlConfig = XmlConfig().withDiscriminator("kind")
+        val encoder = KindlingsXmlEncoder.derived[Shape]
+        val result = encoder.encode(Circle(5.0), "shape")
+        assert(result.attribute("kind").map(_.text) == Some("Circle"))
+        assert(result.attribute("type").isEmpty)
+      }
+
+      test("decoder uses custom discriminator attribute name") {
+        implicit val config: XmlConfig = XmlConfig().withDiscriminator("kind")
+        val decoder = KindlingsXmlDecoder.derived[Shape]
+        val xml = <shape kind="Circle"><radius>5.0</radius></shape>
+        val result = decoder.decode(xml)
+        assert(result == Right(Circle(5.0)))
+      }
+
+      test("encoder wraps with type name when no discriminator") {
         implicit val config: XmlConfig = XmlConfig().withNoDiscriminator
         val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
-        assert(result.label == "shape")
+        // Without discriminator, the result is wrapped: <Circle><radius>5.0</radius></Circle>
+        assert(result.label == "Circle")
+        assert((result \\ "radius").text == "5.0")
+      }
+
+      test("decoder reads wrapped element when no discriminator") {
+        implicit val config: XmlConfig = XmlConfig().withNoDiscriminator
+        val decoder = KindlingsXmlDecoder.derived[Shape]
+        val xml = <shape><Circle><radius>5.0</radius></Circle></shape>
+        val result = decoder.decode(xml)
+        assert(result == Right(Circle(5.0)))
       }
     }
 
-    group("withEnumAsStrings") {
+    group("useDefaults") {
 
-      test("encoder derives sealed trait with enumAsStrings config") {
-        implicit val config: XmlConfig = XmlConfig().withEnumAsStrings
-        val encoder = KindlingsXmlEncoder.derived[Animal]
-        val result = encoder.encode(Dog("Rex", "Labrador"), "animal")
-        assert(result.label == "animal")
-      }
-    }
-
-    group("withUseDefaults") {
-
-      test("encoder derives with useDefaults config") {
+      test("encoder with useDefaults still encodes all fields") {
         implicit val config: XmlConfig = XmlConfig().withUseDefaults
         val encoder = KindlingsXmlEncoder.derived[WithDefaults]
         val result = encoder.encode(WithDefaults("Alice"), "user")
-        assert(result.label == "user")
+        assert((result \ "name").text == "Alice")
+        assert((result \ "age").text == "25")
+        assert((result \ "active").text == "true")
       }
 
-      test("decoder derives with useDefaults config") {
+      test("decoder uses default values for missing fields") {
         implicit val config: XmlConfig = XmlConfig().withUseDefaults
         val decoder = KindlingsXmlDecoder.derived[WithDefaults]
-        assert(decoder != null)
+        // Only provide name, omit age and active
+        val xml = <user><name>Alice</name></user>
+        val result = decoder.decode(xml)
+        assert(result == Right(WithDefaults("Alice", 25, true)))
+      }
+
+      test("decoder prefers provided values over defaults") {
+        implicit val config: XmlConfig = XmlConfig().withUseDefaults
+        val decoder = KindlingsXmlDecoder.derived[WithDefaults]
+        val xml = <user><name>Bob</name><age>30</age><active>false</active></user>
+        val result = decoder.decode(xml)
+        assert(result == Right(WithDefaults("Bob", 30, false)))
       }
     }
 
-    group("withTransientNone") {
+    group("transientNone") {
 
-      test("encoder derives with transientNone config") {
+      test("encoder omits None fields with transientNone") {
+        implicit val config: XmlConfig = XmlConfig().withTransientNone
+        val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
+        val resultNone = encoder.encode(Box(None), "box")
+        // With transientNone, the <value> element should be absent for None
+        assert(resultNone.child.collect { case e: scala.xml.Elem => e }.isEmpty)
+      }
+
+      test("encoder keeps Some fields with transientNone") {
         implicit val config: XmlConfig = XmlConfig().withTransientNone
         val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
         val resultSome = encoder.encode(Box(Some(42)), "box")
-        assert(resultSome.label == "box")
+        assert((resultSome \\ "value").nonEmpty)
+      }
+
+      test("encoder includes None fields without transientNone") {
+        // Default config (transientNone = false)
+        val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
         val resultNone = encoder.encode(Box(None), "box")
-        assert(resultNone.label == "box")
+        // Without transientNone, the <value> element should still be present
+        assert(resultNone.child.collect { case e: scala.xml.Elem => e }.nonEmpty)
       }
     }
 
-    group("withTransientEmpty") {
+    group("transientEmpty") {
 
-      test("encoder derives with transientEmpty config") {
+      test("encoder omits empty collections with transientEmpty") {
         implicit val config: XmlConfig = XmlConfig().withTransientEmpty
         val encoder = KindlingsXmlEncoder.derived[TeamWithMembers]
         val result = encoder.encode(TeamWithMembers("Team A", List.empty), "team")
-        assert(result.label == "team")
+        assert((result \ "name").text == "Team A")
+        // The <members> element should be absent for empty list
+        val memberElems = result.child.collect { case e: scala.xml.Elem if e.label == "members" => e }
+        assert(memberElems.isEmpty)
+      }
+
+      test("encoder keeps non-empty collections with transientEmpty") {
+        implicit val config: XmlConfig = XmlConfig().withTransientEmpty
+        val encoder = KindlingsXmlEncoder.derived[TeamWithMembers]
+        val result = encoder.encode(TeamWithMembers("Team A", List(SimplePerson("Alice", 30))), "team")
+        assert((result \ "name").text == "Team A")
+        val memberElems = result.child.collect { case e: scala.xml.Elem if e.label == "members" => e }
+        assert(memberElems.nonEmpty)
       }
     }
 
-    group("withAttributesByDefault") {
+    group("defaultFieldMode") {
 
-      test("encoder derives with Attribute default field mode") {
+      test("encoder uses attributes by default with withAttributesByDefault") {
         implicit val config: XmlConfig = XmlConfig().withAttributesByDefault
         val encoder = KindlingsXmlEncoder.derived[SimplePerson]
         val result = encoder.encode(SimplePerson("Alice", 30), "person")
         assert(result.label == "person")
+        // Fields should be rendered as attributes, not child elements
+        assert(result.attribute("name").map(_.text) == Some("Alice"))
+        assert(result.attribute("age").map(_.text) == Some("30"))
+        assert((result \ "name").isEmpty)
+        assert((result \ "age").isEmpty)
       }
     }
 
     group("combined config options") {
 
-      test("encoder derives with multiple config options") {
-        implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames.withUseDefaults.withTransientNone
+      test("encoder uses snake_case fields + transientNone together") {
+        implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames.withTransientNone
+        val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
+        val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
+        assert((result \ "first_name").text == "Alice")
+        assert((result \ "last_name").text == "Smith")
+      }
+
+      test("encoder uses snake_case fields + useDefaults together") {
+        implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames.withUseDefaults
         val encoder = KindlingsXmlEncoder.derived[WithDefaults]
         val result = encoder.encode(WithDefaults("Alice"), "user")
-        assert(result.label == "user")
+        assert((result \ "name").text == "Alice")
+        assert((result \ "age").text == "25")
+        assert((result \ "active").text == "true")
       }
     }
   }

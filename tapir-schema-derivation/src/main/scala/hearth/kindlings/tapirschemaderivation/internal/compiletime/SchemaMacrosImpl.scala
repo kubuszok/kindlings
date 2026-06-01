@@ -465,6 +465,94 @@ trait SchemaMacrosImpl
     ).contains(pp)
   }
 
+  // Enumeration entrypoint (no JSON config needed)
+
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveEnumeration[A: Type]: Expr[Schema[A]] = {
+    implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+    implicit val SNameT: Type[SName] = TsTypes.SNameType
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    implicit val stringT: Type[String] = TsTypes.StringType
+
+    val macroName = "KindlingsSchema.derivedEnumeration"
+
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType]\n" +
+          "or add a type ascription to the result variable."
+      )
+
+    // Validate A is a sealed trait/enum
+    val e: Enum[A] = Enum.parse[A].toEither match {
+      case Right(e)     => e
+      case Left(reason) =>
+        Environment.reportErrorAndAbort(
+          s"$macroName: ${Type[A].prettyPrint} is not a sealed trait or enum.\n" +
+            s"Reason: $reason"
+        )
+    }
+
+    val children = e.directChildren.toList
+
+    // Verify all children are singletons
+    val nonSingletons = children.collect { case (childName, child) =>
+      import child.Underlying as ChildType
+      SingletonValue.parse[ChildType].toEither match {
+        case Left(_)  => Some(childName)
+        case Right(_) => None
+      }
+    }.flatten
+
+    if (nonSingletons.nonEmpty)
+      Environment.reportErrorAndAbort(
+        s"$macroName: ${Type[A].prettyPrint} has non-singleton children: ${nonSingletons.mkString(", ")}.\n" +
+          "derivedEnumeration only supports sealed traits/enums where all children are case objects."
+      )
+
+    val sNameExpr = computeSNameExpr[A](derivedType = None)
+    val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
+
+    // Build singleton values list
+    val singletonValuesExpr: Expr[List[A]] = children.foldRight(Expr.quote(Nil: List[A])) { case ((_, child), acc) =>
+      import child.Underlying as ChildType
+      val sv = SingletonValue.parse[ChildType].toEither.toOption.get
+      Expr.quote(Expr.splice(sv.singletonExpr).asInstanceOf[A] :: Expr.splice(acc))
+    }
+
+    // Build names list (using plain child names, no JSON config transform)
+    val namesListExpr: Expr[List[String]] = children
+      .map { case (childName, _) => Expr(childName) }
+      .foldRight(Expr.quote(Nil: List[String])) { (nameExpr, acc) =>
+        Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
+      }
+
+    val rawSchemaExpr = Expr.quote {
+      TapirSchemaUtils.stringEnumSchema[A](
+        Expr.splice(sNameExpr),
+        Expr.splice(singletonValuesExpr),
+        Expr.splice(namesListExpr)
+      )
+    }
+
+    Expr.quote {
+      TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))
+    }
+  }
+
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveKindlingsSchemaEnumeration[A: Type]: Expr[KindlingsSchema[A]] = {
+    implicit val schemaAType: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+    implicit val kindlingsSchemaAType: Type[KindlingsSchema[A]] = TsTypes.KindlingsSchemaOf[A]
+
+    val schemaExpr = deriveEnumeration[A]
+    Expr.quote {
+      hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaDerivationFactories.instance[A](
+        Expr.splice(schemaExpr)
+      )
+    }
+  }
+
   // Enum / sealed trait derivation
 
   @scala.annotation.nowarn("msg=is never used")

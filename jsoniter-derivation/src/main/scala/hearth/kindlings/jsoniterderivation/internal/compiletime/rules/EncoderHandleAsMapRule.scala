@@ -226,6 +226,49 @@ trait EncoderHandleAsMapRuleImpl {
             Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[BigDecimal]))))
           else if (Type[K] =:= Type.of[BigInt])
             Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[BigInt]))))
+          // Java boxed primitives — unbox, then use native writeKey overload
+          else if (Type[K] =:= CTypes.JavaByte)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Byte].byteValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaShort)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Short].shortValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaInteger)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Integer].intValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaLong)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Long].longValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaFloat)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Float].floatValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaDouble)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Double].doubleValue()))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaBoolean)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Boolean].booleanValue()))
+              )
+            )
           else
             None
         }

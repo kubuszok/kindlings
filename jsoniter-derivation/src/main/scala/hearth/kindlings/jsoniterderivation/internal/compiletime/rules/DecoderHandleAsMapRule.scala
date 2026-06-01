@@ -672,6 +672,39 @@ trait DecoderHandleAsMapRuleImpl {
             Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigDecimal().asInstanceOf[K])))
           else if (Type[K] =:= Type.of[BigInt])
             Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigInt().asInstanceOf[K])))
+          // Java boxed primitives — decode key as primitive, then box
+          else if (Type[K] =:= CTypes.JavaByte)
+            Some(
+              makeKeyDecoder(r => Expr.quote(java.lang.Byte.valueOf(Expr.splice(r).readKeyAsByte()).asInstanceOf[K]))
+            )
+          else if (Type[K] =:= CTypes.JavaShort)
+            Some(
+              makeKeyDecoder(r => Expr.quote(java.lang.Short.valueOf(Expr.splice(r).readKeyAsShort()).asInstanceOf[K]))
+            )
+          else if (Type[K] =:= CTypes.JavaInteger)
+            Some(
+              makeKeyDecoder(r => Expr.quote(java.lang.Integer.valueOf(Expr.splice(r).readKeyAsInt()).asInstanceOf[K]))
+            )
+          else if (Type[K] =:= CTypes.JavaLong)
+            Some(
+              makeKeyDecoder(r => Expr.quote(java.lang.Long.valueOf(Expr.splice(r).readKeyAsLong()).asInstanceOf[K]))
+            )
+          else if (Type[K] =:= CTypes.JavaFloat)
+            Some(
+              makeKeyDecoder(r => Expr.quote(java.lang.Float.valueOf(Expr.splice(r).readKeyAsFloat()).asInstanceOf[K]))
+            )
+          else if (Type[K] =:= CTypes.JavaDouble)
+            Some(
+              makeKeyDecoder(r =>
+                Expr.quote(java.lang.Double.valueOf(Expr.splice(r).readKeyAsDouble()).asInstanceOf[K])
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaBoolean)
+            Some(
+              makeKeyDecoder(r =>
+                Expr.quote(java.lang.Boolean.valueOf(Expr.splice(r).readKeyAsBoolean()).asInstanceOf[K])
+              )
+            )
           else
             None
         }

@@ -6,4 +6,7 @@ private[tapirschemaderivation] trait KindlingsSchemaCompanionCompat { this: Kind
 
   implicit def derived[A]: KindlingsSchema[A] =
     macro internal.compiletime.SchemaMacros.deriveKindlingsSchemaImpl[A]
+
+  def derivedEnumeration[A]: KindlingsSchema[A] =
+    macro internal.compiletime.SchemaMacros.deriveKindlingsSchemaEnumerationImpl[A]
 }

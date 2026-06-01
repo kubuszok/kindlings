@@ -484,5 +484,43 @@ final class AvroDecoderSpec extends MacroSuite {
         decoded.data("c") ==> Some(3)
       }
     }
+
+    group("@avroName on sealed trait subtypes — decode side (bug #108)") {
+
+      test("decode matches avro name, not Scala class name") {
+        // Construct a GenericRecord whose schema name is the @avroName value ("FooRenamed"),
+        // NOT the Scala class name ("RenamedFoo"). The decoder must resolve by avro name.
+        val unionSchema = AvroSchemaFor.schemaOf[RenamedInner]
+        val fooSchema = unionSchema.getTypes.get(0) // "FooRenamed"
+        fooSchema.getName ==> "FooRenamed"
+        val record = new GenericData.Record(fooSchema)
+        record.put("a", "hello")
+        val result = AvroDecoder.decode[RenamedInner](record: Any)
+        result ==> RenamedFoo("hello")
+      }
+
+      test("decode second renamed subtype by avro name") {
+        val unionSchema = AvroSchemaFor.schemaOf[RenamedInner]
+        val barSchema = unionSchema.getTypes.get(1) // "BarRenamed"
+        barSchema.getName ==> "BarRenamed"
+        val record = new GenericData.Record(barSchema)
+        record.put("b", "world")
+        val result = AvroDecoder.decode[RenamedInner](record: Any)
+        result ==> RenamedBar("world")
+      }
+
+      test("decode renamed subtype inside parent record") {
+        val outerSchema = AvroSchemaFor.schemaOf[OuterWithRenamedInner]
+        val innerUnionSchema = outerSchema.getField("inner").schema()
+        val fooSchema = innerUnionSchema.getTypes.get(0)
+        fooSchema.getName ==> "FooRenamed"
+        val innerRecord = new GenericData.Record(fooSchema)
+        innerRecord.put("a", "decoded")
+        val outerRecord = new GenericData.Record(outerSchema)
+        outerRecord.put("inner", innerRecord)
+        val result = AvroDecoder.decode[OuterWithRenamedInner](outerRecord: Any)
+        result ==> OuterWithRenamedInner(RenamedFoo("decoded"))
+      }
+    }
   }
 }

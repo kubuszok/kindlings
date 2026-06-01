@@ -2,7 +2,9 @@ package hearth.kindlings.jsoniterderivation.internal.compiletime
 package rules
 
 import hearth.MacroCommons
+import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
@@ -32,134 +34,145 @@ trait EncoderHandleAsEnumRuleImpl {
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val StringT: Type[String] = CTypes.String
 
-      // Check at compile time if all children are singletons (case objects with no fields)
-      val childrenList = enumm.directChildren.toList
+      // Use exhaustive (leaf) children to flatten nested sealed trait hierarchies.
+      // This ensures intermediate sealed traits like MotorVehicle in Vehicle > MotorVehicle > Truck
+      // are skipped — only concrete leaf types (Truck, Motorcycle, Bicycle) are encoded.
+      val childrenList: List[(String, ??<:[A])] = enumm.exhaustiveChildren match {
+        case Some(ec) => ec.toList
+        case None     => enumm.directChildren.toList
+      }
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
         SingletonValue.unapply(child.Underlying).isDefined
       }
 
-      enumm
-        .parMatchOn[MIO, Unit](ectx.value) { matched =>
-          import matched.{value as enumCaseValue, Underlying as EnumCase}
-          Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-            val caseName: String = childrenList
-              .find { case (_, child) =>
-                import child.Underlying as ChildType
-                Type[EnumCase] <:< Type[ChildType]
-              }
-              .map(_._1)
-              .getOrElse(Type[EnumCase].shortName)
+      // Build a type match on exhaustive (leaf) children instead of using
+      // enumm.parMatchOn, which dispatches on directChildren and would match
+      // intermediate sealed traits, causing nested wrapper encoding.
+      NonEmptyList.fromList(childrenList) match {
+        case None =>
+          val err = CodecDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
+        case Some(children) =>
+          children
+            .parTraverse { case (caseName, child) =>
+              import child.Underlying as EnumCase
+              MIO.scoped { runSafe =>
+                val mc: MatchCase[Expr[EnumCase]] = MatchCase.typeMatch[EnumCase](caseName)
+                mc.map { (enumCaseValue: Expr[EnumCase]) =>
+                  runSafe {
+                    Log.namedScope(s"Encoding enum case $caseName: ${Type[EnumCase].prettyPrint}") {
 
-            // For discriminator mode, we need fields-only encoding to avoid double wrapping.
-            // Parse child as case class to get field-level access.
-            val fieldsOnlyMIO: MIO[Expr[Unit]] =
-              if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
-              else
-                SingletonValue.unapply(Type[EnumCase]) match {
-                  case Some(_) =>
-                    // Singleton — no fields
-                    MIO.pure(Expr.quote(()): Expr[Unit])
-                  case None =>
-                    CaseClass.parse[EnumCase].toOption match {
-                      case Some(caseClass) =>
-                        EncoderHandleAsCaseClassRule.encodeCaseClassFieldsOnly[EnumCase](caseClass)(using
-                          ectx.nest(enumCaseValue)
-                        )
-                      case None =>
-                        // Not a case class (e.g. case object) — no fields
-                        MIO.pure(Expr.quote(()): Expr[Unit])
-                    }
-                }
-
-            // Also derive the full encoding for wrapper mode
-            val fullEncMIO: MIO[Expr[Unit]] =
-              if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
-              else deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
-
-            for {
-              fieldsOnly <- fieldsOnlyMIO
-              fullEnc <- fullEncMIO
-            } yield
-              if (allCaseObjects) {
-                if (isEnumerationOrJavaEnum)
-                  Expr.quote {
-                    val config = Expr.splice(ectx.config)
-                    if (config.useScalaEnumValueId)
-                      JsoniterDerivationUtils.writeScalaEnumValueId(
-                        Expr.splice(ectx.writer),
-                        Expr.splice(enumCaseValue)
-                      )
-                    else {
-                      val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-                      if (config.enumAsStrings)
-                        JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
-                      else
-                        config.discriminatorFieldName match {
-                          case Some(discriminatorField) =>
-                            Expr.splice(ectx.writer).writeObjectStart()
-                            Expr.splice(ectx.writer).writeKey(discriminatorField)
-                            Expr.splice(ectx.writer).writeVal(name)
-                            Expr.splice(ectx.writer).writeObjectEnd()
-                          case None =>
-                            JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {}
-                        }
-                    }
-                  }
-                else
-                  Expr.quote {
-                    val config = Expr.splice(ectx.config)
-                    val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-                    if (config.enumAsStrings) {
-                      JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
-                    } else {
-                      config.discriminatorFieldName match {
-                        case Some(discriminatorField) =>
-                          Expr.splice(ectx.writer).writeObjectStart()
-                          Expr.splice(ectx.writer).writeKey(discriminatorField)
-                          Expr.splice(ectx.writer).writeVal(name)
-                          Expr.splice(fieldsOnly)
-                          Expr.splice(ectx.writer).writeObjectEnd()
-                        case None =>
-                          JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
-                            Expr.splice(fullEnc)
+                      // For discriminator mode, we need fields-only encoding to avoid double wrapping.
+                      // Parse child as case class to get field-level access.
+                      val fieldsOnlyMIO: MIO[Expr[Unit]] =
+                        if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
+                        else
+                          SingletonValue.unapply(Type[EnumCase]) match {
+                            case Some(_) =>
+                              // Singleton — no fields
+                              MIO.pure(Expr.quote(()): Expr[Unit])
+                            case None =>
+                              CaseClass.parse[EnumCase].toOption match {
+                                case Some(caseClass) =>
+                                  EncoderHandleAsCaseClassRule.encodeCaseClassFieldsOnly[EnumCase](caseClass)(using
+                                    ectx.nest(enumCaseValue)
+                                  )
+                                case None =>
+                                  // Not a case class (e.g. case object) — no fields
+                                  MIO.pure(Expr.quote(()): Expr[Unit])
+                              }
                           }
-                      }
-                    }
-                  }
-              } else {
-                val isSingletonCase = SingletonValue.unapply(Type[EnumCase]).isDefined
-                Expr.quote {
-                  val config = Expr.splice(ectx.config)
-                  val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
-                  if (config.circeLikeObjectEncoding && Expr.splice(Expr(isSingletonCase)))
-                    JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
-                      Expr.splice(ectx.writer).writeObjectStart()
-                      Expr.splice(ectx.writer).writeObjectEnd()
-                    }
-                  else
-                    config.discriminatorFieldName match {
-                      case Some(discriminatorField) =>
-                        Expr.splice(ectx.writer).writeObjectStart()
-                        Expr.splice(ectx.writer).writeKey(discriminatorField)
-                        Expr.splice(ectx.writer).writeVal(name)
-                        Expr.splice(fieldsOnly)
-                        Expr.splice(ectx.writer).writeObjectEnd()
-                      case None =>
-                        JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
-                          Expr.splice(fullEnc)
+
+                      // Also derive the full encoding for wrapper mode
+                      val fullEncMIO: MIO[Expr[Unit]] =
+                        if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(()): Expr[Unit])
+                        else deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
+
+                      for {
+                        fieldsOnly <- fieldsOnlyMIO
+                        fullEnc <- fullEncMIO
+                      } yield
+                        if (allCaseObjects) {
+                          if (isEnumerationOrJavaEnum)
+                            Expr.quote {
+                              val config = Expr.splice(ectx.config)
+                              if (config.useScalaEnumValueId)
+                                JsoniterDerivationUtils.writeScalaEnumValueId(
+                                  Expr.splice(ectx.writer),
+                                  Expr.splice(enumCaseValue)
+                                )
+                              else {
+                                val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                                if (config.enumAsStrings)
+                                  JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                                else
+                                  config.discriminatorFieldName match {
+                                    case Some(discriminatorField) =>
+                                      Expr.splice(ectx.writer).writeObjectStart()
+                                      Expr.splice(ectx.writer).writeKey(discriminatorField)
+                                      Expr.splice(ectx.writer).writeVal(name)
+                                      Expr.splice(ectx.writer).writeObjectEnd()
+                                    case None =>
+                                      JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {}
+                                  }
+                              }
+                            }
+                          else
+                            Expr.quote {
+                              val config = Expr.splice(ectx.config)
+                              val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                              if (config.enumAsStrings) {
+                                JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
+                              } else {
+                                config.discriminatorFieldName match {
+                                  case Some(discriminatorField) =>
+                                    Expr.splice(ectx.writer).writeObjectStart()
+                                    Expr.splice(ectx.writer).writeKey(discriminatorField)
+                                    Expr.splice(ectx.writer).writeVal(name)
+                                    Expr.splice(fieldsOnly)
+                                    Expr.splice(ectx.writer).writeObjectEnd()
+                                  case None =>
+                                    JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                                      Expr.splice(fullEnc)
+                                    }
+                                }
+                              }
+                            }
+                        } else {
+                          val isSingletonCase = SingletonValue.unapply(Type[EnumCase]).isDefined
+                          Expr.quote {
+                            val config = Expr.splice(ectx.config)
+                            val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                            if (config.circeLikeObjectEncoding && Expr.splice(Expr(isSingletonCase)))
+                              JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                                Expr.splice(ectx.writer).writeObjectStart()
+                                Expr.splice(ectx.writer).writeObjectEnd()
+                              }
+                            else
+                              config.discriminatorFieldName match {
+                                case Some(discriminatorField) =>
+                                  Expr.splice(ectx.writer).writeObjectStart()
+                                  Expr.splice(ectx.writer).writeKey(discriminatorField)
+                                  Expr.splice(ectx.writer).writeVal(name)
+                                  Expr.splice(fieldsOnly)
+                                  Expr.splice(ectx.writer).writeObjectEnd()
+                                case None =>
+                                  JsoniterDerivationUtils.writeWrapped(Expr.splice(ectx.writer), name) {
+                                    Expr.splice(fullEnc)
+                                  }
+                              }
+                          }
                         }
                     }
+                  }
                 }
               }
-          }
-        }
-        .flatMap {
-          case Some(result) => MIO.pure(result)
-          case None         =>
-            val err = CodecDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
-            Log.error(err.message) >> MIO.fail(err)
-        }
+            }
+            .map { matchCases =>
+              ectx.value.matchOn[Unit](matchCases.toNonEmptyVector)
+            }
+      }
     }
   }
 }
