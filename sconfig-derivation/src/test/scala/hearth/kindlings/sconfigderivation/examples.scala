@@ -44,3 +44,29 @@ case class PersonFull(name: String, address: FullAddress)
 case class WithOption(name: String, nickname: Option[String])
 case class WithList(items: List[Int])
 case class WithMap(scores: Map[String, Int])
+
+// --- Combinatorial: wrapper x inner type ---
+// Inner types (SimplePerson, Shape) have no pre-existing reader/writer instances;
+// the macro must derive them recursively (bug #120 pattern).
+
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[SimplePerson],
+    optSealedTrait: Option[Shape],
+    listCaseClass: List[SimplePerson],
+    mapCaseClass: Map[String, SimplePerson]
+)
+
+// --- Annotation x type shape ---
+// Sealed traits whose subtypes carry field-level annotations.
+
+sealed trait AnnotatedShape
+case class AnnotatedCircle(@configKey("r") radius: Double) extends AnnotatedShape
+case class AnnotatedRect(
+    @configKey("w") width: Double,
+    @configKey("h") height: Double
+) extends AnnotatedShape
+
+sealed trait TransientShape
+case class TransientCircle(radius: Double, @transientField memo: String = "") extends TransientShape
+case class TransientRect(width: Double, height: Double, @transientField memo: String = "") extends TransientShape

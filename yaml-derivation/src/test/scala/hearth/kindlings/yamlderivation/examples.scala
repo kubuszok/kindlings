@@ -102,3 +102,23 @@ case class MutRecB(value: String, a: Option[MutRecA])
 case class WithMapField(data: Map[String, Int])
 case class WithNestedMap(data: Map[String, Map[String, Int]])
 case class WithMapOfCaseClass(data: Map[String, SimplePerson])
+
+// Combinatorial wrapper x inner type test types
+// NOTE: no pre-existing codecs for CombInner* — macro must derive recursively
+case class CombInnerCC(label: String, count: Int)
+
+sealed trait CombInnerST
+case class CombVariantA(x: Int) extends CombInnerST
+case class CombVariantB(text: String) extends CombInnerST
+
+sealed trait CombAnnotatedST
+case class CombAnnotA(@fieldName("renamed_field") value: String) extends CombAnnotatedST
+case class CombAnnotB(flag: Boolean) extends CombAnnotatedST
+
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[CombInnerCC],
+    optSealedTrait: Option[CombInnerST],
+    listCaseClass: List[CombInnerCC],
+    mapCaseClass: Map[String, CombInnerCC]
+)

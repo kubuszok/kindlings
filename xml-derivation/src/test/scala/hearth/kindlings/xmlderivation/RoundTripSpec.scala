@@ -119,4 +119,60 @@ final class RoundTripSpec extends MacroSuite {
       assert(elem.label == "mutrec")
     }
   }
+
+  group("combinatorial: wrapper x inner type") {
+
+    test("CombOuter all fields populated") {
+      implicit val encoder: XmlEncoder[CombOuter] = KindlingsXmlEncoder.derived[CombOuter]
+      implicit val decoder: XmlDecoder[CombOuter] = KindlingsXmlDecoder.derived[CombOuter]
+      val value = CombOuter(
+        optPrimitive = Some(42),
+        optCaseClass = Some(CombInnerCC("hello", 7)),
+        optSealedTrait = Some(CombVariantA(99)),
+        listCaseClass = List(CombInnerCC("a", 1), CombInnerCC("b", 2)),
+        mapCaseClass = Map("k1" -> CombInnerCC("m", 10))
+      )
+      assert(roundTrip(value, "comb") == Right(value))
+    }
+
+    test("CombOuter None and empty collections") {
+      implicit val encoder: XmlEncoder[CombOuter] = KindlingsXmlEncoder.derived[CombOuter]
+      implicit val decoder: XmlDecoder[CombOuter] = KindlingsXmlDecoder.derived[CombOuter]
+      val value = CombOuter(
+        optPrimitive = None,
+        optCaseClass = None,
+        optSealedTrait = None,
+        listCaseClass = Nil,
+        mapCaseClass = Map.empty
+      )
+      assert(roundTrip(value, "comb") == Right(value))
+    }
+
+    test("Option[SealedTrait] with second variant") {
+      implicit val encoder: XmlEncoder[CombOuter] = KindlingsXmlEncoder.derived[CombOuter]
+      implicit val decoder: XmlDecoder[CombOuter] = KindlingsXmlDecoder.derived[CombOuter]
+      val value = CombOuter(
+        optPrimitive = None,
+        optCaseClass = None,
+        optSealedTrait = Some(CombVariantB("variant-b")),
+        listCaseClass = Nil,
+        mapCaseClass = Map.empty
+      )
+      assert(roundTrip(value, "comb") == Right(value))
+    }
+
+    test("@xmlName on sealed trait subtype field round-trips") {
+      implicit val encoder: XmlEncoder[CombAnnotatedST] = KindlingsXmlEncoder.derived[CombAnnotatedST]
+      implicit val decoder: XmlDecoder[CombAnnotatedST] = KindlingsXmlDecoder.derived[CombAnnotatedST]
+      val value: CombAnnotatedST = CombAnnotA("test")
+      assert(roundTrip(value, "annot") == Right(value))
+    }
+
+    test("@xmlAttribute on sealed trait subtype field round-trips") {
+      implicit val encoder: XmlEncoder[CombAnnotatedST] = KindlingsXmlEncoder.derived[CombAnnotatedST]
+      implicit val decoder: XmlDecoder[CombAnnotatedST] = KindlingsXmlDecoder.derived[CombAnnotatedST]
+      val value: CombAnnotatedST = CombAnnotB(true)
+      assert(roundTrip(value, "annot") == Right(value))
+    }
+  }
 }

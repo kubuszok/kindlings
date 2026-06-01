@@ -1,6 +1,7 @@
 package hearth.kindlings.avroderivation
 
 import hearth.MacroSuite
+import org.apache.avro.Schema
 
 final class AvroRoundTripSpec extends MacroSuite {
 
@@ -506,6 +507,217 @@ final class AvroRoundTripSpec extends MacroSuite {
           val decoded = AvroIO.fromBinary[OuterWithRenamedInner](bytes)(decoder)
           decoded ==> original
         }
+      }
+    }
+
+    group("combinatorial: wrapper x inner type") {
+
+      test("CombOuter schema has no nested unions (bug #78)") {
+        val schema = AvroSchemaFor.schemaOf[CombOuter]
+        schema.getType ==> Schema.Type.RECORD
+
+        // Option[Int] => UNION(null, int)
+        val optPrim = schema.getField("optPrimitive").schema()
+        optPrim.getType ==> Schema.Type.UNION
+        optPrim.getTypes.size() ==> 2
+        optPrim.getTypes.get(0).getType ==> Schema.Type.NULL
+        optPrim.getTypes.get(1).getType ==> Schema.Type.INT
+
+        // Option[SimplePerson] => UNION(null, record)
+        val optCC = schema.getField("optCaseClass").schema()
+        optCC.getType ==> Schema.Type.UNION
+        optCC.getTypes.size() ==> 2
+        optCC.getTypes.get(0).getType ==> Schema.Type.NULL
+        optCC.getTypes.get(1).getType ==> Schema.Type.RECORD
+
+        // Option[Shape] => UNION(null, Circle, Rectangle) — flattened, not nested
+        val optST = schema.getField("optSealedTrait").schema()
+        optST.getType ==> Schema.Type.UNION
+        optST.getTypes.size() ==> 3
+        optST.getTypes.get(0).getType ==> Schema.Type.NULL
+        optST.getTypes.get(1).getName ==> "Circle"
+        optST.getTypes.get(2).getName ==> "Rectangle"
+
+        // List[SimplePerson] => ARRAY of RECORD
+        val listCC = schema.getField("listCaseClass").schema()
+        listCC.getType ==> Schema.Type.ARRAY
+        listCC.getElementType.getType ==> Schema.Type.RECORD
+
+        // List[Shape] => ARRAY of UNION(Circle, Rectangle)
+        val listST = schema.getField("listSealedTrait").schema()
+        listST.getType ==> Schema.Type.ARRAY
+        listST.getElementType.getType ==> Schema.Type.UNION
+      }
+
+      test("CombOuter round-trip with all fields populated") {
+        val encoder: AvroEncoder[CombOuter] = AvroEncoder.derived[CombOuter]
+        val decoder: AvroDecoder[CombOuter] = AvroDecoder.derived[CombOuter]
+        val original = CombOuter(
+          optPrimitive = Some(42),
+          optCaseClass = Some(SimplePerson("Alice", 30)),
+          optSealedTrait = Some(Circle(3.14)),
+          listCaseClass = List(SimplePerson("Bob", 25)),
+          listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0))
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[CombOuter](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("CombOuter round-trip with None/empty") {
+        val encoder: AvroEncoder[CombOuter] = AvroEncoder.derived[CombOuter]
+        val decoder: AvroDecoder[CombOuter] = AvroDecoder.derived[CombOuter]
+        val original = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          listCaseClass = List.empty,
+          listSealedTrait = List.empty
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[CombOuter](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("Option[Shape] round-trip with each subtype (bug #78)") {
+        val encoder: AvroEncoder[WithOptionalShape] = AvroEncoder.derived[WithOptionalShape]
+        val decoder: AvroDecoder[WithOptionalShape] = AvroDecoder.derived[WithOptionalShape]
+        val values = List(
+          WithOptionalShape(Some(Circle(1.0))),
+          WithOptionalShape(Some(Rectangle(2.0, 3.0))),
+          WithOptionalShape(None)
+        )
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)(encoder)
+          val decoded = AvroIO.fromBinary[WithOptionalShape](bytes)(decoder)
+          decoded ==> original
+        }
+      }
+
+      test("Option[Shape] schema has flattened union, not nested (bug #78)") {
+        val schema = AvroSchemaFor.schemaOf[WithOptionalShape]
+        val fieldSchema = schema.getField("shape").schema()
+        fieldSchema.getType ==> Schema.Type.UNION
+        // Must be [null, Circle, Rectangle] — NOT [null, UNION(Circle, Rectangle)]
+        fieldSchema.getTypes.size() ==> 3
+        fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
+        fieldSchema.getTypes.get(1).getName ==> "Circle"
+        fieldSchema.getTypes.get(2).getName ==> "Rectangle"
+      }
+    }
+
+    group("annotation x type shape") {
+
+      test("@avroName on sealed trait subtypes round-trip (bug #108 pattern)") {
+        val encoder: AvroEncoder[OuterWithRenamedInner] = AvroEncoder.derived[OuterWithRenamedInner]
+        val decoder: AvroDecoder[OuterWithRenamedInner] = AvroDecoder.derived[OuterWithRenamedInner]
+        // Verify renamed subtypes survive full round-trip, not just encode
+        val values = List(
+          OuterWithRenamedInner(RenamedFoo("hello")),
+          OuterWithRenamedInner(RenamedBar("world"))
+        )
+        values.foreach { original =>
+          val json = AvroIO.toJson(original)(encoder)
+          val decoded = AvroIO.fromJson[OuterWithRenamedInner](json)(decoder)
+          decoded ==> original
+        }
+      }
+
+      test("@avroName on sealed trait subtypes: schema uses renamed names") {
+        val schema = AvroSchemaFor.schemaOf[RenamedInner]
+        schema.getType ==> Schema.Type.UNION
+        schema.getTypes.get(0).getName ==> "FooRenamed"
+        schema.getTypes.get(1).getName ==> "BarRenamed"
+      }
+
+      test("@avroNamespace on enum round-trip (bug #80 pattern)") {
+        val encoder: AvroEncoder[WithNamespacedEnum] = AvroEncoder.derived[WithNamespacedEnum]
+        val decoder: AvroDecoder[WithNamespacedEnum] = AvroDecoder.derived[WithNamespacedEnum]
+        val original = WithNamespacedEnum(NRed)
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[WithNamespacedEnum](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("@avroNamespace on enum: namespace preserved through round-trip (bug #80 pattern)") {
+        val encoder: AvroEncoder[WithNamespacedEnum] = AvroEncoder.derived[WithNamespacedEnum]
+        val schema = encoder.schema
+        val colorSchema = schema.getField("color").schema()
+        colorSchema.getType ==> Schema.Type.ENUM
+        colorSchema.getNamespace ==> "com.example.colors"
+      }
+
+      test("@avroScalePrecision round-trip preserves precision (bug #110 pattern)") {
+        val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derived[WithPerFieldDecimal]
+        val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derived[WithPerFieldDecimal]
+        val values = List(
+          WithPerFieldDecimal(price = BigDecimal("0.0001"), label = "tiny"),
+          WithPerFieldDecimal(price = BigDecimal("99999999.9999"), label = "large"),
+          WithPerFieldDecimal(price = BigDecimal("0"), label = "zero")
+        )
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)(encoder)
+          val decoded = AvroIO.fromBinary[WithPerFieldDecimal](bytes)(decoder)
+          decoded ==> original
+        }
+      }
+
+      test("@avroScalePrecision schema has correct precision and scale") {
+        val schema = AvroSchemaFor.schemaOf[WithPerFieldDecimal]
+        val priceSchema = schema.getField("price").schema()
+        priceSchema.getType ==> Schema.Type.BYTES
+        val decimal = priceSchema.getLogicalType.asInstanceOf[org.apache.avro.LogicalTypes.Decimal]
+        decimal.getPrecision ==> 12
+        decimal.getScale ==> 4
+      }
+    }
+
+    group("same name different package (bug #79)") {
+
+      test("TwoShared schema disambiguates same-name types via namespace") {
+        val schema = AvroSchemaFor.schemaOf[TwoShared]
+        schema.getType ==> Schema.Type.RECORD
+        schema.getNamespace ==> "pkg.outer"
+
+        val xSchema = schema.getField("x").schema()
+        xSchema.getName ==> "Shared"
+        xSchema.getNamespace ==> "pkg.x"
+        xSchema.getField("id").schema().getType ==> Schema.Type.INT
+
+        val ySchema = schema.getField("y").schema()
+        ySchema.getName ==> "Shared"
+        ySchema.getNamespace ==> "pkg.y"
+        ySchema.getField("label").schema().getType ==> Schema.Type.STRING
+      }
+
+      test("TwoShared round-trip (bug #79)") {
+        val encoder: AvroEncoder[TwoShared] = AvroEncoder.derived[TwoShared]
+        val decoder: AvroDecoder[TwoShared] = AvroDecoder.derived[TwoShared]
+        val original = TwoShared(pkgX.Shared(1), pkgY.Shared("hello"))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[TwoShared](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("BarWithDuplicateNames round-trip (bug #79)") {
+        val encoder: AvroEncoder[BarWithDuplicateNames] = AvroEncoder.derived[BarWithDuplicateNames]
+        val decoder: AvroDecoder[BarWithDuplicateNames] = AvroDecoder.derived[BarWithDuplicateNames]
+        val original = BarWithDuplicateNames(nsA.Foo(42), nsB.Foo("hello"))
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[BarWithDuplicateNames](bytes)(decoder)
+        decoded ==> original
+      }
+
+      test("generic name collision round-trip (bug #91)") {
+        val encoder: AvroEncoder[Message] = AvroEncoder.derived[Message]
+        val decoder: AvroDecoder[Message] = AvroDecoder.derived[Message]
+        val original = Message(
+          foo = Audited(SimplePerson("Alice", 30), "admin"),
+          bar = Audited(Address("Main St", "NYC"), "system")
+        )
+        val bytes = AvroIO.toBinary(original)(encoder)
+        val decoded = AvroIO.fromBinary[Message](bytes)(decoder)
+        decoded ==> original
       }
     }
   }

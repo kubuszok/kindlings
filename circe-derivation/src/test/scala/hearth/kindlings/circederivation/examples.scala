@@ -252,3 +252,33 @@ case class ThreeFields(x: Int, y: String, z: Boolean)
 
 // Collection decode failure (exercises CollectionBuildException path)
 // (test by providing wrong element types in JSON array for List[Int])
+
+// Combinatorial wrapper x inner type (exercises recursive derivation for Option/List/Map of derived types)
+// Key: SimplePerson and Shape must NOT have pre-existing encoder/decoder implicits —
+// the macro must derive them recursively (bug #120 pattern: Option[DerivedType], bug #78 pattern: Option[SealedTrait])
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[SimplePerson],
+    optSealedTrait: Option[Shape],
+    optValueClass: Option[WrappedInt],
+    listCaseClass: List[SimplePerson],
+    listSealedTrait: List[Shape],
+    mapCaseClass: Map[String, SimplePerson],
+    mapSealedTrait: Map[String, Shape]
+)
+
+// Annotation x type shape: sealed trait with annotated fields on subtypes (bug #108 pattern)
+sealed trait AnnotatedADT
+case class AnnotatedLeafA(
+    @fieldName("full_name") fullName: String,
+    value: Int
+) extends AnnotatedADT
+case class AnnotatedLeafB(
+    label: String,
+    @transientField hidden: Int = 0
+) extends AnnotatedADT
+case class AnnotatedLeafBoth(
+    @fieldName("display_label") displayLabel: String,
+    @transientField scratch: Option[String] = None,
+    active: Boolean
+) extends AnnotatedADT

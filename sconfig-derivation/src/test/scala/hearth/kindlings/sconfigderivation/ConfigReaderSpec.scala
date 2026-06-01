@@ -237,5 +237,101 @@ final class ConfigReaderSpec extends MacroSuite {
         r.from(innerVal) ==> Right(North)
       }
     }
+
+    group("combinatorial: wrapper x inner type") {
+
+      test("read CombOuter with all fields populated") {
+        val r = ConfigReader.derived[CombOuter]
+        r.from(value("""{
+          opt-primitive = 42,
+          opt-case-class = { name = Alice, age = 30 },
+          opt-sealed-trait = { type = circle, radius = 1.5 },
+          list-case-class = [ { name = Bob, age = 25 } ],
+          map-case-class = { key1 = { name = Carol, age = 40 } }
+        }""")) ==> Right(
+          CombOuter(
+            optPrimitive = Some(42),
+            optCaseClass = Some(SimplePerson("Alice", 30)),
+            optSealedTrait = Some(Circle(1.5)),
+            listCaseClass = List(SimplePerson("Bob", 25)),
+            mapCaseClass = Map("key1" -> SimplePerson("Carol", 40))
+          )
+        )
+      }
+
+      test("read CombOuter with missing optional fields (None)") {
+        val r = ConfigReader.derived[CombOuter]
+        r.from(value("""{
+          list-case-class = [],
+          map-case-class = {}
+        }""")) ==> Right(
+          CombOuter(
+            optPrimitive = None,
+            optCaseClass = None,
+            optSealedTrait = None,
+            listCaseClass = Nil,
+            mapCaseClass = Map.empty
+          )
+        )
+      }
+
+      test("read Option[SealedTrait] with discriminator") {
+        val r = ConfigReader.derived[CombOuter]
+        r.from(value("""{
+          opt-sealed-trait = { type = rectangle, width = 2.0, height = 3.0 },
+          list-case-class = [],
+          map-case-class = {}
+        }""")) ==> Right(
+          CombOuter(
+            optPrimitive = None,
+            optCaseClass = None,
+            optSealedTrait = Some(Rectangle(2.0, 3.0)),
+            listCaseClass = Nil,
+            mapCaseClass = Map.empty
+          )
+        )
+      }
+    }
+
+    group("annotation x type shape") {
+
+      test("@configKey on a sealed trait subtype field (reader)") {
+        val r = ConfigReader.derived[AnnotatedShape]
+        r.from(value("{ type = annotated-circle, r = 2.5 }")) ==> Right(AnnotatedCircle(2.5))
+      }
+
+      test("@configKey on multiple fields of a sealed trait subtype (reader)") {
+        val r = ConfigReader.derived[AnnotatedShape]
+        r.from(value("{ type = annotated-rect, w = 4.0, h = 5.0 }")) ==> Right(AnnotatedRect(4.0, 5.0))
+      }
+
+      test("@transientField on a sealed trait subtype (reader)") {
+        val r = ConfigReader.derived[TransientShape]
+        r.from(value("{ type = transient-circle, radius = 3.0 }")) ==> Right(TransientCircle(3.0))
+      }
+
+      test("@transientField on a sealed trait subtype with extra fields (reader)") {
+        val r = ConfigReader.derived[TransientShape]
+        r.from(value("{ type = transient-rect, width = 6.0, height = 7.0 }")) ==> Right(TransientRect(6.0, 7.0))
+      }
+
+      test("round-trip AnnotatedShape via reader + writer") {
+        val r = ConfigReader.derived[AnnotatedShape]
+        val w = ConfigWriter.derived[AnnotatedShape]
+        val circle: AnnotatedShape = AnnotatedCircle(2.5)
+        val rect: AnnotatedShape = AnnotatedRect(4.0, 5.0)
+        r.from(w.to(circle)) ==> Right(circle)
+        r.from(w.to(rect)) ==> Right(rect)
+      }
+
+      test("round-trip TransientShape via reader + writer") {
+        val r = ConfigReader.derived[TransientShape]
+        val w = ConfigWriter.derived[TransientShape]
+        val circle: TransientShape = TransientCircle(3.0)
+        val rect: TransientShape = TransientRect(6.0, 7.0)
+        r.from(w.to(circle)) ==> Right(circle)
+        r.from(w.to(rect)) ==> Right(rect)
+      }
+    }
   }
 }

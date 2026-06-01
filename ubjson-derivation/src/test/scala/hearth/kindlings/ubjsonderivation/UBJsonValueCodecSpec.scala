@@ -403,6 +403,45 @@ final class UBJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("combinatorial: wrapper x inner type") {
+
+      test("CombOuter all fields populated") {
+        val codec = UBJsonValueCodec.derived[CombOuter]
+        val value = CombOuter(
+          optPrimitive = Some(42),
+          optCaseClass = Some(CombInnerCC("hello", 7)),
+          optSealedTrait = Some(CombVariantA(99)),
+          listCaseClass = List(CombInnerCC("a", 1), CombInnerCC("b", 2)),
+          mapCaseClass = Map("k1" -> CombInnerCC("m", 10))
+        )
+        roundTrip(value)(codec) ==> value
+      }
+
+      test("CombOuter None and empty collections") {
+        val codec = UBJsonValueCodec.derived[CombOuter]
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          listCaseClass = Nil,
+          mapCaseClass = Map.empty
+        )
+        roundTrip(value)(codec) ==> value
+      }
+
+      test("Option[SealedTrait] with second variant") {
+        val codec = UBJsonValueCodec.derived[CombOuter]
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = Some(CombVariantB("variant-b")),
+          listCaseClass = Nil,
+          mapCaseClass = Map.empty
+        )
+        roundTrip(value)(codec) ==> value
+      }
+    }
+
     group("indirect recursion") {
 
       test("indirect recursive type round-trip") {

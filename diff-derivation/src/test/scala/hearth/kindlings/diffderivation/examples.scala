@@ -18,3 +18,11 @@ case object No extends SimpleEnum
 sealed trait TreeNode
 case class Branch(left: TreeNode, right: TreeNode) extends TreeNode
 case class Leaf(value: Int) extends TreeNode
+
+// Combinatorial wrapper x inner-type test types
+case class CombOuter(
+    optCaseClass: Option[Person],
+    optSealedTrait: Option[Shape],
+    listCaseClass: List[Person],
+    mapCaseClass: Map[String, Person]
+)

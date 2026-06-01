@@ -170,6 +170,29 @@ case class Leaf(value: Int) extends TreeNode
 case class MutRecA(value: Int, b: Option[MutRecB])
 case class MutRecB(value: String, a: Option[MutRecA])
 
+// Combinatorial wrapper x inner type (no pre-existing codecs for SimplePerson/Shape — must derive recursively, bug #120)
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[SimplePerson],
+    optSealedTrait: Option[Shape],
+    optValueClass: Option[WrappedInt],
+    listCaseClass: List[SimplePerson],
+    listSealedTrait: List[Shape],
+    mapCaseClass: Map[String, SimplePerson],
+    mapSealedTrait: Map[String, Shape]
+)
+
+// Annotation x type shape test types
+case class AnnotatedCaseClass(
+    @fieldName("full_name") fullName: String,
+    @stringified score: Int,
+    @fieldName("is_active") @stringified isActive: Int
+)
+
+sealed trait AnnotatedSealedTrait
+case class AnnotatedSubA(@fieldName("sub_name") subName: String, @stringified value: Int) extends AnnotatedSealedTrait
+case class AnnotatedSubB(@fieldName("sub_label") subLabel: String) extends AnnotatedSealedTrait
+
 // HashMap / TreeMap test types
 case class WithHashMap(data: scala.collection.immutable.HashMap[String, Int])
 case class WithTreeMap(data: scala.collection.immutable.TreeMap[String, Int])

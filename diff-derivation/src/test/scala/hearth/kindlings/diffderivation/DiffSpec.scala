@@ -190,6 +190,131 @@ final class DiffSpec extends hearth.MacroSuite {
       }
     }
 
+    group("combinatorial wrapper x inner-type") {
+
+      test("identical CombOuter instances") {
+        val d = Diff.derived[CombOuter]
+        val v = CombOuter(
+          Some(Person("Alice", 30)),
+          Some(Circle(1.0)),
+          List(Person("Bob", 25)),
+          Map("key" -> Person("Carol", 40))
+        )
+        val result = d.diff(v, v)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("optSealedTrait differs — Some(Circle) vs Some(Rectangle)") {
+        val d = Diff.derived[CombOuter]
+        val left = CombOuter(
+          Some(Person("Alice", 30)),
+          Some(Circle(1.0)),
+          List(Person("Bob", 25)),
+          Map("key" -> Person("Carol", 40))
+        )
+        val right = CombOuter(
+          Some(Person("Alice", 30)),
+          Some(Rectangle(2.0, 3.0)),
+          List(Person("Bob", 25)),
+          Map("key" -> Person("Carol", 40))
+        )
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val optSTField = r.fields.find(_._1 == "optSealedTrait")
+            assert(optSTField.isDefined, s"expected optSealedTrait field in $result")
+            assert(!optSTField.get._2.isIdentical, "expected optSealedTrait to differ")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("listCaseClass differs") {
+        val d = Diff.derived[CombOuter]
+        val left = CombOuter(
+          None,
+          None,
+          List(Person("Alice", 30), Person("Bob", 25)),
+          Map.empty
+        )
+        val right = CombOuter(
+          None,
+          None,
+          List(Person("Alice", 30), Person("Charlie", 35)),
+          Map.empty
+        )
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val listField = r.fields.find(_._1 == "listCaseClass")
+            assert(listField.isDefined, s"expected listCaseClass field in $result")
+            assert(!listField.get._2.isIdentical, "expected listCaseClass to differ")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("mapCaseClass has different keys") {
+        val d = Diff.derived[CombOuter]
+        val left = CombOuter(
+          None,
+          None,
+          Nil,
+          Map("a" -> Person("Alice", 30))
+        )
+        val right = CombOuter(
+          None,
+          None,
+          Nil,
+          Map("b" -> Person("Bob", 25))
+        )
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val mapField = r.fields.find(_._1 == "mapCaseClass")
+            assert(mapField.isDefined, s"expected mapCaseClass field in $result")
+            assert(!mapField.get._2.isIdentical, "expected mapCaseClass to differ")
+            mapField.get._2 match {
+              case md: DiffResult.MapDiff =>
+                val added = md.entries.collect { case a: DiffResult.MapEntry.Added => a }
+                val removed = md.entries.collect { case r: DiffResult.MapEntry.Removed => r }
+                assert(added.nonEmpty, "expected at least one Added entry")
+                assert(removed.nonEmpty, "expected at least one Removed entry")
+              case other =>
+                fail(s"expected MapDiff, got $other")
+            }
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("optCaseClass Some vs None") {
+        val d = Diff.derived[CombOuter]
+        val left = CombOuter(Some(Person("Alice", 30)), None, Nil, Map.empty)
+        val right = CombOuter(None, None, Nil, Map.empty)
+        val result = d.diff(left, right)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val optField = r.fields.find(_._1 == "optCaseClass")
+            assert(optField.isDefined, s"expected optCaseClass field in $result")
+            assert(!optField.get._2.isIdentical, "expected optCaseClass to differ")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("snapshot of CombOuter") {
+        val d = Diff.derived[CombOuter]
+        val snap = d.snapshot(CombOuter(
+          Some(Person("Alice", 30)),
+          Some(Circle(1.0)),
+          List(Person("Bob", 25)),
+          Map("key" -> Person("Carol", 40))
+        ))
+        assert(snap.isIdentical, s"snapshot should be identical, got $snap")
+      }
+    }
+
     group("snapshot") {
 
       test("snapshot of case class") {

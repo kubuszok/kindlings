@@ -294,6 +294,17 @@ object examples {
     implicit val showPrettyShape: ShowPretty[Shape] = ShowPretty.derived
   }
 
+  // Combinatorial wrapper x inner-type test types
+  final case class CombOuter(
+      optPoint: Option[Point],
+      listPoint: List[Point],
+      mapPoint: Map[String, Point]
+  )
+  object CombOuter {
+    implicit val showCombOuter: cats.Show[CombOuter] = cats.Show.derived
+    implicit val eqCombOuter: cats.kernel.Eq[CombOuter] = cats.kernel.Eq.derived
+  }
+
   // Monoid/Group built-in rule coverage — Long fields
   final case class LongPair(a: Long, b: Long)
   object LongPair {

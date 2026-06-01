@@ -423,6 +423,83 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("Show combinatorial wrapper x inner-type") {
+
+    test("Show for CombOuter with all fields populated") {
+      val value = examples.CombOuter(
+        Some(examples.Point(1, 2)),
+        List(examples.Point(3, 4), examples.Point(5, 6)),
+        Map("origin" -> examples.Point(0, 0))
+      )
+      val shown = examples.CombOuter.showCombOuter.show(value)
+      assert(shown.startsWith("CombOuter("), s"expected CombOuter prefix, got: $shown")
+      assert(shown.contains("optPoint = Some(Point(x = 1, y = 2))"), s"expected Option[Point] rendering, got: $shown")
+      assert(shown.contains("listPoint = List(Point(x = 3, y = 4), Point(x = 5, y = 6))"), s"expected List[Point] rendering, got: $shown")
+      assert(shown.contains("origin -> Point(x = 0, y = 0)"), s"expected Map[String, Point] rendering, got: $shown")
+    }
+
+    test("Show for CombOuter with None and empty collections") {
+      val value = examples.CombOuter(None, Nil, Map.empty)
+      val shown = examples.CombOuter.showCombOuter.show(value)
+      assert(shown.contains("optPoint = None"), s"expected None rendering, got: $shown")
+      assert(shown.contains("listPoint = List()"), s"expected empty List rendering, got: $shown")
+      assert(shown.contains("mapPoint = Map()"), s"expected empty Map rendering, got: $shown")
+    }
+  }
+
+  group("Eq combinatorial wrapper x inner-type") {
+
+    test("equal CombOuter instances") {
+      val a = examples.CombOuter(
+        Some(examples.Point(1, 2)),
+        List(examples.Point(3, 4)),
+        Map("k" -> examples.Point(5, 6))
+      )
+      val b = examples.CombOuter(
+        Some(examples.Point(1, 2)),
+        List(examples.Point(3, 4)),
+        Map("k" -> examples.Point(5, 6))
+      )
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> true
+    }
+
+    test("unequal CombOuter — Option field differs") {
+      val a = examples.CombOuter(Some(examples.Point(1, 2)), Nil, Map.empty)
+      val b = examples.CombOuter(Some(examples.Point(9, 9)), Nil, Map.empty)
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> false
+    }
+
+    test("unequal CombOuter — Some vs None") {
+      val a = examples.CombOuter(Some(examples.Point(1, 2)), Nil, Map.empty)
+      val b = examples.CombOuter(None, Nil, Map.empty)
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> false
+    }
+
+    test("unequal CombOuter — List field differs") {
+      val a = examples.CombOuter(None, List(examples.Point(1, 2)), Map.empty)
+      val b = examples.CombOuter(None, List(examples.Point(3, 4)), Map.empty)
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> false
+    }
+
+    test("unequal CombOuter — List length differs") {
+      val a = examples.CombOuter(None, List(examples.Point(1, 2)), Map.empty)
+      val b = examples.CombOuter(None, Nil, Map.empty)
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> false
+    }
+
+    test("unequal CombOuter — Map field differs") {
+      val a = examples.CombOuter(None, Nil, Map("k" -> examples.Point(1, 2)))
+      val b = examples.CombOuter(None, Nil, Map("k" -> examples.Point(9, 9)))
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> false
+    }
+
+    test("equal CombOuter — both empty") {
+      val a = examples.CombOuter(None, Nil, Map.empty)
+      val b = examples.CombOuter(None, Nil, Map.empty)
+      examples.CombOuter.eqCombOuter.eqv(a, b) ==> true
+    }
+  }
+
   group("Eq Option field") {
 
     test("Some equal to Some with same value") {

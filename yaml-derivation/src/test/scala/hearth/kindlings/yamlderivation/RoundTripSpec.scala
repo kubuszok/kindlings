@@ -324,5 +324,61 @@ final class RoundTripSpec extends MacroSuite {
 
     // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
     // in yaml encoder macro — see KindlingsYamlEncoderSpec.
+
+    group("combinatorial: wrapper x inner type") {
+
+      test("CombOuter all fields populated") {
+        val value = CombOuter(
+          optPrimitive = Some(42),
+          optCaseClass = Some(CombInnerCC("hello", 7)),
+          optSealedTrait = Some(CombVariantA(99)),
+          listCaseClass = List(CombInnerCC("a", 1), CombInnerCC("b", 2)),
+          mapCaseClass = Map("k1" -> CombInnerCC("m", 10))
+        )
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[CombOuter](node)
+        decoded ==> Right(value)
+      }
+
+      test("CombOuter None and empty collections") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          listCaseClass = Nil,
+          mapCaseClass = Map.empty
+        )
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[CombOuter](node)
+        decoded ==> Right(value)
+      }
+
+      test("Option[SealedTrait] with second variant") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = Some(CombVariantB("variant-b")),
+          listCaseClass = Nil,
+          mapCaseClass = Map.empty
+        )
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[CombOuter](node)
+        decoded ==> Right(value)
+      }
+
+      test("@fieldName on sealed trait subtype field round-trips") {
+        val value: CombAnnotatedST = CombAnnotA("test")
+        val node = KindlingsYamlEncoder.encode[CombAnnotatedST](value)
+        val decoded = KindlingsYamlDecoder.decode[CombAnnotatedST](node)
+        decoded ==> Right(value)
+      }
+
+      test("@fieldName on sealed trait subtype field round-trips (other variant)") {
+        val value: CombAnnotatedST = CombAnnotB(true)
+        val node = KindlingsYamlEncoder.encode[CombAnnotatedST](value)
+        val decoded = KindlingsYamlDecoder.decode[CombAnnotatedST](node)
+        decoded ==> Right(value)
+      }
+    }
   }
 }
