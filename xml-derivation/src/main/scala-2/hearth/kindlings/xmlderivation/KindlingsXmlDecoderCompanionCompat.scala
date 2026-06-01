@@ -4,10 +4,6 @@ import scala.language.experimental.macros
 
 private[xmlderivation] trait KindlingsXmlDecoderCompanionCompat { this: KindlingsXmlDecoder.type =>
 
-  @deprecated("Use .derived instead", "next")
-  def derive[A](implicit config: XmlConfig): XmlDecoder[A] =
-    macro internal.compiletime.DecoderMacros.deriveDecoderImpl[A]
-
   def decode[A](elem: scala.xml.Elem)(implicit config: XmlConfig): Either[XmlDecodingError, A] =
     macro internal.compiletime.DecoderMacros.deriveInlineDecodeImpl[A]
 

@@ -327,8 +327,8 @@ trait CodecMacrosImpl
 
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
-        s"KindlingsJsonCodec.derive: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
-          "Provide an explicit type parameter, e.g.: KindlingsJsonCodec.derive[MyType](...)\n" +
+        s"KindlingsJsonCodec.derived: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          "Provide an explicit type parameter, e.g.: KindlingsJsonCodec.derived[MyType](...)\n" +
           "or add a type ascription to the result variable."
       )
 
@@ -403,10 +403,10 @@ trait CodecMacrosImpl
             case (Some(enc), Some(dec)) => (enc, dec)
             case _                      =>
               Environment.reportErrorAndAbort(
-                s"KindlingsJsonCodec.derive: Cannot derive JsonKeyCodec for ${Type[A].prettyPrint}.\n" +
+                s"KindlingsJsonCodec.derived: Cannot derive JsonKeyCodec for ${Type[A].prettyPrint}.\n" +
                   "Key codecs can only be derived for: primitive types (Int, Long, Double, Float, Short, Boolean, BigDecimal, BigInt),\n" +
                   "value types wrapping those primitives, and sealed traits/enums of case objects.\n" +
-                  "If you only need value encoding/decoding, use KindlingsJsonValueCodec.derive instead."
+                  "If you only need value encoding/decoding, use KindlingsJsonValueCodec.derived instead."
               )
           }
 
@@ -431,7 +431,7 @@ trait CodecMacrosImpl
         Log.info(s"Derived final combined json codec result: ${result.prettyPrint}")
       }
       .runToExprOrFail(
-        "KindlingsJsonCodec.derive",
+        "KindlingsJsonCodec.derived",
         infoRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout

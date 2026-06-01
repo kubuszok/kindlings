@@ -5,10 +5,10 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsXmlInstances {
-  val simpleCCEncoder: XmlEncoder[SimpleCC] = KindlingsXmlEncoder.derive[SimpleCC]
-  val simpleCCDecoder: XmlDecoder[SimpleCC] = KindlingsXmlDecoder.derive[SimpleCC]
-  val addressEncoder: XmlEncoder[Address] = KindlingsXmlEncoder.derive[Address]
-  val addressDecoder: XmlDecoder[Address] = KindlingsXmlDecoder.derive[Address]
+  val simpleCCEncoder: XmlEncoder[SimpleCC] = KindlingsXmlEncoder.derived[SimpleCC]
+  val simpleCCDecoder: XmlDecoder[SimpleCC] = KindlingsXmlDecoder.derived[SimpleCC]
+  val addressEncoder: XmlEncoder[Address] = KindlingsXmlEncoder.derived[Address]
+  val addressDecoder: XmlDecoder[Address] = KindlingsXmlDecoder.derived[Address]
 }
 
 @State(Scope.Benchmark)

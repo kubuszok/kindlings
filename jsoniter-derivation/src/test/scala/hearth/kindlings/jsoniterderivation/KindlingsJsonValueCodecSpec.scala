@@ -1850,8 +1850,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     group("nested sealed trait hierarchies") {
 
-      @annotation.nowarn("msg=deprecated")
-      val vehicleCodec = KindlingsJsonValueCodec.derive[Vehicle]
+      val vehicleCodec = KindlingsJsonValueCodec.derived[Vehicle]
 
       // TODO: nested sealed trait hierarchies with wrapper encoding are broken
       test("intermediate sealed trait round-trip (leaf under MotorVehicle)".ignore) {

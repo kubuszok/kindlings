@@ -6,14 +6,14 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsAvroInstances {
-  val simpleCCEncoder: AvroEncoder[SimpleCC] = AvroEncoder.derive[SimpleCC]
-  val simpleCCDecoder: AvroDecoder[SimpleCC] = AvroDecoder.derive[SimpleCC]
-  val personEncoder: AvroEncoder[Person] = AvroEncoder.derive[Person]
-  val personDecoder: AvroDecoder[Person] = AvroDecoder.derive[Person]
-  val eventEncoder: AvroEncoder[Event] = AvroEncoder.derive[Event]
-  val eventDecoder: AvroDecoder[Event] = AvroDecoder.derive[Event]
-  val simpleADTEncoder: AvroEncoder[SimpleADT] = AvroEncoder.derive[SimpleADT]
-  val simpleADTDecoder: AvroDecoder[SimpleADT] = AvroDecoder.derive[SimpleADT]
+  val simpleCCEncoder: AvroEncoder[SimpleCC] = AvroEncoder.derived[SimpleCC]
+  val simpleCCDecoder: AvroDecoder[SimpleCC] = AvroDecoder.derived[SimpleCC]
+  val personEncoder: AvroEncoder[Person] = AvroEncoder.derived[Person]
+  val personDecoder: AvroDecoder[Person] = AvroDecoder.derived[Person]
+  val eventEncoder: AvroEncoder[Event] = AvroEncoder.derived[Event]
+  val eventDecoder: AvroDecoder[Event] = AvroDecoder.derived[Event]
+  val simpleADTEncoder: AvroEncoder[SimpleADT] = AvroEncoder.derived[SimpleADT]
+  val simpleADTDecoder: AvroDecoder[SimpleADT] = AvroDecoder.derived[SimpleADT]
 }
 
 @State(Scope.Benchmark)

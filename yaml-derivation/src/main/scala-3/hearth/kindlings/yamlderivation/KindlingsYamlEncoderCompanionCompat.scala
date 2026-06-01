@@ -4,11 +4,6 @@ import org.virtuslab.yaml.{Node, YamlEncoder}
 
 private[yamlderivation] trait KindlingsYamlEncoderCompanionCompat { this: KindlingsYamlEncoder.type =>
 
-  @deprecated("Use .derived instead", "next")
-  inline def derive[A](using config: YamlConfig): YamlEncoder[A] = ${
-    internal.compiletime.EncoderMacros.deriveEncoderImpl[A]('config)
-  }
-
   inline def encode[A](inline value: A)(using config: YamlConfig): Node = ${
     internal.compiletime.EncoderMacros.deriveInlineEncodeImpl[A]('value, 'config)
   }

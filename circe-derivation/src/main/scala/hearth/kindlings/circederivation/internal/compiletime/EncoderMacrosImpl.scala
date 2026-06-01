@@ -78,7 +78,7 @@ trait EncoderMacrosImpl
     if (!isCaseClass && !isNamedTuple && !isEnum)
       Environment.reportErrorAndAbort(
         s"KindlingsEncoder.deriveAsObject: ${Type[A].prettyPrint} is not a case class, sealed trait, or named tuple. " +
-          "Use KindlingsEncoder.derive instead."
+          "Use KindlingsEncoder.derived instead."
       )
 
     implicit val KindlingsEncoderAsObjectA: Type[KindlingsEncoderAsObject[A]] = Types.KindlingsEncoderAsObject[A]
@@ -104,7 +104,7 @@ trait EncoderMacrosImpl
                   case None      =>
                     throw new IllegalStateException(
                       "Encoder.AsObject: produced non-object JSON. This can happen when using enumAsStrings=true " +
-                        "with a sealed trait of case objects. Use KindlingsEncoder.derive instead."
+                        "with a sealed trait of case objects. Use KindlingsEncoder.derived instead."
                     )
                 }
             }

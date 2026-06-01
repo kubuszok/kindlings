@@ -105,7 +105,7 @@ This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `No
       unit: String
     )
 
-    val codec = KindlingsJsonValueCodec.derive[Measurement]
+    val codec = KindlingsJsonValueCodec.derived[Measurement]
     val json = writeToString(Measurement(42.0.refine, "kg"))(codec)
     println(json)
     // expected output:

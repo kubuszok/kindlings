@@ -4,11 +4,6 @@ import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 
 private[yamlderivation] trait KindlingsYamlDecoderCompanionCompat { this: KindlingsYamlDecoder.type =>
 
-  @deprecated("Use .derived instead", "next")
-  inline def derive[A](using config: YamlConfig): YamlDecoder[A] = ${
-    internal.compiletime.DecoderMacros.deriveDecoderImpl[A]('config)
-  }
-
   inline def decode[A](node: Node)(using config: YamlConfig): Either[ConstructError, A] = ${
     internal.compiletime.DecoderMacros.deriveInlineDecodeImpl[A]('node, 'config)
   }

@@ -6,10 +6,10 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsSconfigInstances {
-  val simpleCCCodec: ConfigCodec[SimpleCC] = ConfigCodec.derive[SimpleCC]
-  val personCodec: ConfigCodec[Person] = ConfigCodec.derive[Person]
-  val eventCodec: ConfigCodec[Event] = ConfigCodec.derive[Event]
-  val simpleADTCodec: ConfigCodec[SimpleADT] = ConfigCodec.derive[SimpleADT]
+  val simpleCCCodec: ConfigCodec[SimpleCC] = ConfigCodec.derived[SimpleCC]
+  val personCodec: ConfigCodec[Person] = ConfigCodec.derived[Person]
+  val eventCodec: ConfigCodec[Event] = ConfigCodec.derived[Event]
+  val simpleADTCodec: ConfigCodec[SimpleADT] = ConfigCodec.derived[SimpleADT]
 }
 
 @State(Scope.Benchmark)

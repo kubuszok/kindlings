@@ -114,7 +114,7 @@ This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...
       age: Int
     )
 
-    implicit val codec = KindlingsJsonValueCodec.derive[User]
+    implicit val codec = KindlingsJsonValueCodec.derived[User]
     val json = writeToString(User("Alice", 30))
     println(json)
     // expected output:
