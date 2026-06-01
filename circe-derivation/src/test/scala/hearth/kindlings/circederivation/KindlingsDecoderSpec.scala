@@ -1175,9 +1175,9 @@ final class KindlingsDecoderSpec extends MacroSuite {
         KindlingsDecoder.decode[WithOptionalPerson](json) ==> Right(WithOptionalPerson("test", None))
       }
 
-      test("Option[SimplePerson] absent fails without useDefaults") {
+      test("Option[SimplePerson] absent decodes as None (bug #120 fix)") {
         val json = Json.obj("label" -> Json.fromString("test"))
-        assert(KindlingsDecoder.decode[WithOptionalPerson](json).isLeft)
+        KindlingsDecoder.decode[WithOptionalPerson](json) ==> Right(WithOptionalPerson("test", None))
       }
     }
 
@@ -1366,6 +1366,44 @@ final class KindlingsDecoderSpec extends MacroSuite {
         result.fold(
           errors => assert(errors.size >= 1),
           _ => fail("expected invalid")
+        )
+      }
+    }
+
+    group("accumulating Option[DerivedType] absent field (bug #120)") {
+
+      test("accumulating: absent Option[InnerForOpt] decodes as Valid(None)") {
+        val decoder = KindlingsDecoder.derived[OuterWithOptInner]
+        val json = io.circe.Json.obj()
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => value ==> OuterWithOptInner(None)
+        )
+      }
+
+      test("accumulating: null Option[InnerForOpt] decodes as Valid(None)") {
+        val decoder = KindlingsDecoder.derived[OuterWithOptInner]
+        val json = io.circe.Json.obj("data" -> io.circe.Json.Null)
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => value ==> OuterWithOptInner(None)
+        )
+      }
+
+      test("accumulating: present Option[InnerForOpt] decodes as Valid(Some(...))") {
+        val decoder = KindlingsDecoder.derived[OuterWithOptInner]
+        val json = io.circe.Json.obj(
+          "data" -> io.circe.Json.obj("x" -> io.circe.Json.fromInt(1), "y" -> io.circe.Json.fromString("a"))
+        )
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => value ==> OuterWithOptInner(Some(InnerForOpt(1, "a")))
         )
       }
     }

@@ -53,6 +53,12 @@ trait AvroSchemaForUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[java.nio.ByteBuffer])
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
+      else if (tpe =:= Type.of[Seq[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.bytesSchema))
+      else if (tpe =:= Type.of[List[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.bytesSchema))
+      else if (tpe =:= Type.of[Vector[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           Expr.splice(sfctx.config).decimalConfig match {

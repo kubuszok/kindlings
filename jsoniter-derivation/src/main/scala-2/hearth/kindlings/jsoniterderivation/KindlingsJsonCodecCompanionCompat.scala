@@ -1,6 +1,6 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonCodec, JsonKeyCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec
 import scala.language.experimental.macros
 
 private[jsoniterderivation] trait KindlingsJsonCodecCompanionCompat { this: KindlingsJsonCodec.type =>

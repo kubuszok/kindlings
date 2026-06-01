@@ -52,6 +52,12 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.decodeByteBuffer(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.nio.ByteBuffer])
         Some(Expr.quote(AvroDerivationUtils.decodeToByteBuffer(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[Seq[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.decodeByteBufferToSeq(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[List[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.decodeByteBufferToList(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[Vector[Byte]])
+        Some(Expr.quote(AvroDerivationUtils.decodeByteBufferToVector(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[BigDecimal])
         Some(Expr.quote {
           (Expr.splice(dctx.config).decimalConfig match {

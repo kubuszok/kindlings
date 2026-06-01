@@ -1,6 +1,6 @@
 package hearth.kindlings.circederivation
 
-import io.circe.{Decoder, DecodingFailure, Json}
+import io.circe.{DecodingFailure, Json}
 import scala.language.experimental.macros
 
 private[circederivation] trait KindlingsDecoderCompanionCompat { this: KindlingsDecoder.type =>

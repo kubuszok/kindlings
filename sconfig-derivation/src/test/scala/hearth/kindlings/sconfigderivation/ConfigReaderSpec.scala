@@ -120,6 +120,19 @@ final class ConfigReaderSpec extends MacroSuite {
         assert(result.isLeft)
       }
 
+      test("withStrictDecoding rejects unknown keys in sealed trait subtype") {
+        implicit val cfg: SConfig = SConfig().withStrictDecoding
+        val r = ConfigReader.derived[Shape]
+        val result = r.from(value("{ type = circle, radius = 1.5, extra = oops }"))
+        assert(result.isLeft)
+      }
+
+      test("withStrictDecoding accepts valid sealed trait subtype without extra keys".ignore) {
+        implicit val cfg: SConfig = SConfig().withStrictDecoding
+        val r = ConfigReader.derived[Shape]
+        r.from(value("{ type = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
+      }
+
       test("per-type ProductHint allowUnknownKeys = false rejects extras") {
         // Even with global config permissive, the per-type hint enforces strict mode.
         implicit val strictHint: ProductHint[SimplePerson] =

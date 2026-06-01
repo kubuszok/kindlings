@@ -34,7 +34,13 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val StringT: Type[String] = CTypes.String
       implicit val ListStringT: Type[List[String]] = CTypes.ListString
 
-      val childrenList = enumm.directChildren.toList
+      // Use exhaustive (leaf) children to flatten nested sealed trait hierarchies.
+      // This ensures intermediate sealed traits like MotorVehicle in Vehicle > MotorVehicle > Truck
+      // are skipped — only concrete leaf types (Truck, Motorcycle, Bicycle) are decoded.
+      val childrenList = enumm.exhaustiveChildren match {
+        case Some(ec) => ec.toList
+        case None     => enumm.directChildren.toList
+      }
 
       // Check at compile time if all children are singletons (case objects with no fields)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||

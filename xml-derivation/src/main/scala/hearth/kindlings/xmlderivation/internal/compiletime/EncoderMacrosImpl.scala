@@ -30,6 +30,7 @@ trait EncoderMacrosImpl
     implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
     implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
     implicit val StringT: Type[String] = Types.String
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, scala.xml.Elem]("KindlingsXmlEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -39,7 +40,7 @@ trait EncoderMacrosImpl
               val _ = Expr.splice(valueVal)
               val _ = Expr.splice(configVal)
               val _ = Expr.splice(nameVal)
-              Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None)))
+              Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None, evConfig)))
             }
           }
         }
@@ -56,6 +57,7 @@ trait EncoderMacrosImpl
     implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
     implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
     implicit val StringT: Type[String] = Types.String
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, String]("KindlingsXmlEncoder.toXmlString") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -66,7 +68,7 @@ trait EncoderMacrosImpl
               val _ = Expr.splice(configVal)
               val _ = Expr.splice(nameVal)
               XmlDerivationUtils.elemToString(
-                Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None)))
+                Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None, evConfig)))
               )
             }
           }
@@ -83,6 +85,7 @@ trait EncoderMacrosImpl
     implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
     implicit val StringT: Type[String] = Types.String
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsXmlEncoder[A]]("KindlingsXmlEncoder.derived") { fromCtx =>
       ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
@@ -95,7 +98,8 @@ trait EncoderMacrosImpl
               val _ = cfg
               Expr.splice {
                 fromCtx(
-                  EncoderCtx.from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType)
+                  EncoderCtx
+                    .from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType, evConfig)
                 )
               }
           }
@@ -185,7 +189,8 @@ trait EncoderMacrosImpl
       elementName: Expr[String],
       config: Expr[XmlConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[XmlConfig] = None
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -251,14 +256,16 @@ trait EncoderMacrosImpl
         value: Expr[A],
         elementName: Expr[String],
         config: Expr[XmlConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[XmlConfig] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
       elementName = elementName,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 
@@ -325,10 +332,21 @@ trait EncoderMacrosImpl
   sealed trait FieldEncoding
   object FieldEncoding {
     case object Skip extends FieldEncoding
-    case class Attr(name: String, value: Expr[Any]) extends FieldEncoding
-    case class Child(elem: Expr[scala.xml.Elem]) extends FieldEncoding
-    case class WrappedChild(wrapperName: String, elem: Expr[scala.xml.Elem]) extends FieldEncoding
+    case class Attr(name: String, value: Expr[Any], skipConditions: List[Expr[Boolean]] = Nil) extends FieldEncoding
+    case class AttrExpr(nameExpr: Expr[String], value: Expr[Any], skipConditions: List[Expr[Boolean]] = Nil)
+        extends FieldEncoding
+    case class Child(elem: Expr[scala.xml.Elem], skipConditions: List[Expr[Boolean]] = Nil) extends FieldEncoding
+    case class WrappedChild(wrapperName: String, elem: Expr[scala.xml.Elem], skipConditions: List[Expr[Boolean]] = Nil)
+        extends FieldEncoding
     case class Content(elem: Expr[scala.xml.Elem]) extends FieldEncoding
+
+    /** Dynamic mode: both attribute and element encodings; chosen at runtime by config.defaultFieldMode. */
+    case class DynamicMode(
+        nameExpr: Expr[String],
+        value: Expr[Any],
+        elemEncoding: Expr[scala.xml.Elem],
+        skipConditions: List[Expr[Boolean]] = Nil
+    ) extends FieldEncoding
   }
 
   // Types

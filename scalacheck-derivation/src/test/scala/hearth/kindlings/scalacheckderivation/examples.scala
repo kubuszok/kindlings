@@ -161,15 +161,12 @@ object examples {
     }
   }
 
-  // ==Recursive Sealed Trait==
-  object RecursiveSealedTrait {
-    sealed trait TreeNode
-    case class Branch(value: Int, children: List[TreeNode]) extends TreeNode
-    case class Leaf(value: Int) extends TreeNode
-
-    object TreeNode {
-      implicit val arbTreeNode: Arbitrary[TreeNode] = DeriveArbitrary.derived
-    }
+  // ==Direct Recursive Sealed Trait==
+  object DirectRecursive {
+    sealed trait BinaryTree
+    case class BNode(value: Int, left: BinaryTree, right: BinaryTree) extends BinaryTree
+    case class BLeaf(value: Int) extends BinaryTree
+    implicit val arb: Arbitrary[BinaryTree] = DeriveArbitrary.derived
   }
 
   // ==Value Class Support==

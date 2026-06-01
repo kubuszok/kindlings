@@ -88,8 +88,27 @@ trait CodecMacrosImpl
     val OffsetDateTime: Type[java.time.OffsetDateTime] = Type.of[java.time.OffsetDateTime]
     val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
     val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
+    val MonthDay: Type[java.time.MonthDay] = Type.of[java.time.MonthDay]
+    val OffsetTime: Type[java.time.OffsetTime] = Type.of[java.time.OffsetTime]
     val Period: Type[java.time.Period] = Type.of[java.time.Period]
+    val Year: Type[java.time.Year] = Type.of[java.time.Year]
+    val YearMonth: Type[java.time.YearMonth] = Type.of[java.time.YearMonth]
+    val ZoneId: Type[java.time.ZoneId] = Type.of[java.time.ZoneId]
+    val ZoneOffset: Type[java.time.ZoneOffset] = Type.of[java.time.ZoneOffset]
     val UUID: Type[java.util.UUID] = Type.of[java.util.UUID]
+    // Java boxed primitives
+    val JavaByte: Type[java.lang.Byte] = Type.of[java.lang.Byte]
+    val JavaShort: Type[java.lang.Short] = Type.of[java.lang.Short]
+    val JavaInteger: Type[java.lang.Integer] = Type.of[java.lang.Integer]
+    val JavaLong: Type[java.lang.Long] = Type.of[java.lang.Long]
+    val JavaFloat: Type[java.lang.Float] = Type.of[java.lang.Float]
+    val JavaDouble: Type[java.lang.Double] = Type.of[java.lang.Double]
+    val JavaBoolean: Type[java.lang.Boolean] = Type.of[java.lang.Boolean]
+    val JavaCharacter: Type[java.lang.Character] = Type.of[java.lang.Character]
+    // BitSet types
+    val ImmutableBitSet: Type[scala.collection.immutable.BitSet] = Type.of[scala.collection.immutable.BitSet]
+    val MutableBitSet: Type[scala.collection.mutable.BitSet] = Type.of[scala.collection.mutable.BitSet]
+    val CollectionBitSet: Type[scala.collection.BitSet] = Type.of[scala.collection.BitSet]
   }
 
   // Entrypoints
@@ -340,6 +359,9 @@ trait CodecMacrosImpl
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = Some(Type[A].as_??)
           val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
+
+          // Validate config for contradictory flag combinations at compile time
+          validateConfigOrAbort(evConfig, "KindlingsJsonCodec.derived")
 
           // Value codec parts — same as deriveCodecTypeClass
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
@@ -605,6 +627,9 @@ trait CodecMacrosImpl
           // like JsoniterConfig.default. Pending fix in hearth 0.3.1.
           val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
 
+          // Validate config for contradictory flag combinations at compile time
+          validateConfigOrAbort(evConfig, macroName)
+
           // Encoder: cache as def, derive body inside, extract function from cache
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
             val defBuilder =
@@ -701,6 +726,34 @@ trait CodecMacrosImpl
          |$errorsRendered
          |$hint""".stripMargin
   }
+
+  // Config conflict validation — reports compile-time errors or warnings when the config is
+  // statically known (via semiEval) and contains contradictory flag combinations.
+  //
+  // - decodingOnly + encodingOnly: hard error (codec is completely unusable)
+  // - requireCollectionFields + transientEmpty: warning (well-defined but likely unintended)
+  // - requireDefaultFields + transientDefault: warning (well-defined but likely unintended)
+
+  private def validateConfigOrAbort(evConfig: Option[JsoniterConfig], macroName: String): Unit =
+    evConfig.foreach { config =>
+      // Hard error: a codec that can neither encode nor decode is useless
+      if (config.decodingOnly && config.encodingOnly)
+        Environment.reportErrorAndAbort(
+          s"$macroName: JsoniterConfig has both decodingOnly = true and encodingOnly = true. " +
+            "A codec cannot both reject encoding and reject decoding."
+        )
+      // Warnings for confusing but technically valid combinations
+      if (config.requireCollectionFields && config.transientEmpty)
+        Environment.reportWarn(
+          s"$macroName: JsoniterConfig has both requireCollectionFields = true and transientEmpty = true. " +
+            "The encoder will omit empty collections but the decoder will reject their absence."
+        )
+      if (config.requireDefaultFields && config.transientDefault)
+        Environment.reportWarn(
+          s"$macroName: JsoniterConfig has both requireDefaultFields = true and transientDefault = true. " +
+            "The encoder will omit default-valued fields but the decoder will reject their absence."
+        )
+    }
 
   // Null value derivation
 

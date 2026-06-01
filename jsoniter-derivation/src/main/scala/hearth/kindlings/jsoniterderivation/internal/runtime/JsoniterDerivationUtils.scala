@@ -399,6 +399,55 @@ object JsoniterDerivationUtils {
     value
   }
 
+  // --- BitSet helpers ---
+
+  def readImmutableBitSet(in: JsonReader, limit: Int): scala.collection.immutable.BitSet = {
+    val builder = scala.collection.immutable.BitSet.newBuilder
+    if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' or null")
+    if (!in.isNextToken(']'.toByte)) {
+      in.rollbackToken()
+      val v = in.readInt()
+      if (v < 0) in.decodeError(s"BitSet value must be non-negative, got $v")
+      if (v >= limit) in.decodeError(s"BitSet value $v exceeds limit $limit")
+      builder += v
+      while (in.isNextToken(','.toByte)) {
+        val v = in.readInt()
+        if (v < 0) in.decodeError(s"BitSet value must be non-negative, got $v")
+        if (v >= limit) in.decodeError(s"BitSet value $v exceeds limit $limit")
+        builder += v
+      }
+      if (!in.isCurrentToken(']'.toByte)) in.decodeError("expected ']' or ','")
+    }
+    builder.result()
+  }
+
+  def readMutableBitSet(in: JsonReader, limit: Int): scala.collection.mutable.BitSet = {
+    val builder = scala.collection.mutable.BitSet.empty
+    if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' or null")
+    if (!in.isNextToken(']'.toByte)) {
+      in.rollbackToken()
+      val v = in.readInt()
+      if (v < 0) in.decodeError(s"BitSet value must be non-negative, got $v")
+      if (v >= limit) in.decodeError(s"BitSet value $v exceeds limit $limit")
+      builder += v
+      while (in.isNextToken(','.toByte)) {
+        val v = in.readInt()
+        if (v < 0) in.decodeError(s"BitSet value must be non-negative, got $v")
+        if (v >= limit) in.decodeError(s"BitSet value $v exceeds limit $limit")
+        builder += v
+      }
+      if (!in.isCurrentToken(']'.toByte)) in.decodeError("expected ']' or ','")
+    }
+    builder
+  }
+
+  def writeBitSet(out: JsonWriter, value: scala.collection.BitSet): Unit = {
+    out.writeArrayStart()
+    val iter = value.iterator
+    while (iter.hasNext) out.writeVal(iter.next())
+    out.writeArrayEnd()
+  }
+
   def validateBigInt(in: JsonReader, value: BigInt, digitsLimit: Int): BigInt = {
     if (value ne null) {
       if (value.underlying.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103

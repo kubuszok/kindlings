@@ -154,4 +154,20 @@ final class JsoniterScala3Spec extends MacroSuite {
       decoded.version ==> List[Short](0, 1)
     }
   }
+
+  group("compile-time config conflict validation") {
+
+    test("decodingOnly + encodingOnly is a compile error".ignore) {
+      compileErrors(
+        """
+        given config: hearth.kindlings.jsoniterderivation.JsoniterConfig =
+          hearth.kindlings.jsoniterderivation.JsoniterConfig(decodingOnly = true, encodingOnly = true)
+        hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[hearth.kindlings.jsoniterderivation.SimplePerson]
+        """
+      ).check(
+        "decodingOnly",
+        "encodingOnly"
+      )
+    }
+  }
 }

@@ -66,6 +66,21 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("@transientField on sealed trait subtype") {
+
+      test("@transientField field is absent from encoded sealed trait subtype") {
+        val encoder = KindlingsXmlEncoder.derived[CombTransientST]
+        val result = encoder.encode(CombTransientA("Alice", "cached-value"), "item")
+        assert((result \\ "cache").isEmpty)
+      }
+
+      test("@transientField Option field is absent from encoded sealed trait subtype") {
+        val encoder = KindlingsXmlEncoder.derived[CombTransientST]
+        val result = encoder.encode(CombTransientB(42, Some("memo-value")), "item")
+        assert((result \\ "memo").isEmpty)
+      }
+    }
+
     group("collections") {
 
       test("list of simple values") {

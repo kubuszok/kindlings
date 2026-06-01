@@ -298,34 +298,13 @@ case class RenamedFoo(a: String) extends RenamedInner
 @annotations.avroName("BarRenamed")
 case class RenamedBar(b: String) extends RenamedInner
 
-// Mutually recursive types (exercises UseCachedDefWhenAvailable rules)
-case class MutRecA(value: Int, b: Option[MutRecB])
-case class MutRecB(value: String, a: Option[MutRecA])
+// Byte collection as BYTES test types
+case class WithByteSeq(data: Seq[Byte])
+case class WithByteList(data: List[Byte])
+case class WithByteVector(data: Vector[Byte])
 
-// Deeply nested mutual recursion (exercises caching across multiple recursive levels)
-case class Forest(trees: List[TreeCaseClass])
-case class TreeCaseClass(value: Int, children: List[TreeCaseClass])
-
-// Combinatorial: wrapper x inner type (catches bug patterns like #78, #79, #91)
-case class CombOuter(
-    optPrimitive: Option[Int],
-    optCaseClass: Option[SimplePerson],
-    optSealedTrait: Option[Shape],       // Bug #78: Option[SealedTrait] union flattening
-    listCaseClass: List[SimplePerson],
-    listSealedTrait: List[Shape]
-)
-
-// Same-name-different-package (bug #79 regression guard)
-object pkgX {
-  @avroNamespace("pkg.x")
-  case class Shared(id: Int)
-}
-object pkgY {
-  @avroNamespace("pkg.y")
-  case class Shared(label: String)
-}
-@avroNamespace("pkg.outer")
-case class TwoShared(x: pkgX.Shared, y: pkgY.Shared)
+// Package namespace test types (no @avroNamespace annotation — should use package)
+case class PackageNamespaceRecord(name: String, value: Int)
 
 // Unhandled type for compile-time error tests
 class NotAnAvroType

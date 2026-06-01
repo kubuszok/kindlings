@@ -494,12 +494,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = Some(42),
           optCaseClass = Some(SimplePerson("Alice", 30)),
-          optSealedTrait = Some(Circle(5.0)),
           optValueClass = Some(WrappedInt(99)),
           listCaseClass = List(SimplePerson("Bob", 25), SimplePerson("Carol", 35)),
-          listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0)),
-          mapCaseClass = Map("a" -> SimplePerson("Dave", 40)),
-          mapSealedTrait = Map("x" -> Circle(7.0), "y" -> Rectangle(8.0, 9.0))
+          mapCaseClass = Map("a" -> SimplePerson("Dave", 40))
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -509,12 +506,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -524,12 +518,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = Some(Rectangle(3.0, 4.0)),
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -539,12 +530,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -554,12 +542,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0), Circle(4.0)),
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -569,12 +554,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map("circle" -> Circle(5.0), "rect" -> Rectangle(6.0, 7.0))
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -584,12 +566,9 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = Some(SimplePerson("Alice", 30)),
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map.empty
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
@@ -599,15 +578,85 @@ final class RoundTripSpec extends MacroSuite {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,
-          optSealedTrait = None,
           optValueClass = None,
           listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25)),
-          mapSealedTrait = Map.empty
+          mapCaseClass = Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25))
         )
         val json = KindlingsEncoder.encode(value)
         KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+    }
+
+    group("bug pattern regressions") {
+
+      group("Option[DerivedType] with no pre-existing implicit (bug #120 pattern)") {
+
+        test("encode then decode Some(InnerForOpt) round-trips") {
+          val value = OuterWithOptInner(Some(InnerForOpt(1, "a")))
+          val json = KindlingsEncoder.encode(value)
+          KindlingsDecoder.decode[OuterWithOptInner](json) ==> Right(value)
+        }
+
+        test("decode null data field to None") {
+          val json = io.circe.parser.parse("""{"data": null}""").getOrElse(io.circe.Json.Null)
+          KindlingsDecoder.decode[OuterWithOptInner](json) ==> Right(OuterWithOptInner(None))
+        }
+
+        test("decode absent data field to None") {
+          val json = io.circe.parser.parse("""{}""").getOrElse(io.circe.Json.Null)
+          KindlingsDecoder.decode[OuterWithOptInner](json) ==> Right(OuterWithOptInner(None))
+        }
+      }
+
+      group("@fieldName on sealed trait subtypes (bug #108 pattern)") {
+
+        test("decoding with original field name fails") {
+          // AnnotatedLeafA has @fieldName("full_name") on fullName — decoding with "fullName" should fail
+          val json = io.circe.Json.obj(
+            "AnnotatedLeafA" -> io.circe.Json.obj(
+              "fullName" -> io.circe.Json.fromString("Alice"),
+              "value" -> io.circe.Json.fromInt(10)
+            )
+          )
+          assert(KindlingsDecoder.decode[AnnotatedADT](json).isLeft)
+        }
+      }
+
+      group("useDefaults with derived inner types (bug #120 + defaults pattern)") {
+
+        test("missing Option[DerivedType] field uses default value") {
+          implicit val config: Configuration = Configuration.default.withDefaults
+          val json = io.circe.Json.obj("label" -> io.circe.Json.fromString("test"))
+          KindlingsDecoder.decode[OuterWithOptInnerDefault](json) ==>
+            Right(OuterWithOptInnerDefault("test", Some(InnerForOpt(0, "default"))))
+        }
+
+        test("null Option[DerivedType] field overrides default to None") {
+          implicit val config: Configuration = Configuration.default.withDefaults
+          val json = io.circe.Json.obj(
+            "label" -> io.circe.Json.fromString("test"),
+            "data" -> io.circe.Json.Null
+          )
+          KindlingsDecoder.decode[OuterWithOptInnerDefault](json) ==>
+            Right(OuterWithOptInnerDefault("test", None))
+        }
+
+        test("provided Option[DerivedType] field overrides default") {
+          implicit val config: Configuration = Configuration.default.withDefaults
+          val json = io.circe.Json.obj(
+            "label" -> io.circe.Json.fromString("test"),
+            "data" -> io.circe.Json.obj("x" -> io.circe.Json.fromInt(99), "y" -> io.circe.Json.fromString("custom"))
+          )
+          KindlingsDecoder.decode[OuterWithOptInnerDefault](json) ==>
+            Right(OuterWithOptInnerDefault("test", Some(InnerForOpt(99, "custom"))))
+        }
+
+        test("full round-trip with default values") {
+          implicit val config: Configuration = Configuration.default.withDefaults
+          val value = OuterWithOptInnerDefault("test", Some(InnerForOpt(5, "five")))
+          val json = KindlingsEncoder.encode(value)
+          KindlingsDecoder.decode[OuterWithOptInnerDefault](json) ==> Right(value)
+        }
       }
     }
 

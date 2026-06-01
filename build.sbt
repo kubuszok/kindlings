@@ -606,7 +606,8 @@ lazy val catsDerivation = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % versions.cats,
-      "org.typelevel" %%% "alleycats-core" % versions.cats
+      "org.typelevel" %%% "alleycats-core" % versions.cats,
+      "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
     )
   )
 

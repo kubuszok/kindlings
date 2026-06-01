@@ -31,6 +31,7 @@ trait DecoderMacrosImpl
     implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]]("KindlingsXmlDecoder.decode") { fromCtx =>
       ValDefs.createVal[scala.xml.Elem](elemExpr).use { elemVal =>
@@ -39,7 +40,7 @@ trait DecoderMacrosImpl
             val _ = Expr.splice(elemVal)
             val _ = Expr.splice(configVal)
             Expr.splice {
-              fromCtx(DecoderCtx.from(elemVal, configVal, derivedType = None))
+              fromCtx(DecoderCtx.from(elemVal, configVal, derivedType = None, evConfig))
             }
           }
         }
@@ -57,6 +58,7 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
     implicit val StringT: Type[String] = DTypes.String
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]](
       "KindlingsXmlDecoder.fromXmlString"
@@ -72,7 +74,7 @@ trait DecoderMacrosImpl
                 val _ = elem
                 val _ = cfg
                 Expr.splice {
-                  fromCtx(DecoderCtx.from(Expr.quote(elem), Expr.quote(cfg), derivedType = None))
+                  fromCtx(DecoderCtx.from(Expr.quote(elem), Expr.quote(cfg), derivedType = None, evConfig))
                 }
               }
             )
@@ -91,6 +93,7 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
@@ -110,7 +113,8 @@ trait DecoderMacrosImpl
           val placeholderCtx = DecoderCtx.from[A](
             elem = Expr.quote(null.asInstanceOf[scala.xml.Elem]),
             config = Expr.quote(null.asInstanceOf[XmlConfig]),
-            derivedType = selfType
+            derivedType = selfType,
+            evaluatedConfig = evConfig
           )
           runSafe {
             for {
@@ -152,7 +156,7 @@ trait DecoderMacrosImpl
                   (elem: scala.xml.Elem) =>
                     val _ = elem
                     Expr.splice {
-                      fromCtx(DecoderCtx.from[A](Expr.quote(elem), configExpr, derivedType = selfType))
+                      fromCtx(DecoderCtx.from[A](Expr.quote(elem), configExpr, derivedType = selfType, evConfig))
                     }
                 }
               }
@@ -272,7 +276,8 @@ trait DecoderMacrosImpl
       elem: Expr[scala.xml.Elem],
       config: Expr[XmlConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      evaluatedConfig: Option[XmlConfig] = None
   ) {
 
     def nest[B: Type](newElem: Expr[scala.xml.Elem]): DecoderCtx[B] = copy[B](
@@ -339,13 +344,15 @@ trait DecoderMacrosImpl
     def from[A: Type](
         elem: Expr[scala.xml.Elem],
         config: Expr[XmlConfig],
-        derivedType: Option[??]
+        derivedType: Option[??],
+        evaluatedConfig: Option[XmlConfig] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       elem = elem,
       config = config,
       cache = ValDefsCache.mlocal,
-      derivedType = derivedType
+      derivedType = derivedType,
+      evaluatedConfig = evaluatedConfig
     )
   }
 
@@ -412,8 +419,12 @@ trait DecoderMacrosImpl
   sealed trait FieldDecoding
   object FieldDecoding {
     case class Default(value: Expr[Any]) extends FieldDecoding
-    case class FromAttribute(name: String, fieldType: ??) extends FieldDecoding
-    case class FromChildElement(name: String, fieldType: ??) extends FieldDecoding
+    case class FromAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
+    case class FromChildElement(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
+    case class FromChildElementWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+        extends FieldDecoding
+    case class FromChildElementWithRuntimeDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+        extends FieldDecoding
     case class FromContent(decoded: Expr[Either[XmlDecodingError, Any]]) extends FieldDecoding
   }
 

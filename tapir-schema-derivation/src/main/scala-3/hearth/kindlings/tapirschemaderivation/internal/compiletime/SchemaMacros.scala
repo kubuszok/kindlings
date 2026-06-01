@@ -18,4 +18,10 @@ private[tapirschemaderivation] object SchemaMacros {
 
   def deriveKindlingsSchemaImpl[A: Type](using q: Quotes): Expr[KindlingsSchema[A]] =
     new SchemaMacros(q).deriveKindlingsSchema[A]
+
+  def deriveEnumerationImpl[A: Type](using q: Quotes): Expr[Schema[A]] =
+    new SchemaMacros(q).deriveEnumeration[A]
+
+  def deriveKindlingsSchemaEnumerationImpl[A: Type](using q: Quotes): Expr[KindlingsSchema[A]] =
+    new SchemaMacros(q).deriveKindlingsSchemaEnumeration[A]
 }

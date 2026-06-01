@@ -43,6 +43,12 @@ object CogenUtils {
       }
     }
 
+  /** Lazy Cogen — defers evaluation of the underlying Cogen until perturb is called. Breaks infinite recursion for
+    * recursive types where Cogen.perturb is strict.
+    */
+  def cogenLazy[A](cogen: => Cogen[A]): Cogen[A] =
+    Cogen((seed, a) => cogen.perturb(seed, a))
+
   /** Cogen for value types: unwrap to inner type and delegate to inner Cogen. */
   def cogenMapped(innerCogen: Cogen[Any], unwrap: Any => Any): Cogen[Any] =
     Cogen { (seed, value) =>

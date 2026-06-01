@@ -249,6 +249,8 @@ object AvroDerivationUtils {
 
   def wrapByteArray(bytes: Array[Byte]): ByteBuffer = ByteBuffer.wrap(bytes)
 
+  def wrapByteSeq(bytes: Seq[Byte]): ByteBuffer = ByteBuffer.wrap(bytes.toArray)
+
   def wrapByteArrayAsFixed(bytes: Array[Byte], expectedSize: Int): GenericData.Fixed = {
     if (bytes.length != expectedSize)
       throw new org.apache.avro.AvroRuntimeException(
@@ -341,6 +343,27 @@ object AvroDerivationUtils {
     val bytes = new Array[Byte](bb.remaining())
     bb.get(bytes)
     bytes
+  }
+
+  def decodeByteBufferToSeq(value: Any): Seq[Byte] = {
+    val bb = value.asInstanceOf[ByteBuffer]
+    val bytes = new Array[Byte](bb.remaining())
+    bb.get(bytes)
+    bytes.toSeq
+  }
+
+  def decodeByteBufferToList(value: Any): List[Byte] = {
+    val bb = value.asInstanceOf[ByteBuffer]
+    val bytes = new Array[Byte](bb.remaining())
+    bb.get(bytes)
+    bytes.toList
+  }
+
+  def decodeByteBufferToVector(value: Any): Vector[Byte] = {
+    val bb = value.asInstanceOf[ByteBuffer]
+    val bytes = new Array[Byte](bb.remaining())
+    bb.get(bytes)
+    bytes.toVector
   }
 
   def decodeBigDecimal(value: Any, scale: Int): BigDecimal = {

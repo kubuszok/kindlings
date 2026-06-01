@@ -578,6 +578,33 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("@transientField on sealed trait subtype fields") {
+
+      test("@transientField field is absent from encoded sealed trait subtype (CombTransientA)") {
+        val node = KindlingsYamlEncoder.encode[CombTransientST](CombTransientA("Alice", "cached-value"))
+        val inner = node match {
+          case MappingNode(mappings, _) =>
+            mappings
+              .collectFirst { case (ScalarNode(k, _), v) if k == "CombTransientA" => v }
+              .getOrElse(fail("Expected CombTransientA wrapper key"))
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+        inner ==> mappingOf("name" -> scalarNode("Alice"))
+      }
+
+      test("@transientField field is absent from encoded sealed trait subtype (CombTransientB)") {
+        val node = KindlingsYamlEncoder.encode[CombTransientST](CombTransientB(42, Some("memo-value")))
+        val inner = node match {
+          case MappingNode(mappings, _) =>
+            mappings
+              .collectFirst { case (ScalarNode(k, _), v) if k == "CombTransientB" => v }
+              .getOrElse(fail("Expected CombTransientB wrapper key"))
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+        inner ==> mappingOf("value" -> scalarNode("42"))
+      }
+    }
+
     // Note: List[Shape] (collection of sealed trait) fails on Scala 3 due to splice isolation issue
     // in yaml encoder macro. The Shape encoder is derived inside the List encoder's splice context,
     // but the resulting expression escapes that splice boundary.

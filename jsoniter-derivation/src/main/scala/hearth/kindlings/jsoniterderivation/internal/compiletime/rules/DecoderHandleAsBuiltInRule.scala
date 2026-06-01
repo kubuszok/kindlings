@@ -71,14 +71,71 @@ trait DecoderHandleAsBuiltInRuleImpl {
             Some(Expr.quote(Expr.splice(reader).readZonedDateTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.Duration)
             Some(Expr.quote(Expr.splice(reader).readDuration(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.MonthDay)
+            Some(Expr.quote(Expr.splice(reader).readMonthDay(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.OffsetTime)
+            Some(Expr.quote(Expr.splice(reader).readOffsetTime(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.Period)
             Some(Expr.quote(Expr.splice(reader).readPeriod(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.Year)
+            Some(Expr.quote(Expr.splice(reader).readYear(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.YearMonth)
+            Some(Expr.quote(Expr.splice(reader).readYearMonth(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.ZoneId)
+            Some(Expr.quote(Expr.splice(reader).readZoneId(null).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.ZoneOffset)
+            Some(Expr.quote(Expr.splice(reader).readZoneOffset(null).asInstanceOf[A]))
           else if (Type[A] =:= CTypes.UUID)
             Some(Expr.quote(Expr.splice(reader).readUUID(null).asInstanceOf[A]))
           else if (Type[A] =:= Type.of[Unit])
             Some(Expr.quote {
               Expr.splice(reader).skip()
               ().asInstanceOf[A]
+            })
+          // Java boxed primitives — decode as the underlying primitive, then box
+          else if (Type[A] =:= CTypes.JavaByte)
+            Some(Expr.quote(java.lang.Byte.valueOf(Expr.splice(reader).readByte()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaShort)
+            Some(Expr.quote(java.lang.Short.valueOf(Expr.splice(reader).readShort()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaInteger)
+            Some(Expr.quote(java.lang.Integer.valueOf(Expr.splice(reader).readInt()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaLong)
+            Some(Expr.quote(java.lang.Long.valueOf(Expr.splice(reader).readLong()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaFloat)
+            Some(Expr.quote(java.lang.Float.valueOf(Expr.splice(reader).readFloat()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaDouble)
+            Some(Expr.quote(java.lang.Double.valueOf(Expr.splice(reader).readDouble()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaBoolean)
+            Some(Expr.quote(java.lang.Boolean.valueOf(Expr.splice(reader).readBoolean()).asInstanceOf[A]))
+          else if (Type[A] =:= CTypes.JavaCharacter)
+            Some(Expr.quote(java.lang.Character.valueOf(Expr.splice(reader).readChar()).asInstanceOf[A]))
+          // BitSet types — decode from JSON array of ints
+          else if (Type[A] =:= CTypes.ImmutableBitSet)
+            Some(Expr.quote {
+              JsoniterDerivationUtils
+                .readImmutableBitSet(
+                  Expr.splice(reader),
+                  Expr.splice(dctx.config).bitSetValueLimit
+                )
+                .asInstanceOf[A]
+            })
+          else if (Type[A] =:= CTypes.MutableBitSet)
+            Some(Expr.quote {
+              JsoniterDerivationUtils
+                .readMutableBitSet(
+                  Expr.splice(reader),
+                  Expr.splice(dctx.config).bitSetValueLimit
+                )
+                .asInstanceOf[A]
+            })
+          else if (Type[A] =:= CTypes.CollectionBitSet)
+            Some(Expr.quote {
+              JsoniterDerivationUtils
+                .readImmutableBitSet(
+                  Expr.splice(reader),
+                  Expr.splice(dctx.config).bitSetValueLimit
+                )
+                .asInstanceOf[A]
             })
           else
             None

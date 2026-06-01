@@ -589,6 +589,19 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("@transientField on sealed trait subtype fields") {
+
+      test("@transientField uses default value when decoding sealed trait subtype (CombTransientA)") {
+        val node = mappingOf("CombTransientA" -> mappingOf("name" -> scalarNode("Alice")))
+        KindlingsYamlDecoder.decode[CombTransientST](node) ==> Right(CombTransientA("Alice", ""): CombTransientST)
+      }
+
+      test("@transientField uses default value when decoding sealed trait subtype (CombTransientB)") {
+        val node = mappingOf("CombTransientB" -> mappingOf("value" -> scalarNode("42")))
+        KindlingsYamlDecoder.decode[CombTransientST](node) ==> Right(CombTransientB(42, None): CombTransientST)
+      }
+    }
+
     group("collection of sealed traits") {
 
       test("decode List[Shape]") {
