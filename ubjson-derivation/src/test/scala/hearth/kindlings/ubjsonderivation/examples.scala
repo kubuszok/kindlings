@@ -104,6 +104,15 @@ case class ShortBoundaries(min: Short, max: Short)
 // Unicode content
 case class UnicodeContent(value: String)
 
+// Recursive sealed trait hierarchy
+sealed trait TreeNode
+case class Branch(left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
+// Mutual recursion
+case class MutRecA(label: String, b: Option[MutRecB] = None)
+case class MutRecB(count: Int, a: Option[MutRecA] = None)
+
 // Indirect recursion test types
 case class RecursiveNode(id: String, children: List[RecursiveNode])
 case class RecursiveParent(name: String, nodes: List[RecursiveNode])

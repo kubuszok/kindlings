@@ -413,6 +413,58 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
 
+    group("recursive types - def caching") {
+
+      test("direct recursive sealed trait encode/decode round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[TreeNode]
+        val value: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[TreeNode](json)(codec)
+        decoded ==> value
+      }
+
+      test("direct recursive sealed trait leaf-only round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[TreeNode]
+        val value: TreeNode = Leaf(42)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[TreeNode](json)(codec)
+        decoded ==> value
+      }
+
+      test("direct recursive sealed trait deeply nested round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[TreeNode]
+        val value: TreeNode =
+          Branch(1, Branch(2, Branch(3, Leaf(4), Leaf(5)), Leaf(6)), Branch(7, Leaf(8), Leaf(9)))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[TreeNode](json)(codec)
+        decoded ==> value
+      }
+
+      test("mutual recursion encode/decode round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[MutRecA]
+        val value = MutRecA(1, Some(MutRecB("hello", Some(MutRecA(2, None)))))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[MutRecA](json)(codec)
+        decoded ==> value
+      }
+
+      test("mutual recursion base case round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[MutRecA]
+        val value = MutRecA(42, None)
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[MutRecA](json)(codec)
+        decoded ==> value
+      }
+
+      test("mutual recursion deeply nested round-trip") {
+        val codec = KindlingsJsonValueCodec.derive[MutRecA]
+        val value = MutRecA(1, Some(MutRecB("a", Some(MutRecA(2, Some(MutRecB("b", Some(MutRecA(3, None)))))))))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[MutRecA](json)(codec)
+        decoded ==> value
+      }
+    }
+
     group("auto-derivation") {
 
       test("derived is available as implicit") {

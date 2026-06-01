@@ -74,6 +74,31 @@ final class ConfigWriterSpec extends MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("write a Leaf") {
+        val w = ConfigWriter.derive[TreeNode]
+        val rendered = renderConcise(w.to(Leaf(42)))
+        assert(rendered.contains("\"type\":\"leaf\""))
+        assert(rendered.contains("\"value\":42"))
+      }
+
+      test("write a Branch with Leaf children") {
+        val w = ConfigWriter.derive[TreeNode]
+        val rendered = renderConcise(w.to(Branch(1, Leaf(2), Leaf(3))))
+        assert(rendered.contains("\"type\":\"branch\""))
+        assert(rendered.contains("\"value\":1"))
+      }
+
+      test("round-trip nested recursive structure") {
+        val r = ConfigReader.derive[TreeNode]
+        val w = ConfigWriter.derive[TreeNode]
+        val tree: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+        val written = w.to(tree)
+        r.from(written) ==> Right(tree)
+      }
+    }
+
     group("sealed traits / enums") {
 
       test("discriminator-based encoding (default = PascalCase → kebab-case)") {

@@ -161,6 +161,15 @@ case class Truck(payload: Int) extends MotorVehicle
 case class Motorcycle(cc: Int) extends MotorVehicle
 case class Bicycle(gears: Int) extends Vehicle
 
+// Direct recursive sealed trait (bare field, not wrapped in List/Option)
+sealed trait TreeNode
+case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
+// Mutual recursion (bare Option fields)
+case class MutRecA(value: Int, b: Option[MutRecB])
+case class MutRecB(value: String, a: Option[MutRecA])
+
 // HashMap / TreeMap test types
 case class WithHashMap(data: scala.collection.immutable.HashMap[String, Int])
 case class WithTreeMap(data: scala.collection.immutable.TreeMap[String, Int])

@@ -14,3 +14,7 @@ case class Rectangle(width: Double, height: Double) extends Shape
 sealed trait SimpleEnum
 case object Yes extends SimpleEnum
 case object No extends SimpleEnum
+
+sealed trait TreeNode
+case class Branch(left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode

@@ -84,6 +84,30 @@ class ShrinkSpec extends munit.FunSuite {
     assert(result.exists(_.items.size < 3), "Should produce shorter lists")
   }
 
+  test("derives Shrink for recursive sealed trait (TreeNode)") {
+    sealed trait TreeNode
+    case class Branch(value: Int, children: List[TreeNode]) extends TreeNode
+    case class Leaf(value: Int) extends TreeNode
+
+    implicit val shrinkLeaf: Shrink[Leaf] = DeriveShrink.derived[Leaf]
+    implicit val shrinkBranch: Shrink[Branch] = DeriveShrink.derived[Branch]
+    val shrink: Shrink[TreeNode] = DeriveShrink.derived[TreeNode]
+
+    val branch: TreeNode = Branch(10, List(Leaf(20), Leaf(30)))
+    val result = shrink.shrink(branch).take(20).toList
+    assert(result.nonEmpty, "Should produce shrunk values for a Branch")
+    // Shrunk values should be simpler (e.g., smaller value, shorter children list, or Leaf nodes)
+    val hasSmallerChildren = result.exists {
+      case Branch(_, cs) => cs.size < 2
+      case _             => false
+    }
+    val hasSmallerValue = result.exists {
+      case Branch(v, _) => v < 10
+      case _            => false
+    }
+    assert(hasSmallerChildren || hasSmallerValue, "Shrunk values should be simpler than original")
+  }
+
   test("Shrink.derived extension syntax works") {
     case class Person(name: String, age: Int)
 

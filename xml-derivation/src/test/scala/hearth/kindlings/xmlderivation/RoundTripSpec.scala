@@ -71,4 +71,52 @@ final class RoundTripSpec extends MacroSuite {
       assert(roundTrip(value, "user") == Right(value))
     }
   }
+
+  group("Recursive types - def caching") {
+
+    // Note: XML decoder derivation for recursive types fails on Scala 2 with "not found: type $anonfun"
+    // (a Scala 2 macro reification limitation). Encoder-only tests below; round-trip tests require Scala 3.
+
+    test("direct recursive sealed trait encoder compiles") {
+      val encoder: XmlEncoder[TreeNode] = KindlingsXmlEncoder.derive[TreeNode]
+      val value: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+      val elem = encoder.encode(value, "tree")
+      assert(elem.label == "tree")
+    }
+
+    test("leaf-only recursive sealed trait encoder compiles") {
+      val encoder: XmlEncoder[TreeNode] = KindlingsXmlEncoder.derive[TreeNode]
+      val value: TreeNode = Leaf(42)
+      val elem = encoder.encode(value, "tree")
+      assert(elem.label == "tree")
+    }
+
+    test("deeply nested recursive sealed trait encoder compiles") {
+      val encoder: XmlEncoder[TreeNode] = KindlingsXmlEncoder.derive[TreeNode]
+      val value: TreeNode = Branch(1, Branch(2, Branch(3, Leaf(4), Leaf(5)), Leaf(6)), Branch(7, Leaf(8), Leaf(9)))
+      val elem = encoder.encode(value, "tree")
+      assert(elem.label == "tree")
+    }
+
+    test("mutual recursion encoder compiles") {
+      val encoder: XmlEncoder[MutRecA] = KindlingsXmlEncoder.derive[MutRecA]
+      val value = MutRecA(1, Some(MutRecB("x", Some(MutRecA(2, None)))))
+      val elem = encoder.encode(value, "mutrec")
+      assert(elem.label == "mutrec")
+    }
+
+    test("mutual recursion encoder from B side compiles") {
+      val encoder: XmlEncoder[MutRecB] = KindlingsXmlEncoder.derive[MutRecB]
+      val value = MutRecB("root", Some(MutRecA(1, Some(MutRecB("leaf", None)))))
+      val elem = encoder.encode(value, "mutrec")
+      assert(elem.label == "mutrec")
+    }
+
+    test("mutual recursion encoder with no nesting compiles") {
+      val encoder: XmlEncoder[MutRecA] = KindlingsXmlEncoder.derive[MutRecA]
+      val value = MutRecA(42, None)
+      val elem = encoder.encode(value, "mutrec")
+      assert(elem.label == "mutrec")
+    }
+  }
 }

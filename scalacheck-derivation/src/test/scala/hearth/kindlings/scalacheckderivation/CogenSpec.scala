@@ -79,6 +79,20 @@ class CogenSpec extends munit.FunSuite {
     assert(fn(p) == fn(p), "Generated function should be deterministic")
   }
 
+  // TODO: recursive types stack overflow for Cogen because the generated cogenCaseClass_* defs
+  // call themselves eagerly (Cogen.perturb is strict, unlike Gen.sample or Stream which are lazy).
+  // The UseCached rule produces defs but they don't break the recursion for strict type classes.
+  test("derives Cogen for recursive case class via List".ignore) {
+    case class TreeNode(value: Int, children: List[TreeNode])
+
+    val cogen: Cogen[TreeNode] = DeriveCogen.derived[TreeNode]
+    val s1 = cogen.perturb(baseSeed, TreeNode(1, List.empty))
+    val s2 = cogen.perturb(baseSeed, TreeNode(1, List(TreeNode(2, List.empty))))
+    val s3 = cogen.perturb(baseSeed, TreeNode(1, List.empty))
+    assert(s1 == s3, "Same tree should produce same seed")
+    assert(s1 != s2, "Different trees should produce different seeds")
+  }
+
   test("built-in Int Cogen works") {
     val cogen: Cogen[Int] = DeriveCogen.derived[Int]
     val s1 = cogen.perturb(baseSeed, 42)

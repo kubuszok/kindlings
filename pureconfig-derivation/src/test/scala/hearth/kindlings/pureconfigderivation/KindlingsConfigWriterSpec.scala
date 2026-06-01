@@ -96,6 +96,31 @@ final class KindlingsConfigWriterSpec extends MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("write a Leaf") {
+        val w = KindlingsConfigWriter.derive[TreeNode]
+        val rendered = renderConcise(w.to(Leaf(42)))
+        assert(rendered.contains("\"type\":\"leaf\""))
+        assert(rendered.contains("\"value\":42"))
+      }
+
+      test("write a Branch with Leaf children") {
+        val w = KindlingsConfigWriter.derive[TreeNode]
+        val rendered = renderConcise(w.to(Branch(1, Leaf(2), Leaf(3))))
+        assert(rendered.contains("\"type\":\"branch\""))
+        assert(rendered.contains("\"value\":1"))
+      }
+
+      test("round-trip nested recursive structure") {
+        val r = KindlingsConfigReader.derive[TreeNode]
+        val w = KindlingsConfigWriter.derive[TreeNode]
+        val tree: TreeNode = Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5))
+        val written = w.to(tree)
+        r.from(pureconfig.ConfigCursor(written, Nil)) ==> Right(tree)
+      }
+    }
+
     group("value classes") {
 
       test("value class field write") {

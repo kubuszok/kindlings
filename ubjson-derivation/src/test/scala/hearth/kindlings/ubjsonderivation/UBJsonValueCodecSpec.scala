@@ -199,6 +199,20 @@ final class UBJsonValueCodecSpec extends MacroSuite {
         val value = RecursiveTree(1, List(RecursiveTree(2, Nil), RecursiveTree(3, List(RecursiveTree(4, Nil)))))
         roundTrip(value)(codec) ==> value
       }
+
+      test("recursive sealed trait hierarchy round-trip") {
+        val codec = UBJsonValueCodec.derive[TreeNode]
+        val leaf: TreeNode = Leaf(1)
+        roundTrip(leaf)(codec) ==> leaf
+        val tree: TreeNode = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
+        roundTrip(tree)(codec) ==> tree
+      }
+
+      test("mutual recursion round-trip") {
+        val codec = UBJsonValueCodec.derive[MutRecA]
+        val value = MutRecA("top", Some(MutRecB(1, Some(MutRecA("inner", None)))))
+        roundTrip(value)(codec) ==> value
+      }
     }
 
     group("annotations") {

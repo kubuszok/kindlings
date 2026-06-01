@@ -187,6 +187,39 @@ final class ConfigReaderSpec extends MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("read a Leaf") {
+        val r = ConfigReader.derive[TreeNode]
+        r.from(value("{ type = leaf, value = 42 }")) ==> Right(Leaf(42))
+      }
+
+      test("read a Branch with Leaf children") {
+        val r = ConfigReader.derive[TreeNode]
+        r.from(value("""{
+          type = branch,
+          value = 1,
+          left = { type = leaf, value = 2 },
+          right = { type = leaf, value = 3 }
+        }""")) ==> Right(Branch(1, Leaf(2), Leaf(3)))
+      }
+
+      test("read a nested recursive structure") {
+        val r = ConfigReader.derive[TreeNode]
+        r.from(value("""{
+          type = branch,
+          value = 1,
+          left = {
+            type = branch,
+            value = 2,
+            left = { type = leaf, value = 3 },
+            right = { type = leaf, value = 4 }
+          },
+          right = { type = leaf, value = 5 }
+        }""")) ==> Right(Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5)))
+      }
+    }
+
     group("sealed traits / enums") {
 
       test("discriminator-based encoding (default = PascalCase → kebab-case)") {

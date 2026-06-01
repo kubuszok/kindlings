@@ -498,6 +498,23 @@ final class FastShowPrettySpec extends MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("nested tree") {
+        val tree: TreeNode = Branch(Leaf(1), Branch(Leaf(2), Leaf(3)))
+        val result = FastShowPretty.render[TreeNode](tree, RenderConfig.Default)
+        assert(result.contains("Branch"), s"expected Branch in: $result")
+        assert(result.contains("Leaf"), s"expected Leaf in: $result")
+        assert(result.contains("left"), s"expected left field in: $result")
+        assert(result.contains("right"), s"expected right field in: $result")
+        assert(result.contains("value"), s"expected value field in: $result")
+        assert(result.contains("1"), s"expected value 1 in: $result")
+        assert(result.contains("2"), s"expected value 2 in: $result")
+        assert(result.contains("3"), s"expected value 3 in: $result")
+        assert(result.contains("TreeNode"), s"expected TreeNode in: $result")
+      }
+    }
+
     group("tuples") {
 
       test("Tuple2") {

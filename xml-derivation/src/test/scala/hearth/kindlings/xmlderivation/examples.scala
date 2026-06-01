@@ -91,3 +91,12 @@ case class ShapeCollection(shapes: List[Shape])
 // Indirect recursion test types
 case class RecursiveNode(id: String, children: List[RecursiveNode])
 case class RecursiveParent(name: String, nodes: List[RecursiveNode])
+
+// Direct recursive sealed trait (triggers UseCachedDefWhenAvailableRule)
+sealed trait TreeNode
+case class Branch(value: Int, left: TreeNode, right: TreeNode) extends TreeNode
+case class Leaf(value: Int) extends TreeNode
+
+// Mutual recursion (triggers UseCachedDefWhenAvailableRule for both types)
+case class MutRecA(value: Int, b: Option[MutRecB])
+case class MutRecB(value: String, a: Option[MutRecA])

@@ -298,5 +298,13 @@ case class RenamedFoo(a: String) extends RenamedInner
 @annotations.avroName("BarRenamed")
 case class RenamedBar(b: String) extends RenamedInner
 
+// Mutually recursive types (exercises UseCachedDefWhenAvailable rules)
+case class MutRecA(value: Int, b: Option[MutRecB])
+case class MutRecB(value: String, a: Option[MutRecA])
+
+// Deeply nested mutual recursion (exercises caching across multiple recursive levels)
+case class Forest(trees: List[TreeCaseClass])
+case class TreeCaseClass(value: Int, children: List[TreeCaseClass])
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

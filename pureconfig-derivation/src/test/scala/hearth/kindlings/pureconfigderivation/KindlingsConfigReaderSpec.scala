@@ -233,6 +233,39 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
       }
     }
 
+    group("recursive sealed trait") {
+
+      test("read a Leaf") {
+        val r = KindlingsConfigReader.derive[TreeNode]
+        r.from(cursor("{ type = leaf, value = 42 }")) ==> Right(Leaf(42))
+      }
+
+      test("read a Branch with Leaf children") {
+        val r = KindlingsConfigReader.derive[TreeNode]
+        r.from(cursor("""{
+          type = branch,
+          value = 1,
+          left = { type = leaf, value = 2 },
+          right = { type = leaf, value = 3 }
+        }""")) ==> Right(Branch(1, Leaf(2), Leaf(3)))
+      }
+
+      test("read a nested recursive structure") {
+        val r = KindlingsConfigReader.derive[TreeNode]
+        r.from(cursor("""{
+          type = branch,
+          value = 1,
+          left = {
+            type = branch,
+            value = 2,
+            left = { type = leaf, value = 3 },
+            right = { type = leaf, value = 4 }
+          },
+          right = { type = leaf, value = 5 }
+        }""")) ==> Right(Branch(1, Branch(2, Leaf(3), Leaf(4)), Leaf(5)))
+      }
+    }
+
     group("complex defaults") {
 
       test("missing fields with List/Map defaults") {
