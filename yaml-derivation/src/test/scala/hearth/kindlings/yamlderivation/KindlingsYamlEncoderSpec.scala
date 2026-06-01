@@ -148,6 +148,57 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
         val node = KindlingsYamlEncoder.encode(Map.empty[String, Int])
         node ==> mappingOf()
       }
+
+      test("case class with Map[String, Int] field") {
+        val node = KindlingsYamlEncoder.encode(WithMapField(Map("x" -> 10, "y" -> 20)))
+        node match {
+          case MappingNode(outerMappings, _) =>
+            val dataNode = outerMappings
+              .collectFirst {
+                case (ScalarNode(k, _), v) if k == "data" => v
+              }
+              .getOrElse(fail("Expected 'data' key"))
+            dataNode match {
+              case MappingNode(innerMappings, _) =>
+                innerMappings.exists {
+                  case (ScalarNode(k, _), ScalarNode(v, _)) => k == "x" && v == "10"
+                  case _                                    => false
+                } ==> true
+                innerMappings.exists {
+                  case (ScalarNode(k, _), ScalarNode(v, _)) => k == "y" && v == "20"
+                  case _                                    => false
+                } ==> true
+              case other => fail(s"Expected MappingNode for data but got $other")
+            }
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+
+      test("case class with empty Map field") {
+        val node = KindlingsYamlEncoder.encode(WithMapField(Map.empty))
+        node ==> mappingOf("data" -> mappingOf())
+      }
+
+      test("nested Map[String, Map[String, Int]]") {
+        val node = KindlingsYamlEncoder.encode(
+          WithNestedMap(Map("group1" -> Map("a" -> 1), "group2" -> Map("b" -> 2)))
+        )
+        node match {
+          case MappingNode(outerMappings, _) =>
+            val dataNode = outerMappings
+              .collectFirst {
+                case (ScalarNode(k, _), v) if k == "data" => v
+              }
+              .getOrElse(fail("Expected 'data' key"))
+            dataNode match {
+              case MappingNode(innerMappings, _) =>
+                innerMappings.size ==> 2
+              case other => fail(s"Expected MappingNode for data but got $other")
+            }
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+
     }
 
     group("sealed traits") {

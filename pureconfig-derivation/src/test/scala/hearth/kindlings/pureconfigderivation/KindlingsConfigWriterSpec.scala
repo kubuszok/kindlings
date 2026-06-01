@@ -32,12 +32,56 @@ final class KindlingsConfigWriterSpec extends MacroSuite {
         val w = KindlingsConfigWriter.derive[WithList]
         renderConcise(w.to(WithList(List(1, 2, 3)))) ==> """{"items":[1,2,3]}"""
       }
+    }
 
-      test("Map field") {
+    group("maps") {
+
+      test("Map[String, Int] field") {
         val w = KindlingsConfigWriter.derive[WithMap]
-        // LinkedHashMap preserves insertion order; Map.iterator order is implementation-dependent
         val rendered = renderConcise(w.to(WithMap(Map("a" -> 1, "b" -> 2))))
         assert(rendered.contains("\"a\":1") && rendered.contains("\"b\":2"))
+      }
+
+      test("empty Map field") {
+        val w = KindlingsConfigWriter.derive[WithMap]
+        val rendered = renderConcise(w.to(WithMap(Map.empty)))
+        assert(rendered.contains("\"scores\":{}"))
+      }
+
+      test("nested Map[String, Map[String, Int]]") {
+        val w = KindlingsConfigWriter.derive[WithNestedMap]
+        val rendered = renderConcise(w.to(WithNestedMap(Map("group1" -> Map("a" -> 1)))))
+        assert(rendered.contains("\"group1\""))
+        assert(rendered.contains("\"a\":1"))
+      }
+
+      test("Map[String, CaseClass] with derived inner type") {
+        val w = KindlingsConfigWriter.derive[WithMapOfCaseClass]
+        val rendered = renderConcise(w.to(WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30)))))
+        assert(rendered.contains("\"alice\""))
+        assert(rendered.contains("\"name\":\"Alice\""))
+        assert(rendered.contains("\"age\":30"))
+      }
+
+      test("Map round-trip via reader and writer") {
+        val r = KindlingsConfigReader.derive[WithMap]
+        val w = KindlingsConfigWriter.derive[WithMap]
+        val original = WithMap(Map("x" -> 10, "y" -> 20))
+        r.from(pureconfig.ConfigCursor(w.to(original), Nil)) ==> Right(original)
+      }
+
+      test("nested Map round-trip") {
+        val r = KindlingsConfigReader.derive[WithNestedMap]
+        val w = KindlingsConfigWriter.derive[WithNestedMap]
+        val original = WithNestedMap(Map("group1" -> Map("a" -> 1, "b" -> 2), "group2" -> Map("c" -> 3)))
+        r.from(pureconfig.ConfigCursor(w.to(original), Nil)) ==> Right(original)
+      }
+
+      test("Map[String, CaseClass] round-trip") {
+        val r = KindlingsConfigReader.derive[WithMapOfCaseClass]
+        val w = KindlingsConfigWriter.derive[WithMapOfCaseClass]
+        val original = WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25)))
+        r.from(pureconfig.ConfigCursor(w.to(original), Nil)) ==> Right(original)
       }
     }
 

@@ -305,4 +305,69 @@ final class YamlScala3Spec extends MacroSuite {
       }
     }
   }
+
+  group("Map[String, CaseClass] (Scala 3)") {
+
+    group("decoding") {
+
+      test("Map[String, CaseClass] with derived inner type") {
+        val node = mappingOf(
+          "data" -> mappingOf(
+            "alice" -> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30")),
+            "bob" -> mappingOf("name" -> scalarNode("Bob"), "age" -> scalarNode("25"))
+          )
+        )
+        KindlingsYamlDecoder.decode[WithMapOfCaseClass](node) ==>
+          Right(WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25))))
+      }
+    }
+
+    group("encoding") {
+
+      test("Map[String, CaseClass] with derived inner type") {
+        val node = KindlingsYamlEncoder.encode(
+          WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30)))
+        )
+        node match {
+          case MappingNode(outerMappings, _) =>
+            val dataNode = outerMappings
+              .collectFirst {
+                case (ScalarNode(k, _), v) if k == "data" => v
+              }
+              .getOrElse(fail("Expected 'data' key"))
+            dataNode match {
+              case MappingNode(innerMappings, _) =>
+                val aliceNode = innerMappings
+                  .collectFirst {
+                    case (ScalarNode(k, _), v) if k == "alice" => v
+                  }
+                  .getOrElse(fail("Expected 'alice' key"))
+                aliceNode match {
+                  case MappingNode(personMappings, _) =>
+                    personMappings.exists {
+                      case (ScalarNode(k, _), ScalarNode(v, _)) => k == "name" && v == "Alice"
+                      case _                                    => false
+                    } ==> true
+                    personMappings.exists {
+                      case (ScalarNode(k, _), ScalarNode(v, _)) => k == "age" && v == "30"
+                      case _                                    => false
+                    } ==> true
+                  case other => fail(s"Expected MappingNode for alice but got $other")
+                }
+              case other => fail(s"Expected MappingNode for data but got $other")
+            }
+          case other => fail(s"Expected MappingNode but got $other")
+        }
+      }
+    }
+
+    group("round-trip") {
+
+      test("Map[String, CaseClass] roundtrip") {
+        val value = WithMapOfCaseClass(Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25)))
+        val node = KindlingsYamlEncoder.encode(value)
+        KindlingsYamlDecoder.decode[WithMapOfCaseClass](node) ==> Right(value)
+      }
+    }
+  }
 }

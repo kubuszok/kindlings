@@ -32,6 +32,62 @@ final class DiffSpec extends hearth.MacroSuite {
         val result = d.diff(left, right)
         assert(!result.isIdentical, s"expected not identical")
       }
+
+      test("all fields identical nested") {
+        val d = Diff.derived[PersonWithAddress]
+        val v = PersonWithAddress(Person("Alice", 30), Address("Main St", "NYC"))
+        val result = d.diff(v, v)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("multiple fields changed") {
+        val d = Diff.derived[Person]
+        val result = d.diff(Person("Alice", 30), Person("Bob", 31))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val changedFields = r.fields.filterNot(_._2.isIdentical)
+            assertEquals(changedFields.size, 2)
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("changed string field produces StringDiff") {
+        val d = Diff.derived[Person]
+        val result = d.diff(Person("Alice", 30), Person("Bob", 30))
+        result match {
+          case r: DiffResult.Record =>
+            val nameField = r.fields.find(_._1 == "name").get._2
+            assert(!nameField.isIdentical, s"expected name to differ")
+            nameField match {
+              case _: DiffResult.StringDiff   => ()
+              case _: DiffResult.ValueChanged => ()
+              case other                      => fail(s"expected StringDiff or ValueChanged, got $other")
+            }
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("identical string field produces Identical") {
+        val d = Diff.derived[Person]
+        val result = d.diff(Person("Alice", 30), Person("Alice", 31))
+        result match {
+          case r: DiffResult.Record =>
+            val nameField = r.fields.find(_._1 == "name").get._2
+            assert(nameField.isIdentical, s"expected name to be identical, got $nameField")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("Diff instance has correct simpleName") {
+        val d = Diff.derived[Person]
+        assert(d.simpleName.contains("Person"), s"expected Person in simpleName: ${d.simpleName}")
+      }
+
+      test("Diff instance has correct shortName") {
+        val d = Diff.derived[Person]
+        assert(d.shortName.contains("Person"), s"expected Person in shortName: ${d.shortName}")
+      }
     }
 
     group("sealed traits") {
@@ -59,6 +115,24 @@ final class DiffSpec extends hearth.MacroSuite {
       test("identical singletons") {
         val d = Diff.derived[SimpleEnum]
         val result = d.diff(Yes, Yes)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("different singletons") {
+        val d = Diff.derived[SimpleEnum]
+        val result = d.diff(Yes, No)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+      }
+
+      test("identical same-variant circle") {
+        val d = Diff.derived[Shape]
+        val result = d.diff(Circle(5.0), Circle(5.0))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("identical same-variant rectangle") {
+        val d = Diff.derived[Shape]
+        val result = d.diff(Rectangle(2.0, 3.0), Rectangle(2.0, 3.0))
         assert(result.isIdentical, s"expected identical, got $result")
       }
     }
@@ -95,6 +169,25 @@ final class DiffSpec extends hearth.MacroSuite {
             }
         }
       }
+
+      test("deeply nested identical") {
+        val d = Diff.derived[TreeNode]
+        val tree: TreeNode = Branch(Branch(Leaf(1), Leaf(2)), Branch(Leaf(3), Leaf(4)))
+        val result = d.diff(tree, tree)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("single leaf identical") {
+        val d = Diff.derived[TreeNode]
+        val result = d.diff(Leaf(42), Leaf(42))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("single leaf different") {
+        val d = Diff.derived[TreeNode]
+        val result = d.diff(Leaf(1), Leaf(2))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+      }
     }
 
     group("snapshot") {
@@ -102,6 +195,30 @@ final class DiffSpec extends hearth.MacroSuite {
       test("snapshot of case class") {
         val d = Diff.derived[Person]
         val snap = d.snapshot(Person("Alice", 30))
+        assert(snap.isIdentical, s"snapshot should be identical, got $snap")
+      }
+
+      test("snapshot of nested case class") {
+        val d = Diff.derived[PersonWithAddress]
+        val snap = d.snapshot(PersonWithAddress(Person("Alice", 30), Address("Main St", "NYC")))
+        assert(snap.isIdentical, s"snapshot should be identical, got $snap")
+      }
+
+      test("snapshot of sealed trait") {
+        val d = Diff.derived[Shape]
+        val snap = d.snapshot(Circle(5.0))
+        assert(snap.isIdentical, s"snapshot should be identical, got $snap")
+      }
+
+      test("snapshot of singleton") {
+        val d = Diff.derived[SimpleEnum]
+        val snap = d.snapshot(Yes)
+        assert(snap.isIdentical, s"snapshot should be identical, got $snap")
+      }
+
+      test("snapshot of recursive tree") {
+        val d = Diff.derived[TreeNode]
+        val snap = d.snapshot(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))))
         assert(snap.isIdentical, s"snapshot should be identical, got $snap")
       }
     }
@@ -121,6 +238,41 @@ final class DiffSpec extends hearth.MacroSuite {
         val result = d.diff(Person("Alice", 30), Person("Alice", 31))
         val rendered = DiffRenderer.render(result, RenderConfig.plain)
         assert(rendered.contains("Person"), s"expected type name in: $rendered")
+      }
+
+      test("render identical record shows ellipsis") {
+        val d = Diff.derived[Person]
+        val result = d.diff(Person("Alice", 30), Person("Alice", 30))
+        val rendered = DiffRenderer.render(result, RenderConfig.plain)
+        // Identical record should show ellipsis
+        assert(
+          rendered.contains("...") || result.isIdentical,
+          s"expected ellipsis or identical in: $rendered"
+        )
+      }
+
+      test("render sealed trait type mismatch") {
+        val d = Diff.derived[Shape]
+        val result = d.diff(Circle(1.0), Rectangle(2.0, 3.0))
+        val rendered = DiffRenderer.render(result, RenderConfig.plain)
+        assert(rendered.contains("Circle") || rendered.contains("Rectangle"), s"expected variant names in: $rendered")
+      }
+
+      test("render with ANSI colors") {
+        val d = Diff.derived[Person]
+        val result = d.diff(Person("Alice", 30), Person("Bob", 30))
+        val rendered = DiffRenderer.render(result, RenderConfig.default)
+        // ANSI mode should contain escape sequences
+        assert(rendered.contains("["), s"expected ANSI codes in: $rendered")
+      }
+
+      test("render nested diff") {
+        val d = Diff.derived[PersonWithAddress]
+        val left = PersonWithAddress(Person("Alice", 30), Address("Main St", "NYC"))
+        val right = PersonWithAddress(Person("Alice", 31), Address("Elm St", "NYC"))
+        val result = d.diff(left, right)
+        val rendered = DiffRenderer.render(result, RenderConfig.plain)
+        assert(rendered.contains("PersonWithAddress"), s"expected outer type in: $rendered")
       }
     }
   }

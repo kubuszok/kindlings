@@ -97,3 +97,8 @@ case class Leaf(value: Int) extends TreeNode
 // Mutual recursion (triggers UseCachedDefWhenAvailableRule for both types)
 case class MutRecA(value: Int, b: Option[MutRecB])
 case class MutRecB(value: String, a: Option[MutRecA])
+
+// Map test types
+case class WithMapField(data: Map[String, Int])
+case class WithNestedMap(data: Map[String, Map[String, Int]])
+case class WithMapOfCaseClass(data: Map[String, SimplePerson])

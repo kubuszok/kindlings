@@ -211,6 +211,24 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("ShowPretty enum") {
+
+    test("sealed trait with case class") {
+      val result = examples.ShapeShowPretty.showPrettyShape.show(examples.Circle(1.0))
+      result ==> "Circle(\n  radius = 1.0\n)"
+    }
+
+    test("sealed trait with multi-field case class") {
+      val result = examples.ShapeShowPretty.showPrettyShape.show(examples.Rectangle(3.0, 4.0))
+      result ==> s"Rectangle(\n  width = ${3.0.toString},\n  height = ${4.0.toString}\n)"
+    }
+
+    test("showLines for sealed trait") {
+      val lines = examples.ShapeShowPretty.showPrettyShape.showLines(examples.Circle(1.0))
+      lines ==> List("Circle(", "  radius = 1.0", ")")
+    }
+  }
+
   group("Show @sensitiveData") {
 
     test("field-level redaction") {
@@ -286,6 +304,83 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("Show Map field") {
+
+    test("case class with Map field") {
+      val value = examples.WithMapField(Map("a" -> 1, "b" -> 2))
+      val shown = examples.WithMapField.showWithMapField.show(value)
+      assert(shown.startsWith("WithMapField(data = Map("))
+      assert(shown.contains("a -> 1"))
+      assert(shown.contains("b -> 2"))
+    }
+
+    test("case class with empty Map field") {
+      val value = examples.WithMapField(Map.empty)
+      examples.WithMapField.showWithMapField.show(value) ==> "WithMapField(data = Map())"
+    }
+  }
+
+  group("Show Collection field") {
+
+    test("case class with List field") {
+      examples.WithListField.showWithListField.show(
+        examples.WithListField(List(1, 2, 3))
+      ) ==> "WithListField(items = List(1, 2, 3))"
+    }
+
+    test("case class with empty List field") {
+      examples.WithListField.showWithListField.show(
+        examples.WithListField(Nil)
+      ) ==> "WithListField(items = List())"
+    }
+  }
+
+  group("Show Option field") {
+
+    test("case class with Some field") {
+      examples.WithOptField.showWithOptField.show(
+        examples.WithOptField(Some("hello"))
+      ) ==> "WithOptField(value = Some(hello))"
+    }
+
+    test("case class with None field") {
+      examples.WithOptField.showWithOptField.show(
+        examples.WithOptField(None)
+      ) ==> "WithOptField(value = None)"
+    }
+  }
+
+  group("Eq Option field") {
+
+    test("Some equal to Some with same value") {
+      examples.WithOptField.eqWithOptField.eqv(
+        examples.WithOptField(Some("hello")),
+        examples.WithOptField(Some("hello"))
+      ) ==> true
+    }
+
+    test("None equal to None") {
+      examples.WithOptField.eqWithOptField.eqv(
+        examples.WithOptField(None),
+        examples.WithOptField(None)
+      ) ==> true
+    }
+
+    test("Some not equal to None") {
+      examples.WithOptField.eqWithOptField.eqv(
+        examples.WithOptField(Some("hello")),
+        examples.WithOptField(None)
+      ) ==> false
+    }
+
+    test("Some not equal to Some with different value") {
+      examples.WithOptField.eqWithOptField.eqv(
+        examples.WithOptField(Some("hello")),
+        examples.WithOptField(Some("world"))
+      ) ==> false
+    }
+  }
+
   group("Eq enum") {
 
     test("same case class values") {
@@ -356,6 +451,11 @@ final class CatsDerivationSpec extends MacroSuite {
     test("case class empty") {
       val empty = examples.Point.emptyPoint.empty
       empty ==> examples.Point(0, 0)
+    }
+
+    test("enum empty returns the variant with an Empty instance") {
+      val empty = examples.Status.emptyStatus.empty
+      empty ==> examples.Suspended("")
     }
   }
 
