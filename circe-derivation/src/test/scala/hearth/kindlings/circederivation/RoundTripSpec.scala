@@ -357,5 +357,135 @@ final class RoundTripSpec extends MacroSuite {
         KindlingsDecoder.decode[MutRecA](json) ==> Right(value)
       }
     }
+
+    group("Option of derived type") {
+
+      test("Some(derived case class) roundtrip") {
+        val value = WithOptionalPerson("test", Some(SimplePerson("Alice", 30)))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithOptionalPerson](json) ==> Right(value)
+      }
+
+      test("None for derived case class roundtrip") {
+        val value = WithOptionalPerson("test", None)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithOptionalPerson](json) ==> Right(value)
+      }
+    }
+
+    group("value class in various positions") {
+
+      test("case class with value class fields roundtrip") {
+        val value = WithValueClassFields(UserId(1), WrappedString("hello"), Some(UserId(2)), List(UserId(3), UserId(4)))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithValueClassFields](json) ==> Right(value)
+      }
+
+      test("case class with None value class field roundtrip") {
+        val value = WithValueClassFields(UserId(1), WrappedString("hello"), None, Nil)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithValueClassFields](json) ==> Right(value)
+      }
+    }
+
+    group("non-string key maps extended") {
+
+      test("Map[Short, String] roundtrip") {
+        val value = Map(1.toShort -> "a", 2.toShort -> "b")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Short, String]](json) ==> Right(value)
+      }
+
+      test("Map[Byte, String] roundtrip") {
+        val value = Map(1.toByte -> "a", 2.toByte -> "b")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Byte, String]](json) ==> Right(value)
+      }
+
+      test("Map[Double, String] roundtrip") {
+        val value = Map(1.5 -> "a", 2.5 -> "b")
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[Map[Double, String]](json) ==> Right(value)
+      }
+
+      test("case class with Map[Short, String] field roundtrip") {
+        val value = WithShortKeyMap(Map(10.toShort -> "x"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithShortKeyMap](json) ==> Right(value)
+      }
+
+      test("case class with Map[Byte, String] field roundtrip") {
+        val value = WithByteKeyMap(Map(5.toByte -> "y"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithByteKeyMap](json) ==> Right(value)
+      }
+
+      test("case class with Map[Double, String] field roundtrip") {
+        val value = WithDoubleKeyMap(Map(3.14 -> "pi"))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithDoubleKeyMap](json) ==> Right(value)
+      }
+
+      test("Map[Long, List[String]] nested roundtrip") {
+        val value = WithMapOfLists(Map(1L -> List("a", "b"), 2L -> List("c")))
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[WithMapOfLists](json) ==> Right(value)
+      }
+    }
+
+    group("strict decoding with discriminator") {
+
+      test("strict decoding without discriminator passes with exact fields") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val value: Shape = Circle(5.0)
+        val json = KindlingsEncoder.encode[Shape](value)
+        KindlingsDecoder.decode[Shape](json) ==> Right(value)
+      }
+
+      test("strict decoding without discriminator rejects extra fields on inner") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val json = io.circe.parser
+          .parse("""{"Circle":{"radius":5.0,"extra":"oops"}}""")
+          .getOrElse(io.circe.Json.Null)
+        assert(KindlingsDecoder.decode[Shape](json).isLeft)
+      }
+    }
+
+    group("accumulating + defaults") {
+
+      test("accumulating decoder with defaults for missing fields") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = io.circe.Json.obj()
+        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => {
+            value.a ==> None
+            value.b ==> "default-b"
+            value.c ==> Some("default-c")
+            value.d ==> 42
+          }
+        )
+      }
+
+      test("accumulating decoder with defaults uses provided values over defaults") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = io.circe.Json.obj(
+          "a" -> io.circe.Json.fromInt(10),
+          "b" -> io.circe.Json.fromString("custom"),
+          "c" -> io.circe.Json.fromString("custom-c"),
+          "d" -> io.circe.Json.fromInt(99)
+        )
+        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => value ==> MultiOptionDefaults(Some(10), "custom", Some("custom-c"), 99)
+        )
+      }
+    }
   }
 }

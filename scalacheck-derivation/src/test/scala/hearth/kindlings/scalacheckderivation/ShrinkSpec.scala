@@ -132,4 +132,75 @@ class ShrinkSpec extends munit.FunSuite {
     val result = shrink.shrink(Outer(Inner(50), true)).take(20).toList
     assert(result.nonEmpty, "Should produce shrunk nested values")
   }
+
+  test("derives Shrink for case class with Map field") {
+    case class Config(settings: Map[String, Int])
+
+    val shrink: Shrink[Config] = DeriveShrink.derived[Config]
+    val result = shrink.shrink(Config(Map("a" -> 1, "b" -> 2, "c" -> 3))).take(20).toList
+    assert(result.nonEmpty, "Should produce shrunk values for Map field")
+    assert(result.exists(_.settings.size < 3), "Should produce smaller maps")
+  }
+
+  test("derives Shrink for case class with Set field") {
+    case class Tags(values: Set[Int])
+
+    val shrink: Shrink[Tags] = DeriveShrink.derived[Tags]
+    val result = shrink.shrink(Tags(Set(1, 2, 3))).take(20).toList
+    assert(result.nonEmpty, "Should produce shrunk values for Set field")
+    assert(result.exists(_.values.size < 3), "Should produce smaller sets")
+  }
+
+  test("derives Shrink for sealed trait — case objects appear in shrink stream") {
+    sealed trait Status
+    case object Active extends Status
+    case class Suspended(reason: String) extends Status
+
+    implicit val shrinkSuspended: Shrink[Suspended] = DeriveShrink.derived[Suspended]
+    val shrink: Shrink[Status] = DeriveShrink.derived[Status]
+    // Shrink a case class variant — should produce shrunk values
+    val result = shrink.shrink(Suspended("timeout"): Status).take(20).toList
+    assert(result.nonEmpty, "Should produce shrunk values for Suspended")
+    // Shrink a case object — should produce empty stream (cannot shrink further)
+    val caseObjResult = shrink.shrink(Active: Status).take(5).toList
+    assert(caseObjResult.isEmpty, "Case object should produce empty shrink stream")
+  }
+
+  test("derives Shrink for case class with value class field") {
+    import examples.WrappedId
+    case class WithWrapper(w: WrappedId, extra: Int)
+
+    val shrink: Shrink[WithWrapper] = DeriveShrink.derived[WithWrapper]
+    val result = shrink.shrink(WithWrapper(WrappedId(100), 50)).take(20).toList
+    assert(result.nonEmpty, "Should produce shrunk values for value class fields")
+    // Value class field should be shrunk
+    assert(
+      result.exists(ww => ww.w.value != 100 || ww.extra != 50),
+      "At least some shrunk values should differ from original"
+    )
+  }
+
+  test("derives Shrink for case class with empty collection") {
+    case class Box(items: List[Int])
+
+    val shrink: Shrink[Box] = DeriveShrink.derived[Box]
+    val result = shrink.shrink(Box(Nil)).take(5).toList
+    assert(result.isEmpty, "Empty collection should produce empty shrink stream")
+  }
+
+  test("derives Shrink for case class with empty Map") {
+    case class Config(settings: Map[String, Int])
+
+    val shrink: Shrink[Config] = DeriveShrink.derived[Config]
+    val result = shrink.shrink(Config(Map.empty)).take(5).toList
+    assert(result.isEmpty, "Empty map should produce empty shrink stream")
+  }
+
+  test("derives Shrink for case class with empty Set") {
+    case class Tags(values: Set[Int])
+
+    val shrink: Shrink[Tags] = DeriveShrink.derived[Tags]
+    val result = shrink.shrink(Tags(Set.empty)).take(5).toList
+    assert(result.isEmpty, "Empty set should produce empty shrink stream")
+  }
 }

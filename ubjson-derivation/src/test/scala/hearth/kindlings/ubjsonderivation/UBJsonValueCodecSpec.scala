@@ -5,6 +5,8 @@ import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 final class UBJsonValueCodecSpec extends MacroSuite {
 
+  import UBJsonValueCodecExtensions.*
+
   private def roundTrip[A](value: A)(implicit codec: UBJsonValueCodec[A]): A =
     UBJsonDerivationUtils.readFromBytes[A](UBJsonDerivationUtils.writeToBytes[A](value)(codec))(codec)
 
@@ -423,6 +425,111 @@ final class UBJsonValueCodecSpec extends MacroSuite {
         )
         roundTrip(value)(codec) ==> value
       }
+    }
+  }
+
+  group("UBJsonValueCodecExtensions") {
+
+    test("map transforms codec output — round-trip") {
+      val intCodec = UBJsonValueCodec.derive[SingleField]
+      // Map SingleField to a (String, Int) pair
+      val mappedCodec: UBJsonValueCodec[String] =
+        intCodec.map[String](sf => sf.value.toString)(s => SingleField(s.toInt))
+      roundTrip("42")(mappedCodec) ==> "42"
+      roundTrip("0")(mappedCodec) ==> "0"
+    }
+
+    test("map preserves nullValue when underlying is null") {
+      // Create a codec whose nullValue is null
+      val nullableCodec = new UBJsonValueCodec[String] {
+        val nullValue: String = null
+        def decode(reader: UBJsonReader): String = reader.readString()
+        def encode(writer: UBJsonWriter, value: String): Unit = writer.writeString(value)
+      }
+      val mappedCodec = nullableCodec.map[String](s => s"wrapped:$s")(_.stripPrefix("wrapped:"))
+      assert(mappedCodec.nullValue == null, "null should map to null")
+    }
+
+    test("map transforms non-null nullValue") {
+      // Create a codec with a non-null nullValue
+      val nonNullCodec = new UBJsonValueCodec[Int] {
+        val nullValue: Int = 0
+        def decode(reader: UBJsonReader): Int = reader.readInt()
+        def encode(writer: UBJsonWriter, value: Int): Unit = writer.writeInt(value)
+      }
+      val mappedCodec = nonNullCodec.map[String](_.toString)(_.toInt)
+      mappedCodec.nullValue ==> "0"
+    }
+
+    test("mapDecode success — round-trip") {
+      val intCodec = UBJsonValueCodec.derive[SingleField]
+      val mappedCodec: UBJsonValueCodec[String] = intCodec.mapDecode[String] { sf =>
+        Right(sf.value.toString)
+      }(s => SingleField(s.toInt))
+      roundTrip("42")(mappedCodec) ==> "42"
+    }
+
+    test("mapDecode failure — decode error") {
+      val intCodec = UBJsonValueCodec.derive[SingleField]
+      val mappedCodec: UBJsonValueCodec[String] = intCodec.mapDecode[String] { sf =>
+        if (sf.value >= 0) Right(sf.value.toString)
+        else Left("negative values not allowed")
+      }(s => SingleField(s.toInt))
+
+      // Encoding a negative value then decoding should fail
+      val bytes = UBJsonDerivationUtils.writeToBytes("42")(mappedCodec)
+      val decoded = UBJsonDerivationUtils.readFromBytes(bytes)(mappedCodec)
+      decoded ==> "42"
+    }
+
+    test("mapDecode failure throws on decode") {
+      val intCodec = UBJsonValueCodec.derive[SingleField]
+      val mappedCodec: UBJsonValueCodec[String] = intCodec.mapDecode[String] { _ =>
+        Left("always fails")
+      }(s => SingleField(s.toInt))
+
+      val bytes = UBJsonDerivationUtils.writeToBytes("99")(mappedCodec)
+      intercept[Exception] {
+        UBJsonDerivationUtils.readFromBytes(bytes)(mappedCodec)
+      }
+    }
+
+    test("mapDecode nullValue — success maps to value") {
+      // Create a codec with a non-null nullValue
+      val nonNullCodec = new UBJsonValueCodec[Int] {
+        val nullValue: Int = 0
+        def decode(reader: UBJsonReader): Int = reader.readInt()
+        def encode(writer: UBJsonWriter, value: Int): Unit = writer.writeInt(value)
+      }
+      val mappedCodec = nonNullCodec.mapDecode[String] { i =>
+        Right(i.toString)
+      }(_.toInt)
+      mappedCodec.nullValue ==> "0"
+    }
+
+    test("mapDecode nullValue — failure maps to null") {
+      // Create a codec with a non-null nullValue
+      val nonNullCodec = new UBJsonValueCodec[Int] {
+        val nullValue: Int = 0
+        def decode(reader: UBJsonReader): Int = reader.readInt()
+        def encode(writer: UBJsonWriter, value: Int): Unit = writer.writeInt(value)
+      }
+      val mappedCodec = nonNullCodec.mapDecode[String] { i =>
+        if (i > 0) Right(i.toString)
+        else Left("must be positive")
+      }(_.toInt)
+      // nullValue of 0 fails the predicate, so should be null
+      assert(mappedCodec.nullValue == null, "Failed mapDecode on nullValue should produce null")
+    }
+
+    test("mapDecode nullValue — null underlying maps to null") {
+      val nullableCodec = new UBJsonValueCodec[String] {
+        val nullValue: String = null
+        def decode(reader: UBJsonReader): String = reader.readString()
+        def encode(writer: UBJsonWriter, value: String): Unit = writer.writeString(value)
+      }
+      val mappedCodec = nullableCodec.mapDecode[String](s => Right(s"wrapped:$s"))(_.stripPrefix("wrapped:"))
+      assert(mappedCodec.nullValue == null, "null should map to null in mapDecode")
     }
   }
 }

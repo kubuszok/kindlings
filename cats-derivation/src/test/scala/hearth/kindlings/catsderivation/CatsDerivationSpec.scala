@@ -79,6 +79,45 @@ final class CatsDerivationSpec extends MacroSuite {
       val b = examples.Point(3, 4)
       examples.Point.monoidPoint.combine(a, b) ==> examples.Point(4, 6)
     }
+
+    test("combineAll") {
+      val points = List(examples.Point(1, 2), examples.Point(3, 4), examples.Point(5, 6))
+      examples.Point.monoidPoint.combineAll(points) ==> examples.Point(9, 12)
+    }
+
+    test("combineAll empty list") {
+      examples.Point.monoidPoint.combineAll(Nil) ==> examples.Point(0, 0)
+    }
+
+    test("Long fields — empty") {
+      examples.LongPair.monoidLongPair.empty ==> examples.LongPair(0L, 0L)
+    }
+
+    test("Long fields — combine") {
+      val a = examples.LongPair(100L, 200L)
+      val b = examples.LongPair(300L, 400L)
+      examples.LongPair.monoidLongPair.combine(a, b) ==> examples.LongPair(400L, 600L)
+    }
+
+    test("String fields — empty") {
+      examples.StringPair.monoidStringPair.empty ==> examples.StringPair("", "")
+    }
+
+    test("String fields — combine") {
+      val a = examples.StringPair("hello", "foo")
+      val b = examples.StringPair(" world", "bar")
+      examples.StringPair.monoidStringPair.combine(a, b) ==> examples.StringPair("hello world", "foobar")
+    }
+
+    test("Double fields — empty") {
+      examples.DoublePair.monoidDoublePair.empty ==> examples.DoublePair(0.0, 0.0)
+    }
+
+    test("Double fields — combine") {
+      val a = examples.DoublePair(1.5, 2.5)
+      val b = examples.DoublePair(3.5, 4.5)
+      examples.DoublePair.monoidDoublePair.combine(a, b) ==> examples.DoublePair(5.0, 7.0)
+    }
   }
 
   group("CommutativeSemigroup") {
@@ -155,6 +194,40 @@ final class CatsDerivationSpec extends MacroSuite {
       val a = examples.Point(5, 10)
       val inv = examples.Point.groupPoint.inverse(a)
       examples.Point.groupPoint.combine(a, inv) ==> examples.Point(0, 0)
+    }
+
+    test("remove") {
+      val a = examples.Point(10, 20)
+      val b = examples.Point(3, 7)
+      examples.Point.groupPoint.remove(a, b) ==> examples.Point(7, 13)
+    }
+
+    test("Long fields — inverse") {
+      val a = examples.LongPair(100L, 200L)
+      examples.LongPair.groupLongPair.inverse(a) ==> examples.LongPair(-100L, -200L)
+    }
+
+    test("Long fields — combine with inverse yields empty") {
+      val a = examples.LongPair(42L, 99L)
+      val inv = examples.LongPair.groupLongPair.inverse(a)
+      examples.LongPair.groupLongPair.combine(a, inv) ==> examples.LongPair(0L, 0L)
+    }
+
+    test("Long fields — remove") {
+      val a = examples.LongPair(1000L, 2000L)
+      val b = examples.LongPair(300L, 700L)
+      examples.LongPair.groupLongPair.remove(a, b) ==> examples.LongPair(700L, 1300L)
+    }
+
+    test("Double fields — inverse") {
+      val a = examples.DoublePair(1.5, 2.5)
+      examples.DoublePair.groupDoublePair.inverse(a) ==> examples.DoublePair(-1.5, -2.5)
+    }
+
+    test("Double fields — remove") {
+      val a = examples.DoublePair(10.0, 20.0)
+      val b = examples.DoublePair(3.0, 7.0)
+      examples.DoublePair.groupDoublePair.remove(a, b) ==> examples.DoublePair(7.0, 13.0)
     }
   }
 
@@ -377,6 +450,37 @@ final class CatsDerivationSpec extends MacroSuite {
       examples.WithOptField.eqWithOptField.eqv(
         examples.WithOptField(Some("hello")),
         examples.WithOptField(Some("world"))
+      ) ==> false
+    }
+  }
+
+  group("Eq Option with derived inner type") {
+
+    test("Some(Point) equal to Some(Point) with same values") {
+      examples.WithOptPoint.eqWithOptPoint.eqv(
+        examples.WithOptPoint(Some(examples.Point(1, 2))),
+        examples.WithOptPoint(Some(examples.Point(1, 2)))
+      ) ==> true
+    }
+
+    test("Some(Point) not equal to Some(Point) with different values") {
+      examples.WithOptPoint.eqWithOptPoint.eqv(
+        examples.WithOptPoint(Some(examples.Point(1, 2))),
+        examples.WithOptPoint(Some(examples.Point(3, 4)))
+      ) ==> false
+    }
+
+    test("None equal to None for Option[Point]") {
+      examples.WithOptPoint.eqWithOptPoint.eqv(
+        examples.WithOptPoint(None),
+        examples.WithOptPoint(None)
+      ) ==> true
+    }
+
+    test("Some(Point) not equal to None") {
+      examples.WithOptPoint.eqWithOptPoint.eqv(
+        examples.WithOptPoint(Some(examples.Point(1, 2))),
+        examples.WithOptPoint(None)
       ) ==> false
     }
   }

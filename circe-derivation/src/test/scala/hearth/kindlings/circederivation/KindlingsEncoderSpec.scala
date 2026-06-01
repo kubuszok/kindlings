@@ -622,5 +622,99 @@ final class KindlingsEncoderSpec extends MacroSuite {
         )
       }
     }
+
+    group("Option of derived type") {
+
+      test("Some(SimplePerson) encodes nested object") {
+        KindlingsEncoder.encode(WithOptionalPerson("test", Some(SimplePerson("Alice", 30)))) ==>
+          Json.obj(
+            "label" -> Json.fromString("test"),
+            "person" -> Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+          )
+      }
+
+      test("None for derived type encodes as null") {
+        KindlingsEncoder.encode(WithOptionalPerson("test", None)) ==>
+          Json.obj("label" -> Json.fromString("test"), "person" -> Json.Null)
+      }
+    }
+
+    group("value classes in various positions") {
+
+      test("value class in Option field") {
+        val json = KindlingsEncoder.encode(
+          WithValueClassFields(UserId(1), WrappedString("hello"), Some(UserId(2)), List(UserId(3), UserId(4)))
+        )
+        val obj = json.asObject.get
+        obj("id") ==> Some(Json.fromInt(1))
+        obj("name") ==> Some(Json.fromString("hello"))
+        obj("optId") ==> Some(Json.fromInt(2))
+        obj("ids") ==> Some(Json.arr(Json.fromInt(3), Json.fromInt(4)))
+      }
+
+      test("value class in None Option field") {
+        val json = KindlingsEncoder.encode(
+          WithValueClassFields(UserId(1), WrappedString("hello"), None, Nil)
+        )
+        val obj = json.asObject.get
+        obj("optId") ==> Some(Json.Null)
+        obj("ids") ==> Some(Json.arr())
+      }
+    }
+
+    group("non-string key maps extended") {
+
+      test("Map[Short, String]") {
+        val json = KindlingsEncoder.encode(Map(1.toShort -> "a"))
+        val obj = json.asObject.get
+        obj("1") ==> Some(Json.fromString("a"))
+      }
+
+      test("Map[Byte, String]") {
+        val json = KindlingsEncoder.encode(Map(7.toByte -> "a"))
+        val obj = json.asObject.get
+        obj("7") ==> Some(Json.fromString("a"))
+      }
+
+      test("Map[Long, List[String]] nested") {
+        val json = KindlingsEncoder.encode(WithMapOfLists(Map(1L -> List("a", "b"))))
+        val obj = json.asObject.get
+        val data = obj("data").get.asObject.get
+        data("1") ==> Some(Json.arr(Json.fromString("a"), Json.fromString("b")))
+      }
+
+      test("case class with Map[Short, String] field") {
+        val json = KindlingsEncoder.encode(WithShortKeyMap(Map(10.toShort -> "x")))
+        val obj = json.asObject.get
+        val data = obj("data").get.asObject.get
+        data("10") ==> Some(Json.fromString("x"))
+      }
+
+      test("case class with Map[Byte, String] field") {
+        val json = KindlingsEncoder.encode(WithByteKeyMap(Map(5.toByte -> "y")))
+        val obj = json.asObject.get
+        val data = obj("data").get.asObject.get
+        data("5") ==> Some(Json.fromString("y"))
+      }
+    }
+
+    group("addDiscriminator with non-object inner") {
+
+      test("discriminator with case object wraps in value field") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val json = KindlingsEncoder.encode[SimpleEnumCirce](Yes)
+        val obj = json.asObject.get
+        obj("type") ==> Some(Json.fromString("Yes"))
+      }
+    }
+
+    group("enumAsStrings combined with constructor transform and discriminator") {
+
+      test("enumAsStrings takes precedence over discriminator for case-object-only sealed traits") {
+        implicit val config: Configuration =
+          Configuration(enumAsStrings = true, discriminator = Some("type"), transformConstructorNames = _.toLowerCase)
+        KindlingsEncoder.encode[CardinalDirection](North) ==> Json.fromString("north")
+      }
+    }
   }
 }
