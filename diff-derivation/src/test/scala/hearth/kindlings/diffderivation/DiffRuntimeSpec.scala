@@ -102,7 +102,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("identical maps") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map("a" -> 1, "b" -> 2),
           Map("a" -> 1, "b" -> 2),
           _.toString,
@@ -114,7 +117,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("added key") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map("a" -> 1),
           Map("a" -> 1, "b" -> 2),
           _.toString,
@@ -131,7 +137,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("removed key") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map("a" -> 1, "b" -> 2),
           Map("a" -> 1),
           _.toString,
@@ -148,7 +157,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("changed value") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map("a" -> 1),
           Map("a" -> 99),
           _.toString,
@@ -158,15 +170,20 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
         result match {
           case md: DiffResult.MapDiff =>
             val matched = md.entries.collect { case m: DiffResult.MapEntry.Matched => m }
-            assert(matched.exists(e => e.key == "a" && !e.valueDiff.isIdentical),
-              s"expected changed value, entries: ${md.entries}")
+            assert(
+              matched.exists(e => e.key == "a" && !e.valueDiff.isIdentical),
+              s"expected changed value, entries: ${md.entries}"
+            )
           case _ => fail(s"expected MapDiff, got $result")
         }
       }
 
       test("empty maps") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map.empty[String, Int],
           Map.empty[String, Int],
           _.toString,
@@ -177,7 +194,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("empty vs non-empty") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map.empty[String, Int],
           Map("x" -> 42),
           _.toString,
@@ -195,7 +215,10 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
 
       test("non-empty vs empty") {
         val result = DiffRuntime.diffMap[String, Int](
-          pn, fn, sn, sh,
+          pn,
+          fn,
+          sn,
+          sh,
           Map("x" -> 42),
           Map.empty[String, Int],
           _.toString,
@@ -291,7 +314,7 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
           case od: DiffResult.OptionalDiff =>
             od.inner match {
               case DiffResult.OptionalContent.BothPresent(d) => assert(d.isIdentical)
-              case other => fail(s"expected BothPresent, got $other")
+              case other                                     => fail(s"expected BothPresent, got $other")
             }
           case _ => fail(s"expected OptionalDiff, got $result")
         }
@@ -304,7 +327,7 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
           case od: DiffResult.OptionalDiff =>
             od.inner match {
               case DiffResult.OptionalContent.BothPresent(d) => assert(!d.isIdentical)
-              case other => fail(s"expected BothPresent, got $other")
+              case other                                     => fail(s"expected BothPresent, got $other")
             }
           case _ => fail(s"expected OptionalDiff, got $result")
         }
@@ -317,7 +340,7 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
           case od: DiffResult.OptionalDiff =>
             od.inner match {
               case _: DiffResult.OptionalContent.LeftOnly => ()
-              case other => fail(s"expected LeftOnly, got $other")
+              case other                                  => fail(s"expected LeftOnly, got $other")
             }
           case _ => fail(s"expected OptionalDiff, got $result")
         }
@@ -330,7 +353,7 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
           case od: DiffResult.OptionalDiff =>
             od.inner match {
               case _: DiffResult.OptionalContent.RightOnly => ()
-              case other => fail(s"expected RightOnly, got $other")
+              case other                                   => fail(s"expected RightOnly, got $other")
             }
           case _ => fail(s"expected OptionalDiff, got $result")
         }
@@ -343,7 +366,7 @@ final class DiffRuntimeSpec extends hearth.MacroSuite {
           case od: DiffResult.OptionalDiff =>
             od.inner match {
               case DiffResult.OptionalContent.BothAbsent => ()
-              case other => fail(s"expected BothAbsent, got $other")
+              case other                                 => fail(s"expected BothAbsent, got $other")
             }
           case _ => fail(s"expected OptionalDiff, got $result")
         }

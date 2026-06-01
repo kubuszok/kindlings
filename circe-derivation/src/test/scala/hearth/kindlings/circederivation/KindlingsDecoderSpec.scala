@@ -1158,5 +1158,256 @@ final class KindlingsDecoderSpec extends MacroSuite {
         KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("Alice", 25))
       }
     }
+
+    group("Option of derived type") {
+
+      test("Option[SimplePerson] present with value") {
+        val json = Json.obj(
+          "label" -> Json.fromString("test"),
+          "person" -> Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
+        )
+        KindlingsDecoder.decode[WithOptionalPerson](json) ==>
+          Right(WithOptionalPerson("test", Some(SimplePerson("Alice", 30))))
+      }
+
+      test("Option[SimplePerson] present with null") {
+        val json = Json.obj("label" -> Json.fromString("test"), "person" -> Json.Null)
+        KindlingsDecoder.decode[WithOptionalPerson](json) ==> Right(WithOptionalPerson("test", None))
+      }
+
+      test("Option[SimplePerson] absent fails without useDefaults") {
+        val json = Json.obj("label" -> Json.fromString("test"))
+        assert(KindlingsDecoder.decode[WithOptionalPerson](json).isLeft)
+      }
+    }
+
+    group("value classes in various positions") {
+
+      test("value class in Option field") {
+        val json = Json.obj(
+          "id" -> Json.fromInt(1),
+          "name" -> Json.fromString("hello"),
+          "optId" -> Json.fromInt(2),
+          "ids" -> Json.arr(Json.fromInt(3))
+        )
+        KindlingsDecoder.decode[WithValueClassFields](json) ==>
+          Right(WithValueClassFields(UserId(1), WrappedString("hello"), Some(UserId(2)), List(UserId(3))))
+      }
+
+      test("value class in Option field with null") {
+        val json = Json.obj(
+          "id" -> Json.fromInt(1),
+          "name" -> Json.fromString("hello"),
+          "optId" -> Json.Null,
+          "ids" -> Json.arr()
+        )
+        KindlingsDecoder.decode[WithValueClassFields](json) ==>
+          Right(WithValueClassFields(UserId(1), WrappedString("hello"), None, Nil))
+      }
+    }
+
+    group("non-string key map error paths") {
+
+      test("Map[Short, String] invalid key returns Left") {
+        val json = Json.obj("abc" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Short, String]](json).isLeft)
+      }
+
+      test("Map[Byte, String] invalid key returns Left") {
+        val json = Json.obj("xyz" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Byte, String]](json).isLeft)
+      }
+
+      test("Map[Double, String] invalid key returns Left") {
+        val json = Json.obj("not-a-number" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Double, String]](json).isLeft)
+      }
+
+      test("Map[Short, String] overflow key returns Left") {
+        val json = Json.obj("99999" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Short, String]](json).isLeft)
+      }
+
+      test("Map[Byte, String] overflow key returns Left") {
+        val json = Json.obj("999" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[Byte, String]](json).isLeft)
+      }
+
+      test("enum key Map[CardinalDirection, String] unknown key returns Left") {
+        val json = Json.obj("NorthWest" -> Json.fromString("x"))
+        assert(KindlingsDecoder.decode[Map[CardinalDirection, String]](json).isLeft)
+      }
+    }
+
+    group("collection decode failure") {
+
+      test("List[Int] with non-integer elements fails") {
+        val json = Json.arr(Json.fromString("not an int"), Json.fromInt(2))
+        assert(KindlingsDecoder.decode[List[Int]](json).isLeft)
+      }
+
+      test("List[Int] from non-array fails") {
+        assert(KindlingsDecoder.decode[List[Int]](Json.fromString("not an array")).isLeft)
+      }
+
+      test("Set[Int] from non-array fails") {
+        assert(KindlingsDecoder.decode[Set[Int]](Json.fromString("not an array")).isLeft)
+      }
+
+      test("Vector[String] from non-array fails") {
+        assert(KindlingsDecoder.decode[Vector[String]](Json.fromInt(42)).isLeft)
+      }
+    }
+
+    group("map decode failure") {
+
+      test("Map[String, Int] from non-object fails") {
+        assert(KindlingsDecoder.decode[Map[String, Int]](Json.arr()).isLeft)
+      }
+
+      test("Map[Int, String] from non-object fails") {
+        assert(KindlingsDecoder.decode[Map[Int, String]](Json.arr()).isLeft)
+      }
+
+      test("Map[String, Int] with wrong value type fails") {
+        val json = Json.obj("a" -> Json.fromString("not an int"))
+        assert(KindlingsDecoder.decode[Map[String, Int]](json).isLeft)
+      }
+
+      test("Map[Int, String] with wrong value type fails") {
+        val json = Json.obj("1" -> Json.fromInt(42))
+        assert(KindlingsDecoder.decode[Map[Int, String]](json).isLeft)
+      }
+    }
+
+    group("strict decoding with sealed traits") {
+
+      test("strict + wrapper style passes with exact subtype fields") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
+        KindlingsDecoder.decode[Shape](json) ==> Right(Circle(5.0): Shape)
+      }
+
+      test("strict + wrapper style rejects extra fields on inner") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0), "extra" -> Json.True))
+        val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
+        assert(error.message.contains("Unexpected field(s):"))
+        assert(error.message.contains("extra"))
+      }
+
+      test("strict + wrapper style + accumulating rejects extra fields on inner") {
+        implicit val config: Configuration = Configuration(strictDecoding = true)
+        val decoder = KindlingsDecoder.derive[Shape]
+        val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0), "extra" -> Json.True))
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+      }
+    }
+
+    group("accumulating error paths") {
+
+      test("accumulating with all fields wrong type") {
+        val json = Json.obj(
+          "x" -> Json.fromString("not int"),
+          "y" -> Json.fromInt(42),
+          "z" -> Json.fromString("not bool")
+        )
+        val decoder = KindlingsDecoder.derive[ThreeFields]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors => assert(errors.size >= 2),
+          _ => fail("expected invalid")
+        )
+      }
+
+      test("accumulating on non-object input") {
+        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val result = decoder.decodeAccumulating(Json.fromInt(42).hcursor)
+        assert(result.isInvalid)
+      }
+
+      test("accumulating strict mode passes with exact fields") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        val json = Json.obj("x" -> Json.fromInt(1), "y" -> Json.fromString("a"), "z" -> Json.True)
+        val decoder = KindlingsDecoder.derive[ThreeFields]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => value ==> ThreeFields(1, "a", true)
+        )
+      }
+
+      test("accumulating with useDefaults and partially missing fields") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("a" -> Json.fromInt(10))
+        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isValid)
+        result.fold(
+          _ => fail("expected valid"),
+          value => {
+            value.a ==> Some(10)
+            value.b ==> "default-b"
+            value.c ==> Some("default-c")
+            value.d ==> 42
+          }
+        )
+      }
+
+      test("accumulating with useDefaults and wrong type for non-default field fails") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        val json = Json.obj("b" -> Json.fromInt(42), "d" -> Json.fromString("not int"))
+        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val result = decoder.decodeAccumulating(json.hcursor)
+        assert(result.isInvalid)
+        result.fold(
+          errors => assert(errors.size >= 1),
+          _ => fail("expected invalid")
+        )
+      }
+    }
+
+    group("wrapped decoding error paths") {
+
+      test("decodeWrapped fails on non-object input") {
+        val json = Json.arr(Json.fromInt(1))
+        assert(KindlingsDecoder.decode[Shape](json).isLeft)
+      }
+
+      test("decodeWrapped fails on empty object") {
+        assert(KindlingsDecoder.decode[Shape](Json.obj()).isLeft)
+      }
+    }
+
+    group("enumAsStrings error paths") {
+
+      test("non-string JSON for enumAsStrings sealed trait gives clear error") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        val Left(error) = KindlingsDecoder.decode[CardinalDirection](Json.fromInt(42)): @unchecked
+        assert(error.message.contains("Expected a JSON string for enum value"))
+      }
+
+      test("unknown string for enumAsStrings sealed trait gives clear error") {
+        implicit val config: Configuration = Configuration(enumAsStrings = true)
+        val Left(error) = KindlingsDecoder.decode[CardinalDirection](Json.fromString("NorthWest")): @unchecked
+        assert(error.message.contains("Unknown type discriminator"))
+      }
+    }
+
+    group("Map[Int, String] case class field error paths") {
+
+      test("case class with Map[Int, String] field fails on non-object map") {
+        val json = Json.obj("data" -> Json.arr())
+        assert(KindlingsDecoder.decode[WithIntKeyMap](json).isLeft)
+      }
+
+      test("case class with Map[Int, String] field fails on invalid key") {
+        val json = Json.obj("data" -> Json.obj("abc" -> Json.fromString("x")))
+        assert(KindlingsDecoder.decode[WithIntKeyMap](json).isLeft)
+      }
+    }
   }
 }

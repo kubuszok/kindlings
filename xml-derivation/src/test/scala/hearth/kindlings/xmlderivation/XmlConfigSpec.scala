@@ -144,15 +144,8 @@ final class XmlConfigSpec extends MacroSuite {
     }
 
     test("builder methods can be chained") {
-      val config = XmlConfig()
-        .withSnakeCaseFieldNames
-        .withKebabCaseConstructorNames
-        .withNoDiscriminator
-        .withEnumAsStrings
-        .withUseDefaults
-        .withTransientNone
-        .withTransientEmpty
-        .withAttributesByDefault
+      val config =
+        XmlConfig().withSnakeCaseFieldNames.withKebabCaseConstructorNames.withNoDiscriminator.withEnumAsStrings.withUseDefaults.withTransientNone.withTransientEmpty.withAttributesByDefault
 
       assert(config.defaultFieldMode == XmlFieldMode.Attribute)
       assert(config.fieldNameMapper("firstName") == "first_name")
@@ -420,10 +413,7 @@ final class XmlConfigSpec extends MacroSuite {
     group("combined config options") {
 
       test("encoder derives with multiple config options") {
-        implicit val config: XmlConfig = XmlConfig()
-          .withSnakeCaseFieldNames
-          .withUseDefaults
-          .withTransientNone
+        implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames.withUseDefaults.withTransientNone
         val encoder = KindlingsXmlEncoder.derive[WithDefaults]
         val result = encoder.encode(WithDefaults("Alice"), "user")
         assert(result.label == "user")

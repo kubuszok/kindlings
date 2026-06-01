@@ -212,3 +212,43 @@ case class Leaf(value: Int) extends TreeNode
 // Mutual recursion (triggers UseCachedDefWhenAvailableRule for both types)
 case class MutRecA(value: Int, b: Option[MutRecB])
 case class MutRecB(value: String, a: Option[MutRecA])
+
+// Option of derived type (exercises decodeOptionFromFn null path)
+case class WithOptionalPerson(label: String, person: Option[SimplePerson])
+
+// Value class in various positions
+final case class WrappedString(value: String) extends AnyVal
+case class WithValueClassFields(
+    id: UserId,
+    name: WrappedString,
+    optId: Option[UserId],
+    ids: List[UserId]
+)
+
+// Map with Short/Byte/Double keys (exercises key decoder error paths)
+case class WithShortKeyMap(data: Map[Short, String])
+case class WithByteKeyMap(data: Map[Byte, String])
+case class WithDoubleKeyMap(data: Map[Double, String])
+
+// Map with nested collections as values
+case class WithMapOfLists(data: Map[Long, List[String]])
+
+// Case class with multiple Option fields and defaults for accumulating+defaults
+case class MultiOptionDefaults(
+    a: Option[Int] = None,
+    b: String = "default-b",
+    c: Option[String] = Some("default-c"),
+    d: Int = 42
+)
+
+// Strict decoding with discriminator
+// (reuses Animal with Configuration(discriminator = Some("type"), strictDecoding = true))
+
+// Case class for accumulating error paths
+case class ThreeFields(x: Int, y: String, z: Boolean)
+
+// Enum-keyed map with unknown key (exercises decodeEnumKey error path)
+// (reuses CardinalDirection)
+
+// Collection decode failure (exercises CollectionBuildException path)
+// (test by providing wrong element types in JSON array for List[Int])

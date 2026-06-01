@@ -97,3 +97,15 @@ case class WithMapOfCaseClass(data: Map[String, SimplePerson])
 // --- Discriminator field collision ---
 
 case class WithTypeField(`type`: String, name: String)
+
+// --- Multi-word field names (for name transform tests) ---
+
+case class MultiWordFields(firstName: String, lastName: String, postalCode: Int)
+case class WithDefaultsMultiWord(firstName: String, middleName: String = "N/A", age: Int = 0)
+
+// --- Sealed traits for constructor name transform tests ---
+
+sealed trait ColorChoice
+case class BrightRed(intensity: Int) extends ColorChoice
+case class DarkBlue(intensity: Int) extends ColorChoice
+case object PaleGreen extends ColorChoice

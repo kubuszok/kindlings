@@ -284,8 +284,33 @@ object examples {
     implicit val eqWithOptField: cats.kernel.Eq[WithOptField] = cats.kernel.Eq.derived
   }
 
+  final case class WithOptPoint(point: Option[Point])
+  object WithOptPoint {
+    implicit val eqWithOptPoint: cats.kernel.Eq[WithOptPoint] = cats.kernel.Eq.derived
+  }
+
   // ShowPretty for sealed trait (enum) coverage
   object ShapeShowPretty {
     implicit val showPrettyShape: ShowPretty[Shape] = ShowPretty.derived
+  }
+
+  // Monoid/Group built-in rule coverage — Long fields
+  final case class LongPair(a: Long, b: Long)
+  object LongPair {
+    implicit val monoidLongPair: cats.kernel.Monoid[LongPair] = cats.kernel.Monoid.derived
+    implicit val groupLongPair: cats.kernel.Group[LongPair] = cats.kernel.Group.derived
+  }
+
+  // Monoid built-in rule coverage — String fields (Monoid but not Group)
+  final case class StringPair(x: String, y: String)
+  object StringPair {
+    implicit val monoidStringPair: cats.kernel.Monoid[StringPair] = cats.kernel.Monoid.derived
+  }
+
+  // Monoid/Group built-in rule coverage — Double fields
+  final case class DoublePair(x: Double, y: Double)
+  object DoublePair {
+    implicit val monoidDoublePair: cats.kernel.Monoid[DoublePair] = cats.kernel.Monoid.derived
+    implicit val groupDoublePair: cats.kernel.Group[DoublePair] = cats.kernel.Group.derived
   }
 }

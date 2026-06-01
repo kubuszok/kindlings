@@ -57,5 +57,5 @@ object DerivationTimeout {
   val Default: scala.concurrent.duration.FiniteDuration =
     scala.concurrent.duration.FiniteDuration(5, java.util.concurrent.TimeUnit.SECONDS)
 
-  private val DurationPattern = """^\s*(\d+)\s*(ms|millis|milliseconds|s|seconds?|m|minutes?)\s*$""".r
+  private[derivation] val DurationPattern = """^\s*(\d+)\s*(ms|millis|milliseconds|s|seconds?|m|minutes?)\s*$""".r
 }
