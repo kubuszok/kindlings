@@ -249,7 +249,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
     group("derive") {
 
       test("explicit derive returns YamlDecoder") {
-        val decoder: YamlDecoder[SimplePerson] = KindlingsYamlDecoder.derive[SimplePerson]
+        val decoder: YamlDecoder[SimplePerson] = KindlingsYamlDecoder.derived[SimplePerson]
         val node = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
         decoder.construct(node)() ==> Right(SimplePerson("Alice", 30))
       }

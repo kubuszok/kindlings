@@ -177,7 +177,7 @@ final class AvroSchemaForSpec extends MacroSuite {
     group("derived instance") {
 
       test("derive creates AvroSchemaFor instance") {
-        val instance = AvroSchemaFor.derive[SimplePerson]
+        val instance = AvroSchemaFor.derived[SimplePerson]
         instance.schema.getType ==> Schema.Type.RECORD
         instance.schema.getName ==> "SimplePerson"
       }

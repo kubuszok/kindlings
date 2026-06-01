@@ -11,8 +11,8 @@ final class CatsSconfigSpec extends MacroSuite {
     group("NonEmptyList") {
 
       test("round-trip") {
-        implicit val reader: ConfigReader[WithNEL] = ConfigReader.derive[WithNEL]
-        implicit val writer: ConfigWriter[WithNEL] = ConfigWriter.derive[WithNEL]
+        implicit val reader: ConfigReader[WithNEL] = ConfigReader.derived[WithNEL]
+        implicit val writer: ConfigWriter[WithNEL] = ConfigWriter.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val config = writer.to(v)
         val result = reader.from(config)
@@ -23,8 +23,8 @@ final class CatsSconfigSpec extends MacroSuite {
     group("NonEmptyVector") {
 
       test("round-trip") {
-        implicit val reader: ConfigReader[WithNEV] = ConfigReader.derive[WithNEV]
-        implicit val writer: ConfigWriter[WithNEV] = ConfigWriter.derive[WithNEV]
+        implicit val reader: ConfigReader[WithNEV] = ConfigReader.derived[WithNEV]
+        implicit val writer: ConfigWriter[WithNEV] = ConfigWriter.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val config = writer.to(v)
         val result = reader.from(config)
@@ -35,8 +35,8 @@ final class CatsSconfigSpec extends MacroSuite {
     group("Chain") {
 
       test("round-trip") {
-        implicit val reader: ConfigReader[WithChain] = ConfigReader.derive[WithChain]
-        implicit val writer: ConfigWriter[WithChain] = ConfigWriter.derive[WithChain]
+        implicit val reader: ConfigReader[WithChain] = ConfigReader.derived[WithChain]
+        implicit val writer: ConfigWriter[WithChain] = ConfigWriter.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val config = writer.to(v)
         val result = reader.from(config)
@@ -47,8 +47,8 @@ final class CatsSconfigSpec extends MacroSuite {
     group("Const") {
 
       test("round-trip") {
-        implicit val reader: ConfigReader[WithConst] = ConfigReader.derive[WithConst]
-        implicit val writer: ConfigWriter[WithConst] = ConfigWriter.derive[WithConst]
+        implicit val reader: ConfigReader[WithConst] = ConfigReader.derived[WithConst]
+        implicit val writer: ConfigWriter[WithConst] = ConfigWriter.derived[WithConst]
         val v = WithConst(Const("hello"))
         val config = writer.to(v)
         val result = reader.from(config)

@@ -19,7 +19,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("NonEmptyList") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithNEL]
+        val encoder = KindlingsXmlEncoder.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val result = encoder.encode(v, "withNEL")
         assert(result.label == "withNEL")
@@ -28,9 +28,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithNEL] =
-          KindlingsXmlEncoder.derive[WithNEL]
+          KindlingsXmlEncoder.derived[WithNEL]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithNEL] =
-          KindlingsXmlDecoder.derive[WithNEL]
+          KindlingsXmlDecoder.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2))
         val result = roundTrip(v, "withNEL")
         assert(result.isRight, s"Expected Right but got $result")
@@ -41,7 +41,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("NonEmptyVector") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithNEV]
+        val encoder = KindlingsXmlEncoder.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val result = encoder.encode(v, "withNEV")
         assert(result.label == "withNEV")
@@ -49,9 +49,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithNEV] =
-          KindlingsXmlEncoder.derive[WithNEV]
+          KindlingsXmlEncoder.derived[WithNEV]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithNEV] =
-          KindlingsXmlDecoder.derive[WithNEV]
+          KindlingsXmlDecoder.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(5))
         val result = roundTrip(v, "withNEV")
         assert(result.isRight, s"Expected Right but got $result")
@@ -62,7 +62,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("NonEmptyChain") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithNEC]
+        val encoder = KindlingsXmlEncoder.derived[WithNEC]
         val v = WithNEC(NonEmptyChain.of(7, 8))
         val result = encoder.encode(v, "withNEC")
         assert(result.label == "withNEC")
@@ -70,9 +70,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithNEC] =
-          KindlingsXmlEncoder.derive[WithNEC]
+          KindlingsXmlEncoder.derived[WithNEC]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithNEC] =
-          KindlingsXmlDecoder.derive[WithNEC]
+          KindlingsXmlDecoder.derived[WithNEC]
         val v = WithNEC(NonEmptyChain.of(3, 4))
         val result = roundTrip(v, "withNEC")
         assert(result.isRight, s"Expected Right but got $result")
@@ -82,14 +82,14 @@ final class CatsXmlSpec extends MacroSuite {
     group("Chain") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithChain]
+        val encoder = KindlingsXmlEncoder.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val result = encoder.encode(v, "withChain")
         assert(result.label == "withChain")
       }
 
       test("encode empty") {
-        val encoder = KindlingsXmlEncoder.derive[WithChain]
+        val encoder = KindlingsXmlEncoder.derived[WithChain]
         val v = WithChain(Chain.empty)
         val result = encoder.encode(v, "withChain")
         assert(result.label == "withChain")
@@ -97,9 +97,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithChain] =
-          KindlingsXmlEncoder.derive[WithChain]
+          KindlingsXmlEncoder.derived[WithChain]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithChain] =
-          KindlingsXmlDecoder.derive[WithChain]
+          KindlingsXmlDecoder.derived[WithChain]
         val v = WithChain(Chain(9))
         val result = roundTrip(v, "withChain")
         assert(result.isRight, s"Expected Right but got $result")
@@ -107,9 +107,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip empty") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithChain] =
-          KindlingsXmlEncoder.derive[WithChain]
+          KindlingsXmlEncoder.derived[WithChain]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithChain] =
-          KindlingsXmlDecoder.derive[WithChain]
+          KindlingsXmlDecoder.derived[WithChain]
         val v = WithChain(Chain.empty)
         val result = roundTrip(v, "withChain")
         assert(result.isRight, s"Expected Right but got $result")
@@ -119,7 +119,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("NonEmptyMap") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithNEM]
+        val encoder = KindlingsXmlEncoder.derived[WithNEM]
         val v = WithNEM(NonEmptyMap.of("x" -> 1, "y" -> 2))
         val result = encoder.encode(v, "withNEM")
         assert(result.label == "withNEM")
@@ -127,9 +127,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithNEM] =
-          KindlingsXmlEncoder.derive[WithNEM]
+          KindlingsXmlEncoder.derived[WithNEM]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithNEM] =
-          KindlingsXmlDecoder.derive[WithNEM]
+          KindlingsXmlDecoder.derived[WithNEM]
         val v = WithNEM(NonEmptyMap.of("a" -> 1))
         val result = roundTrip(v, "withNEM")
         assert(result.isRight, s"Expected Right but got $result")
@@ -139,7 +139,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("NonEmptySet") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithNES]
+        val encoder = KindlingsXmlEncoder.derived[WithNES]
         val v = WithNES(NonEmptySet.of(3, 1, 2))
         val result = encoder.encode(v, "withNES")
         assert(result.label == "withNES")
@@ -147,9 +147,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithNES] =
-          KindlingsXmlEncoder.derive[WithNES]
+          KindlingsXmlEncoder.derived[WithNES]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithNES] =
-          KindlingsXmlDecoder.derive[WithNES]
+          KindlingsXmlDecoder.derived[WithNES]
         val v = WithNES(NonEmptySet.of(5, 10))
         val result = roundTrip(v, "withNES")
         assert(result.isRight, s"Expected Right but got $result")
@@ -159,7 +159,7 @@ final class CatsXmlSpec extends MacroSuite {
     group("Const") {
 
       test("encode") {
-        val encoder = KindlingsXmlEncoder.derive[WithConst]
+        val encoder = KindlingsXmlEncoder.derived[WithConst]
         val v = WithConst(Const("hello"))
         val result = encoder.encode(v, "withConst")
         assert(result.label == "withConst")
@@ -168,9 +168,9 @@ final class CatsXmlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: hearth.kindlings.xmlderivation.XmlEncoder[WithConst] =
-          KindlingsXmlEncoder.derive[WithConst]
+          KindlingsXmlEncoder.derived[WithConst]
         implicit val decoder: hearth.kindlings.xmlderivation.XmlDecoder[WithConst] =
-          KindlingsXmlDecoder.derive[WithConst]
+          KindlingsXmlDecoder.derived[WithConst]
         val v = WithConst(Const("world"))
         val result = roundTrip(v, "withConst")
         assert(result.isRight, s"Expected Right but got $result")

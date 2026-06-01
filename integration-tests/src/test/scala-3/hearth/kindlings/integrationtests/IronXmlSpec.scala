@@ -17,7 +17,7 @@ final class IronXmlSpec extends MacroSuite {
     group("encoding") {
 
       test("case class with iron fields encodes correctly") {
-        val encoder = KindlingsXmlEncoder.derive[IronPerson]
+        val encoder = KindlingsXmlEncoder.derived[IronPerson]
         val person = IronPerson("Alice", 30)
         val result = encoder.encode(person, "person")
         assert((result \ "name").text == "Alice")
@@ -29,7 +29,7 @@ final class IronXmlSpec extends MacroSuite {
     group("decoding valid") {
 
       test("case class with iron fields decodes valid XML") {
-        val decoder = KindlingsXmlDecoder.derive[IronPerson]
+        val decoder = KindlingsXmlDecoder.derived[IronPerson]
         val elem = parseXml("<person><name>Alice</name><age>30</age></person>")
         val result = decoder.decode(elem)
         assert(result.isRight, s"Expected Right but got $result")
@@ -39,7 +39,7 @@ final class IronXmlSpec extends MacroSuite {
     group("decoding invalid") {
 
       test("iron positive rejects negative") {
-        val decoder = KindlingsXmlDecoder.derive[IronPerson]
+        val decoder = KindlingsXmlDecoder.derived[IronPerson]
         val elem = parseXml("<person><name>Alice</name><age>-1</age></person>")
         val result = decoder.decode(elem)
         assert(result.isLeft, s"Expected Left but got $result")
@@ -49,8 +49,8 @@ final class IronXmlSpec extends MacroSuite {
     group("round-trip") {
 
       test("encode then decode preserves value") {
-        val encoder = KindlingsXmlEncoder.derive[IronPerson]
-        val decoder = KindlingsXmlDecoder.derive[IronPerson]
+        val encoder = KindlingsXmlEncoder.derived[IronPerson]
+        val decoder = KindlingsXmlDecoder.derived[IronPerson]
         val person = IronPerson("Alice", 30)
         val elem = encoder.encode(person, "person")
         val decoded = decoder.decode(elem)

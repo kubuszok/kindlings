@@ -19,7 +19,7 @@ final class RefinedXmlSpec extends MacroSuite {
     group("encoding") {
 
       test("case class with refined fields encodes correctly") {
-        val encoder = KindlingsXmlEncoder.derive[RefinedPerson]
+        val encoder = KindlingsXmlEncoder.derived[RefinedPerson]
         val person = RefinedPerson(alice, thirty)
         val result = encoder.encode(person, "person")
         assert((result \ "name").text == "Alice")
@@ -31,7 +31,7 @@ final class RefinedXmlSpec extends MacroSuite {
     group("decoding valid") {
 
       test("case class with refined fields decodes valid XML") {
-        val decoder = KindlingsXmlDecoder.derive[RefinedPerson]
+        val decoder = KindlingsXmlDecoder.derived[RefinedPerson]
         val elem = parseXml("<person><name>Alice</name><age>30</age></person>")
         val result = decoder.decode(elem)
         assert(result.isRight, s"Expected Right but got $result")
@@ -45,14 +45,14 @@ final class RefinedXmlSpec extends MacroSuite {
     group("decoding invalid") {
 
       test("refined positive rejects negative") {
-        val decoder = KindlingsXmlDecoder.derive[RefinedPerson]
+        val decoder = KindlingsXmlDecoder.derived[RefinedPerson]
         val elem = parseXml("<person><name>Alice</name><age>-1</age></person>")
         val result = decoder.decode(elem)
         assert(result.isLeft, s"Expected Left but got $result")
       }
 
       test("refined non-empty rejects empty string") {
-        val decoder = KindlingsXmlDecoder.derive[RefinedPerson]
+        val decoder = KindlingsXmlDecoder.derived[RefinedPerson]
         val elem = parseXml("<person><name></name><age>30</age></person>")
         val result = decoder.decode(elem)
         assert(result.isLeft, s"Expected Left but got $result")
@@ -62,8 +62,8 @@ final class RefinedXmlSpec extends MacroSuite {
     group("round-trip") {
 
       test("encode then decode preserves value") {
-        val encoder = KindlingsXmlEncoder.derive[RefinedPerson]
-        val decoder = KindlingsXmlDecoder.derive[RefinedPerson]
+        val encoder = KindlingsXmlEncoder.derived[RefinedPerson]
+        val decoder = KindlingsXmlDecoder.derived[RefinedPerson]
         val person = RefinedPerson(alice, thirty)
         val elem = encoder.encode(person, "person")
         val decoded = decoder.decode(elem)

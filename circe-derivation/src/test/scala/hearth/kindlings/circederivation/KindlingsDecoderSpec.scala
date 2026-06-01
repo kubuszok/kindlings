@@ -222,7 +222,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
     group("derive") {
 
       test("explicit derive returns Decoder") {
-        val decoder: Decoder[SimplePerson] = KindlingsDecoder.derive[SimplePerson]
+        val decoder: Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
         decoder.decodeJson(json) ==> Right(SimplePerson("Alice", 30))
       }
@@ -734,7 +734,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("accumulates errors across multiple fields") {
         val json = Json.obj("name" -> Json.fromInt(42), "age" -> Json.fromString("nope"))
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         result.fold(
@@ -745,7 +745,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("returns Valid on correct input") {
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isValid)
         result.fold(
@@ -760,7 +760,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "age" -> Json.fromString("nope"),
           "address" -> Json.obj("street" -> Json.fromInt(0), "city" -> Json.fromInt(0))
         )
-        val decoder = KindlingsDecoder.derive[PersonWithAddress]
+        val decoder = KindlingsDecoder.derived[PersonWithAddress]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         result.fold(
@@ -772,7 +772,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("single field error gives one error") {
         val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromString("nope"))
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         result.fold(
@@ -793,7 +793,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
 
       test("empty case class accumulating returns Valid") {
-        val decoder = KindlingsDecoder.derive[EmptyClass]
+        val decoder = KindlingsDecoder.derived[EmptyClass]
         val result = decoder.decodeAccumulating(Json.obj().hcursor)
         assert(result.isValid)
       }
@@ -1028,7 +1028,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "age" -> Json.fromInt(30),
           "extra" -> Json.fromString("unexpected") // unknown field
         )
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         // At minimum, the type error for "name" must be reported
@@ -1045,7 +1045,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "age" -> Json.fromInt(30),
           "extra" -> Json.fromString("unexpected")
         )
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
       }
@@ -1298,7 +1298,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
 
       test("strict + wrapper style + accumulating rejects extra fields on inner") {
         implicit val config: Configuration = Configuration(strictDecoding = true)
-        val decoder = KindlingsDecoder.derive[Shape]
+        val decoder = KindlingsDecoder.derived[Shape]
         val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0), "extra" -> Json.True))
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
@@ -1313,7 +1313,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "y" -> Json.fromInt(42),
           "z" -> Json.fromString("not bool")
         )
-        val decoder = KindlingsDecoder.derive[ThreeFields]
+        val decoder = KindlingsDecoder.derived[ThreeFields]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         result.fold(
@@ -1323,7 +1323,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
 
       test("accumulating on non-object input") {
-        val decoder = KindlingsDecoder.derive[SimplePerson]
+        val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(Json.fromInt(42).hcursor)
         assert(result.isInvalid)
       }
@@ -1331,7 +1331,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("accumulating strict mode passes with exact fields") {
         implicit val config: Configuration = Configuration.default.withStrictDecoding
         val json = Json.obj("x" -> Json.fromInt(1), "y" -> Json.fromString("a"), "z" -> Json.True)
-        val decoder = KindlingsDecoder.derive[ThreeFields]
+        val decoder = KindlingsDecoder.derived[ThreeFields]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isValid)
         result.fold(
@@ -1343,7 +1343,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("accumulating with useDefaults and partially missing fields") {
         implicit val config: Configuration = Configuration.default.withDefaults
         val json = Json.obj("a" -> Json.fromInt(10))
-        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val decoder = KindlingsDecoder.derived[MultiOptionDefaults]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isValid)
         result.fold(
@@ -1360,7 +1360,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("accumulating with useDefaults and wrong type for non-default field fails") {
         implicit val config: Configuration = Configuration.default.withDefaults
         val json = Json.obj("b" -> Json.fromInt(42), "d" -> Json.fromString("not int"))
-        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val decoder = KindlingsDecoder.derived[MultiOptionDefaults]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
         result.fold(

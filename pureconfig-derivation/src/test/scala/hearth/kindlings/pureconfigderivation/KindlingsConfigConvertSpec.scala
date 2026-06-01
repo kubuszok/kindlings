@@ -39,8 +39,8 @@ final class KindlingsConfigConvertSpec extends MacroSuite {
     }
 
     test("round-trip via standalone reader and writer instances") {
-      val r = KindlingsConfigReader.derive[TeamWithMembers]
-      val w = KindlingsConfigWriter.derive[TeamWithMembers]
+      val r = KindlingsConfigReader.derived[TeamWithMembers]
+      val w = KindlingsConfigWriter.derived[TeamWithMembers]
       val original = TeamWithMembers("Eagles", List(SimplePerson("A", 1), SimplePerson("B", 2)))
       r.from(ConfigCursor(w.to(original), Nil)) ==> Right(original)
     }

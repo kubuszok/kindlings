@@ -20,9 +20,9 @@ final class CatsYamlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: org.virtuslab.yaml.YamlEncoder[WithNEL] =
-          KindlingsYamlEncoder.derive[WithNEL]
+          KindlingsYamlEncoder.derived[WithNEL]
         implicit val decoder: org.virtuslab.yaml.YamlDecoder[WithNEL] =
-          KindlingsYamlDecoder.derive[WithNEL]
+          KindlingsYamlDecoder.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val result = roundTrip(v)
         assert(result.isRight, s"Expected Right but got $result")
@@ -33,9 +33,9 @@ final class CatsYamlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: org.virtuslab.yaml.YamlEncoder[WithNEV] =
-          KindlingsYamlEncoder.derive[WithNEV]
+          KindlingsYamlEncoder.derived[WithNEV]
         implicit val decoder: org.virtuslab.yaml.YamlDecoder[WithNEV] =
-          KindlingsYamlDecoder.derive[WithNEV]
+          KindlingsYamlDecoder.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val result = roundTrip(v)
         assert(result.isRight, s"Expected Right but got $result")
@@ -46,9 +46,9 @@ final class CatsYamlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: org.virtuslab.yaml.YamlEncoder[WithChain] =
-          KindlingsYamlEncoder.derive[WithChain]
+          KindlingsYamlEncoder.derived[WithChain]
         implicit val decoder: org.virtuslab.yaml.YamlDecoder[WithChain] =
-          KindlingsYamlDecoder.derive[WithChain]
+          KindlingsYamlDecoder.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val result = roundTrip(v)
         assert(result.isRight, s"Expected Right but got $result")
@@ -59,9 +59,9 @@ final class CatsYamlSpec extends MacroSuite {
 
       test("round-trip") {
         implicit val encoder: org.virtuslab.yaml.YamlEncoder[WithConst] =
-          KindlingsYamlEncoder.derive[WithConst]
+          KindlingsYamlEncoder.derived[WithConst]
         implicit val decoder: org.virtuslab.yaml.YamlDecoder[WithConst] =
-          KindlingsYamlDecoder.derive[WithConst]
+          KindlingsYamlDecoder.derived[WithConst]
         val v = WithConst(Const("hello"))
         val result = roundTrip(v)
         assert(result.isRight, s"Expected Right but got $result")

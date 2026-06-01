@@ -174,7 +174,7 @@ final class AvroEncoderSpec extends MacroSuite {
     group("derived instance") {
 
       test("derive creates AvroEncoder instance") {
-        val encoder = AvroEncoder.derive[SimplePerson]
+        val encoder = AvroEncoder.derived[SimplePerson]
         val result = encoder.encode(SimplePerson("Test", 99))
         result.isInstanceOf[GenericRecord] ==> true
         val record = result.asInstanceOf[GenericRecord]
@@ -397,7 +397,7 @@ final class AvroEncoderSpec extends MacroSuite {
     group("@avroFixed") {
 
       test("encode Array[Byte] of correct length succeeds") {
-        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
         val result = encoder.encode(WithFixedBytes(Array[Byte](1, 2, 3, 4)))
         val record = result.asInstanceOf[GenericRecord]
         val fixed = record.get("id").asInstanceOf[GenericData.Fixed]
@@ -405,7 +405,7 @@ final class AvroEncoderSpec extends MacroSuite {
       }
 
       test("encode Array[Byte] of wrong length throws AvroRuntimeException") {
-        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
         val ex = intercept[org.apache.avro.AvroRuntimeException] {
           encoder.encode(WithFixedBytes(Array[Byte](1, 2)))
         }

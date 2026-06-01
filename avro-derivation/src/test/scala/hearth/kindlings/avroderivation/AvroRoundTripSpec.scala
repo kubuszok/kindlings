@@ -9,8 +9,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("binary") {
 
       test("simple case class") {
-        val encoder: AvroEncoder[SimplePerson] = AvroEncoder.derive[SimplePerson]
-        val decoder: AvroDecoder[SimplePerson] = AvroDecoder.derive[SimplePerson]
+        val encoder: AvroEncoder[SimplePerson] = AvroEncoder.derived[SimplePerson]
+        val decoder: AvroDecoder[SimplePerson] = AvroDecoder.derived[SimplePerson]
         val original = SimplePerson("Alice", 30)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[SimplePerson](bytes)(decoder)
@@ -18,8 +18,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("empty case class") {
-        val encoder: AvroEncoder[EmptyClass] = AvroEncoder.derive[EmptyClass]
-        val decoder: AvroDecoder[EmptyClass] = AvroDecoder.derive[EmptyClass]
+        val encoder: AvroEncoder[EmptyClass] = AvroEncoder.derived[EmptyClass]
+        val decoder: AvroDecoder[EmptyClass] = AvroDecoder.derived[EmptyClass]
         val original = EmptyClass()
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[EmptyClass](bytes)(decoder)
@@ -27,8 +27,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("nested case class") {
-        val encoder: AvroEncoder[PersonWithAddress] = AvroEncoder.derive[PersonWithAddress]
-        val decoder: AvroDecoder[PersonWithAddress] = AvroDecoder.derive[PersonWithAddress]
+        val encoder: AvroEncoder[PersonWithAddress] = AvroEncoder.derived[PersonWithAddress]
+        val decoder: AvroDecoder[PersonWithAddress] = AvroDecoder.derived[PersonWithAddress]
         val original = PersonWithAddress("Bob", 25, Address("Main St", "NYC"))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[PersonWithAddress](bytes)(decoder)
@@ -36,8 +36,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("case class with collection") {
-        val encoder: AvroEncoder[TeamWithMembers] = AvroEncoder.derive[TeamWithMembers]
-        val decoder: AvroDecoder[TeamWithMembers] = AvroDecoder.derive[TeamWithMembers]
+        val encoder: AvroEncoder[TeamWithMembers] = AvroEncoder.derived[TeamWithMembers]
+        val decoder: AvroDecoder[TeamWithMembers] = AvroDecoder.derived[TeamWithMembers]
         val original = TeamWithMembers("Team A", List(SimplePerson("A", 1), SimplePerson("B", 2)))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[TeamWithMembers](bytes)(decoder)
@@ -45,8 +45,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("value class") {
-        val encoder: AvroEncoder[WrappedInt] = AvroEncoder.derive[WrappedInt]
-        val decoder: AvroDecoder[WrappedInt] = AvroDecoder.derive[WrappedInt]
+        val encoder: AvroEncoder[WrappedInt] = AvroEncoder.derived[WrappedInt]
+        val decoder: AvroDecoder[WrappedInt] = AvroDecoder.derived[WrappedInt]
         val original = WrappedInt(42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WrappedInt](bytes)(decoder)
@@ -57,8 +57,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("generic case classes") {
 
       test("Box[Int] binary round-trip") {
-        val encoder: AvroEncoder[Box[Int]] = AvroEncoder.derive[Box[Int]]
-        val decoder: AvroDecoder[Box[Int]] = AvroDecoder.derive[Box[Int]]
+        val encoder: AvroEncoder[Box[Int]] = AvroEncoder.derived[Box[Int]]
+        val decoder: AvroDecoder[Box[Int]] = AvroDecoder.derived[Box[Int]]
         val original = Box(42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Box[Int]](bytes)(decoder)
@@ -66,8 +66,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("Pair[String, Int] binary round-trip") {
-        val encoder: AvroEncoder[Pair[String, Int]] = AvroEncoder.derive[Pair[String, Int]]
-        val decoder: AvroDecoder[Pair[String, Int]] = AvroDecoder.derive[Pair[String, Int]]
+        val encoder: AvroEncoder[Pair[String, Int]] = AvroEncoder.derived[Pair[String, Int]]
+        val decoder: AvroDecoder[Pair[String, Int]] = AvroDecoder.derived[Pair[String, Int]]
         val original = Pair("hello", 42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Pair[String, Int]](bytes)(decoder)
@@ -78,8 +78,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("deeply nested") {
 
       test("PersonFull binary round-trip") {
-        val encoder: AvroEncoder[PersonFull] = AvroEncoder.derive[PersonFull]
-        val decoder: AvroDecoder[PersonFull] = AvroDecoder.derive[PersonFull]
+        val encoder: AvroEncoder[PersonFull] = AvroEncoder.derived[PersonFull]
+        val decoder: AvroDecoder[PersonFull] = AvroDecoder.derived[PersonFull]
         val original = PersonFull("Alice", FullAddress("123 Main", "NYC", GeoCoordinates(40.7, -74.0)))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[PersonFull](bytes)(decoder)
@@ -90,8 +90,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("type aliases") {
 
       test("WithAlias binary round-trip") {
-        val encoder: AvroEncoder[WithAlias] = AvroEncoder.derive[WithAlias]
-        val decoder: AvroDecoder[WithAlias] = AvroDecoder.derive[WithAlias]
+        val encoder: AvroEncoder[WithAlias] = AvroEncoder.derived[WithAlias]
+        val decoder: AvroDecoder[WithAlias] = AvroDecoder.derived[WithAlias]
         val original = WithAlias("Alice", 30)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithAlias](bytes)(decoder)
@@ -102,8 +102,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("sets") {
 
       test("Set of ints round-trip") {
-        val encoder: AvroEncoder[Set[Int]] = AvroEncoder.derive[Set[Int]]
-        val decoder: AvroDecoder[Set[Int]] = AvroDecoder.derive[Set[Int]]
+        val encoder: AvroEncoder[Set[Int]] = AvroEncoder.derived[Set[Int]]
+        val decoder: AvroDecoder[Set[Int]] = AvroDecoder.derived[Set[Int]]
         val original = Set(1, 2, 3)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Set[Int]](bytes)(decoder)
@@ -114,8 +114,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("logical types") {
 
       test("UUID binary round-trip") {
-        val encoder: AvroEncoder[java.util.UUID] = AvroEncoder.derive[java.util.UUID]
-        val decoder: AvroDecoder[java.util.UUID] = AvroDecoder.derive[java.util.UUID]
+        val encoder: AvroEncoder[java.util.UUID] = AvroEncoder.derived[java.util.UUID]
+        val decoder: AvroDecoder[java.util.UUID] = AvroDecoder.derived[java.util.UUID]
         val original = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[java.util.UUID](bytes)(decoder)
@@ -123,8 +123,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("Instant binary round-trip") {
-        val encoder: AvroEncoder[java.time.Instant] = AvroEncoder.derive[java.time.Instant]
-        val decoder: AvroDecoder[java.time.Instant] = AvroDecoder.derive[java.time.Instant]
+        val encoder: AvroEncoder[java.time.Instant] = AvroEncoder.derived[java.time.Instant]
+        val decoder: AvroDecoder[java.time.Instant] = AvroDecoder.derived[java.time.Instant]
         val original = java.time.Instant.ofEpochMilli(1700000000000L)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[java.time.Instant](bytes)(decoder)
@@ -132,8 +132,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("LocalDate binary round-trip") {
-        val encoder: AvroEncoder[java.time.LocalDate] = AvroEncoder.derive[java.time.LocalDate]
-        val decoder: AvroDecoder[java.time.LocalDate] = AvroDecoder.derive[java.time.LocalDate]
+        val encoder: AvroEncoder[java.time.LocalDate] = AvroEncoder.derived[java.time.LocalDate]
+        val decoder: AvroDecoder[java.time.LocalDate] = AvroDecoder.derived[java.time.LocalDate]
         val original = java.time.LocalDate.of(2024, 1, 15)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[java.time.LocalDate](bytes)(decoder)
@@ -141,8 +141,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("LocalTime binary round-trip") {
-        val encoder: AvroEncoder[java.time.LocalTime] = AvroEncoder.derive[java.time.LocalTime]
-        val decoder: AvroDecoder[java.time.LocalTime] = AvroDecoder.derive[java.time.LocalTime]
+        val encoder: AvroEncoder[java.time.LocalTime] = AvroEncoder.derived[java.time.LocalTime]
+        val decoder: AvroDecoder[java.time.LocalTime] = AvroDecoder.derived[java.time.LocalTime]
         val original = java.time.LocalTime.of(14, 30, 0)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[java.time.LocalTime](bytes)(decoder)
@@ -150,8 +150,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("LocalDateTime binary round-trip") {
-        val encoder: AvroEncoder[java.time.LocalDateTime] = AvroEncoder.derive[java.time.LocalDateTime]
-        val decoder: AvroDecoder[java.time.LocalDateTime] = AvroDecoder.derive[java.time.LocalDateTime]
+        val encoder: AvroEncoder[java.time.LocalDateTime] = AvroEncoder.derived[java.time.LocalDateTime]
+        val decoder: AvroDecoder[java.time.LocalDateTime] = AvroDecoder.derived[java.time.LocalDateTime]
         val original = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[java.time.LocalDateTime](bytes)(decoder)
@@ -159,8 +159,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("EventRecord with all logical types binary round-trip") {
-        val encoder: AvroEncoder[EventRecord] = AvroEncoder.derive[EventRecord]
-        val decoder: AvroDecoder[EventRecord] = AvroDecoder.derive[EventRecord]
+        val encoder: AvroEncoder[EventRecord] = AvroEncoder.derived[EventRecord]
+        val decoder: AvroDecoder[EventRecord] = AvroDecoder.derived[EventRecord]
         val original = EventRecord(
           id = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
           timestamp = java.time.Instant.ofEpochMilli(1700000000000L),
@@ -177,8 +177,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("per-field annotations") {
 
       test("@fieldName round-trip") {
-        val encoder: AvroEncoder[AvroWithFieldName] = AvroEncoder.derive[AvroWithFieldName]
-        val decoder: AvroDecoder[AvroWithFieldName] = AvroDecoder.derive[AvroWithFieldName]
+        val encoder: AvroEncoder[AvroWithFieldName] = AvroEncoder.derived[AvroWithFieldName]
+        val decoder: AvroDecoder[AvroWithFieldName] = AvroDecoder.derived[AvroWithFieldName]
         val original = AvroWithFieldName("Alice", 30)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[AvroWithFieldName](bytes)(decoder)
@@ -186,8 +186,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("@transientField round-trip preserves non-transient fields") {
-        val encoder: AvroEncoder[AvroWithTransient] = AvroEncoder.derive[AvroWithTransient]
-        val decoder: AvroDecoder[AvroWithTransient] = AvroDecoder.derive[AvroWithTransient]
+        val encoder: AvroEncoder[AvroWithTransient] = AvroEncoder.derived[AvroWithTransient]
+        val decoder: AvroDecoder[AvroWithTransient] = AvroDecoder.derived[AvroWithTransient]
         val original = AvroWithTransient("Alice", Some("cached"))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[AvroWithTransient](bytes)(decoder)
@@ -196,8 +196,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("@fieldName and @transientField combined round-trip") {
-        val encoder: AvroEncoder[AvroWithBothAnnotations] = AvroEncoder.derive[AvroWithBothAnnotations]
-        val decoder: AvroDecoder[AvroWithBothAnnotations] = AvroDecoder.derive[AvroWithBothAnnotations]
+        val encoder: AvroEncoder[AvroWithBothAnnotations] = AvroEncoder.derived[AvroWithBothAnnotations]
+        val decoder: AvroDecoder[AvroWithBothAnnotations] = AvroDecoder.derived[AvroWithBothAnnotations]
         val original = AvroWithBothAnnotations("Alice", 42, true)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[AvroWithBothAnnotations](bytes)(decoder)
@@ -209,8 +209,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("tuples") {
 
       test("Tuple2 binary round-trip") {
-        val encoder: AvroEncoder[(String, Int)] = AvroEncoder.derive[(String, Int)]
-        val decoder: AvroDecoder[(String, Int)] = AvroDecoder.derive[(String, Int)]
+        val encoder: AvroEncoder[(String, Int)] = AvroEncoder.derived[(String, Int)]
+        val decoder: AvroDecoder[(String, Int)] = AvroDecoder.derived[(String, Int)]
         val original = ("hello", 42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[(String, Int)](bytes)(decoder)
@@ -218,8 +218,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("Tuple3 binary round-trip") {
-        val encoder: AvroEncoder[(Int, String, Boolean)] = AvroEncoder.derive[(Int, String, Boolean)]
-        val decoder: AvroDecoder[(Int, String, Boolean)] = AvroDecoder.derive[(Int, String, Boolean)]
+        val encoder: AvroEncoder[(Int, String, Boolean)] = AvroEncoder.derived[(Int, String, Boolean)]
+        val decoder: AvroDecoder[(Int, String, Boolean)] = AvroDecoder.derived[(Int, String, Boolean)]
         val original = (1, "world", true)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[(Int, String, Boolean)](bytes)(decoder)
@@ -231,8 +231,8 @@ final class AvroRoundTripSpec extends MacroSuite {
 
       test("BigDecimal decimal round-trip via binary") {
         implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
-        val encoder: AvroEncoder[BigDecimal] = AvroEncoder.derive[BigDecimal]
-        val decoder: AvroDecoder[BigDecimal] = AvroDecoder.derive[BigDecimal]
+        val encoder: AvroEncoder[BigDecimal] = AvroEncoder.derived[BigDecimal]
+        val decoder: AvroDecoder[BigDecimal] = AvroDecoder.derived[BigDecimal]
         val original = BigDecimal("123.45")
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[BigDecimal](bytes)(decoder)
@@ -241,8 +241,8 @@ final class AvroRoundTripSpec extends MacroSuite {
 
       test("case class with BigDecimal decimal round-trip") {
         implicit val config: AvroConfig = AvroConfig().withDecimalConfig(10, 2)
-        val encoder: AvroEncoder[WithBigDecimal] = AvroEncoder.derive[WithBigDecimal]
-        val decoder: AvroDecoder[WithBigDecimal] = AvroDecoder.derive[WithBigDecimal]
+        val encoder: AvroEncoder[WithBigDecimal] = AvroEncoder.derived[WithBigDecimal]
+        val decoder: AvroDecoder[WithBigDecimal] = AvroDecoder.derived[WithBigDecimal]
         val original = WithBigDecimal(BigDecimal("999.99"))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithBigDecimal](bytes)(decoder)
@@ -253,8 +253,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("Either") {
 
       test("Either[String, Int] Left round-trip") {
-        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derive[Either[String, Int]]
-        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derive[Either[String, Int]]
+        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derived[Either[String, Int]]
+        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derived[Either[String, Int]]
         val original: Either[String, Int] = Left("error")
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Either[String, Int]](bytes)(decoder)
@@ -262,8 +262,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("Either[String, Int] Right round-trip") {
-        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derive[Either[String, Int]]
-        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derive[Either[String, Int]]
+        val encoder: AvroEncoder[Either[String, Int]] = AvroEncoder.derived[Either[String, Int]]
+        val decoder: AvroDecoder[Either[String, Int]] = AvroDecoder.derived[Either[String, Int]]
         val original: Either[String, Int] = Right(42)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[Either[String, Int]](bytes)(decoder)
@@ -271,8 +271,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("case class with Either field round-trip") {
-        val encoder: AvroEncoder[WithEither] = AvroEncoder.derive[WithEither]
-        val decoder: AvroDecoder[WithEither] = AvroDecoder.derive[WithEither]
+        val encoder: AvroEncoder[WithEither] = AvroEncoder.derived[WithEither]
+        val decoder: AvroDecoder[WithEither] = AvroDecoder.derived[WithEither]
         val original = WithEither(Right(42))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithEither](bytes)(decoder)
@@ -283,8 +283,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("Java enum round-trip") {
 
       test("Java enum binary round-trip") {
-        val encoder: AvroEncoder[JavaColor] = AvroEncoder.derive[JavaColor]
-        val decoder: AvroDecoder[JavaColor] = AvroDecoder.derive[JavaColor]
+        val encoder: AvroEncoder[JavaColor] = AvroEncoder.derived[JavaColor]
+        val decoder: AvroDecoder[JavaColor] = AvroDecoder.derived[JavaColor]
         val original = JavaColor.GREEN
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[JavaColor](bytes)(decoder)
@@ -295,8 +295,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("Scala Enumeration round-trip") {
 
       test("Scala Enumeration binary round-trip") {
-        val encoder: AvroEncoder[ScalaColor.Value] = AvroEncoder.derive[ScalaColor.Value]
-        val decoder: AvroDecoder[ScalaColor.Value] = AvroDecoder.derive[ScalaColor.Value]
+        val encoder: AvroEncoder[ScalaColor.Value] = AvroEncoder.derived[ScalaColor.Value]
+        val decoder: AvroDecoder[ScalaColor.Value] = AvroDecoder.derived[ScalaColor.Value]
         val original: ScalaColor.Value = ScalaColor.Blue
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[ScalaColor.Value](bytes)(decoder)
@@ -307,8 +307,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("@avroFixed") {
 
       test("WithFixedBytes binary round-trip") {
-        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
-        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derive[WithFixedBytes]
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
+        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derived[WithFixedBytes]
         val original = WithFixedBytes(Array[Byte](1, 2, 3, 4))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithFixedBytes](bytes)(decoder)
@@ -316,8 +316,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("WithFixedAndRegularBytes binary round-trip (mixed FIXED + BYTES)") {
-        val encoder: AvroEncoder[WithFixedAndRegularBytes] = AvroEncoder.derive[WithFixedAndRegularBytes]
-        val decoder: AvroDecoder[WithFixedAndRegularBytes] = AvroDecoder.derive[WithFixedAndRegularBytes]
+        val encoder: AvroEncoder[WithFixedAndRegularBytes] = AvroEncoder.derived[WithFixedAndRegularBytes]
+        val decoder: AvroDecoder[WithFixedAndRegularBytes] = AvroDecoder.derived[WithFixedAndRegularBytes]
         val original = WithFixedAndRegularBytes(
           token = Array.fill[Byte](16)(0x42),
           data = Array[Byte](10, 20, 30)
@@ -332,8 +332,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("ByteBuffer") {
 
       test("WithByteBuffer binary round-trip") {
-        val encoder: AvroEncoder[WithByteBuffer] = AvroEncoder.derive[WithByteBuffer]
-        val decoder: AvroDecoder[WithByteBuffer] = AvroDecoder.derive[WithByteBuffer]
+        val encoder: AvroEncoder[WithByteBuffer] = AvroEncoder.derived[WithByteBuffer]
+        val decoder: AvroDecoder[WithByteBuffer] = AvroDecoder.derived[WithByteBuffer]
         val original = WithByteBuffer(java.nio.ByteBuffer.wrap(Array[Byte](1, 2, 3, 4)))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithByteBuffer](bytes)(decoder)
@@ -347,8 +347,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("@avroError") {
 
       test("@avroError record round-trip") {
-        val encoder: AvroEncoder[AvroErrorRecord] = AvroEncoder.derive[AvroErrorRecord]
-        val decoder: AvroDecoder[AvroErrorRecord] = AvroDecoder.derive[AvroErrorRecord]
+        val encoder: AvroEncoder[AvroErrorRecord] = AvroEncoder.derived[AvroErrorRecord]
+        val decoder: AvroDecoder[AvroErrorRecord] = AvroDecoder.derived[AvroErrorRecord]
         val original = AvroErrorRecord(500, "Internal Server Error")
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[AvroErrorRecord](bytes)(decoder)
@@ -359,8 +359,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("JSON") {
 
       test("simple case class") {
-        val encoder: AvroEncoder[SimplePerson] = AvroEncoder.derive[SimplePerson]
-        val decoder: AvroDecoder[SimplePerson] = AvroDecoder.derive[SimplePerson]
+        val encoder: AvroEncoder[SimplePerson] = AvroEncoder.derived[SimplePerson]
+        val decoder: AvroDecoder[SimplePerson] = AvroDecoder.derived[SimplePerson]
         val original = SimplePerson("Alice", 30)
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[SimplePerson](json)(decoder)
@@ -368,8 +368,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("nested case class") {
-        val encoder: AvroEncoder[PersonWithAddress] = AvroEncoder.derive[PersonWithAddress]
-        val decoder: AvroDecoder[PersonWithAddress] = AvroDecoder.derive[PersonWithAddress]
+        val encoder: AvroEncoder[PersonWithAddress] = AvroEncoder.derived[PersonWithAddress]
+        val decoder: AvroDecoder[PersonWithAddress] = AvroDecoder.derived[PersonWithAddress]
         val original = PersonWithAddress("Bob", 25, Address("Main St", "NYC"))
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[PersonWithAddress](json)(decoder)
@@ -380,8 +380,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("annotation round-trips") {
 
       test("@avroNoDefault round-trip (decode without default)") {
-        val encoder: AvroEncoder[WithNoDefault] = AvroEncoder.derive[WithNoDefault]
-        val decoder: AvroDecoder[WithNoDefault] = AvroDecoder.derive[WithNoDefault]
+        val encoder: AvroEncoder[WithNoDefault] = AvroEncoder.derived[WithNoDefault]
+        val decoder: AvroDecoder[WithNoDefault] = AvroDecoder.derived[WithNoDefault]
         val original = WithNoDefault("Alice", 42)
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[WithNoDefault](json)(decoder)
@@ -389,8 +389,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("@avroEnumDefault round-trip") {
-        val encoder: AvroEncoder[SizeWithDefault] = AvroEncoder.derive[SizeWithDefault]
-        val decoder: AvroDecoder[SizeWithDefault] = AvroDecoder.derive[SizeWithDefault]
+        val encoder: AvroEncoder[SizeWithDefault] = AvroEncoder.derived[SizeWithDefault]
+        val decoder: AvroDecoder[SizeWithDefault] = AvroDecoder.derived[SizeWithDefault]
         val original: SizeWithDefault = Large
         val json = AvroIO.toJson(original)(encoder)
         val decoded = AvroIO.fromJson[SizeWithDefault](json)(decoder)
@@ -401,8 +401,8 @@ final class AvroRoundTripSpec extends MacroSuite {
     group("recursive types") {
 
       test("self-recursive case class (RecursiveNode) binary round-trip") {
-        val encoder: AvroEncoder[RecursiveNode] = AvroEncoder.derive[RecursiveNode]
-        val decoder: AvroDecoder[RecursiveNode] = AvroDecoder.derive[RecursiveNode]
+        val encoder: AvroEncoder[RecursiveNode] = AvroEncoder.derived[RecursiveNode]
+        val decoder: AvroDecoder[RecursiveNode] = AvroDecoder.derived[RecursiveNode]
         val original = RecursiveNode(1, List(RecursiveNode(2, List()), RecursiveNode(3, List())))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[RecursiveNode](bytes)(decoder)
@@ -410,8 +410,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("recursive via Option (LinkedNode) binary round-trip") {
-        val encoder: AvroEncoder[LinkedNode] = AvroEncoder.derive[LinkedNode]
-        val decoder: AvroDecoder[LinkedNode] = AvroDecoder.derive[LinkedNode]
+        val encoder: AvroEncoder[LinkedNode] = AvroEncoder.derived[LinkedNode]
+        val decoder: AvroDecoder[LinkedNode] = AvroDecoder.derived[LinkedNode]
         val original = LinkedNode("a", Some(LinkedNode("b", Some(LinkedNode("c", None)))))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[LinkedNode](bytes)(decoder)
@@ -419,8 +419,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("indirect recursive type (RecursiveParent) binary round-trip") {
-        val encoder: AvroEncoder[RecursiveParent] = AvroEncoder.derive[RecursiveParent]
-        val decoder: AvroDecoder[RecursiveParent] = AvroDecoder.derive[RecursiveParent]
+        val encoder: AvroEncoder[RecursiveParent] = AvroEncoder.derived[RecursiveParent]
+        val decoder: AvroDecoder[RecursiveParent] = AvroDecoder.derived[RecursiveParent]
         val original = RecursiveParent(
           "root",
           List(
@@ -434,8 +434,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("mixed sealed trait (case objects + case classes) round-trip") {
-        val encoder: AvroEncoder[MixedEvent] = AvroEncoder.derive[MixedEvent]
-        val decoder: AvroDecoder[MixedEvent] = AvroDecoder.derive[MixedEvent]
+        val encoder: AvroEncoder[MixedEvent] = AvroEncoder.derived[MixedEvent]
+        val decoder: AvroDecoder[MixedEvent] = AvroDecoder.derived[MixedEvent]
         val values: List[MixedEvent] = List(Started, Stopped, Error("boom"))
         values.foreach { original =>
           val bytes = AvroIO.toBinary(original)(encoder)
@@ -445,8 +445,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("mutually recursive types (MutRecA/MutRecB) binary round-trip") {
-        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derive[MutRecA]
-        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derive[MutRecA]
+        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derived[MutRecA]
+        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derived[MutRecA]
         val original = MutRecA(1, Some(MutRecB("x", Some(MutRecA(2, None)))))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[MutRecA](bytes)(decoder)
@@ -454,8 +454,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("mutually recursive types (MutRecA) with None terminators round-trip") {
-        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derive[MutRecA]
-        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derive[MutRecA]
+        val encoder: AvroEncoder[MutRecA] = AvroEncoder.derived[MutRecA]
+        val decoder: AvroDecoder[MutRecA] = AvroDecoder.derived[MutRecA]
         val original = MutRecA(99, None)
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[MutRecA](bytes)(decoder)
@@ -463,8 +463,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("mutually recursive types (MutRecB) binary round-trip") {
-        val encoder: AvroEncoder[MutRecB] = AvroEncoder.derive[MutRecB]
-        val decoder: AvroDecoder[MutRecB] = AvroDecoder.derive[MutRecB]
+        val encoder: AvroEncoder[MutRecB] = AvroEncoder.derived[MutRecB]
+        val decoder: AvroDecoder[MutRecB] = AvroDecoder.derived[MutRecB]
         val original = MutRecB("hello", Some(MutRecA(10, Some(MutRecB("world", None)))))
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[MutRecB](bytes)(decoder)
@@ -472,8 +472,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("indirect recursion via container (Forest/TreeCaseClass) binary round-trip") {
-        val encoder: AvroEncoder[Forest] = AvroEncoder.derive[Forest]
-        val decoder: AvroDecoder[Forest] = AvroDecoder.derive[Forest]
+        val encoder: AvroEncoder[Forest] = AvroEncoder.derived[Forest]
+        val decoder: AvroDecoder[Forest] = AvroDecoder.derived[Forest]
         val original = Forest(
           List(
             TreeCaseClass(1, List(TreeCaseClass(2, List()), TreeCaseClass(3, List()))),
@@ -486,8 +486,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("@avroScalePrecision on BigDecimal field (issue #110)") {
-        val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derive[WithPerFieldDecimal]
-        val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derive[WithPerFieldDecimal]
+        val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derived[WithPerFieldDecimal]
+        val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derived[WithPerFieldDecimal]
         val original = WithPerFieldDecimal(price = BigDecimal("123.4567"), label = "test")
         val bytes = AvroIO.toBinary(original)(encoder)
         val decoded = AvroIO.fromBinary[WithPerFieldDecimal](bytes)(decoder)
@@ -495,8 +495,8 @@ final class AvroRoundTripSpec extends MacroSuite {
       }
 
       test("@avroName on sealed trait subtypes (issue #108)") {
-        val encoder: AvroEncoder[OuterWithRenamedInner] = AvroEncoder.derive[OuterWithRenamedInner]
-        val decoder: AvroDecoder[OuterWithRenamedInner] = AvroDecoder.derive[OuterWithRenamedInner]
+        val encoder: AvroEncoder[OuterWithRenamedInner] = AvroEncoder.derived[OuterWithRenamedInner]
+        val decoder: AvroDecoder[OuterWithRenamedInner] = AvroDecoder.derived[OuterWithRenamedInner]
         val values = List(
           OuterWithRenamedInner(RenamedFoo("hello")),
           OuterWithRenamedInner(RenamedBar("world"))

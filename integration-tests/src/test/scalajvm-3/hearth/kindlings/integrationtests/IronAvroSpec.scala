@@ -10,8 +10,8 @@ final class IronAvroSpec extends MacroSuite {
   group("Iron + Avro") {
 
     test("round-trip") {
-      val encoder: AvroEncoder[IronPerson] = AvroEncoder.derive[IronPerson]
-      val decoder: AvroDecoder[IronPerson] = AvroDecoder.derive[IronPerson]
+      val encoder: AvroEncoder[IronPerson] = AvroEncoder.derived[IronPerson]
+      val decoder: AvroDecoder[IronPerson] = AvroDecoder.derived[IronPerson]
       val v = IronPerson("Alice", 30)
       val decoded = decoder.decode(encoder.encode(v))
       assert(decoded.name == "Alice")

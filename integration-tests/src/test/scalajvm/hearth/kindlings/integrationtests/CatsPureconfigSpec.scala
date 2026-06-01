@@ -12,8 +12,8 @@ final class CatsPureconfigSpec extends MacroSuite {
     group("NonEmptyList") {
 
       test("round-trip") {
-        val reader: ConfigReader[WithNEL] = KindlingsConfigReader.derive[WithNEL]
-        val writer: ConfigWriter[WithNEL] = KindlingsConfigWriter.derive[WithNEL]
+        val reader: ConfigReader[WithNEL] = KindlingsConfigReader.derived[WithNEL]
+        val writer: ConfigWriter[WithNEL] = KindlingsConfigWriter.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val config = writer.to(v)
         val result = ConfigSource.fromConfig(config.atKey("root")).at("root").load[WithNEL](reader)
@@ -24,8 +24,8 @@ final class CatsPureconfigSpec extends MacroSuite {
     group("Chain") {
 
       test("round-trip") {
-        val reader: ConfigReader[WithChain] = KindlingsConfigReader.derive[WithChain]
-        val writer: ConfigWriter[WithChain] = KindlingsConfigWriter.derive[WithChain]
+        val reader: ConfigReader[WithChain] = KindlingsConfigReader.derived[WithChain]
+        val writer: ConfigWriter[WithChain] = KindlingsConfigWriter.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val config = writer.to(v)
         val result = ConfigSource.fromConfig(config.atKey("root")).at("root").load[WithChain](reader)
@@ -36,8 +36,8 @@ final class CatsPureconfigSpec extends MacroSuite {
     group("Const") {
 
       test("round-trip") {
-        val reader: ConfigReader[WithConst] = KindlingsConfigReader.derive[WithConst]
-        val writer: ConfigWriter[WithConst] = KindlingsConfigWriter.derive[WithConst]
+        val reader: ConfigReader[WithConst] = KindlingsConfigReader.derived[WithConst]
+        val writer: ConfigWriter[WithConst] = KindlingsConfigWriter.derived[WithConst]
         val v = WithConst(Const("hello"))
         val config = writer.to(v)
         val result = ConfigSource.fromConfig(config.atKey("root")).at("root").load[WithConst](reader)

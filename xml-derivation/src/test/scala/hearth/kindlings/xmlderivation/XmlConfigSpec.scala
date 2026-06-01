@@ -279,14 +279,14 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with snake_case config") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames
-        val encoder = KindlingsXmlEncoder.derive[CamelCasePerson]
+        val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
         assert(result.label == "person")
       }
 
       test("decoder derives with snake_case config") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames
-        val decoder = KindlingsXmlDecoder.derive[CamelCasePerson]
+        val decoder = KindlingsXmlDecoder.derived[CamelCasePerson]
         // The decoder exists and can be called
         assert(decoder != null)
       }
@@ -296,7 +296,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with kebab-case config") {
         implicit val config: XmlConfig = XmlConfig().withKebabCaseFieldNames
-        val encoder = KindlingsXmlEncoder.derive[CamelCasePerson]
+        val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
         assert(result.label == "person")
       }
@@ -306,7 +306,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with PascalCase config") {
         implicit val config: XmlConfig = XmlConfig().withPascalCaseFieldNames
-        val encoder = KindlingsXmlEncoder.derive[CamelCasePerson]
+        val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
         assert(result.label == "person")
       }
@@ -316,7 +316,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with SCREAMING_SNAKE_CASE config") {
         implicit val config: XmlConfig = XmlConfig().withScreamingSnakeCaseFieldNames
-        val encoder = KindlingsXmlEncoder.derive[CamelCasePerson]
+        val encoder = KindlingsXmlEncoder.derived[CamelCasePerson]
         val result = encoder.encode(CamelCasePerson("Alice", "Smith"), "person")
         assert(result.label == "person")
       }
@@ -326,7 +326,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives sealed trait with snake_case constructor names") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseConstructorNames
-        val encoder = KindlingsXmlEncoder.derive[Shape]
+        val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
         assert(result.label == "shape")
       }
@@ -336,7 +336,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives sealed trait with kebab-case constructor names") {
         implicit val config: XmlConfig = XmlConfig().withKebabCaseConstructorNames
-        val encoder = KindlingsXmlEncoder.derive[Shape]
+        val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
         assert(result.label == "shape")
       }
@@ -346,7 +346,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives sealed trait without discriminator") {
         implicit val config: XmlConfig = XmlConfig().withNoDiscriminator
-        val encoder = KindlingsXmlEncoder.derive[Shape]
+        val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
         assert(result.label == "shape")
       }
@@ -356,7 +356,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives sealed trait with enumAsStrings config") {
         implicit val config: XmlConfig = XmlConfig().withEnumAsStrings
-        val encoder = KindlingsXmlEncoder.derive[Animal]
+        val encoder = KindlingsXmlEncoder.derived[Animal]
         val result = encoder.encode(Dog("Rex", "Labrador"), "animal")
         assert(result.label == "animal")
       }
@@ -366,14 +366,14 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with useDefaults config") {
         implicit val config: XmlConfig = XmlConfig().withUseDefaults
-        val encoder = KindlingsXmlEncoder.derive[WithDefaults]
+        val encoder = KindlingsXmlEncoder.derived[WithDefaults]
         val result = encoder.encode(WithDefaults("Alice"), "user")
         assert(result.label == "user")
       }
 
       test("decoder derives with useDefaults config") {
         implicit val config: XmlConfig = XmlConfig().withUseDefaults
-        val decoder = KindlingsXmlDecoder.derive[WithDefaults]
+        val decoder = KindlingsXmlDecoder.derived[WithDefaults]
         assert(decoder != null)
       }
     }
@@ -382,7 +382,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with transientNone config") {
         implicit val config: XmlConfig = XmlConfig().withTransientNone
-        val encoder = KindlingsXmlEncoder.derive[Box[Option[Int]]]
+        val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
         val resultSome = encoder.encode(Box(Some(42)), "box")
         assert(resultSome.label == "box")
         val resultNone = encoder.encode(Box(None), "box")
@@ -394,7 +394,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with transientEmpty config") {
         implicit val config: XmlConfig = XmlConfig().withTransientEmpty
-        val encoder = KindlingsXmlEncoder.derive[TeamWithMembers]
+        val encoder = KindlingsXmlEncoder.derived[TeamWithMembers]
         val result = encoder.encode(TeamWithMembers("Team A", List.empty), "team")
         assert(result.label == "team")
       }
@@ -404,7 +404,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with Attribute default field mode") {
         implicit val config: XmlConfig = XmlConfig().withAttributesByDefault
-        val encoder = KindlingsXmlEncoder.derive[SimplePerson]
+        val encoder = KindlingsXmlEncoder.derived[SimplePerson]
         val result = encoder.encode(SimplePerson("Alice", 30), "person")
         assert(result.label == "person")
       }
@@ -414,7 +414,7 @@ final class XmlConfigSpec extends MacroSuite {
 
       test("encoder derives with multiple config options") {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseFieldNames.withUseDefaults.withTransientNone
-        val encoder = KindlingsXmlEncoder.derive[WithDefaults]
+        val encoder = KindlingsXmlEncoder.derived[WithDefaults]
         val result = encoder.encode(WithDefaults("Alice"), "user")
         assert(result.label == "user")
       }
