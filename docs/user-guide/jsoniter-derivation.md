@@ -45,7 +45,7 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
 
     case class Person(name: String, age: Int)
 
-    implicit val codec: JsonValueCodec[Person] = KindlingsJsonValueCodec.derive[Person]
+    implicit val codec: JsonValueCodec[Person] = KindlingsJsonValueCodec.derived[Person]
 
     val bytes = writeToArray(Person("Alice", 30))
     println(new String(bytes))
@@ -67,13 +67,11 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsJsonValueCodec.derive[A]` | `JsonValueCodec[A]` | Semi-automatic codec |
-| `KindlingsJsonValueCodec.derived[A]` | `KindlingsJsonValueCodec[A]` | Sanely-automatic (given/implicit) |
+| `KindlingsJsonValueCodec.derived[A]` | `KindlingsJsonValueCodec[A]` | Sanely-automatic codec (given/implicit, also usable as semi-automatic) |
 | `KindlingsJsonValueCodec.writeToString[A](value)` | `String` | Inline encoding |
 | `KindlingsJsonValueCodec.readFromString[A](json)` | `Either[JsonReaderException, A]` | Inline decoding |
-| `KindlingsJsonCodec.derive[A]` | `JsonCodec[A]` | Combined value + key codec |
+| `KindlingsJsonCodec.derived[A]` | `KindlingsJsonCodec[A]` | Sanely-automatic combined value + key codec (given/implicit, also usable as semi-automatic) |
 | `KindlingsJsonCodec.deriveKeyCodec[A]` | `JsonKeyCodec[A]` | Key codec (for map keys) |
-| `KindlingsJsonCodec.derived[A]` | `KindlingsJsonCodec[A]` | Sanely-automatic |
 
 All methods take an implicit/using `JsoniterConfig` parameter (defaults to `JsoniterConfig.default`).
 
@@ -148,7 +146,7 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
     implicit val config: JsoniterConfig = JsoniterConfig.default
       .withDiscriminator("type")
 
-    implicit val codec: JsonValueCodec[Shape] = KindlingsJsonValueCodec.derive[Shape]
+    implicit val codec: JsonValueCodec[Shape] = KindlingsJsonValueCodec.derived[Shape]
 
     println(writeToString[Shape](Circle(5.0)))
     // expected output:
@@ -185,7 +183,7 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
       debug: Option[Boolean] = None
     )
 
-    implicit val codec: JsonValueCodec[Settings] = KindlingsJsonValueCodec.derive[Settings]
+    implicit val codec: JsonValueCodec[Settings] = KindlingsJsonValueCodec.derived[Settings]
 
     // Default and None fields are omitted
     println(writeToString(Settings("localhost")))

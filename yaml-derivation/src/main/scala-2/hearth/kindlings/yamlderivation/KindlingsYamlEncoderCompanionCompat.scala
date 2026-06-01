@@ -5,10 +5,6 @@ import scala.language.experimental.macros
 
 private[yamlderivation] trait KindlingsYamlEncoderCompanionCompat { this: KindlingsYamlEncoder.type =>
 
-  @deprecated("Use .derived instead", "next")
-  def derive[A](implicit config: YamlConfig): YamlEncoder[A] =
-    macro internal.compiletime.EncoderMacros.deriveEncoderImpl[A]
-
   def encode[A](value: A)(implicit config: YamlConfig): Node =
     macro internal.compiletime.EncoderMacros.deriveInlineEncodeImpl[A]
 

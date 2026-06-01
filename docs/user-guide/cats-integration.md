@@ -133,7 +133,7 @@ Each provider teaches all derivation modules how to encode and decode the corres
       settings: NonEmptyMap[String, String]
     )
 
-    val codec = KindlingsJsonValueCodec.derive[Config]
+    val codec = KindlingsJsonValueCodec.derived[Config]
     val config = Config(NonEmptyMap.of("host" -> "localhost", "port" -> "8080"))
     println(writeToString(config)(codec))
     // expected output:

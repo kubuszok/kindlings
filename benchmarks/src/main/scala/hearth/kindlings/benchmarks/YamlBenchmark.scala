@@ -6,14 +6,14 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsYamlInstances {
-  val simpleCCEncoder: YamlEncoder[SimpleCC] = KindlingsYamlEncoder.derive[SimpleCC]
-  val simpleCCDecoder: YamlDecoder[SimpleCC] = KindlingsYamlDecoder.derive[SimpleCC]
-  val personEncoder: YamlEncoder[Person] = KindlingsYamlEncoder.derive[Person]
-  val personDecoder: YamlDecoder[Person] = KindlingsYamlDecoder.derive[Person]
-  val eventEncoder: YamlEncoder[Event] = KindlingsYamlEncoder.derive[Event]
-  val eventDecoder: YamlDecoder[Event] = KindlingsYamlDecoder.derive[Event]
-  val simpleADTEncoder: YamlEncoder[SimpleADT] = KindlingsYamlEncoder.derive[SimpleADT]
-  val simpleADTDecoder: YamlDecoder[SimpleADT] = KindlingsYamlDecoder.derive[SimpleADT]
+  val simpleCCEncoder: YamlEncoder[SimpleCC] = KindlingsYamlEncoder.derived[SimpleCC]
+  val simpleCCDecoder: YamlDecoder[SimpleCC] = KindlingsYamlDecoder.derived[SimpleCC]
+  val personEncoder: YamlEncoder[Person] = KindlingsYamlEncoder.derived[Person]
+  val personDecoder: YamlDecoder[Person] = KindlingsYamlDecoder.derived[Person]
+  val eventEncoder: YamlEncoder[Event] = KindlingsYamlEncoder.derived[Event]
+  val eventDecoder: YamlDecoder[Event] = KindlingsYamlDecoder.derived[Event]
+  val simpleADTEncoder: YamlEncoder[SimpleADT] = KindlingsYamlEncoder.derived[SimpleADT]
+  val simpleADTDecoder: YamlDecoder[SimpleADT] = KindlingsYamlDecoder.derived[SimpleADT]
 }
 
 @State(Scope.Benchmark)

@@ -35,7 +35,7 @@ while (...) {
 new SimpleCC(_name, _age, _active)
 ```
 
-**Kindlings** (`KindlingsJsonValueCodec.derive[SimpleCC]`) generates:
+**Kindlings** (`KindlingsJsonValueCodec.derived[SimpleCC]`) generates:
 ```scala
 JsoniterDerivationUtils.readObject[SimpleCC](reader, 3, (arr: Array[Any]) => {
   new SimpleCC(

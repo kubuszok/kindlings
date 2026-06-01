@@ -9,10 +9,10 @@ import java.util.concurrent.TimeUnit
 object KindlingsTapirInstances {
   implicit val preferCirceConfig: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
 
-  val simpleCCSchema: Schema[SimpleCC] = KindlingsSchema.derive[SimpleCC]
-  val personSchema: Schema[Person] = KindlingsSchema.derive[Person]
-  val eventSchema: Schema[Event] = KindlingsSchema.derive[Event]
-  val simpleADTSchema: Schema[SimpleADT] = KindlingsSchema.derive[SimpleADT]
+  val simpleCCSchema: Schema[SimpleCC] = KindlingsSchema.derived[SimpleCC]
+  val personSchema: Schema[Person] = KindlingsSchema.derived[Person]
+  val eventSchema: Schema[Event] = KindlingsSchema.derived[Event]
+  val simpleADTSchema: Schema[SimpleADT] = KindlingsSchema.derived[SimpleADT]
 }
 
 object OriginalTapirSemiAutoInstances {

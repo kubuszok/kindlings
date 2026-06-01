@@ -4,10 +4,6 @@ import scala.language.experimental.macros
 
 private[xmlderivation] trait KindlingsXmlEncoderCompanionCompat { this: KindlingsXmlEncoder.type =>
 
-  @deprecated("Use .derived instead", "next")
-  def derive[A](implicit config: XmlConfig): XmlEncoder[A] =
-    macro internal.compiletime.EncoderMacros.deriveEncoderImpl[A]
-
   def encode[A](value: A, elementName: String)(implicit config: XmlConfig): scala.xml.Elem =
     macro internal.compiletime.EncoderMacros.deriveInlineEncodeImpl[A]
 

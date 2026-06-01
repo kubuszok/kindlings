@@ -12,25 +12,25 @@
 
 Sanely-automatic derivation means three things:
 
-1. **Semi-automatic is recursive.** When you call `KindlingsEncoder.derive[Person]`, it derives instances for `Person` and all its nested types (`Address`, `List[Address]`, etc.) in a single macro expansion — no need to declare instances for each type manually.
+1. **Semi-automatic is recursive.** When you call `KindlingsEncoder.derived[Person]`, it derives instances for `Person` and all its nested types (`Address`, `List[Address]`, etc.) in a single macro expansion — no need to declare instances for each type manually.
 
 2. **Automatic has no overhead over semi-automatic.** For a single derivation site, automatic and semi-automatic produce identical generated code — same compilation cost, same runtime performance. The generated code is as fast as what you'd write by hand.
 
 3. **Errors are informative and actionable.** When derivation fails, you get a clear message telling you which type is missing an instance and where in the type hierarchy the problem is — not a cryptic `diverging implicit expansion`.
 
-If the same type is auto-derived at multiple call sites, each site derives independently. This is still cheaper than Shapeless/Mirrors-based automatic derivation, but if you want to guarantee a type is derived exactly once, use semi-automatic (`KindlingsEncoder.derive[A]`) and assign it to an `implicit val` / `given`.
+If the same type is auto-derived at multiple call sites, each site derives independently. This is still cheaper than Shapeless/Mirrors-based automatic derivation, but if you want to guarantee a type is derived exactly once, use semi-automatic (`KindlingsEncoder.derived[A]`) and assign it to an `implicit val` / `given`.
 
 ## Can I use both Kindlings and the original library's derivation?
 
 Yes. Kindlings type classes extend their parent library's types (`KindlingsEncoder[A] extends Encoder[A]`, `KindlingsDecoder[A] extends Decoder[A]`, etc.). You can mix manually written instances with derived ones.
 
-If both Kindlings' and the original library's automatic derivation are in scope, you may get ambiguous implicits. In that case, use semi-automatic derivation (`KindlingsEncoder.derive[A]`) to be explicit.
+If both Kindlings' and the original library's automatic derivation are in scope, you may get ambiguous implicits. In that case, use semi-automatic derivation (`KindlingsEncoder.derived[A]`) to be explicit.
 
 ## How do I migrate from circe-generic?
 
 1. Replace the dependency: `circe-generic` / `circe-generic-extras` with `kindlings-circe-derivation`
 2. Replace imports: `io.circe.generic.auto._` or `io.circe.generic.semiauto._` with `hearth.kindlings.circederivation._`
-3. Replace `deriveEncoder[A]` / `deriveDecoder[A]` with `KindlingsEncoder.derive[A]` / `KindlingsDecoder.derive[A]`
+3. Replace `deriveEncoder[A]` / `deriveDecoder[A]` with `KindlingsEncoder.derived[A]` / `KindlingsDecoder.derived[A]`
 4. If using `@ConfiguredJsonCodec` or circe `Configuration`, switch to Kindlings' `Configuration` class (same builder API)
 
 ## How do I migrate from kittens?
@@ -43,7 +43,7 @@ If both Kindlings' and the original library's automatic derivation are in scope,
 ## How do I migrate from jsoniter-scala macros?
 
 1. Replace the dependency: `jsoniter-scala-macros` with `kindlings-jsoniter-derivation`
-2. Replace `JsonCodecMaker.make[A]` with `KindlingsJsonValueCodec.derive[A]`
+2. Replace `JsonCodecMaker.make[A]` with `KindlingsJsonValueCodec.derived[A]`
 3. Replace `CodecMakerConfig` with `JsoniterConfig` (similar builder API)
 
 ## Which modules are JVM-only?

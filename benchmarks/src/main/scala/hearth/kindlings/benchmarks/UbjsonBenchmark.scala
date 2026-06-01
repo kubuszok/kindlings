@@ -5,10 +5,10 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsUbjsonInstances {
-  val simpleCCCodec: UBJsonValueCodec[SimpleCC] = UBJsonValueCodec.derive[SimpleCC]
-  val personCodec: UBJsonValueCodec[Person] = UBJsonValueCodec.derive[Person]
-  val eventCodec: UBJsonValueCodec[Event] = UBJsonValueCodec.derive[Event]
-  val simpleADTCodec: UBJsonValueCodec[SimpleADT] = UBJsonValueCodec.derive[SimpleADT]
+  val simpleCCCodec: UBJsonValueCodec[SimpleCC] = UBJsonValueCodec.derived[SimpleCC]
+  val personCodec: UBJsonValueCodec[Person] = UBJsonValueCodec.derived[Person]
+  val eventCodec: UBJsonValueCodec[Event] = UBJsonValueCodec.derived[Event]
+  val simpleADTCodec: UBJsonValueCodec[SimpleADT] = UBJsonValueCodec.derived[SimpleADT]
 }
 
 @State(Scope.Benchmark)

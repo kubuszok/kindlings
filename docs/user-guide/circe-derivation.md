@@ -55,15 +55,12 @@ Drop-in replacement for `circe-generic` / `circe-generic-extras` — derives `En
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsEncoder.derive[A]` | `Encoder[A]` | Semi-automatic encoder |
-| `KindlingsEncoder.deriveAsObject[A]` | `Encoder.AsObject[A]` | Semi-automatic object encoder |
+| `KindlingsEncoder.derived[A]` | `KindlingsEncoder[A]` | Sanely-automatic encoder (given/implicit, also usable as semi-automatic) |
+| `KindlingsEncoder.deriveAsObject[A]` | `Encoder.AsObject[A]` | Object encoder |
 | `KindlingsEncoder.encode[A](value)` | `Json` | Inline encoding (no instance allocation) |
-| `KindlingsEncoder.derived[A]` | `KindlingsEncoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsDecoder.derive[A]` | `Decoder[A]` | Semi-automatic decoder |
+| `KindlingsDecoder.derived[A]` | `KindlingsDecoder[A]` | Sanely-automatic decoder (given/implicit, also usable as semi-automatic) |
 | `KindlingsDecoder.decode[A](json)` | `Either[DecodingFailure, A]` | Inline decoding |
-| `KindlingsDecoder.derived[A]` | `KindlingsDecoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsCodecAsObject.derive[A]` | `Codec.AsObject[A]` | Semi-automatic codec |
-| `KindlingsCodecAsObject.derived[A]` | `KindlingsCodecAsObject[A]` | Sanely-automatic codec |
+| `KindlingsCodecAsObject.derived[A]` | `KindlingsCodecAsObject[A]` | Sanely-automatic codec (given/implicit, also usable as semi-automatic) |
 
 All methods take an implicit/using `Configuration` parameter (defaults to `Configuration.default`).
 

@@ -110,7 +110,7 @@ In most libraries, you choose between **automatic** and **semi-automatic** deriv
 
 Kindlings eliminates this choice:
 
-- **Semi-automatic is recursive.** `KindlingsEncoder.derive[Person]` derives not just `Person` but also `Address`, `List[Address]`, and anything else reachable — no need to define instances for nested types manually.
+- **Semi-automatic is recursive.** `KindlingsEncoder.derived[Person]` derives not just `Person` but also `Address`, `List[Address]`, and anything else reachable — no need to define instances for nested types manually.
 - **Automatic imposes no overhead.** For a single derivation site, automatic and semi-automatic produce identical code — same compilation cost, same runtime performance. The generated code is as fast as what you'd write by hand.
 - **Errors are informative and actionable.** When derivation fails, you get a clear message telling you exactly which type is missing an instance and where in the hierarchy the problem is.
 

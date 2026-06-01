@@ -8,14 +8,14 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 
 object KindlingsCirceInstances {
 
-  val simpleCCSemiAutoEncoder: Encoder[SimpleCC] = KindlingsEncoder.derive[SimpleCC]
-  val simpleCCSemiAutoDecoder: Decoder[SimpleCC] = KindlingsDecoder.derive[SimpleCC]
-  val personSemiAutoEncoder: Encoder[Person] = KindlingsEncoder.derive[Person]
-  val personSemiAutoDecoder: Decoder[Person] = KindlingsDecoder.derive[Person]
-  val eventSemiAutoEncoder: Encoder[Event] = KindlingsEncoder.derive[Event]
-  val eventSemiAutoDecoder: Decoder[Event] = KindlingsDecoder.derive[Event]
-  val simpleADTSemiAutoEncoder: Encoder[SimpleADT] = KindlingsEncoder.derive[SimpleADT]
-  val simpleADTSemiAutoDecoder: Decoder[SimpleADT] = KindlingsDecoder.derive[SimpleADT]
+  val simpleCCSemiAutoEncoder: Encoder[SimpleCC] = KindlingsEncoder.derived[SimpleCC]
+  val simpleCCSemiAutoDecoder: Decoder[SimpleCC] = KindlingsDecoder.derived[SimpleCC]
+  val personSemiAutoEncoder: Encoder[Person] = KindlingsEncoder.derived[Person]
+  val personSemiAutoDecoder: Decoder[Person] = KindlingsDecoder.derived[Person]
+  val eventSemiAutoEncoder: Encoder[Event] = KindlingsEncoder.derived[Event]
+  val eventSemiAutoDecoder: Decoder[Event] = KindlingsDecoder.derived[Event]
+  val simpleADTSemiAutoEncoder: Encoder[SimpleADT] = KindlingsEncoder.derived[SimpleADT]
+  val simpleADTSemiAutoDecoder: Decoder[SimpleADT] = KindlingsDecoder.derived[SimpleADT]
 
   val simpleCCAutoEncoder: KindlingsEncoder[SimpleCC] = KindlingsEncoder.derived[SimpleCC]
   val simpleCCAutoDecoder: KindlingsDecoder[SimpleCC] = KindlingsDecoder.derived[SimpleCC]
@@ -29,10 +29,10 @@ object KindlingsCirceInstances {
 
 object KindlingsJsoniterInstances {
 
-  val simpleCCSemiAutoCodec: JsonValueCodec[SimpleCC] = KindlingsJsonValueCodec.derive[SimpleCC]
-  val personSemiAutoCodec: JsonValueCodec[Person] = KindlingsJsonValueCodec.derive[Person]
-  val eventSemiAutoCodec: JsonValueCodec[Event] = KindlingsJsonValueCodec.derive[Event]
-  val simpleADTSemiAutoCodec: JsonValueCodec[SimpleADT] = KindlingsJsonValueCodec.derive[SimpleADT]
+  val simpleCCSemiAutoCodec: JsonValueCodec[SimpleCC] = KindlingsJsonValueCodec.derived[SimpleCC]
+  val personSemiAutoCodec: JsonValueCodec[Person] = KindlingsJsonValueCodec.derived[Person]
+  val eventSemiAutoCodec: JsonValueCodec[Event] = KindlingsJsonValueCodec.derived[Event]
+  val simpleADTSemiAutoCodec: JsonValueCodec[SimpleADT] = KindlingsJsonValueCodec.derived[SimpleADT]
 
   val simpleCCAutoCodec: KindlingsJsonValueCodec[SimpleCC] = KindlingsJsonValueCodec.derived[SimpleCC]
   val personAutoCodec: KindlingsJsonValueCodec[Person] = KindlingsJsonValueCodec.derived[Person]

@@ -7,10 +7,10 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 object KindlingsPureconfigInstances {
-  val simpleCCReader: ConfigReader[SimpleCC] = KindlingsConfigReader.derive[SimpleCC]
-  val simpleCCWriter: ConfigWriter[SimpleCC] = KindlingsConfigWriter.derive[SimpleCC]
-  val personReader: ConfigReader[Person] = KindlingsConfigReader.derive[Person]
-  val personWriter: ConfigWriter[Person] = KindlingsConfigWriter.derive[Person]
+  val simpleCCReader: ConfigReader[SimpleCC] = KindlingsConfigReader.derived[SimpleCC]
+  val simpleCCWriter: ConfigWriter[SimpleCC] = KindlingsConfigWriter.derived[SimpleCC]
+  val personReader: ConfigReader[Person] = KindlingsConfigReader.derived[Person]
+  val personWriter: ConfigWriter[Person] = KindlingsConfigWriter.derived[Person]
 }
 
 @State(Scope.Benchmark)
