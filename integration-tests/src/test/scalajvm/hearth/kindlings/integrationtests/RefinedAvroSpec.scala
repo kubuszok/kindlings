@@ -14,8 +14,8 @@ final class RefinedAvroSpec extends MacroSuite {
   group("Refined + Avro") {
 
     test("round-trip") {
-      val encoder = AvroEncoder.derive[RefinedPerson]
-      val decoder = AvroDecoder.derive[RefinedPerson]
+      val encoder = AvroEncoder.derived[RefinedPerson]
+      val decoder = AvroDecoder.derived[RefinedPerson]
       val v = RefinedPerson(alice, thirty)
       val decoded = decoder.decode(encoder.encode(v))
       decoded.name ==> alice

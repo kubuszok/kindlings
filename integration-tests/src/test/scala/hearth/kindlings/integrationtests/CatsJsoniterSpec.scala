@@ -15,7 +15,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("NonEmptyList") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithNEL] = KindlingsJsonValueCodec.derive[WithNEL]
+        implicit val codec: JsonValueCodec[WithNEL] = KindlingsJsonValueCodec.derived[WithNEL]
         val v = WithNEL(NonEmptyList.of(1, 2, 3))
         val decoded = roundTrip(v)
         decoded.values ==> NonEmptyList.of(1, 2, 3)
@@ -25,7 +25,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("NonEmptyVector") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithNEV] = KindlingsJsonValueCodec.derive[WithNEV]
+        implicit val codec: JsonValueCodec[WithNEV] = KindlingsJsonValueCodec.derived[WithNEV]
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val decoded = roundTrip(v)
         decoded.values ==> NonEmptyVector.of(10, 20)
@@ -35,7 +35,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("NonEmptyChain") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithNEC] = KindlingsJsonValueCodec.derive[WithNEC]
+        implicit val codec: JsonValueCodec[WithNEC] = KindlingsJsonValueCodec.derived[WithNEC]
         val v = WithNEC(NonEmptyChain.of(7, 8))
         val decoded = roundTrip(v)
         assert(decoded.values.iterator.toList == List(7, 8))
@@ -45,14 +45,14 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("Chain") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithChain] = KindlingsJsonValueCodec.derive[WithChain]
+        implicit val codec: JsonValueCodec[WithChain] = KindlingsJsonValueCodec.derived[WithChain]
         val v = WithChain(Chain(1, 2, 3))
         val decoded = roundTrip(v)
         assert(decoded.values.toList == List(1, 2, 3))
       }
 
       test("round-trip empty") {
-        implicit val codec: JsonValueCodec[WithChain] = KindlingsJsonValueCodec.derive[WithChain]
+        implicit val codec: JsonValueCodec[WithChain] = KindlingsJsonValueCodec.derived[WithChain]
         val v = WithChain(Chain.empty)
         val decoded = roundTrip(v)
         assert(decoded.values.toList == List.empty)
@@ -62,7 +62,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("NonEmptyMap") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithNEM] = KindlingsJsonValueCodec.derive[WithNEM]
+        implicit val codec: JsonValueCodec[WithNEM] = KindlingsJsonValueCodec.derived[WithNEM]
         val v = WithNEM(NonEmptyMap.of("x" -> 1, "y" -> 2))
         val decoded = roundTrip(v)
         assert(decoded.values.toSortedMap.size == 2)
@@ -72,7 +72,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("NonEmptySet") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithNES] = KindlingsJsonValueCodec.derive[WithNES]
+        implicit val codec: JsonValueCodec[WithNES] = KindlingsJsonValueCodec.derived[WithNES]
         val v = WithNES(NonEmptySet.of(3, 1, 2))
         val decoded = roundTrip(v)
         assert(decoded.values.toSortedSet == Set(1, 2, 3))
@@ -82,7 +82,7 @@ final class CatsJsoniterSpec extends MacroSuite {
     group("Const") {
 
       test("round-trip") {
-        implicit val codec: JsonValueCodec[WithConst] = KindlingsJsonValueCodec.derive[WithConst]
+        implicit val codec: JsonValueCodec[WithConst] = KindlingsJsonValueCodec.derived[WithConst]
         val v = WithConst(Const("hello"))
         val decoded = roundTrip(v)
         decoded.value.getConst ==> "hello"

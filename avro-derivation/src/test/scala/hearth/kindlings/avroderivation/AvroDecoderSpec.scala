@@ -399,7 +399,7 @@ final class AvroDecoderSpec extends MacroSuite {
     group("derived instance") {
 
       test("derive creates AvroDecoder instance") {
-        val decoder = AvroDecoder.derive[SimplePerson]
+        val decoder = AvroDecoder.derived[SimplePerson]
         val schema = decoder.schema
         val record = new GenericData.Record(schema)
         record.put("name", "Test")
@@ -412,8 +412,8 @@ final class AvroDecoderSpec extends MacroSuite {
     group("@avroFixed") {
 
       test("decode from encoded FIXED data produces correct Array[Byte]") {
-        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derive[WithFixedBytes]
-        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derive[WithFixedBytes]
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
+        val decoder: AvroDecoder[WithFixedBytes] = AvroDecoder.derived[WithFixedBytes]
         val original = WithFixedBytes(Array[Byte](1, 2, 3, 4))
         val encoded = encoder.encode(original)
         val decoded = decoder.decode(encoded)
@@ -424,8 +424,8 @@ final class AvroDecoderSpec extends MacroSuite {
     group("custom field names") {
 
       test("@fieldName decodes with custom field names") {
-        val encoder: AvroEncoder[AvroWithCustomFieldNames] = AvroEncoder.derive[AvroWithCustomFieldNames]
-        val decoder: AvroDecoder[AvroWithCustomFieldNames] = AvroDecoder.derive[AvroWithCustomFieldNames]
+        val encoder: AvroEncoder[AvroWithCustomFieldNames] = AvroEncoder.derived[AvroWithCustomFieldNames]
+        val decoder: AvroDecoder[AvroWithCustomFieldNames] = AvroDecoder.derived[AvroWithCustomFieldNames]
         val original = AvroWithCustomFieldNames("Alice", 30, true)
         val encoded = encoder.encode(original)
         val decoded = decoder.decode(encoded)

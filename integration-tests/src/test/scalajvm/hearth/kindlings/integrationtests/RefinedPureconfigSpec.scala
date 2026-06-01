@@ -15,8 +15,8 @@ final class RefinedPureconfigSpec extends MacroSuite {
   group("Refined + PureConfig") {
 
     test("round-trip") {
-      val reader: ConfigReader[RefinedPerson] = KindlingsConfigReader.derive[RefinedPerson]
-      val writer: ConfigWriter[RefinedPerson] = KindlingsConfigWriter.derive[RefinedPerson]
+      val reader: ConfigReader[RefinedPerson] = KindlingsConfigReader.derived[RefinedPerson]
+      val writer: ConfigWriter[RefinedPerson] = KindlingsConfigWriter.derived[RefinedPerson]
       val v = RefinedPerson(alice, thirty)
       val config = writer.to(v)
       val result = ConfigSource.fromConfig(config.atKey("root")).at("root").load[RefinedPerson](reader)

@@ -194,7 +194,7 @@ final class RoundTripSpec extends MacroSuite {
     group("KindlingsYamlCodec") {
 
       test("simple case class roundtrip") {
-        val codec = KindlingsYamlCodec.derive[SimplePerson]
+        val codec = KindlingsYamlCodec.derived[SimplePerson]
         val value = SimplePerson("Bob", 25)
         val node = codec.asNode(value)
         val decoded = codec.construct(node)
@@ -203,7 +203,7 @@ final class RoundTripSpec extends MacroSuite {
 
       test("sealed trait roundtrip with discriminator") {
         implicit val config: YamlConfig = YamlConfig.default.withDiscriminator("kind")
-        val codec = KindlingsYamlCodec.derive[Shape]
+        val codec = KindlingsYamlCodec.derived[Shape]
         val value: Shape = Circle(3.14)
         val node = codec.asNode(value)
         val decoded = codec.construct(node)
@@ -219,7 +219,7 @@ final class RoundTripSpec extends MacroSuite {
       }
 
       test("codec with annotations round-trip") {
-        val codec = KindlingsYamlCodec.derive[YamlWithFieldName]
+        val codec = KindlingsYamlCodec.derived[YamlWithFieldName]
         val value = YamlWithFieldName("Alice", 30)
         val node = codec.asNode(value)
         val decoded = codec.construct(node)

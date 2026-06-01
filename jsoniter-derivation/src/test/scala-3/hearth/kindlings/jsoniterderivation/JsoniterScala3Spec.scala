@@ -8,14 +8,14 @@ final class JsoniterScala3Spec extends MacroSuite {
   group("named tuples (Scala 3.7+)") {
 
     test("single-element named tuple round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[(field: Int)]
+      val codec = KindlingsJsonValueCodec.derived[(field: Int)]
       val json = writeToString[((field: Int))](Tuple1(3))(codec)
       val decoded = readFromString[((field: Int))](json)(codec)
       decoded ==> Tuple1(3)
     }
 
     test("multi-element named tuple round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[(name: String, age: Int)]
+      val codec = KindlingsJsonValueCodec.derived[(name: String, age: Int)]
       val nt: (name: String, age: Int) = ("Alice", 42)
       val json = writeToString(nt)(codec)
       val decoded = readFromString[((name: String, age: Int))](json)(codec)
@@ -27,7 +27,7 @@ final class JsoniterScala3Spec extends MacroSuite {
 
     test("opaque type in case class round-trip") {
       import JsoniterOpaqueTypes.*
-      val codec = KindlingsJsonValueCodec.derive[JsoniterUserWithOpaque]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterUserWithOpaque]
       val value = JsoniterUserWithOpaque(UserId(42), "Alice")
       val json = writeToString(value)(codec)
       val decoded = readFromString[JsoniterUserWithOpaque](json)(codec)
@@ -39,7 +39,7 @@ final class JsoniterScala3Spec extends MacroSuite {
   group("Scala 3 literal types") {
 
     test("literal String field round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[JsoniterWithLiteralString]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterWithLiteralString]
       val value = JsoniterWithLiteralString("hello", "Alice")
       val json = writeToString(value)(codec)
       val decoded = readFromString[JsoniterWithLiteralString](json)(codec)
@@ -47,7 +47,7 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
 
     test("literal Int field round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[JsoniterWithLiteralInt]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterWithLiteralInt]
       val value = JsoniterWithLiteralInt(42, "Bob")
       val json = writeToString(value)(codec)
       val decoded = readFromString[JsoniterWithLiteralInt](json)(codec)
@@ -55,7 +55,7 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
 
     test("literal Boolean field round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[JsoniterWithLiteralBoolean]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterWithLiteralBoolean]
       val value = JsoniterWithLiteralBoolean(true, "Carol")
       val json = writeToString(value)(codec)
       val decoded = readFromString[JsoniterWithLiteralBoolean](json)(codec)
@@ -66,7 +66,7 @@ final class JsoniterScala3Spec extends MacroSuite {
   group("Scala 3 union types") {
 
     test("case class union round-trip (first variant)") {
-      val codec = KindlingsJsonValueCodec.derive[ParrotOrHamster]
+      val codec = KindlingsJsonValueCodec.derived[ParrotOrHamster]
       val value: ParrotOrHamster = Parrot("Polly", 100)
       val json = writeToString(value)(codec)
       val decoded = readFromString[ParrotOrHamster](json)(codec)
@@ -74,7 +74,7 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
 
     test("case class union round-trip (second variant)") {
-      val codec = KindlingsJsonValueCodec.derive[ParrotOrHamster]
+      val codec = KindlingsJsonValueCodec.derived[ParrotOrHamster]
       val value: ParrotOrHamster = Hamster("Biscuit", 7.5)
       val json = writeToString(value)(codec)
       val decoded = readFromString[ParrotOrHamster](json)(codec)
@@ -86,7 +86,7 @@ final class JsoniterScala3Spec extends MacroSuite {
 
     test("simple enum (case objects) round-trip with enumAsStrings") {
       implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
-      val codec = KindlingsJsonValueCodec.derive[Color]
+      val codec = KindlingsJsonValueCodec.derived[Color]
       val json = writeToString(Color.Red: Color)(codec)
       json ==> "\"Red\""
       readFromString[Color](json)(codec) ==> Color.Red
@@ -94,7 +94,7 @@ final class JsoniterScala3Spec extends MacroSuite {
 
     test("simple enum all values round-trip") {
       implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
-      val codec = KindlingsJsonValueCodec.derive[Color]
+      val codec = KindlingsJsonValueCodec.derived[Color]
       for c <- Color.values do {
         val json = writeToString(c: Color)(codec)
         readFromString[Color](json)(codec) ==> c
@@ -102,7 +102,7 @@ final class JsoniterScala3Spec extends MacroSuite {
     }
 
     test("parameterized enum (mixed cases) round-trip") {
-      val codec = KindlingsJsonValueCodec.derive[JsoniterVehicle]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterVehicle]
       val car: JsoniterVehicle = JsoniterVehicle.Car("Toyota", 2024)
       val bike: JsoniterVehicle = JsoniterVehicle.Bike(21)
       val carJson = writeToString(car)(codec)
@@ -113,14 +113,14 @@ final class JsoniterScala3Spec extends MacroSuite {
 
     test("enum used as field in case class") {
       implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
-      val codec = KindlingsJsonValueCodec.derive[WithColor]
+      val codec = KindlingsJsonValueCodec.derived[WithColor]
       val value = WithColor("sky", Color.Blue)
       val json = writeToString(value)(codec)
       readFromString[WithColor](json)(codec) ==> value
     }
 
     test("parameterized enum used as field in case class") {
-      val codec = KindlingsJsonValueCodec.derive[WithVehicle]
+      val codec = KindlingsJsonValueCodec.derived[WithVehicle]
       val value = WithVehicle("Alice", JsoniterVehicle.Car("Honda", 2023))
       val json = writeToString(value)(codec)
       readFromString[WithVehicle](json)(codec) ==> value
@@ -128,7 +128,7 @@ final class JsoniterScala3Spec extends MacroSuite {
 
     test("parameterized enum with discriminator") {
       implicit val config: JsoniterConfig = JsoniterConfig.default.withDiscriminator("_type")
-      val codec = KindlingsJsonValueCodec.derive[JsoniterVehicle]
+      val codec = KindlingsJsonValueCodec.derived[JsoniterVehicle]
       val car: JsoniterVehicle = JsoniterVehicle.Car("Tesla", 2025)
       val json = writeToString(car)(codec)
       assert(json.contains("\"_type\""))

@@ -384,7 +384,7 @@ final class KindlingsEncoderSpec extends MacroSuite {
     group("derive") {
 
       test("explicit derive returns Encoder") {
-        val encoder: Encoder[SimplePerson] = KindlingsEncoder.derive[SimplePerson]
+        val encoder: Encoder[SimplePerson] = KindlingsEncoder.derived[SimplePerson]
         encoder(SimplePerson("Alice", 30)) ==>
           Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30))
       }
@@ -553,7 +553,7 @@ final class KindlingsEncoderSpec extends MacroSuite {
 
       test("deriveAsObject produces same JSON as derive") {
         val asObject = KindlingsEncoder.deriveAsObject[SimplePerson]
-        val regular = KindlingsEncoder.derive[SimplePerson]
+        val regular = KindlingsEncoder.derived[SimplePerson]
         val person = SimplePerson("Alice", 30)
         asObject(person) ==> regular(person)
       }

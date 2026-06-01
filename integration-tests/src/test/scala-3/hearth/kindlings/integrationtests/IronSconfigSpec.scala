@@ -10,8 +10,8 @@ final class IronSconfigSpec extends MacroSuite {
   group("Iron + sconfig") {
 
     test("round-trip") {
-      implicit val reader: ConfigReader[IronPerson] = ConfigReader.derive[IronPerson]
-      implicit val writer: ConfigWriter[IronPerson] = ConfigWriter.derive[IronPerson]
+      implicit val reader: ConfigReader[IronPerson] = ConfigReader.derived[IronPerson]
+      implicit val writer: ConfigWriter[IronPerson] = ConfigWriter.derived[IronPerson]
       val v = IronPerson("Alice", 30)
       val config = writer.to(v)
       val result = reader.from(config)
@@ -19,7 +19,7 @@ final class IronSconfigSpec extends MacroSuite {
     }
 
     test("rejects invalid iron value") {
-      implicit val reader: ConfigReader[IronPerson] = ConfigReader.derive[IronPerson]
+      implicit val reader: ConfigReader[IronPerson] = ConfigReader.derived[IronPerson]
       val config = org.ekrich.config.ConfigFactory.parseString("""name = "Alice"
 age = -1""")
       val result = reader.from(config.root)

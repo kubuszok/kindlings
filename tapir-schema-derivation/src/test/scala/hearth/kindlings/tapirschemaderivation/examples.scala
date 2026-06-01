@@ -99,6 +99,6 @@ object GenericDerivation {
   implicit val schemaSimplePerson: Schema[SimplePerson] = ks.schema
 
   // Non-inline — macro expansion sees abstract A, testing runtimePlainPrint resolution
-  def deriveBoxSchema[A](implicit ev: Schema[A]): Schema[Box[A]] = KindlingsSchema.derive[Box[A]]
+  def deriveBoxSchema[A](implicit ev: Schema[A]): Schema[Box[A]] = KindlingsSchema.derived[Box[A]]
   val boxOfPerson: Schema[Box[SimplePerson]] = deriveBoxSchema[SimplePerson]
 }

@@ -20,7 +20,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
 
       test("Java enum round-trip") {
         implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
-        val codec = KindlingsJsonValueCodec.derive[JavaColor]
+        val codec = KindlingsJsonValueCodec.derived[JavaColor]
         val json = writeToString[JavaColor](JavaColor.RED)(codec)
         json ==> "\"RED\""
         readFromString[JavaColor](json)(codec) ==> JavaColor.RED
@@ -28,7 +28,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
 
       test("all Java enum values round-trip") {
         implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = true)
-        val codec = KindlingsJsonValueCodec.derive[JavaColor]
+        val codec = KindlingsJsonValueCodec.derived[JavaColor]
         Seq(JavaColor.RED, JavaColor.GREEN, JavaColor.BLUE).foreach { v =>
           readFromString[JavaColor](writeToString[JavaColor](v)(codec))(codec) ==> v
         }
@@ -38,7 +38,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
     group("java.time types") {
 
       test("Instant round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithInstant]
+        val codec = KindlingsJsonValueCodec.derived[WithInstant]
         val instant = java.time.Instant.parse("2024-01-15T10:30:00Z")
         val value = WithInstant(instant)
         val json = writeToString(value)(codec)
@@ -47,7 +47,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("LocalDate round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithLocalDate]
+        val codec = KindlingsJsonValueCodec.derived[WithLocalDate]
         val date = java.time.LocalDate.of(2024, 1, 15)
         val value = WithLocalDate(date)
         val json = writeToString(value)(codec)
@@ -56,7 +56,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("LocalTime round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithLocalTime]
+        val codec = KindlingsJsonValueCodec.derived[WithLocalTime]
         val time = java.time.LocalTime.of(10, 30, 0)
         val value = WithLocalTime(time)
         val json = writeToString(value)(codec)
@@ -65,7 +65,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("LocalDateTime round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithLocalDateTime]
+        val codec = KindlingsJsonValueCodec.derived[WithLocalDateTime]
         val dt = java.time.LocalDateTime.of(2024, 1, 15, 10, 30, 0)
         val value = WithLocalDateTime(dt)
         val json = writeToString(value)(codec)
@@ -74,7 +74,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("OffsetDateTime round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithOffsetDateTime]
+        val codec = KindlingsJsonValueCodec.derived[WithOffsetDateTime]
         val dt = java.time.OffsetDateTime.of(2024, 1, 15, 10, 30, 0, 0, java.time.ZoneOffset.UTC)
         val value = WithOffsetDateTime(dt)
         val json = writeToString(value)(codec)
@@ -83,7 +83,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("ZonedDateTime round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithZonedDateTime]
+        val codec = KindlingsJsonValueCodec.derived[WithZonedDateTime]
         val dt = java.time.ZonedDateTime.of(2024, 1, 15, 10, 30, 0, 0, java.time.ZoneId.of("UTC"))
         val value = WithZonedDateTime(dt)
         val json = writeToString(value)(codec)
@@ -91,7 +91,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("Duration round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithDuration]
+        val codec = KindlingsJsonValueCodec.derived[WithDuration]
         val dur = java.time.Duration.ofHours(2).plusMinutes(30)
         val value = WithDuration(dur)
         val json = writeToString(value)(codec)
@@ -100,7 +100,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("Period round-trip") {
-        val codec = KindlingsJsonValueCodec.derive[WithPeriod]
+        val codec = KindlingsJsonValueCodec.derived[WithPeriod]
         val per = java.time.Period.of(1, 6, 15)
         val value = WithPeriod(per)
         val json = writeToString(value)(codec)
@@ -109,7 +109,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
       }
 
       test("invalid Instant string produces decode error") {
-        val codec = KindlingsJsonValueCodec.derive[WithInstant]
+        val codec = KindlingsJsonValueCodec.derived[WithInstant]
         val json = """{"ts":"not-a-date"}"""
         intercept[JsonReaderException] {
           readFromString[WithInstant](json)(codec)

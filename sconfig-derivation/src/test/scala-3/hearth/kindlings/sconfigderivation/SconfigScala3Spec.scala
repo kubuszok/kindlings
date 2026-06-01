@@ -17,23 +17,23 @@ final class SconfigScala3Spec extends MacroSuite {
     group("ConfigReader") {
 
       test("simple named tuple") {
-        val r = ConfigReader.derive[(name: String, age: Int)]
+        val r = ConfigReader.derived[(name: String, age: Int)]
         r.from(value("{ name = Alice, age = 42 }")) ==> Right(("Alice", 42))
       }
 
       test("named tuple with nested case class") {
-        val r = ConfigReader.derive[(person: SimplePerson, score: Int)]
+        val r = ConfigReader.derived[(person: SimplePerson, score: Int)]
         r.from(value("{ person = { name = Bob, age = 25 }, score = 100 }")) ==>
           Right((SimplePerson("Bob", 25), 100))
       }
 
       test("single-element named tuple") {
-        val r = ConfigReader.derive[(field: Int)]
+        val r = ConfigReader.derived[(field: Int)]
         r.from(value("{ field = 7 }")) ==> Right(Tuple1(7))
       }
 
       test("missing required field returns failure") {
-        val r = ConfigReader.derive[(name: String, age: Int)]
+        val r = ConfigReader.derived[(name: String, age: Int)]
         val result = r.from(value("{ name = Alice }"))
         assert(result.isLeft)
       }
@@ -42,14 +42,14 @@ final class SconfigScala3Spec extends MacroSuite {
     group("ConfigWriter") {
 
       test("simple named tuple") {
-        val w = ConfigWriter.derive[(name: String, age: Int)]
+        val w = ConfigWriter.derived[(name: String, age: Int)]
         val rendered = renderConcise(w.to(("Alice", 42)))
         assert(rendered.contains("\"name\":\"Alice\""))
         assert(rendered.contains("\"age\":42"))
       }
 
       test("named tuple with nested case class") {
-        val w = ConfigWriter.derive[(person: SimplePerson, score: Int)]
+        val w = ConfigWriter.derived[(person: SimplePerson, score: Int)]
         val rendered = renderConcise(w.to((SimplePerson("Bob", 25), 100)))
         assert(rendered.contains("\"score\":100"))
         assert(rendered.contains("\"name\":\"Bob\""))
@@ -57,7 +57,7 @@ final class SconfigScala3Spec extends MacroSuite {
       }
 
       test("single-element named tuple") {
-        val w = ConfigWriter.derive[(field: Int)]
+        val w = ConfigWriter.derived[(field: Int)]
         val rendered = renderConcise(w.to(Tuple1(7)))
         rendered ==> """{"field":7}"""
       }
@@ -66,22 +66,22 @@ final class SconfigScala3Spec extends MacroSuite {
     group("round-trip") {
 
       test("simple named tuple round-trip") {
-        val r = ConfigReader.derive[(name: String, age: Int)]
-        val w = ConfigWriter.derive[(name: String, age: Int)]
+        val r = ConfigReader.derived[(name: String, age: Int)]
+        val w = ConfigWriter.derived[(name: String, age: Int)]
         val original: (name: String, age: Int) = ("Alice", 42)
         r.from(w.to(original)) ==> Right(original)
       }
 
       test("named tuple with nested case class round-trip") {
-        val r = ConfigReader.derive[(person: SimplePerson, score: Int)]
-        val w = ConfigWriter.derive[(person: SimplePerson, score: Int)]
+        val r = ConfigReader.derived[(person: SimplePerson, score: Int)]
+        val w = ConfigWriter.derived[(person: SimplePerson, score: Int)]
         val original: (person: SimplePerson, score: Int) = (SimplePerson("Bob", 25), 100)
         r.from(w.to(original)) ==> Right(original)
       }
 
       test("single-element named tuple round-trip") {
-        val r = ConfigReader.derive[(field: Int)]
-        val w = ConfigWriter.derive[(field: Int)]
+        val r = ConfigReader.derived[(field: Int)]
+        val w = ConfigWriter.derived[(field: Int)]
         val original: (field: Int) = Tuple1(7)
         r.from(w.to(original)) ==> Right(original)
       }

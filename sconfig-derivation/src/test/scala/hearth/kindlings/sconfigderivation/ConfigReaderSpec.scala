@@ -14,12 +14,12 @@ final class ConfigReaderSpec extends MacroSuite {
     group("primitives via case-class fields") {
 
       test("Int field") {
-        val r = ConfigReader.derive[SingleField]
+        val r = ConfigReader.derived[SingleField]
         r.from(value("{ value = 42 }")) ==> Right(SingleField(42))
       }
 
       test("String + Int + Boolean") {
-        val r = ConfigReader.derive[WithDefaults]
+        val r = ConfigReader.derived[WithDefaults]
         r.from(value("{ name = Alice, age = 30, active = true }")) ==> Right(WithDefaults("Alice", 30, true))
       }
     }
@@ -27,24 +27,24 @@ final class ConfigReaderSpec extends MacroSuite {
     group("case classes") {
 
       test("simple") {
-        val r = ConfigReader.derive[SimplePerson]
+        val r = ConfigReader.derived[SimplePerson]
         r.from(value("{ name = Alice, age = 30 }")) ==> Right(SimplePerson("Alice", 30))
       }
 
       test("empty") {
-        val r = ConfigReader.derive[EmptyClass]
+        val r = ConfigReader.derived[EmptyClass]
         r.from(value("{}")) ==> Right(EmptyClass())
       }
 
       test("nested") {
-        val r = ConfigReader.derive[PersonWithAddress]
+        val r = ConfigReader.derived[PersonWithAddress]
         r.from(
           value("{ name = Bob, age = 25, address = { street = \"123 Main\", city = Springfield } }")
         ) ==> Right(PersonWithAddress("Bob", 25, Address("123 Main", "Springfield")))
       }
 
       test("missing required field returns failure") {
-        val r = ConfigReader.derive[SimplePerson]
+        val r = ConfigReader.derived[SimplePerson]
         val result = r.from(value("{ name = Alice }"))
         assert(result.isLeft)
       }
@@ -53,19 +53,19 @@ final class ConfigReaderSpec extends MacroSuite {
     group("collections") {
 
       test("List field of primitives") {
-        val r = ConfigReader.derive[WithList]
+        val r = ConfigReader.derived[WithList]
         r.from(value("{ items = [1, 2, 3] }")) ==> Right(WithList(List(1, 2, 3)))
       }
 
       test("List of case classes") {
-        val r = ConfigReader.derive[TeamWithMembers]
+        val r = ConfigReader.derived[TeamWithMembers]
         r.from(
           value("{ name = Eagles, members = [ { name = A, age = 1 }, { name = B, age = 2 } ] }")
         ) ==> Right(TeamWithMembers("Eagles", List(SimplePerson("A", 1), SimplePerson("B", 2))))
       }
 
       test("Map[String, Int] field") {
-        val r = ConfigReader.derive[WithMap]
+        val r = ConfigReader.derived[WithMap]
         r.from(value("{ scores = { a = 1, b = 2 } }")) ==> Right(WithMap(Map("a" -> 1, "b" -> 2)))
       }
     }
@@ -73,12 +73,12 @@ final class ConfigReaderSpec extends MacroSuite {
     group("options") {
 
       test("None from missing key") {
-        val r = ConfigReader.derive[WithOption]
+        val r = ConfigReader.derived[WithOption]
         r.from(value("{ name = Alice }")) ==> Right(WithOption("Alice", None))
       }
 
       test("Some from present key") {
-        val r = ConfigReader.derive[WithOption]
+        val r = ConfigReader.derived[WithOption]
         r.from(value("{ name = Alice, nickname = Allie }")) ==> Right(WithOption("Alice", Some("Allie")))
       }
     }
@@ -86,12 +86,12 @@ final class ConfigReaderSpec extends MacroSuite {
     group("annotations") {
 
       test("@configKey overrides field name") {
-        val r = ConfigReader.derive[WithConfigKey]
+        val r = ConfigReader.derived[WithConfigKey]
         r.from(value("{ user_name = jdoe, age = 30 }")) ==> Right(WithConfigKey("jdoe", 30))
       }
 
       test("@transientField uses default") {
-        val r = ConfigReader.derive[WithTransient]
+        val r = ConfigReader.derived[WithTransient]
         r.from(value("{ name = Alice }")) ==> Right(WithTransient("Alice", None))
       }
     }
@@ -100,7 +100,7 @@ final class ConfigReaderSpec extends MacroSuite {
 
       test("missing field uses default") {
         implicit val cfg: SConfig = SConfig().withUseDefaults
-        val r = ConfigReader.derive[WithDefaults]
+        val r = ConfigReader.derived[WithDefaults]
         r.from(value("{ name = Bob }")) ==> Right(WithDefaults("Bob"))
       }
     }
@@ -108,14 +108,14 @@ final class ConfigReaderSpec extends MacroSuite {
     group("strict mode (allowUnknownKeys = false)") {
 
       test("default allowUnknownKeys = true accepts extra keys") {
-        val r = ConfigReader.derive[SimplePerson]
+        val r = ConfigReader.derived[SimplePerson]
         // Extra `extra` field is silently ignored under default config (matching upstream).
         r.from(value("{ name = Alice, age = 30, extra = ignored }")) ==> Right(SimplePerson("Alice", 30))
       }
 
       test("global SConfig.withStrictDecoding rejects extra keys") {
         implicit val cfg: SConfig = SConfig().withStrictDecoding
-        val r = ConfigReader.derive[SimplePerson]
+        val r = ConfigReader.derived[SimplePerson]
         val result = r.from(value("{ name = Alice, age = 30, extra = ignored }"))
         assert(result.isLeft)
       }
@@ -124,7 +124,7 @@ final class ConfigReaderSpec extends MacroSuite {
         // Even with global config permissive, the per-type hint enforces strict mode.
         implicit val strictHint: ProductHint[SimplePerson] =
           ProductHint[SimplePerson](allowUnknownKeys = false)
-        val r = ConfigReader.derive[SimplePerson]
+        val r = ConfigReader.derived[SimplePerson]
         val result = r.from(value("{ name = Alice, age = 30, extra = ignored }"))
         assert(result.isLeft)
       }
@@ -138,7 +138,7 @@ final class ConfigReaderSpec extends MacroSuite {
         // the global default.
         implicit val withSnake: ProductHint[WithConfigKey] =
           ProductHint[WithConfigKey](transformMemberNames = ConfigFieldMapping(CamelCase, SnakeCase))
-        val r = ConfigReader.derive[WithConfigKey]
+        val r = ConfigReader.derived[WithConfigKey]
         // @configKey("user_name") wins over the hint, so userName still maps to "user_name".
         // age has no annotation so the hint applies (single-token, snake_case == "age").
         r.from(value("{ user_name = jdoe, age = 30 }")) ==> Right(WithConfigKey("jdoe", 30))
@@ -147,7 +147,7 @@ final class ConfigReaderSpec extends MacroSuite {
       test("ProductHint useDefaults overrides global setting") {
         implicit val noDefaults: ProductHint[WithDefaults] =
           ProductHint[WithDefaults](useDefaults = false)
-        val r = ConfigReader.derive[WithDefaults]
+        val r = ConfigReader.derived[WithDefaults]
         // Even though the global SConfig has useDefaults = true, the per-type hint
         // overrides to false, so a missing field becomes a failure.
         val result = r.from(value("{ name = Bob }"))
@@ -161,7 +161,7 @@ final class ConfigReaderSpec extends MacroSuite {
         // Per-type hint changes the discriminator key from "type" (global default) to "kind".
         implicit val hint: CoproductHint.Field[Shape] =
           CoproductHint.Field[Shape](fieldName = "kind")
-        val r = ConfigReader.derive[Shape]
+        val r = ConfigReader.derived[Shape]
         r.from(value("{ kind = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
       }
 
@@ -172,7 +172,7 @@ final class ConfigReaderSpec extends MacroSuite {
             fieldName = "type",
             transformConstructorNames = ConfigFieldMapping(PascalCase, PascalCase)
           )
-        val r = ConfigReader.derive[Shape]
+        val r = ConfigReader.derived[Shape]
         // With PascalCase → PascalCase, the discriminator value matches the original
         // class name (no kebab-case conversion).
         r.from(value("{ type = Circle, radius = 1.5 }")) ==> Right(Circle(1.5))
@@ -181,7 +181,7 @@ final class ConfigReaderSpec extends MacroSuite {
       test("Wrapped hint switches to single-key wrapping") {
         implicit val hint: CoproductHint.Wrapped[Shape] =
           CoproductHint.Wrapped[Shape]()
-        val r = ConfigReader.derive[Shape]
+        val r = ConfigReader.derived[Shape]
         // Single-key wrapping: `{"circle": {radius = 1.5}}`
         r.from(value("{ circle = { radius = 1.5 } }")) ==> Right(Circle(1.5))
       }
@@ -190,12 +190,12 @@ final class ConfigReaderSpec extends MacroSuite {
     group("recursive sealed trait") {
 
       test("read a Leaf") {
-        val r = ConfigReader.derive[TreeNode]
+        val r = ConfigReader.derived[TreeNode]
         r.from(value("{ type = leaf, value = 42 }")) ==> Right(Leaf(42))
       }
 
       test("read a Branch with Leaf children") {
-        val r = ConfigReader.derive[TreeNode]
+        val r = ConfigReader.derived[TreeNode]
         r.from(value("""{
           type = branch,
           value = 1,
@@ -205,7 +205,7 @@ final class ConfigReaderSpec extends MacroSuite {
       }
 
       test("read a nested recursive structure") {
-        val r = ConfigReader.derive[TreeNode]
+        val r = ConfigReader.derived[TreeNode]
         r.from(value("""{
           type = branch,
           value = 1,
@@ -225,13 +225,13 @@ final class ConfigReaderSpec extends MacroSuite {
       test("discriminator-based encoding (default = PascalCase → kebab-case)") {
         // Default constructor name transform mirrors PureConfig:
         // `Circle` → discriminator value `"circle"`.
-        val r = ConfigReader.derive[Shape]
+        val r = ConfigReader.derived[Shape]
         r.from(value("{ type = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
         r.from(value("{ type = rectangle, width = 2.0, height = 3.0 }")) ==> Right(Rectangle(2.0, 3.0))
       }
 
       test("case-object enum (as string field of a wrapping object)") {
-        val r = ConfigReader.derive[CardinalDirection]
+        val r = ConfigReader.derived[CardinalDirection]
         val rootObj = value("{ direction = north }").asInstanceOf[org.ekrich.config.ConfigObject]
         val innerVal = rootObj.get("direction")
         r.from(innerVal) ==> Right(North)

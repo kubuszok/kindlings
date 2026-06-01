@@ -9,7 +9,7 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("case classes") {
 
       test("simple case class") {
-        val encoder = KindlingsXmlEncoder.derive[SimplePerson]
+        val encoder = KindlingsXmlEncoder.derived[SimplePerson]
         val result = encoder.encode(SimplePerson("Alice", 30), "person")
         assert((result \ "name").text == "Alice")
         assert((result \ "age").text == "30")
@@ -17,19 +17,19 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
       }
 
       test("empty case class") {
-        val encoder = KindlingsXmlEncoder.derive[EmptyClass]
+        val encoder = KindlingsXmlEncoder.derived[EmptyClass]
         val result = encoder.encode(EmptyClass(), "empty")
         assert(result.label == "empty")
       }
 
       test("single field case class") {
-        val encoder = KindlingsXmlEncoder.derive[SingleField]
+        val encoder = KindlingsXmlEncoder.derived[SingleField]
         val result = encoder.encode(SingleField(42), "field")
         assert((result \ "value").text == "42")
       }
 
       test("nested case class") {
-        val encoder = KindlingsXmlEncoder.derive[PersonWithAddress]
+        val encoder = KindlingsXmlEncoder.derived[PersonWithAddress]
         val result = encoder.encode(PersonWithAddress("Bob", 25, Address("123 Main St", "Springfield")), "person")
         assert((result \ "name").text == "Bob")
         assert((result \ "age").text == "25")
@@ -41,21 +41,21 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("annotations") {
 
       test("@xmlName renames field") {
-        val encoder = KindlingsXmlEncoder.derive[XmlWithFieldName]
+        val encoder = KindlingsXmlEncoder.derived[XmlWithFieldName]
         val result = encoder.encode(XmlWithFieldName("John", 30), "user")
         assert((result \ "user_name").text == "John")
         assert((result \ "age").text == "30")
       }
 
       test("@transientField skips field") {
-        val encoder = KindlingsXmlEncoder.derive[XmlWithTransient]
+        val encoder = KindlingsXmlEncoder.derived[XmlWithTransient]
         val result = encoder.encode(XmlWithTransient("Alice", Some("cached")), "item")
         assert((result \ "name").text == "Alice")
         assert((result \ "cache").isEmpty)
       }
 
       test("@xmlAttribute encodes as attribute") {
-        val encoder = KindlingsXmlEncoder.derive[XmlWithAttributes]
+        val encoder = KindlingsXmlEncoder.derived[XmlWithAttributes]
         val result = encoder.encode(
           XmlWithAttributes("John", 30, Address("123 Main", "NY")),
           "user"
@@ -69,7 +69,7 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("collections") {
 
       test("list of simple values") {
-        val encoder = KindlingsXmlEncoder.derive[TeamWithMembers]
+        val encoder = KindlingsXmlEncoder.derived[TeamWithMembers]
         val result = encoder.encode(
           TeamWithMembers("Team A", List(SimplePerson("Alice", 30), SimplePerson("Bob", 25))),
           "team"
@@ -83,7 +83,7 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("sealed traits") {
 
       test("case class subtype") {
-        val encoder = KindlingsXmlEncoder.derive[Shape]
+        val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
         assert(result.label == "shape")
       }
@@ -92,13 +92,13 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("options") {
 
       test("Some value") {
-        val encoder = KindlingsXmlEncoder.derive[Box[Option[Int]]]
+        val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
         val result = encoder.encode(Box(Some(42)), "box")
         assert(result.label == "box")
       }
 
       test("None value") {
-        val encoder = KindlingsXmlEncoder.derive[Box[Option[Int]]]
+        val encoder = KindlingsXmlEncoder.derived[Box[Option[Int]]]
         val result = encoder.encode(Box(None), "box")
         assert(result.label == "box")
       }
@@ -107,7 +107,7 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("value classes") {
 
       test("value class is unwrapped") {
-        val encoder = KindlingsXmlEncoder.derive[WrappedInt]
+        val encoder = KindlingsXmlEncoder.derived[WrappedInt]
         val result = encoder.encode(WrappedInt(42), "wrapped")
         assert(result.label == "wrapped")
       }
@@ -116,13 +116,13 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("generic types") {
 
       test("Box[Int]") {
-        val encoder = KindlingsXmlEncoder.derive[Box[Int]]
+        val encoder = KindlingsXmlEncoder.derived[Box[Int]]
         val result = encoder.encode(Box(42), "box")
         assert(result.label == "box")
       }
 
       test("Pair[String, Int]") {
-        val encoder = KindlingsXmlEncoder.derive[Pair[String, Int]]
+        val encoder = KindlingsXmlEncoder.derived[Pair[String, Int]]
         val result = encoder.encode(Pair("hello", 42), "pair")
         assert((result \ "first").text == "hello")
         assert((result \ "second").text == "42")
@@ -132,7 +132,7 @@ final class KindlingsXmlEncoderSpec extends MacroSuite {
     group("deeply nested") {
 
       test("3 levels deep") {
-        val encoder = KindlingsXmlEncoder.derive[PersonFull]
+        val encoder = KindlingsXmlEncoder.derived[PersonFull]
         val result = encoder.encode(
           PersonFull("Alice", FullAddress("123 Main", "NY", GeoCoordinates(40.7, -74.0))),
           "person"

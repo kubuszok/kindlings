@@ -475,7 +475,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
     group("derive") {
 
       test("explicit derive returns YamlEncoder") {
-        val encoder: YamlEncoder[SimplePerson] = KindlingsYamlEncoder.derive[SimplePerson]
+        val encoder: YamlEncoder[SimplePerson] = KindlingsYamlEncoder.derived[SimplePerson]
         val node = encoder.asNode(SimplePerson("Alice", 30))
         node ==> mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
       }

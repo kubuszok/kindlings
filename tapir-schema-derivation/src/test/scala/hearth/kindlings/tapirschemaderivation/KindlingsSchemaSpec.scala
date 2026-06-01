@@ -15,7 +15,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     group("case classes") {
 
       test("simple case class") {
-        val schema = KindlingsSchema.derive[SimplePerson]
+        val schema = KindlingsSchema.derived[SimplePerson]
         schema.schemaType match {
           case p: SchemaType.SProduct[SimplePerson] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -26,7 +26,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("nested case class") {
-        val schema = KindlingsSchema.derive[Nested]
+        val schema = KindlingsSchema.derived[Nested]
         schema.schemaType match {
           case p: SchemaType.SProduct[Nested] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -37,7 +37,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("schema has correct SName") {
-        val schema = KindlingsSchema.derive[SimplePerson]
+        val schema = KindlingsSchema.derived[SimplePerson]
         assert(schema.name.isDefined, "Schema should have a name")
         assert(
           schema.name.get.fullName.endsWith("SimplePerson"),
@@ -46,7 +46,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("parameterized type SName has fullName without type params") {
-        val schema = KindlingsSchema.derive[Box[SimplePerson]]
+        val schema = KindlingsSchema.derived[Box[SimplePerson]]
         assert(schema.name.isDefined, "Schema should have a name")
         val name = schema.name.get
         assert(
@@ -60,7 +60,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("parameterized type SName has typeParameterShortNames") {
-        val schema = KindlingsSchema.derive[Box[SimplePerson]]
+        val schema = KindlingsSchema.derived[Box[SimplePerson]]
         val name = schema.name.get
         assertEquals(
           name.typeParameterShortNames,
@@ -70,7 +70,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("multi-param type SName has all type parameter short names") {
-        val schema = KindlingsSchema.derive[Pair[SimplePerson, Nested]]
+        val schema = KindlingsSchema.derived[Pair[SimplePerson, Nested]]
         val name = schema.name.get
         assert(
           name.fullName.endsWith("Pair"),
@@ -84,7 +84,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("non-parameterized type SName has empty typeParameterShortNames") {
-        val schema = KindlingsSchema.derive[SimplePerson]
+        val schema = KindlingsSchema.derived[SimplePerson]
         val name = schema.name.get
         assertEquals(
           name.typeParameterShortNames,
@@ -97,7 +97,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     group("sealed traits") {
 
       test("sealed trait derives coproduct") {
-        val schema = KindlingsSchema.derive[Shape]
+        val schema = KindlingsSchema.derived[Shape]
         schema.schemaType match {
           case _: SchemaType.SCoproduct[Shape] => () // success
           case other                           =>
@@ -106,7 +106,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("sealed trait has subtypes") {
-        val schema = KindlingsSchema.derive[Shape]
+        val schema = KindlingsSchema.derived[Shape]
         schema.schemaType match {
           case c: SchemaType.SCoproduct[Shape] =>
             assertEquals(c.subtypes.size, 2)
@@ -119,19 +119,19 @@ final class KindlingsSchemaSpec extends MacroSuite {
     group("annotations") {
 
       test("@description on type") {
-        val schema = KindlingsSchema.derive[AnnotatedPerson]
+        val schema = KindlingsSchema.derived[AnnotatedPerson]
         assertEquals(schema.description, Some("A person with metadata"))
       }
 
       test("@title on type") {
-        val schema = KindlingsSchema.derive[AnnotatedPerson]
+        val schema = KindlingsSchema.derived[AnnotatedPerson]
         val titleOpt = schema.attributes.get(Schema.Title.Attribute)
         assert(titleOpt.isDefined, "Schema should have a Title attribute")
         assertEquals(titleOpt.get.value, "PersonMeta")
       }
 
       test("@description on field") {
-        val schema = KindlingsSchema.derive[AnnotatedPerson]
+        val schema = KindlingsSchema.derived[AnnotatedPerson]
         schema.schemaType match {
           case p: SchemaType.SProduct[AnnotatedPerson] =>
             val nameField = p.fields.find(_.name.name == "name")
@@ -143,7 +143,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("@format on field") {
-        val schema = KindlingsSchema.derive[AnnotatedPerson]
+        val schema = KindlingsSchema.derived[AnnotatedPerson]
         schema.schemaType match {
           case p: SchemaType.SProduct[AnnotatedPerson] =>
             val ageField = p.fields.find(_.name.name == "age")
@@ -155,7 +155,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("@encodedName overrides JSON config name") {
-        val schema = KindlingsSchema.derive[WithEncodedName]
+        val schema = KindlingsSchema.derived[WithEncodedName]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithEncodedName] =>
             val userNameField = p.fields.find(_.name.name == "userName")
@@ -167,12 +167,12 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("@deprecated on type") {
-        val schema = KindlingsSchema.derive[DeprecatedType]
+        val schema = KindlingsSchema.derived[DeprecatedType]
         assert(schema.deprecated, "Schema should be deprecated")
       }
 
       test("@hidden on field") {
-        val schema = KindlingsSchema.derive[WithHiddenField]
+        val schema = KindlingsSchema.derived[WithHiddenField]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithHiddenField] =>
             val secretField = p.fields.find(_.name.name == "secret")
@@ -184,7 +184,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("@validate on field") {
-        val schema = KindlingsSchema.derive[WithValidation]
+        val schema = KindlingsSchema.derived[WithValidation]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithValidation] =>
             val ageField = p.fields.find(_.name.name == "age")
@@ -199,7 +199,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     group("structural types") {
 
       test("optional field") {
-        val schema = KindlingsSchema.derive[WithOptional]
+        val schema = KindlingsSchema.derived[WithOptional]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithOptional] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -210,7 +210,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("collection fields") {
-        val schema = KindlingsSchema.derive[WithCollections]
+        val schema = KindlingsSchema.derived[WithCollections]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithCollections] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -221,7 +221,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("map field") {
-        val schema = KindlingsSchema.derive[WithMap]
+        val schema = KindlingsSchema.derived[WithMap]
         schema.schemaType match {
           case p: SchemaType.SProduct[WithMap] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -232,7 +232,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("recursive type uses SRef") {
-        val schema = KindlingsSchema.derive[RecursiveTree]
+        val schema = KindlingsSchema.derived[RecursiveTree]
         schema.schemaType match {
           case p: SchemaType.SProduct[RecursiveTree] =>
             val fieldNames = p.fields.map(_.name.name)
@@ -284,7 +284,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     test("selects circe config with PreferSchemaConfig[Configuration]") {
       // The class-level implicit preferCirce selects circe.
       // With default circe Configuration, field names are unchanged.
-      val schema = KindlingsSchema.derive[SimplePerson]
+      val schema = KindlingsSchema.derived[SimplePerson]
       schema.schemaType match {
         case p: SchemaType.SProduct[SimplePerson] =>
           val fieldNames = p.fields.map(_.name.name)
@@ -464,7 +464,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
   group("annotation coverage") {
 
     test("@description annotation on field") {
-      val schema = KindlingsSchema.derive[AnnotatedPerson]
+      val schema = KindlingsSchema.derived[AnnotatedPerson]
       schema.schemaType match {
         case p: SchemaType.SProduct[AnnotatedPerson] =>
           val nameField = p.fields.find(_.name.name == "name")
@@ -476,7 +476,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
 
     test("@validate annotation on field") {
-      val schema = KindlingsSchema.derive[WithValidation]
+      val schema = KindlingsSchema.derived[WithValidation]
       schema.schemaType match {
         case p: SchemaType.SProduct[WithValidation] =>
           val ageField = p.fields.find(_.name.name == "age")
@@ -488,7 +488,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
 
     test("@deprecated annotation on type") {
-      val schema = KindlingsSchema.derive[DeprecatedType]
+      val schema = KindlingsSchema.derived[DeprecatedType]
       assert(schema.deprecated, "Schema should be deprecated")
     }
   }
@@ -496,7 +496,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
   group("recursive type verification") {
 
     test("recursive field emits SRef") {
-      val schema = KindlingsSchema.derive[RecursiveTree]
+      val schema = KindlingsSchema.derived[RecursiveTree]
       schema.schemaType match {
         case p: SchemaType.SProduct[RecursiveTree] =>
           val childrenField = p.fields.find(_.name.name == "children")
@@ -515,7 +515,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
 
     test("indirect recursive type uses SRef") {
-      val schema = KindlingsSchema.derive[RecursiveParent]
+      val schema = KindlingsSchema.derived[RecursiveParent]
       schema.schemaType match {
         case p: SchemaType.SProduct[RecursiveParent] =>
           val nodesField = p.fields.find(_.name.name == "nodes")
@@ -535,7 +535,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
 
     test("recursive sealed trait hierarchy uses SRef") {
-      val schema = KindlingsSchema.derive[TreeNode]
+      val schema = KindlingsSchema.derived[TreeNode]
       schema.schemaType match {
         case c: SchemaType.SCoproduct[TreeNode] =>
           // Branch has two TreeNode fields — both should resolve to SRef
@@ -563,7 +563,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
 
     test("recursive through Option") {
-      val schema = KindlingsSchema.derive[RecursiveOption]
+      val schema = KindlingsSchema.derived[RecursiveOption]
       schema.schemaType match {
         case p: SchemaType.SProduct[RecursiveOption] =>
           val childField = p.fields.find(_.name.name == "child")
@@ -590,7 +590,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
   group("value class schemas") {
 
     test("value class produces SProduct wrapping") {
-      val schema = KindlingsSchema.derive[WithWrappedId]
+      val schema = KindlingsSchema.derived[WithWrappedId]
       schema.schemaType match {
         case p: SchemaType.SProduct[WithWrappedId] =>
           val fieldNames = p.fields.map(_.name.name)
@@ -605,7 +605,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
   group("parent annotation inheritance") {
 
     test("sealed trait @description propagates to coproduct schema") {
-      val schema = KindlingsSchema.derive[AnnotatedShape]
+      val schema = KindlingsSchema.derived[AnnotatedShape]
       // The description annotation on the sealed trait should be set
       assert(schema.description.isDefined, "Sealed trait should have description from annotation")
       schema.description.get ==> "A shape type"
@@ -653,7 +653,7 @@ object JsoniterPreferredDerivation {
   implicit val jsoniterConfig: JsoniterConfig = JsoniterConfig.default.withSnakeCaseFieldNames
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
 
-  private val schema: Schema[CamelCasePerson] = KindlingsSchema.derive[CamelCasePerson]
+  private val schema: Schema[CamelCasePerson] = KindlingsSchema.derived[CamelCasePerson]
 
   val snakeCaseFieldNames: List[String] = schema.schemaType match {
     case p: SchemaType.SProduct[CamelCasePerson] => p.fields.map(_.name.encodedName)
@@ -666,7 +666,7 @@ object JsoniterPreferredDerivation {
 object CirceSnakeCaseDerivation {
   implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
   implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
-  private val schema: Schema[CamelCasePerson] = KindlingsSchema.derive[CamelCasePerson]
+  private val schema: Schema[CamelCasePerson] = KindlingsSchema.derived[CamelCasePerson]
   val fieldEncodedNames: List[String] = schema.schemaType match {
     case p: SchemaType.SProduct[CamelCasePerson] => p.fields.map(_.name.encodedName)
     case _                                       => Nil
@@ -677,50 +677,50 @@ object CirceDiscriminatorDerivation {
   implicit val config: Configuration =
     Configuration(discriminator = Some("type"), transformConstructorNames = _.toLowerCase)
   implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
-  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
+  val schema: Schema[Shape] = KindlingsSchema.derived[Shape]
 }
 
 object JsoniterDiscriminatorDerivation {
   implicit val config: JsoniterConfig =
     JsoniterConfig(discriminatorFieldName = Some("type"), adtLeafClassNameMapper = _.toLowerCase)
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
+  val schema: Schema[Shape] = KindlingsSchema.derived[Shape]
 }
 
 object CirceTransientDerivation {
   implicit val config: Configuration = Configuration.default
   implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
-  val schema: Schema[WithCirceTransientField] = KindlingsSchema.derive[WithCirceTransientField]
+  val schema: Schema[WithCirceTransientField] = KindlingsSchema.derived[WithCirceTransientField]
 }
 
 object JsoniterTransientDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[WithJsoniterTransientField] = KindlingsSchema.derive[WithJsoniterTransientField]
+  val schema: Schema[WithJsoniterTransientField] = KindlingsSchema.derived[WithJsoniterTransientField]
 }
 
 object CirceEnumAsStringsDerivation {
   implicit val config: Configuration = Configuration.default.withEnumAsStrings
   implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
-  val schema: Schema[Color] = KindlingsSchema.derive[Color]
+  val schema: Schema[Color] = KindlingsSchema.derived[Color]
 }
 
 object JsoniterEnumAsStringsDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[Color] = KindlingsSchema.derive[Color]
+  val schema: Schema[Color] = KindlingsSchema.derived[Color]
 }
 
 object CirceDefaultsOptionalDerivation {
   implicit val config: Configuration = Configuration.default.withDefaults
   implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
-  val schema: Schema[WithDefaults] = KindlingsSchema.derive[WithDefaults]
+  val schema: Schema[WithDefaults] = KindlingsSchema.derived[WithDefaults]
 }
 
 object JsoniterDefaultsOptionalDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default.withTransientDefault
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[WithDefaults] = KindlingsSchema.derive[WithDefaults]
+  val schema: Schema[WithDefaults] = KindlingsSchema.derived[WithDefaults]
 }
 
 // --- Jsoniter-only helper objects ---
@@ -728,18 +728,18 @@ object JsoniterDefaultsOptionalDerivation {
 object JsoniterMapAsArrayDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default.withMapAsArray
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[WithMap] = KindlingsSchema.derive[WithMap]
+  val schema: Schema[WithMap] = KindlingsSchema.derived[WithMap]
 }
 
 object JsoniterStringifiedDerivation {
   implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[NumericFields] = KindlingsSchema.derive[NumericFields]
+  val schema: Schema[NumericFields] = KindlingsSchema.derived[NumericFields]
 }
 
 object JsoniterDiscriminatorChildDerivation {
   implicit val config: JsoniterConfig =
     JsoniterConfig(discriminatorFieldName = Some("type"))
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
-  val schema: Schema[Shape] = KindlingsSchema.derive[Shape]
+  val schema: Schema[Shape] = KindlingsSchema.derived[Shape]
 }

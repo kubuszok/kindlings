@@ -223,21 +223,21 @@ final class RoundTripSpec extends MacroSuite {
     group("KindlingsCodecAsObject") {
 
       test("derive returns Codec.AsObject") {
-        val codec: io.circe.Codec.AsObject[SimplePerson] = KindlingsCodecAsObject.derive[SimplePerson]
+        val codec: io.circe.Codec.AsObject[SimplePerson] = KindlingsCodecAsObject.derived[SimplePerson]
         val value = SimplePerson("Alice", 30)
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
       }
 
       test("round-trip via derived codec") {
-        val codec = KindlingsCodecAsObject.derive[PersonWithAddress]
+        val codec = KindlingsCodecAsObject.derived[PersonWithAddress]
         val value = PersonWithAddress("Bob", 25, Address("123 Main", "NYC"))
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
       }
 
       test("produces same output as separate derivation") {
-        val codec = KindlingsCodecAsObject.derive[SimplePerson]
+        val codec = KindlingsCodecAsObject.derived[SimplePerson]
         val encoder = KindlingsEncoder.deriveAsObject[SimplePerson]
         val value = SimplePerson("Alice", 30)
         codec.encodeObject(value) ==> encoder.encodeObject(value)
@@ -245,7 +245,7 @@ final class RoundTripSpec extends MacroSuite {
 
       test("with snake_case configuration") {
         implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames
-        val codec = KindlingsCodecAsObject.derive[CamelCaseFields]
+        val codec = KindlingsCodecAsObject.derived[CamelCaseFields]
         val value = CamelCaseFields("Alice", "Smith")
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
@@ -253,21 +253,21 @@ final class RoundTripSpec extends MacroSuite {
 
       test("sealed trait round-trip with discriminator") {
         implicit val config: Configuration = Configuration(discriminator = Some("type"))
-        val codec = KindlingsCodecAsObject.derive[Animal]
+        val codec = KindlingsCodecAsObject.derived[Animal]
         val value: Animal = Dog("Rex", "Labrador")
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
       }
 
       test("sealed trait round-trip without discriminator") {
-        val codec = KindlingsCodecAsObject.derive[Shape]
+        val codec = KindlingsCodecAsObject.derived[Shape]
         val value: Shape = Rectangle(3.0, 4.0)
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
       }
 
       test("empty case class") {
-        val codec = KindlingsCodecAsObject.derive[EmptyClass]
+        val codec = KindlingsCodecAsObject.derived[EmptyClass]
         val value = EmptyClass()
         val json = codec(value)
         codec.decodeJson(json) ==> Right(value)
@@ -282,13 +282,13 @@ final class RoundTripSpec extends MacroSuite {
 
       test("Codec.AsObject with strictDecoding rejects extra fields") {
         implicit val config: Configuration = Configuration(strictDecoding = true)
-        val codec = KindlingsCodecAsObject.derive[SimplePerson]
+        val codec = KindlingsCodecAsObject.derived[SimplePerson]
         val json = io.circe.parser.parse("""{"name":"Alice","age":30,"extra":true}""").getOrElse(io.circe.Json.Null)
         assert(codec.decodeJson(json).isLeft)
       }
 
       test("Codec.AsObject with @transientField") {
-        val codec = KindlingsCodecAsObject.derive[CirceWithTransient]
+        val codec = KindlingsCodecAsObject.derived[CirceWithTransient]
         val value = CirceWithTransient("Alice", Some("cached"))
         val json = codec(value)
         // Transient field should not appear in encoded JSON
@@ -456,7 +456,7 @@ final class RoundTripSpec extends MacroSuite {
       test("accumulating decoder with defaults for missing fields") {
         implicit val config: Configuration = Configuration.default.withDefaults
         val json = io.circe.Json.obj()
-        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val decoder = KindlingsDecoder.derived[MultiOptionDefaults]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isValid)
         result.fold(
@@ -478,7 +478,7 @@ final class RoundTripSpec extends MacroSuite {
           "c" -> io.circe.Json.fromString("custom-c"),
           "d" -> io.circe.Json.fromInt(99)
         )
-        val decoder = KindlingsDecoder.derive[MultiOptionDefaults]
+        val decoder = KindlingsDecoder.derived[MultiOptionDefaults]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isValid)
         result.fold(

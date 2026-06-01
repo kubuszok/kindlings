@@ -14,8 +14,8 @@ final class RefinedSconfigSpec extends MacroSuite {
   group("Refined + sconfig") {
 
     test("round-trip") {
-      implicit val reader: ConfigReader[RefinedPerson] = ConfigReader.derive[RefinedPerson]
-      implicit val writer: ConfigWriter[RefinedPerson] = ConfigWriter.derive[RefinedPerson]
+      implicit val reader: ConfigReader[RefinedPerson] = ConfigReader.derived[RefinedPerson]
+      implicit val writer: ConfigWriter[RefinedPerson] = ConfigWriter.derived[RefinedPerson]
       val v = RefinedPerson(alice, thirty)
       val config = writer.to(v)
       val result = reader.from(config)
@@ -23,7 +23,7 @@ final class RefinedSconfigSpec extends MacroSuite {
     }
 
     test("rejects invalid refined value") {
-      implicit val reader: ConfigReader[RefinedPerson] = ConfigReader.derive[RefinedPerson]
+      implicit val reader: ConfigReader[RefinedPerson] = ConfigReader.derived[RefinedPerson]
       val config = org.ekrich.config.ConfigFactory.parseString("""name = "Alice"
 age = -1""")
       val result = reader.from(config.root)

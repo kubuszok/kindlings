@@ -33,8 +33,8 @@ final class AvroScala3Spec extends MacroSuite {
       }
 
       test("round-trip") {
-        implicit val encoder: AvroEncoder[Fruit] = AvroEncoder.derive[Fruit]
-        implicit val decoder: AvroDecoder[Fruit] = AvroDecoder.derive[Fruit]
+        implicit val encoder: AvroEncoder[Fruit] = AvroEncoder.derived[Fruit]
+        implicit val decoder: AvroDecoder[Fruit] = AvroDecoder.derived[Fruit]
         val original = Fruit.Cherry
         val bytes = AvroIO.toBinary(original)
         val decoded = AvroIO.fromBinary[Fruit](bytes)
@@ -72,8 +72,8 @@ final class AvroScala3Spec extends MacroSuite {
       }
 
       test("round-trip") {
-        implicit val encoder: AvroEncoder[Vehicle] = AvroEncoder.derive[Vehicle]
-        implicit val decoder: AvroDecoder[Vehicle] = AvroDecoder.derive[Vehicle]
+        implicit val encoder: AvroEncoder[Vehicle] = AvroEncoder.derived[Vehicle]
+        implicit val decoder: AvroDecoder[Vehicle] = AvroDecoder.derived[Vehicle]
         val original = Vehicle.Bike(21)
         val bytes = AvroIO.toBinary(original)
         val decoded = AvroIO.fromBinary[Vehicle](bytes)
@@ -180,8 +180,8 @@ final class AvroScala3Spec extends MacroSuite {
     }
 
     test("round-trip via binary") {
-      implicit val encoder: AvroEncoder[(name: String, age: Int)] = AvroEncoder.derive[(name: String, age: Int)]
-      implicit val decoder: AvroDecoder[(name: String, age: Int)] = AvroDecoder.derive[(name: String, age: Int)]
+      implicit val encoder: AvroEncoder[(name: String, age: Int)] = AvroEncoder.derived[(name: String, age: Int)]
+      implicit val decoder: AvroDecoder[(name: String, age: Int)] = AvroDecoder.derived[(name: String, age: Int)]
       val original: (name: String, age: Int) = ("Alice", 42)
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[(name: String, age: Int)](bytes)
@@ -189,8 +189,8 @@ final class AvroScala3Spec extends MacroSuite {
     }
 
     test("single-element named tuple round-trip") {
-      implicit val encoder: AvroEncoder[(field: Int)] = AvroEncoder.derive[(field: Int)]
-      implicit val decoder: AvroDecoder[(field: Int)] = AvroDecoder.derive[(field: Int)]
+      implicit val encoder: AvroEncoder[(field: Int)] = AvroEncoder.derived[(field: Int)]
+      implicit val decoder: AvroDecoder[(field: Int)] = AvroDecoder.derived[(field: Int)]
       val original: (field: Int) = Tuple1(3)
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[(field: Int)](bytes)
@@ -231,8 +231,8 @@ final class AvroScala3Spec extends MacroSuite {
 
     test("round-trip case class with opaque type") {
       import AvroOpaqueTypes.*
-      implicit val encoder: AvroEncoder[AvroUserWithOpaque] = AvroEncoder.derive[AvroUserWithOpaque]
-      implicit val decoder: AvroDecoder[AvroUserWithOpaque] = AvroDecoder.derive[AvroUserWithOpaque]
+      implicit val encoder: AvroEncoder[AvroUserWithOpaque] = AvroEncoder.derived[AvroUserWithOpaque]
+      implicit val decoder: AvroDecoder[AvroUserWithOpaque] = AvroDecoder.derived[AvroUserWithOpaque]
       val original = AvroUserWithOpaque(UserId(42), "Alice")
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[AvroUserWithOpaque](bytes)
@@ -249,8 +249,8 @@ final class AvroScala3Spec extends MacroSuite {
     }
 
     test("IArray[Int] round-trip via binary") {
-      implicit val encoder: AvroEncoder[IArray[Int]] = AvroEncoder.derive[IArray[Int]]
-      implicit val decoder: AvroDecoder[IArray[Int]] = AvroDecoder.derive[IArray[Int]]
+      implicit val encoder: AvroEncoder[IArray[Int]] = AvroEncoder.derived[IArray[Int]]
+      implicit val decoder: AvroDecoder[IArray[Int]] = AvroDecoder.derived[IArray[Int]]
       val original: IArray[Int] = IArray(1, 2, 3)
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[IArray[Int]](bytes)
@@ -329,8 +329,8 @@ final class AvroScala3Spec extends MacroSuite {
     }
 
     test("round-trip case class union") {
-      implicit val encoder: AvroEncoder[ParrotOrHamster] = AvroEncoder.derive[ParrotOrHamster]
-      implicit val decoder: AvroDecoder[ParrotOrHamster] = AvroDecoder.derive[ParrotOrHamster]
+      implicit val encoder: AvroEncoder[ParrotOrHamster] = AvroEncoder.derived[ParrotOrHamster]
+      implicit val decoder: AvroDecoder[ParrotOrHamster] = AvroDecoder.derived[ParrotOrHamster]
       val original: ParrotOrHamster = Hamster("Biscuit", 7.5)
       val bytes = AvroIO.toBinary(original)
       val decoded = AvroIO.fromBinary[ParrotOrHamster](bytes)

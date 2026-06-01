@@ -92,7 +92,7 @@ final case class CompModel(
     animations: List[CompAnimation] = Nil
 )
 object CompModel {
-  val codec: TestJsonCodec[CompModel] = KindlingsJsonValueCodec.derive[CompModel]
+  val codec: TestJsonCodec[CompModel] = KindlingsJsonValueCodec.derived[CompModel]
 }
 
 // Simple Scala 3 enum (case objects only)
