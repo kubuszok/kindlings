@@ -100,3 +100,23 @@ case class Leaf(value: Int) extends TreeNode
 // Mutual recursion (triggers UseCachedDefWhenAvailableRule for both types)
 case class MutRecA(value: Int, b: Option[MutRecB])
 case class MutRecB(value: String, a: Option[MutRecA])
+
+// Combinatorial wrapper x inner type test types
+// NOTE: no pre-existing codecs for CombInner* — macro must derive recursively
+case class CombInnerCC(label: String, count: Int)
+
+sealed trait CombInnerST
+case class CombVariantA(x: Int) extends CombInnerST
+case class CombVariantB(text: String) extends CombInnerST
+
+sealed trait CombAnnotatedST
+case class CombAnnotA(@xmlName("renamed_field") value: String) extends CombAnnotatedST
+case class CombAnnotB(@xmlAttribute flag: Boolean) extends CombAnnotatedST
+
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[CombInnerCC],
+    optSealedTrait: Option[CombInnerST],
+    listCaseClass: List[CombInnerCC],
+    mapCaseClass: Map[String, CombInnerCC]
+)

@@ -121,6 +121,22 @@ case class RecursiveParent(name: String, nodes: List[RecursiveNode])
 case class Recursive3Plain(id: String, extra: String, children: List[Recursive3Plain] = Nil)
 case class Recursive3Option(id: String, extra: Option[String] = None, children: List[Recursive3Option] = Nil)
 
+// Combinatorial wrapper x inner type test types
+// NOTE: no pre-existing codecs for CombInner* — macro must derive recursively
+case class CombInnerCC(label: String, count: Int)
+
+sealed trait CombInnerST
+case class CombVariantA(x: Int) extends CombInnerST
+case class CombVariantB(text: String) extends CombInnerST
+
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[CombInnerCC],
+    optSealedTrait: Option[CombInnerST],
+    listCaseClass: List[CombInnerCC],
+    mapCaseClass: Map[String, CombInnerCC]
+)
+
 // Large recursive type graph (reproduces G3dModelJson scenario)
 case class LargeRecKeyframeV1(
     keytime: Float = 0f,

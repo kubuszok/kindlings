@@ -118,5 +118,86 @@ final class ConfigWriterSpec extends MacroSuite {
         renderConcise(w.to(North)) ==> "\"north\""
       }
     }
+
+    group("combinatorial: wrapper x inner type") {
+
+      test("write CombOuter with all fields populated") {
+        val w = ConfigWriter.derived[CombOuter]
+        val rendered = renderConcise(
+          w.to(
+            CombOuter(
+              optPrimitive = Some(42),
+              optCaseClass = Some(SimplePerson("Alice", 30)),
+              optSealedTrait = Some(Circle(1.5)),
+              listCaseClass = List(SimplePerson("Bob", 25)),
+              mapCaseClass = Map("key1" -> SimplePerson("Carol", 40))
+            )
+          )
+        )
+        assert(rendered.contains("\"opt-primitive\":42"))
+        assert(rendered.contains("\"name\":\"Alice\""))
+        assert(rendered.contains("\"type\":\"circle\""))
+        assert(rendered.contains("\"radius\":1.5"))
+        assert(rendered.contains("\"name\":\"Bob\""))
+        assert(rendered.contains("\"key1\""))
+        assert(rendered.contains("\"name\":\"Carol\""))
+      }
+
+      test("write CombOuter with None and empty collections") {
+        val w = ConfigWriter.derived[CombOuter]
+        val rendered = renderConcise(
+          w.to(
+            CombOuter(
+              optPrimitive = None,
+              optCaseClass = None,
+              optSealedTrait = None,
+              listCaseClass = Nil,
+              mapCaseClass = Map.empty
+            )
+          )
+        )
+        assert(rendered.contains("\"opt-primitive\":null"))
+        assert(rendered.contains("\"opt-case-class\":null"))
+        assert(rendered.contains("\"opt-sealed-trait\":null"))
+        assert(rendered.contains("\"list-case-class\":[]"))
+        assert(rendered.contains("\"map-case-class\":{}"))
+      }
+    }
+
+    group("annotation x type shape") {
+
+      test("@configKey on a sealed trait subtype field (writer)") {
+        val w = ConfigWriter.derived[AnnotatedShape]
+        val rendered = renderConcise(w.to(AnnotatedCircle(2.5)))
+        assert(rendered.contains("\"r\":2.5"))
+        assert(!rendered.contains("\"radius\""))
+      }
+
+      test("@configKey on multiple fields of a sealed trait subtype (writer)") {
+        val w = ConfigWriter.derived[AnnotatedShape]
+        val rendered = renderConcise(w.to(AnnotatedRect(4.0, 5.0)))
+        assert(rendered.contains("\"w\":4"))
+        assert(rendered.contains("\"h\":5"))
+        assert(!rendered.contains("\"width\""))
+        assert(!rendered.contains("\"height\""))
+      }
+
+      test("@transientField on a sealed trait subtype (writer)") {
+        val w = ConfigWriter.derived[TransientShape]
+        val rendered = renderConcise(w.to(TransientCircle(3.0, "cached")))
+        assert(rendered.contains("\"radius\":3"))
+        assert(!rendered.contains("memo"))
+        assert(!rendered.contains("cached"))
+      }
+
+      test("@transientField on a sealed trait subtype with extra fields (writer)") {
+        val w = ConfigWriter.derived[TransientShape]
+        val rendered = renderConcise(w.to(TransientRect(6.0, 7.0, "cached")))
+        assert(rendered.contains("\"width\":6"))
+        assert(rendered.contains("\"height\":7"))
+        assert(!rendered.contains("memo"))
+        assert(!rendered.contains("cached"))
+      }
+    }
   }
 }

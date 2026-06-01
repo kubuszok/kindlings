@@ -306,5 +306,26 @@ case class MutRecB(value: String, a: Option[MutRecA])
 case class Forest(trees: List[TreeCaseClass])
 case class TreeCaseClass(value: Int, children: List[TreeCaseClass])
 
+// Combinatorial: wrapper x inner type (catches bug patterns like #78, #79, #91)
+case class CombOuter(
+    optPrimitive: Option[Int],
+    optCaseClass: Option[SimplePerson],
+    optSealedTrait: Option[Shape],       // Bug #78: Option[SealedTrait] union flattening
+    listCaseClass: List[SimplePerson],
+    listSealedTrait: List[Shape]
+)
+
+// Same-name-different-package (bug #79 regression guard)
+object pkgX {
+  @avroNamespace("pkg.x")
+  case class Shared(id: Int)
+}
+object pkgY {
+  @avroNamespace("pkg.y")
+  case class Shared(label: String)
+}
+@avroNamespace("pkg.outer")
+case class TwoShared(x: pkgX.Shared, y: pkgY.Shared)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

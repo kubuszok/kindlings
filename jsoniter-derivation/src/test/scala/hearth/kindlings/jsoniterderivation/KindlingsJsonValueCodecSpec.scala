@@ -1895,4 +1895,139 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       }
     }
   }
+
+  group("combinatorial: wrapper x inner type") {
+
+    test("CombOuter round-trip with all fields populated") {
+      val codec = KindlingsJsonValueCodec.derived[CombOuter]
+      val value = CombOuter(
+        optPrimitive = Some(42),
+        optCaseClass = Some(SimplePerson("Alice", 30)),
+        optSealedTrait = Some(Circle(5.0)),
+        optValueClass = Some(WrappedInt(7)),
+        listCaseClass = List(SimplePerson("Bob", 25), SimplePerson("Eve", 28)),
+        listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0)),
+        mapCaseClass = Map("first" -> SimplePerson("Carol", 40)),
+        mapSealedTrait = Map("s1" -> Circle(10.0), "s2" -> Rectangle(4.0, 5.0))
+      )
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[CombOuter](json)(codec)
+      decoded ==> value
+    }
+
+    test("CombOuter round-trip with None and empty collections") {
+      val codec = KindlingsJsonValueCodec.derived[CombOuter]
+      val value = CombOuter(
+        optPrimitive = None,
+        optCaseClass = None,
+        optSealedTrait = None,
+        optValueClass = None,
+        listCaseClass = Nil,
+        listSealedTrait = Nil,
+        mapCaseClass = Map.empty,
+        mapSealedTrait = Map.empty
+      )
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[CombOuter](json)(codec)
+      decoded ==> value
+    }
+
+    test("Option[Shape] round-trip (recursive sealed trait derivation)") {
+      val codec = KindlingsJsonValueCodec.derived[Option[Shape]]
+      val some: Option[Shape] = Some(Rectangle(3.0, 4.0))
+      val jsonSome = writeToString(some)(codec)
+      readFromString[Option[Shape]](jsonSome)(codec) ==> some
+      val none: Option[Shape] = None
+      val jsonNone = writeToString(none)(codec)
+      readFromString[Option[Shape]](jsonNone)(codec) ==> none
+    }
+
+    test("Option[SimplePerson] without pre-existing codec") {
+      val codec = KindlingsJsonValueCodec.derived[Option[SimplePerson]]
+      val some: Option[SimplePerson] = Some(SimplePerson("Alice", 30))
+      val jsonSome = writeToString(some)(codec)
+      readFromString[Option[SimplePerson]](jsonSome)(codec) ==> some
+      val none: Option[SimplePerson] = None
+      val jsonNone = writeToString(none)(codec)
+      readFromString[Option[SimplePerson]](jsonNone)(codec) ==> none
+    }
+
+    test("List[Shape] round-trip (recursive sealed trait derivation)") {
+      val codec = KindlingsJsonValueCodec.derived[List[Shape]]
+      val value: List[Shape] = List(Circle(1.0), Rectangle(2.0, 3.0), Circle(4.0))
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[List[Shape]](json)(codec)
+      decoded ==> value
+    }
+
+    test("Map[String, Shape] round-trip (recursive sealed trait derivation)") {
+      val codec = KindlingsJsonValueCodec.derived[Map[String, Shape]]
+      val value = Map("c" -> Circle(1.0): Shape, "r" -> Rectangle(2.0, 3.0): Shape)
+      val json = writeToString(value)(codec)
+      val decoded = readFromString[Map[String, Shape]](json)(codec)
+      decoded ==> value
+    }
+  }
+
+  group("annotation x type shape") {
+
+    test("@fieldName and @stringified on case class fields round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedCaseClass]
+      val value = AnnotatedCaseClass("Alice", 99, 1)
+      val json = writeToString(value)(codec)
+      assert(json.contains("\"full_name\":\"Alice\""))
+      assert(json.contains("\"99\""))
+      assert(json.contains("\"is_active\":\"1\""))
+      val decoded = readFromString[AnnotatedCaseClass](json)(codec)
+      decoded ==> value
+    }
+
+    test("@fieldName on sealed trait subtypes round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedSealedTrait]
+      val valueA: AnnotatedSealedTrait = AnnotatedSubA("hello", 42)
+      val jsonA = writeToString(valueA)(codec)
+      assert(jsonA.contains("\"sub_name\":\"hello\""))
+      assert(jsonA.contains("\"42\""))
+      val decodedA = readFromString[AnnotatedSealedTrait](jsonA)(codec)
+      decodedA ==> valueA
+
+      val valueB: AnnotatedSealedTrait = AnnotatedSubB("world")
+      val jsonB = writeToString(valueB)(codec)
+      assert(jsonB.contains("\"sub_label\":\"world\""))
+      val decodedB = readFromString[AnnotatedSealedTrait](jsonB)(codec)
+      decodedB ==> valueB
+    }
+
+    test("@fieldName with config field name transform (annotation takes precedence)") {
+      implicit val config: JsoniterConfig = JsoniterConfig.default.withSnakeCaseFieldNames
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedCaseClass]
+      val value = AnnotatedCaseClass("Bob", 50, 0)
+      val json = writeToString(value)(codec)
+      // @fieldName("full_name") takes precedence over snake_case transform
+      assert(json.contains("\"full_name\""))
+      assert(json.contains("\"is_active\""))
+      val decoded = readFromString[AnnotatedCaseClass](json)(codec)
+      decoded ==> value
+    }
+
+    test("@stringified on sealed trait subtypes round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedSealedTrait]
+      val value: AnnotatedSealedTrait = AnnotatedSubA("test", 100)
+      val json = writeToString(value)(codec)
+      // @stringified on AnnotatedSubA.value should encode as string
+      assert(json.contains("\"100\""))
+      val decoded = readFromString[AnnotatedSealedTrait](json)(codec)
+      decoded ==> value
+    }
+
+    test("@fieldName + @stringified combined on same field round-trip") {
+      val codec = KindlingsJsonValueCodec.derived[AnnotatedCaseClass]
+      val value = AnnotatedCaseClass("Carol", 77, 1)
+      val json = writeToString(value)(codec)
+      // is_active field has both annotations
+      assert(json.contains("\"is_active\":\"1\""))
+      val decoded = readFromString[AnnotatedCaseClass](json)(codec)
+      decoded ==> value
+    }
+  }
 }

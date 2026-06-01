@@ -587,6 +587,133 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
   }
 
+  group("combinatorial wrapper x inner-type") {
+
+    test("CombOuter derives successfully") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val fieldNames = p.fields.map(_.name.name)
+          assertEquals(
+            fieldNames,
+            List("optCaseClass", "optSealedTrait", "listCaseClass", "listSealedTrait", "mapCaseClass", "mapSealedTrait")
+          )
+        case other =>
+          fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("Option[case class] field is optional with nested SProduct") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val optCCField = p.fields.find(_.name.name == "optCaseClass").get
+          assert(optCCField.schema.isOptional, "Option field should be optional")
+          optCCField.schema.schemaType match {
+            case SchemaType.SOption(inner) =>
+              inner.schemaType match {
+                case _: SchemaType.SProduct[?] => () // nested case class as SProduct
+                case _: SchemaType.SRef[?]     => () // or SRef if recursive resolution
+                case other                     => fail(s"Expected SProduct or SRef inside SOption, got: $other")
+              }
+            case other => fail(s"Expected SOption, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("Option[sealed trait] field is optional with nested SCoproduct") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val optSTField = p.fields.find(_.name.name == "optSealedTrait").get
+          assert(optSTField.schema.isOptional, "Option field should be optional")
+          optSTField.schema.schemaType match {
+            case SchemaType.SOption(inner) =>
+              inner.schemaType match {
+                case _: SchemaType.SCoproduct[?] => () // sealed trait as SCoproduct
+                case _: SchemaType.SRef[?]       => () // or SRef
+                case other                       => fail(s"Expected SCoproduct or SRef inside SOption, got: $other")
+              }
+            case other => fail(s"Expected SOption, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("List[case class] field is SArray with SProduct element") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val listCCField = p.fields.find(_.name.name == "listCaseClass").get
+          listCCField.schema.schemaType match {
+            case arr: SchemaType.SArray[?, ?] =>
+              arr.element.schemaType match {
+                case _: SchemaType.SProduct[?] => ()
+                case _: SchemaType.SRef[?]     => ()
+                case other                     => fail(s"Expected SProduct or SRef inside SArray, got: $other")
+              }
+            case other => fail(s"Expected SArray, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("List[sealed trait] field is SArray with SCoproduct element") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val listSTField = p.fields.find(_.name.name == "listSealedTrait").get
+          listSTField.schema.schemaType match {
+            case arr: SchemaType.SArray[?, ?] =>
+              arr.element.schemaType match {
+                case _: SchemaType.SCoproduct[?] => ()
+                case _: SchemaType.SRef[?]       => ()
+                case other                       => fail(s"Expected SCoproduct or SRef inside SArray, got: $other")
+              }
+            case other => fail(s"Expected SArray, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("Map[String, case class] field is SOpenProduct with SProduct element") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val mapCCField = p.fields.find(_.name.name == "mapCaseClass").get
+          mapCCField.schema.schemaType match {
+            case op: SchemaType.SOpenProduct[?, ?] =>
+              op.valueSchema.schemaType match {
+                case _: SchemaType.SProduct[?] => ()
+                case _: SchemaType.SRef[?]     => ()
+                case other                     => fail(s"Expected SProduct or SRef inside SOpenProduct, got: $other")
+              }
+            case other => fail(s"Expected SOpenProduct, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("Map[String, sealed trait] field is SOpenProduct with SCoproduct element") {
+      val schema = KindlingsSchema.derived[CombOuter]
+      schema.schemaType match {
+        case p: SchemaType.SProduct[CombOuter] =>
+          val mapSTField = p.fields.find(_.name.name == "mapSealedTrait").get
+          mapSTField.schema.schemaType match {
+            case op: SchemaType.SOpenProduct[?, ?] =>
+              op.valueSchema.schemaType match {
+                case _: SchemaType.SCoproduct[?] => ()
+                case _: SchemaType.SRef[?]       => ()
+                case other                       => fail(s"Expected SCoproduct or SRef inside SOpenProduct, got: $other")
+              }
+            case other => fail(s"Expected SOpenProduct, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+  }
+
   group("value class schemas") {
 
     test("value class produces SProduct wrapping") {

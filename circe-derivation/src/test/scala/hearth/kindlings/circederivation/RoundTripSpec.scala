@@ -487,5 +487,212 @@ final class RoundTripSpec extends MacroSuite {
         )
       }
     }
+
+    group("combinatorial: wrapper x inner type") {
+
+      test("CombOuter round-trip with all fields populated") {
+        val value = CombOuter(
+          optPrimitive = Some(42),
+          optCaseClass = Some(SimplePerson("Alice", 30)),
+          optSealedTrait = Some(Circle(5.0)),
+          optValueClass = Some(WrappedInt(99)),
+          listCaseClass = List(SimplePerson("Bob", 25), SimplePerson("Carol", 35)),
+          listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0)),
+          mapCaseClass = Map("a" -> SimplePerson("Dave", 40)),
+          mapSealedTrait = Map("x" -> Circle(7.0), "y" -> Rectangle(8.0, 9.0))
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("CombOuter round-trip with None and empty collections") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("Option[Shape] with Some (sealed trait in Option - bug #78 pattern)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = Some(Rectangle(3.0, 4.0)),
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("Option[Shape] with None (sealed trait in Option - bug #78 pattern)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("List[Shape] (sealed trait in List)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = List(Circle(1.0), Rectangle(2.0, 3.0), Circle(4.0)),
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("Map[String, Shape] (sealed trait in Map)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map("circle" -> Circle(5.0), "rect" -> Rectangle(6.0, 7.0))
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("Option[SimplePerson] (case class in Option - bug #120 pattern)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = Some(SimplePerson("Alice", 30)),
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map.empty,
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+
+      test("Map[String, SimplePerson] (case class in Map)") {
+        val value = CombOuter(
+          optPrimitive = None,
+          optCaseClass = None,
+          optSealedTrait = None,
+          optValueClass = None,
+          listCaseClass = Nil,
+          listSealedTrait = Nil,
+          mapCaseClass = Map("alice" -> SimplePerson("Alice", 30), "bob" -> SimplePerson("Bob", 25)),
+          mapSealedTrait = Map.empty
+        )
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
+      }
+    }
+
+    group("annotation x type shape") {
+
+      test("@fieldName on case class field round-trip") {
+        val value = CirceWithFieldName("Alice", 30)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CirceWithFieldName](json) ==> Right(value)
+      }
+
+      test("@transientField on case class field round-trip") {
+        val value = CirceWithTransient("Alice", Some("cached"))
+        val json = KindlingsEncoder.encode(value)
+        // transient field uses default on decode
+        KindlingsDecoder.decode[CirceWithTransient](json) ==> Right(CirceWithTransient("Alice", None))
+      }
+
+      test("@fieldName + @transientField combined on case class round-trip") {
+        val value = CirceWithBothAnnotations("Alice", 42, true)
+        val json = KindlingsEncoder.encode(value)
+        KindlingsDecoder.decode[CirceWithBothAnnotations](json) ==> Right(CirceWithBothAnnotations("Alice", 0, true))
+      }
+
+      test("@fieldName on sealed trait subtype field round-trip (bug #108 pattern)") {
+        val value: AnnotatedADT = AnnotatedLeafA("Alice Smith", 42)
+        val json = KindlingsEncoder.encode[AnnotatedADT](value)
+        KindlingsDecoder.decode[AnnotatedADT](json) ==> Right(value)
+      }
+
+      test("@fieldName on sealed trait subtype encodes with renamed field") {
+        val json = KindlingsEncoder.encode[AnnotatedADT](AnnotatedLeafA("Alice", 10): AnnotatedADT)
+        val inner = json.asObject.flatMap(_("AnnotatedLeafA")).flatMap(_.asObject)
+        assert(inner.isDefined)
+        assert(inner.get.contains("full_name"))
+        assert(!inner.get.contains("fullName"))
+      }
+
+      test("@transientField on sealed trait subtype field round-trip (bug #108 pattern)") {
+        val value: AnnotatedADT = AnnotatedLeafB("test", 999)
+        val json = KindlingsEncoder.encode[AnnotatedADT](value)
+        // transient field should not be encoded, and decoding uses default
+        KindlingsDecoder.decode[AnnotatedADT](json) ==> Right(AnnotatedLeafB("test", 0): AnnotatedADT)
+      }
+
+      test("@transientField on sealed trait subtype excludes field from encoding") {
+        val json = KindlingsEncoder.encode[AnnotatedADT](AnnotatedLeafB("test", 999): AnnotatedADT)
+        val inner = json.asObject.flatMap(_("AnnotatedLeafB")).flatMap(_.asObject)
+        assert(inner.isDefined)
+        assert(!inner.get.contains("hidden"))
+        inner.get("label") ==> Some(io.circe.Json.fromString("test"))
+      }
+
+      test("both annotations on sealed trait subtype field round-trip (bug #108 pattern)") {
+        val value: AnnotatedADT = AnnotatedLeafBoth("Hello", Some("scratch"), true)
+        val json = KindlingsEncoder.encode[AnnotatedADT](value)
+        KindlingsDecoder.decode[AnnotatedADT](json) ==> Right(AnnotatedLeafBoth("Hello", None, true): AnnotatedADT)
+      }
+
+      test("both annotations on sealed trait subtype encode correctly") {
+        val json =
+          KindlingsEncoder.encode[AnnotatedADT](AnnotatedLeafBoth("Hello", Some("scratch"), true): AnnotatedADT)
+        val inner = json.asObject.flatMap(_("AnnotatedLeafBoth")).flatMap(_.asObject)
+        assert(inner.isDefined)
+        assert(inner.get.contains("display_label"))
+        assert(!inner.get.contains("displayLabel"))
+        assert(!inner.get.contains("scratch"))
+        inner.get("active") ==> Some(io.circe.Json.True)
+      }
+
+      test("sealed trait with annotated subtypes with discriminator round-trip") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val value: AnnotatedADT = AnnotatedLeafA("Bob", 7)
+        val json = KindlingsEncoder.encode[AnnotatedADT](value)
+        KindlingsDecoder.decode[AnnotatedADT](json) ==> Right(value)
+      }
+
+      test("sealed trait with annotated subtypes with discriminator encodes renamed fields") {
+        implicit val config: Configuration = Configuration(discriminator = Some("type"))
+        val json = KindlingsEncoder.encode[AnnotatedADT](AnnotatedLeafA("Bob", 7): AnnotatedADT)
+        val obj = json.asObject.get
+        obj("type") ==> Some(io.circe.Json.fromString("AnnotatedLeafA"))
+        obj("full_name") ==> Some(io.circe.Json.fromString("Bob"))
+        assert(!obj.contains("fullName"))
+      }
+    }
   }
 }

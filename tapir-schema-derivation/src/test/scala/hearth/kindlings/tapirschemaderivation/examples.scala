@@ -50,6 +50,16 @@ case class Box[A](value: A)
 
 case class Pair[A, B](first: A, second: B)
 
+// Combinatorial wrapper x inner-type test types
+case class CombOuter(
+    optCaseClass: Option[SimplePerson],
+    optSealedTrait: Option[Shape],
+    listCaseClass: List[SimplePerson],
+    listSealedTrait: List[Shape],
+    mapCaseClass: Map[String, SimplePerson],
+    mapSealedTrait: Map[String, Shape]
+)
+
 // Config feature test types
 
 sealed trait Color
