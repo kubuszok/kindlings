@@ -399,6 +399,37 @@ final class CatsDerivationSpec extends MacroSuite {
       val empty: examples.IList[Int] = examples.INil()
       examples.IList.functorIList.map(empty)(_ * 10) ==> examples.INil()
     }
+
+    test("self-recursive nested case class Search: direct field") {
+      val search = examples.Search(1, None, Nil)
+      examples.Search.functorSearch.map(search)(_ * 10) ==> examples.Search(10, None, Nil)
+    }
+
+    test("self-recursive nested case class Search: with child") {
+      val search = examples.Search(1, Some(examples.Search(2, None, Nil)), Nil)
+      examples.Search.functorSearch.map(search)(_ * 10) ==>
+        examples.Search(10, Some(examples.Search(20, None, Nil)), Nil)
+    }
+
+    test("self-recursive nested case class Search: with variations") {
+      val search = examples.Search(1, None, List(examples.Search(2, None, Nil), examples.Search(3, None, Nil)))
+      examples.Search.functorSearch.map(search)(_ * 10) ==>
+        examples.Search(10, None, List(examples.Search(20, None, Nil), examples.Search(30, None, Nil)))
+    }
+
+    test("self-recursive nested case class Search: deep nesting") {
+      val search = examples.Search(
+        1,
+        Some(examples.Search(2, Some(examples.Search(3, None, Nil)), Nil)),
+        List(examples.Search(4, None, List(examples.Search(5, None, Nil))))
+      )
+      examples.Search.functorSearch.map(search)(_ * 10) ==>
+        examples.Search(
+          10,
+          Some(examples.Search(20, Some(examples.Search(30, None, Nil)), Nil)),
+          List(examples.Search(40, None, List(examples.Search(50, None, Nil))))
+        )
+    }
   }
 
   group("Contravariant") {

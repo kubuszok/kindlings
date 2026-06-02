@@ -40,7 +40,7 @@ Port regression tests even if kindlings doesn't currently have the bug.
 
 | # | Gap | Priority |
 |---|---|---|
-| 3.1 | Recursive nested HKT: `Search[+A](move, child: Option[Search[A]], variations: List[Search[A]])` — needs 4th field classification category (nested+self-recursive) in Functor/Foldable/Traverse; infrastructure exists but composing nested functors with self-recursion is non-trivial | P1 |
+| 3.1 | ~~Recursive nested HKT~~ → 4th field classification (nested+self-recursive) for Functor, with recursive binding and erased cast fix. `Search[+A](move: A, child: Option[Search[A]], variations: List[Search[A]])` derives correctly. | ✅ |
 | 3.3 | ~~Automatic derivation mode~~ → `import auto.show.given` (Scala 3) / `import auto.show._` (Scala 2) for Show, Eq, Order, Hash, Semigroup, Monoid, Empty, Functor, Contravariant, Foldable, Traverse | ✅ |
 | 3.4 | ~~`strict.semiauto` mode~~ → `StrictDerivation` sentinel type; when in implicit scope, UseImplicit rules fail instead of yielding to auto-derivation | ✅ |
 

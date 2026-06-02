@@ -24,6 +24,31 @@ final private[catsderivation] class FunctorMacros(q: Quotes) extends MacroCommon
     }
   }
 
+  protected def extractSingleTypeArg(appliedType: Type[Any]): Option[Type[Any]] = {
+    import q.reflect.*
+    val repr = TypeRepr.of(using appliedType.asInstanceOf[scala.quoted.Type[Any]])
+    repr.dealias match {
+      case AppliedType(_, arg :: Nil) =>
+        Some(arg.asType match { case '[t] => scala.quoted.Type.of[t].asInstanceOf[Type[Any]] })
+      case _ => None
+    }
+  }
+
+  protected def isNestedSelfRecursive(fieldType: Type[Any], parentCtor: UntypedType): Boolean = {
+    import q.reflect.*
+    val repr = TypeRepr.of(using fieldType.asInstanceOf[scala.quoted.Type[Any]])
+    repr.dealias match {
+      case AppliedType(_, innerArg :: Nil) =>
+        innerArg.dealias match {
+          case AppliedType(innerCtor, _) =>
+            // Compare type symbols for reliable cross-context equality
+            innerCtor.typeSymbol == parentCtor.asInstanceOf[TypeRepr].typeSymbol
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
   protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
     import q.reflect.*
     val repr = TypeRepr.of(using fieldType.asInstanceOf[scala.quoted.Type[Any]])

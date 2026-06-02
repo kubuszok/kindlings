@@ -18,11 +18,23 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
 
   protected def mkCtor1FromType(appliedType: Type[Any]): Option[(Type.Ctor1[AnyK], UntypedType)]
 
+  /** Given an applied type `G[X]`, extract the single type argument `X` as a `Type[Any]`. Returns None if the type is
+    * not a single-argument applied type.
+    */
+  protected def extractSingleTypeArg(appliedType: Type[Any]): Option[Type[Any]]
+
+  /** Check whether the given applied type `G[X]` has an inner type argument `X` whose type constructor matches the
+    * given parent constructor. For example, `Option[Search[Int]]` with parent `Search` would return true because
+    * `Search` (from `Search[Int]`) matches the parent.
+    */
+  protected def isNestedSelfRecursive(fieldType: Type[Any], parentCtor: UntypedType): Boolean
+
   final case class FunctorCaseClassResult[F[_]](
       FCtor: Type.Ctor1[F],
       directFieldSet: Set[String],
       nestedFieldFunctors: Map[String, Expr[Any]],
-      selfRecursiveFields: Set[String] = Set.empty
+      selfRecursiveFields: Set[String] = Set.empty,
+      selfRecursiveOuterFunctors: Map[String, Expr[Any]] = Map.empty
   )
 
   abstract class FunctorDerivationRule(val name: String) extends Rule {
@@ -47,27 +59,63 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
     }
   }
 
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   protected def deriveFunctorForCaseClass[F[_]](
       result: FunctorCaseClassResult[F],
       runSafe: hearth.fp.DirectStyle.RunSafe[hearth.fp.effect.MIO]
   )(implicit FCtor: Type.Ctor1[F]): Expr[cats.Functor[F]] = {
     import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-    Expr.quote {
-      CatsDerivationFactories.functorInstance[F] {
-        (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
-          val _ = fa
-          val _ = f
-          Expr.splice {
-            val body: MIO[Expr[F[CatsDerivationFactories.W2]]] =
-              deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
-                result.FCtor,
-                result.directFieldSet,
-                result.nestedFieldFunctors,
-                Expr.quote(fa),
-                Expr.quote(f)
-              )(Type.of[CatsDerivationFactories.W1], Type.of[CatsDerivationFactories.W2])
-            runSafe(body)
-          }
+
+    val hasSelfRecursive = result.selfRecursiveFields.nonEmpty
+
+    if (hasSelfRecursive) {
+      Expr.quote {
+        var self$macro: Any = null
+        self$macro = CatsDerivationFactories.functorInstance[F] {
+          (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+            val _ = fa; val _ = f
+            val r$0: F[Any] = Expr.splice {
+              val body: MIO[Expr[F[Any]]] =
+                deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                  result.FCtor,
+                  result.directFieldSet,
+                  result.nestedFieldFunctors,
+                  result.selfRecursiveFields,
+                  result.selfRecursiveOuterFunctors,
+                  Expr.quote(fa),
+                  Expr.quote(f),
+                  Some(Expr.quote(self$macro))
+                )(
+                  Type.of[CatsDerivationFactories.W1],
+                  Type.of[CatsDerivationFactories.W2]
+                ).asInstanceOf[MIO[Expr[F[Any]]]]
+              runSafe(body)
+            }
+            r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
+        }
+        self$macro.asInstanceOf[cats.Functor[F]]
+      }
+    } else {
+      Expr.quote {
+        CatsDerivationFactories.functorInstance[F] {
+          (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+            val _ = fa
+            val _ = f
+            Expr.splice {
+              val body: MIO[Expr[F[CatsDerivationFactories.W2]]] =
+                deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                  result.FCtor,
+                  result.directFieldSet,
+                  result.nestedFieldFunctors,
+                  result.selfRecursiveFields,
+                  result.selfRecursiveOuterFunctors,
+                  Expr.quote(fa),
+                  Expr.quote(f),
+                  None
+                )(Type.of[CatsDerivationFactories.W1], Type.of[CatsDerivationFactories.W2])
+              runSafe(body)
+            }
+        }
       }
     }
   }
@@ -113,8 +161,11 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
       FCtor: Type.Ctor1[F],
       directFields: Set[String],
       nestedFieldFunctors: Map[String, Expr[Any]],
+      selfRecursiveFields: Set[String],
+      selfRecursiveOuterFunctors: Map[String, Expr[Any]],
       faExpr: Expr[F[A]],
-      fExpr: Expr[A => B]
+      fExpr: Expr[A => B],
+      selfOpt: Option[Expr[Any]]
   )(implicit AType: Type[A], BType: Type[B]): MIO[Expr[F[B]]] = {
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
@@ -139,6 +190,39 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
       if (directFields.contains(fieldName)) {
         val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
         (fieldName, mapped.as_??)
+      } else if (selfRecursiveFields.contains(fieldName) && selfRecursiveOuterFunctors.contains(fieldName)) {
+        // Self-recursive nested field: e.g. Option[Search[A]] where Search is the parent.
+        // Use outerFunctor.map(field)(inner => self.map(inner)(f))
+        val outerFunctorExpr = selfRecursiveOuterFunctors(fieldName)
+        val selfExpr = selfOpt.getOrElse(
+          throw new RuntimeException("Self-recursive field but no self Functor reference")
+        )
+        val nestedResult: Expr[Any] = Expr.quote {
+          hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+            .mapNestedSelfRecursive(
+              Expr.splice(outerFunctorExpr),
+              Expr.splice(selfExpr),
+              Expr.splice(fieldExpr.upcast[Any]),
+              Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
+            )
+        }
+        val bParam = bFieldMap(fieldName)
+        (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
+      } else if (selfRecursiveFields.contains(fieldName)) {
+        // Direct self-recursive field (no outer wrapper): e.g. F[A] itself
+        val selfExpr = selfOpt.getOrElse(
+          throw new RuntimeException("Self-recursive field but no self Functor reference")
+        )
+        val nestedResult: Expr[Any] = Expr.quote {
+          hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+            .mapNested(
+              Expr.splice(selfExpr),
+              Expr.splice(fieldExpr.upcast[Any]),
+              Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
+            )
+        }
+        val bParam = bFieldMap(fieldName)
+        (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
       } else if (nestedFieldFunctors.contains(fieldName)) {
         val functorExpr = nestedFieldFunctors(fieldName)
         val nestedResult: Expr[Any] = Expr.quote {
