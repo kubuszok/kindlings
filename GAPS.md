@@ -78,10 +78,8 @@ Port regression tests even if kindlings doesn't currently have the bug.
 
 | # | Gap | Priority |
 |---|---|---|
-| 6.1 | `@default` annotation (per-field default enrichment) | P1 |
-| 6.2 | `@encodedExample` annotation | P1 |
-| 6.3 | `.modify(_.path)` post-derivation | P2 |
-| 6.4 | Scala 3 union type schemas (`String | Int`) | P2 |
+| 6.1 | `.modify(_.path)` post-derivation | P2 |
+| 6.2 | Scala 3 union type schemas (`String | Int`) | P2 |
 
 ---
 
@@ -187,3 +185,6 @@ Independent implementation (not diffx port). Gaps below matter for diffx parity.
 - **xml @xmlAttribute on sealed trait subtype** — fixed: FromAttribute now decodes through field helper
 - **sconfig strict decoding for sealed traits** — fixed: strip discriminator key before passing to child reader
 - **diff-derivation core coverage** — audit shows comprehensive test coverage (DiffResult/DiffRuntime all types tested)
+- **diff-derivation Map/Collection/Option inner type derivation** — fixed: recursive derivation via def-caching
+- **tapir @default annotation** — already implemented with tests
+- **tapir @encodedExample annotation** — already implemented with tests

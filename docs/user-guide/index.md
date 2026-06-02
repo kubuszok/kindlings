@@ -49,7 +49,7 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     //> using dep com.kubuszok::kindlings-yaml-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
 
-    // intagrations:
+    // integrations:
     //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}

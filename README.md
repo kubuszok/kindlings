@@ -67,21 +67,36 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 | Module | Replaces | Derived type classes |
 |---|---|---|
 | `kindlings-avro-derivation` | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
-| `kindlings-cats-derivation` | kittens | `Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Functor`, `Foldable`, `Traverse`, and [26 more](FEATURE_PARITY.md#cats-derivation) |
+| `kindlings-cats-derivation` | kittens | `Show`, `Eq`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Functor`, `Foldable`, `Traverse`, and 26 more |
 | `kindlings-circe-derivation` | circe-generic-extras / circe configured derivation | `Encoder`, `Encoder.AsObject`, `Decoder` |
+| `kindlings-diff-derivation` | _(original)_ | `Diff` (structural comparison with Myers diff) |
+| `kindlings-fast-show-pretty` | _(original)_ | `FastShowPretty` |
 | `kindlings-jsoniter-derivation` | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
-| `kindlings-pureconfig-derivation` | PureConfig `pureconfig.generic.semiauto` / `auto` / `derivation.default` (JVM only) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` (subtypes of `pureconfig.ConfigReader`/`Writer`/`Convert`) |
-| `kindlings-scalacheck-derivation` | ScalaCheck manual instances | `Arbitrary` |
-| `kindlings-sconfig-derivation` | _(original)_ — built on `org.ekrich:sconfig` (cross-platform HOCON port of typesafe-config) | `ConfigReader`, `ConfigWriter`, `ConfigCodec` |
+| `kindlings-pureconfig-derivation` | PureConfig generic (JVM only) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` |
+| `kindlings-scalacheck-derivation` | ScalaCheck manual instances | `Arbitrary`, `Cogen`, `Shrink` |
+| `kindlings-sconfig-derivation` | _(original)_ — cross-platform HOCON | `ConfigReader`, `ConfigWriter`, `ConfigCodec` |
 | `kindlings-tapir-schema-derivation` | Tapir built-in `Schema.derived` | `Schema` |
 | `kindlings-ubjson-derivation` | _(original)_ | `UBJsonValueCodec` |
 | `kindlings-xml-derivation` | _(original)_ | `XmlEncoder`, `XmlDecoder` |
 | `kindlings-yaml-derivation` | scala-yaml built-in `derives` | `YamlEncoder`, `YamlDecoder` |
-| `kindlings-fast-show-pretty` | _(original)_ | `FastShowPretty` |
 
-All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation`, which are JVM-only because their underlying libraries (`org.apache.avro:avro` and `com.typesafe:config`) are JVM-only.
+### Integration modules
 
-For a detailed feature-by-feature comparison of each module against the library it replaces, see [FEATURE_PARITY.md](FEATURE_PARITY.md).
+| Module | Description |
+|---|---|
+| `kindlings-cats-integration` | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated` — handled automatically in all derivation modules |
+| `kindlings-iron-integration` | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
+| `kindlings-refined-integration` | Refined types (`Refined[A, P]`) — validated on decode, unwrapped on encode |
+
+### Extra
+
+| Module | Description |
+|---|---|
+| `kindlings-jsoniter-json` | Minimal JSON AST with optics and `JsonValueCodec` for jsoniter-scala |
+
+All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation`, which are JVM-only because their underlying libraries are JVM-only. Integration modules are add-and-forget: the macro extension system discovers them at compile time via SPI.
+
+For a detailed feature-by-feature comparison of each module against the library it replaces, see the [Feature Parity](https://kubuszok.github.io/kindlings/feature-parity/) page in the documentation.
 
 ## Why a separate project?
 
