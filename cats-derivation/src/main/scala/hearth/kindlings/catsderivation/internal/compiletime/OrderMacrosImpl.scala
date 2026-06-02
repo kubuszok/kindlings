@@ -8,7 +8,8 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 /** Order derivation: lexicographic comparison of case class fields, ordinal comparison for enums. */
 trait OrderMacrosImpl
-    extends rules.OrderUseCachedRuleImpl
+    extends StrictDerivationSupport
+    with rules.OrderUseCachedRuleImpl
     with rules.OrderUseImplicitRuleImpl
     with rules.OrderBuiltInRuleImpl
     with rules.OrderValueTypeRuleImpl

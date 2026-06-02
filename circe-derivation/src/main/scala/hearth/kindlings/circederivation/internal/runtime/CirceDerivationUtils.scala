@@ -368,6 +368,30 @@ object CirceDerivationUtils {
     else decoder.tryDecodeAccumulating(field).map(x => x: Any)
   }
 
+  def patchDecoder[A](decoder: Decoder[A], encoder: Encoder[A]): Decoder[A => A] =
+    new Decoder[A => A] {
+      def apply(c: HCursor): Decoder.Result[A => A] = {
+        val patchJson = c.value
+        if (patchJson.isNull || patchJson.asObject.exists(_.isEmpty)) Right(identity)
+        else
+          Right { (original: A) =>
+            val originalJson = encoder(original)
+            val merged = deepMerge(originalJson, patchJson)
+            decoder.decodeJson(merged).getOrElse(original)
+          }
+      }
+    }
+
+  private def deepMerge(base: Json, patch: Json): Json =
+    (base.asObject, patch.asObject) match {
+      case (Some(baseObj), Some(patchObj)) =>
+        val merged = baseObj.toMap ++ patchObj.toMap.map { case (k, v) =>
+          k -> baseObj(k).map(deepMerge(_, v)).getOrElse(v)
+        }
+        Json.fromJsonObject(JsonObject.fromMap(merged))
+      case _ => patch
+    }
+
   // --- Codec.AsObject combiner ---
 
   def codecAsObject[A](

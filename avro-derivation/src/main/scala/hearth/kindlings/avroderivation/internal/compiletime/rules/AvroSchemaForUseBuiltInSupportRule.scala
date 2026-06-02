@@ -76,6 +76,10 @@ trait AvroSchemaForUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.timeMicrosSchema))
       else if (tpe =:= Type.of[java.time.LocalDateTime])
         Some(Expr.quote(AvroDerivationUtils.timestampMillisSchema))
+      else if (tpe =:= Type.of[java.time.OffsetDateTime])
+        Some(Expr.quote(AvroDerivationUtils.timestampMillisSchema))
+      else if (tpe =:= Type.of[None.type])
+        Some(Expr.quote(AvroDerivationUtils.nullSchema))
       else
         None
     }

@@ -52,6 +52,42 @@ object DiffRuntime {
     SeqDiff(prettyName, plainName, simpleName, shortName, resultEdits.result())
   }
 
+  def diffSeqByKey[A](
+      prettyName: => String,
+      plainName: => String,
+      simpleName: => String,
+      shortName: => String,
+      left: Iterable[A],
+      right: Iterable[A],
+      elemDiff: Diff[A],
+      matcher: ObjectMatcher[A]
+  ): DiffResult = {
+    val leftSeq = left.toVector
+    val rightSeq = right.toVector
+
+    val rightByKey = rightSeq.groupBy(matcher.key)
+    val rightUsed = new scala.collection.mutable.HashSet[Any]()
+    val edits = Vector.newBuilder[Edit[DiffResult]]
+
+    leftSeq.foreach { l =>
+      val k = matcher.key(l)
+      rightByKey.get(k).flatMap(_.find(r => !rightUsed.contains(System.identityHashCode(r)))) match {
+        case Some(r) =>
+          rightUsed += System.identityHashCode(r)
+          edits += Edit.Equal(elemDiff.diff(l, r))
+        case None =>
+          edits += Edit.Delete(elemDiff.snapshot(l))
+      }
+    }
+
+    rightSeq.foreach { r =>
+      if (!rightUsed.contains(System.identityHashCode(r)))
+        edits += Edit.Insert(elemDiff.snapshot(r))
+    }
+
+    SeqDiff(prettyName, plainName, simpleName, shortName, edits.result())
+  }
+
   def diffMap[K, V](
       prettyName: => String,
       plainName: => String,

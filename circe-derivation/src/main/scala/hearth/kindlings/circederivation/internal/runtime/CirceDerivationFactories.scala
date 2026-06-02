@@ -26,6 +26,15 @@ object CirceDerivationFactories {
       def apply(c: HCursor): Decoder.Result[A] = applyFn(c)
     }
 
+  def decoderInstanceWithFields[A](
+      applyFn: HCursor => Decoder.Result[A],
+      fields: Set[String]
+  ): KindlingsDecoder[A] =
+    new KindlingsDecoder[A] {
+      def apply(c: HCursor): Decoder.Result[A] = applyFn(c)
+      override def expectedFields: Option[Set[String]] = Some(fields)
+    }
+
   def decoderWithAccInstance[A](
       applyFn: HCursor => Decoder.Result[A],
       decodeAccFn: HCursor => ValidatedNel[DecodingFailure, A]
@@ -33,6 +42,17 @@ object CirceDerivationFactories {
     new KindlingsDecoder[A] {
       def apply(c: HCursor): Decoder.Result[A] = applyFn(c)
       override def decodeAccumulating(c: HCursor): Decoder.AccumulatingResult[A] = decodeAccFn(c)
+    }
+
+  def decoderWithAccInstanceAndFields[A](
+      applyFn: HCursor => Decoder.Result[A],
+      decodeAccFn: HCursor => ValidatedNel[DecodingFailure, A],
+      fields: Set[String]
+  ): KindlingsDecoder[A] =
+    new KindlingsDecoder[A] {
+      def apply(c: HCursor): Decoder.Result[A] = applyFn(c)
+      override def decodeAccumulating(c: HCursor): Decoder.AccumulatingResult[A] = decodeAccFn(c)
+      override def expectedFields: Option[Set[String]] = Some(fields)
     }
 
   def codecAsObjectInstance[A](

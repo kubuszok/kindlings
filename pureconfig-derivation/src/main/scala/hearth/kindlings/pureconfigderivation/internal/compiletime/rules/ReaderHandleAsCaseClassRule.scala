@@ -276,7 +276,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
                           val cur = Expr.splice(rctx.cursor)
                           cur.asObjectCursor
                             .flatMap { obj =>
-                              obj.atKey(Expr.splice(keyExpr)).flatMap(c => Expr.splice(readerExpr).from(c))
+                              PureConfigDerivationUtils
+                                .readRequiredFieldWithSuggestions(obj, Expr.splice(keyExpr), Expr.splice(readerExpr))
                             }
                             .asInstanceOf[Either[ConfigReaderFailures, Any]]
                         }

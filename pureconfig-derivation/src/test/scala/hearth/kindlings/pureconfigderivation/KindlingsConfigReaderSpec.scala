@@ -236,6 +236,17 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
         val r = KindlingsConfigReader.derived[WithWrappedInt]
         r.from(cursor("{ value = 42 }")) ==> Right(WithWrappedInt(WrappedInt(42)))
       }
+
+      test("value class in case class with other fields") {
+        val r = KindlingsConfigReader.derived[WithDoubleWrapped]
+        r.from(cursor("{ outer = 99, name = test }")) ==> Right(WithDoubleWrapped(WrappedInt(99), "test"))
+      }
+
+      test("WrappedString as field reads correctly") {
+        case class WithName(label: WrappedString)
+        val r = KindlingsConfigReader.derived[WithName]
+        r.from(cursor("{ label = hello }")) ==> Right(WithName(WrappedString("hello")))
+      }
     }
 
     group("recursive product types") {

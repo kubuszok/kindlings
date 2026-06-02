@@ -207,6 +207,21 @@ case class WithArrayBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
 case class WithIntMap(data: scala.collection.immutable.IntMap[String])
 case class WithLongMap(data: scala.collection.immutable.LongMap[String])
 
+// Gap 5.2: additional collection types
+case class WithLazyList(items: LazyList[Int])
+case class WithQueue(items: scala.collection.immutable.Queue[Int])
+case class WithLinkedHashMap(data: scala.collection.mutable.LinkedHashMap[String, Int])
+
+// inlineOneValueClasses test types
+case class Wrapper(inner: Int)
+case class StringWrapper(value: String)
+
+// Name collision test types (Scala keywords as field names)
+case class WithKeywordFields(`type`: String, `class`: Int, `val`: Boolean)
+sealed trait KeywordEnum
+case class `match`(pattern: String) extends KeywordEnum
+case object `null` extends KeywordEnum
+
 // Either test types
 case class WithEitherField(result: Either[String, Int])
 case class WithNestedEither(value: Either[Either[Int, String], Boolean])

@@ -387,6 +387,27 @@ final class PureConfigSpec extends MacroSuite {
       assert(result.isLeft)
     }
 
+    test("missing required field suggests similar keys") {
+      implicit val cfg: PureConfig = PureConfig()
+      val r = KindlingsConfigReader.derived[SimplePerson]
+      val result = r.from(cursor("{ naem = Alice, age = 30 }"))
+      assert(result.isLeft, "should fail on misspelled key")
+      val errorMsg = result.left.toOption.get.toList.map(_.description).mkString(" ")
+      assert(
+        errorMsg.contains("name") || result.left.toOption.get.toList.exists { f =>
+          f match {
+            case cf: pureconfig.error.ConvertFailure =>
+              cf.reason match {
+                case kn: pureconfig.error.KeyNotFound => kn.candidates.contains("name")
+                case _                                => false
+              }
+            case _ => false
+          }
+        },
+        s"expected suggestion of 'name' in: $errorMsg"
+      )
+    }
+
     test("full round-trip: SCREAMING_SNAKE members + snake_case constructors + custom discriminator") {
       implicit val cfg: PureConfig = PureConfig().withScreamingSnakeCaseMemberNames.withSnakeCaseConstructorNames
         .withDiscriminator("variant")

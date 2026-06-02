@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait GroupUseImplicitRuleImpl {
-  this: GroupMacrosImpl & MacroCommons & StdExtensions =>
+  this: GroupMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object GroupUseImplicitRule extends GroupDerivationRule("use implicit Group") {
@@ -23,7 +23,14 @@ trait GroupUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               GroupUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Group[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Group[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Group[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

@@ -41,7 +41,8 @@ trait EncoderHandleAsEnumRuleImpl {
         case Some(ec) => ec.toList
         case None     => enumm.directChildren.toList
       }
-      val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
+      val isJavaEnum = Type[A].isJavaEnum
+      val isEnumerationOrJavaEnum = Type[A].isEnumeration || isJavaEnum
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
         SingletonValue.unapply(child.Underlying).isDefined
       }
@@ -103,7 +104,10 @@ trait EncoderHandleAsEnumRuleImpl {
                                   Expr.splice(enumCaseValue)
                                 )
                               else {
-                                val name = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                                val baseName = config.adtLeafClassNameMapper(Expr.splice(Expr(caseName)))
+                                val name =
+                                  if (Expr.splice(Expr(isJavaEnum))) config.javaEnumValueNameMapper(baseName)
+                                  else baseName
                                 if (config.enumAsStrings)
                                   JsoniterDerivationUtils.writeEnumAsString(Expr.splice(ectx.writer), name)
                                 else

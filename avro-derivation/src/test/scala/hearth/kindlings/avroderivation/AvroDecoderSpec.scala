@@ -522,5 +522,45 @@ final class AvroDecoderSpec extends MacroSuite {
         result ==> OuterWithRenamedInner(RenamedFoo("decoded"))
       }
     }
+
+    group("schema evolution") {
+
+      test("decode from record with reordered fields") {
+        val schema = AvroSchemaFor.schemaOf[SimplePerson]
+        val record = new GenericData.Record(schema)
+        record.put("age", 30)
+        record.put("name", "Alice")
+        val result = AvroDecoder.decode[SimplePerson](record: Any)
+        result ==> SimplePerson("Alice", 30)
+      }
+
+      test("decode from record with aliased field name") {
+        val writerSchema = org.apache.avro.SchemaBuilder
+          .record("WithAliasField")
+          .namespace("hearth.kindlings.avroderivation")
+          .fields()
+          .requiredString("old_name")
+          .requiredInt("age")
+          .endRecord()
+        val record = new GenericData.Record(writerSchema)
+        record.put("old_name", "Bob")
+        record.put("age", 25)
+        val result = AvroDecoder.decode[WithAliasField](record: Any)
+        result ==> WithAliasField("Bob", 25)
+      }
+
+      test("decode from record with missing field using Scala default") {
+        val schema = org.apache.avro.SchemaBuilder
+          .record("WithDefaultAge")
+          .namespace("hearth.kindlings.avroderivation")
+          .fields()
+          .requiredString("name")
+          .endRecord()
+        val record = new GenericData.Record(schema)
+        record.put("name", "Charlie")
+        val result = AvroDecoder.decode[WithDefaultAge](record: Any)
+        result ==> WithDefaultAge("Charlie")
+      }
+    }
   }
 }

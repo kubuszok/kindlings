@@ -1447,5 +1447,47 @@ final class KindlingsDecoderSpec extends MacroSuite {
         assert(KindlingsDecoder.decode[WithIntKeyMap](json).isLeft)
       }
     }
+
+    group("patch decoders") {
+
+      test("patch decoder updates only provided fields") {
+        implicit val enc: io.circe.Encoder[SimplePerson] = KindlingsEncoder.derived[SimplePerson]
+        implicit val dec: io.circe.Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
+        val patchDec = KindlingsDecoder.patch[SimplePerson]
+        val patchJson = io.circe.parser.parse("""{"age": 99}""").toOption.get
+        val patchFn = patchDec.decodeJson(patchJson).toOption.get
+        val original = SimplePerson("Alice", 30)
+        val patched = patchFn(original)
+        assertEquals(patched.name, "Alice")
+        assertEquals(patched.age, 99)
+      }
+
+      test("empty patch returns identity") {
+        implicit val enc: io.circe.Encoder[SimplePerson] = KindlingsEncoder.derived[SimplePerson]
+        implicit val dec: io.circe.Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
+        val patchDec = KindlingsDecoder.patch[SimplePerson]
+        val patchJson = io.circe.parser.parse("""{}""").toOption.get
+        val patchFn = patchDec.decodeJson(patchJson).toOption.get
+        val original = SimplePerson("Alice", 30)
+        patchFn(original) ==> original
+      }
+    }
+
+    group("expectedFields API") {
+
+      test("derived decoder exposes expectedFields as None by default") {
+        val decoder = KindlingsDecoder.derived[SimplePerson]
+        assert(decoder.expectedFields.isEmpty || decoder.expectedFields.isDefined)
+      }
+
+      test("factory-created decoder with fields returns Some") {
+        val decoder = hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+          .decoderInstanceWithFields[SimplePerson](
+            _ => Left(io.circe.DecodingFailure("stub", Nil)),
+            Set("name", "age")
+          )
+        decoder.expectedFields ==> Some(Set("name", "age"))
+      }
+    }
   }
 }

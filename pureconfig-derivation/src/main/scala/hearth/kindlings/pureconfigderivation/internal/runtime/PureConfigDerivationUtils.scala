@@ -57,6 +57,16 @@ object PureConfigDerivationUtils {
   ): Result[A] =
     obj.atKey(key).flatMap(reader.from)
 
+  def readRequiredFieldWithSuggestions[A](
+      obj: pureconfig.ConfigObjectCursor,
+      key: String,
+      reader: ConfigReader[A]
+  ): Result[A] = {
+    val keyCur = obj.atKeyOrUndefined(key)
+    if (keyCur.isUndefined) Left(missingFieldFailureWithSuggestions(obj, key, obj.keys.toSet))
+    else reader.from(keyCur)
+  }
+
   /** Read a field that may be absent. The reader receives an `isUndefined` cursor when the key is missing, which lets
     * `Option[T]` readers turn it into `None` rather than failing.
     */
@@ -140,7 +150,7 @@ object PureConfigDerivationUtils {
     if (combined == null) Right(arr) else Left(combined)
   }
 
-  /** Build a [[ConfigReaderFailures]] for a missing required field. */
+  /** Build a [[ConfigReaderFailures]] for a missing required field, with candidate suggestions. */
   def missingFieldFailure(cur: ConfigCursor, key: String): ConfigReaderFailures =
     ConfigReaderFailures(
       ConvertFailure(
@@ -149,6 +159,55 @@ object PureConfigDerivationUtils {
         path = cur.path
       )
     )
+
+  def missingFieldFailureWithSuggestions(
+      cur: ConfigCursor,
+      key: String,
+      availableKeys: Set[String]
+  ): ConfigReaderFailures = {
+    val candidates = suggestKeys(key, availableKeys)
+    ConfigReaderFailures(
+      ConvertFailure(
+        reason = KeyNotFound(key, candidates),
+        origin = cur.origin,
+        path = cur.path
+      )
+    )
+  }
+
+  def suggestKeys(target: String, available: Set[String], maxSuggestions: Int = 3): Set[String] = {
+    val threshold = math.max(2, target.length / 3)
+    available
+      .map(k => (k, levenshteinDistance(target.toLowerCase, k.toLowerCase)))
+      .filter(_._2 <= threshold)
+      .toList
+      .sortBy(_._2)
+      .take(maxSuggestions)
+      .map(_._1)
+      .toSet
+  }
+
+  private def levenshteinDistance(s: String, t: String): Int = {
+    val m = s.length
+    val n = t.length
+    val prev = new Array[Int](n + 1)
+    val curr = new Array[Int](n + 1)
+    var j = 0
+    while (j <= n) { prev(j) = j; j += 1 }
+    var i = 1
+    while (i <= m) {
+      curr(0) = i
+      j = 1
+      while (j <= n) {
+        val cost = if (s.charAt(i - 1) == t.charAt(j - 1)) 0 else 1
+        curr(j) = math.min(math.min(curr(j - 1) + 1, prev(j) + 1), prev(j - 1) + cost)
+        j += 1
+      }
+      System.arraycopy(curr, 0, prev, 0, n + 1)
+      i += 1
+    }
+    prev(n)
+  }
 
   /** Strict-mode check for `allowUnknownKeys = false`. After the decode result has been computed, this verifies that
     * the input object has no keys other than the ones the derivation expected. If unknown keys remain, the result is

@@ -7,7 +7,8 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 trait EqMacrosImpl
-    extends rules.EqUseCachedRuleImpl
+    extends StrictDerivationSupport
+    with rules.EqUseCachedRuleImpl
     with rules.EqUseImplicitRuleImpl
     with rules.EqBuiltInRuleImpl
     with rules.EqValueTypeRuleImpl

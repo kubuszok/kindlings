@@ -820,9 +820,40 @@ final class KindlingsSchemaSpec extends MacroSuite {
 
     test("sealed trait @description propagates to coproduct schema") {
       val schema = KindlingsSchema.derived[AnnotatedShape].schema
-      // The description annotation on the sealed trait should be set
+      // The description annotation on the sealed trait should have description from annotation
       assert(schema.description.isDefined, "Sealed trait should have description from annotation")
       schema.description.get ==> "A shape type"
+    }
+  }
+
+  group("post-derivation modification") {
+
+    test("modify field description after derivation") {
+      val schema = KindlingsSchema
+        .derived[SimplePerson]
+        .schema
+        .modify(_.name)(_.description("The person's name"))
+      schema.schemaType match {
+        case p: SchemaType.SProduct[SimplePerson @unchecked] =>
+          val nameField = p.fields.find(_.name.name == "name")
+          assert(nameField.isDefined, "name field should exist")
+          assert(
+            nameField.get.schema.description.contains("The person's name"),
+            s"name field should have description, got: ${nameField.get.schema.description}"
+          )
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
+    test("modify nested field after derivation") {
+      val schema = KindlingsSchema
+        .derived[Nested]
+        .schema
+        .modify(_.person.name)(_.description("person name"))
+      schema.schemaType match {
+        case _: SchemaType.SProduct[Nested @unchecked] => () // compiles and runs = success
+        case other                                     => fail(s"Expected SProduct, got: $other")
+      }
     }
   }
 

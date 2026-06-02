@@ -63,6 +63,11 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[BigDecimal]
         schema.getType ==> Schema.Type.STRING
       }
+
+      test("None.type schema maps to NULL") {
+        val schema = AvroSchemaFor.schemaOf[None.type]
+        schema.getType ==> Schema.Type.NULL
+      }
     }
 
     group("case classes") {
@@ -177,7 +182,7 @@ final class AvroSchemaForSpec extends MacroSuite {
     group("derived instance") {
 
       test("derive creates AvroSchemaFor instance") {
-        val instance = AvroSchemaFor.derive[SimplePerson]
+        val instance = AvroSchemaFor.derived[SimplePerson]
         instance.schema.getType ==> Schema.Type.RECORD
         instance.schema.getName ==> "SimplePerson"
       }
@@ -648,6 +653,15 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[WithMultipleProps]
         schema.getProp("key1") ==> "val1"
         schema.getProp("key2") ==> "val2"
+      }
+
+      test("@avroProp with JSON object value") {
+        val schema = AvroSchemaFor.schemaOf[WithJsonProp]
+        val prop = schema.getObjectProp("metadata")
+        assert(prop != null, s"expected metadata prop, got null")
+        val map = prop.asInstanceOf[java.util.LinkedHashMap[String, Any]]
+        assertEquals(map.get("version"), 1: Any)
+        assertEquals(map.get("source"), "test": Any)
       }
     }
 

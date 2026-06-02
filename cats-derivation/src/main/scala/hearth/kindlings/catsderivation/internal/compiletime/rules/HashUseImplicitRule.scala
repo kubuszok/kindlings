@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait HashUseImplicitRuleImpl {
-  this: HashMacrosImpl & MacroCommons & StdExtensions =>
+  this: HashMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object HashUseImplicitRule extends HashDerivationRule("use implicit Hash") {
@@ -24,7 +24,14 @@ trait HashUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               HashUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Hash[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Hash[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Hash[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

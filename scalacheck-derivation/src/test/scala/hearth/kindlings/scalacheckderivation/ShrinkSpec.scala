@@ -151,19 +151,39 @@ class ShrinkSpec extends munit.FunSuite {
     assert(result.exists(_.values.size < 3), "Should produce smaller sets")
   }
 
-  test("derives Shrink for sealed trait — case objects appear in shrink stream") {
+  test("derives Shrink for sealed trait — case objects appear as cross-variant alternatives") {
     sealed trait Status
     case object Active extends Status
     case class Suspended(reason: String) extends Status
 
     implicit val shrinkSuspended: Shrink[Suspended] = DeriveShrink.derived[Suspended]
     val shrink: Shrink[Status] = DeriveShrink.derived[Status]
-    // Shrink a case class variant — should produce shrunk values
     val result = shrink.shrink(Suspended("timeout"): Status).take(20).toList
     assert(result.nonEmpty, "Should produce shrunk values for Suspended")
-    // Shrink a case object — should produce empty stream (cannot shrink further)
+    assert(
+      result.contains(Active: Status),
+      s"Shrinking case class variant should offer case object alternatives, got: $result"
+    )
     val caseObjResult = shrink.shrink(Active: Status).take(5).toList
     assert(caseObjResult.isEmpty, "Case object should produce empty shrink stream")
+  }
+
+  test("derives Shrink for sealed trait — multiple case objects offered as alternatives") {
+    sealed trait Light
+    case object Red extends Light
+    case object Yellow extends Light
+    case object Green extends Light
+    case class Custom(r: Int, g: Int, b: Int) extends Light
+
+    implicit val shrinkCustom: Shrink[Custom] = DeriveShrink.derived[Custom]
+    val shrink: Shrink[Light] = DeriveShrink.derived[Light]
+    val result = shrink.shrink(Custom(100, 200, 50): Light).take(30).toList
+    assert(result.nonEmpty, "Should produce shrunk values for Custom")
+    val alternatives = result.filter {
+      case Red | Yellow | Green => true
+      case _                    => false
+    }
+    assert(alternatives.nonEmpty, s"Should offer case object variants, got: $result")
   }
 
   test("derives Shrink for case class with value class field") {

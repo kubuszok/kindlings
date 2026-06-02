@@ -8,7 +8,8 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 /** Semigroup derivation: combines case class fields pairwise using their Semigroup instances. */
 trait SemigroupMacrosImpl
-    extends rules.SemigroupUseCachedRuleImpl
+    extends StrictDerivationSupport
+    with rules.SemigroupUseCachedRuleImpl
     with rules.SemigroupUseImplicitRuleImpl
     with rules.SemigroupBuiltInRuleImpl
     with rules.SemigroupCaseClassRuleImpl

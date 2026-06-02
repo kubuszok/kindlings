@@ -345,5 +345,26 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
         readFromString[Map[java.lang.Long, String]](json)(codec) ==> value
       }
     }
+
+    group("javaEnumValueNameMapper") {
+
+      test("Java enum round-trip with snake_case mapper") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
+          .withJavaEnumValueNameMapper(JsoniterConfig.snakeCase)
+        val codec = KindlingsJsonValueCodec.derived[JavaColor]
+        val json = writeToString[JavaColor](JavaColor.RED)(codec)
+        assert(json.contains("r_e_d") || json.contains("red"), s"expected mapped name in: $json")
+      }
+
+      test("Java enum round-trip with lowercase mapper") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
+          .withJavaEnumValueNameMapper(_.toLowerCase)
+        val codec = KindlingsJsonValueCodec.derived[JavaColor]
+        val json = writeToString[JavaColor](JavaColor.GREEN)(codec)
+        json ==> "\"green\""
+        val decoded = readFromString[JavaColor](json)(codec)
+        decoded ==> JavaColor.GREEN
+      }
+    }
   }
 }

@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait ShowUseImplicitRuleImpl {
-  this: ShowMacrosImpl & MacroCommons & StdExtensions =>
+  this: ShowMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   object ShowUseImplicitRule extends ShowDerivationRule("use implicit Show") {
 
@@ -25,7 +25,14 @@ trait ShowUseImplicitRuleImpl {
                 )(_ => instanceExpr) >>
                 ShowUseCachedRule[A]
             case Left(reason) =>
-              MIO.pure(Rule.yielded(s"No implicit Show[${Type[A].prettyPrint}]: $reason"))
+              if (isStrictDerivationMode)
+                MIO.fail(
+                  new StrictDerivationError(
+                    s"Strict derivation mode: no implicit Show[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                  )
+                )
+              else
+                MIO.pure(Rule.yielded(s"No implicit Show[${Type[A].prettyPrint}]: $reason"))
           }
       }
     }

@@ -1134,4 +1134,48 @@ final class CatsDerivationSpec extends MacroSuite {
       assert(!examples.Person.eqPerson.eqv(a, examples.Person("Bob", 30)))
     }
   }
+
+  group("auto derivation") {
+
+    test("auto.show derives Show for case class") {
+      import auto.show.given
+      val s = implicitly[cats.Show[examples.Color]].show(examples.Red)
+      assert(s.contains("Red"), s"expected Red in: $s")
+    }
+
+    test("auto.eq derives Eq for case class") {
+      import auto.eq.given
+      val eq = implicitly[cats.kernel.Eq[examples.Color]]
+      assert(eq.eqv(examples.Red, examples.Red))
+      assert(!eq.eqv(examples.Red, examples.Green))
+    }
+
+    test("auto.hash derives Hash for case class") {
+      import auto.hash.given
+      val hash = implicitly[cats.kernel.Hash[examples.Color]]
+      assertEquals(hash.hash(examples.Red), hash.hash(examples.Red))
+    }
+
+    test("auto.empty derives Empty for case class") {
+      import auto.empty.given
+      val e = implicitly[alleycats.Empty[examples.Person]]
+      assert(e.empty.name.isEmpty || e.empty.name == "", s"expected empty name, got: ${e.empty}")
+    }
+  }
+
+  group("strict derivation") {
+
+    test("StrictDerivation sentinel type exists and can be instantiated") {
+      val strict: StrictDerivation = StrictDerivation.instance
+      assert(strict != null)
+    }
+
+    test("without strict mode, nested types derive successfully") {
+      import hearth.kindlings.catsderivation.extensions.*
+      val show = cats.Show.derived[examples.PersonWithAddress]
+      assert(
+        show.show(examples.PersonWithAddress("Alice", examples.Address("Main", "NYC"))).nonEmpty
+      )
+    }
+  }
 }

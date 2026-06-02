@@ -75,6 +75,10 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.decodeLocalTime(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.time.LocalDateTime])
         Some(Expr.quote(AvroDerivationUtils.decodeLocalDateTime(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[java.time.OffsetDateTime])
+        Some(Expr.quote(AvroDerivationUtils.decodeOffsetDateTime(Expr.splice(value)).asInstanceOf[A]))
+      else if (tpe =:= Type.of[None.type])
+        Some(Expr.quote(None.asInstanceOf[A]))
       else
         None
     }
