@@ -23,9 +23,8 @@ trait DiffCollectionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensio
             val pn = Expr(Type.prettyPrint[A])
             val fn = Expr(Type.plainPrint[A])
             val sn = Expr(Type.shortName[A])
-            DiffItemT.summonExprIgnoring(ignoredImplicits*).toEither match {
-              case Right(elemDiffExpr) =>
-                val ed = elemDiffExpr.asInstanceOf[Expr[Diff[Item]]]
+            summonOrDeriveDiffInstance[Item](dctx.cache, dctx.derivedType).flatMap {
+              case Some(ed) =>
                 val iterLeft = isCollection.value.asIterable(dctx.left)
                 val iterRight = isCollection.value.asIterable(dctx.right)
                 MIO.pure(Rule.matched(Expr.quote {
@@ -39,8 +38,8 @@ trait DiffCollectionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensio
                     Expr.splice(ed)
                   )
                 }))
-              case Left(reason) =>
-                MIO.pure(Rule.yielded(s"No Diff[${Item.prettyPrint}]: $reason"))
+              case None =>
+                MIO.pure(Rule.yielded(s"No Diff[${Item.prettyPrint}]"))
             }
           case _ =>
             MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} is not a collection"))

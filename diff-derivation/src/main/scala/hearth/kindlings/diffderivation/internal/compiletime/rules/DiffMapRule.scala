@@ -32,9 +32,8 @@ trait DiffMapRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
       val pn = Expr(Type.prettyPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
-      DiffVT.summonExprIgnoring(ignoredImplicits*).toEither match {
-        case Right(valueDiffExpr) =>
-          val vd = valueDiffExpr.asInstanceOf[Expr[Diff[Value]]]
+      summonOrDeriveDiffInstance[Value](dctx.cache, dctx.derivedType).flatMap {
+        case Some(vd) =>
           val iterLeft = isMap.asIterable(dctx.left)
           val iterRight = isMap.asIterable(dctx.right)
           MIO.pure(Rule.matched(Expr.quote {
@@ -49,8 +48,8 @@ trait DiffMapRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
               Expr.splice(vd)
             )
           }))
-        case Left(reason) =>
-          MIO.pure(Rule.yielded(s"No Diff[${Value.prettyPrint}]: $reason"))
+        case None =>
+          MIO.pure(Rule.yielded(s"No Diff[${Value.prettyPrint}]"))
       }
     }
   }

@@ -161,6 +161,13 @@ final class RoundTripSpec extends MacroSuite {
       assert(roundTrip(value, "comb") == Right(value))
     }
 
+    test("@xmlAttribute with non-String types round-trips") {
+      implicit val encoder: XmlEncoder[XmlWithAttributes] = KindlingsXmlEncoder.derived[XmlWithAttributes]
+      implicit val decoder: XmlDecoder[XmlWithAttributes] = KindlingsXmlDecoder.derived[XmlWithAttributes]
+      val value = XmlWithAttributes("John", 30, Address("123 Main", "NY"))
+      assert(roundTrip(value, "user") == Right(value))
+    }
+
     test("@xmlName on sealed trait subtype field round-trips") {
       implicit val encoder: XmlEncoder[CombAnnotatedST] = KindlingsXmlEncoder.derived[CombAnnotatedST]
       @annotation.nowarn("msg=never used")
@@ -169,7 +176,7 @@ final class RoundTripSpec extends MacroSuite {
       assert(roundTrip(value, "annot") == Right(value))
     }
 
-    test("@xmlAttribute on sealed trait subtype field round-trips".ignore) {
+    test("@xmlAttribute on sealed trait subtype field round-trips") {
       implicit val encoder: XmlEncoder[CombAnnotatedST] = KindlingsXmlEncoder.derived[CombAnnotatedST]
       @annotation.nowarn("msg=never used")
       implicit val decoder: XmlDecoder[CombAnnotatedST] = KindlingsXmlDecoder.derived[CombAnnotatedST]

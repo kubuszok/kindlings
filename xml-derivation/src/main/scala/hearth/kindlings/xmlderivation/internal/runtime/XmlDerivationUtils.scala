@@ -140,6 +140,9 @@ object XmlDerivationUtils {
     if (text.isEmpty) None else Some(text)
   }
 
+  def wrapAttrAsElem(attrValue: String): scala.xml.Elem =
+    scala.xml.Elem(null, "attr", scala.xml.Null, scala.xml.TopScope, false, scala.xml.Text(attrValue))
+
   def parseString(value: String, @scala.annotation.unused context: String): Either[XmlDecodingError, String] =
     Right(value)
 

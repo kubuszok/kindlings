@@ -127,7 +127,7 @@ final class ConfigReaderSpec extends MacroSuite {
         assert(result.isLeft)
       }
 
-      test("withStrictDecoding accepts valid sealed trait subtype without extra keys".ignore) {
+      test("withStrictDecoding accepts valid sealed trait subtype without extra keys") {
         implicit val cfg: SConfig = SConfig().withStrictDecoding
         val r = ConfigReader.derived[Shape]
         r.from(value("{ type = circle, radius = 1.5 }")) ==> Right(Circle(1.5))

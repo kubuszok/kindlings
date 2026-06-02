@@ -203,6 +203,10 @@ case class WithHashMap(data: scala.collection.immutable.HashMap[String, Int])
 case class WithTreeMap(data: scala.collection.immutable.TreeMap[String, Int])
 case class WithArrayBuffer(items: scala.collection.mutable.ArrayBuffer[Int])
 
+// IntMap / LongMap test types
+case class WithIntMap(data: scala.collection.immutable.IntMap[String])
+case class WithLongMap(data: scala.collection.immutable.LongMap[String])
+
 // Either test types
 case class WithEitherField(result: Either[String, Int])
 case class WithNestedEither(value: Either[Either[Int, String], Boolean])
