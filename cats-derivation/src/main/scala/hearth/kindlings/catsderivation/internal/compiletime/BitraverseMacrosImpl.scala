@@ -242,12 +242,20 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                 )
               }
             }
-          case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
-              )
-            )
+          case Left(_) =>
+            Enum.parse[F[Any, Any]].toEither match {
+              case Left(reason2) =>
+                MIO.fail(
+                  new RuntimeException(
+                    s"$macroName: Cannot derive: not a case class and not a sealed trait ($reason2)."
+                  )
+                )
+              case Right(enumm) =>
+                MIO.scoped { runSafe =>
+                  val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+                  runSafe(deriveBitraverseForEnum[F](FCtor, enumm, runSafe))
+                }
+            }
         }
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
@@ -323,6 +331,320 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
         }
       }
     MIO.pure(lambda)
+  }
+
+  @scala.annotation.nowarn(
+    "msg=is never used|unused explicit parameter|unused local definition|unused implicit parameter"
+  )
+  private def deriveBitraverseForEnum[F[_, _]](
+      FCtor: Type.Ctor2[F],
+      enumm: Enum[F[Any, Any]],
+      runSafe: hearth.fp.DirectStyle.RunSafe[hearth.fp.effect.MIO]
+  ): MIO[Expr[cats.Bitraverse[F]]] = {
+    implicit val AnyType: Type[Any] = BitraverseTypes.Any
+    implicit val IntType: Type[Int] = BitraverseTypes.Int
+    implicit val StringType: Type[String] = BitraverseTypes.String
+    implicit val FAAType: Type[F[Any, Any]] = FCtor.apply[Any, Any]
+    implicit val EvalAnyType: Type[cats.Eval[Any]] = BitraverseTypes.EvalAny
+    implicit val ListAnyType: Type[List[Any]] = BitraverseTypes.ListAny
+    implicit val FCtor1: Type.Ctor2[F] = FCtor
+
+    val enumP1 = Enum.parse(using FCtor.apply[Int, Int].asInstanceOf[Type[Any]]).toEither match {
+      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[Int,Int]"))
+    }
+    val enumP2 = Enum.parse(using FCtor.apply[String, Int].asInstanceOf[Type[Any]]).toEither match {
+      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[String,Int]"))
+    }
+    val enumP3 = Enum.parse(using FCtor.apply[Int, String].asInstanceOf[Type[Any]]).toEither match {
+      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[Int,String]"))
+    }
+
+    case class BiChildInfo(leftFields: Set[String], rightFields: Set[String])
+    val childInfo: Map[String, BiChildInfo] = runSafe {
+      val result = scala.collection.mutable.Map.empty[String, BiChildInfo]
+      val c1 = enumP1.directChildren.toList
+      val c2 = enumP2.directChildren.toList
+      val c3 = enumP3.directChildren.toList
+      c1.zip(c2).zip(c3).foreach { case (((cn, ch1), (_, ch2)), (_, ch3)) =>
+        import ch1.Underlying as C1; import ch2.Underlying as C2; import ch3.Underlying as C3
+        (CaseClass.parse[C1].toEither, CaseClass.parse[C2].toEither, CaseClass.parse[C3].toEither) match {
+          case (Right(cc1), Right(cc2), Right(cc3)) =>
+            val f1 = cc1.primaryConstructor.parameters.flatten.toList
+            val f2 = cc2.primaryConstructor.parameters.flatten.toList
+            val f3 = cc3.primaryConstructor.parameters.flatten.toList
+            val left = scala.collection.mutable.Set.empty[String]
+            val right = scala.collection.mutable.Set.empty[String]
+            f1.zip(f2).zip(f3).foreach { case (((n, p1), (_, p2)), (_, p3)) =>
+              val t1 = p1.tpe.Underlying; val t2 = p2.tpe.Underlying; val t3 = p3.tpe.Underlying
+              if (!(t1 =:= t2) && (t1 =:= t3)) left += n
+              else if ((t1 =:= t2) && !(t1 =:= t3)) right += n
+            }
+            result += (cn -> BiChildInfo(left.toSet, right.toSet))
+          case _ => result += (cn -> BiChildInfo(Set.empty, Set.empty))
+        }
+      }
+      MIO.pure(result.toMap)
+    }
+
+    import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+
+    def mkBimapBody(fabExpr: Expr[F[Any, Any]], fExpr: Expr[Any => Any], gExpr: Expr[Any => Any]): Expr[F[Any, Any]] =
+      runSafe {
+        enumm
+          .matchOn[MIO, F[Any, Any]](fabExpr) { matched =>
+            import matched.{value as cv, Underlying as CT}
+            val cn = Type[CT].shortName
+            childInfo.get(cn) match {
+              case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+              case Some(info) =>
+                CaseClass.parse[CT].toEither match {
+                  case Left(_)   => MIO.pure(cv.upcast[F[Any, Any]])
+                  case Right(cc) =>
+                    val fields = cc.caseFieldValuesAt(cv).toList
+                    val mapped: List[(String, Expr_??)] = fields.map { case (fn, fv) =>
+                      import fv.Underlying as Field
+                      val fe = fv.value.asInstanceOf[Expr[Field]]
+                      if (info.leftFields.contains(fn))
+                        (fn, Expr.quote(Expr.splice(fExpr)(Expr.splice(fe.upcast[Any])).asInstanceOf[Field]).as_??)
+                      else if (info.rightFields.contains(fn))
+                        (fn, Expr.quote(Expr.splice(gExpr)(Expr.splice(fe.upcast[Any])).asInstanceOf[Field]).as_??)
+                      else (fn, fe.as_??)
+                    }
+                    cc.primaryConstructor(mapped.toMap) match {
+                      case Right(e) => MIO.pure(e.upcast[F[Any, Any]])
+                      case Left(e)  => MIO.fail(new RuntimeException(s"Cannot construct $cn: $e"))
+                    }
+                }
+            }
+          }
+          .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+      }
+
+    def mkBifoldLeftBody(
+        fabExpr: Expr[F[Any, Any]],
+        cExpr: Expr[Any],
+        fExpr: Expr[(Any, Any) => Any],
+        gExpr: Expr[(Any, Any) => Any]
+    ): Expr[Any] = runSafe {
+      enumm
+        .matchOn[MIO, Any](fabExpr) { matched =>
+          import matched.{value as cv, Underlying as CT}
+          val cn = Type[CT].shortName
+          childInfo.get(cn) match {
+            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case Some(info) =>
+              CaseClass.parse[CT].toEither match {
+                case Left(_)   => MIO.pure(cExpr)
+                case Right(cc) =>
+                  val fields = cc.caseFieldValuesAt(cv).toList
+                  var acc = cExpr
+                  fields.foreach { case (fn, fv) =>
+                    import fv.Underlying as Field
+                    val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
+                    if (info.leftFields.contains(fn))
+                      acc = Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fe)))
+                    else if (info.rightFields.contains(fn))
+                      acc = Expr.quote(Expr.splice(gExpr)(Expr.splice(acc), Expr.splice(fe)))
+                  }
+                  MIO.pure(acc)
+              }
+          }
+        }
+        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+    }
+
+    def mkBifoldRightBody(
+        fabExpr: Expr[F[Any, Any]],
+        lcExpr: Expr[cats.Eval[Any]],
+        fExpr: Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]],
+        gExpr: Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]
+    ): Expr[cats.Eval[Any]] = runSafe {
+      enumm
+        .matchOn[MIO, cats.Eval[Any]](fabExpr) { matched =>
+          import matched.{value as cv, Underlying as CT}
+          val cn = Type[CT].shortName
+          childInfo.get(cn) match {
+            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case Some(info) =>
+              CaseClass.parse[CT].toEither match {
+                case Left(_)   => MIO.pure(lcExpr)
+                case Right(cc) =>
+                  val fields = cc.caseFieldValuesAt(cv).toList
+                  val covariant: List[(Expr[Any], Boolean)] = fields.collect {
+                    case (fn, fv) if info.leftFields.contains(fn) =>
+                      import fv.Underlying as Field; (fv.value.asInstanceOf[Expr[Field]].upcast[Any], true)
+                    case (fn, fv) if info.rightFields.contains(fn) =>
+                      import fv.Underlying as Field; (fv.value.asInstanceOf[Expr[Field]].upcast[Any], false)
+                  }
+                  val result = covariant.foldRight(lcExpr) { case ((fe, isLeft), acc) =>
+                    if (isLeft) Expr.quote(Expr.splice(fExpr)(Expr.splice(fe), Expr.splice(acc)))
+                    else Expr.quote(Expr.splice(gExpr)(Expr.splice(fe), Expr.splice(acc)))
+                  }
+                  MIO.pure(result)
+              }
+          }
+        }
+        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+    }
+
+    def mkBitraverseBody(
+        fabExpr: Expr[F[Any, Any]],
+        fExpr: Expr[Any],
+        gExpr: Expr[Any],
+        gAppExpr: Expr[Any]
+    ): Expr[Any] = runSafe {
+      enumm
+        .matchOn[MIO, Any](fabExpr) { matched =>
+          import matched.{value as cv, Underlying as CT}
+          val cn = Type[CT].shortName
+          childInfo.get(cn) match {
+            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case Some(info) =>
+              CaseClass.parse[CT].toEither match {
+                case Left(_) =>
+                  MIO.pure(
+                    Expr
+                      .quote(
+                        Expr
+                          .splice(gAppExpr)
+                          .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                          .pure(Expr.splice(cv.upcast[Any]))
+                      )
+                      .upcast[Any]
+                  )
+                case Right(cc) =>
+                  val fields = cc.caseFieldValuesAt(cv).toList
+                  val covariantFields = info.leftFields ++ info.rightFields
+                  val gFieldExprs: List[Expr[CatsDerivationFactories.AnyF[Any]]] = fields.collect {
+                    case (fn, fv) if info.leftFields.contains(fn) =>
+                      import fv.Underlying as Field
+                      val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
+                      Expr.quote(
+                        Expr.splice(fExpr).asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]](Expr.splice(fe))
+                      )
+                    case (fn, fv) if info.rightFields.contains(fn) =>
+                      import fv.Underlying as Field
+                      val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
+                      Expr.quote(
+                        Expr.splice(gExpr).asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]](Expr.splice(fe))
+                      )
+                  }
+                  if (gFieldExprs.isEmpty) {
+                    MIO.pure(
+                      Expr
+                        .quote(
+                          Expr
+                            .splice(gAppExpr)
+                            .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                            .pure(Expr.splice(cv.upcast[Any]))
+                        )
+                        .upcast[Any]
+                    )
+                  } else {
+                    val reconLambda: Expr[List[Any] => Any] = runSafe {
+                      val lambda = LambdaBuilder.of1[List[Any]]("newVals").buildWith { nvExpr =>
+                        var currentList: Expr[List[Any]] = nvExpr
+                        val fieldExprs: List[(String, Expr_??)] = fields.map { case (fn2, fv2) =>
+                          import fv2.Underlying as Field2
+                          if (covariantFields.contains(fn2)) {
+                            val h = Expr.quote(Expr.splice(currentList).head)
+                            val t = Expr.quote(Expr.splice(currentList).tail)
+                            currentList = t
+                            (fn2, Expr.quote(Expr.splice(h).asInstanceOf[Field2]).as_??)
+                          } else {
+                            (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
+                          }
+                        }
+                        cc.primaryConstructor(fieldExprs.toMap) match {
+                          case Right(e) => e.upcast[Any]
+                          case Left(e)  => throw new RuntimeException(s"Cannot construct $cn: $e")
+                        }
+                      }
+                      MIO.pure(lambda)
+                    }
+                    val gListExpr = gFieldExprs.foldRight(
+                      Expr.quote(
+                        Expr
+                          .splice(gAppExpr)
+                          .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                          .pure(Nil: List[Any])
+                      )
+                    ) { (gvExpr, accExpr) =>
+                      Expr.quote(
+                        Expr
+                          .splice(gAppExpr)
+                          .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                          .map2[Any, List[Any], List[Any]](Expr.splice(gvExpr), Expr.splice(accExpr))(_ :: _)
+                      )
+                    }
+                    val result = Expr.quote {
+                      val recon: List[Any] => Any = Expr.splice(reconLambda)
+                      val _ = recon
+                      Expr
+                        .splice(gAppExpr)
+                        .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                        .map[List[Any], Any](Expr.splice(gListExpr))(nv => recon(nv))
+                    }
+                    MIO.pure(result.upcast[Any])
+                  }
+              }
+          }
+        }
+        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+    }
+
+    MIO.pure {
+      Expr.quote {
+        CatsDerivationFactories.bitraverseInstance[F](
+          bitraverseFn = {
+            (fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2], fAny: Any, gAny: Any, gApp: Any) =>
+              val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+              val _ = anyFab; val _ = fAny; val _ = gAny; val _ = gApp
+              Expr.splice(mkBitraverseBody(Expr.quote(anyFab), Expr.quote(fAny), Expr.quote(gAny), Expr.quote(gApp)))
+          },
+          bimapFn = {
+            (
+                fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                f: CatsDerivationFactories.W1 => CatsDerivationFactories.W3,
+                g: CatsDerivationFactories.W2 => CatsDerivationFactories.W4
+            ) =>
+              val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+              val _ = anyFab; val _ = f; val _ = g
+              Expr
+                .splice(
+                  mkBimapBody(
+                    Expr.quote(anyFab),
+                    Expr.quote(f.asInstanceOf[Any => Any]),
+                    Expr.quote(g.asInstanceOf[Any => Any])
+                  )
+                )
+                .asInstanceOf[F[CatsDerivationFactories.W3, CatsDerivationFactories.W4]]
+          },
+          bifoldLeftFn = {
+            (
+                fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                cAny: Any,
+                fAny: (Any, Any) => Any,
+                gAny: (Any, Any) => Any
+            ) =>
+              val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+              val _ = anyFab; val _ = cAny; val _ = fAny; val _ = gAny
+              Expr.splice(mkBifoldLeftBody(Expr.quote(anyFab), Expr.quote(cAny), Expr.quote(fAny), Expr.quote(gAny)))
+          },
+          bifoldRightFn = {
+            (
+                fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                lcAny: cats.Eval[Any],
+                fAny: (Any, cats.Eval[Any]) => cats.Eval[Any],
+                gAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
+            ) =>
+              val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+              val _ = anyFab; val _ = lcAny; val _ = fAny; val _ = gAny
+              Expr.splice(mkBifoldRightBody(Expr.quote(anyFab), Expr.quote(lcAny), Expr.quote(fAny), Expr.quote(gAny)))
+          }
+        )
+      }
+    }
   }
 
   protected object BitraverseTypes {

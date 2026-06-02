@@ -196,13 +196,14 @@ object examples {
   }
 
   // Recursive polymorphic sealed trait for Functor/Foldable/Traverse derivation
-  // IList: Functor/Foldable/Traverse for sealed traits NOT YET SUPPORTED.
-  // Hearth only derives HKT type classes for case classes, not coproducts.
-  // Types defined for future use.
   sealed trait IList[+A]
   final case class ICons[+A](head: A, tail: IList[A]) extends IList[A]
   final case class INil[+A]() extends IList[A]
-  object IList {}
+  object IList {
+    implicit val functorIList: cats.Functor[IList] = cats.Functor.derived
+    implicit val foldableIList: cats.Foldable[IList] = cats.Foldable.derived
+    implicit val traverseIList: cats.Traverse[IList] = cats.Traverse.derived
+  }
 
   // Bifunctor examples — case classes with two type parameters
   final case class Pair[A, B](first: A, second: B)
@@ -335,18 +336,25 @@ object examples {
   }
 
   // Interleaved invariant + type param fields (kittens-equivalent shape)
-  // Functor/Foldable/Traverse NOT SUPPORTED: Vector[A] is a nested type constructor
-  // (requires ConsK support). Types defined for future use.
   final case class Interleaved[A](i: Int, a: A, l: Long, as: Vector[A], s: String)
+  object Interleaved {
+    implicit val functorInterleaved: cats.Functor[Interleaved] = cats.Functor.derived
+    implicit val foldableInterleaved: cats.Foldable[Interleaved] = cats.Foldable.derived
+    implicit val traverseInterleaved: cats.Traverse[Interleaved] = cats.Traverse.derived
+  }
 
-  // Search: multiple recursive positions (kittens-equivalent shape)
-  // Functor/Foldable NOT SUPPORTED: Option[Search[A]] and List[Search[A]] are nested
-  // type constructors with recursion. Types defined for future use.
+  // Search: multiple recursive+nested positions (kittens-equivalent shape)
+  // NOT YET SUPPORTED: recursive nested type constructors (Option[Search[A]], List[Search[A]])
+  // require recursive HKT derivation which isn't implemented yet.
   final case class Search[+A](move: A, child: Option[Search[A]], variations: List[Search[A]])
 
   // CaseClassWOption: Option-wrapped type param in HKT (kittens-equivalent shape)
-  // Functor/Foldable/Traverse NOT SUPPORTED: Option[A] is a nested type constructor.
   final case class CaseClassWOption[A](value: Option[A])
+  object CaseClassWOption {
+    implicit val functorCaseClassWOption: cats.Functor[CaseClassWOption] = cats.Functor.derived
+    implicit val foldableCaseClassWOption: cats.Foldable[CaseClassWOption] = cats.Foldable.derived
+    implicit val traverseCaseClassWOption: cats.Traverse[CaseClassWOption] = cats.Traverse.derived
+  }
 
   // User-provided instance delegation test types
 
@@ -376,11 +384,15 @@ object examples {
 
   case class WithStrings(a: String, b: String)
 
-  // Bi-variant Result type — Bifunctor/Bifoldable/Bitraverse for sealed traits
-  // is NOT YET SUPPORTED (only case classes). Types defined for future use.
+  // Bi-variant Result type
   sealed trait Result[+A, +E]
   case class Success[+A](value: A) extends Result[A, Nothing]
   case class Failure[+E](error: E) extends Result[Nothing, E]
   case class Both[+A, +E](value: A, error: E) extends Result[A, E]
   case object ResultEmpty extends Result[Nothing, Nothing]
+  object Result {
+    implicit val bifunctorResult: cats.Bifunctor[Result] = cats.Bifunctor.derived
+    implicit val bifoldableResult: cats.Bifoldable[Result] = cats.Bifoldable.derived
+    implicit val bitraverseResult: cats.Bitraverse[Result] = cats.Bitraverse.derived
+  }
 }

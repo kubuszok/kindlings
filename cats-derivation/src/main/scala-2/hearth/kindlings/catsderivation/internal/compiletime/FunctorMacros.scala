@@ -19,4 +19,25 @@ final private[catsderivation] class FunctorMacros(val c: blackbox.Context)
 
     deriveFunctor[F](fCtor, functorFType)
   }
+
+  protected def mkCtor1FromType(appliedType: Type[Any]): Option[(Type.Ctor1[AnyK], UntypedType)] = {
+    val tpe = appliedType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    if (ctor == tpe) None
+    else {
+      val untyped = ctor.asInstanceOf[UntypedType]
+      Some((Type.Ctor1.fromUntyped[List](untyped).asInstanceOf[Type.Ctor1[AnyK]], untyped))
+    }
+  }
+
+  protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
+    val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    val functorCtor = c.universe.weakTypeOf[cats.Functor[List]].typeConstructor
+    val functorGType = c.universe.appliedType(functorCtor, List(ctor))
+    c.inferImplicitValue(functorGType) match {
+      case c.universe.EmptyTree => None
+      case tree                 => Some(c.Expr[Any](tree).asInstanceOf[Expr[Any]])
+    }
+  }
 }

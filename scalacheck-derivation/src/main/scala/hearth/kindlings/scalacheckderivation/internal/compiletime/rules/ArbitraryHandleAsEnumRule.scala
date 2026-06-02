@@ -45,20 +45,15 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
               }
             }
             .map { caseGens =>
-              caseGens.toList match {
+              val oneOfExpr: Expr[_root_.org.scalacheck.Gen[A]] = caseGens.toList match {
                 case singleGen :: Nil =>
-                  // Single case
                   singleGen
                 case firstGen :: secondGen :: rest =>
-                  // Multiple cases: use Gen.oneOf with at least 2 explicit args
                   if (rest.isEmpty) {
-                    // Exactly 2 cases - no varargs needed
                     Expr.quote {
                       _root_.org.scalacheck.Gen.oneOf(Expr.splice(firstGen), Expr.splice(secondGen))
                     }
                   } else {
-                    // 3+ cases - build list by prepending to avoid empty type parameter
-                    // Start with last element as a singleton list
                     val reversedRest = rest.reverse
                     val restGens: Expr[_root_.scala.List[_root_.org.scalacheck.Gen[A]]] =
                       reversedRest.tail.foldLeft(Expr.quote(_root_.scala.List(Expr.splice(reversedRest.head)))) {
@@ -72,8 +67,15 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
                     }
                   }
                 case Nil =>
-                  // Should never happen due to NonEmptyList, but handle for safety
                   throw new RuntimeException(s"Enum ${Type[A].prettyPrint} has no cases")
+              }
+              Expr.quote {
+                _root_.org.scalacheck.Gen.sized { n =>
+                  _root_.org.scalacheck.Gen.resize(
+                    _root_.java.lang.Math.max(n - 1, 0),
+                    Expr.splice(oneOfExpr)
+                  )
+                }
               }
             }
       }

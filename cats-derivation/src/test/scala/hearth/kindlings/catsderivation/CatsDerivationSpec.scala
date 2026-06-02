@@ -372,6 +372,33 @@ final class CatsDerivationSpec extends MacroSuite {
     test("type param and invariant field") {
       examples.Labeled.functorLabeled.map(examples.Labeled(1, "x"))(_ + 1) ==> examples.Labeled(2, "x")
     }
+
+    test("nested type constructor Vector[A]") {
+      examples.Interleaved.functorInterleaved.map(examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d"))(
+        _.toUpperCase
+      ) ==> examples.Interleaved(1, "A", 2L, Vector("B", "C"), "d")
+    }
+
+    test("nested type constructor Option[A]") {
+      examples.CaseClassWOption.functorCaseClassWOption.map(examples.CaseClassWOption(Some(1)))(_ + 1) ==>
+        examples.CaseClassWOption(Some(2))
+    }
+
+    test("nested Option[A] with None") {
+      examples.CaseClassWOption.functorCaseClassWOption.map(examples.CaseClassWOption(None: Option[Int]))(_ + 1) ==>
+        examples.CaseClassWOption(None)
+    }
+
+    test("sealed trait IList via enum rule") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
+      examples.IList.functorIList.map(list)(_ * 10) ==>
+        examples.ICons(10, examples.ICons(20, examples.INil()))
+    }
+
+    test("sealed trait IList empty") {
+      val empty: examples.IList[Int] = examples.INil()
+      examples.IList.functorIList.map(empty)(_ * 10) ==> examples.INil()
+    }
   }
 
   group("Contravariant") {
@@ -536,6 +563,46 @@ final class CatsDerivationSpec extends MacroSuite {
         .value
       result ==> List(42)
     }
+
+    test("foldLeft with nested Vector[A]") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d")
+      examples.Interleaved.foldableInterleaved.foldLeft(v, List.empty[String])((acc, a) => acc :+ a) ==>
+        List("a", "b", "c")
+    }
+
+    test("foldRight with nested Vector[A]") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d")
+      val result = examples.Interleaved.foldableInterleaved
+        .foldRight(v, cats.Eval.now(List.empty[String]))((a, acc) => acc.map(a :: _))
+        .value
+      result ==> List("a", "b", "c")
+    }
+
+    test("foldLeft with nested Option[A]") {
+      examples.CaseClassWOption.foldableCaseClassWOption.foldLeft(examples.CaseClassWOption(Some(42)), 0)(_ + _) ==> 42
+      examples.CaseClassWOption.foldableCaseClassWOption.foldLeft(
+        examples.CaseClassWOption(None: Option[Int]),
+        0
+      )(_ + _) ==> 0
+    }
+
+    test("foldLeft IList sealed trait") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.ICons(3, examples.INil())))
+      examples.IList.foldableIList.foldLeft(list, 0)(_ + _) ==> 6
+    }
+
+    test("foldLeft IList empty") {
+      val empty: examples.IList[Int] = examples.INil()
+      examples.IList.foldableIList.foldLeft(empty, 0)(_ + _) ==> 0
+    }
+
+    test("foldRight IList sealed trait") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
+      val result = examples.IList.foldableIList
+        .foldRight(list, cats.Eval.now(List.empty[Int]))((a, acc) => acc.map(a :: _))
+        .value
+      result ==> List(1, 2)
+    }
   }
 
   group("Traverse") {
@@ -581,6 +648,70 @@ final class CatsDerivationSpec extends MacroSuite {
 
     test("traverse sequence") {
       examples.Box.traverseBox.sequence(examples.Box(Option(42))) ==> Some(examples.Box(42))
+    }
+
+    test("traverse with nested Vector[A]") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d")
+      examples.Interleaved.traverseInterleaved.traverse(v)(s => Option(s.toUpperCase)) ==>
+        Some(examples.Interleaved(1, "A", 2L, Vector("B", "C"), "d"))
+    }
+
+    test("traverse with nested Vector[A] short-circuits on None") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "fail"), "d")
+      val result = examples.Interleaved.traverseInterleaved.traverse(v) { s =>
+        if (s == "fail") None else Some(s.toUpperCase)
+      }
+      result ==> None
+    }
+
+    test("traverse with nested Option[A]") {
+      examples.CaseClassWOption.traverseCaseClassWOption.traverse(examples.CaseClassWOption(Some(1)))(a =>
+        Option(a.toString)
+      ) ==> Some(examples.CaseClassWOption(Some("1")))
+    }
+
+    test("traverse with nested Option[A] containing None") {
+      examples.CaseClassWOption.traverseCaseClassWOption.traverse(
+        examples.CaseClassWOption(None: Option[Int])
+      )(a => Option(a.toString)) ==> Some(examples.CaseClassWOption(None))
+    }
+
+    test("traverse map with nested Vector[A]") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d")
+      examples.Interleaved.traverseInterleaved.map(v)(_.toUpperCase) ==>
+        examples.Interleaved(1, "A", 2L, Vector("B", "C"), "d")
+    }
+
+    test("traverse foldLeft with nested Vector[A]") {
+      val v = examples.Interleaved(1, "a", 2L, Vector("b", "c"), "d")
+      examples.Interleaved.traverseInterleaved.foldLeft(v, List.empty[String])((acc, s) => acc :+ s) ==>
+        List("a", "b", "c")
+    }
+
+    test("traverse IList sealed trait with Option") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
+      examples.IList.traverseIList.traverse(list)(a => Option(a * 10)) ==>
+        Some(examples.ICons(10, examples.ICons(20, examples.INil())))
+    }
+
+    test("traverse IList empty") {
+      val empty: examples.IList[Int] = examples.INil()
+      examples.IList.traverseIList.traverse(empty)(a => Option(a.toString)) ==>
+        Some(examples.INil())
+    }
+
+    test("traverse IList short-circuits on None") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
+      val result = examples.IList.traverseIList.traverse(list) { a =>
+        if (a == 2) None else Some(a * 10)
+      }
+      result ==> None
+    }
+
+    test("traverse IList map via Traverse") {
+      val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
+      examples.IList.traverseIList.map(list)(_ * 10) ==>
+        examples.ICons(10, examples.ICons(20, examples.INil()))
     }
   }
 
@@ -773,6 +904,26 @@ final class CatsDerivationSpec extends MacroSuite {
       val result = examples.Pair.bifunctorPair.leftMap(pair)(_.toString)
       result ==> examples.Pair("1", "hello")
     }
+
+    test("Result sealed trait bimap Success") {
+      val s: examples.Result[Int, String] = examples.Success(1)
+      examples.Result.bifunctorResult.bimap(s)(_.toString, _.length) ==> examples.Success("1")
+    }
+
+    test("Result sealed trait bimap Failure") {
+      val f: examples.Result[Int, String] = examples.Failure("err")
+      examples.Result.bifunctorResult.bimap(f)(_.toString, _.length) ==> examples.Failure(3)
+    }
+
+    test("Result sealed trait bimap Both") {
+      val b: examples.Result[Int, String] = examples.Both(1, "hi")
+      examples.Result.bifunctorResult.bimap(b)(_.toString, _.length) ==> examples.Both("1", 2)
+    }
+
+    test("Result sealed trait bimap ResultEmpty") {
+      val e: examples.Result[Int, String] = examples.ResultEmpty
+      examples.Result.bifunctorResult.bimap(e)(_.toString, _.length) ==> examples.ResultEmpty
+    }
   }
 
   group("Bifoldable") {
@@ -804,6 +955,26 @@ final class CatsDerivationSpec extends MacroSuite {
       val pair = examples.Pair("hello", "world")
       val result = examples.Pair.bifoldablePair.bifoldMap(pair)(_.length, _.length)(cats.kernel.Monoid[Int])
       result ==> 10
+    }
+
+    test("Result sealed trait bifoldLeft Success") {
+      val s: examples.Result[Int, String] = examples.Success(42)
+      examples.Result.bifoldableResult.bifoldLeft(s, 0)(_ + _, (acc, s) => acc + s.length) ==> 42
+    }
+
+    test("Result sealed trait bifoldLeft Failure") {
+      val f: examples.Result[Int, String] = examples.Failure("err")
+      examples.Result.bifoldableResult.bifoldLeft(f, 0)(_ + _, (acc, s) => acc + s.length) ==> 3
+    }
+
+    test("Result sealed trait bifoldLeft Both") {
+      val b: examples.Result[Int, String] = examples.Both(10, "hi")
+      examples.Result.bifoldableResult.bifoldLeft(b, 0)(_ + _, (acc, s) => acc + s.length) ==> 12
+    }
+
+    test("Result sealed trait bifoldLeft ResultEmpty") {
+      val e: examples.Result[Int, String] = examples.ResultEmpty
+      examples.Result.bifoldableResult.bifoldLeft(e, 0)(_ + _, (acc, s) => acc + s.length) ==> 0
     }
   }
 
@@ -847,25 +1018,38 @@ final class CatsDerivationSpec extends MacroSuite {
       val result = examples.Pair.bitraversePair.bisequence(pair)
       result ==> Some(examples.Pair(1, "hello"))
     }
-  }
 
-  // Bifunctor/Bifoldable/Bitraverse for sealed traits not yet supported.
-  // Result type defined in examples.scala for future use.
-  // Tests removed until Bi* enum rules are implemented.
+    test("Result sealed trait bitraverse Success") {
+      val s: examples.Result[Int, String] = examples.Success(42)
+      examples.Result.bitraverseResult.bitraverse(s)(a => Option(a.toString), b => Option(b.length)) ==>
+        Some(examples.Success("42"))
+    }
 
-  group("compile-time errors - Bi* on sealed trait") {
-    test("Bifunctor.derived on sealed trait fails") {
-      compileErrors(
-        """
-        import hearth.kindlings.catsderivation.extensions.*
-        cats.Bifunctor.derived[hearth.kindlings.catsderivation.examples.Result]
-        """
-      ).check("not handled by any Bifunctor derivation rule")
+    test("Result sealed trait bitraverse Failure") {
+      val f: examples.Result[Int, String] = examples.Failure("err")
+      examples.Result.bitraverseResult.bitraverse(f)(a => Option(a.toString), b => Option(b.length)) ==>
+        Some(examples.Failure(3))
+    }
+
+    test("Result sealed trait bitraverse Both") {
+      val b: examples.Result[Int, String] = examples.Both(1, "hi")
+      examples.Result.bitraverseResult.bitraverse(b)(a => Option(a.toString), b => Option(b.length)) ==>
+        Some(examples.Both("1", 2))
+    }
+
+    test("Result sealed trait bitraverse ResultEmpty") {
+      val e: examples.Result[Int, String] = examples.ResultEmpty
+      examples.Result.bitraverseResult.bitraverse(e)(a => Option(a.toString), b => Option(b.length)) ==>
+        Some(examples.ResultEmpty)
+    }
+
+    test("Result sealed trait bimap via Bitraverse") {
+      val b: examples.Result[Int, String] = examples.Both(1, "hi")
+      examples.Result.bitraverseResult.bimap(b)(_.toString, _.length) ==> examples.Both("1", 2)
     }
   }
 
-  // Bifunctor/Bifoldable/Bitraverse for sealed traits not yet supported.
-  // Result type defined in examples.scala for future use when Bi* enum rules are added.
+  // Bifunctor/Bifoldable/Bitraverse for sealed traits: see Result tests in each group above.
 
   group("compile-time errors") {
 

@@ -61,17 +61,35 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
               val idx = param.index
               Log.namedScope(s"Deriving Arbitrary for field $fieldName: ${Type[Field].prettyPrint}") {
                 deriveArbitraryRecursively[Field](using arbctx.nest[Field]).map { genExpr =>
-                  // genExpr is Expr[Gen[Field]] - the type witness
-                  // Cast to Gen[Any] for the list literal
-                  val genAny: Expr[Gen[Any]] = Expr.quote(Expr.splice(genExpr).asInstanceOf[Gen[Any]])
+                  // Check if the field's type matches the entry-point derived type (direct recursion)
+                  val isRecursive: Boolean = arbctx.derivedType.exists { dt =>
+                    import dt.Underlying as DT
+                    Type[Field] =:= Type[DT]
+                  }
 
-                  // Create accessor function - closes over genExpr (type witness) and idx
+                  // If recursive, wrap the Gen in size halving to ensure termination
+                  val finalGenExpr: Expr[Gen[Field]] = if (isRecursive) {
+                    Expr.quote {
+                      _root_.org.scalacheck.Gen.sized { n =>
+                        _root_.org.scalacheck.Gen.resize(
+                          _root_.java.lang.Math.max(n / 2, 0),
+                          Expr.splice(genExpr)
+                        )
+                      }
+                    }
+                  } else genExpr
+
+                  // finalGenExpr is Expr[Gen[Field]] - the type witness
+                  // Cast to Gen[Any] for the list literal
+                  val genAny: Expr[Gen[Any]] = Expr.quote(Expr.splice(finalGenExpr).asInstanceOf[Gen[Any]])
+
+                  // Create accessor function - closes over finalGenExpr (type witness) and idx
                   val makeAccessor: Expr[List[Any]] => (String, Expr_??) = { listExpr =>
                     val typedExpr = Expr.quote {
                       hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
                         .unsafeCast(
                           Expr.splice(listExpr)(Expr.splice(Expr(idx))),
-                          Expr.splice(genExpr) // Type witness: Gen[Field]
+                          Expr.splice(finalGenExpr) // Type witness: Gen[Field]
                         )
                     }
                     (fieldName, typedExpr.as_??)
