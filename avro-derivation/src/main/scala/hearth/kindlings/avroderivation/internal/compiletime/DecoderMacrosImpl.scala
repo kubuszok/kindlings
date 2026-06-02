@@ -5,7 +5,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, DecimalConfig}
-import hearth.kindlings.avroderivation.annotations.{avroFixed, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroAlias, avroFixed, fieldName, transientField}
 import org.apache.avro.Schema
 
 trait DecoderMacrosImpl
@@ -482,5 +482,7 @@ trait DecoderMacrosImpl
     val FieldName: Type[fieldName] = Type.of[fieldName]
     val TransientField: Type[transientField] = Type.of[transientField]
     val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
+    val AvroAlias: Type[avroAlias] = Type.of[avroAlias]
+    val ListString: Type[List[String]] = Type.of[List[String]]
   }
 }

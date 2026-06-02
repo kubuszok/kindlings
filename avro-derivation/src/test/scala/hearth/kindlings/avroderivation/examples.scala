@@ -306,5 +306,19 @@ case class WithByteVector(data: Vector[Byte])
 // Package namespace test types (no @avroNamespace annotation — should use package)
 case class PackageNamespaceRecord(name: String, value: Int)
 
+// Mutually recursive types (Gap 2.4)
+case class MutRec1(name: String, other: Option[MutRec2])
+case class MutRec2(value: Int, back: Option[MutRec1])
+
+// OffsetDateTime (Gap 2.5)
+case class WithOffsetDateTime(timestamp: java.time.OffsetDateTime, label: String)
+
+// Schema evolution (Gap 2.1)
+case class WithDefaultAge(name: String, age: Int = 0)
+case class WithAliasField(@avroAlias("old_name") name: String, age: Int)
+
+@avroProp("metadata", """{"version": 1, "source": "test"}""")
+case class WithJsonProp(name: String, value: Int)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

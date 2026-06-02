@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait EmptyUseImplicitRuleImpl {
-  this: EmptyMacrosImpl & MacroCommons & StdExtensions =>
+  this: EmptyMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object EmptyUseImplicitRule extends EmptyDerivationRule("use implicit Empty") {
@@ -24,7 +24,14 @@ trait EmptyUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               EmptyUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Empty[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Empty[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Empty[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

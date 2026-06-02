@@ -371,5 +371,15 @@ final class RoundTripSpec extends MacroSuite {
         decoded ==> Right(CombTransientB(42, None))
       }
     }
+
+    group("name collision (Scala keywords)") {
+
+      test("case class with keyword field names round-trip") {
+        val value = WithKeywordFields("myType", 42, true)
+        val node = KindlingsYamlEncoder.encode(value)
+        val decoded = KindlingsYamlDecoder.decode[WithKeywordFields](node)
+        decoded ==> Right(value)
+      }
+    }
   }
 }

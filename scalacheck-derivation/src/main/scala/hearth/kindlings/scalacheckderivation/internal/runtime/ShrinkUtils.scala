@@ -65,6 +65,23 @@ object ShrinkUtils {
       }
     }
 
+  /** Shrinks an enum/sealed trait with cross-variant alternatives. When shrinking a case class variant, case object
+    * variants from the same sealed trait are offered as simpler alternatives (prepended before field-level shrinks).
+    */
+  def shrinkEnumWithAlternatives[A](caseShrinks: List[Shrink[A]], caseObjectValues: List[A]): Shrink[A] =
+    Shrink { value =>
+      val isCaseObject = caseObjectValues.exists(_.getClass == value.getClass)
+      val fieldShrinks: Stream[A] = caseShrinks.toStream.flatMap { caseShrink =>
+        try caseShrink.shrink(value)
+        catch { case _: ClassCastException => Stream.empty }
+      }
+      if (isCaseObject) fieldShrinks
+      else {
+        val alternatives: Stream[A] = caseObjectValues.toStream
+        alternatives #::: fieldShrinks
+      }
+    }
+
   // --- Internal helpers ---
 
   /** Remove chunks of elements from a list (halving strategy from ScalaCheck). */

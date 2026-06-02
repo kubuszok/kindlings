@@ -350,6 +350,112 @@ final class DiffSpec extends hearth.MacroSuite {
       }
     }
 
+    group("Either and Tuple") {
+
+      test("identical Left values") {
+        val d = Diff.derived[Either[String, Int]]
+        val result = d.diff(Left("hello"), Left("hello"))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("identical Right values") {
+        val d = Diff.derived[Either[String, Int]]
+        val result = d.diff(Right(42), Right(42))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("Left vs Right is type mismatch") {
+        val d = Diff.derived[Either[String, Int]]
+        val result = d.diff(Left("hello"), Right(42))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case _: DiffResult.TypeMismatch => ()
+          case _                          =>
+            result match {
+              case v: DiffResult.Variant if !v.isIdentical => ()
+              case _ => fail(s"expected TypeMismatch or non-identical Variant, got $result")
+            }
+        }
+      }
+
+      test("identical Tuple2") {
+        val d = Diff.derived[(String, Int)]
+        val result = d.diff(("hello", 1), ("hello", 1))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("Tuple2 different first element") {
+        val d = Diff.derived[(String, Int)]
+        val result = d.diff(("hello", 1), ("world", 1))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val f1 = r.fields.find(_._1 == "_1")
+            assert(f1.isDefined, s"expected _1 field in $result")
+            assert(!f1.get._2.isIdentical, s"expected _1 to differ")
+            val f2 = r.fields.find(_._1 == "_2")
+            assert(f2.isDefined, s"expected _2 field in $result")
+            assert(f2.get._2.isIdentical, s"expected _2 to be identical")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+
+      test("Tuple2 different second element") {
+        val d = Diff.derived[(String, Int)]
+        val result = d.diff(("hello", 1), ("hello", 2))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val f1 = r.fields.find(_._1 == "_1")
+            assert(f1.isDefined, s"expected _1 field in $result")
+            assert(f1.get._2.isIdentical, s"expected _1 to be identical")
+            val f2 = r.fields.find(_._1 == "_2")
+            assert(f2.isDefined, s"expected _2 field in $result")
+            assert(!f2.get._2.isIdentical, s"expected _2 to differ")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+    }
+
+    group("Diff.approximate") {
+
+      test("values within epsilon are identical") {
+        val d = Diff.approximate[Double](0.01)
+        val result = d.diff(1.0, 1.005)
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("values outside epsilon are different") {
+        val d = Diff.approximate[Double](0.01)
+        val result = d.diff(1.0, 1.02)
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case vc: DiffResult.ValueChanged =>
+            assertEquals(vc.left, "1.0")
+            assertEquals(vc.right, "1.02")
+          case _ => fail(s"expected ValueChanged, got $result")
+        }
+      }
+
+      test("exact epsilon boundary is identical") {
+        val d = Diff.approximate[Int](5)
+        val result = d.diff(10, 15)
+        assert(result.isIdentical, s"expected identical at boundary, got $result")
+      }
+
+      test("one past epsilon boundary is different") {
+        val d = Diff.approximate[Int](5)
+        val result = d.diff(10, 16)
+        assert(!result.isIdentical, s"expected not identical past boundary, got $result")
+      }
+
+      test("snapshot produces Identical") {
+        val d = Diff.approximate[Double](0.01)
+        val result = d.snapshot(3.14)
+        assert(result.isIdentical, s"expected identical snapshot, got $result")
+      }
+    }
+
     group("rendering") {
 
       test("render changed record in plain mode") {
@@ -400,6 +506,139 @@ final class DiffSpec extends hearth.MacroSuite {
         val result = d.diff(left, right)
         val rendered = DiffRenderer.render(result, RenderConfig.plain)
         assert(rendered.contains("PersonWithAddress"), s"expected outer type in: $rendered")
+      }
+    }
+
+    group("ignoreField") {
+
+      test("ignored field is excluded from result") {
+        val d = Diff.derived[Person].ignoreField("age")
+        val result = d.diff(Person("Alice", 30), Person("Alice", 99))
+        assert(result.isIdentical, s"expected identical after ignoring age, got $result")
+      }
+
+      test("non-ignored field still differs") {
+        val d = Diff.derived[Person].ignoreField("age")
+        val result = d.diff(Person("Alice", 30), Person("Bob", 30))
+        assert(!result.isIdentical, s"expected not identical for name diff, got $result")
+      }
+
+      test("multiple fields can be ignored") {
+        val d = Diff.derived[Person].ignoreField("name").ignoreField("age")
+        val result = d.diff(Person("Alice", 30), Person("Bob", 99))
+        assert(result.isIdentical, s"expected identical after ignoring all fields, got $result")
+      }
+
+      test("snapshot also applies ignore") {
+        val d = Diff.derived[Person].ignoreField("age")
+        val result = d.snapshot(Person("Alice", 30))
+        result match {
+          case r: DiffResult.Record =>
+            assert(r.fields.forall(_._1 != "age"), s"age field should be removed from snapshot")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+    }
+
+    group("modifyField") {
+
+      test("modifyField().ignore is equivalent to ignoreField") {
+        val d = Diff.derived[Person].modifyField("age").ignore
+        val result = d.diff(Person("Alice", 30), Person("Alice", 99))
+        assert(result.isIdentical, s"expected identical after ignoring age, got $result")
+      }
+    }
+
+    group("assertNoDiff / assertDiff") {
+
+      test("assertNoDiff passes for identical values") {
+        implicit val d: Diff[Person] = Diff.derived[Person]
+        Diff.assertNoDiff(Person("Alice", 30), Person("Alice", 30))
+      }
+
+      test("assertNoDiff throws for different values") {
+        implicit val d: Diff[Person] = Diff.derived[Person]
+        intercept[AssertionError] {
+          Diff.assertNoDiff(Person("Alice", 30), Person("Bob", 30))
+        }
+      }
+
+      test("assertDiff returns result for different values") {
+        implicit val d: Diff[Person] = Diff.derived[Person]
+        val result = Diff.assertDiff(Person("Alice", 30), Person("Bob", 30))
+        assert(!result.isIdentical)
+      }
+
+      test("assertDiff throws for identical values") {
+        implicit val d: Diff[Person] = Diff.derived[Person]
+        intercept[AssertionError] {
+          Diff.assertDiff(Person("Alice", 30), Person("Alice", 30))
+        }
+      }
+    }
+
+    group("name collision (Scala keywords)") {
+
+      test("case class with keyword field names diffs correctly") {
+        val d = Diff.derived[WithKeywordFields]
+        val result = d.diff(WithKeywordFields("a", 1, true), WithKeywordFields("a", 1, true))
+        assert(result.isIdentical, s"expected identical, got $result")
+      }
+
+      test("detects difference in keyword-named field") {
+        val d = Diff.derived[WithKeywordFields]
+        val result = d.diff(WithKeywordFields("a", 1, true), WithKeywordFields("b", 1, true))
+        assert(!result.isIdentical, s"expected not identical, got $result")
+        result match {
+          case r: DiffResult.Record =>
+            val typeField = r.fields.find(_._1 == "type")
+            assert(typeField.isDefined, s"expected 'type' field in: ${r.fields.map(_._1)}")
+            assert(!typeField.get._2.isIdentical, "expected 'type' field to differ")
+          case _ => fail(s"expected Record, got $result")
+        }
+      }
+    }
+
+    group("ObjectMatcher") {
+
+      test("seq diff by key matches elements") {
+        case class User(id: Int, name: String)
+        implicit val userDiff: Diff[User] = Diff.derived[User]
+        val matcher = ObjectMatcher.by[User, Int](_.id)
+        val seqDiff = Diff.seqDiff(userDiff, matcher)
+
+        val left = List(User(1, "Alice"), User(2, "Bob"))
+        val right = List(User(2, "Robert"), User(1, "Alice"))
+
+        val result = seqDiff.diff(left, right)
+        result match {
+          case sd: DiffResult.SeqDiff =>
+            val equalEdits = sd.edits.collect { case Edit.Equal(r) => r }
+            assertEquals(equalEdits.size, 2, s"Expected 2 matched elements, got: ${sd.edits}")
+            val aliceResult = equalEdits.find(_.isIdentical)
+            assert(aliceResult.isDefined, "Alice should be identical (matched by id)")
+          case _ => fail(s"expected SeqDiff, got $result")
+        }
+      }
+
+      test("seq diff by key detects additions and removals") {
+        case class Item(id: String, value: Int)
+        implicit val itemDiff: Diff[Item] = Diff.derived[Item]
+        val matcher = ObjectMatcher.by[Item, String](_.id)
+        val seqDiff = Diff.seqDiff(itemDiff, matcher)
+
+        val left = List(Item("a", 1), Item("b", 2))
+        val right = List(Item("b", 2), Item("c", 3))
+
+        val result = seqDiff.diff(left, right)
+        result match {
+          case sd: DiffResult.SeqDiff =>
+            val deletes = sd.edits.count { case Edit.Delete(_) => true; case _ => false }
+            val inserts = sd.edits.count { case Edit.Insert(_) => true; case _ => false }
+            assertEquals(deletes, 1, "Should have 1 deletion (item 'a')")
+            assertEquals(inserts, 1, "Should have 1 insertion (item 'c')")
+          case _ => fail(s"expected SeqDiff, got $result")
+        }
       }
     }
   }

@@ -28,6 +28,7 @@ trait CodecMacrosImpl
     with rules.EncoderHandleAsMapRuleImpl
     with rules.EncoderHandleAsCollectionRuleImpl
     with rules.EncoderHandleAsNamedTupleRuleImpl
+    with rules.EncoderHandleAsOneValueClassRuleImpl
     with rules.EncoderHandleAsSingletonRuleImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl
@@ -40,6 +41,7 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsMapRuleImpl
     with rules.DecoderHandleAsCollectionRuleImpl
     with rules.DecoderHandleAsNamedTupleRuleImpl
+    with rules.DecoderHandleAsOneValueClassRuleImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
@@ -902,6 +904,7 @@ trait CodecMacrosImpl
           EncoderHandleAsMapRule,
           EncoderHandleAsCollectionRule,
           EncoderHandleAsNamedTupleRule,
+          EncoderHandleAsOneValueClassRule,
           EncoderHandleAsSingletonRule,
           EncoderHandleAsCaseClassRule,
           EncoderHandleAsEnumRule
@@ -1088,6 +1091,7 @@ trait CodecMacrosImpl
           DecoderHandleAsMapRule,
           DecoderHandleAsCollectionRule,
           DecoderHandleAsNamedTupleRule,
+          DecoderHandleAsOneValueClassRule,
           DecoderHandleAsSingletonRule,
           DecoderHandleAsCaseClassRule,
           DecoderHandleAsEnumRule

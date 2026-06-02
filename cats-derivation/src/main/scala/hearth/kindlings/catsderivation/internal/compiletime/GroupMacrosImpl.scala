@@ -6,6 +6,7 @@ import hearth.std.*
 
 trait GroupMacrosImpl
     extends SemigroupMacrosImpl
+    with StrictDerivationSupport
     with rules.GroupUseCachedRuleImpl
     with rules.GroupUseImplicitRuleImpl
     with rules.GroupBuiltInRuleImpl

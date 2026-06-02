@@ -7,7 +7,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.{avroFixed, avroScalePrecision, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{avroAlias, avroFixed, avroScalePrecision, fieldName, transientField}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.generic.GenericRecord
 
@@ -37,6 +37,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
       implicit val transientFieldT: Type[transientField] = DecTypes.TransientField
       implicit val avroFixedT: Type[avroFixed] = DecTypes.AvroFixed
       implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
+      implicit val avroAliasT: Type[avroAlias] = DecTypes.AvroAlias
 
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.parameters.flatten.toList
@@ -100,15 +101,22 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
             }
 
         case Some(fields) =>
-          val indexedFields = fields.toList.zipWithIndex
+          implicit val ListStringT: Type[List[String]] = DecTypes.ListString
 
-          NonEmptyList
-            .fromList(indexedFields)
-            .get
-            .parTraverse { case ((fName, param), fieldIndex) =>
+          fields
+            .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
+              val nameOverride = getAnnotationStringArg[fieldName](param)
+              val avroFieldName = nameOverride.getOrElse(fName)
+              val aliases = getAllAnnotationStringArgs[avroAlias](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
+
+              val aliasesExpr: Expr[List[String]] =
+                aliases.foldRight(Expr.quote(List.empty[String])) { (a, acc) =>
+                  Expr.quote(Expr.splice(Expr(a)) :: Expr.splice(acc))
+                }
+
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 (avroFixedSize, decimalOverride) match {
                   case (Some(_), _) =>
@@ -117,7 +125,13 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                       implicit val ArrayByteT: Type[Array[Byte]] = arrayByteType
                       val decodedExpr: Expr_?? = Expr.quote {
                         val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                        AvroDerivationUtils.decodeFixed(record.get(Expr.splice(Expr(fieldIndex)))): Array[Byte]
+                        AvroDerivationUtils.decodeFixed(
+                          AvroDerivationUtils.getFieldByNameOrAlias(
+                            record,
+                            Expr.splice(Expr(avroFieldName)),
+                            Expr.splice(aliasesExpr)
+                          )
+                        ): Array[Byte]
                       }.as_??
                       (fName, decodedExpr)
                     }
@@ -128,7 +142,11 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                       val decodedExpr: Expr_?? = Expr.quote {
                         val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
                         AvroDerivationUtils.decodeBigDecimal(
-                          record.get(Expr.splice(Expr(fieldIndex))),
+                          AvroDerivationUtils.getFieldByNameOrAlias(
+                            record,
+                            Expr.splice(Expr(avroFieldName)),
+                            Expr.splice(aliasesExpr)
+                          ),
                           Expr.splice(Expr(scale))
                         ): BigDecimal
                       }.as_??
@@ -136,7 +154,11 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                     }
                   case _ =>
                     val fieldAvroValue: Expr[Any] = Expr.quote {
-                      Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord].get(Expr.splice(Expr(fieldIndex)))
+                      AvroDerivationUtils.getFieldByNameOrAlias(
+                        Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord],
+                        Expr.splice(Expr(avroFieldName)),
+                        Expr.splice(aliasesExpr)
+                      )
                     }
                     deriveDecoderRecursively[Field](using dctx.nest[Field](fieldAvroValue)).map { decoded =>
                       (fName, decoded.as_??)

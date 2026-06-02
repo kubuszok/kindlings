@@ -6,6 +6,7 @@ import hearth.std.*
 
 trait ShowPrettyMacrosImpl
     extends ShowMacrosImpl
+    with StrictDerivationSupport
     with rules.ShowPrettyUseCachedRuleImpl
     with rules.ShowPrettyUseImplicitRuleImpl
     with rules.ShowPrettyCaseClassRuleImpl

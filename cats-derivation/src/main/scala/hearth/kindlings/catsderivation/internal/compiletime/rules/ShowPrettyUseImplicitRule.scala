@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait ShowPrettyUseImplicitRuleImpl {
-  this: ShowPrettyMacrosImpl & MacroCommons & StdExtensions =>
+  this: ShowPrettyMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object ShowPrettyUseImplicitRule extends ShowDerivationRule("use implicit ShowPretty/Show") {
@@ -37,7 +37,14 @@ trait ShowPrettyUseImplicitRuleImpl {
                     )(_ => instanceExpr) >>
                     ShowPrettyUseCachedRule[A]
                 case Left(reason) =>
-                  MIO.pure(Rule.yielded(s"No implicit ShowPretty/Show[${Type[A].prettyPrint}]: $reason"))
+                  if (isStrictDerivationMode)
+                    MIO.fail(
+                      new StrictDerivationError(
+                        s"Strict derivation mode: no implicit ShowPretty/Show[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                      )
+                    )
+                  else
+                    MIO.pure(Rule.yielded(s"No implicit ShowPretty/Show[${Type[A].prettyPrint}]: $reason"))
               }
           }
         }

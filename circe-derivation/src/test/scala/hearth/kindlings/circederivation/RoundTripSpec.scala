@@ -611,6 +611,18 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
+    group("local class derivation (Gap 4.4)") {
+
+      test("local case class round-trip") {
+        case class LocalPoint(x: Int, y: Int)
+        val encoder = KindlingsEncoder.derived[LocalPoint]
+        val decoder = KindlingsDecoder.derived[LocalPoint]
+        val value = LocalPoint(3, 7)
+        val json = encoder(value)
+        decoder.decodeJson(json) ==> Right(value)
+      }
+    }
+
     group("bug pattern regressions") {
 
       group("Option[DerivedType] with no pre-existing implicit (bug #120 pattern)") {
@@ -765,6 +777,19 @@ final class RoundTripSpec extends MacroSuite {
         obj("type") ==> Some(io.circe.Json.fromString("AnnotatedLeafA"))
         obj("full_name") ==> Some(io.circe.Json.fromString("Bob"))
         assert(!obj.contains("fullName"))
+      }
+    }
+
+    group("name collision (Scala keywords)") {
+
+      test("case class with keyword field names round-trip") {
+        val value = WithKeywordFields("myType", 42, true)
+        val json = KindlingsEncoder.encode(value)
+        val obj = json.asObject.get
+        assert(obj.contains("type"), s"expected 'type' key in: $json")
+        assert(obj.contains("class"), s"expected 'class' key in: $json")
+        assert(obj.contains("val"), s"expected 'val' key in: $json")
+        KindlingsDecoder.decode[WithKeywordFields](json) ==> Right(value)
       }
     }
   }

@@ -63,10 +63,26 @@ object AvroDerivationUtils {
   }
 
   def addSchemaProp(schema: Schema, key: String, value: String): Unit =
-    schema.addProp(key, value)
+    schema.addProp(key, parseJsonPropValue(value))
 
   def addFieldProp(field: Schema.Field, key: String, value: String): Unit =
-    field.addProp(key, value)
+    field.addProp(key, parseJsonPropValue(value))
+
+  private def parseJsonPropValue(value: String): AnyRef = {
+    val trimmed = value.trim
+    if (
+      trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.startsWith("\"") ||
+      trimmed == "true" || trimmed == "false" || trimmed == "null" ||
+      trimmed.headOption.exists(c => c.isDigit || c == '-')
+    ) {
+      try {
+        val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+        mapper.readTree(trimmed)
+      } catch {
+        case _: Exception => value
+      }
+    } else value
+  }
 
   def addSchemaAlias(schema: Schema, alias: String): Unit =
     schema.addAlias(alias)
@@ -277,6 +293,8 @@ object AvroDerivationUtils {
   def encodeLocalTime(time: java.time.LocalTime): Any = time.toNanoOfDay / 1000
   def encodeLocalDateTime(dt: java.time.LocalDateTime): Any =
     dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
+  def encodeOffsetDateTime(dt: java.time.OffsetDateTime): Any =
+    dt.toInstant.toEpochMilli
 
   // --- Decoder helpers ---
 
@@ -291,6 +309,18 @@ object AvroDerivationUtils {
 
   def decodeRecord(record: GenericRecord, fieldName: String): Any =
     record.get(fieldName)
+
+  def getFieldByNameOrAlias(record: GenericRecord, name: String, aliases: List[String]): Any = {
+    val schema = record.getSchema
+    if (schema.getField(name) != null) return record.get(name)
+    var remaining = aliases
+    while (remaining.nonEmpty) {
+      val alias = remaining.head
+      if (schema.getField(alias) != null) return record.get(alias)
+      remaining = remaining.tail
+    }
+    null
+  }
 
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, schemaFor: hearth.kindlings.avroderivation.AvroSchemaFor[A]): A =
@@ -396,6 +426,9 @@ object AvroDerivationUtils {
     java.time.LocalTime.ofNanoOfDay(value.asInstanceOf[Long] * 1000)
   def decodeLocalDateTime(value: Any): java.time.LocalDateTime =
     java.time.LocalDateTime
+      .ofInstant(java.time.Instant.ofEpochMilli(value.asInstanceOf[Long]), java.time.ZoneOffset.UTC)
+  def decodeOffsetDateTime(value: Any): java.time.OffsetDateTime =
+    java.time.OffsetDateTime
       .ofInstant(java.time.Instant.ofEpochMilli(value.asInstanceOf[Long]), java.time.ZoneOffset.UTC)
 
   def sequenceDecodeResults(fieldValues: List[Any]): Array[Any] =

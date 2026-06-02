@@ -66,6 +66,8 @@ case class WithMap(scores: Map[String, Int])
 // --- Value class ---
 
 case class WithWrappedInt(value: WrappedInt)
+final case class WrappedString(value: String) extends AnyVal
+case class WithDoubleWrapped(outer: WrappedInt, name: String)
 
 // --- Recursive Option ---
 

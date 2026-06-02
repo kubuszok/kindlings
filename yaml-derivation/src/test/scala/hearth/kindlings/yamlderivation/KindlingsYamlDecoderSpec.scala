@@ -626,5 +626,35 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         )
       }
     }
+
+    group("decoder combinators") {
+
+      test("orElse falls back to second decoder on failure") {
+        val intDecoder = KindlingsYamlDecoder.derived[SimplePerson]
+        val fallbackDecoder: KindlingsYamlDecoder[SimplePerson] =
+          new KindlingsYamlDecoder[SimplePerson] {
+            def construct(
+                node: Node
+            )(implicit
+                settings: org.virtuslab.yaml.LoadSettings
+            ): Either[org.virtuslab.yaml.ConstructError, SimplePerson] =
+              Right(SimplePerson("fallback", 0))
+          }
+        val combined = intDecoder.orElse(fallbackDecoder)
+        val validNode = mappingOf("name" -> scalarNode("Alice"), "age" -> scalarNode("30"))
+        combined.construct(validNode) ==> Right(SimplePerson("Alice", 30))
+        val invalidNode = scalarNode("not a person")
+        combined.construct(invalidNode) ==> Right(SimplePerson("fallback", 0))
+      }
+
+      test("orElse returns first decoder result when it succeeds") {
+        val d1 = KindlingsYamlDecoder.derived[SimplePerson]
+        val d2 = KindlingsYamlDecoder.derived[SimplePerson]
+        val combined = d1.orElse(d2)
+        val node = mappingOf("name" -> scalarNode("Bob"), "age" -> scalarNode("25"))
+        combined.construct(node) ==> Right(SimplePerson("Bob", 25))
+      }
+
+    }
   }
 }

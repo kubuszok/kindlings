@@ -52,7 +52,11 @@ final case class JsoniterConfig(
     // NOTE: jsoniter-scala defaults to 1024; Kindlings defaults to Int.MaxValue (no limit).
     // Set explicitly via .withSetMaxInsertNumber(1024) for DoS protection.
     setMaxInsertNumber: Int = Int.MaxValue,
-    bitSetValueLimit: Int = 1024
+    bitSetValueLimit: Int = 1024,
+    javaEnumValueNameMapper: String => String = identity,
+    skipNestedOptionValues: Boolean = false,
+    alwaysEmitDiscriminator: Boolean = false,
+    inlineOneValueClasses: Boolean = false
 ) {
 
   def withFieldNameMapper(f: String => String): JsoniterConfig = copy(fieldNameMapper = f)
@@ -89,10 +93,22 @@ final case class JsoniterConfig(
   def withMapMaxInsertNumber(max: Int): JsoniterConfig = copy(mapMaxInsertNumber = max)
   def withSetMaxInsertNumber(max: Int): JsoniterConfig = copy(setMaxInsertNumber = max)
   def withBitSetValueLimit(limit: Int): JsoniterConfig = copy(bitSetValueLimit = limit)
+  def withJavaEnumValueNameMapper(f: String => String): JsoniterConfig = copy(javaEnumValueNameMapper = f)
+  def withSkipNestedOptionValues: JsoniterConfig = copy(skipNestedOptionValues = true)
+  def withAlwaysEmitDiscriminator: JsoniterConfig = copy(alwaysEmitDiscriminator = true)
+  def withInlineOneValueClasses: JsoniterConfig = copy(inlineOneValueClasses = true)
 }
 object JsoniterConfig {
 
   implicit val default: JsoniterConfig = JsoniterConfig()
+
+  val jsoniterScalaDefaults: JsoniterConfig = JsoniterConfig(
+    discriminatorFieldName = Some("type"),
+    transientDefault = true,
+    checkFieldDuplication = true,
+    mapMaxInsertNumber = 1024,
+    setMaxInsertNumber = 1024
+  )
 
   private[jsoniterderivation] val snakeCase: String => String = { s =>
     val sb = new StringBuilder

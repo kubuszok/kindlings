@@ -8,6 +8,7 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 trait ShowMacrosImpl
     extends AnnotationSupport
+    with StrictDerivationSupport
     with rules.ShowUseCachedRuleImpl
     with rules.ShowUseImplicitRuleImpl
     with rules.ShowBuiltInRuleImpl
@@ -145,6 +146,7 @@ trait ShowMacrosImpl
   protected object ShowTypes {
     def Show: Type.Ctor1[cats.Show] = Type.Ctor1.of[cats.Show]
     val LogDerivation: Type[LogDerivation] = Type.of[LogDerivation]
+    // StrictDerivation type managed by StrictDerivationSupport trait
     val Boolean: Type[Boolean] = Type.of[Boolean]
     val Byte: Type[Byte] = Type.of[Byte]
     val Short: Type[Short] = Type.of[Short]
@@ -170,6 +172,7 @@ trait ShowMacrosImpl
 
     logDerivationImported || logDerivationSetGlobally
   }
+
 }
 
 sealed private[compiletime] trait ShowDerivationError extends util.control.NoStackTrace with Product with Serializable {

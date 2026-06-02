@@ -448,6 +448,15 @@ object JsoniterDerivationUtils {
     out.writeArrayEnd()
   }
 
+  def mapEnumName(
+      config: hearth.kindlings.jsoniterderivation.JsoniterConfig,
+      caseName: String,
+      isJavaEnum: Boolean
+  ): String = {
+    val base = config.adtLeafClassNameMapper(caseName)
+    if (isJavaEnum) config.javaEnumValueNameMapper(base) else base
+  }
+
   def validateBigInt(in: JsonReader, value: BigInt, digitsLimit: Int): BigInt = {
     if (value ne null) {
       if (value.underlying.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103

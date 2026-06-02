@@ -43,7 +43,8 @@ trait DecoderHandleAsEnumRuleImpl {
       }
 
       // Check at compile time if all children are singletons (case objects with no fields)
-      val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
+      val isJavaEnum = Type[A].isJavaEnum
+      val allCaseObjects = Type[A].isEnumeration || isJavaEnum ||
         childrenList.forall { case (_, child) =>
           SingletonValue.unapply(child.Underlying).isDefined
         }
@@ -257,7 +258,11 @@ trait DecoderHandleAsEnumRuleImpl {
             MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
                 if (
-                  Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                  JsoniterDerivationUtils.mapEnumName(
+                    Expr.splice(dctx.config),
+                    Expr.splice(Expr(childName)),
+                    Expr.splice(Expr(Type[A].isJavaEnum))
+                  ) == Expr
                     .splice(typeNameExpr)
                 )
                   Expr
@@ -277,7 +282,11 @@ trait DecoderHandleAsEnumRuleImpl {
                 MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
                   Expr.quote {
                     if (
-                      Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                      JsoniterDerivationUtils.mapEnumName(
+                        Expr.splice(dctx.config),
+                        Expr.splice(Expr(childName)),
+                        Expr.splice(Expr(Type[A].isJavaEnum))
+                      ) == Expr
                         .splice(typeNameExpr)
                     )
                       Expr.splice(singleton).asInstanceOf[A]
@@ -294,7 +303,11 @@ trait DecoderHandleAsEnumRuleImpl {
                       val helperCallExpr = helper(readerExpr, dctx.config)
                       Expr.quote {
                         if (
-                          Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                          JsoniterDerivationUtils.mapEnumName(
+                            Expr.splice(dctx.config),
+                            Expr.splice(Expr(childName)),
+                            Expr.splice(Expr(Type[A].isJavaEnum))
+                          ) == Expr
                             .splice(typeNameExpr)
                         )
                           Expr.splice(helperCallExpr).asInstanceOf[A]
@@ -308,7 +321,11 @@ trait DecoderHandleAsEnumRuleImpl {
                     (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
                       Expr.quote {
                         if (
-                          Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                          JsoniterDerivationUtils.mapEnumName(
+                            Expr.splice(dctx.config),
+                            Expr.splice(Expr(childName)),
+                            Expr.splice(Expr(Type[A].isJavaEnum))
+                          ) == Expr
                             .splice(typeNameExpr)
                         )
                           Expr.splice(decodedExpr).asInstanceOf[A]
@@ -337,7 +354,11 @@ trait DecoderHandleAsEnumRuleImpl {
             .map { inlineExpr => (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
                 if (
-                  Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                  JsoniterDerivationUtils.mapEnumName(
+                    Expr.splice(dctx.config),
+                    Expr.splice(Expr(childName)),
+                    Expr.splice(Expr(Type[A].isJavaEnum))
+                  ) == Expr
                     .splice(typeNameExpr)
                 )
                   Expr.splice(inlineExpr).asInstanceOf[A]
@@ -368,7 +389,11 @@ trait DecoderHandleAsEnumRuleImpl {
             MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
                 if (
-                  Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                  JsoniterDerivationUtils.mapEnumName(
+                    Expr.splice(dctx.config),
+                    Expr.splice(Expr(childName)),
+                    Expr.splice(Expr(Type[A].isJavaEnum))
+                  ) == Expr
                     .splice(typeNameExpr)
                 )
                   Expr.splice(sv.singletonExpr).asInstanceOf[A]
@@ -395,7 +420,11 @@ trait DecoderHandleAsEnumRuleImpl {
                   MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
                     Expr.quote {
                       if (
-                        Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                        JsoniterDerivationUtils.mapEnumName(
+                          Expr.splice(dctx.config),
+                          Expr.splice(Expr(childName)),
+                          Expr.splice(Expr(Type[A].isJavaEnum))
+                        ) == Expr
                           .splice(typeNameExpr)
                       )
                         Expr.splice(instanceExpr).asInstanceOf[A]
@@ -435,7 +464,11 @@ trait DecoderHandleAsEnumRuleImpl {
             MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
                 if (
-                  Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                  JsoniterDerivationUtils.mapEnumName(
+                    Expr.splice(dctx.config),
+                    Expr.splice(Expr(childName)),
+                    Expr.splice(Expr(Type[A].isJavaEnum))
+                  ) == Expr
                     .splice(typeNameExpr)
                 ) {
                   JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
@@ -463,7 +496,11 @@ trait DecoderHandleAsEnumRuleImpl {
                   MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
                     Expr.quote {
                       if (
-                        Expr.splice(dctx.config).adtLeafClassNameMapper(Expr.splice(Expr(childName))) == Expr
+                        JsoniterDerivationUtils.mapEnumName(
+                          Expr.splice(dctx.config),
+                          Expr.splice(Expr(childName)),
+                          Expr.splice(Expr(Type[A].isJavaEnum))
+                        ) == Expr
                           .splice(typeNameExpr)
                       ) {
                         JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))

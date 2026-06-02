@@ -7,6 +7,7 @@ import hearth.std.*
 /** Monoid derivation: extends Semigroup with empty (constructed from field Monoid.empty values). */
 trait MonoidMacrosImpl
     extends SemigroupMacrosImpl
+    with StrictDerivationSupport
     with rules.MonoidUseCachedRuleImpl
     with rules.MonoidUseImplicitRuleImpl
     with rules.MonoidBuiltInRuleImpl

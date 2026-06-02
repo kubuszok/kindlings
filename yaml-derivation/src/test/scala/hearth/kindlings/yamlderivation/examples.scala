@@ -126,3 +126,6 @@ case class CombOuter(
     listCaseClass: List[CombInnerCC],
     mapCaseClass: Map[String, CombInnerCC]
 )
+
+// Name collision test types
+case class WithKeywordFields(`type`: String, `class`: Int, `val`: Boolean)

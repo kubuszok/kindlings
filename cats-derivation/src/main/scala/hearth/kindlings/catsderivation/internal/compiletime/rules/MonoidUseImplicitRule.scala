@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait MonoidUseImplicitRuleImpl {
-  this: MonoidMacrosImpl & MacroCommons & StdExtensions =>
+  this: MonoidMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object MonoidUseImplicitRule extends MonoidDerivationRule("use implicit Monoid") {
@@ -23,7 +23,14 @@ trait MonoidUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               MonoidUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Monoid[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Monoid[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Monoid[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

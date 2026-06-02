@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait OrderUseImplicitRuleImpl {
-  this: OrderMacrosImpl & MacroCommons & StdExtensions =>
+  this: OrderMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   object OrderUseImplicitRule extends OrderDerivationRule("use implicit Order") {
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] = {
@@ -22,7 +22,14 @@ trait OrderUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               OrderUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Order[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Order[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Order[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

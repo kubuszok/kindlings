@@ -295,3 +295,6 @@ case class AnnotatedLeafBoth(
     @transientField scratch: Option[String] = None,
     active: Boolean
 ) extends AnnotatedADT
+
+// Name collision test types
+case class WithKeywordFields(`type`: String, `class`: Int, `val`: Boolean)

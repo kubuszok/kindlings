@@ -80,6 +80,14 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
             AvroDerivationUtils.encodeLocalDateTime(Expr.splice(value).asInstanceOf[java.time.LocalDateTime]): Any
           )
         )
+      else if (tpe =:= Type.of[java.time.OffsetDateTime])
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.encodeOffsetDateTime(Expr.splice(value).asInstanceOf[java.time.OffsetDateTime]): Any
+          )
+        )
+      else if (tpe =:= Type.of[None.type])
+        Some(Expr.quote(null: Any))
       else
         None
     }

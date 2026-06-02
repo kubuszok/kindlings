@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait EqUseImplicitRuleImpl {
-  this: EqMacrosImpl & MacroCommons & StdExtensions =>
+  this: EqMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   object EqUseImplicitRule extends EqDerivationRule("use implicit Eq") {
     def apply[A: EqCtx]: MIO[Rule.Applicability[Expr[Boolean]]] = {
@@ -22,7 +22,14 @@ trait EqUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               EqUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Eq[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Eq[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Eq[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }

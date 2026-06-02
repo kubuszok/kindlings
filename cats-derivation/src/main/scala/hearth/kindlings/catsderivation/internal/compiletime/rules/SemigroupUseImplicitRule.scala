@@ -6,7 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 trait SemigroupUseImplicitRuleImpl {
-  this: SemigroupMacrosImpl & MacroCommons & StdExtensions =>
+  this: SemigroupMacrosImpl & MacroCommons & StdExtensions & StrictDerivationSupport =>
 
   @scala.annotation.nowarn("msg=is never used")
   object SemigroupUseImplicitRule extends SemigroupDerivationRule("use implicit Semigroup") {
@@ -23,7 +23,14 @@ trait SemigroupUseImplicitRuleImpl {
             )(_ => instanceExpr) >>
               SemigroupUseCachedRule[A]
           case Left(reason) =>
-            MIO.pure(Rule.yielded(s"No implicit Semigroup[${Type[A].prettyPrint}]: $reason"))
+            if (isStrictDerivationMode)
+              MIO.fail(
+                new StrictDerivationError(
+                  s"Strict derivation mode: no implicit Semigroup[${Type[A].prettyPrint}] found. Provide an explicit instance or remove StrictDerivation from scope."
+                )
+              )
+            else
+              MIO.pure(Rule.yielded(s"No implicit Semigroup[${Type[A].prettyPrint}]: $reason"))
         }
     }
   }
