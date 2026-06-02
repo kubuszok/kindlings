@@ -42,15 +42,30 @@ trait FunctorCaseClassRuleImpl {
       }
 
       if (nestedFields.nonEmpty) {
-        MIO.pure(
-          Rule.yielded(
-            s"Fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-              "Only direct type parameter fields (A) and invariant fields are supported."
+        val nestedFieldFunctors = scala.collection.mutable.Map.empty[String, Expr[Any]]
+        val unsupported = scala.collection.mutable.ListBuffer.empty[String]
+        nestedFields.foreach { name =>
+          val param = fieldsInt.find(_._1 == name).get._2
+          import param.tpe.Underlying as FieldType
+          summonFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+            case Some(functorExpr) => nestedFieldFunctors += (name -> functorExpr)
+            case None              => unsupported += name
+          }
+        }
+        if (unsupported.nonEmpty) {
+          MIO.pure(
+            Rule.yielded(
+              s"Fields ${unsupported.mkString(", ")} contain nested type constructors " +
+                "without Functor instances."
+            )
           )
-        )
+        } else {
+          val directFieldSet: Set[String] = directFields.toSet
+          MIO.pure(Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet, nestedFieldFunctors.toMap)))
+        }
       } else {
         val directFieldSet: Set[String] = directFields.toSet
-        MIO.pure(Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet)))
+        MIO.pure(Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet, Map.empty)))
       }
     }
   }

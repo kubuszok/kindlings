@@ -18,4 +18,22 @@ final private[catsderivation] class TraverseMacros(val c: blackbox.Context)
 
     deriveTraverse[F](fCtor, traverseFType)
   }
+
+  protected def mkCtor1FromTypeTraverse(appliedType: Type[Any]): Option[UntypedType] = {
+    val tpe = appliedType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    if (ctor == tpe) None
+    else Some(ctor.asInstanceOf[UntypedType])
+  }
+
+  protected def summonTraverseForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
+    val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    val traverseCtor = c.universe.weakTypeOf[cats.Traverse[List]].typeConstructor
+    val traverseGType = c.universe.appliedType(traverseCtor, List(ctor))
+    c.inferImplicitValue(traverseGType) match {
+      case c.universe.EmptyTree => None
+      case tree                 => Some(c.Expr[Any](tree).asInstanceOf[Expr[Any]])
+    }
+  }
 }

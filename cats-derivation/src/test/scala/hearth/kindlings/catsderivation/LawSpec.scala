@@ -268,7 +268,7 @@ final class LawSpec extends ScalaCheckSuite {
       }
     }
 
-    property("Shape: transitivity".ignore) {
+    property("Shape: transitivity") {
       forAll { (a: examples.Shape, b: examples.Shape, c: examples.Shape) =>
         val ord = examples.Shape.orderShape
         val ab = ord.compare(a, b)

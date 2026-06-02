@@ -18,4 +18,22 @@ final private[catsderivation] class FoldableMacros(val c: blackbox.Context)
 
     deriveFoldable[F](fCtor, foldableFType)
   }
+
+  protected def mkCtor1FromTypeFoldable(appliedType: Type[Any]): Option[UntypedType] = {
+    val tpe = appliedType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    if (ctor == tpe) None
+    else Some(ctor.asInstanceOf[UntypedType])
+  }
+
+  protected def summonFoldableForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
+    val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val ctor = tpe.typeConstructor
+    val foldableCtor = c.universe.weakTypeOf[cats.Foldable[List]].typeConstructor
+    val foldableGType = c.universe.appliedType(foldableCtor, List(ctor))
+    c.inferImplicitValue(foldableGType) match {
+      case c.universe.EmptyTree => None
+      case tree                 => Some(c.Expr[Any](tree).asInstanceOf[Expr[Any]])
+    }
+  }
 }
