@@ -72,6 +72,7 @@ nav:
   - "Extra":
     - "Jsoniter JSON": "jsoniter-json.md"
   - "Debugging & Diagnostics": "debugging.md"
+  - "Feature Parity": "feature-parity.md"
   - "FAQ": "faq.md"
 
 markdown_extensions:

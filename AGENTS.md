@@ -4,7 +4,7 @@
 
 **Kindlings** provides type classes (re)implemented with [Hearth](https://github.com/kubuszok/hearth/) to kick-off the ecosystem — cross-compiled (Scala 2.13 + 3) type class derivation using Hearth's macro-agnostic APIs.
 
-- **Scala Versions**: 2.13.18, 3.8.2 | **Platforms**: JVM, Scala.js, Scala Native | **Build Tool**: SBT
+- **Scala Versions**: 2.13.18, 3.8.3 | **Platforms**: JVM, Scala.js, Scala Native | **Build Tool**: SBT
 
 ## MCP — Always verify APIs via MCP before using them
 
@@ -49,13 +49,13 @@ Code uses `Expr`, `Type`, etc. from **Hearth's API**, NOT `scala.quoted.Expr` or
 
 ## Cross-Compilation Pitfalls
 
-See `docs/contributing/cross-compilation-pitfalls-skill.md` for the full live list.
+See `docs/contributing/hearth-cross-compilation/SKILL.md` for the full live list.
 The most load-bearing entries to keep in mind for any macro work:
 
 - **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; for
   multi-method type-class instances **derive everything at `Q0` using `ValDefsCache`,
   then call cached `def`s by name from inside each splice**. See
-  `docs/contributing/def-caching-skill.md`. Do **not** use `LambdaBuilder` as a
+  `docs/contributing/hearth-def-caching/SKILL.md`. Do **not** use `LambdaBuilder` as a
   workaround — that was a misdiagnosis; the real fix is `cache.toValDefs.use` placement.
 - **`summonExprIgnoring` vs OOM** — always pass the library auto-derivation methods to
   ignore, otherwise summoning recurses into them and OOMs the compiler.
@@ -65,22 +65,22 @@ The most load-bearing entries to keep in mind for any macro work:
 - **`Type.of[A]` bootstrap cycle in extensions** — see the pitfalls skill.
 - **`IsValueType` intercepts single-element named tuples (Scala 3)** — guard every
   `HandleAsValueTypeRule` with `if (Type[A].isNamedTuple)` before the `IsValueType`
-  match. See pitfalls skill and `type-class-derivation-skill.md` § REQ-5.
+  match. See pitfalls skill and `docs/contributing/kindlings-new-module/requirements.md` § REQ-5.
 
 ## Standard extensions, `LambdaBuilder`, and def-caching rules
 
 - **Load standard extensions exactly once per macro bundle.** See
-  `docs/contributing/load-standard-extensions-skill.md`. The shared implementation
+  `docs/contributing/hearth-standard-extensions/SKILL.md`. The shared implementation
   lives in `derivation-commons` (`hearth.kindlings.derivation.compiletime.LoadStandardExtensionsOnce`);
   per-module thin delegates re-export it in each module's `internal.compiletime` package.
   Use `ensureStandardExtensionsLoaded()` instead of calling
   `Environment.loadStandardExtensions()` directly. Issue `kubuszok/kindlings#65`.
 - **`LambdaBuilder` only for collection/Optional iteration lambdas.** Strict rule, no
-  exceptions. See `docs/contributing/lambda-builder-when-to-use-skill.md`. For
+  exceptions. See `docs/contributing/hearth-lambda-builder/SKILL.md`. For
   multi-method type-class instances or any other shape that needs pre-derived helper
   functions, use the def-caching pattern instead.
 - **Def-caching is the answer to multi-method instances and sibling-splice isolation.**
-  See `docs/contributing/def-caching-skill.md`. The recipe: shared `ValDefsCache`,
+  See `docs/contributing/hearth-def-caching/SKILL.md`. The recipe: shared `ValDefsCache`,
   derivation in `Q0` via `forwardDeclare` + `buildCachedWith`, helper-call functions
   retrieved via `cache.getNAry`, outer `cacheState.toValDefs.use` wrapping the entire
   `Expr.quote { new T[A] { … } }`. Reference implementations: `cats-derivation`
@@ -102,7 +102,7 @@ The most load-bearing entries to keep in mind for any macro work:
   `ValDefBuilder.ofDef*` (with `cache.forwardDeclare` + `cache.buildCachedWith`) for
   recursive helpers.
 - **Use factory methods instead of anonymous classes for final instances.** See
-  `docs/contributing/factory-instance-pattern-skill.md`. For monomorphic type classes
+  `docs/contributing/kindlings-factory-instance/SKILL.md`. For monomorphic type classes
   (kind `*`), use lambda factories. For polymorphic type classes (kind `* → *`), use the
   erasure-based factory with `Witness1`/`Witness2` witness types. Factory methods live in
   each module's `internal/runtime/` package. Issue `kubuszok/kindlings#86`.
@@ -124,25 +124,31 @@ Each module reads from its own settings namespace (e.g. `jsoniterDerivation`, `c
 Invalid values emit a compiler warning and fall back to default.
 
 Hearth source is at `../hearth/` when documentation is insufficient.
-See `docs/contributing/hearth-documentation-skill.md` § "Hearth source as reference" for key files.
+See `docs/contributing/hearth-documentation/SKILL.md` § "Hearth source as reference" for key files.
 
 ## Hearth documentation and API reference
 
-- **`docs/contributing/hearth-documentation-skill.md`** — finding docs, verifying APIs, hearth source reference
-- **`docs/contributing/hearth-api-knowledge.md`** — quick-reference table of commonly used hearth API signatures
+- **`docs/contributing/hearth-documentation/SKILL.md`** — finding docs, verifying APIs, hearth source reference
+- **`docs/contributing/hearth-api-reference/SKILL.md`** — quick-reference table of commonly used hearth API signatures
 - Check `build.sbt` for `versions.hearth` — use `https://scala-hearth.readthedocs.io/en/latest/` for SNAPSHOT, `/en/<version>/` for stable
 
 ## Skills routing
 
-### Type class derivation — follow `docs/contributing/type-class-derivation-skill.md`
+### Type class derivation (split into focused skills)
 
-- `FastShowPrettyMacrosImpl.scala` — reference for **encoder-style** derivation (reading fields)
-- `circe-derivation/DecoderMacrosImpl.scala` — reference for **decoder-style** derivation (constructing types)
-- `jsoniter-derivation/CodecMacrosImpl.scala` — reference for **combined codec** (encoder + decoder, `LambdaBuilder` pattern)
+- `docs/contributing/hearth-macro-basics/SKILL.md` — rule architecture, context, MIO, caching
+- `docs/contributing/hearth-case-class-rules/SKILL.md` — case class derivation, decoder construction
+- `docs/contributing/hearth-enum-rules/SKILL.md` — enum/sealed trait derivation, matchOn, discriminators
+- `docs/contributing/hearth-hkt-derivation/SKILL.md` — polymorphic (HKT) derivation, erased approach
+- `docs/contributing/kindlings-new-module/SKILL.md` — bootstrapping a new module, requirements checklist
+- `docs/contributing/kindlings-debugging/SKILL.md` — debugging derivation, logging, error hierarchy
 
-Also in `type-class-derivation-skill.md`: "Implementing a new module", "Debugging derivation", "Syncing from Hearth", "Polymorphic (HKT) type class derivation".
+Reference implementations:
+- `FastShowPrettyMacrosImpl.scala` — **encoder-style** derivation (reading fields)
+- `circe-derivation/DecoderMacrosImpl.scala` — **decoder-style** derivation (constructing types)
+- `jsoniter-derivation/CodecMacrosImpl.scala` — **combined codec** (encoder + decoder)
 
-### Runtime performance — follow `docs/contributing/runtime-performance-skill.md`
+### Runtime performance — follow `docs/contributing/kindlings-runtime-perf/SKILL.md`
 
 When optimizing the runtime performance of generated codecs/encoders/decoders. Key techniques:
 - `semiEval` for compile-time config evaluation (eliminate runtime `config.fieldNameMapper(name)` calls)
@@ -156,7 +162,7 @@ When optimizing the runtime performance of generated codecs/encoders/decoders. K
 
 Reference analysis: `docs/research/jsoniter-codegen-techniques.md`, `docs/research/perf-regression-analysis.md`
 
-### Factory instance pattern — follow `docs/contributing/factory-instance-pattern-skill.md`
+### Factory instance pattern — follow `docs/contributing/kindlings-factory-instance/SKILL.md`
 
 When generating the final `new TypeClass[A] { ... }` expression, use factory methods + lambdas
 instead of anonymous classes. Benchmark data: `docs/research/anon-vs-lambda/analysis.md`.
@@ -176,14 +182,14 @@ Key reference files:
 - `ApplicativeMacrosImpl.scala` — composed derivation (pure + map + ap body builders)
 - `NonEmptyAlternativeMacrosImpl.scala` — multi-trait composition (Applicative + SemigroupK patterns)
 
-### Collection & map integration — follow `docs/contributing/collection-integration-skill.md`
+### Collection & map integration — follow `docs/contributing/hearth-collection-map/SKILL.md`
 
 - `cats-integration/CatsCollectionAndMapProviders.scala` — reference for **collection/map providers** (NonEmptyList, NonEmptyVector, NonEmptyChain, Chain, NonEmptyMap, NonEmptySet)
 - `cats-integration/runtime/CatsConversions.scala` — reference for **runtime helper pattern** (Newtype aliases)
 
 Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), `fromUntyped` for cross-compilation-boundary matching.
 
-### Documentation maintenance — follow `docs/contributing/documentation-maintenance-skill.md`
+### Documentation maintenance — follow `docs/contributing/kindlings-doc-maintenance/SKILL.md`
 
 When writing or editing documentation snippets in `docs/user-guide/`. Covers: `// expected output:` verification syntax, running snippet tests (`just test-snippets`), template variables, using `FastShowPretty.render` for case class output, adding snippets to the ignore list.
 

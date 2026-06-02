@@ -120,8 +120,8 @@ This does NOT happen on Scala 3 because `scala.quoted.Expr` generates different 
 
 ## Workaround in kindlings
 
-Java enum tests are placed in `scalajvm-3/` (Scala 3 + JVM only). FEATURE_PARITY.md
-documents Java enum support as Scala 3 only.
+Java enum tests are placed in `scalajvm-3/` (Scala 3 + JVM only). The feature parity
+documentation notes Java enum support as Scala 3 only.
 
 ## Potential fix directions
 
