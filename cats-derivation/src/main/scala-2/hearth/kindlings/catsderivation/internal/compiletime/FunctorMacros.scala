@@ -20,6 +20,26 @@ final private[catsderivation] class FunctorMacros(val c: blackbox.Context)
     deriveFunctor[F](fCtor, functorFType)
   }
 
+  protected def extractSingleTypeArg(appliedType: Type[Any]): Option[Type[Any]] = {
+    val tpe = appliedType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    tpe.dealias.typeArgs match {
+      case arg :: Nil => Some(c.WeakTypeTag[Any](arg).asInstanceOf[Type[Any]])
+      case _          => None
+    }
+  }
+
+  protected def isNestedSelfRecursive(fieldType: Type[Any], parentCtor: UntypedType): Boolean = {
+    val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
+    val dealiased = tpe.dealias
+    dealiased.typeArgs match {
+      case innerArg :: Nil =>
+        val innerCtor = innerArg.typeConstructor
+        // Compare type symbols for reliable equality
+        innerCtor.typeSymbol == parentCtor.asInstanceOf[c.Type].typeSymbol
+      case _ => false
+    }
+  }
+
   protected def mkCtor1FromType(appliedType: Type[Any]): Option[(Type.Ctor1[AnyK], UntypedType)] = {
     val tpe = appliedType.asInstanceOf[c.WeakTypeTag[Any]].tpe
     val ctor = tpe.typeConstructor

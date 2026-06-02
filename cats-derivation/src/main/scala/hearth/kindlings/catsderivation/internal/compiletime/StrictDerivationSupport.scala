@@ -15,7 +15,6 @@ trait StrictDerivationSupport { this: MacroCommons & StdExtensions =>
   }
 }
 
-private[compiletime] final class StrictDerivationError(val message: String)
-    extends util.control.NoStackTrace {
+final private[compiletime] class StrictDerivationError(val message: String) extends util.control.NoStackTrace {
   override def getMessage(): String = message
 }

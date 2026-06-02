@@ -41,15 +41,43 @@ trait FunctorCaseClassRuleImpl {
         }
       }
 
+      val parentCtor = FCtor.asUntyped
+
       if (nestedFields.nonEmpty) {
         val nestedFieldFunctors = scala.collection.mutable.Map.empty[String, Expr[Any]]
+        val selfRecursive = scala.collection.mutable.Set.empty[String]
+        val selfRecursiveOuter = scala.collection.mutable.Map.empty[String, Expr[Any]]
         val unsupported = scala.collection.mutable.ListBuffer.empty[String]
         nestedFields.foreach { name =>
           val param = fieldsInt.find(_._1 == name).get._2
           import param.tpe.Underlying as FieldType
-          summonFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
-            case Some(functorExpr) => nestedFieldFunctors += (name -> functorExpr)
-            case None              => unsupported += name
+          val fieldType = Type[FieldType].asInstanceOf[Type[Any]]
+
+          // Check for self-recursive nested pattern: e.g. Option[Search[Int]] where Search is the parent.
+          // Uses symbol-based comparison for reliable cross-platform equality.
+          val isSelfRecursiveNested = isNestedSelfRecursive(fieldType, parentCtor)
+
+          if (isSelfRecursiveNested) {
+            // Self-recursive nested: summon the OUTER functor (e.g. Functor[Option])
+            summonFunctorForFieldType(fieldType) match {
+              case Some(outerFunctorExpr) =>
+                selfRecursive += name
+                selfRecursiveOuter += (name -> outerFunctorExpr)
+              case None =>
+                unsupported += name
+            }
+          } else {
+            summonFunctorForFieldType(fieldType) match {
+              case Some(functorExpr) => nestedFieldFunctors += (name -> functorExpr)
+              case None              =>
+                // Also check for direct self-recursion (e.g. IList[Int] where F = IList)
+                mkCtor1FromType(fieldType) match {
+                  case Some((_, nestedUntyped)) if nestedUntyped == parentCtor =>
+                    selfRecursive += name
+                  case _ =>
+                    unsupported += name
+                }
+            }
           }
         }
         if (unsupported.nonEmpty) {
@@ -61,7 +89,17 @@ trait FunctorCaseClassRuleImpl {
           )
         } else {
           val directFieldSet: Set[String] = directFields.toSet
-          MIO.pure(Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet, nestedFieldFunctors.toMap)))
+          MIO.pure(
+            Rule.matched(
+              FunctorCaseClassResult(
+                FCtor,
+                directFieldSet,
+                nestedFieldFunctors.toMap,
+                selfRecursive.toSet,
+                selfRecursiveOuter.toMap
+              )
+            )
+          )
         }
       } else {
         val directFieldSet: Set[String] = directFields.toSet

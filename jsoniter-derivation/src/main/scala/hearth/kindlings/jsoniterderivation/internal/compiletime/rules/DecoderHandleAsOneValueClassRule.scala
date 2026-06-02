@@ -10,7 +10,8 @@ import hearth.kindlings.jsoniterderivation.annotations.transientField
 trait DecoderHandleAsOneValueClassRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
-  object DecoderHandleAsOneValueClassRule extends DecoderDerivationRule("handle as one-value-class when inlineOneValueClasses is set") {
+  object DecoderHandleAsOneValueClassRule
+      extends DecoderDerivationRule("handle as one-value-class when inlineOneValueClasses is set") {
 
     @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] = {

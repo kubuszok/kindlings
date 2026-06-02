@@ -343,10 +343,13 @@ object examples {
     implicit val traverseInterleaved: cats.Traverse[Interleaved] = cats.Traverse.derived
   }
 
-  // Search: multiple recursive+nested positions (kittens-equivalent shape)
-  // NOT YET SUPPORTED: recursive nested type constructors (Option[Search[A]], List[Search[A]])
-  // require recursive HKT derivation which isn't implemented yet.
+  // Search: self-recursive nested type constructors (kittens-equivalent shape)
+  // Infrastructure added (4th field classification, recursive binding), but erased
+  // approach runtime casts need refinement for full correctness.
   final case class Search[+A](move: A, child: Option[Search[A]], variations: List[Search[A]])
+  object Search {
+    implicit val functorSearch: cats.Functor[Search] = cats.Functor.derived
+  }
 
   // CaseClassWOption: Option-wrapped type param in HKT (kittens-equivalent shape)
   final case class CaseClassWOption[A](value: Option[A])
