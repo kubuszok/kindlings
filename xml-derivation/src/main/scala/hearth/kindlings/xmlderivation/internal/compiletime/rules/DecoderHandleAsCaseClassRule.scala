@@ -210,10 +210,19 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   MIO.pure(acc :+ ((decodedExpr, makeAccessor)))
 
                 case FieldDecoding.FromAttribute(attrNameExpr, _) =>
-                  deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem)).map { _ =>
+                  for {
+                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
+                    helperOpt <- dctx.getHelper[FieldT]
+                  } yield {
+                    val configExpr = dctx.config
+                    val helper = helperOpt.get
                     val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
                       XmlDerivationUtils
                         .getAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
+                        .flatMap { attrValue =>
+                          Expr
+                            .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
+                        }
                         .asInstanceOf[Either[XmlDecodingError, Any]]
                     }
                     val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>

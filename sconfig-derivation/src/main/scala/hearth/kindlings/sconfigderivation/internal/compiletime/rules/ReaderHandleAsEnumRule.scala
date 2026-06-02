@@ -138,7 +138,8 @@ trait ReaderHandleAsEnumRuleImpl {
                     Expr.splice(discrFieldExpr) match {
                       case Some(field) =>
                         SConfigDerivationUtils.readDiscriminator(obj, field).flatMap { typeName =>
-                          Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(v)))
+                          val stripped: ConfigValue = obj.withoutKey(field)
+                          Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(stripped)))
                         }
                       case None =>
                         SConfigDerivationUtils.readWrapped(obj).flatMap { case (typeName, inner) =>

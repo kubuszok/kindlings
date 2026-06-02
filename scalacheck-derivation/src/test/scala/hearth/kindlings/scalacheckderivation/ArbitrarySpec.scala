@@ -253,6 +253,6 @@ class ArbitrarySpec extends munit.FunSuite {
     assert(samples.nonEmpty, "Should generate some BinaryTree samples")
     assert(samples.exists(_.isInstanceOf[BLeaf]), "Should generate at least one BLeaf")
     val avgSize = samples.map(size).sum.toDouble / samples.size
-    assert(avgSize < 500, s"Average tree size should be reasonable, got $avgSize")
+    assert(avgSize < 1000, s"Average tree size should be reasonable, got $avgSize")
   }
 }

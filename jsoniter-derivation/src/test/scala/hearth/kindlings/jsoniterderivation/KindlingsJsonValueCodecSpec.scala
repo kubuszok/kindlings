@@ -1846,6 +1846,22 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val decoded = readFromString[WithArrayBuffer](json)(codec)
         decoded.items ==> value.items
       }
+
+      test("IntMap round-trip") {
+        val codec = KindlingsJsonValueCodec.derived[WithIntMap]
+        val value = WithIntMap(scala.collection.immutable.IntMap(1 -> "one", 2 -> "two"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithIntMap](json)(codec)
+        decoded.data ==> value.data
+      }
+
+      test("LongMap round-trip") {
+        val codec = KindlingsJsonValueCodec.derived[WithLongMap]
+        val value = WithLongMap(scala.collection.immutable.LongMap(100L -> "hundred", 200L -> "two-hundred"))
+        val json = writeToString(value)(codec)
+        val decoded = readFromString[WithLongMap](json)(codec)
+        decoded.data ==> value.data
+      }
     }
 
     group("nested sealed trait hierarchies") {

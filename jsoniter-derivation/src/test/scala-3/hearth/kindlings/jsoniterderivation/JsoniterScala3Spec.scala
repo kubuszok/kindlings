@@ -157,6 +157,8 @@ final class JsoniterScala3Spec extends MacroSuite {
 
   group("compile-time config conflict validation") {
 
+    // semiEval can't evaluate a given defined inside compileErrors() string literal,
+    // so the compile-time validation is skipped. Validation works in real usage.
     test("decodingOnly + encodingOnly is a compile error".ignore) {
       compileErrors(
         """

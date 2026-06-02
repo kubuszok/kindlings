@@ -23,9 +23,8 @@ trait DiffOptionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =
             val pn = Expr(Type.prettyPrint[A])
             val fn = Expr(Type.plainPrint[A])
             val sn = Expr(Type.shortName[A])
-            DiffInnerT.summonExprIgnoring(ignoredImplicits*).toEither match {
-              case Right(elemDiffExpr) =>
-                val ed = elemDiffExpr.asInstanceOf[Expr[Diff[Inner]]]
+            summonOrDeriveDiffInstance[Inner](dctx.cache, dctx.derivedType).flatMap {
+              case Some(ed) =>
                 MIO.pure(Rule.matched(Expr.quote {
                   DiffRuntime.diffOption[Inner](
                     Expr.splice(pn),
@@ -37,8 +36,8 @@ trait DiffOptionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =
                     Expr.splice(ed)
                   )
                 }))
-              case Left(reason) =>
-                MIO.pure(Rule.yielded(s"No Diff[${Inner.prettyPrint}]: $reason"))
+              case None =>
+                MIO.pure(Rule.yielded(s"No Diff[${Inner.prettyPrint}]"))
             }
           case _ =>
             MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} is not an Option"))

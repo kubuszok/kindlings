@@ -378,6 +378,80 @@ trait DiffMacrosImpl
     }
   }
 
+  // ── Helper: summon or recursively derive Diff[Inner] ────
+
+  @scala.annotation.nowarn("msg=is never used|unused")
+  protected def summonOrDeriveDiffInstance[Inner: Type](
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  ): MIO[Option[Expr[Diff[Inner]]]] = {
+    implicit val DiffInnerT: Type[Diff[Inner]] = DiffTypes.Diff[Inner]
+    implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
+    implicit val ST: Type[String] = DiffTypes.StringType
+    DiffInnerT.summonExprIgnoring(ignoredImplicits*).toEither match {
+      case Right(expr) => MIO.pure(Some(expr.asInstanceOf[Expr[Diff[Inner]]]))
+      case Left(_)     =>
+        cache.get0Ary[Diff[Inner]]("cached-diff-instance").flatMap {
+          case Some(cached) => MIO.pure(Some(cached))
+          case None         =>
+            val diffKey = s"inner-diff:${Type[Inner].prettyPrint}"
+            val snapKey = s"inner-snap:${Type[Inner].prettyPrint}"
+            val diffDefBuilder = ValDefBuilder.ofDef2[Inner, Inner, DiffResult](s"innerDiff_${Type[Inner].shortName}")
+            val snapDefBuilder = ValDefBuilder.ofDef1[Inner, DiffResult](s"innerSnap_${Type[Inner].shortName}")
+            val pn = Expr(Type.prettyPrint[Inner])
+            val fn = Expr(Type.plainPrint[Inner])
+            val sn = Expr(Type.shortName[Inner])
+            val derivation: MIO[Option[Expr[Diff[Inner]]]] = for {
+              _ <- cache.forwardDeclare(diffKey, diffDefBuilder)
+              _ <- cache.forwardDeclare(snapKey, snapDefBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(cache.buildCachedWith(diffKey, diffDefBuilder) { case (_, (l, r)) =>
+                  runSafe(deriveDiffRecursively[Inner](using DiffCtx[Inner](Type[Inner], l, r, cache, derivedType)))
+                })
+              }
+              _ <- MIO.scoped { runSafe =>
+                runSafe(cache.buildCachedWith(snapKey, snapDefBuilder) { case (_, v) =>
+                  runSafe(
+                    deriveSnapshotRecursively[Inner](using SnapshotCtx[Inner](Type[Inner], v, cache, derivedType))
+                  )
+                })
+              }
+              diffCall <- cache.get2Ary[Inner, Inner, DiffResult](diffKey)
+              snapCall <- cache.get1Ary[Inner, DiffResult](snapKey)
+              instanceExpr = {
+                val dc = diffCall.get
+                val sc = snapCall.get
+                Expr
+                  .quote {
+                    DiffFactories.instance[Inner](
+                      Expr.splice(pn),
+                      Expr.splice(fn),
+                      Expr.splice(sn),
+                      Expr.splice(sn),
+                      (left: Inner, right: Inner) => {
+                        val _ = left
+                        val _ = right
+                        Expr.splice(dc(Expr.quote(left), Expr.quote(right)))
+                      },
+                      (value: Inner) => {
+                        val _ = value
+                        Expr.splice(sc(Expr.quote(value)))
+                      }
+                    )
+                  }
+                  .asInstanceOf[Expr[Diff[Inner]]]
+              }
+              _ <- cache.buildCachedWith(
+                "cached-diff-instance",
+                ValDefBuilder.ofLazy[Diff[Inner]](s"diffInst_${Type[Inner].shortName}")
+              )(_ => instanceExpr)
+              cached <- cache.get0Ary[Diff[Inner]]("cached-diff-instance")
+            } yield Some(cached.get)
+            derivation.recoverWith(_ => MIO.pure(None))
+        }
+    }
+  }
+
   // ── Entry point ──────────────────────────────────────────
 
   private var nameCache: ValDefsCache = ValDefsCache.empty
