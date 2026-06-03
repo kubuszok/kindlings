@@ -247,7 +247,7 @@ cats-derivation were NOT migrated due to a Scala 2 cross-quotes limitation (see
 `docs/contributing/factory-instance-pattern-skill.md`).
 
 Full benchmark JSON: `post-migration-scala3.json`, `post-migration-scala213.json`
-Pre-migration baseline: `benchmark-results-pre-factory-migration.md`
+Pre-migration baseline: (removed — superseded by `benchmark-results.md`)
 
 ### Scala 3 — kindlings results (post-migration vs pre-migration)
 
