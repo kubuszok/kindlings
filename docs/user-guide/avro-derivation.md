@@ -30,8 +30,8 @@
     case class Person(name: String, age: Int)
 
     // Semi-automatic derivation
-    val encoder: AvroEncoder[Person] = AvroEncoder.derive[Person]
-    val decoder: AvroDecoder[Person] = AvroDecoder.derive[Person]
+    val encoder: AvroEncoder[Person] = AvroEncoder.derived[Person]
+    val decoder: AvroDecoder[Person] = AvroDecoder.derived[Person]
 
     // Encode to Avro GenericRecord and decode back
     val record: Any = encoder.encode(Person("Alice", 30))
@@ -54,13 +54,13 @@
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `AvroSchemaFor.derive[A]` | `AvroSchemaFor[A]` | Semi-automatic schema derivation |
+| `AvroSchemaFor.derived[A]` | `AvroSchemaFor[A]` | Semi-automatic schema derivation |
 | `AvroSchemaFor.schemaOf[A]` | `Schema` | Inline schema generation (no instance allocation) |
 | `AvroSchemaFor.derived[A]` | `AvroSchemaFor[A]` | Sanely-automatic (given/implicit) |
-| `AvroEncoder.derive[A]` | `AvroEncoder[A]` | Semi-automatic encoder |
+| `AvroEncoder.derived[A]` | `AvroEncoder[A]` | Semi-automatic encoder |
 | `AvroEncoder.encode[A](value)` | `Any` | Inline encoding (no instance allocation) |
 | `AvroEncoder.derived[A]` | `AvroEncoder[A]` | Sanely-automatic (given/implicit) |
-| `AvroDecoder.derive[A]` | `AvroDecoder[A]` | Semi-automatic decoder |
+| `AvroDecoder.derived[A]` | `AvroDecoder[A]` | Semi-automatic decoder |
 | `AvroDecoder.decode[A](value)` | `A` | Inline decoding (no instance allocation) |
 | `AvroDecoder.derived[A]` | `AvroDecoder[A]` | Sanely-automatic (given/implicit) |
 
@@ -165,8 +165,8 @@ import hearth.kindlings.avroderivation.annotations._
       @avroDoc("Age in years") age: Int
     )
 
-    val encoder = AvroEncoder.derive[Person]
-    val decoder = AvroDecoder.derive[Person]
+    val encoder = AvroEncoder.derived[Person]
+    val decoder = AvroDecoder.derived[Person]
 
     val decoded = decoder.decode(encoder.encode(Person("Alice", 30)))
     println(decoded)
@@ -189,8 +189,8 @@ import hearth.kindlings.avroderivation.annotations._
     case class Circle(radius: Double) extends Shape
 
     // Rectangle appears first in the union schema thanks to @avroSortPriority
-    val encoder = AvroEncoder.derive[Shape]
-    val decoder = AvroDecoder.derive[Shape]
+    val encoder = AvroEncoder.derived[Shape]
+    val decoder = AvroDecoder.derived[Shape]
 
     val decoded = decoder.decode(encoder.encode(Circle(5.0): Shape))
     println(decoded)
@@ -213,8 +213,8 @@ import hearth.kindlings.avroderivation.annotations._
       @transientField cache: Option[String] = None
     )
 
-    val encoder = AvroEncoder.derive[Settings]
-    val decoder = AvroDecoder.derive[Settings]
+    val encoder = AvroEncoder.derived[Settings]
+    val decoder = AvroDecoder.derived[Settings]
 
     // @transientField excludes `cache` — it is not encoded, and gets its default on decode
     val encoded = encoder.encode(Settings("localhost", cache = Some("hot")))
@@ -238,8 +238,8 @@ import hearth.kindlings.avroderivation.annotations._
     case class UserProfile(firstName: String, lastName: String, emailAddress: String)
 
     // Fields become: first_name, last_name, email_address in the Avro schema
-    val encoder = AvroEncoder.derive[UserProfile]
-    val decoder = AvroDecoder.derive[UserProfile]
+    val encoder = AvroEncoder.derived[UserProfile]
+    val decoder = AvroDecoder.derived[UserProfile]
 
     val decoded = decoder.decode(encoder.encode(UserProfile("Alice", "Smith", "alice@example.com")))
     println(decoded)
@@ -257,8 +257,8 @@ import hearth.kindlings.avroderivation.annotations._
     case class TreeNode(value: Int, children: List[TreeNode])
 
     // Recursive types work out of the box
-    val encoder = AvroEncoder.derive[TreeNode]
-    val decoder = AvroDecoder.derive[TreeNode]
+    val encoder = AvroEncoder.derived[TreeNode]
+    val decoder = AvroDecoder.derived[TreeNode]
 
     val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
     val decoded = decoder.decode(encoder.encode(tree))
@@ -290,8 +290,8 @@ import hearth.kindlings.avroderivation.annotations._
     // - LocalDate -> int with logicalType "date"
     // - LocalTime -> int with logicalType "time-millis"
     // - LocalDateTime -> long with logicalType "local-timestamp-millis"
-    val encoder = AvroEncoder.derive[EventRecord]
-    val decoder = AvroDecoder.derive[EventRecord]
+    val encoder = AvroEncoder.derived[EventRecord]
+    val decoder = AvroDecoder.derived[EventRecord]
 
     val event = EventRecord(
       UUID.fromString("550e8400-e29b-41d4-a716-446655440000"),
@@ -319,8 +319,8 @@ import hearth.kindlings.avroderivation.annotations._
 
     // Generic types encode type parameters in the schema name by default:
     // Audited[User] -> "AuditedUser"
-    val encoder = AvroEncoder.derive[Audited[User]]
-    val decoder = AvroDecoder.derive[Audited[User]]
+    val encoder = AvroEncoder.derived[Audited[User]]
+    val decoder = AvroDecoder.derived[Audited[User]]
 
     val decoded = decoder.decode(encoder.encode(Audited(User("Alice"), "admin")))
     println(decoded)

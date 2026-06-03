@@ -33,7 +33,7 @@ Original module -- derives `UBJsonValueCodec` for case classes, sealed traits, S
 
     case class Person(name: String, age: Int)
 
-    val codec: UBJsonValueCodec[Person] = UBJsonValueCodec.derive[Person]
+    val codec: UBJsonValueCodec[Person] = UBJsonValueCodec.derived[Person]
 
     // Encode to UBJson binary
     val writer = new UBJsonWriter()
@@ -53,7 +53,7 @@ Original module -- derives `UBJsonValueCodec` for case classes, sealed traits, S
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `UBJsonValueCodec.derive[A]` | `UBJsonValueCodec[A]` | Semi-automatic codec |
+| `UBJsonValueCodec.derived[A]` | `UBJsonValueCodec[A]` | Semi-automatic codec |
 | `UBJsonValueCodec.derived[A]` | `UBJsonValueCodec[A]` | Sanely-automatic (given/implicit) |
 
 All methods take an implicit/using `UBJsonConfig` parameter (defaults to `UBJsonConfig.default`).
@@ -146,7 +146,7 @@ case class User(
     implicit val config: UBJsonConfig = UBJsonConfig.default
       .withDiscriminator("type")
 
-    val codec: UBJsonValueCodec[Shape] = UBJsonValueCodec.derive[Shape]
+    val codec: UBJsonValueCodec[Shape] = UBJsonValueCodec.derived[Shape]
 
     val writer = new UBJsonWriter()
     codec.encode(writer, Circle(5.0): Shape)
@@ -174,7 +174,7 @@ case class User(
       debug: Option[Boolean] = None
     )
 
-    val codec: UBJsonValueCodec[Settings] = UBJsonValueCodec.derive[Settings]
+    val codec: UBJsonValueCodec[Settings] = UBJsonValueCodec.derived[Settings]
 
     // Default and None fields are omitted during encoding
     val writer = new UBJsonWriter()
@@ -197,7 +197,7 @@ case class User(
     case class TreeNode(value: Int, children: List[TreeNode])
 
     // Recursive types just work -- no special setup needed
-    val codec: UBJsonValueCodec[TreeNode] = UBJsonValueCodec.derive[TreeNode]
+    val codec: UBJsonValueCodec[TreeNode] = UBJsonValueCodec.derived[TreeNode]
 
     val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
     val writer = new UBJsonWriter()
@@ -222,7 +222,7 @@ case class User(
     case class UserProfile(firstName: String, lastName: String, emailAddress: String)
 
     // Fields encoded as: first_name, last_name, email_address
-    val codec: UBJsonValueCodec[UserProfile] = UBJsonValueCodec.derive[UserProfile]
+    val codec: UBJsonValueCodec[UserProfile] = UBJsonValueCodec.derived[UserProfile]
 
     val writer = new UBJsonWriter()
     codec.encode(writer, UserProfile("Alice", "Smith", "alice@example.com"))
