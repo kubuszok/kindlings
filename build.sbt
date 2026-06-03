@@ -15,7 +15,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.3.0-38-g7b2e98e-SNAPSHOT"
+  val hearth = "0.3.0-42-gde446c1-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val avro4s213 = "4.1.2"
@@ -181,7 +181,7 @@ val publishSettings = Seq(
   ),
   startYear := Some(2026),
   developers := List(
-    Developer("MateuszKubuszok", "Mateusz Kubuszok", "", url("https://github.com/MateuszKubuszok"))
+    Developer("MateuszKubuszok", "Mateusz Kubuszok", "", url("https://kubuszok.com"))
   ),
   pomExtra := (
     <issueManagement>
