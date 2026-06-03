@@ -488,7 +488,7 @@ final class RoundTripSpec extends MacroSuite {
       }
     }
 
-    group("combinatorial: wrapper x inner type") {
+    group("combinatorial: wrapper x inner type (CombOuter)") {
 
       test("CombOuter round-trip with all fields populated") {
         val value = CombOuter(
@@ -506,66 +506,6 @@ final class RoundTripSpec extends MacroSuite {
       }
 
       test("CombOuter round-trip with None and empty collections") {
-        val value = CombOuter(
-          optPrimitive = None,
-          optCaseClass = None,
-          optSealedTrait = None,
-          optValueClass = None,
-          listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
-        )
-        val json = KindlingsEncoder.encode(value)
-        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
-      }
-
-      test("Option[Shape] with Some (sealed trait in Option - bug #78 pattern)") {
-        val value = CombOuter(
-          optPrimitive = None,
-          optCaseClass = None,
-          optSealedTrait = None,
-          optValueClass = None,
-          listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
-        )
-        val json = KindlingsEncoder.encode(value)
-        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
-      }
-
-      test("Option[Shape] with None (sealed trait in Option - bug #78 pattern)") {
-        val value = CombOuter(
-          optPrimitive = None,
-          optCaseClass = None,
-          optSealedTrait = None,
-          optValueClass = None,
-          listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
-        )
-        val json = KindlingsEncoder.encode(value)
-        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
-      }
-
-      test("List[Shape] (sealed trait in List)") {
-        val value = CombOuter(
-          optPrimitive = None,
-          optCaseClass = None,
-          optSealedTrait = None,
-          optValueClass = None,
-          listCaseClass = Nil,
-          listSealedTrait = Nil,
-          mapCaseClass = Map.empty,
-          mapSealedTrait = Map.empty
-        )
-        val json = KindlingsEncoder.encode(value)
-        KindlingsDecoder.decode[CombOuter](json) ==> Right(value)
-      }
-
-      test("Map[String, Shape] (sealed trait in Map)") {
         val value = CombOuter(
           optPrimitive = None,
           optCaseClass = None,

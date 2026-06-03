@@ -12,6 +12,11 @@ Metals MCP at `.metals/mcp.json` (`kindlings-metals`). Query definitions/types/s
 
 ## Global Rules
 
+ - **Kindlings stress-tests Hearth.** When a Hearth bug is discovered, create a
+   reproducer in `docs/research/` and keep the failing test in shared test directories.
+   Do NOT hide failures by moving tests to platform-specific directories (`scala-2/`,
+   `scala-3/`, `scalajvm/`). Those are only for platform-specific language features or
+   dependencies available on one platform only.
  - **Always use `sbt --client`** — never bare `sbt`. Connects to running server instead of launching new JVM.
  - **Redirect sbt output**: `sbt --client "module/clean ; test-jvm-2_13" 2>&1 | tee /tmp/sbt-output.txt`
    Then inspect with `grep`/`tail`/`head`. Only re-run sbt if code was modified.
