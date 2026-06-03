@@ -220,6 +220,20 @@ seconds. Override per-module via `-Xmacro-settings`:
 Supported formats: plain integer (seconds), `Ns`/`Nseconds`, `Nms`/`Nmilliseconds`,
 `Nm`/`Nminutes`. Invalid values emit a compiler warning and fall back to default.
 
+## Reporting Hearth bugs
+
+Kindlings exists to stress-test Hearth. When you find a Hearth-level bug:
+
+1. **Keep the failing test** in the shared test directory (`src/test/scala/`). Do NOT
+   move it to `scala-2/` or `scala-3/` to hide the failure.
+2. **Write a reproducer** in `docs/research/` with: summary, minimal code to trigger,
+   error output, root cause analysis, affected modules, and expected fix direction.
+3. **Update `docs/research/GAPS.md`** if the bug blocks a gap item.
+
+Platform-specific test directories (`scala-2/`, `scala-3/`, `scalajvm/`) are only for
+testing platform-specific language features or working with dependencies available on
+one platform only.
+
 ## Related skills
 
 - [hearth-macro-basics](../hearth-macro-basics/SKILL.md) -- core architecture, logging
