@@ -418,7 +418,7 @@ A derived instance is therefore a drop-in replacement for the upstream interface
 
 | Feature | PureConfig | Kindlings | Status |
 |---|---|---|---|
-| Semi-automatic (`derive[A]`) | `semiauto.deriveReader[A]` (Scala 2 + 3) | `KindlingsConfigReader.derive[A]` | Parity |
+| Semi-automatic (`derive[A]`) | `semiauto.deriveReader[A]` (Scala 2 + 3) | `KindlingsConfigReader.derived[A]` | Parity |
 | Automatic (full recursion via import) | `pureconfig.generic.auto._` (Scala 2 only — Shapeless) | `KindlingsConfigReader.derived[A]` (sanely-automatic, both Scala 2 + 3) | Improvement |
 | Scala 3 native `derives` clause | `derives ConfigReader` via `pureconfig.generic.derivation.default` (Scala 3 only) | Same `derives` syntax via `KindlingsConfigReader` (both Scala 2 + 3) | Improvement |
 | Unified Scala 2 + 3 API | No — three separate derivation modules with overlapping APIs and feature gaps | Yes — single API, same call shape on both | Improvement |
@@ -610,7 +610,7 @@ Owned by the kindlings module — no extending of any third-party type, just a c
 
 | Feature | Description |
 |---|---|
-| `ConfigReader.derive[A]` / `ConfigWriter.derive[A]` / `ConfigCodec.derive[A]` | Semi-automatic |
+| `ConfigReader.derived[A]` / `ConfigWriter.derived[A]` / `ConfigCodec.derived[A]` | Semi-automatic |
 | `ConfigReader.derived[A]` / `ConfigWriter.derived[A]` / `ConfigCodec.derived[A]` | Sanely-automatic — implicit on Scala 3 (`given`), explicit non-implicit on Scala 2 (to avoid clashing with the built-in instances under Scala 2 implicit-search rules) |
 | `derives ConfigReader` (Scala 3) | Yes |
 | Inline composition of `ConfigCodec` from `ConfigReader.derive` + `ConfigWriter.derive` | Scala 3 — sidesteps sibling-splice isolation by running each derivation as its own top-level macro expansion |

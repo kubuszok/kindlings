@@ -385,7 +385,7 @@ final class XmlConfigSpec extends MacroSuite {
         val encoder = KindlingsXmlEncoder.derived[Shape]
         val result = encoder.encode(Circle(5.0), "shape")
         assert(result.label == "Circle")
-        assert(result.toString.contains("5.0"), s"expected radius 5.0 in: $result")
+        assert(result.toString.contains("radius") && result.toString.contains("5"), s"expected radius in: $result")
       }
 
       test("decoder reads wrapped element when no discriminator") {

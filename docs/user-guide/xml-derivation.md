@@ -53,7 +53,7 @@ Original module -- derives `XmlEncoder`, `XmlDecoder`, and `XmlCodec` for case c
     )
 
     // Semi-automatic encoding
-    val encoder: XmlEncoder[Book] = KindlingsXmlEncoder.derive[Book]
+    val encoder: XmlEncoder[Book] = KindlingsXmlEncoder.derived[Book]
     val book = Book("978-0-13-468599-1", "The Scala Cookbook", "Alvin Alexander")
     val xml: scala.xml.Elem = encoder.encode(book, "book")
     println(xml)
@@ -61,7 +61,7 @@ Original module -- derives `XmlEncoder`, `XmlDecoder`, and `XmlCodec` for case c
     // <book isbn="978-0-13-468599-1"><title>The Scala Cookbook</title><author>Alvin Alexander</author></book>
 
     // Semi-automatic decoding
-    val decoder: XmlDecoder[Book] = KindlingsXmlDecoder.derive[Book]
+    val decoder: XmlDecoder[Book] = KindlingsXmlDecoder.derived[Book]
     println(decoder.decode(xml))
     // expected output:
     // Right(Book(978-0-13-468599-1,The Scala Cookbook,Alvin Alexander))
@@ -73,15 +73,15 @@ Original module -- derives `XmlEncoder`, `XmlDecoder`, and `XmlCodec` for case c
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsXmlEncoder.derive[A]` | `XmlEncoder[A]` | Semi-automatic encoder |
+| `KindlingsXmlEncoder.derived[A]` | `XmlEncoder[A]` | Semi-automatic encoder |
 | `KindlingsXmlEncoder.encode[A](value, elementName)` | `scala.xml.Elem` | Inline encoding (no instance allocation) |
 | `KindlingsXmlEncoder.toXmlString[A](value, elementName)` | `String` | Inline encoding to string |
 | `KindlingsXmlEncoder.derived[A]` | `KindlingsXmlEncoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsXmlDecoder.derive[A]` | `XmlDecoder[A]` | Semi-automatic decoder |
+| `KindlingsXmlDecoder.derived[A]` | `XmlDecoder[A]` | Semi-automatic decoder |
 | `KindlingsXmlDecoder.decode[A](elem)` | `Either[XmlDecodingError, A]` | Inline decoding |
 | `KindlingsXmlDecoder.fromXmlString[A](xml)` | `Either[XmlDecodingError, A]` | Inline decoding from string |
 | `KindlingsXmlDecoder.derived[A]` | `KindlingsXmlDecoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsXmlCodec.derive[A]` | `KindlingsXmlCodec[A]` | Semi-automatic codec (encoder + decoder) |
+| `KindlingsXmlCodec.derived[A]` | `KindlingsXmlCodec[A]` | Semi-automatic codec (encoder + decoder) |
 | `KindlingsXmlCodec.derived[A]` | `KindlingsXmlCodec[A]` | Sanely-automatic codec |
 
 All methods take an implicit/using `XmlConfig` parameter (defaults to `XmlConfig.default`).
@@ -187,8 +187,8 @@ case class Article(
       .withDiscriminator("kind")
       .withSnakeCaseConstructorNames
 
-    val encoder = KindlingsXmlEncoder.derive[Shape]
-    val decoder = KindlingsXmlDecoder.derive[Shape]
+    val encoder = KindlingsXmlEncoder.derived[Shape]
+    val decoder = KindlingsXmlDecoder.derived[Shape]
 
     val shape: Shape = Circle(5.0)
     val xml = encoder.encode(shape, "shape")
@@ -289,7 +289,7 @@ case class Article(
     case class TreeNode(value: Int, children: List[TreeNode])
 
     // Recursive types just work -- no special setup needed
-    val codec: KindlingsXmlCodec[TreeNode] = KindlingsXmlCodec.derive[TreeNode]
+    val codec: KindlingsXmlCodec[TreeNode] = KindlingsXmlCodec.derived[TreeNode]
 
     val tree = TreeNode(1, List(TreeNode(2, Nil), TreeNode(3, List(TreeNode(4, Nil)))))
     val xml = codec.encode(tree, "tree")
