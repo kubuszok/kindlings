@@ -34,8 +34,8 @@
     case class ServerConfig(host: String, port: Int, debug: Boolean)
 
     // Semi-automatic derivation
-    val reader: ConfigReader[ServerConfig] = KindlingsConfigReader.derive[ServerConfig]
-    val writer: ConfigWriter[ServerConfig] = KindlingsConfigWriter.derive[ServerConfig]
+    val reader: ConfigReader[ServerConfig] = KindlingsConfigReader.derived[ServerConfig]
+    val writer: ConfigWriter[ServerConfig] = KindlingsConfigWriter.derived[ServerConfig]
 
     // Read from HOCON string
     val result = ConfigSource.string("""
@@ -54,11 +54,11 @@
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsConfigReader.derive[A]` | `ConfigReader[A]` | Semi-automatic reader |
+| `KindlingsConfigReader.derived[A]` | `ConfigReader[A]` | Semi-automatic reader |
 | `KindlingsConfigReader.derived[A]` | `KindlingsConfigReader[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsConfigWriter.derive[A]` | `ConfigWriter[A]` | Semi-automatic writer |
+| `KindlingsConfigWriter.derived[A]` | `ConfigWriter[A]` | Semi-automatic writer |
 | `KindlingsConfigWriter.derived[A]` | `KindlingsConfigWriter[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsConfigConvert.derive[A]` | `ConfigConvert[A]` | Semi-automatic reader + writer |
+| `KindlingsConfigConvert.derived[A]` | `ConfigConvert[A]` | Semi-automatic reader + writer |
 | `KindlingsConfigConvert.derived[A]` | `KindlingsConfigConvert[A]` | Sanely-automatic reader + writer |
 
 All methods take an implicit/using `PureConfig` parameter (defaults to `PureConfig.default`).
@@ -135,7 +135,7 @@ case class DatabaseConfig(
     case class Sqlite(path: String) extends DatabaseType
 
     // Default config uses "type" discriminator and kebab-case names
-    val reader = KindlingsConfigReader.derive[DatabaseType]
+    val reader = KindlingsConfigReader.derived[DatabaseType]
 
     val result = ConfigSource.string("""
       type = "postgres"
@@ -162,7 +162,7 @@ case class DatabaseConfig(
 
     implicit val config: PureConfig = PureConfig.default.withWrappedSubtypes
 
-    val reader = KindlingsConfigReader.derive[Shape]
+    val reader = KindlingsConfigReader.derived[Shape]
 
     val result = ConfigSource.string("""
       circle { radius = 5.0 }
@@ -190,7 +190,7 @@ case class DatabaseConfig(
       debug: Boolean = false
     )
 
-    val reader = KindlingsConfigReader.derive[AppSettings]
+    val reader = KindlingsConfigReader.derived[AppSettings]
 
     // Missing fields use Scala defaults
     val result = ConfigSource.string("""host = "localhost" """).load[AppSettings](reader)
@@ -221,7 +221,7 @@ case class DatabaseConfig(
 
     case class UserProfile(firstName: String, lastName: String, emailAddress: String)
 
-    val reader = KindlingsConfigReader.derive[UserProfile]
+    val reader = KindlingsConfigReader.derived[UserProfile]
 
     val result = ConfigSource.string("""
       first_name = "Alice"
@@ -245,7 +245,7 @@ case class DatabaseConfig(
     case class DatabaseConfig(url: String, pool: Int)
     case class AppConfig(http: HttpConfig, database: DatabaseConfig)
 
-    val reader = KindlingsConfigReader.derive[AppConfig]
+    val reader = KindlingsConfigReader.derived[AppConfig]
 
     val result = ConfigSource.string("""
       http {

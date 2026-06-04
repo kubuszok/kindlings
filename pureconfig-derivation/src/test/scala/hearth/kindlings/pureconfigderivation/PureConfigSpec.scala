@@ -178,14 +178,17 @@ final class PureConfigSpec extends MacroSuite {
       assert(result.isLeft)
     }
 
-    test("strict decoding + discriminator: discriminator key treated as unknown (known limitation)") {
+    test("strict decoding + discriminator accepts valid sealed trait subtype") {
       implicit val cfg: PureConfig = PureConfig().withStrictDecoding
       val r = KindlingsConfigReader.derived[Shape]
-      val result = r.from(cursor("{ type = circle, radius = 1.5 }"))
-      assert(
-        result.isLeft,
-        "strict decoding rejects discriminator key as unknown — needs discriminator-aware expectedKeys"
-      )
+      r.from(cursor("{ type = circle, radius = 1.5 }")) ==> Right(Circle(1.5))
+    }
+
+    test("strict decoding + discriminator rejects extra keys") {
+      implicit val cfg: PureConfig = PureConfig().withStrictDecoding
+      val r = KindlingsConfigReader.derived[Shape]
+      val result = r.from(cursor("{ type = circle, radius = 1.5, extra = oops }"))
+      assert(result.isLeft)
     }
 
     test("strict decoding + wrapped subtypes works") {

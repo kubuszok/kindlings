@@ -31,13 +31,7 @@ trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdEx
         case Nil =>
           MIO.fail(new RuntimeException(s"Enum ${Type[A].prettyPrint} has no cases"))
         case children =>
-          val singletonExprs: List[Expr[A]] = children.flatMap { case (_, enumChild) =>
-            import enumChild.Underlying as CaseType
-            SingletonValue.unapply(Type[CaseType]).map { sv =>
-              sv.singletonExpr.asInstanceOf[Expr[A]]
-            }
-          }
-
+          // Derive Shrink for each enum case
           NonEmptyList
             .fromList(children)
             .get
@@ -50,25 +44,16 @@ trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdEx
               }
             }
             .map { caseShrinks =>
+              // Build a list of Shrink[A] for runtime dispatch
               val shrinksListExpr: Expr[List[Shrink[A]]] =
                 caseShrinks.toList.foldRight(Expr.quote(List.empty[Shrink[A]])) { (shrinkExpr, acc) =>
                   Expr.quote(Expr.splice(shrinkExpr) :: Expr.splice(acc))
                 }
 
-              if (singletonExprs.nonEmpty) {
-                val singletonsListExpr: Expr[List[A]] =
-                  singletonExprs.foldRight(Expr.quote(List.empty[A])) { (sExpr, acc) =>
-                    Expr.quote(Expr.splice(sExpr) :: Expr.splice(acc))
-                  }
-                Expr.quote {
-                  hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
-                    .shrinkEnumWithAlternatives(Expr.splice(shrinksListExpr), Expr.splice(singletonsListExpr))
-                }
-              } else {
-                Expr.quote {
-                  hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
-                    .shrinkEnum(Expr.splice(shrinksListExpr))
-                }
+              // At runtime, dispatch to the correct Shrink based on the value's actual class
+              Expr.quote {
+                hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
+                  .shrinkEnum(Expr.splice(shrinksListExpr))
               }
             }
       }

@@ -353,7 +353,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
                         Expr.splice(rctx.cursor),
                         coreResult,
                         Expr.splice(expectedKeysExpr),
-                        Expr.splice(allowUnknownKeysExpr)
+                        Expr.splice(allowUnknownKeysExpr),
+                        Expr.splice(rctx.config).discriminator
                       )
                     }
                 }

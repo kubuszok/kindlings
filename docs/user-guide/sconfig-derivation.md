@@ -47,7 +47,7 @@ Derives `ConfigReader`, `ConfigWriter`, and `ConfigCodec` for HOCON configuratio
     case class DatabaseConfig(hostName: String, portNumber: Int, maxConnections: Int)
 
     // Derive a reader -- default config uses kebab-case field names
-    implicit val reader: ConfigReader[DatabaseConfig] = ConfigReader.derive[DatabaseConfig]
+    implicit val reader: ConfigReader[DatabaseConfig] = ConfigReader.derived[DatabaseConfig]
 
     // Parse HOCON (kebab-case keys map to camelCase fields by default)
     val config = ConfigFactory.parseString("""
@@ -68,11 +68,11 @@ Derives `ConfigReader`, `ConfigWriter`, and `ConfigCodec` for HOCON configuratio
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `ConfigReader.derive[A]` | `ConfigReader[A]` | Semi-automatic reader |
+| `ConfigReader.derived[A]` | `ConfigReader[A]` | Semi-automatic reader |
 | `ConfigReader.derived[A]` | `ConfigReader[A]` | Sanely-automatic reader (given on Scala 3) |
-| `ConfigWriter.derive[A]` | `ConfigWriter[A]` | Semi-automatic writer |
+| `ConfigWriter.derived[A]` | `ConfigWriter[A]` | Semi-automatic writer |
 | `ConfigWriter.derived[A]` | `ConfigWriter[A]` | Sanely-automatic writer (given on Scala 3) |
-| `ConfigCodec.derive[A]` | `ConfigCodec[A]` | Semi-automatic codec (reader + writer) |
+| `ConfigCodec.derived[A]` | `ConfigCodec[A]` | Semi-automatic codec (reader + writer) |
 | `ConfigCodec.derived[A]` | `ConfigCodec[A]` | Sanely-automatic codec (given on Scala 3) |
 
 All methods take an implicit/using `SConfig` parameter (defaults to `SConfig.default`).
@@ -188,7 +188,7 @@ case class AppConfig(
     case class Postgres(host: String, port: Int) extends DbBackend
     case class Sqlite(path: String) extends DbBackend
 
-    implicit val reader: ConfigReader[DbBackend] = ConfigReader.derive[DbBackend]
+    implicit val reader: ConfigReader[DbBackend] = ConfigReader.derived[DbBackend]
 
     val config = ConfigFactory.parseString("""
       type = "postgres"
@@ -215,7 +215,7 @@ case class AppConfig(
 
     case class Server(host: String, port: Int)
 
-    implicit val reader: ConfigReader[Server] = ConfigReader.derive[Server]
+    implicit val reader: ConfigReader[Server] = ConfigReader.derived[Server]
 
     // This will fail -- "debug" is not a field of Server
     val result = reader.from(ConfigFactory.parseString("""
@@ -243,9 +243,9 @@ case class AppConfig(
     case class DbConfig(url: String, poolSize: Int = 10)
     case class AppConfig(http: HttpConfig, db: DbConfig)
 
-    implicit val httpReader: ConfigReader[HttpConfig] = ConfigReader.derive[HttpConfig]
-    implicit val dbReader: ConfigReader[DbConfig] = ConfigReader.derive[DbConfig]
-    implicit val appReader: ConfigReader[AppConfig] = ConfigReader.derive[AppConfig]
+    implicit val httpReader: ConfigReader[HttpConfig] = ConfigReader.derived[HttpConfig]
+    implicit val dbReader: ConfigReader[DbConfig] = ConfigReader.derived[DbConfig]
+    implicit val appReader: ConfigReader[AppConfig] = ConfigReader.derived[AppConfig]
 
     val result = appReader.from(ConfigFactory.parseString("""
       http {
@@ -272,7 +272,7 @@ case class AppConfig(
 
     case class AppConfig(appName: String, maxRetries: Int, debug: Boolean)
 
-    implicit val writer: ConfigWriter[AppConfig] = ConfigWriter.derive[AppConfig]
+    implicit val writer: ConfigWriter[AppConfig] = ConfigWriter.derived[AppConfig]
 
     val configValue = writer.to(AppConfig("my-app", 3, false))
     println(configValue.render)

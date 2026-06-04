@@ -47,7 +47,7 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
     case class Person(name: String, age: Int)
 
     // Semi-automatic
-    val schema: Schema[Person] = KindlingsSchema.derived[Person]
+    val schema: Schema[Person] = KindlingsSchema.derived[Person].schema
     println(schema.name)
     // expected output:
     // Some(SName(Person,List()))
@@ -128,7 +128,7 @@ case class User(
     case class Circle(radius: Double) extends Shape
     case class Rectangle(width: Double, height: Double) extends Shape
 
-    val schema: Schema[Shape] = KindlingsSchema.derived[Shape]
+    val schema: Schema[Shape] = KindlingsSchema.derived[Shape].schema
     println(schema.name)
     // Some(SName(Shape,List()))
     ```
@@ -154,7 +154,7 @@ case class User(
       @format("int32") age: Int
     )
 
-    val schema: Schema[AnnotatedPerson] = KindlingsSchema.derived[AnnotatedPerson]
+    val schema: Schema[AnnotatedPerson] = KindlingsSchema.derived[AnnotatedPerson].schema
     println(schema.description)
     // Some(A person with metadata)
     ```
@@ -173,7 +173,7 @@ case class User(
     case class UserProfile(firstName: String, lastName: String)
 
     // Schema automatically picks up snake_case from Circe config
-    val schema: Schema[UserProfile] = KindlingsSchema.derived[UserProfile]
+    val schema: Schema[UserProfile] = KindlingsSchema.derived[UserProfile].schema
     // Field names: first_name, last_name (matching JSON encoding)
     ```
 
@@ -192,7 +192,7 @@ case class User(
     case class TreeNode(value: Int, children: List[TreeNode])
 
     // Recursive types work out of the box — uses schema references
-    val schema: Schema[TreeNode] = KindlingsSchema.derived[TreeNode]
+    val schema: Schema[TreeNode] = KindlingsSchema.derived[TreeNode].schema
     ```
 
 ??? example "Generic types"
@@ -210,12 +210,12 @@ case class User(
     case class Box[A](value: A)
     case class Person(name: String, age: Int)
 
-    implicit val personSchema: Schema[Person] = KindlingsSchema.derived[Person]
+    implicit val personSchema: Schema[Person] = KindlingsSchema.derived[Person].schema
     println(personSchema.name)
     // Some(SName(Person,List()))
 
     // Box[Person] picks up the Person schema via implicit
-    lazy val boxSchema: Schema[Box[Person]] = KindlingsSchema.derived[Box[Person]]
+    lazy val boxSchema: Schema[Box[Person]] = KindlingsSchema.derived[Box[Person]].schema
     println(boxSchema.name)
     // Some(SName(Box,List(Person)))
     ```

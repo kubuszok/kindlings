@@ -194,7 +194,7 @@ case class Article(
     val xml = encoder.encode(shape, "shape")
     println(xml)
     // expected output:
-    // <shape type="Circle"><radius>5.0</radius></shape>
+    // <shape kind="circle"><radius>5.0</radius></shape>
 
     println(decoder.decode(xml))
     // expected output:
@@ -220,7 +220,7 @@ case class Article(
     val xml = KindlingsXmlEncoder.encode(Point(10, 20), "point")
     println(xml)
     // expected output:
-    // <point><x>10</x><y>20</y></point>
+    // <point x="10" y="20"/>
     ```
 
 ??? example "Mixed attributes and elements"

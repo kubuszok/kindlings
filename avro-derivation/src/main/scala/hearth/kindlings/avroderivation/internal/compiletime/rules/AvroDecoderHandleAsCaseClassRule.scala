@@ -107,7 +107,11 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
             .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
               val nameOverride = getAnnotationStringArg[fieldName](param)
-              val avroFieldName = nameOverride.getOrElse(fName)
+              val avroFieldNameExpr: Expr[String] = nameOverride match {
+                case Some(custom) => Expr(custom)
+                case None         =>
+                  Expr.quote(Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName))))
+              }
               val aliases = getAllAnnotationStringArgs[avroAlias](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
@@ -128,7 +132,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                         AvroDerivationUtils.decodeFixed(
                           AvroDerivationUtils.getFieldByNameOrAlias(
                             record,
-                            Expr.splice(Expr(avroFieldName)),
+                            Expr.splice(avroFieldNameExpr),
                             Expr.splice(aliasesExpr)
                           )
                         ): Array[Byte]
@@ -144,7 +148,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                         AvroDerivationUtils.decodeBigDecimal(
                           AvroDerivationUtils.getFieldByNameOrAlias(
                             record,
-                            Expr.splice(Expr(avroFieldName)),
+                            Expr.splice(avroFieldNameExpr),
                             Expr.splice(aliasesExpr)
                           ),
                           Expr.splice(Expr(scale))
@@ -156,7 +160,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                     val fieldAvroValue: Expr[Any] = Expr.quote {
                       AvroDerivationUtils.getFieldByNameOrAlias(
                         Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord],
-                        Expr.splice(Expr(avroFieldName)),
+                        Expr.splice(avroFieldNameExpr),
                         Expr.splice(aliasesExpr)
                       )
                     }
