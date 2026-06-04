@@ -40,13 +40,19 @@ object ShrinkUtils {
       reconstruct: Array[Any] => A
   ): Shrink[A] =
     Shrink { value =>
-      val fields = extract(value)
-      // For each field, try shrinking it while keeping others constant
-      fieldShrinks.zipWithIndex.toStream.flatMap { case (shrink, idx) =>
-        shrink.shrink(fields(idx)).map { shrunkField =>
-          val newFields = fields.clone()
-          newFields(idx) = shrunkField
-          reconstruct(newFields)
+      // Guard: when used inside shrinkEnum, the wrong case's shrink may be called.
+      // On Scala Native, calling productElement beyond a Product's arity causes SIGSEGV
+      // (not a catchable exception). Check arity matches before extracting.
+      val product = value.asInstanceOf[Product]
+      if (product.productArity < fieldShrinks.size) Stream.empty
+      else {
+        val fields = extract(value)
+        fieldShrinks.zipWithIndex.toStream.flatMap { case (shrink, idx) =>
+          shrink.shrink(fields(idx)).map { shrunkField =>
+            val newFields = fields.clone()
+            newFields(idx) = shrunkField
+            reconstruct(newFields)
+          }
         }
       }
     }
@@ -57,29 +63,13 @@ object ShrinkUtils {
     */
   def shrinkEnum[A](caseShrinks: List[Shrink[A]]): Shrink[A] =
     Shrink { value =>
-      // Try each case's shrink — the matching one will succeed,
-      // non-matching ones will produce empty streams or throw
-      caseShrinks.toStream.flatMap { caseShrink =>
+      // Evaluate try/catch eagerly (strict List.map) to avoid try/catch inside lazy
+      // Stream.flatMap — that combination overflows Scala Native's stack.
+      val results: List[Stream[A]] = caseShrinks.map { caseShrink =>
         try caseShrink.shrink(value)
-        catch { case _: ClassCastException => Stream.empty }
+        catch { case _: Throwable => Stream.empty[A] }
       }
-    }
-
-  /** Shrinks an enum/sealed trait with cross-variant alternatives. When shrinking a case class variant, case object
-    * variants from the same sealed trait are offered as simpler alternatives (prepended before field-level shrinks).
-    */
-  def shrinkEnumWithAlternatives[A](caseShrinks: List[Shrink[A]], caseObjectValues: List[A]): Shrink[A] =
-    Shrink { value =>
-      val isCaseObject = caseObjectValues.exists(_.getClass == value.getClass)
-      val fieldShrinks: Stream[A] = caseShrinks.toStream.flatMap { caseShrink =>
-        try caseShrink.shrink(value)
-        catch { case _: ClassCastException => Stream.empty }
-      }
-      if (isCaseObject) fieldShrinks
-      else {
-        val alternatives: Stream[A] = caseObjectValues.toStream
-        alternatives #::: fieldShrinks
-      }
+      results.foldRight(Stream.empty[A])(_ #::: _)
     }
 
   // --- Internal helpers ---

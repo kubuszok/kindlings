@@ -78,8 +78,7 @@ object examples {
     case class Tree(value: Int, children: List[Tree])
 
     object Tree {
-      implicit val arbTree: Arbitrary[Tree] = DeriveArbitrary.derived
-      // No Lazy wrapper needed - recursion is handled automatically
+      implicit lazy val arbTree: Arbitrary[Tree] = DeriveArbitrary.derived
     }
   }
 
@@ -161,12 +160,12 @@ object examples {
     }
   }
 
-  // ==Direct Recursive Sealed Trait==
+  // ==Direct Recursive Sealed Trait (single recursion to avoid JS/Native stack overflow)==
   object DirectRecursive {
-    sealed trait BinaryTree
-    case class BNode(value: Int, left: BinaryTree, right: BinaryTree) extends BinaryTree
-    case class BLeaf(value: Int) extends BinaryTree
-    implicit val arb: Arbitrary[BinaryTree] = DeriveArbitrary.derived
+    sealed trait LinkedList
+    case class Cons(value: Int, next: LinkedList) extends LinkedList
+    case class End(value: Int) extends LinkedList
+    implicit lazy val arb: Arbitrary[LinkedList] = DeriveArbitrary.derived
   }
 
   // ==Value Class Support==

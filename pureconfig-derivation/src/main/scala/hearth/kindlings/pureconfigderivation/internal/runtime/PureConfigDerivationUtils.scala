@@ -218,13 +218,15 @@ object PureConfigDerivationUtils {
       cursor: ConfigCursor,
       result: Result[A],
       expectedKeys: Set[String],
-      allowUnknownKeys: Boolean
+      allowUnknownKeys: Boolean,
+      discriminator: Option[String] = None
   ): Result[A] =
     if (allowUnknownKeys) result
-    else
+    else {
+      val allExpected = discriminator.fold(expectedKeys)(expectedKeys + _)
       cursor.asObjectCursor.flatMap { obj =>
         val unknown = obj.map.toList.collect {
-          case (k, keyCur) if !expectedKeys.contains(k) =>
+          case (k, keyCur) if !allExpected.contains(k) =>
             keyCur.failureFor(pureconfig.error.UnknownKey(k))
         }
         unknown match {
@@ -232,6 +234,7 @@ object PureConfigDerivationUtils {
           case head :: tail => Left(ConfigReaderFailures(head, tail*))
         }
       }
+    }
 
   /** Cast `Any` to `A` using a `ConfigReader[A]` purely as a type-inference hint. The reader is not invoked. This
     * avoids leaking path-dependent field types into `Expr.quote` on Scala 2.

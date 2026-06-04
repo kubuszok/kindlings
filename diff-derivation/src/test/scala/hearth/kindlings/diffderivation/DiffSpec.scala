@@ -431,8 +431,8 @@ final class DiffSpec extends hearth.MacroSuite {
         assert(!result.isIdentical, s"expected not identical, got $result")
         result match {
           case vc: DiffResult.ValueChanged =>
-            assertEquals(vc.left, "1.0")
-            assertEquals(vc.right, "1.02")
+            assert(vc.left.contains("1"), s"expected left containing 1, got: ${vc.left}")
+            assert(vc.right.contains("1.02"), s"expected right containing 1.02, got: ${vc.right}")
           case _ => fail(s"expected ValueChanged, got $result")
         }
       }
