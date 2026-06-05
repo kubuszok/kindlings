@@ -1,6 +1,6 @@
 # Kindlings: Remaining Gaps & Action Items
 
-Last updated: 2026-06-03.
+Last updated: 2026-06-05.
 
 Legend: **P1** = important for migrating users, **P2** = nice to have / quality.
 
@@ -18,66 +18,63 @@ more module/wrapper combinations.
 
 ## 2. avro-derivation
 
-| # | Gap | Priority | Reason not yet addressed |
+| # | Gap | Priority | Status |
 |---|---|---|---|
-| 2.3 | `@avroNamespace` on fields (field-level override) | P2 | Requires threading a namespace override through recursive schema derivation — the annotation exists at type level but field-level support needs a cross-cutting change to the `SchemaForCtx` derivation context, not a local edit. |
-| 2.6 | Streaming / container format (`AvroInputStream`/`AvroOutputStream`) | P2 | Entirely new runtime API (not a derivation gap). Needs input/output stream design around Avro's `DataFileWriter`/`DataFileReader` — unrelated to macro derivation. |
+| 2.3 | `@avroNamespace` on fields (field-level override) | P2 | Requires threading namespace override through recursive schema derivation context. |
+| 2.6 | Streaming / container format (`AvroInputStream`/`AvroOutputStream`) | P2 | New runtime API, not a derivation gap. |
 
 ---
 
 ## 3. jsoniter-derivation
 
-| # | Gap | Priority | Reason not yet addressed |
+| # | Gap | Priority | Status |
 |---|---|---|---|
-| 5.4 | `skipNestedOptionValues` — config field added | P2 | Blocked: `semiEval` cannot evaluate `JsoniterConfig` at compile time when it contains function-type fields (`fieldNameMapper: String => String = identity`). The rule needs the config value at compile time to decide the code path. Fixing requires either removing function fields from the config or adding runtime branching to the case class rule. |
-| 5.5 | `alwaysEmitDiscriminator` — config field added | P2 | Blocked: same `semiEval` limitation as 5.4. Additionally, the case class encoder doesn't know its ADT parent type, so emitting a discriminator for a concrete subtype requires threading parent context through the derivation. |
-| 5.6 | `inlineOneValueClasses` — config field + rule infrastructure added | P2 | Blocked: same `semiEval` limitation as 5.4. Rule files exist and are wired into the chain, but never fire because `evaluatedConfig` is always `None`. |
+| 5.4 | `skipNestedOptionValues` | P2 | Blocked: `semiEval` cannot evaluate `JsoniterConfig` with function-type fields. Needs runtime branching. |
+| 5.5 | `alwaysEmitDiscriminator` | P2 | Blocked: same `semiEval` limitation + needs parent ADT context threading. |
+| 5.6 | `inlineOneValueClasses` | P2 | Blocked: same `semiEval` limitation. Rules exist but never fire. |
 
 ---
 
 ## 4. tapir-schema-derivation
 
-| # | Gap | Priority | Reason not yet addressed |
+| # | Gap | Priority | Status |
 |---|---|---|---|
-| 6.2 | Scala 3 union type schemas | P2 | Not yet implemented. Hearth printer fix landed; `Enum.parse` + `isUnionType` infrastructure is ready. Needs a `SchemaHandleAsUnionRule` (Scala 3 only) that extracts union members and builds `SCoproduct`. |
+| 6.2 | Scala 3 union type schemas | P2 | No derivation code needed — `Enum.parse` + `SchemaHandleAsEnumRule` handle unions automatically. Blocked on testing: `Expr.summonImplicit` fails in `scala-3/` source files. See `docs/research/hearth-summon-implicit-scala3-only-files.md`. |
 
 ---
 
 ## 5. cats-tagless-derivation
 
-| # | Gap | Priority | Reason not yet addressed |
+| # | Gap | Priority | Status |
 |---|---|---|---|
-| 10.1 | SemigroupalK, ApplyK | P1 | Blocked: deferred to Hearth 0.4.0 which adds the dependent-type abstractions needed for higher-kinded type class derivation at kind `(* → *) → *`. |
-| 10.2 | AOP / Instrumentation (`Instrument`, `Aspect`) | P2 | The cats-tagless module is an empty placeholder with no source code. All of 10.1–10.3 require bootstrapping the entire module (build config, entry points, macro impl, rules, tests). 10.2/10.3 also depend on the same HKT infrastructure as 10.1, making them impractical to implement independently. |
-| 10.3 | Utility derivations (`const`, `void`, `readerT`) | P2 | Same as 10.2 — requires the cats-tagless module to be bootstrapped first via 10.1. |
+| 10.1 | FunctorK, InvariantK, ContravariantK, SemigroupalK | P1 | **Done.** Case class: both platforms. Trait: Scala 3. |
+| 10.1b | ApplyK | P1 | **Done.** Composes FunctorK + SemigroupalK. map2K via compose. |
+| 10.1c | Variance-aware trait derivation | P1 | **Done.** FunctorK errors on F-in-params. ContravariantK handles F-in-params. InvariantK handles both positions. |
+| 10.1d | Scala 2 trait support | P2 | AnonymousInstance.construct on Scala 2 generates class outside lambda scope. |
+| 10.2 | Instrument (AOP) | P2 | **Done.** Wraps F[X] fields/methods in Instrumentation with algebra/method names. |
+| 10.3 | Utility derivations (`const`, `void`, `readerT`) | P2 | Deferred — these produce values, not type class instances. Different approach needed. |
+| | **Total** | | **66 tests** (25 Scala 2.13, 41 Scala 3) |
 
 ---
 
 ## 6. yaml-derivation
 
-| # | Gap | Priority | Reason not yet addressed |
+| # | Gap | Priority | Status |
 |---|---|---|---|
-| 11.1 | Custom YAML tags | P2 | Requires investigation of scala-yaml's `Tag` API to determine if custom tags can be applied to `Node` objects and parsed from YAML input. The library imports `org.virtuslab.yaml.Tag` but the API surface for custom tag creation and recognition is not documented and couldn't be determined from local dependency files. Needs experimentation with scala-yaml's tag system before implementation can begin. |
+| 11.1 | Custom YAML tags | P2 | Needs investigation of scala-yaml's `Tag` API. |
 
 ---
 
-## 7. Known Bugs (Hearth-level)
+## 7. Known Bugs
 
 | Module | Test | Issue |
 |---|---|---|
-| **all encoder modules** | `*.derived[CaseClassContaining[Option[SealedTrait]]]` on Scala 3 | Fixed in Hearth 0.4.0. Needs test verification. |
-| jsoniter | `decodingOnly + encodingOnly compile error` | `semiEval` can't evaluate config in `compileErrors()` context; works in real usage |
+| tapir | `Expr.summonImplicit` in scala-3/ files | Phantom type witness fails in Scala-3-only compilation units. See `hearth-summon-implicit-scala3-only-files.md`. |
+| jsoniter | `decodingOnly + encodingOnly compile error` | `semiEval` can't evaluate config in `compileErrors()` context; works in real usage. |
 
----
+### Resolved
 
-## 8. Bug Pattern Analysis
-
-6 of 10 real bugs came from features tested in isolation but never composed.
-
-| Pattern | Issues | Mitigation |
+| Module | Issue | Resolution |
 |---|---|---|
-| Combinatorial gap | #120, #78, #80, #79 | Wrapper x Inner matrices |
-| Annotation tested one-direction only | #110, #108 | Round-trip tests |
-| Upstream fix not ported | #92, #91 | Bug tracker scan |
-| Hearth/cross-quotes | #115, #65 | Already mitigated |
-| Performance/codegen | #109, #86 | Codegen audits |
+| all encoder modules | Splice isolation: `Option[SealedTrait]` on Scala 3 | **Fixed** in Hearth 0.4.0. Verified across circe, jsoniter, ubjson, yaml, fast-show-pretty. |
+| all decoder modules | Default values for generic case classes on Scala 3 | **Fixed** in Hearth 0.3.0-94. `BoxWithDefault[Int]` compiles and tests pass. |

@@ -33,6 +33,7 @@ val versions = new {
   val scalaSaxParser = "0.1.0"
   val scalaYaml = "0.3.1"
   val scalaXml = "2.4.0"
+  val catsTagless = "0.16.5"
   val sconfig = "1.12.4"
 }
 
@@ -214,6 +215,7 @@ lazy val aliases = new Aliases(
     ironIntegration,
     xmlDerivation,
     catsDerivation,
+    catsTaglessDerivation,
     scalacheckDerivation,
     catsIntegration,
     sconfigDerivation,
@@ -246,6 +248,7 @@ lazy val root = project
   .aggregate(ironIntegration.projectRefs *)
   .aggregate(xmlDerivation.projectRefs *)
   .aggregate(catsDerivation.projectRefs *)
+  .aggregate(catsTaglessDerivation.projectRefs *)
   .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
   .aggregate(diffDerivation.projectRefs *)
@@ -608,6 +611,25 @@ lazy val catsDerivation = projectMatrix
       "org.typelevel" %%% "cats-core" % versions.cats,
       "org.typelevel" %%% "alleycats-core" % versions.cats,
       "org.scalacheck" %%% "scalacheck" % versions.scalacheck % Test
+    )
+  )
+
+lazy val catsTaglessDerivation = projectMatrix
+  .in(file("cats-tagless-derivation"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .dependsOn(derivationCommons)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-cats-tagless-derivation",
+    name := "kindlings-cats-tagless-derivation",
+    description := "Cats-tagless FunctorK/InvariantK/ContravariantK derivation using Hearth macros"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.typelevel" %%% "cats-tagless-core" % versions.catsTagless
     )
   )
 
