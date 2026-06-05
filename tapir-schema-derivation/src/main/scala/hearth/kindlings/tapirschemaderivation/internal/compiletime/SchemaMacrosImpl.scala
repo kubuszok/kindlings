@@ -45,10 +45,10 @@ trait SchemaMacrosImpl
 
   protected lazy val ignoredImplicits: Seq[UntypedMethod] = {
     val ours = Type.of[KindlingsSchema.type].methods.collect {
-      case method if method.value.name == "derived" => method.value.asUntyped
+      case method if method.name == "derived" => method.asUntyped
     }
     val tapirSchema = Type.of[Schema.type].methods.collect {
-      case method if method.value.name == "derivedSchema" => method.value.asUntyped
+      case method if method.name == "derivedSchema" => method.asUntyped
     }
     ours ++ tapirSchema
   }
@@ -347,7 +347,7 @@ trait SchemaMacrosImpl
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
 
-    val paramsList = cc.primaryConstructor.parameters.flatten.toList
+    val paramsList = cc.primaryConstructor.totalParameters.flatten.toList
     val activeParams = paramsList.filterNot { case (_, p) => sctx.jsonCfg.isTransientField(p) }
     val sNameExpr = computeSNameExpr[A](sctx.derivedType)
 

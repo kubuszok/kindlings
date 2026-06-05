@@ -18,12 +18,12 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
     // instances like encodeInt, encodeString, etc.).
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsEncoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[Encoder.type].methods.collect {
-        case method if method.value.name == "derived" || method.value.name.startsWith("encodeLiteral") =>
-          method.value.asUntyped
+        case method if method.name == "derived" || method.name.startsWith("encodeLiteral") =>
+          method.asUntyped
       }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =

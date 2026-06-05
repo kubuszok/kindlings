@@ -38,12 +38,12 @@ trait FastShowPrettyHandleAsNamedTupleRuleImpl { this: FastShowPrettyMacrosImpl 
 
     @scala.annotation.nowarn("msg=is never used")
     private def deriveNamedTupleFields[A: DerivationCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[StringBuilder]] = {
       implicit val IntType: Type[Int] = Types.Int
       implicit val ProductType: Type[Product] = Types.Product
 
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldValues) =>

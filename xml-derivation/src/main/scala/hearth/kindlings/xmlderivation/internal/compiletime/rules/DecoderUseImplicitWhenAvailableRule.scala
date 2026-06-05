@@ -14,9 +14,9 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsXmlDecoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[KindlingsXmlCodec.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =

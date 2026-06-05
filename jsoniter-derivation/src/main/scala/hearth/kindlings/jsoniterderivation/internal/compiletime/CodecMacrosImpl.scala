@@ -1030,9 +1030,9 @@ trait CodecMacrosImpl
   // when summoning finds library auto-derivation methods (e.g., KindlingsJsonCodec.derived).
   private[compiletime] lazy val codecIgnoredImplicits: Seq[UntypedMethod] =
     Type.of[KindlingsJsonValueCodec.type].methods.collect {
-      case method if method.value.isImplicit => method.value.asUntyped
+      case method if method.isImplicit => method.asUntyped
     } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
-      case method if method.value.isImplicit => method.value.asUntyped
+      case method if method.isImplicit => method.asUntyped
     }
 
   // Cache for summonExprIgnoring results — avoids re-summoning the same type.

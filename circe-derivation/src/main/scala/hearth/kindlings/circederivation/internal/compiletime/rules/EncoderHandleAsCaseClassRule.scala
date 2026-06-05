@@ -42,7 +42,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       // Only access primaryConstructor when there are actual fields to process.
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.parameters.flatten.toMap
+        else caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {

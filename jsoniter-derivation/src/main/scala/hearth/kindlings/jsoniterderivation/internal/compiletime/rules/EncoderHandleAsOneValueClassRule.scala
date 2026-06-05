@@ -22,7 +22,7 @@ trait EncoderHandleAsOneValueClassRuleImpl {
       else
         CaseClass.parse[A].toEither match {
           case Right(cc) =>
-            val fields = cc.primaryConstructor.parameters.flatten.toList.filter { case (_, p) =>
+            val fields = cc.primaryConstructor.totalParameters.flatten.toList.filter { case (_, p) =>
               !hasAnnotationType[transientField](p)
             }
             fields match {

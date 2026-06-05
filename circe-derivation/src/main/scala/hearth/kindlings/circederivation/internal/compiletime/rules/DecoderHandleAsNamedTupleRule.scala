@@ -57,7 +57,7 @@ trait DecoderHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def decodeNamedTupleFields[A: DecoderCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[Either[DecodingFailure, A]]] = {
       implicit val StringT: Type[String] = DTypes.String
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
@@ -67,19 +67,27 @@ trait DecoderHandleAsNamedTupleRuleImpl {
       implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
       implicit val ListEitherT: Type[List[Either[DecodingFailure, Any]]] = DTypes.ListEitherDFAny
 
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
           // Empty named tuple: return Right(empty tuple)
-          constructor(Map.empty) match {
+          constructor.fold(
+            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ) match {
             case Right(constructExpr) =>
               MIO.pure(Expr.quote {
-                Right(Expr.splice(constructExpr)): Either[DecodingFailure, A]
+                Right(Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])): Either[DecodingFailure, A]
               })
             case Left(error) =>
               val err =
-                DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                DecoderDerivationError.CannotConstructType(
+                  Type[A].prettyPrint,
+                  isSingleton = false,
+                  Some(error.toString)
+                )
               Log.error(err.message) >> MIO.fail(err)
           }
 
@@ -129,13 +137,17 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
-                  constructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
+                  constructor.fold(
+                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
                       val err = DecoderDerivationError.CannotConstructType(
                         Type[A].prettyPrint,
                         isSingleton = false,
-                        Some(error)
+                        Some(error.toString)
                       )
                       Log.error(err.message) >> MIO.fail(err)
                   }

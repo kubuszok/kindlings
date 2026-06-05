@@ -38,7 +38,7 @@ trait ReaderHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def decodeNamedTupleFields[A: ReaderCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[Either[ConfigDecodingError, A]]] = {
       implicit val StringT: Type[String] = RTypes.String
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
@@ -48,14 +48,20 @@ trait ReaderHandleAsNamedTupleRuleImpl {
       implicit val ArrayAnyT: Type[Array[Any]] = RTypes.ArrayAny
       implicit val ListEitherT: Type[List[Either[ConfigDecodingError, Any]]] = RTypes.ListEitherErrorAny
 
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
-          constructor(Map.empty) match {
+          constructor.fold(
+            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ) match {
             case Right(constructExpr) =>
               MIO.pure(Expr.quote {
-                SConfigDerivationUtils.asObject(Expr.splice(rctx.value)).map(_ => Expr.splice(constructExpr))
+                SConfigDerivationUtils
+                  .asObject(Expr.splice(rctx.value))
+                  .map(_ => Expr.splice(constructExpr.value.asInstanceOf[Expr[A]]))
               })
             case Left(error) =>
               val err = ReaderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
@@ -111,8 +117,12 @@ trait ReaderHandleAsNamedTupleRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
-                  constructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
+                  constructor.fold(
+                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
                       val err = ReaderDerivationError.CannotConstructType(
                         Type[A].prettyPrint,

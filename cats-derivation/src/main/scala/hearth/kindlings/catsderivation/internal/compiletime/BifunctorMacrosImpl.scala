@@ -117,9 +117,14 @@ trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDeri
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[C, D]: $e")
     }
-    caseClassCD.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClassCD.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => mappedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[C, D]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct bimap result: $error"))
     }
   }
@@ -212,9 +217,9 @@ trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDeri
             val cc3 = CaseClass.parse[C3].toEither
             (cc1, cc2, cc3) match {
               case (Right(cI), Right(cII), Right(cIII)) =>
-                val f1 = cI.primaryConstructor.parameters.flatten.toList
-                val f2 = cII.primaryConstructor.parameters.flatten.toList
-                val f3 = cIII.primaryConstructor.parameters.flatten.toList
+                val f1 = cI.primaryConstructor.totalParameters.flatten.toList
+                val f2 = cII.primaryConstructor.totalParameters.flatten.toList
+                val f3 = cIII.primaryConstructor.totalParameters.flatten.toList
                 val left = scala.collection.mutable.Set.empty[String]
                 val right = scala.collection.mutable.Set.empty[String]
                 f1.zip(f2).zip(f3).foreach { case (((name, p1), (_, p2)), (_, p3)) =>
@@ -269,8 +274,12 @@ trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDeri
                             (fn, fe.as_??)
                           }
                         }
-                        cc.primaryConstructor(mapped.toMap) match {
-                          case Right(expr) => MIO.pure(expr.upcast[F[Any, Any]])
+                        cc.primaryConstructor.fold(
+                          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                          onTypes = _ => Map.empty,
+                          onValues = _ => mapped.toMap
+                        ) match {
+                          case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any, Any]]])
                           case Left(err)   => MIO.fail(new RuntimeException(s"Cannot construct $cn: $err"))
                         }
                       }

@@ -40,7 +40,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
       implicit val avroAliasT: Type[avroAlias] = DecTypes.AvroAlias
 
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
 
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList.collectFirst {
@@ -58,16 +58,17 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
 
       // Build transient defaults map
       val transientDefaults: Map[String, Expr_??] = transientFields.flatMap { case (fName, param) =>
-        param.defaultValue.flatMap { existentialOuter =>
-          val methodOf = existentialOuter.value
-          methodOf.value match {
-            case noInstance: Method.NoInstance[?] =>
-              import noInstance.Returned
-              noInstance(Map.empty).toOption.map { defaultExpr =>
-                (fName, defaultExpr.as_??)
-              }
-            case _ => None
-          }
+        param.defaultValue.flatMap { method =>
+          method
+            .fold(
+              onInstance = _ => throw new RuntimeException("Default value should not need instance"),
+              onTypes = _ => Map.empty,
+              onValues = _ => Map.empty
+            )
+            .toOption
+            .map { defaultExpr =>
+              (fName, defaultExpr)
+            }
         }
       }.toMap
 
@@ -173,11 +174,15 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
             .flatMap { fieldData =>
               val fieldMap: Map[String, Expr_??] =
                 fieldData.toList.map { case (fName, decodedExpr) => (fName, decodedExpr) }.toMap ++ transientDefaults
-              caseClass.primaryConstructor(fieldMap) match {
+              caseClass.primaryConstructor.fold(
+                onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                onTypes = _ => Map.empty,
+                onValues = _ => fieldMap
+              ) match {
                 case Right(constructExpr) =>
                   MIO.pure(Expr.quote {
                     val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
-                    Expr.splice(constructExpr)
+                    Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
                   })
                 case Left(error) =>
                   val err = DecoderDerivationError.CannotConstructType(

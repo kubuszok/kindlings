@@ -21,9 +21,9 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[ConfigReader.type].methods.collect {
-        case method if method.value.isImplicit && method.value.name == "derived" => method.value.asUntyped
+        case method if method.isImplicit && method.name == "derived" => method.asUntyped
       } ++ Type.of[ConfigCodec.type].methods.collect {
-        case method if method.value.isImplicit && method.value.name == "derived" => method.value.asUntyped
+        case method if method.isImplicit && method.name == "derived" => method.asUntyped
       }
 
     def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] =

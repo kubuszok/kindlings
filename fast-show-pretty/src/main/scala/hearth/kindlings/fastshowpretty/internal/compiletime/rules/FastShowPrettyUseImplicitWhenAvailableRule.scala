@@ -13,7 +13,7 @@ trait FastShowPrettyUseImplicitWhenAvailableRuleImpl { this: FastShowPrettyMacro
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[FastShowPretty.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =

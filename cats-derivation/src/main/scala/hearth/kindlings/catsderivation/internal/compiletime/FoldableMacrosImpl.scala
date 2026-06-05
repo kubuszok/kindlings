@@ -48,8 +48,8 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
               case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
             }
 
-            val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-            val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
             val directFields = scala.collection.mutable.Set.empty[String]
             val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
@@ -266,8 +266,8 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
             val ccS = CaseClass.parse[ChildS].toEither
             (ccI, ccS) match {
               case (Right(cI), Right(cS)) =>
-                val fieldsI = cI.primaryConstructor.parameters.flatten.toList
-                val fieldsS = cS.primaryConstructor.parameters.flatten.toList
+                val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
+                val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
                 val direct = scala.collection.mutable.Set.empty[String]
                 val nested = scala.collection.mutable.Map.empty[String, Expr[Any]]
                 val selfRec = scala.collection.mutable.Set.empty[String]

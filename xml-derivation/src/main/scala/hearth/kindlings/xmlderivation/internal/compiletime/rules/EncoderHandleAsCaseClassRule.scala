@@ -62,7 +62,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.parameters.flatten.toMap
+        else caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       // Check if we can skip transient checks entirely (statically known config)
       val noTransientChecksNeeded: Boolean = ectx.evaluatedConfig.exists { c =>

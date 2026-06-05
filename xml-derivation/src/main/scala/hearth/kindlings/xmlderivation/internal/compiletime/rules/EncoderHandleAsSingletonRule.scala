@@ -16,7 +16,7 @@ trait EncoderHandleAsSingletonRuleImpl {
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
         CaseClass.parse[A].toEither match {
-          case Right(caseClass) if caseClass.primaryConstructor.parameters.flatten.isEmpty =>
+          case Right(caseClass) if caseClass.primaryConstructor.totalParameters.flatten.isEmpty =>
             MIO.pure(Rule.matched(Expr.quote {
               XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName))
             }))

@@ -29,9 +29,9 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsConfigReader.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[KindlingsConfigConvert.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigReaderFailures, A]]]] =

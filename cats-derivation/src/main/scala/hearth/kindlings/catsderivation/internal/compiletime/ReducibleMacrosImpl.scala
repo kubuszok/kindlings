@@ -41,8 +41,8 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
             case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
           }
 
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val directFields = scala.collection.mutable.Set.empty[String]
           val nestedFields = scala.collection.mutable.ListBuffer.empty[String]

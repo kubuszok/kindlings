@@ -35,14 +35,14 @@ trait EncoderHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used")
     private def encodeNamedTupleFields[A: EncoderCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[Json]] = {
       implicit val JsonT: Type[Json] = Types.Json
       implicit val StringT: Type[String] = Types.String
       implicit val ProductType: Type[Product] = Types.Product
       implicit val IntType: Type[Int] = Types.Int
 
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldValues) =>

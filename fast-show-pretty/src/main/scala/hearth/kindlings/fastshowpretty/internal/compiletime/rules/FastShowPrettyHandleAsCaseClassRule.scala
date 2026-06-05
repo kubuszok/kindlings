@@ -39,7 +39,7 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
       val name = Expr(Type[A].shortName)
       implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
         Types.SensitiveData
-      val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.parameters.flatten.toMap
+      val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       NonEmptyList.fromList(caseClass.caseFieldValuesAt(ctx.value).toList) match {
         case Some(fieldValues) =>

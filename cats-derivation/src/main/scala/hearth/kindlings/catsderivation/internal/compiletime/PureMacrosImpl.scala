@@ -36,8 +36,8 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
             case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
           }
 
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val directFields = scala.collection.mutable.Set.empty[String]
 
@@ -118,16 +118,21 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
     }
-    val fields = caseClass.primaryConstructor.parameters.flatten.toList
+    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
     val fieldMap: Map[String, Expr_??] = fields.map { case (fieldName, _) =>
       // All fields are direct (we verified this above), so all get `a`
       (fieldName, aExpr.as_??)
     }.toMap
 
-    caseClass.primaryConstructor(fieldMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => fieldMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[A]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct pure result: $error"))
     }
   }

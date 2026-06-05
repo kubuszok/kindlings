@@ -35,14 +35,14 @@ trait WriterHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used")
     private def encodeNamedTupleFields[A: WriterCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[ConfigValue]] = {
       implicit val ConfigValueT: Type[ConfigValue] = WTypes.ConfigValue
       implicit val StringT: Type[String] = WTypes.String
       implicit val ProductType: Type[Product] = WTypes.Product
       implicit val IntType: Type[Int] = WTypes.Int
 
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldValues) =>

@@ -36,8 +36,8 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
             case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
           }
 
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val directFields = scala.collection.mutable.Set.empty[String]
           val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
@@ -162,9 +162,14 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
     }
-    caseClassB.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClassB.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => mappedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
     }
   }
@@ -207,9 +212,14 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
         }
       }
 
-    caseClass.primaryConstructor(apFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => apFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct ap result: $error"))
     }
   }

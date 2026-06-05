@@ -15,12 +15,12 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsDecoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[Decoder.type].methods.collect {
-        case method if method.value.name == "derived" || method.value.name.startsWith("decodeLiteral") =>
-          method.value.asUntyped
+        case method if method.name == "derived" || method.name.startsWith("decodeLiteral") =>
+          method.asUntyped
       }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =

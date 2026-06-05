@@ -27,9 +27,9 @@ trait BifunctorCaseClassRuleImpl {
         case Left(e)   => return MIO.pure(Rule.yielded(s"Cannot parse F[Int, String]: $e"))
       }
 
-      val fieldsProbe1 = ccIntInt.primaryConstructor.parameters.flatten.toList
-      val fieldsProbe2 = ccStringInt.primaryConstructor.parameters.flatten.toList
-      val fieldsProbe3 = ccIntString.primaryConstructor.parameters.flatten.toList
+      val fieldsProbe1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
+      val fieldsProbe2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
+      val fieldsProbe3 = ccIntString.primaryConstructor.totalParameters.flatten.toList
 
       val leftFields = scala.collection.mutable.Set.empty[String]
       val rightFields = scala.collection.mutable.Set.empty[String]

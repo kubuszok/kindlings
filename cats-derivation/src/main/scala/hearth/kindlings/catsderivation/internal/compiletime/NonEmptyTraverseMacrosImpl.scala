@@ -48,8 +48,8 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
                 case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
               }
 
-              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
               val directFields = scala.collection.mutable.Set.empty[String]
               val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
@@ -280,8 +280,12 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor(fieldExprs.toMap) match {
-          case Right(constructExpr) => constructExpr.upcast[Any]
+        caseClass.primaryConstructor.fold(
+          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          onTypes = _ => Map.empty,
+          onValues = _ => fieldExprs.toMap
+        ) match {
+          case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
             throw new RuntimeException(s"Cannot construct traversed result: $error")
         }

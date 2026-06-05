@@ -24,7 +24,7 @@ trait GroupCaseClassRuleImpl {
         caseClass: CaseClass[A]
     ): MIO[GroupDerivationResult[A]] = {
       val constructor = caseClass.primaryConstructor
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldList) =>
@@ -41,8 +41,12 @@ trait GroupCaseClassRuleImpl {
             .map { emptyFields =>
               val empty: Expr[A] = {
                 val fieldMap: Map[String, Expr_??] = emptyFields.toList.toMap
-                caseClass.primaryConstructor(fieldMap) match {
-                  case Right(constructExpr) => constructExpr
+                caseClass.primaryConstructor.fold(
+                  onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  onTypes = _ => Map.empty,
+                  onValues = _ => fieldMap
+                ) match {
+                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
                   case Left(error)          =>
                     throw new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error")
                 }
@@ -70,9 +74,14 @@ trait GroupCaseClassRuleImpl {
                   }
                   .flatMap { invertedFields =>
                     val fieldMap: Map[String, Expr_??] = invertedFields.toList.toMap
-                    caseClass.primaryConstructor(fieldMap) match {
-                      case Right(constructExpr) => MIO.pure(constructExpr)
-                      case Left(error)          =>
+                    caseClass.primaryConstructor.fold(
+                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                      onTypes = _ => Map.empty,
+                      onValues = _ => fieldMap
+                    ) match {
+                      case Right(constructExpr) =>
+                        MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
+                      case Left(error) =>
                         MIO.fail(new RuntimeException(s"Cannot construct inverse ${Type[A].prettyPrint}: $error"))
                     }
                   }
@@ -83,8 +92,13 @@ trait GroupCaseClassRuleImpl {
 
         case None =>
           // No fields — empty case class
-          caseClass.primaryConstructor(Map.empty) match {
-            case Right(constructExpr) =>
+          caseClass.primaryConstructor.fold(
+            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ) match {
+            case Right(constructExprE) =>
+              val constructExpr: Expr[A] = constructExprE.value.asInstanceOf[Expr[A]]
               val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (_, _) => MIO.pure(constructExpr)
               val inverse: Expr[A] => MIO[Expr[A]] = _ => MIO.pure(constructExpr)
               MIO.pure(GroupDerivationResult(constructExpr, combine, inverse))

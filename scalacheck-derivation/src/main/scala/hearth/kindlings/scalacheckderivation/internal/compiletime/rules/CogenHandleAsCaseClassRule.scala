@@ -36,7 +36,7 @@ trait CogenHandleAsCaseClassRuleImpl { this: CogenMacrosImpl & MacroCommons & St
         caseClass: CaseClass[A]
     ): MIO[Expr[Cogen[A]]] = {
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
       implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
       implicit val AnyT: Type[Any] = CogenTypes.Any
 

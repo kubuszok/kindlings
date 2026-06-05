@@ -39,7 +39,7 @@ more module/wrapper combinations.
 
 | # | Gap | Priority | Reason not yet addressed |
 |---|---|---|---|
-| 6.2 | Scala 3 union type schemas | P2 | Blocked: Hearth's runtime type printer (`RuntimeAwareTypePrinterScala3`) triggers a cross-quotes splice error when processing union types like `String \| Int`. The derivation infrastructure (via `Enum.parse` + `isUnionType`) is ready, but the type printer crashes before the schema can be built. Requires upstream Hearth fix. |
+| 6.2 | Scala 3 union type schemas | P2 | Not yet implemented. Hearth printer fix landed; `Enum.parse` + `isUnionType` infrastructure is ready. Needs a `SchemaHandleAsUnionRule` (Scala 3 only) that extracts union members and builds `SCoproduct`. |
 
 ---
 
@@ -65,7 +65,7 @@ more module/wrapper combinations.
 
 | Module | Test | Issue |
 |---|---|---|
-| **all encoder modules** | `*.derived[CaseClassContaining[Option[SealedTrait]]]` on Scala 3 | Hearth-level splice isolation: `toValDefs.use` + `parMatchOn` interaction creates cross-Quotes references when sealed traits are derived recursively inside Option wrappers. Requires upstream Hearth fix. |
+| **all encoder modules** | `*.derived[CaseClassContaining[Option[SealedTrait]]]` on Scala 3 | Fixed in Hearth 0.4.0. Needs test verification. |
 | jsoniter | `decodingOnly + encodingOnly compile error` | `semiEval` can't evaluate config in `compileErrors()` context; works in real usage |
 
 ---

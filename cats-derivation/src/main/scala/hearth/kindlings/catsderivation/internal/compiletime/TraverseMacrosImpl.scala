@@ -49,8 +49,8 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
                 case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
               }
 
-              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
               val directFields = scala.collection.mutable.Set.empty[String]
               val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
@@ -242,8 +242,12 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor(fieldExprs.toMap) match {
-          case Right(constructExpr) => constructExpr.upcast[Any]
+        caseClass.primaryConstructor.fold(
+          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          onTypes = _ => Map.empty,
+          onValues = _ => fieldExprs.toMap
+        ) match {
+          case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
             throw new RuntimeException(s"Cannot construct traversed result: $error")
         }
@@ -433,8 +437,8 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
         val ccS = CaseClass.parse[ChildS].toEither
         (ccI, ccS) match {
           case (Right(cI), Right(cS)) =>
-            val fieldsI = cI.primaryConstructor.parameters.flatten.toList
-            val fieldsS = cS.primaryConstructor.parameters.flatten.toList
+            val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
+            val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
             val direct = scala.collection.mutable.Set.empty[String]
             val nested = scala.collection.mutable.Map.empty[String, Expr[Any]]
             val selfRec = scala.collection.mutable.Set.empty[String]
@@ -526,8 +530,12 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
                         (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
                       }
                     }
-                    cc.primaryConstructor(fieldExprs.toMap) match {
-                      case Right(expr) => expr.upcast[Any]
+                    cc.primaryConstructor.fold(
+                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                      onTypes = _ => Map.empty,
+                      onValues = _ => fieldExprs.toMap
+                    ) match {
+                      case Right(expr) => expr.value.asInstanceOf[Expr[Any]]
                       case Left(err)   => throw new RuntimeException(s"Cannot construct $cn: $err")
                     }
                   }

@@ -14,9 +14,9 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsYamlEncoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[KindlingsYamlCodec.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[org.virtuslab.yaml.Node]]] =
