@@ -172,10 +172,7 @@ trait FunctorKTraitRuleImpl {
               val sm = sourceCM.method
               try
                 sm.fold(
-                  onInstance = oi => {
-                    import oi.Instance
-                    Expr.quote(Expr.splice(afExpr).asInstanceOf[Instance]).as_??
-                  },
+                  onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
                   onTypes = _ => Map.empty,
                   onValues = av => {
                     val paramNames = av.totalParameters.flatten.toList.map(_._1)
@@ -202,8 +199,10 @@ trait FunctorKTraitRuleImpl {
             import returnT.Underlying as RT
             mkApplyFk[RT](fkExpr, sourceCall)(returnT.Underlying).as_??(returnT.Underlying)
           } else {
+            // Invariant method — return type is the same in source and target.
+            // Use Expr.quote with asInstanceOf to produce properly typed tree on Scala 2.
             import returnT.Underlying as RT
-            sourceCall.asInstanceOf[Expr[RT]].as_??(returnT.Underlying)
+            Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
           }
         }
       }

@@ -320,5 +320,13 @@ case class WithAliasField(@avroAlias("old_name") name: String, age: Int)
 @avroProp("metadata", """{"version": 1, "source": "test"}""")
 case class WithJsonProp(name: String, value: Int)
 
+// Gap 2.3: @avroNamespace on fields — override namespace of nested record
+case class FieldNsInner(value: Int)
+case class FieldNsOuter(@avroNamespace("custom.ns") inner: FieldNsInner, name: String)
+case class FieldNsOuterWithOption(@avroNamespace("custom.opt.ns") inner: Option[FieldNsInner])
+@avroNamespace("type.level.ns")
+case class FieldNsInnerWithTypeNs(value: Int)
+case class FieldNsOverrideTypeNs(@avroNamespace("field.level.ns") inner: FieldNsInnerWithTypeNs)
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType

@@ -159,10 +159,7 @@ trait SemigroupalKTraitRuleImpl {
           def foldSourceMethod(sm: Method, srcExpr: Expr[Any]): Expr[Any] =
             try
               sm.fold(
-                onInstance = oi => {
-                  import oi.Instance
-                  Expr.quote(Expr.splice(srcExpr).asInstanceOf[Instance]).as_??
-                },
+                onInstance = oi => srcExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
                 onTypes = _ => Map.empty,
                 onValues = av => {
                   val paramNames = av.totalParameters.flatten.toList.map(_._1)

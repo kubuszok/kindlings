@@ -94,8 +94,11 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
       // Filter out transient fields
       val nonTransientFields = fieldsList.filter { case (_, param) => !hasAnnotationType[transientField](param) }
 
-      // Build the namespace expression: @avroNamespace > config.namespace > package name > ""
+      // Build the namespace expression: field-level @avroNamespace > type-level @avroNamespace > config.namespace > package name > ""
       val namespaceExpr: Expr[String] = computeNamespaceExpr[A]
+
+      // After consuming namespaceOverride for this record, clear it so it does not leak into nested field derivations.
+      val cleanCtx: SchemaForCtx[A] = sfctx[A].copy(namespaceOverride = None)
 
       // Build the doc expression (null if no @avroDoc)
       val docExprOrNull: Expr[String] = classDoc match {
@@ -147,6 +150,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                 val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
                 val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
                 val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
+                val fieldNamespaceOverride = getAnnotationStringArg[avroNamespace](param)
                 Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
                   (avroFixedSize, decimalOverride) match {
                     case (Some(_), _) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
@@ -179,7 +183,11 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                         (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                       }
                     case _ =>
-                      deriveSchemaRecursively[Field](using sfctx.nest[Field]).map { fieldSchema =>
+                      val nestedCtx: SchemaForCtx[Field] = fieldNamespaceOverride match {
+                        case Some(ns) => cleanCtx.nestWithNamespaceOverride[Field](ns)
+                        case None     => cleanCtx.nest[Field]
+                      }
+                      deriveSchemaRecursively[Field](using nestedCtx).map { fieldSchema =>
                         (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
                       }
                   }

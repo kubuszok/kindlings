@@ -1112,5 +1112,40 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getField("data").schema().getType ==> Schema.Type.BYTES
       }
     }
+
+    group("Gap 2.3: @avroNamespace on fields") {
+
+      test("@avroNamespace on field overrides nested record namespace") {
+        val schema = AvroSchemaFor.schemaOf[FieldNsOuter]
+        val innerSchema = schema.getField("inner").schema()
+        innerSchema.getType ==> Schema.Type.RECORD
+        innerSchema.getName ==> "FieldNsInner"
+        innerSchema.getNamespace ==> "custom.ns"
+      }
+
+      test("@avroNamespace on field overrides type-level @avroNamespace") {
+        val schema = AvroSchemaFor.schemaOf[FieldNsOverrideTypeNs]
+        val innerSchema = schema.getField("inner").schema()
+        innerSchema.getType ==> Schema.Type.RECORD
+        innerSchema.getName ==> "FieldNsInnerWithTypeNs"
+        innerSchema.getNamespace ==> "field.level.ns"
+      }
+
+      test("@avroNamespace on field does not affect outer record namespace") {
+        val schema = AvroSchemaFor.schemaOf[FieldNsOuter]
+        schema.getNamespace ==> "hearth.kindlings.avroderivation"
+      }
+
+      test("@avroNamespace on Optional field propagates to inner record") {
+        val schema = AvroSchemaFor.schemaOf[FieldNsOuterWithOption]
+        val fieldSchema = schema.getField("inner").schema()
+        // Option produces UNION(null, record)
+        fieldSchema.getType ==> Schema.Type.UNION
+        val innerSchema = fieldSchema.getTypes.get(1)
+        innerSchema.getType ==> Schema.Type.RECORD
+        innerSchema.getName ==> "FieldNsInner"
+        innerSchema.getNamespace ==> "custom.opt.ns"
+      }
+    }
   }
 }

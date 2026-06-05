@@ -49,8 +49,11 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
       val typeNameExpr = computeAvroNameExpr[A]
       val enumDefault: Option[String] = getTypeAnnotationStringArg[avroEnumDefault, A]
 
-      // Build the namespace expression: @avroNamespace > config.namespace > package name > ""
+      // Build the namespace expression: field-level @avroNamespace > type-level @avroNamespace > config.namespace > package name > ""
       val namespaceExpr: Expr[String] = computeNamespaceExpr[A]
+
+      // After consuming namespaceOverride for this enum, clear it so it does not leak into nested child derivations.
+      val cleanCtx: SchemaForCtx[A] = sfctx[A].copy(namespaceOverride = None)
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
@@ -120,7 +123,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
               .parTraverse { case (_, child) =>
                 import child.Underlying as ChildType
                 Log.namedScope(s"Deriving schema for enum case ${Type[ChildType].prettyPrint}") {
-                  deriveSchemaRecursively[ChildType](using sfctx.nest[ChildType])
+                  deriveSchemaRecursively[ChildType](using cleanCtx.nest[ChildType])
                 }
               }
               .map { childSchemas =>

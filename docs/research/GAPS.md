@@ -20,8 +20,8 @@ more module/wrapper combinations.
 
 | # | Gap | Priority | Status |
 |---|---|---|---|
-| 2.3 | `@avroNamespace` on fields (field-level override) | P2 | Requires threading namespace override through recursive schema derivation context. |
-| 2.6 | Streaming / container format (`AvroInputStream`/`AvroOutputStream`) | P2 | New runtime API, not a derivation gap. |
+| 2.3 | `@avroNamespace` on fields | P2 | **Done.** Field-level override via `namespaceOverride` in SchemaForCtx. Highest priority in namespace resolution. |
+| 2.6 | Streaming / container format | P2 | New runtime API, not a derivation gap. Out of scope. |
 
 ---
 
@@ -50,7 +50,7 @@ more module/wrapper combinations.
 | 10.1 | FunctorK, InvariantK, ContravariantK, SemigroupalK | P1 | **Done.** Case class: both platforms. Trait: Scala 3. |
 | 10.1b | ApplyK | P1 | **Done.** Composes FunctorK + SemigroupalK. map2K via compose. |
 | 10.1c | Variance-aware trait derivation | P1 | **Done.** FunctorK errors on F-in-params. ContravariantK handles F-in-params. InvariantK handles both positions. |
-| 10.1d | Scala 2 trait support | P2 | AnonymousInstance.construct on Scala 2 generates class outside lambda scope. |
+| 10.1d | Scala 2 trait support | P2 | **Done.** Fixed in Hearth 0.3.0-96 + kindlings fixes for onInstance callback and invariant method typing. |
 | 10.2 | Instrument (AOP) | P2 | **Done.** Wraps F[X] fields/methods in Instrumentation with algebra/method names. |
 | 10.3 | Utility derivations (`const`, `void`, `readerT`) | P2 | Deferred — these produce values, not type class instances. Different approach needed. |
 | | **Total** | | **66 tests** (25 Scala 2.13, 41 Scala 3) |
@@ -61,7 +61,7 @@ more module/wrapper combinations.
 
 | # | Gap | Priority | Status |
 |---|---|---|---|
-| 11.1 | Custom YAML tags | P2 | Needs investigation of scala-yaml's `Tag` API. |
+| 11.1 | Custom YAML tags | P2 | Investigated. Decoding feasible via `CustomTag` + `LoadSettings.constructors`. Encoding blocked: scala-yaml's presenter drops custom tags on output. Needs upstream PR (~3 lines in `PresenterImpl`). |
 
 ---
 
