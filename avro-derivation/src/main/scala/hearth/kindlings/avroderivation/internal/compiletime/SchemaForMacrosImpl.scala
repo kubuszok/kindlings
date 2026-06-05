@@ -160,11 +160,17 @@ trait SchemaForMacrosImpl
       tpe: Type[A],
       config: Expr[AvroConfig],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      namespaceOverride: Option[String] = None
   ) {
 
     def nest[B: Type]: SchemaForCtx[B] = copy[B](
       tpe = Type[B]
+    )
+
+    def nestWithNamespaceOverride[B: Type](ns: String): SchemaForCtx[B] = copy[B](
+      tpe = Type[B],
+      namespaceOverride = Some(ns)
     )
 
     /** Sanitize a type's plainPrint for use as a Scala identifier in generated code. */
@@ -312,10 +318,11 @@ trait SchemaForMacrosImpl
   }
 
   /** Computes the namespace expression for a record or enum type with the following priority:
-    *   1. `@avroNamespace` annotation (highest priority)
-    *   2. `AvroConfig.namespace` (explicit config)
-    *   3. Package name extracted from the type's fully qualified name
-    *   4. `""` (fallback for top-level types)
+    *   1. Field-level `@avroNamespace` override from the parent context (highest priority)
+    *   2. Type-level `@avroNamespace` annotation on the type itself
+    *   3. `AvroConfig.namespace` (explicit config)
+    *   4. Package name extracted from the type's fully qualified name
+    *   5. `""` (fallback for top-level types)
     */
   @scala.annotation.nowarn("msg=is never used")
   protected def computeNamespaceExpr[A: SchemaForCtx]: Expr[String] = {
@@ -323,15 +330,20 @@ trait SchemaForMacrosImpl
     implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
     implicit val StringT: Type[String] = SfTypes.String
 
-    val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
-    val packageNamespace: String = extractPackageNamespace[A]
-
-    classNamespace match {
+    // Field-level override takes highest priority
+    sfctx.namespaceOverride match {
       case Some(ns) => Expr(ns)
       case None     =>
-        val packageNsExpr = Expr(packageNamespace)
-        Expr.quote {
-          Expr.splice(sfctx.config).namespace.getOrElse(Expr.splice(packageNsExpr))
+        val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+        val packageNamespace: String = extractPackageNamespace[A]
+
+        classNamespace match {
+          case Some(ns) => Expr(ns)
+          case None     =>
+            val packageNsExpr = Expr(packageNamespace)
+            Expr.quote {
+              Expr.splice(sfctx.config).namespace.getOrElse(Expr.splice(packageNsExpr))
+            }
         }
     }
   }

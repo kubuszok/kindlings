@@ -189,10 +189,7 @@ trait ContravariantKTraitRuleImpl {
               val sm = sourceCM.method
               try
                 sm.fold(
-                  onInstance = oi => {
-                    import oi.Instance
-                    Expr.quote(Expr.splice(afExpr).asInstanceOf[Instance]).as_??
-                  },
+                  onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
                   onTypes = _ => Map.empty,
                   onValues = av => {
                     val paramNames = av.totalParameters.flatten.toList.map(_._1)
@@ -217,7 +214,7 @@ trait ContravariantKTraitRuleImpl {
 
           {
             import returnT.Underlying as RT
-            sourceCall.asInstanceOf[Expr[RT]].as_??(returnT.Underlying)
+            Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
           }
         }
       }
