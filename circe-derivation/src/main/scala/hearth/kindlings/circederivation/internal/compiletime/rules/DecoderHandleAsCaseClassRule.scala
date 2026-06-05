@@ -60,7 +60,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val transientFieldT: Type[transientField] = DTypes.TransientField
 
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
 
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList
@@ -180,14 +180,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 deriveFieldDecoder[Field].map { decoderExpr =>
                   val defaultAsAnyOpt: Option[Expr[Any]] =
                     if (param.hasDefault)
-                      param.defaultValue.flatMap { existentialOuter =>
-                        val methodOf = existentialOuter.value
-                        methodOf.value match {
-                          case noInstance: Method.NoInstance[?] =>
-                            import noInstance.Returned
-                            noInstance(Map.empty).toOption.map(_.upcast[Any])
-                          case _ => None
-                        }
+                      param.defaultValue.flatMap { method =>
+                        method
+                          .fold(
+                            onInstance = _ => throw new RuntimeException("Default value should not need instance"),
+                            onTypes = _ => Map.empty,
+                            onValues = _ => Map.empty
+                          )
+                          .toOption
+                          .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                       }
                     else None
 
@@ -439,13 +440,17 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
-                  caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
+                  caseClass.primaryConstructor.fold(
+                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
                       val err = DecoderDerivationError.CannotConstructType(
                         Type[A].prettyPrint,
                         isSingleton = false,
-                        Some(error)
+                        Some(error.toString)
                       )
                       Log.error(err.message) >> MIO.fail(err)
                   }

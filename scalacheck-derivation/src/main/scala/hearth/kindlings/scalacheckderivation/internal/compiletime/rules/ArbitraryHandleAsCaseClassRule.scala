@@ -36,14 +36,20 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
         caseClass: CaseClass[A]
     ): MIO[Expr[Gen[A]]] = {
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
           // Zero-parameter case class
-          caseClass.primaryConstructor(Map.empty) match {
+          caseClass.primaryConstructor.fold(
+            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ) match {
             case Right(constructExpr) =>
-              MIO.pure[Expr[Gen[A]]](Expr.quote(_root_.org.scalacheck.Gen.const[A](Expr.splice(constructExpr))))
+              MIO.pure[Expr[Gen[A]]](
+                Expr.quote(_root_.org.scalacheck.Gen.const[A](Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])))
+              )
             case Left(error) =>
               MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
           }
@@ -117,8 +123,12 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                   val fieldMap: Map[String, Expr_??] = makeAccessors.map(_(valuesExpr)).toMap
 
                   // Build constructor
-                  caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
+                  caseClass.primaryConstructor.fold(
+                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
                       MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
                   }

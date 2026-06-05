@@ -50,7 +50,7 @@ trait ShowCaseClassRuleImpl {
       val name = Type[A].shortName
       implicit val SensitiveDataType: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
         ShowTypes.SensitiveData
-      val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.parameters.flatten.toMap
+      val paramsByName: Map[String, Parameter] = caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       NonEmptyList.fromList(caseClass.caseFieldValuesAt(value).toList) match {
         case Some(fieldValues) =>

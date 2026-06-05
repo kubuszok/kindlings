@@ -43,7 +43,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
 
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.parameters.flatten.toMap
+        else caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {
@@ -98,14 +98,15 @@ trait EncoderHandleAsCaseClassRuleImpl {
                         // Determine transient skip conditions
                         val param = paramsByName.get(fName)
                         val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
-                          p.defaultValue.flatMap { existentialOuter =>
-                            val methodOf = existentialOuter.value
-                            methodOf.value match {
-                              case noInstance: Method.NoInstance[?] =>
-                                import noInstance.Returned
-                                noInstance(Map.empty).toOption.map(_.upcast[Any])
-                              case _ => None
-                            }
+                          p.defaultValue.flatMap { method =>
+                            method
+                              .fold(
+                                onInstance = _ => throw new RuntimeException("Default value should not need instance"),
+                                onTypes = _ => Map.empty,
+                                onValues = _ => Map.empty
+                              )
+                              .toOption
+                              .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                           }
                         }
 

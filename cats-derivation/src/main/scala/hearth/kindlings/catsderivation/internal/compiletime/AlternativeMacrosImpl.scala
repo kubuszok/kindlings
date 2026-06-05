@@ -43,8 +43,8 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
             case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
           }
 
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val directFields = scala.collection.mutable.Set.empty[String]
           val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
@@ -169,7 +169,7 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
   private def deriveAltEmptyBody[F[_]](
       caseClass: CaseClass[F[Any]]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fields = caseClass.primaryConstructor.parameters.flatten.toList
+    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
     val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
       import param.tpe.Underlying as Field
@@ -185,9 +185,14 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
       (fieldName, value.as_??)
     }
 
-    caseClass.primaryConstructor(fieldExprs.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => fieldExprs.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct empty result: $error"))
     }
   }
@@ -204,7 +209,7 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
     }
-    val fields = caseClass.primaryConstructor.parameters.flatten.toList
+    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
     val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
       import param.tpe.Underlying as Field
@@ -224,9 +229,14 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
       }
     }
 
-    caseClass.primaryConstructor(fieldExprs.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => fieldExprs.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[A]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct pure result: $error"))
     }
   }
@@ -263,9 +273,14 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
     }
-    caseClassB.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClassB.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => mappedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
     }
   }
@@ -306,9 +321,14 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
         }
       }
 
-    caseClass.primaryConstructor(apFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => apFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct ap result: $error"))
     }
   }
@@ -339,9 +359,14 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout { this: MacroCommons &
         (fieldName, combined.as_??)
       }
 
-    caseClass.primaryConstructor(combinedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => combinedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct combined result: $error"))
     }
   }

@@ -404,7 +404,7 @@ trait DecoderHandleAsEnumRuleImpl {
         case None =>
           // Fall back to CaseClass.construct for zero-arg case classes
           CaseClass.parse[ChildType].toOption match {
-            case Some(cc) if cc.primaryConstructor.parameters.flatten.isEmpty =>
+            case Some(cc) if cc.primaryConstructor.totalParameters.flatten.isEmpty =>
               val constructMIO: MIO[Option[Expr[ChildType]]] =
                 cc.construct[MIO](new CaseClass.ConstructField[MIO] {
                   def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
@@ -480,7 +480,7 @@ trait DecoderHandleAsEnumRuleImpl {
         case None =>
           // Fall back to CaseClass.construct for zero-arg case classes
           CaseClass.parse[ChildType].toOption match {
-            case Some(cc) if cc.primaryConstructor.parameters.flatten.isEmpty =>
+            case Some(cc) if cc.primaryConstructor.totalParameters.flatten.isEmpty =>
               val constructMIO: MIO[Option[Expr[ChildType]]] =
                 cc.construct[MIO](new CaseClass.ConstructField[MIO] {
                   def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {

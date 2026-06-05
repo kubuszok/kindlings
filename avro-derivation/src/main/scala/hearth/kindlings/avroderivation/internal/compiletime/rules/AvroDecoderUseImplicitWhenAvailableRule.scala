@@ -22,7 +22,7 @@ trait AvroDecoderUseImplicitWhenAvailableRuleImpl {
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroDecoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =

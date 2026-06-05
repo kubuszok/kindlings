@@ -35,7 +35,7 @@ trait AvroEncoderHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used")
     private def encodeNamedTupleFields[A: EncoderCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[Any]] = {
       implicit val AnyT: Type[Any] = EncTypes.Any
       implicit val StringT: Type[String] = EncTypes.String
@@ -43,7 +43,7 @@ trait AvroEncoderHandleAsNamedTupleRuleImpl {
       implicit val ProductType: Type[Product] = EncTypes.Product
       implicit val IntType: Type[Int] = EncTypes.Int
 
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
 
       NonEmptyList.fromList(fields) match {
         case Some(fieldValues) =>

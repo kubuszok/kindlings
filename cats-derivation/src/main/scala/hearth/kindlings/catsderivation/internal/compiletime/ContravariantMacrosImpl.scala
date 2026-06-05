@@ -39,8 +39,8 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons
             case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
           }
 
-          val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val contravariantFields = scala.collection.mutable.Set.empty[String]
 
@@ -157,7 +157,7 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons
     }
 
     val fields = caseClass.caseFieldValuesAt(faExpr).toList
-    val fieldsB = caseClassB.primaryConstructor.parameters.flatten.toList
+    val fieldsB = caseClassB.primaryConstructor.totalParameters.flatten.toList
 
     val fieldBTypes: Map[String, Type[Any]] =
       fieldsB.map { case (name, param) => (name, param.tpe.Underlying.asInstanceOf[Type[Any]]) }.toMap
@@ -177,9 +177,14 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons
       }
     }
 
-    caseClassB.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClassB.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => mappedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct contramapped result: $error"))
     }
   }

@@ -16,11 +16,11 @@ trait SchemaUseImplicitWhenAvailableRuleImpl {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsSchema.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       } ++ Type.of[Schema.type].methods.collect {
         // For tapir's own Schema companion, only ignore the auto-derivation method,
         // not built-in schemas for primitive types (schemaForString, schemaForInt, etc.).
-        case method if method.value.name == "derivedSchema" => method.value.asUntyped
+        case method if method.name == "derivedSchema" => method.asUntyped
       }
 
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]] =

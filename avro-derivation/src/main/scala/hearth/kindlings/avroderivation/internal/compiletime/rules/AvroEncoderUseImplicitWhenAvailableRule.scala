@@ -18,7 +18,7 @@ trait AvroEncoderUseImplicitWhenAvailableRuleImpl {
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroEncoder.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =

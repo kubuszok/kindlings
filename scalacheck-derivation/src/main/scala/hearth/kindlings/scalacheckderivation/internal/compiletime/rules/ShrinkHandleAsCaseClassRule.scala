@@ -36,7 +36,7 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
         caseClass: CaseClass[A]
     ): MIO[Expr[Shrink[A]]] = {
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
       implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
       implicit val AnyT: Type[Any] = ShrinkTypes.Any
       implicit val ArrayAnyT: Type[Array[Any]] = ShrinkTypes.ArrayAny
@@ -86,8 +86,12 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
                     val elemExpr: Expr[Any] = Expr.quote(Expr.splice(arrExpr)(Expr.splice(Expr(idx))))
                     (name, castFn(elemExpr))
                   }.toMap
-                  caseClass.primaryConstructor(fieldMap) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr)
+                  caseClass.primaryConstructor.fold(
+                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
                       MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
                   }

@@ -16,9 +16,9 @@ trait WriterUseImplicitWhenAvailableRuleImpl {
     /** See [[ReaderUseImplicitWhenAvailableRule.ignoredImplicits]] for the rationale. */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[ConfigWriter.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+        case method if method.name == "derived" => method.asUntyped
       } ++ Type.of[ConfigCodec.type].methods.collect {
-        case method if method.value.name == "derived" => method.value.asUntyped
+        case method if method.name == "derived" => method.asUntyped
       }
 
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]] =

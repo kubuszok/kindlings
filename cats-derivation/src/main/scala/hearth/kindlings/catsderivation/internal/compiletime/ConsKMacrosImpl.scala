@@ -55,8 +55,8 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
                 case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
               }
 
-              val fieldsInt = ccInt.primaryConstructor.parameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.parameters.flatten.toList
+              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
               val directFields = scala.collection.mutable.Set.empty[String]
               val nestedFieldConsKs = scala.collection.mutable.Map.empty[String, Expr[Any]]
@@ -185,9 +185,14 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
         )
       )
     } else {
-      caseClass.primaryConstructor(resultFields.toMap) match {
-        case Right(constructExpr) => MIO.pure(constructExpr)
-        case Left(error)          =>
+      caseClass.primaryConstructor.fold(
+        onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+        onTypes = _ => Map.empty,
+        onValues = _ => resultFields.toMap
+      ) match {
+        case Right(constructExpr) =>
+          MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+        case Left(error) =>
           MIO.fail(new RuntimeException(s"Cannot construct ConsK result: $error"))
       }
     }

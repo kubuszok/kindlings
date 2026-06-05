@@ -64,7 +64,7 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdE
   private def deriveEmptyKBody[F[_]](
       caseClass: CaseClass[F[Any]]
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
-    val fields = caseClass.primaryConstructor.parameters.flatten.toList
+    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
     val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
       import param.tpe.Underlying as Field
@@ -80,9 +80,14 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdE
       (fieldName, value.as_??)
     }
 
-    caseClass.primaryConstructor(fieldExprs.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => fieldExprs.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct empty result: $error"))
     }
   }

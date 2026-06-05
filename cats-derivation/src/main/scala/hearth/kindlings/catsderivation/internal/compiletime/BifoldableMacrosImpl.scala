@@ -44,9 +44,9 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int, String]: $e")
             }
 
-            val fieldsP1 = ccIntInt.primaryConstructor.parameters.flatten.toList
-            val fieldsP2 = ccStringInt.primaryConstructor.parameters.flatten.toList
-            val fieldsP3 = ccIntString.primaryConstructor.parameters.flatten.toList
+            val fieldsP1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsP2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsP3 = ccIntString.primaryConstructor.totalParameters.flatten.toList
 
             val leftFields = scala.collection.mutable.Set.empty[String]
             val rightFields = scala.collection.mutable.Set.empty[String]
@@ -214,9 +214,9 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
             import ch1.Underlying as C1; import ch2.Underlying as C2; import ch3.Underlying as C3
             (CaseClass.parse[C1].toEither, CaseClass.parse[C2].toEither, CaseClass.parse[C3].toEither) match {
               case (Right(cc1), Right(cc2), Right(cc3)) =>
-                val f1 = cc1.primaryConstructor.parameters.flatten.toList
-                val f2 = cc2.primaryConstructor.parameters.flatten.toList
-                val f3 = cc3.primaryConstructor.parameters.flatten.toList
+                val f1 = cc1.primaryConstructor.totalParameters.flatten.toList
+                val f2 = cc2.primaryConstructor.totalParameters.flatten.toList
+                val f3 = cc3.primaryConstructor.totalParameters.flatten.toList
                 val left = scala.collection.mutable.Set.empty[String]
                 val right = scala.collection.mutable.Set.empty[String]
                 f1.zip(f2).zip(f3).foreach { case (((n, p1), (_, p2)), (_, p3)) =>

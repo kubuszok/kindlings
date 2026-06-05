@@ -35,13 +35,13 @@ trait AvroSchemaForHandleAsNamedTupleRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used")
     private def deriveNamedTupleSchema[A: SchemaForCtx](
-        constructor: Method.NoInstance[A]
+        constructor: Method
     ): MIO[Expr[Schema]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val StringT: Type[String] = SfTypes.String
       implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
 
-      val fields = constructor.parameters.flatten.toList
+      val fields = constructor.totalParameters.flatten.toList
       val typeNameExpr = computeAvroNameExpr[A]
 
       NonEmptyList.fromList(fields) match {

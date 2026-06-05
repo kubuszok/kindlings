@@ -97,9 +97,14 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
         (fieldName, combined.as_??)
       }
 
-    caseClass.primaryConstructor(combinedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClass.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => combinedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct combined result: $error"))
     }
   }

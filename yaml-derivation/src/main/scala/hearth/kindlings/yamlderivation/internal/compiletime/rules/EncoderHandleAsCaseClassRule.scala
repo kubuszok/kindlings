@@ -40,7 +40,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
 
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.parameters.flatten.toMap
+        else caseClass.primaryConstructor.totalParameters.flatten.toMap
 
       paramsByName.collectFirst {
         case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name

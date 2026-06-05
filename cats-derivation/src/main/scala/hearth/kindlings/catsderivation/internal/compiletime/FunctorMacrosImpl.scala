@@ -179,7 +179,7 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
       case Right(cc) => cc
       case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
     }
-    val bFieldMap = caseClassB.primaryConstructor.parameters.flatten.toMap
+    val bFieldMap = caseClassB.primaryConstructor.totalParameters.flatten.toMap
 
     val fields = caseClass.caseFieldValuesAt(faExpr).toList
 
@@ -239,9 +239,14 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
         (fieldName, fieldExpr.as_??)
       }
     }
-    caseClassB.primaryConstructor(mappedFields.toMap) match {
-      case Right(constructExpr) => MIO.pure(constructExpr)
-      case Left(error)          =>
+    caseClassB.primaryConstructor.fold(
+      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+      onTypes = _ => Map.empty,
+      onValues = _ => mappedFields.toMap
+    ) match {
+      case Right(constructExpr) =>
+        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
+      case Left(error) =>
         MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
     }
   }
@@ -297,8 +302,8 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
 
             (ccI, ccS) match {
               case (Right(cI), Right(cS)) =>
-                val fieldsI = cI.primaryConstructor.parameters.flatten.toList
-                val fieldsS = cS.primaryConstructor.parameters.flatten.toList
+                val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
+                val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
                 val directFields = scala.collection.mutable.Set.empty[String]
                 val nestedFunctors = scala.collection.mutable.Map.empty[String, Expr[Any]]
                 val selfRecursive = scala.collection.mutable.Set.empty[String]
@@ -393,8 +398,12 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
                           (fieldName, fieldExpr.as_??)
                         }
                       }
-                      childCC.primaryConstructor(mapped.toMap) match {
-                        case Right(expr) => MIO.pure(expr.upcast[F[Any]])
+                      childCC.primaryConstructor.fold(
+                        onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                        onTypes = _ => Map.empty,
+                        onValues = _ => mapped.toMap
+                      ) match {
+                        case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any]]])
                         case Left(err)   => MIO.fail(new RuntimeException(s"Cannot construct $childName: $err"))
                       }
                     }

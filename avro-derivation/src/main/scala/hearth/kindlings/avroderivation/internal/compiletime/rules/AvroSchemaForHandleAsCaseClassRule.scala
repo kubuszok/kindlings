@@ -66,7 +66,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
       val classAliases: List[String] = getAllTypeAnnotationStringArgs[avroAlias, A]
 
       val constructor = caseClass.primaryConstructor
-      val fieldsList = constructor.parameters.flatten.toList
+      val fieldsList = constructor.totalParameters.flatten.toList
       val typeNameExpr = computeAvroNameExpr[A]
 
       // Validate: @transientField on fields without defaults is a compile error

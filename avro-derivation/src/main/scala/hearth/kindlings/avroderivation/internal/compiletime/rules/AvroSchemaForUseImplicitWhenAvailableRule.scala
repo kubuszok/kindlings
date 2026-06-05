@@ -19,7 +19,7 @@ trait AvroSchemaForUseImplicitWhenAvailableRuleImpl {
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[AvroSchemaFor.type].methods.collect {
-        case method if method.value.isImplicit => method.value.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
 
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =

@@ -42,9 +42,9 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                 case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int, String]: $e")
               }
 
-              val fieldsP1 = ccIntInt.primaryConstructor.parameters.flatten.toList
-              val fieldsP2 = ccStringInt.primaryConstructor.parameters.flatten.toList
-              val fieldsP3 = ccIntString.primaryConstructor.parameters.flatten.toList
+              val fieldsP1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsP2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsP3 = ccIntString.primaryConstructor.totalParameters.flatten.toList
 
               val leftFieldSet = scala.collection.mutable.Set.empty[String]
               val rightFieldSet = scala.collection.mutable.Set.empty[String]
@@ -109,8 +109,12 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                         (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
                       }
                     }
-                    caseClass.primaryConstructor(mappedFields.toMap) match {
-                      case Right(expr) => MIO.pure(expr)
+                    caseClass.primaryConstructor.fold(
+                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                      onTypes = _ => Map.empty,
+                      onValues = _ => mappedFields.toMap
+                    ) match {
+                      case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any, Any]]])
                       case Left(e)     => MIO.fail(new RuntimeException(s"Cannot construct bimap result: $e"))
                     }
                   }
@@ -324,8 +328,12 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor(fieldExprs.toMap) match {
-          case Right(constructExpr) => constructExpr.upcast[Any]
+        caseClass.primaryConstructor.fold(
+          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          onTypes = _ => Map.empty,
+          onValues = _ => fieldExprs.toMap
+        ) match {
+          case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
             throw new RuntimeException(s"Cannot construct bitraversed result: $error")
         }
@@ -369,9 +377,9 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
         import ch1.Underlying as C1; import ch2.Underlying as C2; import ch3.Underlying as C3
         (CaseClass.parse[C1].toEither, CaseClass.parse[C2].toEither, CaseClass.parse[C3].toEither) match {
           case (Right(cc1), Right(cc2), Right(cc3)) =>
-            val f1 = cc1.primaryConstructor.parameters.flatten.toList
-            val f2 = cc2.primaryConstructor.parameters.flatten.toList
-            val f3 = cc3.primaryConstructor.parameters.flatten.toList
+            val f1 = cc1.primaryConstructor.totalParameters.flatten.toList
+            val f2 = cc2.primaryConstructor.totalParameters.flatten.toList
+            val f3 = cc3.primaryConstructor.totalParameters.flatten.toList
             val left = scala.collection.mutable.Set.empty[String]
             val right = scala.collection.mutable.Set.empty[String]
             f1.zip(f2).zip(f3).foreach { case (((n, p1), (_, p2)), (_, p3)) =>
@@ -410,8 +418,12 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                         (fn, Expr.quote(Expr.splice(gExpr)(Expr.splice(fe.upcast[Any])).asInstanceOf[Field]).as_??)
                       else (fn, fe.as_??)
                     }
-                    cc.primaryConstructor(mapped.toMap) match {
-                      case Right(e) => MIO.pure(e.upcast[F[Any, Any]])
+                    cc.primaryConstructor.fold(
+                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                      onTypes = _ => Map.empty,
+                      onValues = _ => mapped.toMap
+                    ) match {
+                      case Right(e) => MIO.pure(e.value.asInstanceOf[Expr[F[Any, Any]]])
                       case Left(e)  => MIO.fail(new RuntimeException(s"Cannot construct $cn: $e"))
                     }
                 }
@@ -555,8 +567,12 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                             (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
                           }
                         }
-                        cc.primaryConstructor(fieldExprs.toMap) match {
-                          case Right(e) => e.upcast[Any]
+                        cc.primaryConstructor.fold(
+                          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                          onTypes = _ => Map.empty,
+                          onValues = _ => fieldExprs.toMap
+                        ) match {
+                          case Right(e) => e.value.asInstanceOf[Expr[Any]]
                           case Left(e)  => throw new RuntimeException(s"Cannot construct $cn: $e")
                         }
                       }
