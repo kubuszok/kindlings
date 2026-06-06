@@ -1,6 +1,6 @@
 package hearth.kindlings.catstaglessderivation
 
-import cats.tagless.{FunctorK, InvariantK, ContravariantK, SemigroupalK}
+import cats.tagless.{ContravariantK, FunctorK, InvariantK, SemigroupalK}
 import cats.tagless.aop.Instrument
 
 object Scala2TraitExamples {

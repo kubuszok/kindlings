@@ -562,6 +562,9 @@ lazy val tapirSchemaDerivation = projectMatrix
   )
   .dependsOn(circeDerivation % Test)
   .dependsOn(jsoniterDerivation % Test)
+  .settings(
+    Test / scalacOptions += "-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe"
+  )
 
 lazy val refinedIntegration = projectMatrix
   .in(file("refined-integration"))

@@ -38,6 +38,7 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
       case Some(configExpr) =>
         ctx.JsonSchemaConfig.register(new ctx.JsonSchemaConfig {
           def libraryName: String = "jsoniter-scala"
+          def configClassName: String = "hearth.kindlings.jsoniterderivation.JsoniterConfig"
           def configType: UntypedType = UntypedType.fromTyped[JsoniterConfig]
 
           def resolveFieldName(param: Parameter, scalaName: String): Expr[String] = {
