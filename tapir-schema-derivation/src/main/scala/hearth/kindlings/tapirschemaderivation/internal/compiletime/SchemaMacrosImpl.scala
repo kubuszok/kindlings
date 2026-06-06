@@ -147,11 +147,6 @@ trait SchemaMacrosImpl
       }
   }
 
-  // Private sealed trait used as a phantom type parameter for UntypedType.toTyped
-  // when probing PreferSchemaConfig[X]. This ensures no other Type[ConfigTypeWitness]
-  // exists in implicit scope to conflict with our locally constructed one.
-  sealed private trait ConfigTypeWitness
-
   private def resolveJsonConfig(macroName: String): JsonSchemaConfig =
     JsonSchemaConfig.all match {
       case Nil =>
@@ -163,22 +158,41 @@ trait SchemaMacrosImpl
         )
       case List(single) => single
       case multiple     =>
-        // Multiple configs found — try to disambiguate using PreferSchemaConfig[X]
+        // Multiple configs found — try to disambiguate using PreferSchemaConfig[X].
+        // Build the search type fresh from the CURRENT expansion context using
+        // provider.freshConfigType(this) which recomputes UntypedType without caching.
+        // Try scalac setting first: -Xmacro-settings:tapirSchemaDerivation.preferConfig=circe
+        // Then fall back to implicit PreferSchemaConfig[X]
+        val preferredLib = for {
+          data <- Environment.typedSettings.toOption
+          moduleSettings <- data.get(derivationSettingsNamespace)
+          preferData <- moduleSettings.get("preferConfig")
+          libName <- preferData.asString
+        } yield libName
         val ctor = TsTypes.PreferSchemaConfigCtor
-        val preferred = multiple.filter { provider =>
-          // Build Type[PreferSchemaConfig[ConfigType]] where ConfigType is the provider's config type.
-          // ConfigTypeWitness is a phantom — the actual compiler type comes from provider.configType.
-          implicit val cfgType: Type[ConfigTypeWitness] = UntypedType.toTyped[ConfigTypeWitness](provider.configType)
-          implicit val pscType: Type[PreferSchemaConfig[ConfigTypeWitness]] = ctor[ConfigTypeWitness]
-          Expr.summonImplicit[PreferSchemaConfig[ConfigTypeWitness]].isDefined
+        val byImplicit = multiple.filter { provider =>
+          val freshCfgType = provider.freshConfigType(this)
+          val cfgExistential = UntypedType.as_??(freshCfgType)
+          import cfgExistential.Underlying as CfgT
+          implicit val pscType: Type[PreferSchemaConfig[CfgT]] = ctor[CfgT]
+          Expr.summonImplicit[PreferSchemaConfig[CfgT]].isDefined
         }
+        val preferred =
+          if (byImplicit.nonEmpty) byImplicit
+          else
+            preferredLib match {
+              case Some(libName) => multiple.filter(_.libraryName == libName)
+              case None          => Nil
+            }
         preferred match {
           case List(single) => single
           case Nil          =>
             val libs = multiple.map(_.libraryName).mkString(", ")
             Environment.reportErrorAndAbort(
               s"$macroName: Multiple JSON library configurations found: $libs.\n" +
-                "Add an implicit PreferSchemaConfig to select which one to use for the schema, e.g.:\n" +
+                "Disambiguate by adding a scalac setting:\n" +
+                s"  scalacOptions += \"-Xmacro-settings:$derivationSettingsNamespace.preferConfig=circe\"\n" +
+                "Or add an implicit PreferSchemaConfig in an enclosing object (not class body):\n" +
                 multiple
                   .map(p => s"  implicit val prefer: PreferSchemaConfig[${p.libraryName}Config] = PreferSchemaConfig()")
                   .mkString("\n")

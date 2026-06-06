@@ -41,6 +41,7 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
       case Some(configExpr) =>
         ctx.JsonSchemaConfig.register(new ctx.JsonSchemaConfig {
           def libraryName: String = "circe"
+          def configClassName: String = "hearth.kindlings.circederivation.Configuration"
           def configType: UntypedType = UntypedType.fromTyped[Configuration]
 
           def resolveFieldName(param: Parameter, scalaName: String): Expr[String] = {

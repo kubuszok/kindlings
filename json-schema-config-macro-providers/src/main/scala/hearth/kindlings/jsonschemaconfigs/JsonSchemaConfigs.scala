@@ -29,6 +29,17 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       */
     def configType: UntypedType
 
+    /** The fully-qualified class name of this library's configuration type. Used to reconstruct a fresh UntypedType
+      * from a new context (avoids stale caching).
+      */
+    def configClassName: String
+
+    /** Recompute configType using a fresh MacroCommons context. ServiceLoader-cached extensions must NOT cache
+      * UntypedType across expansions.
+      */
+    def freshConfigType(freshCtx: MacroCommons & StdExtensions): UntypedType =
+      freshCtx.UntypedType.fromClassName(configClassName).asInstanceOf[UntypedType]
+
     /** Resolve the encoded JSON field name for a case class parameter.
       *
       * The implementation should check library-specific annotations (e.g., `@fieldName`) first, then fall back to the
