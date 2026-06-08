@@ -1,6 +1,9 @@
-# Kindlings
+<p style="text-align: center"><img src="assets/images/logo.svg" alt="Kindlings logo" style="height: 250px" /></p>
 
-Type class derivation that compiles faster, runs faster, and works the same on Scala 2.13 and Scala 3. Drop-in replacements for derivation in Circe, Jsoniter Scala, Avro, and more — built on [Hearth](https://github.com/kubuszok/hearth), powered by macros, free of the trade-offs you've learned to accept.
+<h1 style="margin-bottom:0">Kindlings</h1>
+<h2 style="margin-top:0">Hearth-powered sanely-automatic derivation.</h2>
+
+Type class derivation that compiles faster, runs faster, and works the same on Scala 2.13 and Scala 3. Drop-in replacements for derivation in Circe, Jsoniter Scala, Avro, and more — built with [Hearth](https://scala-hearth.readthedocs.io/), powered by macros, free of the trade-offs you've learned to accept.
 
 ## Quick start
 

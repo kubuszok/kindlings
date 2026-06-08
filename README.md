@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/user-guide/assets/images/logo.svg" alt="Kindlings logo" height="250px" /></p>
+
 # Kindlings
 
 Type class derivation that compiles faster, runs faster, and works the same on Scala 2.13 and Scala 3. Drop-in replacements for derivation in Circe, Jsoniter Scala, Avro, and more — built on Hearth, powered by macros, free of the trade-offs you've learned to accept.

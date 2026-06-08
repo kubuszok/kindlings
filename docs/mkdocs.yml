@@ -48,29 +48,30 @@ theme:
     code: Fira Code
   icon:
     repo: fontawesome/brands/github
+  logo: assets/images/logo.svg
 
 nav:
   - "Welcome": "index.md"
   - "Modules":
-    - "Avro": "avro-derivation.md"
-    - "Cats": "cats-derivation.md"
-    - "Circe": "circe-derivation.md"
-    - "Diff": "diff-derivation.md"
-    - "FastShowPretty": "fast-show-pretty.md"
-    - "Jsoniter Scala": "jsoniter-derivation.md"
-    - "PureConfig": "pureconfig-derivation.md"
-    - "ScalaCheck": "scalacheck-derivation.md"
-    - "sconfig (HOCON)": "sconfig-derivation.md"
-    - "Tapir Schema": "tapir-schema-derivation.md"
-    - "UBJson": "ubjson-derivation.md"
-    - "XML": "xml-derivation.md"
-    - "YAML": "yaml-derivation.md"
+      - "Avro": "avro-derivation.md"
+      - "Cats": "cats-derivation.md"
+      - "Circe": "circe-derivation.md"
+      - "Diff": "diff-derivation.md"
+      - "FastShowPretty": "fast-show-pretty.md"
+      - "Jsoniter Scala": "jsoniter-derivation.md"
+      - "PureConfig": "pureconfig-derivation.md"
+      - "ScalaCheck": "scalacheck-derivation.md"
+      - "sconfig (HOCON)": "sconfig-derivation.md"
+      - "Tapir Schema": "tapir-schema-derivation.md"
+      - "UBJson": "ubjson-derivation.md"
+      - "XML": "xml-derivation.md"
+      - "YAML": "yaml-derivation.md"
   - "Integration Modules":
-    - "Cats Collections": "cats-integration.md"
-    - "Iron": "iron-integration.md"
-    - "Refined": "refined-integration.md"
+      - "Cats Collections": "cats-integration.md"
+      - "Iron": "iron-integration.md"
+      - "Refined": "refined-integration.md"
   - "Extra":
-    - "Jsoniter JSON": "jsoniter-json.md"
+      - "Jsoniter JSON": "jsoniter-json.md"
   - "Debugging & Diagnostics": "debugging.md"
   - "Feature Parity": "feature-parity.md"
   - "FAQ": "faq.md"
@@ -98,7 +99,7 @@ plugins:
 
 copyright: |
   <div style="color: var(--md-footer-fg-color--lighter)">
-  Copyright &copy; 2025-2026, <a href="https://kubuszok.com" target="_blank" rel="noopener">Kubuszok.com</a>.<br />
+  Copyright &copy; 2026, <a href="https://kubuszok.com" target="_blank" rel="noopener">Kubuszok.com</a>.<br />
   Kindlings is FOSS licensed under Apache 2.0<br />
   <br />
   Documentation made with <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a>, <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">Material for MkDocs</a> and <a href="https://mkdocs-macros-plugin.readthedocs.io/" target="_blank" rel="noopener">Mkdocs-Macros</a>, hosted on <a href="https://readthedocs.org/" target="_blank" rel="noopener">Read the Docs</a>
