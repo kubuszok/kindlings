@@ -16,9 +16,13 @@ the Kindlings release.
 
 ## Files
 
-- `scala3-temurin17.json` / `scala3-temurin17.log` — full `benchmarks3/Jmh/run` results (Scala 3)
-- `scala213-temurin17.json` / `scala213-temurin17.log` — full `benchmarks/Jmh/run` results (Scala 2.13)
+- `scala3-temurin17.json` — full `benchmarks3/Jmh/run` results (Scala 3)
+- `scala213-temurin17.json` — full `benchmarks/Jmh/run` results (Scala 2.13)
 - `benchmark-list-scala3.txt` / `benchmark-list-scala213.txt` — `Jmh/run -l` listings
+
+The JSON files contain per-iteration raw data. Six `original*` benchmarks failed
+(broken baselines, matching the `—` cells in the docs): jsoniter-scala's own
+SimpleADT/Event read codecs on both Scala versions, and avro4s semi-auto on 2.13.
 
 Note: `docs/user-guide/cats-derivation.md` and `feature-parity.md` historically used
 GraalVM CE 25 numbers; as of this run all docs are standardized on temurin 17, so their
