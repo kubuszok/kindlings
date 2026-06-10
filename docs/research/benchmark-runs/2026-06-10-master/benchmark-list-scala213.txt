@@ -1,0 +1,309 @@
+[info] scalafmt: Formatting 31 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/benchmarks)...
+[info] scalafmt: Formatting 5 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/scalacheckDerivation)...
+[info] scalafmt: Formatting 2 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/tapirSchemaDerivation)...
+[info] scalafmt: Formatting 5 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/xmlDerivation)...
+[info] scalafmt: Formatting 2 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/jsonSchemaConfigMacroProviders)...
+[info] scalafmt: Formatting 4 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/catsDerivation)...
+[info] scalafmt: Formatting 1 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/derivationCommons)...
+[info] scalafmt: Formatting 2 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/ubjsonDerivation)...
+[info] scalafmt: Formatting 2 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/fastShowPretty)...
+[info] scalafmt: Formatting 6 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/sconfigDerivation)...
+[info] scalafmt: Formatting 8 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/yamlDerivation)...
+[info] scalafmt: Formatting 4 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/jsoniterDerivation)...
+[info] scalafmt: Formatting 5 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/avroDerivation)...
+[info] scalafmt: Formatting 8 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/circeDerivation)...
+[info] scalafmt: Formatting 5 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/pureconfigDerivation)...
+[info] compiling 2 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/json-schema-config-macro-providers/target/jvm-2.13/classes ...
+[info] scalafmt: Formatting 2 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/derivationCommons)...
+[info] scalafmt: Formatting 22 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/fastShowPretty)...
+[info] compiling 2 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/derivation-commons/target/jvm-2.13/classes ...
+[info] scalafmt: Formatting 46 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/scalacheckDerivation)...
+[info] scalafmt: Formatting 20 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/tapirSchemaDerivation)...
+[info] scalafmt: Formatting 39 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/ubjsonDerivation)...
+[info] scalafmt: Formatting 54 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/xmlDerivation)...
+[info] scalafmt: Formatting 49 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/sconfigDerivation)...
+[info] scalafmt: Formatting 46 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/pureconfigDerivation)...
+[info] scalafmt: Formatting 47 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/yamlDerivation)...
+[info] scalafmt: Formatting 140 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/catsDerivation)...
+[info] scalafmt: Formatting 47 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/circeDerivation)...
+[info] scalafmt: Formatting 45 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/jsoniterDerivation)...
+[info] scalafmt: Formatting 80 Scala sources (/Users/dev/Workspaces/GitHub/kindlings/.sbt/matrix/avroDerivation)...
+[info] done compiling
+[info] done compiling
+[info] compiling 39 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/ubjson-derivation/target/jvm-2.13/classes ...
+[info] compiling 22 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/fast-show-pretty/target/jvm-2.13/classes ...
+[info] compiling 80 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/avro-derivation/target/jvm-2.13/classes ...
+[info] compiling 20 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/tapir-schema-derivation/target/jvm-2.13/classes ...
+[info] compiling 46 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/scalacheck-derivation/target/jvm-2.13/classes ...
+[info] compiling 46 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/pureconfig-derivation/target/jvm-2.13/classes ...
+[info] compiling 54 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/xml-derivation/target/jvm-2.13/classes ...
+[info] compiling 45 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/jsoniter-derivation/target/jvm-2.13/classes ...
+[info] compiling 47 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/yaml-derivation/target/jvm-2.13/classes ...
+[info] compiling 49 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/sconfig-derivation/target/jvm-2.13/classes ...
+[info] compiling 47 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/circe-derivation/target/jvm-2.13/classes ...
+[info] compiling 140 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/cats-derivation/target/jvm-2.13/classes ...
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] done compiling
+[info] Wrote /Users/dev/Workspaces/GitHub/kindlings/circe-derivation/target/jvm-2.13/resource_managed/main/META-INF/services/hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigExtension (1 providers)
+[info] done compiling
+[info] Wrote /Users/dev/Workspaces/GitHub/kindlings/jsoniter-derivation/target/jvm-2.13/resource_managed/main/META-INF/services/hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigExtension (1 providers)
+[info] done compiling
+[info] compiling 31 Scala sources to /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/classes ...
+[warn] /Users/dev/Workspaces/GitHub/kindlings/benchmarks/src/main/scala-2/hearth/kindlings/benchmarks/KindlingsScalacheckInstances.scala:16:67: local method genCaseClass_Foo$macro$1 in value simpleADTArbitrary is never used
+[warn]   val simpleADTArbitrary: Arbitrary[SimpleADT] = Arbitrary.derived[SimpleADT]
+[warn]                                                                   ^
+[warn] /Users/dev/Workspaces/GitHub/kindlings/benchmarks/src/main/scala-2/hearth/kindlings/benchmarks/KindlingsScalacheckInstances.scala:17:55: local method cogenCaseClass_Foo$macro$1 in value simpleADTCogen is never used
+[warn]   val simpleADTCogen: Cogen[SimpleADT] = Cogen.derived[SimpleADT]
+[warn]                                                       ^
+[warn] /Users/dev/Workspaces/GitHub/kindlings/benchmarks/src/main/scala/hearth/kindlings/benchmarks/FactoryInstances.scala:5:27: Unused import
+[warn] import io.circe.{Encoder, Json}
+[warn]                           ^
+[warn] /Users/dev/Workspaces/GitHub/kindlings/benchmarks/src/main/scala/hearth/kindlings/benchmarks/TypeClassFactories.scala:4:21: Unused import
+[warn] import cats.kernel.{Eq, Hash}
+[warn]                     ^
+[warn] four warnings found
+[info] done compiling
+[info] running (fork) org.openjdk.jmh.generators.bytecode.JmhBytecodeGenerator /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/classes /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/src_managed/jmh /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/resource_managed/jmh default
+[info] Processing 263 classes from /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/classes with "reflection" generator
+[info] Writing out Java source to /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/src_managed/jmh and resources to /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/resource_managed/jmh
+[info] compiling 387 Java sources to /Users/dev/Workspaces/GitHub/kindlings/benchmarks/target/jvm-2.13/classes ...
+[info] done compiling
+[info] running (fork) org.openjdk.jmh.Main -l
+[info] Benchmarks: 
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCodecReadBenchmark.anonSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCodecReadBenchmark.factorySimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCodecWriteBenchmark.anonSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCodecWriteBenchmark.factorySimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonCodecCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonHashCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.anonShowCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryCodecCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryHashCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaCreationBenchmark.factoryShowCreation
+[info] hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.anonPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.anonSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.factoryPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaEncoderBenchmark.factorySimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaFunctorBenchmark.anonMapSimpleCCBox
+[info] hearth.kindlings.benchmarks.AnonVsLambdaFunctorBenchmark.factoryMapSimpleCCBox
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonEqvPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonEqvSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonHashPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.anonHashSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryEqvPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryEqvSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryHashPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaHashBenchmark.factoryHashSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonEvent
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.anonSimpleCC
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factoryEvent
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factoryPerson
+[info] hearth.kindlings.benchmarks.AnonVsLambdaShowBenchmark.factorySimpleCC
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.AvroDecodeBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.AvroEncodeBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CatsEmptyBenchmark.kindlingsEmpty
+[info] hearth.kindlings.benchmarks.CatsEmptyBenchmark.originalSemiAutoEmpty
+[info] hearth.kindlings.benchmarks.CatsEqBenchmark.kindlingsSimpleCCEqual
+[info] hearth.kindlings.benchmarks.CatsEqBenchmark.kindlingsSimpleCCNotEqual
+[info] hearth.kindlings.benchmarks.CatsEqBenchmark.originalAutoSimpleCCEqual
+[info] hearth.kindlings.benchmarks.CatsEqBenchmark.originalSemiAutoSimpleCCEqual
+[info] hearth.kindlings.benchmarks.CatsFoldableBenchmark.kindlingsSimpleCCBoxFoldLeft
+[info] hearth.kindlings.benchmarks.CatsFunctorBenchmark.kindlingsSimpleCCBoxMap
+[info] hearth.kindlings.benchmarks.CatsFunctorBenchmark.originalSemiAutoSimpleCCBoxMap
+[info] hearth.kindlings.benchmarks.CatsHashBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.CatsHashBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CatsHashBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CatsMonoidBenchmark.kindlingsCombine
+[info] hearth.kindlings.benchmarks.CatsMonoidBenchmark.kindlingsEmpty
+[info] hearth.kindlings.benchmarks.CatsMonoidBenchmark.originalSemiAutoCombine
+[info] hearth.kindlings.benchmarks.CatsMonoidBenchmark.originalSemiAutoEmpty
+[info] hearth.kindlings.benchmarks.CatsOrderBenchmark.kindlingsSimpleCCCompare
+[info] hearth.kindlings.benchmarks.CatsOrderBenchmark.originalAutoSimpleCCCompare
+[info] hearth.kindlings.benchmarks.CatsOrderBenchmark.originalSemiAutoSimpleCCCompare
+[info] hearth.kindlings.benchmarks.CatsSemigroupBenchmark.kindlingsCombine
+[info] hearth.kindlings.benchmarks.CatsSemigroupBenchmark.originalSemiAutoCombine
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalAutoEvent
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CatsShowBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsFastShowPrettyPerson
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsFastShowPrettySimpleCC
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsShowPerson
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsShowPrettyPerson
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsShowPrettySimpleCC
+[info] hearth.kindlings.benchmarks.CatsShowPrettyBenchmark.kindlingsShowSimpleCC
+[info] hearth.kindlings.benchmarks.CatsTraverseBenchmark.kindlingsSimpleCCBoxTraverse
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsNoBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsNoBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsNoBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.kindlingsNoBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalNoBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalNoBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalNoBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterDecodeBenchmark.originalNoBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsNoBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsNoBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsNoBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.kindlingsNoBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalNoBoosterEvent
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalNoBoosterPerson
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalNoBoosterSimpleADT
+[info] hearth.kindlings.benchmarks.CirceBoosterEncodeBenchmark.originalNoBoosterSimpleCC
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsAutoEvent
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsAutoPerson
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsSemiAutoEvent
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsSemiAutoPerson
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.kindlingsSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalAutoEvent
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceDecodeBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsAutoEvent
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsAutoPerson
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsSemiAutoEvent
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsSemiAutoPerson
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.kindlingsSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalAutoEvent
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.CirceEncodeBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.FastShowPrettyBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.FastShowPrettyBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.FastShowPrettyBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.FastShowPrettyBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsAutoSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsSemiAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsSemiAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.kindlingsSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.originalSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterReadBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsAutoSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsSemiAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsSemiAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.kindlingsSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.originalSemiAutoSimpleADT
+[info] hearth.kindlings.benchmarks.JsoniterWriteBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.PureconfigReadBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.PureconfigReadBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.PureconfigReadBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.PureconfigReadBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.PureconfigWriteBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.PureconfigWriteBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.PureconfigWriteBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.PureconfigWriteBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.ScalacheckArbitraryBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.ScalacheckArbitraryBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.ScalacheckArbitraryBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.ScalacheckShrinkBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.ScalacheckShrinkBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.SconfigReadBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.SconfigReadBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.SconfigReadBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.SconfigReadBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.SconfigWriteBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.SconfigWriteBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.SconfigWriteBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.SconfigWriteBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalAutoEvent
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalAutoPerson
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalAutoSimpleCC
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalSemiAutoEvent
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalSemiAutoPerson
+[info] hearth.kindlings.benchmarks.TapirSchemaBenchmark.originalSemiAutoSimpleCC
+[info] hearth.kindlings.benchmarks.UbjsonReadBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.UbjsonReadBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.UbjsonReadBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.UbjsonReadBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.UbjsonWriteBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.UbjsonWriteBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.UbjsonWriteBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.UbjsonWriteBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.XmlDecodeBenchmark.kindlingsAddress
+[info] hearth.kindlings.benchmarks.XmlDecodeBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.XmlEncodeBenchmark.kindlingsAddress
+[info] hearth.kindlings.benchmarks.XmlEncodeBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.YamlDecodeBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.YamlDecodeBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.YamlDecodeBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.YamlDecodeBenchmark.kindlingsSimpleCC
+[info] hearth.kindlings.benchmarks.YamlEncodeBenchmark.kindlingsEvent
+[info] hearth.kindlings.benchmarks.YamlEncodeBenchmark.kindlingsPerson
+[info] hearth.kindlings.benchmarks.YamlEncodeBenchmark.kindlingsSimpleADT
+[info] hearth.kindlings.benchmarks.YamlEncodeBenchmark.kindlingsSimpleCC
+[success] elapsed time: 43 s
+[0J

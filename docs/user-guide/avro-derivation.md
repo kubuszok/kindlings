@@ -363,24 +363,24 @@ This enables `LogDerivation` implicits for `AvroSchemaFor`, `AvroEncoder`, and `
 All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 !!! note
-    Kindlings is **3-5x faster** than avro4s across all benchmarks — both simple and complex nested types.
+    Kindlings is **2-4x faster** than avro4s across all benchmarks — both simple and complex nested types.
 
 #### Encode
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 281.7M | — | 45.0M | **6.3x faster** |
-| SimpleCC | 3 | 270.5M | 49.3M | 48.1M | **5.5x faster** |
-| Person | 2.13 | 19.6M | — | 4.6M | **4.3x faster** |
-| Person | 3 | 18.6M | 5.7M | 5.7M | **3.3x faster** |
+| SimpleCC | 2.13 | 139M | — | 44.7M | **3.1x faster** |
+| SimpleCC | 3 | 145M | 45.1M | 48.3M | **3.0x faster** |
+| Person | 2.13 | 15.3M | — | 4.8M | **3.2x faster** |
+| Person | 3 | 13.8M | 6.7M | 6.5M | **2.1x faster** |
 
 #### Decode
 
 | Type | Scala | Kindlings | Original semi | Original auto | vs best original |
 |------|-------|-----------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 425.3M | — | 17.6M | **24.2x faster** |
-| SimpleCC | 3 | 474.1M | 23.2M | 42.9M | **11.1x faster** |
-| Person | 2.13 | 14.4M | — | 3.5M | **4.1x faster** |
-| Person | 3 | 13.8M | 3.2M | 4.1M | **3.4x faster** |
+| SimpleCC | 2.13 | 86.6M | — | 20.8M | **4.2x faster** |
+| SimpleCC | 3 | 84.6M | 18.7M | 42.0M | **2.0x faster** |
+| Person | 2.13 | 6.0M | — | 2.8M | **2.2x faster** |
+| Person | 3 | 6.5M | 2.6M | 3.2M | **2.0x faster** |
 
 Note: Kindlings semi-automatic and automatic derivation produce identical performance -- this is the "sanely-automatic" design.
