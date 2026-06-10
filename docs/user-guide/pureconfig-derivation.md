@@ -297,21 +297,21 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 | Type | Scala | Kindlings | Original semi | vs original |
 |------|-------|-----------|--------------|------------|
-| SimpleCC | 2.13 | 11.0M | 1.2M | **9.2x faster** |
-| SimpleCC | 3 | 10.9M | 1.6M | **6.8x faster** |
-| Person | 2.13 | 1.2M | 200.4K | **6.0x faster** |
-| Person | 3 | 1.2M | 247.3K | **4.9x faster** |
+| SimpleCC | 2.13 | 10.5M | 1.4M | **7.6x faster** |
+| SimpleCC | 3 | 11.4M | 1.1M | **10x faster** |
+| Person | 2.13 | 1.1M | 218.1K | **5.1x faster** |
+| Person | 3 | 1.2M | 207.3K | **5.5x faster** |
 
 #### Read
 
 | Type | Scala | Kindlings | Original semi | vs original |
 |------|-------|-----------|--------------|------------|
-| SimpleCC | 2.13 | 16.8M | 1.4M | **12.0x faster** |
-| SimpleCC | 3 | 11.9M | 1.4M | **8.5x faster** |
-| Person | 2.13 | 999.8K | 208.9K | **4.8x faster** |
-| Person | 3 | 924.8K | 200.8K | **4.6x faster** |
+| SimpleCC | 2.13 | 15.6M | 1.4M | **11x faster** |
+| SimpleCC | 3 | 17.3M | 959.7K | **18x faster** |
+| Person | 2.13 | 783.5K | 214.2K | **3.7x faster** |
+| Person | 3 | 760.1K | 173.6K | **4.4x faster** |
 
 !!! note
-    Kindlings is 4.6--12x faster across the board, for both reads and writes, on both Scala versions and type complexities.
+    Kindlings is 3.7--18x faster across the board, for both reads and writes, on both Scala versions and type complexities.
 
 Note: Kindlings semi-automatic and automatic derivation produce identical performance -- this is the "sanely-automatic" design.

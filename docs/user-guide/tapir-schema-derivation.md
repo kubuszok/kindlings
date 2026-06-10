@@ -253,6 +253,6 @@ Tapir Schema derivation generates a runtime `Schema[A]` value. At runtime, acces
 
 | Benchmark | Kindlings | Tapir built-in |
 |-----------|-----------|---------------|
-| Schema field access | ~3.7B ops/s | ~3.7B ops/s |
+| Schema field access | ~3B ops/s | ~3B ops/s |
 
 The performance is identical because both approaches produce the same runtime representation -- the work is done entirely at compile time.
