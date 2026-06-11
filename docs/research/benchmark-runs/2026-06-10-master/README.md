@@ -18,6 +18,12 @@ the Kindlings release.
 
 - `scala3-temurin17.json` — full `benchmarks3/Jmh/run` results (Scala 3)
 - `scala213-temurin17.json` — full `benchmarks/Jmh/run` results (Scala 2.13)
+- `rerun-scala3.json` / `rerun-scala213.json` — 5-fork re-run (`-f 5 -wi 5 -i 10`) of
+  families that were unstable in the 2-fork run: Cats Eq, Jsoniter Read/Write
+  (SimpleCC/Person/Event), Avro (SimpleCC/Person), Circe booster Encode (Person/Event).
+  **These supersede the full-run values for those benchmarks** — the 2-fork run had
+  several fork-bimodal results (e.g. Avro encode SimpleCC measured ~140M there vs a
+  stable ~270M here).
 - `benchmark-list-scala3.txt` / `benchmark-list-scala213.txt` — `Jmh/run -l` listings
 
 The JSON files contain per-iteration raw data. Six `original*` benchmarks failed

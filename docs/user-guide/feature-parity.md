@@ -180,7 +180,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 |---|---|---|---|---|
 | Show (SimpleCC) | 2.13 | 48.1M | 18.0M | **2.7x faster** |
 | Show (SimpleCC) | 3 | 47.8M | 14.3M | **3.3x faster** |
-| Eq (SimpleCC) | 2.13 | 96.9M | 43.2M | **2.2x faster** |
+| Eq (SimpleCC) | 2.13 | 97.4M | 46.0M | **2.1x faster** |
 | Hash (SimpleCC) | 2.13 | 264M | 37.4M | **7.1x faster** |
 | Hash (SimpleCC) | 3 | 234M | 53.4M | **4.4x faster** |
 | Semigroup (IntPair) | 2.13 | 508M | 71.6M | **7.1x faster** |

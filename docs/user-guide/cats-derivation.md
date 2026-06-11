@@ -333,8 +333,8 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17, 2 for
 
 | Type | Scala | Kindlings | kittens best | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| SimpleCC (eq) | 2.13 | 96.9M | 43.2M | **2.2x faster** |
-| SimpleCC (eq) | 3 | 84.7M | 111M | 0.76x |
+| SimpleCC (eq) | 2.13 | 97.4M | 46.0M | **2.1x faster** |
+| SimpleCC (eq) | 3 | 83.2M | 85.3M | **~tied** |
 
 #### Hash
 

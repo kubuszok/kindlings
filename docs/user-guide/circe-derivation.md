@@ -264,10 +264,10 @@ The booster is an optional add-on — Kindlings works with standard Circe parsin
 | SimpleCC | 3 | **12.1M** | 7.6M | 8.0M | 6.6M |
 | SimpleADT | 2.13 | **13.2M** | 7.1M | 7.6M | 6.4M |
 | SimpleADT | 3 | **9.7M** | 8.8M | 7.3M | 7.4M |
-| Person | 2.13 | **1.3M** | 1.0M | 962.8K | 915.5K |
-| Person | 3 | **971.2K** | 781.2K | 1.0M | 895.9K |
-| Event | 2.13 | 737.3K | 947.3K | 833.0K | 774.6K |
-| Event | 3 | **864.6K** | 656.5K | 876.6K | 764.3K |
+| Person | 2.13 | **1.5M** | 1.4M | 922.5K | 845.8K |
+| Person | 3 | **1.6M** | 1.4M | 1.0M | 917.5K |
+| Event | 2.13 | **1.3M** | 1.1M | 795.0K | 714.9K |
+| Event | 3 | **1.3M** | 1.1M | 872.2K | 768.4K |
 
 #### Decode (bytes/String to domain type)
 
