@@ -361,3 +361,41 @@ No code fix warranted. The gap is within measurement noise (original has ±8% er
 | `encoderInstanceWithSchema` | **WORKS** | Factory for passing schema to encode body |
 | `ValDefsCache` schema caching | **WORKS** | Used to cache nested record schemas in encoder's outer scope |
 | hearth 0.3.0-33-SNAPSHOT | **WORKS** | All tests pass on both Scala 2.13 and 3 |
+
+---
+
+## Round 4: Post-0.3.1 benchmark refresh findings (2026-06-11, hearth 0.3.1)
+
+Investigated during the pre-release benchmark refresh (master @ e0534fe, temurin 17, Apple M4 Pro;
+raw data in `benchmark-runs/2026-06-10-master/`). **No fixes applied — deferred to the
+hearth-0.4.0-targeting branch.**
+
+### Avro Decode regression: 425M → 57M ops/s (SimpleCC), 14.4M → 6.3M (Person) — REAL
+
+Root cause: commit `c11724a` ("Close gaps", `@avroName`/`@avroAlias` support) replaced
+position-based field access in `AvroDecoderHandleAsCaseClassRule` with per-call name lookup:
+
+- Round 2 codegen: `record.get(<compile-time field index>)` — plain array read.
+- Current codegen: `AvroDerivationUtils.getFieldByNameOrAlias(record, config.transformFieldNames(name), aliases)`
+  per field per decode — `schema.getField(name)` hash lookup, then `record.get(name)` (a second
+  internal lookup), plus a virtual `transformFieldNames` call.
+
+JFR evidence: >50% of in-decode execution samples sit in `getFieldByNameOrAlias` +
+`Schema.RecordSchema.getField` + `GenericData.Record.get(name)`. Allocation is clean (24 B/op).
+The lookup also explains the fork-bimodality (48–72M across forks) — JIT sometimes hoists it.
+
+**Fix strategy (0.4.0)**: emit the compile-time index when no `@avroName`/`@avroAlias`/
+`transformFieldNames` apply (the common case), keeping name lookup only as the annotated
+fallback; or resolve name → position once per schema identity. Should restore ~425M.
+
+### Jsoniter Read SimpleCC "0.92x on 2.13" — NOT a regression
+
+- `DecoderHandleAsCaseClassRule` is unchanged since the 1.04x-faster Round 2/3 measurement;
+  only compile-time entrypoint code (`derive` → `derived`, config validation) changed.
+- Both codecs are fork-bimodal: a fresh JFR run scored Kindlings 34.0M vs original
+  24.7M ±34.7M (the original lost that time). The 5-fork re-run mean (0.92x) is dragged by
+  one cold fork (23.0M among 32.4–34.6M).
+- Structural note from the profiles: Kindlings decodes through factory anon class → lambda →
+  def-cached `codec_decode`/`decode` methods vs jsoniter-scala's single anon class with one
+  private method. Both inline fully on a good JIT day; the deeper chain is slightly more
+  sensitive to inlining budget. Within the "at parity" target — no fix warranted.
