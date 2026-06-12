@@ -87,12 +87,8 @@ trait ApplyKMacrosImpl extends FunctorKMacrosImpl with SemigroupalKMacrosImpl { 
     val isTrait = AnonymousInstance.parse(using AlgWCtor1Type).toEither.isRight
 
     if (!isCaseClass && !isTrait) {
-      MIO.fail(
-        new RuntimeException(
-          s"Cannot derive ApplyK for ${ctx.applyKAlgType.prettyPrint}: " +
-            "type is neither a case class nor a trait"
-        )
-      )
+      val err = CatsTaglessDerivationError.NotCaseClassOrTrait("ApplyK", ctx.applyKAlgType.prettyPrint)
+      Log.error(err.message) >> MIO.fail(err)
     } else if (isCaseClass) {
       buildApplyKCaseClassExpr[Alg](runSafe).map(identity)
     } else {
@@ -192,19 +188,5 @@ trait ApplyKMacrosImpl extends FunctorKMacrosImpl with SemigroupalKMacrosImpl { 
         )
       }
     }
-  }
-}
-
-sealed private[compiletime] trait ApplyKDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
-  def message: String
-  override def getMessage(): String = message
-}
-private[compiletime] object ApplyKDerivationError {
-  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends ApplyKDerivationError {
-    override def message: String =
-      s"The type $tpeName was not handled by any ApplyK derivation rule:\n${reasons.mkString("\n")}"
   }
 }

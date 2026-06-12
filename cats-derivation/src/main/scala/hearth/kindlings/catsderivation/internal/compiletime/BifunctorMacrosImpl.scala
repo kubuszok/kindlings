@@ -6,7 +6,10 @@ import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
-trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDerivationTimeout {
+trait BifunctorMacrosImpl
+    extends rules.BifunctorCaseClassRuleImpl
+    with CatsDerivationTimeout
+    with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
   final case class BifunctorCaseClassResult[F[_, _]](
@@ -92,40 +95,27 @@ trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDeri
     implicit val FABType: Type[F[A, B]] = FCtor.apply[A, B]
     implicit val FCDType: Type[F[C, D]] = FCtor.apply[C, D]
 
-    val caseClass = CaseClass.parse[F[A, B]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A, B]: $e")
-    }
-    val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+    parseCaseClassMIO[F[A, B]]("F[A, B]").parTuple(parseCaseClassMIO[F[C, D]]("F[C, D]")).flatMap {
+      case (caseClass, caseClassCD) =>
+        val fields = caseClass.caseFieldValuesAt(fabExpr).toList
 
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+        val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
+          import fieldValue.Underlying as Field
+          val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
 
-      if (leftFields.contains(fieldName)) {
-        val mapped: Expr[C] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
-        (fieldName, mapped.as_??)
-      } else if (rightFields.contains(fieldName)) {
-        val mapped: Expr[D] = Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[B]])))
-        (fieldName, mapped.as_??)
-      } else {
-        (fieldName, fieldExpr.as_??)
-      }
-    }
+          if (leftFields.contains(fieldName)) {
+            val mapped: Expr[C] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
+            (fieldName, mapped.as_??)
+          } else if (rightFields.contains(fieldName)) {
+            val mapped: Expr[D] = Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[B]])))
+            (fieldName, mapped.as_??)
+          } else {
+            (fieldName, fieldExpr.as_??)
+          }
+        }
 
-    val caseClassCD = CaseClass.parse[F[C, D]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[C, D]: $e")
-    }
-    caseClassCD.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[C, D]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct bimap result: $error"))
+        constructInstanceFree(caseClassCD.primaryConstructor, "Constructor", "bimap result")(mappedFields.toMap)
+          .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[C, D]]])
     }
   }
 
@@ -185,130 +175,114 @@ trait BifunctorMacrosImpl extends rules.BifunctorCaseClassRuleImpl with CatsDeri
     implicit val FAAType: Type[F[Any, Any]] = FCtor.apply[Any, Any]
     implicit val FCtor1: Type.Ctor2[F] = FCtor
 
-    Enum.parse[F[Any, Any]].toEither match {
-      case Left(reason) =>
-        MIO.fail(new RuntimeException(s"Cannot parse as enum for Bifunctor: $reason"))
-      case Right(enumm) =>
-        val enumProbe1 = Enum.parse(using FCtor.apply[Int, Int].asInstanceOf[Type[Any]]).toEither match {
-          case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[Int,Int] as enum"))
-        }
-        val enumProbe2 = Enum.parse(using FCtor.apply[String, Int].asInstanceOf[Type[Any]]).toEither match {
-          case Right(e) => e
-          case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[String,Int] as enum"))
-        }
-        val enumProbe3 = Enum.parse(using FCtor.apply[Int, String].asInstanceOf[Type[Any]]).toEither match {
-          case Right(e) => e
-          case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[Int,String] as enum"))
-        }
+    parseEnumMIO[F[Any, Any]]("F[Any, Any]").flatMap { enumm =>
+      parseEnumMIO[Any]("F[Int, Int]")(using FCtor.apply[Int, Int].asInstanceOf[Type[Any]])
+        .parTuple(parseEnumMIO[Any]("F[String, Int]")(using FCtor.apply[String, Int].asInstanceOf[Type[Any]]))
+        .parTuple(parseEnumMIO[Any]("F[Int, String]")(using FCtor.apply[Int, String].asInstanceOf[Type[Any]]))
+        .flatMap { case ((enumProbe1, enumProbe2), enumProbe3) =>
+          case class BiChildInfo(leftFields: Set[String], rightFields: Set[String])
 
-        case class BiChildInfo(leftFields: Set[String], rightFields: Set[String])
-
-        val childInfo: Map[String, BiChildInfo] = runSafe {
-          val result = scala.collection.mutable.Map.empty[String, BiChildInfo]
-          val c1 = enumProbe1.directChildren.toList
-          val c2 = enumProbe2.directChildren.toList
-          val c3 = enumProbe3.directChildren.toList
-          c1.zip(c2).zip(c3).foreach { case (((cn, ch1), (_, ch2)), (_, ch3)) =>
-            import ch1.Underlying as C1
-            import ch2.Underlying as C2
-            import ch3.Underlying as C3
-            val cc1 = CaseClass.parse[C1].toEither
-            val cc2 = CaseClass.parse[C2].toEither
-            val cc3 = CaseClass.parse[C3].toEither
-            (cc1, cc2, cc3) match {
-              case (Right(cI), Right(cII), Right(cIII)) =>
-                val f1 = cI.primaryConstructor.totalParameters.flatten.toList
-                val f2 = cII.primaryConstructor.totalParameters.flatten.toList
-                val f3 = cIII.primaryConstructor.totalParameters.flatten.toList
-                val left = scala.collection.mutable.Set.empty[String]
-                val right = scala.collection.mutable.Set.empty[String]
-                f1.zip(f2).zip(f3).foreach { case (((name, p1), (_, p2)), (_, p3)) =>
-                  val t1 = p1.tpe.Underlying
-                  val t2 = p2.tpe.Underlying
-                  val t3 = p3.tpe.Underlying
-                  val firstChanges = !(t1 =:= t2)
-                  val secondChanges = !(t1 =:= t3)
-                  if (firstChanges && !secondChanges) left += name
-                  else if (!firstChanges && secondChanges) right += name
-                }
-                result += (cn -> BiChildInfo(left.toSet, right.toSet))
-              case _ =>
-                result += (cn -> BiChildInfo(Set.empty, Set.empty))
-            }
-          }
-          MIO.pure(result.toMap)
-        }
-
-        import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-
-        def mkBimapBody(
-            fabExpr: Expr[F[Any, Any]],
-            fExpr: Expr[Any => Any],
-            gExpr: Expr[Any => Any]
-        ): Expr[F[Any, Any]] = runSafe {
-          enumm
-            .matchOn[MIO, F[Any, Any]](fabExpr) { matched =>
-              import matched.{value as caseValue, Underlying as CT}
-              val cn = Type[CT].shortName
-              childInfo.get(cn) match {
-                case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
-                case Some(info) =>
-                  CaseClass.parse[CT].toEither match {
-                    case Left(_) =>
-                      MIO.pure(caseValue.upcast[F[Any, Any]])
-                    case Right(cc) =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
-                      if (fields.isEmpty) {
-                        MIO.pure(caseValue.upcast[F[Any, Any]])
-                      } else {
-                        val mapped: List[(String, Expr_??)] = fields.map { case (fn, fv) =>
-                          import fv.Underlying as Field
-                          val fe = fv.value.asInstanceOf[Expr[Field]]
-                          if (info.leftFields.contains(fn)) {
-                            val m: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fe.upcast[Any])))
-                            (fn, Expr.quote(Expr.splice(m).asInstanceOf[Field]).as_??)
-                          } else if (info.rightFields.contains(fn)) {
-                            val m: Expr[Any] = Expr.quote(Expr.splice(gExpr)(Expr.splice(fe.upcast[Any])))
-                            (fn, Expr.quote(Expr.splice(m).asInstanceOf[Field]).as_??)
-                          } else {
-                            (fn, fe.as_??)
-                          }
-                        }
-                        cc.primaryConstructor.fold(
-                          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                          onTypes = _ => Map.empty,
-                          onValues = _ => mapped.toMap
-                        ) match {
-                          case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any, Any]]])
-                          case Left(err)   => MIO.fail(new RuntimeException(s"Cannot construct $cn: $err"))
-                        }
-                      }
+          val childInfo: Map[String, BiChildInfo] = runSafe {
+            val result = scala.collection.mutable.Map.empty[String, BiChildInfo]
+            val c1 = enumProbe1.directChildren.toList
+            val c2 = enumProbe2.directChildren.toList
+            val c3 = enumProbe3.directChildren.toList
+            c1.zip(c2).zip(c3).foreach { case (((cn, ch1), (_, ch2)), (_, ch3)) =>
+              import ch1.Underlying as C1
+              import ch2.Underlying as C2
+              import ch3.Underlying as C3
+              val cc1 = CaseClass.parse[C1].toEither
+              val cc2 = CaseClass.parse[C2].toEither
+              val cc3 = CaseClass.parse[C3].toEither
+              (cc1, cc2, cc3) match {
+                case (Right(cI), Right(cII), Right(cIII)) =>
+                  val f1 = cI.primaryConstructor.totalParameters.flatten.toList
+                  val f2 = cII.primaryConstructor.totalParameters.flatten.toList
+                  val f3 = cIII.primaryConstructor.totalParameters.flatten.toList
+                  val left = scala.collection.mutable.Set.empty[String]
+                  val right = scala.collection.mutable.Set.empty[String]
+                  f1.zip(f2).zip(f3).foreach { case (((name, p1), (_, p2)), (_, p3)) =>
+                    val t1 = p1.tpe.Underlying
+                    val t2 = p2.tpe.Underlying
+                    val t3 = p3.tpe.Underlying
+                    val firstChanges = !(t1 =:= t2)
+                    val secondChanges = !(t1 =:= t3)
+                    if (firstChanges && !secondChanges) left += name
+                    else if (!firstChanges && secondChanges) right += name
                   }
+                  result += (cn -> BiChildInfo(left.toSet, right.toSet))
+                case _ =>
+                  result += (cn -> BiChildInfo(Set.empty, Set.empty))
               }
             }
-            .flatMap {
-              case Some(r) => MIO.pure(r)
-              case None    => MIO.fail(new RuntimeException("No children"))
-            }
-        }
+            MIO.pure(result.toMap)
+          }
 
-        MIO.pure {
-          Expr.quote {
-            CatsDerivationFactories.bifunctorInstance[F] {
-              (
-                  fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
-                  f: CatsDerivationFactories.W1 => CatsDerivationFactories.W3,
-                  g: CatsDerivationFactories.W2 => CatsDerivationFactories.W4
-              ) =>
-                val _ = fab; val _ = f; val _ = g
-                val r$0: F[Any, Any] = Expr.splice {
-                  mkBimapBody(
-                    Expr.quote(fab.asInstanceOf[F[Any, Any]]),
-                    Expr.quote(f.asInstanceOf[Any => Any]),
-                    Expr.quote(g.asInstanceOf[Any => Any])
-                  )
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+
+          def mkBimapBody(
+              fabExpr: Expr[F[Any, Any]],
+              fExpr: Expr[Any => Any],
+              gExpr: Expr[Any => Any]
+          ): Expr[F[Any, Any]] = runSafe {
+            enumm
+              .matchOn[MIO, F[Any, Any]](fabExpr) { matched =>
+                import matched.{value as caseValue, Underlying as CT}
+                val cn = Type[CT].shortName
+                childInfo.get(cn) match {
+                  case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Bifunctor", cn))
+                  case Some(info) =>
+                    CaseClass.parse[CT].toEither match {
+                      case Left(_) =>
+                        MIO.pure(caseValue.upcast[F[Any, Any]])
+                      case Right(cc) =>
+                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        if (fields.isEmpty) {
+                          MIO.pure(caseValue.upcast[F[Any, Any]])
+                        } else {
+                          val mapped: List[(String, Expr_??)] = fields.map { case (fn, fv) =>
+                            import fv.Underlying as Field
+                            val fe = fv.value.asInstanceOf[Expr[Field]]
+                            if (info.leftFields.contains(fn)) {
+                              val m: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fe.upcast[Any])))
+                              (fn, Expr.quote(Expr.splice(m).asInstanceOf[Field]).as_??)
+                            } else if (info.rightFields.contains(fn)) {
+                              val m: Expr[Any] = Expr.quote(Expr.splice(gExpr)(Expr.splice(fe.upcast[Any])))
+                              (fn, Expr.quote(Expr.splice(m).asInstanceOf[Field]).as_??)
+                            } else {
+                              (fn, fe.as_??)
+                            }
+                          }
+                          constructInstanceFree(cc.primaryConstructor, "Constructor", cn)(mapped.toMap)
+                            .map(expr => expr.value.asInstanceOf[Expr[F[Any, Any]]])
+                        }
+                    }
                 }
-                r$0.asInstanceOf[F[CatsDerivationFactories.W3, CatsDerivationFactories.W4]]
+              }
+              .flatMap {
+                case Some(r) => MIO.pure(r)
+                case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any, Any]].prettyPrint))
+              }
+          }
+
+          MIO.pure {
+            Expr.quote {
+              CatsDerivationFactories.bifunctorInstance[F] {
+                (
+                    fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                    f: CatsDerivationFactories.W1 => CatsDerivationFactories.W3,
+                    g: CatsDerivationFactories.W2 => CatsDerivationFactories.W4
+                ) =>
+                  val _ = fab; val _ = f; val _ = g
+                  val r$0: F[Any, Any] = Expr.splice {
+                    mkBimapBody(
+                      Expr.quote(fab.asInstanceOf[F[Any, Any]]),
+                      Expr.quote(f.asInstanceOf[Any => Any]),
+                      Expr.quote(g.asInstanceOf[Any => Any])
+                    )
+                  }
+                  r$0.asInstanceOf[F[CatsDerivationFactories.W3, CatsDerivationFactories.W4]]
+              }
             }
           }
         }

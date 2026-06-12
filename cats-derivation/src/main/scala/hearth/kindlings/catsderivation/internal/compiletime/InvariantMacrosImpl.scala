@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -12,7 +14,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * for method-level type parameters inside Expr.quote/Expr.splice. Supports direct A fields (covariant), Function1[A,
   * R] fields (contravariant), Function1[R, A] fields (covariant), and Function1[A, A] fields (both).
   */
-trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveInvariant[F[_]](
@@ -30,14 +33,8 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
           implicit val IntType: Type[Int] = InvariantTypes.Int
           implicit val StringType: Type[String] = InvariantTypes.String
 
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
+          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
           val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
           val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -50,42 +47,60 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
             Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
           }
 
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= tString) {
-              fieldKinds(name) = "invariant"
-            } else if (tInt =:= IntType && tString =:= StringType) {
-              fieldKinds(name) = "direct"
-            } else {
-              (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
-                case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
-                  import arg1Int.Underlying as A1Int
-                  import arg2Int.Underlying as A2Int
-                  import arg1String.Underlying as A1String
-                  import arg2String.Underlying as A2String
+          runSafe {
+            fieldsInt
+              .zip(fieldsString)
+              .traverse { case ((name, pInt), (_, pString)) =>
+                val tInt = pInt.tpe.Underlying
+                val tString = pString.tpe.Underlying
+                if (tInt =:= tString) {
+                  fieldKinds(name) = "invariant"
+                  MIO.void
+                } else if (tInt =:= IntType && tString =:= StringType) {
+                  fieldKinds(name) = "direct"
+                  MIO.void
+                } else {
+                  (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
+                    case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
+                      import arg1Int.Underlying as A1Int
+                      import arg2Int.Underlying as A2Int
+                      import arg1String.Underlying as A1String
+                      import arg2String.Underlying as A2String
 
-                  val firstArgChanges = !(A1Int =:= A1String)
-                  val secondArgChanges = !(A2Int =:= A2String)
+                      val firstArgChanges = !(A1Int =:= A1String)
+                      val secondArgChanges = !(A2Int =:= A2String)
 
-                  if (firstArgChanges && !secondArgChanges) {
-                    fieldKinds(name) = "fn1Contra"
-                  } else if (!firstArgChanges && secondArgChanges) {
-                    fieldKinds(name) = "fn1Covar"
-                  } else if (firstArgChanges && secondArgChanges) {
-                    fieldKinds(name) = "fn1Both"
-                  } else {
-                    throw new RuntimeException(
-                      s"Cannot derive Invariant: field '$name' has inconsistent Function1 decomposition."
-                    )
+                      if (firstArgChanges && !secondArgChanges) {
+                        fieldKinds(name) = "fn1Contra"
+                        MIO.void
+                      } else if (!firstArgChanges && secondArgChanges) {
+                        fieldKinds(name) = "fn1Covar"
+                        MIO.void
+                      } else if (firstArgChanges && secondArgChanges) {
+                        fieldKinds(name) = "fn1Both"
+                        MIO.void
+                      } else {
+                        failDerivation[Unit](
+                          CatsDerivationError.UnsupportedFieldShape(
+                            "Invariant",
+                            name,
+                            "the field has inconsistent Function1 decomposition"
+                          )
+                        )
+                      }
+                    case _ =>
+                      failDerivation[Unit](
+                        CatsDerivationError.UnsupportedFieldShape(
+                          "Invariant",
+                          name,
+                          "the field contains a nested type constructor that is not Function1 - " +
+                            "only direct A fields, Function1[A, R] fields, and invariant fields are currently supported"
+                        )
+                      )
                   }
-                case _ =>
-                  throw new RuntimeException(
-                    s"Cannot derive Invariant: field '$name' contains a nested type constructor that is not Function1. " +
-                      "Only direct A fields, Function1[A, R] fields, and invariant fields are currently supported."
-                  )
+                }
               }
-            }
+              .void
           }
 
           val fieldKindsMap: Map[String, String] = fieldKinds.toMap
@@ -150,60 +165,45 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val caseClassB = CaseClass.parse[F[B]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
-    }
+    parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
+      val fields = caseClass.caseFieldValuesAt(faExpr).toList
+      val fieldsB = caseClassB.primaryConstructor.totalParameters.flatten.toList
+      val fieldBTypes: Map[String, Type[Any]] =
+        fieldsB.map { case (name, param) => (name, param.tpe.Underlying.asInstanceOf[Type[Any]]) }.toMap
 
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
-    val fieldsB = caseClassB.primaryConstructor.totalParameters.flatten.toList
-    val fieldBTypes: Map[String, Type[Any]] =
-      fieldsB.map { case (name, param) => (name, param.tpe.Underlying.asInstanceOf[Type[Any]]) }.toMap
+      val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
+        import fieldValue.Underlying as Field
+        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
 
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-
-      fieldKinds.getOrElse(fieldName, "invariant") match {
-        case "direct" =>
-          val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
-          (fieldName, mapped.as_??)
-        case "fn1Contra" =>
-          val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
-          val composed: Expr[Field] =
-            mkComposeExpr[Field](fieldExpr.asInstanceOf[Expr[Any]], gExpr.asInstanceOf[Expr[Any]])(bFieldType)
-          (fieldName, composed.as_??(bFieldType))
-        case "fn1Covar" =>
-          val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
-          val composed: Expr[Field] =
-            mkAndThenExpr[Field](fieldExpr.asInstanceOf[Expr[Any]], fExpr.asInstanceOf[Expr[Any]])(bFieldType)
-          (fieldName, composed.as_??(bFieldType))
-        case "fn1Both" =>
-          val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
-          val composed: Expr[Field] = mkComposeAndThenExpr[Field](
-            fieldExpr.asInstanceOf[Expr[Any]],
-            fExpr.asInstanceOf[Expr[Any]],
-            gExpr.asInstanceOf[Expr[Any]]
-          )(bFieldType)
-          (fieldName, composed.as_??(bFieldType))
-        case _ =>
-          (fieldName, fieldExpr.as_??)
+        fieldKinds.getOrElse(fieldName, "invariant") match {
+          case "direct" =>
+            val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
+            (fieldName, mapped.as_??)
+          case "fn1Contra" =>
+            val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
+            val composed: Expr[Field] =
+              mkComposeExpr[Field](fieldExpr.asInstanceOf[Expr[Any]], gExpr.asInstanceOf[Expr[Any]])(bFieldType)
+            (fieldName, composed.as_??(bFieldType))
+          case "fn1Covar" =>
+            val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
+            val composed: Expr[Field] =
+              mkAndThenExpr[Field](fieldExpr.asInstanceOf[Expr[Any]], fExpr.asInstanceOf[Expr[Any]])(bFieldType)
+            (fieldName, composed.as_??(bFieldType))
+          case "fn1Both" =>
+            val bFieldType = fieldBTypes(fieldName).asInstanceOf[Type[Field]]
+            val composed: Expr[Field] = mkComposeAndThenExpr[Field](
+              fieldExpr.asInstanceOf[Expr[Any]],
+              fExpr.asInstanceOf[Expr[Any]],
+              gExpr.asInstanceOf[Expr[Any]]
+            )(bFieldType)
+            (fieldName, composed.as_??(bFieldType))
+          case _ =>
+            (fieldName, fieldExpr.as_??)
+        }
       }
-    }
 
-    caseClassB.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct imapped result: $error"))
+      constructInstanceFree(caseClassB.primaryConstructor, "Constructor", "imapped result")(mappedFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[B]]])
     }
   }
 

@@ -39,51 +39,52 @@ final class IsValueTypeProviderForRefined extends StandardMacroExtension { loade
               Type.Ctor2.fromUntyped[eu.timepit.refined.api.Validate](impl.asUntyped).apply[Inner, Pred]
             }
 
-            // Unwrap: use Refined.unapply which works on both Scala 2 (AnyVal with .value)
-            // and Scala 3 (opaque type identity).
-            // Cast to Refined[Inner, Pred] first since A is abstract.
-            val unwrapExpr: Expr[A] => Expr[Inner] = outerExpr =>
-              Expr.quote {
-                eu.timepit.refined.api.Refined
-                  .unapply(
-                    Expr.splice(outerExpr).asInstanceOf[eu.timepit.refined.api.Refined[Inner, Pred]]
-                  )
-                  .get
-              }
+            // Summon Validate[Inner, Pred] at macro expansion time (user's call site). Done
+            // eagerly (not inside the ctor callback) so that a missing instance becomes an
+            // aggregated skip reason instead of an exception crashing the compiler.
+            Expr.summonImplicit(using validateType).toOption match {
+              case None =>
+                skipped(
+                  s"${tpe.prettyPrint} is a Refined type, but no Validate instance was found for Refined[${Type[Inner].prettyPrint}, ${Type[Pred].prettyPrint}] — cannot generate validation"
+                )
 
-            val eitherCtor = CtorLikeOf.EitherStringOrValue[Inner, A](
-              ctor = innerExpr => {
-                // Summon Validate[Inner, Pred] at macro expansion time (user's call site)
-                val validateExpr = Expr
-                  .summonImplicit(using validateType)
-                  .toOption
-                  .getOrElse(
-                    throw new RuntimeException(
-                      s"No Validate instance found for Refined[${Type[Inner].prettyPrint}, ${Type[Pred].prettyPrint}]"
-                    )
-                  )
+              case Some(validateExpr) =>
+                // Unwrap: use Refined.unapply which works on both Scala 2 (AnyVal with .value)
+                // and Scala 3 (opaque type identity).
+                // Cast to Refined[Inner, Pred] first since A is abstract.
+                val unwrapExpr: Expr[A] => Expr[Inner] = outerExpr =>
+                  Expr.quote {
+                    eu.timepit.refined.api.Refined
+                      .unapply(
+                        Expr.splice(outerExpr).asInstanceOf[eu.timepit.refined.api.Refined[Inner, Pred]]
+                      )
+                      .get
+                  }
+
                 // Use refineV which returns Either[String, Refined[Inner, Pred]] and works
                 // on both Scala 2 (AnyVal) and Scala 3 (opaque type)
-                Expr.quote {
-                  val v = Expr.splice(innerExpr)
-                  val validate = Expr.splice(validateExpr)
-                  eu.timepit.refined.refineV[Pred].apply[Inner](v)(validate).asInstanceOf[Either[String, A]]
-                }
-              },
-              method = None
-            )
+                val eitherCtor = CtorLikeOf.EitherStringOrValue[Inner, A](
+                  ctor = innerExpr =>
+                    Expr.quote {
+                      val v = Expr.splice(innerExpr)
+                      val validate = Expr.splice(validateExpr)
+                      eu.timepit.refined.refineV[Pred].apply[Inner](v)(validate).asInstanceOf[Either[String, A]]
+                    },
+                  method = None
+                )
 
-            ProviderResult.Matched(
-              Existential[IsValueTypeOf[A, *], Inner](
-                new IsValueTypeOf[A, Inner] {
-                  override val unwrap: Expr[A] => Expr[Inner] = unwrapExpr
-                  override val wrap: CtorLikeOf[Inner, A] = eitherCtor
-                  override lazy val ctors: CtorLikes[A] = NonEmptyList.one(
-                    Existential[CtorLikeOf[*, A], Inner](eitherCtor)
+                ProviderResult.Matched(
+                  Existential[IsValueTypeOf[A, *], Inner](
+                    new IsValueTypeOf[A, Inner] {
+                      override val unwrap: Expr[A] => Expr[Inner] = unwrapExpr
+                      override val wrap: CtorLikeOf[Inner, A] = eitherCtor
+                      override lazy val ctors: CtorLikes[A] = NonEmptyList.one(
+                        Existential[CtorLikeOf[*, A], Inner](eitherCtor)
+                      )
+                    }
                   )
-                }
-              )
-            )
+                )
+            }
 
           case None => skipped(s"${tpe.prettyPrint} is not a Refined type")
         }

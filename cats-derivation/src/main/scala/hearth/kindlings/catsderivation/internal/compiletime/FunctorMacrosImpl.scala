@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -11,7 +13,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivationTimeout {
+trait FunctorMacrosImpl
+    extends rules.FunctorCaseClassRuleImpl
+    with CatsDerivationTimeout
+    with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
   protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
@@ -171,83 +176,75 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
     implicit val AnyType: Type[Any] = FunctorTypes.Any
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
+    val selfOrFail: MIO[Expr[Any]] = selfOpt match {
+      case Some(self) => MIO.pure(self)
+      case None       => failDerivation(CatsDerivationError.MissingSelfReference("Functor"))
     }
-    val caseClassB = CaseClass.parse[F[B]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
-    }
-    val bFieldMap = caseClassB.primaryConstructor.totalParameters.flatten.toMap
 
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
+      val bFieldMap = caseClassB.primaryConstructor.totalParameters.flatten.toMap
 
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+      val fields = caseClass.caseFieldValuesAt(faExpr).toList
 
-      if (directFields.contains(fieldName)) {
-        val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
-        (fieldName, mapped.as_??)
-      } else if (selfRecursiveFields.contains(fieldName) && selfRecursiveOuterFunctors.contains(fieldName)) {
-        // Self-recursive nested field: e.g. Option[Search[A]] where Search is the parent.
-        // Use outerFunctor.map(field)(inner => self.map(inner)(f))
-        val outerFunctorExpr = selfRecursiveOuterFunctors(fieldName)
-        val selfExpr = selfOpt.getOrElse(
-          throw new RuntimeException("Self-recursive field but no self Functor reference")
-        )
-        val nestedResult: Expr[Any] = Expr.quote {
-          hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-            .mapNestedSelfRecursive(
-              Expr.splice(outerFunctorExpr),
-              Expr.splice(selfExpr),
-              Expr.splice(fieldExpr.upcast[Any]),
-              Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
-            )
+      val mappedFieldsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, fieldValue) =>
+        import fieldValue.Underlying as Field
+        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+        if (directFields.contains(fieldName)) {
+          val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
+          MIO.pure((fieldName, mapped.as_??))
+        } else if (selfRecursiveFields.contains(fieldName) && selfRecursiveOuterFunctors.contains(fieldName)) {
+          // Self-recursive nested field: e.g. Option[Search[A]] where Search is the parent.
+          // Use outerFunctor.map(field)(inner => self.map(inner)(f))
+          val outerFunctorExpr = selfRecursiveOuterFunctors(fieldName)
+          selfOrFail.map { selfExpr =>
+            val nestedResult: Expr[Any] = Expr.quote {
+              hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                .mapNestedSelfRecursive(
+                  Expr.splice(outerFunctorExpr),
+                  Expr.splice(selfExpr),
+                  Expr.splice(fieldExpr.upcast[Any]),
+                  Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
+                )
+            }
+            val bParam = bFieldMap(fieldName)
+            (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
+          }
+        } else if (selfRecursiveFields.contains(fieldName)) {
+          // Direct self-recursive field (no outer wrapper): e.g. F[A] itself
+          selfOrFail.map { selfExpr =>
+            val nestedResult: Expr[Any] = Expr.quote {
+              hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                .mapNested(
+                  Expr.splice(selfExpr),
+                  Expr.splice(fieldExpr.upcast[Any]),
+                  Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
+                )
+            }
+            val bParam = bFieldMap(fieldName)
+            (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
+          }
+        } else if (nestedFieldFunctors.contains(fieldName)) {
+          val functorExpr = nestedFieldFunctors(fieldName)
+          val nestedResult: Expr[Any] = Expr.quote {
+            hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+              .mapNested(
+                Expr.splice(functorExpr),
+                Expr.splice(fieldExpr.upcast[Any]),
+                Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
+              )
+          }
+          val bParam = bFieldMap(fieldName)
+          MIO.pure((fieldName, castAnyToTyped(nestedResult, bParam.tpe)))
+        } else {
+          MIO.pure((fieldName, fieldExpr.as_??))
         }
-        val bParam = bFieldMap(fieldName)
-        (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
-      } else if (selfRecursiveFields.contains(fieldName)) {
-        // Direct self-recursive field (no outer wrapper): e.g. F[A] itself
-        val selfExpr = selfOpt.getOrElse(
-          throw new RuntimeException("Self-recursive field but no self Functor reference")
-        )
-        val nestedResult: Expr[Any] = Expr.quote {
-          hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-            .mapNested(
-              Expr.splice(selfExpr),
-              Expr.splice(fieldExpr.upcast[Any]),
-              Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
-            )
-        }
-        val bParam = bFieldMap(fieldName)
-        (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
-      } else if (nestedFieldFunctors.contains(fieldName)) {
-        val functorExpr = nestedFieldFunctors(fieldName)
-        val nestedResult: Expr[Any] = Expr.quote {
-          hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-            .mapNested(
-              Expr.splice(functorExpr),
-              Expr.splice(fieldExpr.upcast[Any]),
-              Expr.splice(fExpr.asInstanceOf[Expr[Any => Any]])
-            )
-        }
-        val bParam = bFieldMap(fieldName)
-        (fieldName, castAnyToTyped(nestedResult, bParam.tpe))
-      } else {
-        (fieldName, fieldExpr.as_??)
       }
-    }
-    caseClassB.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
+
+      mappedFieldsMIO.flatMap { mappedFields =>
+        constructInstanceFree(caseClassB.primaryConstructor, "Constructor", "mapped result")(mappedFields.toMap)
+          .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[B]]])
+      }
     }
   }
 
@@ -269,185 +266,187 @@ trait FunctorMacrosImpl extends rules.FunctorCaseClassRuleImpl with CatsDerivati
 
     val parentCtor = FCtor.asUntyped
 
-    Enum.parse[F[Any]].toEither match {
-      case Left(reason) =>
-        MIO.fail(new RuntimeException(s"Cannot parse as enum: $reason"))
-      case Right(enumm) =>
-        val enumInt = Enum.parse(using FCtor.apply[Int].asInstanceOf[Type[Any]]).toEither match {
-          case Right(e) => e
-          case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[Int] as enum"))
-        }
-        val enumString = Enum.parse(using FCtor.apply[String].asInstanceOf[Type[Any]]).toEither match {
-          case Right(e) => e
-          case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[String] as enum"))
-        }
+    parseEnumMIO[F[Any]]("F[Any]").flatMap { enumm =>
+      parseEnumMIO[Any]("F[Int]")(using FCtor.apply[Int].asInstanceOf[Type[Any]])
+        .parTuple(parseEnumMIO[Any]("F[String]")(using FCtor.apply[String].asInstanceOf[Type[Any]]))
+        .flatMap { case (enumInt, enumString) =>
+          case class ChildFieldInfo(
+              directFields: Set[String],
+              nestedFieldFunctors: Map[String, Expr[Any]],
+              selfRecursiveFields: Set[String]
+          )
 
-        case class ChildFieldInfo(
-            directFields: Set[String],
-            nestedFieldFunctors: Map[String, Expr[Any]],
-            selfRecursiveFields: Set[String]
-        )
+          val childInfo: Map[String, ChildFieldInfo] = runSafe {
+            val childrenInt = enumInt.directChildren.toList
+            val childrenString = enumString.directChildren.toList
 
-        val childInfo: Map[String, ChildFieldInfo] = runSafe {
-          val result = scala.collection.mutable.Map.empty[String, ChildFieldInfo]
-          val childrenInt = enumInt.directChildren.toList
-          val childrenString = enumString.directChildren.toList
+            childrenInt
+              .zip(childrenString)
+              .traverse { case ((childName, childI), (_, childS)) =>
+                import childI.Underlying as ChildI
+                import childS.Underlying as ChildS
 
-          childrenInt.zip(childrenString).foreach { case ((childName, childI), (_, childS)) =>
-            import childI.Underlying as ChildI
-            import childS.Underlying as ChildS
+                val ccI = CaseClass.parse[ChildI].toEither
+                val ccS = CaseClass.parse[ChildS].toEither
 
-            val ccI = CaseClass.parse[ChildI].toEither
-            val ccS = CaseClass.parse[ChildS].toEither
+                (ccI, ccS) match {
+                  case (Right(cI), Right(cS)) =>
+                    val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
+                    val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
+                    val directFields = scala.collection.mutable.Set.empty[String]
+                    val nestedFunctors = scala.collection.mutable.Map.empty[String, Expr[Any]]
+                    val selfRecursive = scala.collection.mutable.Set.empty[String]
 
-            (ccI, ccS) match {
-              case (Right(cI), Right(cS)) =>
-                val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
-                val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
-                val directFields = scala.collection.mutable.Set.empty[String]
-                val nestedFunctors = scala.collection.mutable.Map.empty[String, Expr[Any]]
-                val selfRecursive = scala.collection.mutable.Set.empty[String]
-
-                fieldsI.zip(fieldsS).foreach { case ((name, pI), (_, pS)) =>
-                  val tI = pI.tpe.Underlying
-                  val tS = pS.tpe.Underlying
-                  if (tI =:= IntType && tS =:= StringType) {
-                    directFields += name
-                  } else if (tI =:= tS) {
-                    // invariant
-                  } else {
-                    val param = fieldsI.find(_._1 == name).get._2
-                    import param.tpe.Underlying as FieldType
-                    summonFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
-                      case Some(functorExpr) => nestedFunctors += (name -> functorExpr)
-                      case None              =>
-                        mkCtor1FromType(Type[FieldType].asInstanceOf[Type[Any]]) match {
-                          case Some((_, nestedUntyped)) if nestedUntyped == parentCtor =>
-                            selfRecursive += name
-                          case _ =>
-                            throw new RuntimeException(
-                              s"Cannot find or derive Functor for nested field $name in $childName"
-                            )
-                        }
-                    }
-                  }
-                }
-                result += (childName -> ChildFieldInfo(directFields.toSet, nestedFunctors.toMap, selfRecursive.toSet))
-              case _ =>
-                result += (childName -> ChildFieldInfo(Set.empty, Map.empty, Set.empty))
-            }
-          }
-          MIO.pure(result.toMap)
-        }
-
-        val hasSelfRecursive = childInfo.values.exists(_.selfRecursiveFields.nonEmpty)
-
-        import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-
-        def mkEnumMapBody(
-            faExpr: Expr[F[Any]],
-            fExpr: Expr[Any => Any],
-            selfOpt: Option[Expr[Any]]
-        ): Expr[F[Any]] =
-          runSafe {
-            enumm
-              .matchOn[MIO, F[Any]](faExpr) { matched =>
-                import matched.{value as caseValue, Underlying as ChildType}
-                val childName = Type[ChildType].shortName
-                childInfo.get(childName) match {
-                  case None =>
-                    MIO.fail(new RuntimeException(s"No derivation info for child $childName"))
-                  case Some(info) =>
-                    val childCC = CaseClass.parse[ChildType].toEither match {
-                      case Right(cc) => cc
-                      case Left(e)   => throw new RuntimeException(s"Cannot parse child $childName: $e")
-                    }
-                    val fields = childCC.caseFieldValuesAt(caseValue).toList
-                    if (fields.isEmpty) {
-                      MIO.pure(caseValue.upcast[F[Any]])
-                    } else {
-                      val mapped: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-                        import fieldValue.Underlying as Field
-                        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-                        if (info.directFields.contains(fieldName)) {
-                          val m: Expr[Any] =
-                            Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
-                          val typedM: Expr[Field] = Expr.quote(Expr.splice(m).asInstanceOf[Field])
-                          (fieldName, typedM.as_??)
-                        } else if (
-                          info.selfRecursiveFields.contains(fieldName) ||
-                          info.nestedFieldFunctors.contains(fieldName)
-                        ) {
-                          val functorExpr = if (info.selfRecursiveFields.contains(fieldName)) {
-                            selfOpt.getOrElse(
-                              throw new RuntimeException("Self-recursive field but no self Functor")
-                            )
-                          } else info.nestedFieldFunctors(fieldName)
-                          val nested: Expr[Any] = Expr.quote {
-                            hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                              .mapNested(
-                                Expr.splice(functorExpr),
-                                Expr.splice(fieldExpr.upcast[Any]),
-                                Expr.splice(fExpr)
-                              )
-                          }
-                          val typedNested: Expr[Field] =
-                            Expr.quote(Expr.splice(nested).asInstanceOf[Field])
-                          (fieldName, typedNested.as_??)
+                    fieldsI
+                      .zip(fieldsS)
+                      .traverse { case ((name, pI), (_, pS)) =>
+                        val tI = pI.tpe.Underlying
+                        val tS = pS.tpe.Underlying
+                        if (tI =:= IntType && tS =:= StringType) {
+                          directFields += name
+                          MIO.void
+                        } else if (tI =:= tS) {
+                          // invariant
+                          MIO.void
                         } else {
-                          (fieldName, fieldExpr.as_??)
+                          val param = fieldsI.find(_._1 == name).get._2
+                          import param.tpe.Underlying as FieldType
+                          summonFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                            case Some(functorExpr) =>
+                              nestedFunctors += (name -> functorExpr)
+                              MIO.void
+                            case None =>
+                              mkCtor1FromType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                                case Some((_, nestedUntyped)) if nestedUntyped == parentCtor =>
+                                  selfRecursive += name
+                                  MIO.void
+                                case _ =>
+                                  failDerivation[Unit](
+                                    CatsDerivationError.MissingInstanceForField("Functor", name, childName)
+                                  )
+                              }
+                          }
                         }
                       }
-                      childCC.primaryConstructor.fold(
-                        onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                        onTypes = _ => Map.empty,
-                        onValues = _ => mapped.toMap
-                      ) match {
-                        case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any]]])
-                        case Left(err)   => MIO.fail(new RuntimeException(s"Cannot construct $childName: $err"))
+                      .map { _ =>
+                        childName -> ChildFieldInfo(directFields.toSet, nestedFunctors.toMap, selfRecursive.toSet)
                       }
-                    }
+                  case _ =>
+                    MIO.pure(childName -> ChildFieldInfo(Set.empty, Map.empty, Set.empty))
                 }
               }
-              .flatMap {
-                case Some(r) => MIO.pure(r)
-                case None    => MIO.fail(new RuntimeException("Enum has no children"))
-              }
+              .map(_.toMap)
           }
 
-        if (hasSelfRecursive) {
-          MIO.pure {
-            Expr.quote {
-              var self$macro: Any = null
-              self$macro = CatsDerivationFactories.functorInstance[F] {
-                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
-                  val _ = fa; val _ = f
-                  val r$0: F[Any] = Expr.splice {
-                    mkEnumMapBody(
-                      Expr.quote(fa.asInstanceOf[F[Any]]),
-                      Expr.quote(f.asInstanceOf[Any => Any]),
-                      Some(Expr.quote(self$macro))
-                    )
+          val hasSelfRecursive = childInfo.values.exists(_.selfRecursiveFields.nonEmpty)
+
+          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+
+          def mkEnumMapBody(
+              faExpr: Expr[F[Any]],
+              fExpr: Expr[Any => Any],
+              selfOpt: Option[Expr[Any]]
+          ): Expr[F[Any]] =
+            runSafe {
+              enumm
+                .matchOn[MIO, F[Any]](faExpr) { matched =>
+                  import matched.{value as caseValue, Underlying as ChildType}
+                  val childName = Type[ChildType].shortName
+                  childInfo.get(childName) match {
+                    case None =>
+                      failDerivation(CatsDerivationError.MissingDerivationInfo("Functor", childName))
+                    case Some(info) =>
+                      parseCaseClassMIO[ChildType](s"child $childName").flatMap { childCC =>
+                        val fields = childCC.caseFieldValuesAt(caseValue).toList
+                        if (fields.isEmpty) {
+                          MIO.pure(caseValue.upcast[F[Any]])
+                        } else {
+                          val mappedMIO: MIO[List[(String, Expr_??)]] = fields.traverse {
+                            case (fieldName, fieldValue) =>
+                              import fieldValue.Underlying as Field
+                              val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+                              if (info.directFields.contains(fieldName)) {
+                                val m: Expr[Any] =
+                                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
+                                val typedM: Expr[Field] = Expr.quote(Expr.splice(m).asInstanceOf[Field])
+                                MIO.pure((fieldName, typedM.as_??))
+                              } else if (
+                                info.selfRecursiveFields.contains(fieldName) ||
+                                info.nestedFieldFunctors.contains(fieldName)
+                              ) {
+                                val functorExprMIO: MIO[Expr[Any]] =
+                                  if (info.selfRecursiveFields.contains(fieldName)) {
+                                    selfOpt match {
+                                      case Some(self) => MIO.pure(self)
+                                      case None       =>
+                                        failDerivation(CatsDerivationError.MissingSelfReference("Functor"))
+                                    }
+                                  } else MIO.pure(info.nestedFieldFunctors(fieldName))
+                                functorExprMIO.map { functorExpr =>
+                                  val nested: Expr[Any] = Expr.quote {
+                                    hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                      .mapNested(
+                                        Expr.splice(functorExpr),
+                                        Expr.splice(fieldExpr.upcast[Any]),
+                                        Expr.splice(fExpr)
+                                      )
+                                  }
+                                  val typedNested: Expr[Field] =
+                                    Expr.quote(Expr.splice(nested).asInstanceOf[Field])
+                                  (fieldName, typedNested.as_??)
+                                }
+                              } else {
+                                MIO.pure((fieldName, fieldExpr.as_??))
+                              }
+                          }
+                          mappedMIO.flatMap { mapped =>
+                            constructInstanceFree(childCC.primaryConstructor, "Constructor", childName)(mapped.toMap)
+                              .map(expr => expr.value.asInstanceOf[Expr[F[Any]]])
+                          }
+                        }
+                      }
                   }
-                  r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
-              }
-              self$macro.asInstanceOf[cats.Functor[F]]
+                }
+                .flatMap {
+                  case Some(r) => MIO.pure(r)
+                  case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any]].prettyPrint))
+                }
             }
-          }
-        } else {
-          MIO.pure {
-            Expr.quote {
-              CatsDerivationFactories.functorInstance[F] {
-                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
-                  val _ = fa; val _ = f
-                  val r$0: F[Any] = Expr.splice {
-                    mkEnumMapBody(
-                      Expr.quote(fa.asInstanceOf[F[Any]]),
-                      Expr.quote(f.asInstanceOf[Any => Any]),
-                      None
-                    )
-                  }
-                  r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
+
+          if (hasSelfRecursive) {
+            MIO.pure {
+              Expr.quote {
+                var self$macro: Any = null
+                self$macro = CatsDerivationFactories.functorInstance[F] {
+                  (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                    val _ = fa; val _ = f
+                    val r$0: F[Any] = Expr.splice {
+                      mkEnumMapBody(
+                        Expr.quote(fa.asInstanceOf[F[Any]]),
+                        Expr.quote(f.asInstanceOf[Any => Any]),
+                        Some(Expr.quote(self$macro))
+                      )
+                    }
+                    r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
+                }
+                self$macro.asInstanceOf[cats.Functor[F]]
+              }
+            }
+          } else {
+            MIO.pure {
+              Expr.quote {
+                CatsDerivationFactories.functorInstance[F] {
+                  (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                    val _ = fa; val _ = f
+                    val r$0: F[Any] = Expr.splice {
+                      mkEnumMapBody(
+                        Expr.quote(fa.asInstanceOf[F[Any]]),
+                        Expr.quote(f.asInstanceOf[Any => Any]),
+                        None
+                      )
+                    }
+                    r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
+                }
               }
             }
           }

@@ -29,12 +29,11 @@ trait CogenHandleAsEnumRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExte
 
       childrenList match {
         case Nil =>
-          MIO.fail(new RuntimeException(s"Enum ${Type[A].prettyPrint} has no cases"))
-        case children =>
+          val err = CogenDerivationError.EnumHasNoCases(Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
+        case child :: children =>
           // Derive Cogen for each enum case
-          NonEmptyList
-            .fromList(children)
-            .get
+          NonEmptyList(child, children)
             .parTraverse { case (_, enumChild) =>
               import enumChild.Underlying as CaseType
               Log.namedScope(s"Deriving Cogen for enum case ${CaseType.prettyPrint}") {

@@ -86,14 +86,14 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
                     val elemExpr: Expr[Any] = Expr.quote(Expr.splice(arrExpr)(Expr.splice(Expr(idx))))
                     (name, castFn(elemExpr))
                   }.toMap
-                  caseClass.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {
                     case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err = ShrinkDerivationError.CannotConstructType(Type[A].prettyPrint, error)
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
                 .map { reconstructBuilder =>

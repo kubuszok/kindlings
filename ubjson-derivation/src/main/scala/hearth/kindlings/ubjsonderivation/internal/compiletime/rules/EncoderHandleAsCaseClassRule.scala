@@ -99,13 +99,10 @@ trait EncoderHandleAsCaseClassRuleImpl {
                         val param = paramsByName.get(fName)
                         val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
                           p.defaultValue.flatMap { method =>
-                            method
-                              .fold(
-                                onInstance = _ => throw new RuntimeException("Default value should not need instance"),
-                                onTypes = _ => Map.empty,
-                                onValues = _ => Map.empty
-                              )
-                              .toOption
+                            foldInstanceFree(method, "Default value")(
+                              onTypes = _ => Map.empty,
+                              onValues = _ => Map.empty
+                            ).toOption
                               .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                           }
                         }

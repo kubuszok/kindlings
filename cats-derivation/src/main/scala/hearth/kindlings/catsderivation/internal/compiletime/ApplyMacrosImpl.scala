@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -12,7 +14,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach since both
   * ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveApply[F[_]](FCtor0: Type.Ctor1[F], ApplyFType: Type[cats.Apply[F]]): Expr[cats.Apply[F]] = {
@@ -27,14 +30,8 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
           implicit val IntType: Type[Int] = ApplyTypes.Int
           implicit val StringType: Type[String] = ApplyTypes.String
 
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
+          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
           val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
           val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -55,10 +52,16 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
           }
 
           if (nestedFields.nonEmpty) {
-            throw new RuntimeException(
-              s"Cannot derive Apply: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                "Only direct type parameter fields (A) and invariant fields are supported."
-            )
+            runSafe {
+              failDerivation[Unit](
+                CatsDerivationError.UnsupportedFieldShape(
+                  "Apply",
+                  nestedFields.mkString(", "),
+                  "nested type constructors are not supported - " +
+                    "only direct type parameter fields (A) and invariant fields are supported"
+                )
+              )
+            }
           }
 
           val directFieldSet: Set[String] = directFields.toSet
@@ -72,10 +75,7 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
           implicit val AnyType: Type[Any] = ApplyTypes.Any
           implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
 
-          val caseClass = CaseClass.parse[F[Any]].toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Any]: $e")
-          }
+          val caseClass = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
 
           val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
             runSafe {
@@ -140,37 +140,23 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
+      val fields = caseClass.caseFieldValuesAt(faExpr).toList
 
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+      val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
+        import fieldValue.Underlying as Field
+        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
 
-      if (directFields.contains(fieldName)) {
-        val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
-        (fieldName, mapped.as_??)
-      } else {
-        (fieldName, fieldExpr.as_??)
+        if (directFields.contains(fieldName)) {
+          val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
+          (fieldName, mapped.as_??)
+        } else {
+          (fieldName, fieldExpr.as_??)
+        }
       }
-    }
 
-    val caseClassB = CaseClass.parse[F[B]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
-    }
-    caseClassB.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
+      constructInstanceFree(caseClassB.primaryConstructor, "Constructor", "mapped result")(mappedFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[B]]])
     }
   }
 
@@ -184,8 +170,8 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
     val fieldsFF = caseClass.caseFieldValuesAt(ffExpr).toList
     val fieldsFA = caseClass.caseFieldValuesAt(faExpr).toList
 
-    val apFields: List[(String, Expr_??)] =
-      fieldsFF.zip(fieldsFA).map { case ((fieldName, ffFieldValue), (_, faFieldValue)) =>
+    val apFieldsMIO: MIO[List[(String, Expr_??)]] =
+      fieldsFF.zip(fieldsFA).traverse { case ((fieldName, ffFieldValue), (_, faFieldValue)) =>
         import ffFieldValue.Underlying as Field
         val ffField = ffFieldValue.value.asInstanceOf[Expr[Field]]
         val faField = faFieldValue.value.asInstanceOf[Expr[Field]]
@@ -195,32 +181,31 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
           val applied: Expr[Any] = Expr.quote(
             Expr.splice(ffField).asInstanceOf[Any => Any].apply(Expr.splice(faField).asInstanceOf[Any])
           )
-          (fieldName, applied.as_??)
+          MIO.pure((fieldName, applied.as_??))
         } else {
           // Invariant field: combine using Semigroup
-          val sgExpr = ApplyTypes.Semigroup[Field].summonExprIgnoring().toEither match {
-            case Right(sg)    => sg
+          ApplyTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+            case Right(sgExpr) =>
+              val combined: Expr[Field] = Expr.quote(
+                Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
+              )
+              MIO.pure((fieldName, combined.as_??))
             case Left(reason) =>
-              throw new RuntimeException(
-                s"No Semigroup instance found for invariant field '$fieldName': ${Field.prettyPrint}: $reason"
+              failDerivation(
+                CatsDerivationError.MissingInstanceForField(
+                  "Semigroup",
+                  fieldName,
+                  Type[F[Any]].prettyPrint,
+                  Some(s"${Field.prettyPrint}: $reason")
+                )
               )
           }
-          val combined: Expr[Field] = Expr.quote(
-            Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
-          )
-          (fieldName, combined.as_??)
         }
       }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => apFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct ap result: $error"))
+    apFieldsMIO.flatMap { apFields =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "ap result")(apFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

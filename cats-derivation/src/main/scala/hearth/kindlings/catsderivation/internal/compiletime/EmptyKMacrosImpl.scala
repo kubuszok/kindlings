@@ -2,12 +2,15 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** EmptyK derivation: constructs empty F[A] by summoning Empty for each field type in F[Any]. */
-trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveEmptyK[F[_]](FCtor0: Type.Ctor1[F], EmptyKFType: Type[alleycats.EmptyK[F]]): Expr[alleycats.EmptyK[F]] = {
@@ -38,9 +41,10 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdE
               }
             }
           case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+            failDerivation(
+              CatsDerivationError.CannotParseCaseClass(
+                Type[F[Any]].prettyPrint,
+                s"$reason. $macroName can only be derived for case classes."
               )
             )
         }
@@ -66,29 +70,28 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdE
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
     val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
-    val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
+    val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      val emptyExpr = EmptyKTypes.Empty[Field].summonExprIgnoring().toEither match {
-        case Right(e)     => e
+      EmptyKTypes.Empty[Field].summonExprIgnoring().toEither match {
+        case Right(emptyExpr) =>
+          val value: Expr[Field] = Expr.quote(Expr.splice(emptyExpr).empty)
+          MIO.pure((fieldName, value.as_??))
         case Left(reason) =>
-          throw new RuntimeException(
-            s"No Empty instance found for field '$fieldName': ${Field.prettyPrint}: $reason"
+          failDerivation(
+            CatsDerivationError.MissingInstanceForField(
+              "Empty",
+              fieldName,
+              Type[F[Any]].prettyPrint,
+              Some(s"${Field.prettyPrint}: $reason")
+            )
           )
       }
-      val value: Expr[Field] = Expr.quote(Expr.splice(emptyExpr).empty)
-      (fieldName, value.as_??)
     }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => fieldExprs.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct empty result: $error"))
+    fieldExprsMIO.flatMap { fieldExprs =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "empty result")(fieldExprs.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

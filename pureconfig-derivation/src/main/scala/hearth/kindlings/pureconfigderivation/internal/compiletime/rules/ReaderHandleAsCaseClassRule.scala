@@ -99,13 +99,10 @@ trait ReaderHandleAsCaseClassRuleImpl {
 
       val transientDefaults: Map[String, Expr_??] = transientFields.flatMap { case (fName, param) =>
         param.defaultValue.flatMap { method =>
-          method
-            .fold(
-              onInstance = _ => throw new RuntimeException("Default value should not need instance"),
-              onTypes = _ => Map.empty,
-              onValues = _ => Map.empty
-            )
-            .toOption
+          foldInstanceFree(method, "Default value")(
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ).toOption
             .map(ee => (fName, ee))
         }
       }.toMap
@@ -154,13 +151,10 @@ trait ReaderHandleAsCaseClassRuleImpl {
               val defaultAsAnyOpt: Option[Expr[Any]] =
                 if (param.hasDefault)
                   param.defaultValue.flatMap { method =>
-                    method
-                      .fold(
-                        onInstance = _ => throw new RuntimeException("Default value should not need instance"),
-                        onTypes = _ => Map.empty,
-                        onValues = _ => Map.empty
-                      )
-                      .toOption
+                    foldInstanceFree(method, "Default value")(
+                      onTypes = _ => Map.empty,
+                      onValues = _ => Map.empty
+                    ).toOption
                       .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                   }
                 else None
@@ -322,8 +316,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
                   val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                  caseClass.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {

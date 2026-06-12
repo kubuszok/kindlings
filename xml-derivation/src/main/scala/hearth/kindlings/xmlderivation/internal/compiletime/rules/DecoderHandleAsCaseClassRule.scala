@@ -69,8 +69,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               if (isTransient) {
                 val defaultValue: Expr[Any] = param.defaultValue match {
                   case Some(method) =>
-                    method.fold(
-                      onInstance = _ => throw new RuntimeException("Default value should not need instance"),
+                    foldInstanceFree(method, "Default value")(
                       onTypes = _ => Map.empty,
                       onValues = _ => Map.empty
                     ) match {
@@ -134,7 +133,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   Right(Expr.splice(constructExpr))
                 })
               case None =>
-                MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}"))
+                val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint)
+                Log.error(err.message) >> MIO.fail(err)
             }
       }
     }
@@ -143,8 +143,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
     private def resolveDefaultValue(fName: String, param: Parameter): Expr[Any] =
       param.defaultValue match {
         case Some(method) =>
-          method.fold(
-            onInstance = _ => throw new RuntimeException("Default value should not need instance"),
+          foldInstanceFree(method, "Default value")(
             onTypes = _ => Map.empty,
             onValues = _ => Map.empty
           ) match {
@@ -325,14 +324,14 @@ trait DecoderHandleAsCaseClassRuleImpl {
             .traverse { decodedValuesExpr =>
               val fieldMap: Map[String, Expr_??] =
                 makeAccessors.map(_(decodedValuesExpr)).toMap
-              constructor.fold(
-                onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+              foldInstanceFree(constructor, "Constructor")(
                 onTypes = _ => Map.empty,
                 onValues = _ => fieldMap
               ) match {
                 case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                 case Left(error)          =>
-                  MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                  val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, Some(error))
+                  Log.error(err.message) >> MIO.fail(err)
               }
             }
             .map { builder =>

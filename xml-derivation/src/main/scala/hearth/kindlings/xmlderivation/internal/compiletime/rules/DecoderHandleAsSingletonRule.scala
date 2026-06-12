@@ -27,7 +27,8 @@ trait DecoderHandleAsSingletonRuleImpl {
                   case Some(singletonExpr) =>
                     MIO.pure(Expr.quote(Right(Expr.splice(singletonExpr))))
                   case None =>
-                    MIO.fail(new RuntimeException(s"Singleton disappeared for ${Type[A].prettyPrint}"))
+                    val err = DecoderDerivationError.SingletonDisappeared(Type[A].prettyPrint)
+                    Log.error(err.message) >> MIO.fail(err)
                 }
               }
               result <- dctx.getHelper[A].flatMap {
