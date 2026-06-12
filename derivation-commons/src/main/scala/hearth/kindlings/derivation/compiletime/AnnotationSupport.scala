@@ -27,6 +27,22 @@ trait AnnotationSupport { this: MacroCommons & StdExtensions =>
   protected def findAllTypeAnnotationsOfType[Ann: Type, A: Type]: List[Expr[Ann]] =
     Type[A].annotationsOfType[Ann]
 
+  /** Collect ALL annotations on a parameter (regardless of type), as untyped spliceable expressions.
+    *
+    * Backed by Hearth's typed cross-platform `Parameter#annotations` (`List[Expr_??]`); each existential expression is
+    * lowered to an [[UntypedExpr]] so callers can re-type it (e.g. `asTyped[Any]`) and splice it into generated code.
+    */
+  protected def allParamAnnotations(param: Parameter): List[UntypedExpr] =
+    param.annotations.map(_.asUntyped)
+
+  /** Collect ALL annotations on a type (regardless of type), as untyped spliceable expressions.
+    *
+    * Backed by Hearth's typed cross-platform `Type#annotations` (`List[Expr_??]`); each existential expression is
+    * lowered to an [[UntypedExpr]] so callers can re-type it (e.g. `asTyped[Any]`) and splice it into generated code.
+    */
+  protected def allTypeAnnotations[A: Type]: List[UntypedExpr] =
+    Type[A].annotations.map(_.asUntyped)
+
   // ----- Literal extraction from annotation constructor arguments (shared) -----
 
   private def decodedArgs[Ann](annotation: Expr[Ann]): List[Either[String, Any]] =
