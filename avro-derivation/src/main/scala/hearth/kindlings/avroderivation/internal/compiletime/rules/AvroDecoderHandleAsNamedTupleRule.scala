@@ -48,8 +48,7 @@ trait AvroDecoderHandleAsNamedTupleRuleImpl {
       NonEmptyList.fromList(fieldsList) match {
         case None =>
           // Empty named tuple — validate input is a record and construct
-          constructor.fold(
-            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          foldInstanceFree(constructor, "Constructor")(
             onTypes = _ => Map.empty,
             onValues = _ => Map.empty
           ) match {
@@ -109,8 +108,7 @@ trait AvroDecoderHandleAsNamedTupleRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     makeAccessors.map(_(decodedValuesExpr)).toMap
-                  constructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(constructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {

@@ -104,109 +104,142 @@ trait SemigroupalKTraitRuleImpl {
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val anonInstance = AnonymousInstance.parse(using AlgWCtor3Type.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[WCtor3] as anonymous instance: $e")
-    }
+    parsedOrFail(
+      AnonymousInstance.parse(using AlgWCtor3Type.asInstanceOf[Type[Any]]).toEither,
+      "Alg[WCtor3] as anonymous instance"
+    )
+      .parTuple(
+        parsedOrFail(
+          AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither,
+          "Alg[WCtor1] as anonymous instance"
+        )
+      )
+      .parTuple(
+        parsedOrFail(
+          AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither,
+          "Alg[WCtor2] as anonymous instance"
+        )
+      )
+      .parTuple(
+        parsedOrFail(AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither, "Alg[Option]")
+      )
+      .parTuple(parsedOrFail(AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither, "Alg[List]"))
+      .flatMap { case ((((anonInstance, anonInstanceSourceF), anonInstanceSourceG), aiOption), aiList) =>
+        val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
+        val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
 
-    val anonInstanceSourceF = AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[WCtor1] as anonymous instance: $e")
-    }
+        // Pre-validate that every method we must override exists on both source instances, so that the
+        // OverrideBody callbacks below can never hit a missing source method.
+        val missingSourceMethods: List[CatsTaglessDerivationError] = anonInstance.mustOverride
+          .map(_.method.name)
+          .flatMap { n =>
+            val missingF =
+              if (anonInstanceSourceF.mustOverride.exists(_.method.name == n)) Nil
+              else List(CatsTaglessDerivationError.SourceMethodNotFound(n, " (F)"))
+            val missingG =
+              if (anonInstanceSourceG.mustOverride.exists(_.method.name == n)) Nil
+              else List(CatsTaglessDerivationError.SourceMethodNotFound(n, " (G)"))
+            missingF ++ missingG
+          }
 
-    val anonInstanceSourceG = AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[WCtor2] as anonymous instance: $e")
-    }
+        missingSourceMethods match {
+          case head :: tail =>
+            Log.error((head :: tail).map(_.message).mkString("\n")) >> MIO.fail(head, tail*)
+          case Nil =>
 
-    val aiOption = AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val aiList = AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+            val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
+              val methodName = cm.method.name
+              val sourceMethodOptF = anonInstanceSourceF.mustOverride.find(_.method.name == methodName)
+              val sourceMethodOptG = anonInstanceSourceG.mustOverride.find(_.method.name == methodName)
 
-    val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
-    val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
-
-    val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
-      val methodName = cm.method.name
-      val sourceMethodOptF = anonInstanceSourceF.mustOverride.find(_.method.name == methodName)
-      val sourceMethodOptG = anonInstanceSourceG.mustOverride.find(_.method.name == methodName)
-
-      val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
-        case (Some(om), Some(lm)) =>
-          (om.method.knownReturning, lm.method.knownReturning) match {
-            case (Some(or), Some(lr)) =>
-              (
-                OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
-                ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
-              ) match {
-                case (Some(io), Some(il)) =>
-                  import io.Underlying as IO; import il.Underlying as IL
-                  IO =:= IL
+              val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
+                case (Some(om), Some(lm)) =>
+                  (om.method.knownReturning, lm.method.knownReturning) match {
+                    case (Some(or), Some(lr)) =>
+                      (
+                        OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
+                        ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
+                      ) match {
+                        case (Some(io), Some(il)) =>
+                          import io.Underlying as IO; import il.Underlying as IL
+                          IO =:= IL
+                        case _ => false
+                      }
+                    case _ => false
+                  }
                 case _ => false
               }
-            case _ => false
-          }
-        case _ => false
-      }
 
-      val body: OverrideBody = new OverrideBody {
-        def apply(octx: OverrideContext): Expr_?? = {
-          val returnT = octx.returnType
+              val body: OverrideBody = new OverrideBody {
+                def apply(octx: OverrideContext): Expr_?? = {
+                  val returnT = octx.returnType
 
-          def foldSourceMethod(sm: Method, srcExpr: Expr[Any]): Expr[Any] =
-            try
-              sm.fold(
-                onInstance = oi => srcExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                onTypes = _ => Map.empty,
-                onValues = av => {
-                  val paramNames = av.totalParameters.flatten.toList.map(_._1)
-                  paramNames.zip(octx.parameters).toMap
+                  // OverrideBody is a synchronous callback invoked inside `anonInstance.construct`; it cannot
+                  // return MIO. Typed errors thrown here are caught by the MIO block wrapping `construct`
+                  // below and routed into the MIO error channel.
+                  def foldSourceMethod(sm: Method, srcExpr: Expr[Any]): Expr[Any] =
+                    try
+                      sm.fold(
+                        onInstance = oi => srcExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
+                        onTypes = _ => Map.empty,
+                        onValues = av => {
+                          val paramNames = av.totalParameters.flatten.toList.map(_._1)
+                          paramNames.zip(octx.parameters).toMap
+                        }
+                      ) match {
+                        case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
+                        case Left(e)      =>
+                          throw CatsTaglessDerivationError.MethodForwardingFailed(methodName, s"fold returned Left: $e")
+                      }
+                    catch {
+                      case e: CatsTaglessDerivationError  => throw e
+                      case scala.util.control.NonFatal(e) =>
+                        throw CatsTaglessDerivationError.MethodForwardingFailed(
+                          methodName,
+                          s"fold crashed: ${e.getMessage}"
+                        )
+                    }
+
+                  // The getOrElse branches are unreachable: validated via missingSourceMethods before
+                  // building overrides.
+                  if (isDirectF) {
+                    val smF =
+                      sourceMethodOptF.getOrElse(
+                        throw CatsTaglessDerivationError.SourceMethodNotFound(methodName, " (F)")
+                      )
+                    val smG =
+                      sourceMethodOptG.getOrElse(
+                        throw CatsTaglessDerivationError.SourceMethodNotFound(methodName, " (G)")
+                      )
+                    val sourceCallF = foldSourceMethod(smF.method, afExpr)
+                    val sourceCallG = foldSourceMethod(smG.method, agExpr)
+                    import returnT.Underlying as RT
+                    mkTuple2K[RT](sourceCallF, sourceCallG)(returnT.Underlying).as_??(returnT.Underlying)
+                  } else {
+                    // Invariant — take from af
+                    val smF =
+                      sourceMethodOptF.getOrElse(
+                        throw CatsTaglessDerivationError.SourceMethodNotFound(methodName, " (F)")
+                      )
+                    val sourceCallF = foldSourceMethod(smF.method, afExpr)
+                    import returnT.Underlying as RT
+                    sourceCallF.asInstanceOf[Expr[RT]].as_??(returnT.Underlying)
+                  }
                 }
-              ) match {
-                case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
-                case Left(e)      => throw new RuntimeException(s"fold returned Left for $methodName: $e")
               }
-            catch {
-              case e: RuntimeException => throw e
-              case e: Throwable        =>
-                throw new RuntimeException(
-                  s"fold crashed for method $methodName: ${e.getMessage}",
-                  e
-                )
-            }
 
-          if (isDirectF) {
-            val smF = sourceMethodOptF.getOrElse(throw new RuntimeException(s"Source method $methodName not found (F)"))
-            val smG = sourceMethodOptG.getOrElse(throw new RuntimeException(s"Source method $methodName not found (G)"))
-            val sourceCallF = foldSourceMethod(smF.method, afExpr)
-            val sourceCallG = foldSourceMethod(smG.method, agExpr)
-            import returnT.Underlying as RT
-            mkTuple2K[RT](sourceCallF, sourceCallG)(returnT.Underlying).as_??(returnT.Underlying)
-          } else {
-            // Invariant — take from af
-            val smF = sourceMethodOptF.getOrElse(throw new RuntimeException(s"Source method $methodName not found (F)"))
-            val sourceCallF = foldSourceMethod(smF.method, afExpr)
-            import returnT.Underlying as RT
-            sourceCallF.asInstanceOf[Expr[RT]].as_??(returnT.Underlying)
-          }
+              cm.method.asUntyped -> body
+            }.toMap
+
+            // The MIO wrapper captures typed errors thrown from the OverrideBody callbacks invoked
+            // synchronously inside `construct` and routes them into the error channel.
+            MIO(anonInstance.construct(None, Map.empty, overrides)).flatMap {
+              case Right(expr) =>
+                MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor3]]])
+              case Left(errors) =>
+                failCannotConstruct("SemigroupalK", s"trait instance: ${errors.toVector.mkString(", ")}")
+            }
         }
       }
-
-      cm.method.asUntyped -> body
-    }.toMap
-
-    anonInstance.construct(None, Map.empty, overrides) match {
-      case Right(expr) =>
-        MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor3]]])
-      case Left(errors) =>
-        MIO.fail(
-          new RuntimeException(
-            s"Cannot construct SemigroupalK trait instance: ${errors.toVector.mkString(", ")}"
-          )
-        )
-    }
   }
 }

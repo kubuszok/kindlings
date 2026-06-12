@@ -41,8 +41,7 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
       NonEmptyList.fromList(fieldsList) match {
         case None =>
           // Zero-parameter case class
-          caseClass.primaryConstructor.fold(
-            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
             onTypes = _ => Map.empty,
             onValues = _ => Map.empty
           ) match {
@@ -51,7 +50,8 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                 Expr.quote(_root_.org.scalacheck.Gen.const[A](Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])))
               )
             case Left(error) =>
-              MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+              val err = ArbitraryDerivationError.CannotConstructType(Type[A].prettyPrint, error)
+              Log.error(err.message) >> MIO.fail(err)
           }
 
         case Some(fields) =>
@@ -123,14 +123,14 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                   val fieldMap: Map[String, Expr_??] = makeAccessors.map(_(valuesExpr)).toMap
 
                   // Build constructor
-                  caseClass.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {
                     case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
                     case Left(error)          =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err = ArbitraryDerivationError.CannotConstructType(Type[A].prettyPrint, error)
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
                 .map { builder =>

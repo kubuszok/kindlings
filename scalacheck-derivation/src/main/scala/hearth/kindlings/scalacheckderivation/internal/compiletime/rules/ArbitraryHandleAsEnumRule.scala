@@ -30,12 +30,11 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
 
       childrenList match {
         case Nil =>
-          MIO.fail(new RuntimeException(s"Enum ${Type[A].prettyPrint} has no cases"))
-        case children =>
+          val err = ArbitraryDerivationError.EnumHasNoCases(Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
+        case child :: children =>
           // Derive Gen for each enum case
-          NonEmptyList
-            .fromList(children)
-            .get
+          NonEmptyList(child, children)
             .parTraverse { case (_, enumChild) =>
               import enumChild.Underlying as CaseType
               Log.namedScope(s"Deriving Arbitrary for enum case ${CaseType.prettyPrint}") {
@@ -45,10 +44,11 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
               }
             }
             .map { caseGens =>
-              val oneOfExpr: Expr[_root_.org.scalacheck.Gen[A]] = caseGens.toList match {
-                case singleGen :: Nil =>
-                  singleGen
-                case firstGen :: secondGen :: rest =>
+              val firstGen = caseGens.head
+              val oneOfExpr: Expr[_root_.org.scalacheck.Gen[A]] = caseGens.tail match {
+                case Nil =>
+                  firstGen
+                case secondGen :: rest =>
                   if (rest.isEmpty) {
                     Expr.quote {
                       _root_.org.scalacheck.Gen.oneOf(Expr.splice(firstGen), Expr.splice(secondGen))
@@ -66,8 +66,6 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
                         .oneOf(Expr.splice(firstGen), Expr.splice(secondGen), Expr.splice(restGens)*)
                     }
                   }
-                case Nil =>
-                  throw new RuntimeException(s"Enum ${Type[A].prettyPrint} has no cases")
               }
               Expr.quote {
                 _root_.org.scalacheck.Gen.sized { n =>

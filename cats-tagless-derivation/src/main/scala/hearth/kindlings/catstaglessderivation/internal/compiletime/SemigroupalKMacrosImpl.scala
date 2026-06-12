@@ -51,7 +51,8 @@ trait SemigroupalKMacrosImpl
               else s" - ${rule.name}: ${reasons.mkString(", ")}"
             }
             .toList
-          val err = SemigroupalKDerivationError.UnsupportedType(
+          val err = CatsTaglessDerivationError.UnsupportedType(
+            "SemigroupalK",
             skctx.semigroupalKAlgType.prettyPrint,
             reasonsStrings
           )
@@ -128,150 +129,137 @@ trait SemigroupalKMacrosImpl
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val ccOption = CaseClass.parse(using AlgOptionType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val ccList = CaseClass.parse(using AlgListType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+    parsedOrFail(CaseClass.parse(using AlgOptionType).toEither, "Alg[Option]")
+      .parTuple(parsedOrFail(CaseClass.parse(using AlgListType).toEither, "Alg[List]"))
+      .flatMap { case (ccOption, ccList) =>
+        val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
+        val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
 
-    val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
-    val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
+        // --- Field classification ---
 
-    // --- Field classification ---
+        val directFields = scala.collection.mutable.Set.empty[String]
+        val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
 
-    val directFields = scala.collection.mutable.Set.empty[String]
-    val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
+        val semigroupalKAnchor = Type
+          .of[cats.tagless.SemigroupalK[CatsTaglessFactories.DummyHKT]]
+          .asInstanceOf[Type[Any]]
 
-    val semigroupalKAnchor = Type
-      .of[cats.tagless.SemigroupalK[CatsTaglessFactories.DummyHKT]]
-      .asInstanceOf[Type[Any]]
+        val nestedFieldDerivations: MIO[Unit] =
+          fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
+            val tOption = pOption.tpe.Underlying
+            val tList = pList.tpe.Underlying
 
-    val nestedFieldDerivations: MIO[Unit] =
-      fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
-        val tOption = pOption.tpe.Underlying
-        val tList = pList.tpe.Underlying
+            val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
+            val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
 
-        val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
-        val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
-
-        (optionUnapply, listUnapply) match {
-          case (Some(innerOption), Some(innerList)) =>
-            import innerOption.Underlying as InnerO
-            import innerList.Underlying as InnerL
-            if (InnerO =:= InnerL) {
-              directFields += name
-              acc
-            } else {
-              acc >> MIO.fail(
-                new RuntimeException(
-                  s"Cannot derive SemigroupalK: field '$name' has type constructor parameter " +
-                    "nested within its own type argument (e.g. F[F[X]]). This is not supported."
-                )
-              )
-            }
-          case (None, None) =>
-            if (tOption =:= tList) {
-              acc // invariant
-            } else {
-              acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], semigroupalKAnchor) match {
-                case Some(info) =>
-                  val nestedCtorK1 =
-                    Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
-                  val nestedSKType = info.typeClassType.asInstanceOf[Type[cats.tagless.SemigroupalK[
-                    CatsTaglessFactories.DummyHKT
-                  ]]]
-                  val nestedCtx = SemigroupalKCtx[CatsTaglessFactories.DummyHKT](
-                    nestedCtorK1,
-                    nestedSKType,
-                    ctx.cache,
-                    ctx.derivedType
+            (optionUnapply, listUnapply) match {
+              case (Some(innerOption), Some(innerList)) =>
+                import innerOption.Underlying as InnerO
+                import innerList.Underlying as InnerL
+                if (InnerO =:= InnerL) {
+                  directFields += name
+                  acc
+                } else {
+                  acc >> failUnsupportedField(
+                    "SemigroupalK",
+                    name,
+                    "has type constructor parameter " +
+                      "nested within its own type argument (e.g. F[F[X]]). This is not supported."
                   )
-                  deriveSemigroupalKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map { nestedExpr =>
-                    nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
-                    ()
-                  }
-                case None =>
-                  MIO.fail(
-                    new RuntimeException(
-                      s"Cannot derive SemigroupalK: field '$name' depends on the type constructor parameter " +
-                        "but is not a direct application of it (e.g. F[X]), and its outer type constructor " +
-                        "could not be extracted for recursive derivation."
-                    )
-                  )
-              })
+                }
+              case (None, None) =>
+                if (tOption =:= tList) {
+                  acc // invariant
+                } else {
+                  acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], semigroupalKAnchor) match {
+                    case Some(info) =>
+                      val nestedCtorK1 =
+                        Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
+                      val nestedSKType = info.typeClassType.asInstanceOf[Type[cats.tagless.SemigroupalK[
+                        CatsTaglessFactories.DummyHKT
+                      ]]]
+                      val nestedCtx = SemigroupalKCtx[CatsTaglessFactories.DummyHKT](
+                        nestedCtorK1,
+                        nestedSKType,
+                        ctx.cache,
+                        ctx.derivedType
+                      )
+                      deriveSemigroupalKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map { nestedExpr =>
+                        nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
+                        ()
+                      }
+                    case None =>
+                      failUnsupportedField(
+                        "SemigroupalK",
+                        name,
+                        "depends on the type constructor parameter " +
+                          "but is not a direct application of it (e.g. F[X]), and its outer type constructor " +
+                          "could not be extracted for recursive derivation."
+                      )
+                  })
+                }
+              case _ =>
+                acc >> failUnsupportedField("SemigroupalK", name, "has inconsistent probe decomposition.")
             }
-          case _ =>
-            acc >> MIO.fail(
-              new RuntimeException(
-                s"Cannot derive SemigroupalK: field '$name' has inconsistent probe decomposition."
-              )
-            )
-        }
-      }
-
-    for {
-      _ <- nestedFieldDerivations
-      result <- {
-        val sourceCC_F = CaseClass.parse(using AlgWCtor1Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[WCtor1]: $e")
-        }
-        val sourceCC_G = CaseClass.parse(using AlgWCtor2Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[WCtor2]: $e")
-        }
-        val targetCC = CaseClass.parse(using AlgWCtor3Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[WCtor3]: $e")
-        }
-
-        val sourceFieldsF = sourceCC_F.caseFieldValuesAt(afExpr).toList
-        val sourceFieldsG = sourceCC_G.caseFieldValuesAt(agExpr).toList
-        val sourceFieldsGMap = sourceFieldsG.toMap
-
-        val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
-          case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
-        }.toMap
-
-        val directFieldSet = directFields.toSet
-        val nestedFieldMap = nestedFieldExprs.toMap
-
-        val mappedFields: List[(String, Expr_??)] = sourceFieldsF.map { case (fieldName, fieldValueF) =>
-          import fieldValueF.Underlying as FieldF
-          val fieldExprF = fieldValueF.value.asInstanceOf[Expr[FieldF]]
-
-          if (directFieldSet.contains(fieldName)) {
-            val tgt: Type[FieldF] = targetParamTypes(fieldName).asInstanceOf[Type[FieldF]]
-            val fieldValueG = sourceFieldsGMap(fieldName)
-            import fieldValueG.Underlying as FieldG
-            val fieldExprG = fieldValueG.value.asInstanceOf[Expr[FieldG]]
-            val mapped = mkTuple2K[FieldF](fieldExprF.upcast[Any], fieldExprG.upcast[Any])(tgt)
-            (fieldName, mapped.as_??(tgt))
-          } else if (nestedFieldMap.contains(fieldName)) {
-            val tgt: Type[FieldF] = targetParamTypes(fieldName).asInstanceOf[Type[FieldF]]
-            val fieldValueG = sourceFieldsGMap(fieldName)
-            import fieldValueG.Underlying as FieldG
-            val fieldExprG = fieldValueG.value.asInstanceOf[Expr[FieldG]]
-            val mapped =
-              mkNestedProductK[FieldF](nestedFieldMap(fieldName), fieldExprF.upcast[Any], fieldExprG.upcast[Any])(tgt)
-            (fieldName, mapped.as_??(tgt))
-          } else {
-            (fieldName, fieldExprF.as_??)
           }
-        }
 
-        targetCC.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-          onTypes = _ => Map.empty,
-          onValues = _ => mappedFields.toMap
-        ) match {
-          case Right(constructExpr) =>
-            import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor3Type))
-          case Left(error) =>
-            MIO.fail(new RuntimeException(s"Cannot construct SemigroupalK result: $error"))
-        }
+        for {
+          _ <- nestedFieldDerivations
+          parsedCCs <- parsedOrFail(CaseClass.parse(using AlgWCtor1Type).toEither, "Alg[WCtor1]")
+            .parTuple(parsedOrFail(CaseClass.parse(using AlgWCtor2Type).toEither, "Alg[WCtor2]"))
+            .parTuple(parsedOrFail(CaseClass.parse(using AlgWCtor3Type).toEither, "Alg[WCtor3]"))
+          result <- {
+            val ((sourceCC_F, sourceCC_G), targetCC) = parsedCCs
+
+            val sourceFieldsF = sourceCC_F.caseFieldValuesAt(afExpr).toList
+            val sourceFieldsG = sourceCC_G.caseFieldValuesAt(agExpr).toList
+            val sourceFieldsGMap = sourceFieldsG.toMap
+
+            val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
+              case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
+            }.toMap
+
+            val directFieldSet = directFields.toSet
+            val nestedFieldMap = nestedFieldExprs.toMap
+
+            val mappedFields: List[(String, Expr_??)] = sourceFieldsF.map { case (fieldName, fieldValueF) =>
+              import fieldValueF.Underlying as FieldF
+              val fieldExprF = fieldValueF.value.asInstanceOf[Expr[FieldF]]
+
+              if (directFieldSet.contains(fieldName)) {
+                val tgt: Type[FieldF] = targetParamTypes(fieldName).asInstanceOf[Type[FieldF]]
+                val fieldValueG = sourceFieldsGMap(fieldName)
+                import fieldValueG.Underlying as FieldG
+                val fieldExprG = fieldValueG.value.asInstanceOf[Expr[FieldG]]
+                val mapped = mkTuple2K[FieldF](fieldExprF.upcast[Any], fieldExprG.upcast[Any])(tgt)
+                (fieldName, mapped.as_??(tgt))
+              } else if (nestedFieldMap.contains(fieldName)) {
+                val tgt: Type[FieldF] = targetParamTypes(fieldName).asInstanceOf[Type[FieldF]]
+                val fieldValueG = sourceFieldsGMap(fieldName)
+                import fieldValueG.Underlying as FieldG
+                val fieldExprG = fieldValueG.value.asInstanceOf[Expr[FieldG]]
+                val mapped =
+                  mkNestedProductK[FieldF](nestedFieldMap(fieldName), fieldExprF.upcast[Any], fieldExprG.upcast[Any])(
+                    tgt
+                  )
+                (fieldName, mapped.as_??(tgt))
+              } else {
+                (fieldName, fieldExprF.as_??)
+              }
+            }
+
+            foldInstanceFree(targetCC.primaryConstructor, "Constructor")(
+              onTypes = _ => Map.empty,
+              onValues = _ => mappedFields.toMap
+            ) match {
+              case Right(constructExpr) =>
+                import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor3Type))
+              case Left(error) =>
+                failCannotConstruct("SemigroupalK", error)
+            }
+          }
+        } yield result
       }
-    } yield result
   }
 
   // --- Helpers ---
@@ -298,18 +286,4 @@ trait SemigroupalKMacrosImpl
         .productK(Expr.splice(semigroupalKExpr), Expr.splice(afFieldExpr), Expr.splice(agFieldExpr))
         .asInstanceOf[Result]
     }
-}
-
-sealed private[compiletime] trait SemigroupalKDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
-  def message: String
-  override def getMessage(): String = message
-}
-private[compiletime] object SemigroupalKDerivationError {
-  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends SemigroupalKDerivationError {
-    override def message: String =
-      s"The type $tpeName was not handled by any SemigroupalK derivation rule:\n${reasons.mkString("\n")}"
-  }
 }

@@ -307,14 +307,24 @@ trait DecoderHandleAsMapRuleImpl {
                                       case Some(cc) =>
                                         cc.construct[MIO](new CaseClass.ConstructField[MIO] {
                                           def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] =
-                                            MIO.fail(new RuntimeException("Unexpected parameter in enum singleton"))
+                                            MIO.fail(
+                                              DecoderDerivationError
+                                                .UnexpectedParameterInSingleton(
+                                                  childName,
+                                                  "Unexpected parameter in enum singleton"
+                                                )
+                                            )
                                         }).flatMap {
                                           case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[K]]))
                                           case None       =>
-                                            MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                            val err =
+                                              DecoderDerivationError.CannotConstructType(childName, isSingleton = true)
+                                            Log.error(err.message) >> MIO.fail(err)
                                         }
                                       case None =>
-                                        MIO.fail(new RuntimeException(s"Cannot construct enum case $childName"))
+                                        val err =
+                                          DecoderDerivationError.CannotConstructType(childName, isSingleton = true)
+                                        Log.error(err.message) >> MIO.fail(err)
                                     }
                                 }
                               }

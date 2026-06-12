@@ -13,6 +13,7 @@ import io.circe.{Decoder, DecodingFailure, HCursor, Json, KeyDecoder}
 
 trait DecoderMacrosImpl
     extends CirceDerivationTimeout
+    with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl

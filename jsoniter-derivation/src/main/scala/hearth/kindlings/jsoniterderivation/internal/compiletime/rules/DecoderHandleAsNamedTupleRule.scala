@@ -49,8 +49,7 @@ trait DecoderHandleAsNamedTupleRuleImpl {
 
       NonEmptyList.fromList(indexedFields) match {
         case None =>
-          constructor.fold(
-            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+          foldInstanceFree(constructor, "Constructor")(
             onTypes = _ => Map.empty,
             onValues = _ => Map.empty
           ) match {
@@ -94,8 +93,7 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
-                  constructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(constructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {

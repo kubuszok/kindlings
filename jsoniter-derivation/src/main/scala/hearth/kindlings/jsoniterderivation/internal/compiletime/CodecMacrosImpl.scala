@@ -19,6 +19,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
 
 trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl

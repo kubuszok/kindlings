@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -12,7 +14,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   * cross-quotes support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach
   * since both ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with CatsDerivationTimeout {
+trait ApplicativeMacrosImpl
+    extends rules.ApplicativeCaseClassRuleImpl
+    with CatsDerivationTimeout
+    with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
   final case class ApplicativeCaseClassResult[F[_]](
@@ -134,40 +139,37 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with Cats
   )(implicit AType: Type[A]): MIO[Expr[F[A]]] = {
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
+    parseCaseClassMIO[F[A]]("F[A]").flatMap { caseClass =>
+      val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
-    val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
-      import param.tpe.Underlying as Field
+      val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
+        import param.tpe.Underlying as Field
 
-      if (directFields.contains(fieldName)) {
-        (fieldName, aExpr.as_??)
-      } else {
-        // Invariant field: use Monoid.empty
-        val monoidExpr = ApplicativeTypes.Monoid[Field].summonExprIgnoring().toEither match {
-          case Right(m)     => m
-          case Left(reason) =>
-            throw new RuntimeException(
-              s"No Monoid instance found for invariant field '$fieldName': ${Field.prettyPrint}: $reason"
-            )
+        if (directFields.contains(fieldName)) {
+          MIO.pure((fieldName, aExpr.as_??))
+        } else {
+          // Invariant field: use Monoid.empty
+          ApplicativeTypes.Monoid[Field].summonExprIgnoring().toEither match {
+            case Right(monoidExpr) =>
+              val emptyValue: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
+              MIO.pure((fieldName, emptyValue.as_??))
+            case Left(reason) =>
+              failDerivation(
+                CatsDerivationError.MissingInstanceForField(
+                  "Monoid",
+                  fieldName,
+                  Type[F[A]].prettyPrint,
+                  Some(s"${Field.prettyPrint}: $reason")
+                )
+              )
+          }
         }
-        val emptyValue: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
-        (fieldName, emptyValue.as_??)
       }
-    }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => fieldExprs.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[A]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct pure result: $error"))
+      fieldExprsMIO.flatMap { fieldExprs =>
+        constructInstanceFree(caseClass.primaryConstructor, "Constructor", "pure result")(fieldExprs.toMap)
+          .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[A]]])
+      }
     }
   }
 
@@ -181,37 +183,23 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with Cats
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
     implicit val FBType: Type[F[B]] = FCtor.apply[B]
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.caseFieldValuesAt(faExpr).toList
+    parseCaseClassMIO[F[A]]("F[A]").parTuple(parseCaseClassMIO[F[B]]("F[B]")).flatMap { case (caseClass, caseClassB) =>
+      val fields = caseClass.caseFieldValuesAt(faExpr).toList
 
-    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+      val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
+        import fieldValue.Underlying as Field
+        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
 
-      if (directFields.contains(fieldName)) {
-        val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
-        (fieldName, mapped.as_??)
-      } else {
-        (fieldName, fieldExpr.as_??)
+        if (directFields.contains(fieldName)) {
+          val mapped: Expr[B] = Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.asInstanceOf[Expr[A]])))
+          (fieldName, mapped.as_??)
+        } else {
+          (fieldName, fieldExpr.as_??)
+        }
       }
-    }
 
-    val caseClassB = CaseClass.parse[F[B]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[B]: $e")
-    }
-    caseClassB.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[B]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct mapped result: $error"))
+      constructInstanceFree(caseClassB.primaryConstructor, "Constructor", "mapped result")(mappedFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[B]]])
     }
   }
 
@@ -225,8 +213,8 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with Cats
     val fieldsFF = caseClass.caseFieldValuesAt(ffExpr).toList
     val fieldsFA = caseClass.caseFieldValuesAt(faExpr).toList
 
-    val apFields: List[(String, Expr_??)] =
-      fieldsFF.zip(fieldsFA).map { case ((fieldName, ffFieldValue), (_, faFieldValue)) =>
+    val apFieldsMIO: MIO[List[(String, Expr_??)]] =
+      fieldsFF.zip(fieldsFA).traverse { case ((fieldName, ffFieldValue), (_, faFieldValue)) =>
         import ffFieldValue.Underlying as Field
         val ffField = ffFieldValue.value.asInstanceOf[Expr[Field]]
         val faField = faFieldValue.value.asInstanceOf[Expr[Field]]
@@ -235,31 +223,30 @@ trait ApplicativeMacrosImpl extends rules.ApplicativeCaseClassRuleImpl with Cats
           val applied: Expr[Any] = Expr.quote(
             Expr.splice(ffField).asInstanceOf[Any => Any].apply(Expr.splice(faField).asInstanceOf[Any])
           )
-          (fieldName, applied.as_??)
+          MIO.pure((fieldName, applied.as_??))
         } else {
-          val sgExpr = ApplicativeTypes.Semigroup[Field].summonExprIgnoring().toEither match {
-            case Right(sg)    => sg
+          ApplicativeTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+            case Right(sgExpr) =>
+              val combined: Expr[Field] = Expr.quote(
+                Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
+              )
+              MIO.pure((fieldName, combined.as_??))
             case Left(reason) =>
-              throw new RuntimeException(
-                s"No Semigroup instance found for invariant field '$fieldName': ${Field.prettyPrint}: $reason"
+              failDerivation(
+                CatsDerivationError.MissingInstanceForField(
+                  "Semigroup",
+                  fieldName,
+                  Type[F[Any]].prettyPrint,
+                  Some(s"${Field.prettyPrint}: $reason")
+                )
               )
           }
-          val combined: Expr[Field] = Expr.quote(
-            Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
-          )
-          (fieldName, combined.as_??)
         }
       }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => apFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct ap result: $error"))
+    apFieldsMIO.flatMap { apFields =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "ap result")(apFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

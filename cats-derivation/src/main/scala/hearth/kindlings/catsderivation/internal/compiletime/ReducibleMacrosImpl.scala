@@ -14,7 +14,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Requires at least one direct field (non-empty guarantee).
   */
-trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveReducible[F[_]](
@@ -32,14 +33,8 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
           implicit val IntType: Type[Int] = ReducibleTypes.Int
           implicit val StringType: Type[String] = ReducibleTypes.String
 
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
+          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
           val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
           val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -60,17 +55,28 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
           }
 
           if (nestedFields.nonEmpty) {
-            throw new RuntimeException(
-              s"Cannot derive Reducible: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                "Only direct type parameter fields (A) and invariant fields are supported."
-            )
+            runSafe {
+              failDerivation[Unit](
+                CatsDerivationError.UnsupportedFieldShape(
+                  "Reducible",
+                  nestedFields.mkString(", "),
+                  "the fields contain nested type constructors - " +
+                    "only direct type parameter fields (A) and invariant fields are supported"
+                )
+              )
+            }
           }
 
           if (directFields.isEmpty) {
-            throw new RuntimeException(
-              "Cannot derive Reducible: no direct type parameter fields found. " +
-                "Reducible requires at least one field of the type parameter."
-            )
+            runSafe {
+              failDerivation[Unit](
+                CatsDerivationError.DerivationFailed(
+                  "Reducible",
+                  "no direct type parameter fields found - " +
+                    "Reducible requires at least one field of the type parameter"
+                )
+              )
+            }
           }
 
           val directFieldSet: Set[String] = directFields.toSet
@@ -84,10 +90,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & S
           implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
           implicit val EvalAnyType: Type[cats.Eval[Any]] = ReducibleTypes.EvalCtor.apply[Any]
 
-          val ccAny = CaseClass.parse[F[Any]].toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Any]: $e")
-          }
+          val ccAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
 
           val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
             (faExpr, fExpr, gExpr) =>

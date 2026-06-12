@@ -104,13 +104,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
       if (param.hasDefault) {
         param.defaultValue
           .flatMap { method =>
-            method
-              .fold(
-                onInstance = _ => throw new RuntimeException("Default value should not need instance"),
-                onTypes = _ => Map.empty,
-                onValues = _ => Map.empty
-              )
-              .toOption
+            foldInstanceFree(method, "Default value")(
+              onTypes = _ => Map.empty,
+              onValues = _ => Map.empty
+            ).toOption
               .map { ee => import ee.Underlying; ee.value.upcast[Any] }
           }
           .foreach { defaultExpr =>
@@ -197,13 +194,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
       .filter { case (_, p) => hasAnnotationType[transientField](p) }
       .flatMap { case (fName, param) =>
         param.defaultValue.flatMap { method =>
-          method
-            .fold(
-              onInstance = _ => throw new RuntimeException("Default value should not need instance"),
-              onTypes = _ => Map.empty,
-              onValues = _ => Map.empty
-            )
-            .toOption
+          foldInstanceFree(method, "Default value")(
+            onTypes = _ => Map.empty,
+            onValues = _ => Map.empty
+          ).toOption
             .map(expr => (fName, expr))
         }
       }
@@ -331,8 +325,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
                   // Merge with transient defaults
                   val fieldMap = nonTransientFieldMap ++ transientDefaults
-                  caseClass.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {
@@ -522,8 +515,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               MIO.pure(combined.use { case (fieldInfos, lenGetter, lenSetter) =>
                 val fieldMap: Map[String, Expr_??] =
                   fieldInfos.map { case (name, _, getter, _) => (name, getter) }.toMap ++ transientDefaults
-                val constructExpr: Expr[A] = caseClass.primaryConstructor.fold(
-                  onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                val constructExpr: Expr[A] = foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                   onTypes = _ => Map.empty,
                   onValues = _ => fieldMap
                 ) match {
@@ -675,8 +667,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
                   val fieldMap = nonTransientFieldMap ++ transientDefaults
-                  caseClass.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {

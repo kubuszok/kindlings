@@ -2,12 +2,15 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** MonoidK derivation: combines EmptyK + SemigroupK by summoning Monoid for each field type in F[Any]. */
-trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveMonoidK[F[_]](
@@ -60,9 +63,10 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & Std
               }
             }
           case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+            failDerivation(
+              CatsDerivationError.CannotParseCaseClass(
+                Type[F[Any]].prettyPrint,
+                s"$reason. $macroName can only be derived for case classes."
               )
             )
         }
@@ -88,29 +92,28 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & Std
   )(implicit FCtor: Type.Ctor1[F], FAnyType: Type[F[Any]], AnyType: Type[Any]): MIO[Expr[F[Any]]] = {
     val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
-    val fieldExprs: List[(String, Expr_??)] = fields.map { case (fieldName, param) =>
+    val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      val monoidExpr = MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither match {
-        case Right(m)     => m
+      MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither match {
+        case Right(monoidExpr) =>
+          val value: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
+          MIO.pure((fieldName, value.as_??))
         case Left(reason) =>
-          throw new RuntimeException(
-            s"No Monoid instance found for field '$fieldName': ${Field.prettyPrint}: $reason"
+          failDerivation(
+            CatsDerivationError.MissingInstanceForField(
+              "Monoid",
+              fieldName,
+              Type[F[Any]].prettyPrint,
+              Some(s"${Field.prettyPrint}: $reason")
+            )
           )
       }
-      val value: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
-      (fieldName, value.as_??)
     }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => fieldExprs.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct empty result: $error"))
+    fieldExprsMIO.flatMap { fieldExprs =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "empty result")(fieldExprs.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 
@@ -123,32 +126,31 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & Std
     val fieldsX = caseClass.caseFieldValuesAt(xExpr).toList
     val fieldsY = caseClass.caseFieldValuesAt(yExpr).toList
 
-    val combinedFields: List[(String, Expr_??)] =
-      fieldsX.zip(fieldsY).map { case ((fieldName, fieldValueX), (_, fieldValueY)) =>
+    val combinedFieldsMIO: MIO[List[(String, Expr_??)]] =
+      fieldsX.zip(fieldsY).traverse { case ((fieldName, fieldValueX), (_, fieldValueY)) =>
         import fieldValueX.Underlying as Field
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        val sgExpr = MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
-          case Right(sg)    => sg
+        MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          case Right(sgExpr) =>
+            val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
+            MIO.pure((fieldName, combined.as_??))
           case Left(reason) =>
-            throw new RuntimeException(
-              s"No Semigroup instance found for field '$fieldName': ${Field.prettyPrint}: $reason"
+            failDerivation(
+              CatsDerivationError.MissingInstanceForField(
+                "Semigroup",
+                fieldName,
+                Type[F[Any]].prettyPrint,
+                Some(s"${Field.prettyPrint}: $reason")
+              )
             )
         }
-        val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
-        (fieldName, combined.as_??)
       }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => combinedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct combined result: $error"))
+    combinedFieldsMIO.flatMap { combinedFields =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "combined result")(combinedFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

@@ -9,6 +9,7 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait DecoderMacrosImpl
     extends XmlDerivationTimeout
+    with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsBuiltInRuleImpl

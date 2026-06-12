@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -12,7 +14,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * method-level type parameters inside Expr.quote/Expr.splice. All type-parameter-dependent fields are filled with the
   * provided value. Invariant fields cause a derivation error.
   */
-trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def derivePure[F[_]](FCtor0: Type.Ctor1[F], PureFType: Type[alleycats.Pure[F]]): Expr[alleycats.Pure[F]] = {
@@ -27,44 +30,55 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
           implicit val IntType: Type[Int] = PureTypes.Int
           implicit val StringType: Type[String] = PureTypes.String
 
-          val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-          }
-          val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-            case Right(cc) => cc
-            case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-          }
+          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
           val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
           val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
           val directFields = scala.collection.mutable.Set.empty[String]
 
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= tString) {
-              // Invariant field — no value to fill
-            } else if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else {
-              throw new RuntimeException(
-                s"Cannot derive Pure: field '$name' contains a nested type constructor. " +
-                  "Only direct type parameter fields (A) and invariant fields are supported, " +
-                  "but invariant fields also require default values which are not yet supported."
-              )
-            }
+          runSafe {
+            fieldsInt
+              .zip(fieldsString)
+              .traverse { case ((name, pInt), (_, pString)) =>
+                val tInt = pInt.tpe.Underlying
+                val tString = pString.tpe.Underlying
+                if (tInt =:= tString) {
+                  // Invariant field — no value to fill
+                  MIO.void
+                } else if (tInt =:= IntType && tString =:= StringType) {
+                  directFields += name
+                  MIO.void
+                } else {
+                  failDerivation[Unit](
+                    CatsDerivationError.UnsupportedFieldShape(
+                      "Pure",
+                      name,
+                      "the field contains a nested type constructor - " +
+                        "only direct type parameter fields (A) and invariant fields are supported, " +
+                        "but invariant fields also require default values which are not yet supported"
+                    )
+                  )
+                }
+              }
+              .void
           }
 
           // Check if there are any non-direct fields (invariant) — these need defaults we can't provide
           val allFieldNames = fieldsInt.map(_._1).toSet
           val invariantFields = allFieldNames -- directFields.toSet
           if (invariantFields.nonEmpty) {
-            throw new RuntimeException(
-              s"Cannot derive Pure: fields ${invariantFields.mkString(", ")} are not of the type parameter type. " +
-                "Pure can only be derived when all fields use the type parameter directly."
-            )
+            runSafe {
+              failDerivation[Unit](
+                CatsDerivationError.UnsupportedFieldShape(
+                  "Pure",
+                  invariantFields.mkString(", "),
+                  "the fields are not of the type parameter type - " +
+                    "Pure can only be derived when all fields use the type parameter directly"
+                )
+              )
+            }
           }
 
           val directFieldSet: Set[String] = directFields.toSet
@@ -114,26 +128,16 @@ trait PureMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExt
   )(implicit AType: Type[A]): MIO[Expr[F[A]]] = {
     implicit val FAType: Type[F[A]] = FCtor.apply[A]
 
-    val caseClass = CaseClass.parse[F[A]].toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse F[A]: $e")
-    }
-    val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
+    parseCaseClassMIO[F[A]]("F[A]").flatMap { caseClass =>
+      val fields = caseClass.primaryConstructor.totalParameters.flatten.toList
 
-    val fieldMap: Map[String, Expr_??] = fields.map { case (fieldName, _) =>
-      // All fields are direct (we verified this above), so all get `a`
-      (fieldName, aExpr.as_??)
-    }.toMap
+      val fieldMap: Map[String, Expr_??] = fields.map { case (fieldName, _) =>
+        // All fields are direct (we verified this above), so all get `a`
+        (fieldName, aExpr.as_??)
+      }.toMap
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => fieldMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[A]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct pure result: $error"))
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "pure result")(fieldMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[A]]])
     }
   }
 

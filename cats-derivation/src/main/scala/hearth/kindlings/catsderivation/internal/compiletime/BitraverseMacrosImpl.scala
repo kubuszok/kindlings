@@ -2,11 +2,14 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
-trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveBitraverse[F[_, _]](
@@ -29,18 +32,11 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               implicit val IntType: Type[Int] = BitraverseTypes.Int
               implicit val StringType: Type[String] = BitraverseTypes.String
 
-              val ccIntInt = CaseClass.parse(using FCtor.apply[Int, Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int, Int]: $e")
-              }
-              val ccStringInt = CaseClass.parse(using FCtor.apply[String, Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String, Int]: $e")
-              }
-              val ccIntString = CaseClass.parse(using FCtor.apply[Int, String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int, String]: $e")
-              }
+              val ccIntInt = runSafe(parseCaseClassMIO[F[Int, Int]]("F[Int, Int]")(using FCtor.apply[Int, Int]))
+              val ccStringInt =
+                runSafe(parseCaseClassMIO[F[String, Int]]("F[String, Int]")(using FCtor.apply[String, Int]))
+              val ccIntString =
+                runSafe(parseCaseClassMIO[F[Int, String]]("F[Int, String]")(using FCtor.apply[Int, String]))
 
               val fieldsP1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
               val fieldsP2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
@@ -50,23 +46,35 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               val rightFieldSet = scala.collection.mutable.Set.empty[String]
               val covariantFieldOrder = scala.collection.mutable.ListBuffer.empty[(String, Boolean)]
 
-              fieldsP1.zip(fieldsP2).zip(fieldsP3).foreach { case (((name, p1), (_, p2)), (_, p3)) =>
-                val t1 = p1.tpe.Underlying
-                val t2 = p2.tpe.Underlying
-                val t3 = p3.tpe.Underlying
-                val firstChanges = !(t1 =:= t2)
-                val secondChanges = !(t1 =:= t3)
-                if (firstChanges && !secondChanges) {
-                  leftFieldSet += name
-                  covariantFieldOrder += ((name, true))
-                } else if (!firstChanges && secondChanges) {
-                  rightFieldSet += name
-                  covariantFieldOrder += ((name, false))
-                } else if (firstChanges && secondChanges) {
-                  throw new RuntimeException(
-                    s"Cannot derive Bitraverse: field $name depends on both type parameters."
-                  )
-                }
+              runSafe {
+                fieldsP1
+                  .zip(fieldsP2)
+                  .zip(fieldsP3)
+                  .traverse { case (((name, p1), (_, p2)), (_, p3)) =>
+                    val t1 = p1.tpe.Underlying
+                    val t2 = p2.tpe.Underlying
+                    val t3 = p3.tpe.Underlying
+                    val firstChanges = !(t1 =:= t2)
+                    val secondChanges = !(t1 =:= t3)
+                    if (firstChanges && !secondChanges) {
+                      leftFieldSet += name
+                      covariantFieldOrder += ((name, true))
+                      MIO.void
+                    } else if (!firstChanges && secondChanges) {
+                      rightFieldSet += name
+                      covariantFieldOrder += ((name, false))
+                      MIO.void
+                    } else if (firstChanges && secondChanges) {
+                      failDerivation[Unit](
+                        CatsDerivationError.UnsupportedFieldShape(
+                          "Bitraverse",
+                          name,
+                          "the field depends on both type parameters"
+                        )
+                      )
+                    } else MIO.void
+                  }
+                  .void
               }
 
               val allCovariantFields: Set[String] = leftFieldSet.toSet ++ rightFieldSet.toSet
@@ -109,14 +117,9 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                         (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
                       }
                     }
-                    caseClass.primaryConstructor.fold(
-                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                      onTypes = _ => Map.empty,
-                      onValues = _ => mappedFields.toMap
-                    ) match {
-                      case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[F[Any, Any]]])
-                      case Left(e)     => MIO.fail(new RuntimeException(s"Cannot construct bimap result: $e"))
-                    }
+                    constructInstanceFree(caseClass.primaryConstructor, "Constructor", "bimap result")(
+                      mappedFields.toMap
+                    ).map(expr => expr.value.asInstanceOf[Expr[F[Any, Any]]])
                   }
 
               val doBifoldLeft
@@ -249,9 +252,10 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
           case Left(_) =>
             Enum.parse[F[Any, Any]].toEither match {
               case Left(reason2) =>
-                MIO.fail(
-                  new RuntimeException(
-                    s"$macroName: Cannot derive: not a case class and not a sealed trait ($reason2)."
+                failDerivation(
+                  CatsDerivationError.CannotParseEnum(
+                    Type[F[Any, Any]].prettyPrint,
+                    s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
                   )
                 )
               case Right(enumm) =>
@@ -311,8 +315,11 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
       FAnyAnyType: Type[F[Any, Any]],
       AnyType: Type[Any],
       ListAnyType: Type[List[Any]]
-  ): MIO[Expr[(List[Any], Any) => Any]] = {
-    val lambda =
+  ): MIO[Expr[(List[Any], Any) => Any]] =
+    // LambdaBuilder callbacks are synchronous and cannot return MIO, so failures inside the
+    // callback throw the typed CatsDerivationError; the enclosing MIO(...) converts the
+    // NonFatal throw into a proper MIO error-channel failure.
+    MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val fabExpr: Expr[F[Any, Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any, Any]])
         val fields = caseClass.caseFieldValuesAt(fabExpr).toList
@@ -328,18 +335,16 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+        foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
           onTypes = _ => Map.empty,
           onValues = _ => fieldExprs.toMap
         ) match {
           case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
-            throw new RuntimeException(s"Cannot construct bitraversed result: $error")
+            throw CatsDerivationError.CannotConstructResult("bitraversed result", error)
         }
       }
-    MIO.pure(lambda)
-  }
+    }
 
   @scala.annotation.nowarn(
     "msg=is never used|unused explicit parameter|unused local definition|unused implicit parameter"
@@ -357,14 +362,10 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
     implicit val ListAnyType: Type[List[Any]] = BitraverseTypes.ListAny
     implicit val FCtor1: Type.Ctor2[F] = FCtor
 
-    val enumP1 = Enum.parse(using FCtor.apply[Int, Int].asInstanceOf[Type[Any]]).toEither match {
-      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[Int,Int]"))
-    }
-    val enumP2 = Enum.parse(using FCtor.apply[String, Int].asInstanceOf[Type[Any]]).toEither match {
-      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[String,Int]"))
-    }
-    val enumP3 = Enum.parse(using FCtor.apply[Int, String].asInstanceOf[Type[Any]]).toEither match {
-      case Right(e) => e; case Left(_) => return MIO.fail(new RuntimeException("Cannot parse F[Int,String]"))
+    val ((enumP1, enumP2), enumP3) = runSafe {
+      parseEnumMIO[Any]("F[Int, Int]")(using FCtor.apply[Int, Int].asInstanceOf[Type[Any]])
+        .parTuple(parseEnumMIO[Any]("F[String, Int]")(using FCtor.apply[String, Int].asInstanceOf[Type[Any]]))
+        .parTuple(parseEnumMIO[Any]("F[Int, String]")(using FCtor.apply[Int, String].asInstanceOf[Type[Any]]))
     }
 
     case class BiChildInfo(leftFields: Set[String], rightFields: Set[String])
@@ -403,7 +404,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
             import matched.{value as cv, Underlying as CT}
             val cn = Type[CT].shortName
             childInfo.get(cn) match {
-              case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+              case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Bitraverse", cn))
               case Some(info) =>
                 CaseClass.parse[CT].toEither match {
                   case Left(_)   => MIO.pure(cv.upcast[F[Any, Any]])
@@ -418,18 +419,15 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                         (fn, Expr.quote(Expr.splice(gExpr)(Expr.splice(fe.upcast[Any])).asInstanceOf[Field]).as_??)
                       else (fn, fe.as_??)
                     }
-                    cc.primaryConstructor.fold(
-                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                      onTypes = _ => Map.empty,
-                      onValues = _ => mapped.toMap
-                    ) match {
-                      case Right(e) => MIO.pure(e.value.asInstanceOf[Expr[F[Any, Any]]])
-                      case Left(e)  => MIO.fail(new RuntimeException(s"Cannot construct $cn: $e"))
-                    }
+                    constructInstanceFree(cc.primaryConstructor, "Constructor", cn)(mapped.toMap)
+                      .map(e => e.value.asInstanceOf[Expr[F[Any, Any]]])
                 }
             }
           }
-          .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+          .flatMap {
+            case Some(r) => MIO.pure(r)
+            case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any, Any]].prettyPrint))
+          }
       }
 
     def mkBifoldLeftBody(
@@ -443,7 +441,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
           import matched.{value as cv, Underlying as CT}
           val cn = Type[CT].shortName
           childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Bitraverse", cn))
             case Some(info) =>
               CaseClass.parse[CT].toEither match {
                 case Left(_)   => MIO.pure(cExpr)
@@ -462,7 +460,10 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               }
           }
         }
-        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+        .flatMap {
+          case Some(r) => MIO.pure(r)
+          case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any, Any]].prettyPrint))
+        }
     }
 
     def mkBifoldRightBody(
@@ -476,7 +477,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
           import matched.{value as cv, Underlying as CT}
           val cn = Type[CT].shortName
           childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Bitraverse", cn))
             case Some(info) =>
               CaseClass.parse[CT].toEither match {
                 case Left(_)   => MIO.pure(lcExpr)
@@ -496,7 +497,10 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               }
           }
         }
-        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+        .flatMap {
+          case Some(r) => MIO.pure(r)
+          case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any, Any]].prettyPrint))
+        }
     }
 
     def mkBitraverseBody(
@@ -510,7 +514,7 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
           import matched.{value as cv, Underlying as CT}
           val cn = Type[CT].shortName
           childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
+            case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Bitraverse", cn))
             case Some(info) =>
               CaseClass.parse[CT].toEither match {
                 case Left(_) =>
@@ -553,30 +557,33 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
                         .upcast[Any]
                     )
                   } else {
+                    // LambdaBuilder callbacks are synchronous and cannot return MIO, so failures
+                    // inside the callback throw the typed CatsDerivationError; the enclosing
+                    // MIO(...) converts the NonFatal throw into an MIO error-channel failure.
                     val reconLambda: Expr[List[Any] => Any] = runSafe {
-                      val lambda = LambdaBuilder.of1[List[Any]]("newVals").buildWith { nvExpr =>
-                        var currentList: Expr[List[Any]] = nvExpr
-                        val fieldExprs: List[(String, Expr_??)] = fields.map { case (fn2, fv2) =>
-                          import fv2.Underlying as Field2
-                          if (covariantFields.contains(fn2)) {
-                            val h = Expr.quote(Expr.splice(currentList).head)
-                            val t = Expr.quote(Expr.splice(currentList).tail)
-                            currentList = t
-                            (fn2, Expr.quote(Expr.splice(h).asInstanceOf[Field2]).as_??)
-                          } else {
-                            (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
+                      MIO {
+                        LambdaBuilder.of1[List[Any]]("newVals").buildWith { nvExpr =>
+                          var currentList: Expr[List[Any]] = nvExpr
+                          val fieldExprs: List[(String, Expr_??)] = fields.map { case (fn2, fv2) =>
+                            import fv2.Underlying as Field2
+                            if (covariantFields.contains(fn2)) {
+                              val h = Expr.quote(Expr.splice(currentList).head)
+                              val t = Expr.quote(Expr.splice(currentList).tail)
+                              currentList = t
+                              (fn2, Expr.quote(Expr.splice(h).asInstanceOf[Field2]).as_??)
+                            } else {
+                              (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
+                            }
+                          }
+                          foldInstanceFree(cc.primaryConstructor, "Constructor")(
+                            onTypes = _ => Map.empty,
+                            onValues = _ => fieldExprs.toMap
+                          ) match {
+                            case Right(e) => e.value.asInstanceOf[Expr[Any]]
+                            case Left(e)  => throw CatsDerivationError.CannotConstructResult(cn, e)
                           }
                         }
-                        cc.primaryConstructor.fold(
-                          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                          onTypes = _ => Map.empty,
-                          onValues = _ => fieldExprs.toMap
-                        ) match {
-                          case Right(e) => e.value.asInstanceOf[Expr[Any]]
-                          case Left(e)  => throw new RuntimeException(s"Cannot construct $cn: $e")
-                        }
                       }
-                      MIO.pure(lambda)
                     }
                     val gListExpr = gFieldExprs.foldRight(
                       Expr.quote(
@@ -606,7 +613,10 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               }
           }
         }
-        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
+        .flatMap {
+          case Some(r) => MIO.pure(r)
+          case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any, Any]].prettyPrint))
+        }
     }
 
     MIO.pure {

@@ -14,7 +14,8 @@ trait EmptyMacrosImpl
     with rules.EmptyBuiltInRuleImpl
     with rules.EmptyCaseClassRuleImpl
     with rules.EmptyEnumRuleImpl
-    with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+    with CatsDerivationTimeout
+    with CatsDerivationErrorSupport { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEmpty[A: Type]: Expr[alleycats.Empty[A]] = {

@@ -17,7 +17,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Uses erased approach: builds body for F[Any] with Any, wraps with asInstanceOf.
   */
-trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   /** Bridge method: summon ConsK for the type constructor of a nested field type.
     *
@@ -46,14 +47,8 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
               implicit val IntType: Type[Int] = ConsKTypes.Int
               implicit val StringType: Type[String] = ConsKTypes.String
 
-              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-              }
-              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-              }
+              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
               val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
               val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -78,10 +73,15 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
               }
 
               if (directFields.isEmpty && nestedFieldConsKs.isEmpty) {
-                throw new RuntimeException(
-                  "Cannot derive ConsK: no type-parameter-dependent fields found. " +
-                    "Need at least one field of type A or G[A] where ConsK[G] exists."
-                )
+                runSafe {
+                  failDerivation[Unit](
+                    CatsDerivationError.DerivationFailed(
+                      "ConsK",
+                      "no type-parameter-dependent fields found - " +
+                        "need at least one field of type A or G[A] where ConsK[G] exists"
+                    )
+                  )
+                }
               }
 
               val directFieldSet: Set[String] = directFields.toSet
@@ -108,9 +108,10 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
               }
             }
           case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+            failDerivation(
+              CatsDerivationError.CannotParseCaseClass(
+                Type[F[Any]].prettyPrint,
+                s"$reason. $macroName can only be derived for case classes."
               )
             )
         }
@@ -178,23 +179,16 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdEx
     }
 
     if (carried.isDefined) {
-      MIO.fail(
-        new RuntimeException(
-          "Cannot derive ConsK: no container field found to absorb the consed element. " +
-            "Need at least one field of type G[A] where ConsK[G] exists (e.g., List[A], Vector[A])."
+      failDerivation(
+        CatsDerivationError.DerivationFailed(
+          "ConsK",
+          "no container field found to absorb the consed element - " +
+            "need at least one field of type G[A] where ConsK[G] exists (e.g., List[A], Vector[A])"
         )
       )
     } else {
-      caseClass.primaryConstructor.fold(
-        onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-        onTypes = _ => Map.empty,
-        onValues = _ => resultFields.toMap
-      ) match {
-        case Right(constructExpr) =>
-          MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-        case Left(error) =>
-          MIO.fail(new RuntimeException(s"Cannot construct ConsK result: $error"))
-      }
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "ConsK result")(resultFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

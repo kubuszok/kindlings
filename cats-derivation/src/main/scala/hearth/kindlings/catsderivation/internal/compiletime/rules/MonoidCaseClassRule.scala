@@ -50,29 +50,14 @@ trait MonoidCaseClassRuleImpl {
             }
             .flatMap { emptyFields =>
               val fieldMap: Map[String, Expr_??] = emptyFields.toList.toMap
-              caseClass.primaryConstructor.fold(
-                onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                onTypes = _ => Map.empty,
-                onValues = _ => fieldMap
-              ) match {
-                case Right(constructExpr) =>
-                  MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                case Left(error) =>
-                  MIO.fail(new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error"))
-              }
+              constructInstanceFree(caseClass.primaryConstructor, "Constructor", s"empty ${Type[A].prettyPrint}")(
+                fieldMap
+              ).map(constructExpr => constructExpr.value.asInstanceOf[Expr[A]])
             }
         case None =>
           // No fields — construct empty instance
-          caseClass.primaryConstructor.fold(
-            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-            onTypes = _ => Map.empty,
-            onValues = _ => Map.empty
-          ) match {
-            case Right(constructExpr) =>
-              MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-            case Left(error) =>
-              MIO.fail(new RuntimeException(s"Cannot construct empty ${Type[A].prettyPrint}: $error"))
-          }
+          constructInstanceFree(caseClass.primaryConstructor, "Constructor", s"empty ${Type[A].prettyPrint}")(Map.empty)
+            .map(constructExpr => constructExpr.value.asInstanceOf[Expr[A]])
       }
     }
   }

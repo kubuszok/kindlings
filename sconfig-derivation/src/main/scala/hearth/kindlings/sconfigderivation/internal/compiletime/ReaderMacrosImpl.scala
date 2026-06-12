@@ -10,6 +10,7 @@ import org.ekrich.config.ConfigValue
 
 trait ReaderMacrosImpl
     extends SconfigDerivationTimeout
+    with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsValueTypeRuleImpl

@@ -49,7 +49,8 @@ trait ContravariantKMacrosImpl
               else s" - ${rule.name}: ${reasons.mkString(", ")}"
             }
             .toList
-          val err = ContravariantKDerivationError.UnsupportedType(
+          val err = CatsTaglessDerivationError.UnsupportedType(
+            "ContravariantK",
             ckctx.contravariantKAlgType.prettyPrint,
             reasonsStrings
           )
@@ -124,127 +125,115 @@ trait ContravariantKMacrosImpl
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val ccOption = CaseClass.parse(using AlgOptionType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val ccList = CaseClass.parse(using AlgListType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+    parsedOrFail(CaseClass.parse(using AlgOptionType).toEither, "Alg[Option]")
+      .parTuple(parsedOrFail(CaseClass.parse(using AlgListType).toEither, "Alg[List]"))
+      .flatMap { case (ccOption, ccList) =>
+        val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
+        val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
 
-    val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
-    val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
+        val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
 
-    val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
+        val contravariantKAnchor = Type
+          .of[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]
+          .asInstanceOf[Type[Any]]
+        val invariantKAnchor = Type
+          .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
+          .asInstanceOf[Type[Any]]
 
-    val contravariantKAnchor = Type
-      .of[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]
-      .asInstanceOf[Type[Any]]
-    val invariantKAnchor = Type
-      .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
-      .asInstanceOf[Type[Any]]
+        val nestedFieldDerivations: MIO[Unit] =
+          fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
+            val tOption = pOption.tpe.Underlying
+            val tList = pList.tpe.Underlying
+            val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
+            val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
 
-    val nestedFieldDerivations: MIO[Unit] =
-      fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
-        val tOption = pOption.tpe.Underlying
-        val tList = pList.tpe.Underlying
-        val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
-        val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
-
-        (optionUnapply, listUnapply) match {
-          case (Some(_), Some(_)) =>
-            acc >> MIO.fail(
-              new RuntimeException(
-                s"Cannot derive ContravariantK: field '$name' is covariant in the type constructor parameter " +
-                  s"(has type F[X]). ContravariantK can only handle contravariant or invariant fields. " +
-                  "Consider using InvariantK or FunctorK instead."
-              )
-            )
-          case (None, None) =>
-            if (tOption =:= tList) acc
-            else {
-              acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], contravariantKAnchor) match {
-                case Some(info) =>
-                  val nestedCtorK1 = Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
-                  val nestedCKType = info.typeClassType
-                    .asInstanceOf[Type[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]]
-                  val nestedCtx = ContravariantKCtx[CatsTaglessFactories.DummyHKT](
-                    nestedCtorK1,
-                    nestedCKType,
-                    ctx.cache,
-                    ctx.derivedType
-                  )
-                  deriveContravariantKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map { nestedExpr =>
-                    nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
-                    ()
-                  }
-                case None =>
-                  val invariantKAvailable = constructTypeClassTypeForField(
-                    tOption.asInstanceOf[Type[Any]],
-                    invariantKAnchor
-                  ).exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
-                  val hint =
-                    if (invariantKAvailable)
-                      " An InvariantK instance exists for it — consider using InvariantK.derived instead."
-                    else ""
-                  MIO.fail(
-                    new RuntimeException(
-                      s"Cannot derive ContravariantK: field '$name' depends on the type constructor parameter " +
-                        s"but no ContravariantK instance could be derived for its outer type constructor.$hint"
-                    )
-                  )
-              })
+            (optionUnapply, listUnapply) match {
+              case (Some(_), Some(_)) =>
+                acc >> failUnsupportedField(
+                  "ContravariantK",
+                  name,
+                  "is covariant in the type constructor parameter " +
+                    "(has type F[X]). ContravariantK can only handle contravariant or invariant fields. " +
+                    "Consider using InvariantK or FunctorK instead."
+                )
+              case (None, None) =>
+                if (tOption =:= tList) acc
+                else {
+                  acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], contravariantKAnchor) match {
+                    case Some(info) =>
+                      val nestedCtorK1 = Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
+                      val nestedCKType = info.typeClassType
+                        .asInstanceOf[Type[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]]
+                      val nestedCtx = ContravariantKCtx[CatsTaglessFactories.DummyHKT](
+                        nestedCtorK1,
+                        nestedCKType,
+                        ctx.cache,
+                        ctx.derivedType
+                      )
+                      deriveContravariantKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map {
+                        nestedExpr =>
+                          nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
+                          ()
+                      }
+                    case None =>
+                      val invariantKAvailable = constructTypeClassTypeForField(
+                        tOption.asInstanceOf[Type[Any]],
+                        invariantKAnchor
+                      ).exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
+                      val hint =
+                        if (invariantKAvailable)
+                          " An InvariantK instance exists for it — consider using InvariantK.derived instead."
+                        else ""
+                      failUnsupportedField(
+                        "ContravariantK",
+                        name,
+                        "depends on the type constructor parameter " +
+                          s"but no ContravariantK instance could be derived for its outer type constructor.$hint"
+                      )
+                  })
+                }
+              case _ =>
+                acc >> failUnsupportedField("ContravariantK", name, "has inconsistent probe decomposition.")
             }
-          case _ =>
-            acc >> MIO.fail(
-              new RuntimeException(
-                s"Cannot derive ContravariantK: field '$name' has inconsistent probe decomposition."
-              )
-            )
-        }
-      }
-
-    for {
-      _ <- nestedFieldDerivations
-      result <- {
-        val sourceCC = CaseClass.parse(using AlgWCtor1Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-        }
-        val targetCC = CaseClass.parse(using AlgWCtor2Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-        }
-        val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
-        val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
-          case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
-        }.toMap
-
-        val nestedFieldMap = nestedFieldExprs.toMap
-
-        val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
-          import fieldValue.Underlying as Field
-          val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-
-          if (nestedFieldMap.contains(fieldName)) {
-            val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
-            val mapped = mkNestedContramapK[Field](nestedFieldMap(fieldName), fieldExpr.upcast[Any], fkExpr)(tgt)
-            (fieldName, mapped.as_??(tgt))
-          } else {
-            (fieldName, fieldExpr.as_??)
           }
-        }
 
-        targetCC.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-          onTypes = _ => Map.empty,
-          onValues = _ => mappedFields.toMap
-        ) match {
-          case Right(constructExpr) =>
-            import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
-          case Left(error) => MIO.fail(new RuntimeException(s"Cannot construct ContravariantK result: $error"))
-        }
+        for {
+          _ <- nestedFieldDerivations
+          sourceAndTarget <- parsedOrFail(CaseClass.parse(using AlgWCtor1Type).toEither, "Alg[WCtor1]")
+            .parTuple(parsedOrFail(CaseClass.parse(using AlgWCtor2Type).toEither, "Alg[WCtor2]"))
+          result <- {
+            val (sourceCC, targetCC) = sourceAndTarget
+            val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
+            val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
+              case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
+            }.toMap
+
+            val nestedFieldMap = nestedFieldExprs.toMap
+
+            val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
+              import fieldValue.Underlying as Field
+              val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+              if (nestedFieldMap.contains(fieldName)) {
+                val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
+                val mapped = mkNestedContramapK[Field](nestedFieldMap(fieldName), fieldExpr.upcast[Any], fkExpr)(tgt)
+                (fieldName, mapped.as_??(tgt))
+              } else {
+                (fieldName, fieldExpr.as_??)
+              }
+            }
+
+            foldInstanceFree(targetCC.primaryConstructor, "Constructor")(
+              onTypes = _ => Map.empty,
+              onValues = _ => mappedFields.toMap
+            ) match {
+              case Right(constructExpr) =>
+                import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
+              case Left(error) => failCannotConstruct("ContravariantK", error)
+            }
+          }
+        } yield result
       }
-    } yield result
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
@@ -258,18 +247,4 @@ trait ContravariantKMacrosImpl
         .contramapK(Expr.splice(contravariantKExpr), Expr.splice(fieldExpr), Expr.splice(fkExpr))
         .asInstanceOf[Result]
     }
-}
-
-sealed private[compiletime] trait ContravariantKDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
-  def message: String
-  override def getMessage(): String = message
-}
-private[compiletime] object ContravariantKDerivationError {
-  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends ContravariantKDerivationError {
-    override def message: String =
-      s"The type $tpeName was not handled by any ContravariantK derivation rule:\n${reasons.mkString("\n")}"
-  }
 }

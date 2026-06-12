@@ -2,6 +2,8 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
@@ -14,7 +16,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * (apply f) and nested fields (delegate to Traverse[G].traverse). A LambdaBuilder-built reconstruction lambda rebuilds
   * the case class from the resulting List[Any] + original invariant field values.
   */
-trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   protected def summonTraverseForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
 
@@ -40,14 +43,8 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
               implicit val IntType: Type[Int] = TraverseTypes.Int
               implicit val StringType: Type[String] = TraverseTypes.String
 
-              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-              }
-              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-              }
+              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
               val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
               val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -79,10 +76,15 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
                   }
                 }
                 if (unsupported.nonEmpty) {
-                  throw new RuntimeException(
-                    s"Cannot derive Traverse: fields ${unsupported.mkString(", ")} contain nested type constructors " +
-                      "without Traverse instances."
-                  )
+                  runSafe {
+                    failDerivation[Unit](
+                      CatsDerivationError.UnsupportedFieldShape(
+                        "Traverse",
+                        unsupported.mkString(", "),
+                        "the fields contain nested type constructors without Traverse instances"
+                      )
+                    )
+                  }
                 }
               }
 
@@ -187,9 +189,10 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
           case Left(_) =>
             Enum.parse[F[Any]].toEither match {
               case Left(reason2) =>
-                MIO.fail(
-                  new RuntimeException(
-                    s"$macroName: Cannot derive for type: not a case class and not a sealed trait ($reason2)."
+                failDerivation(
+                  CatsDerivationError.CannotParseEnum(
+                    Type[F[Any]].prettyPrint,
+                    s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
                   )
                 )
               case Right(enumm) =>
@@ -224,8 +227,11 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
       FAnyType: Type[F[Any]],
       AnyType: Type[Any],
       ListAnyType: Type[List[Any]]
-  ): MIO[Expr[(List[Any], Any) => Any]] = {
-    val lambda =
+  ): MIO[Expr[(List[Any], Any) => Any]] =
+    // LambdaBuilder callbacks are synchronous and cannot return MIO, so failures inside the
+    // callback throw the typed CatsDerivationError; the enclosing MIO(...) converts the
+    // NonFatal throw into a proper MIO error-channel failure.
+    MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val faExpr: Expr[F[Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any]])
         val fields = caseClass.caseFieldValuesAt(faExpr).toList
@@ -242,18 +248,16 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+        foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
           onTypes = _ => Map.empty,
           onValues = _ => fieldExprs.toMap
         ) match {
           case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
-            throw new RuntimeException(s"Cannot construct traversed result: $error")
+            throw CatsDerivationError.CannotConstructResult("traversed result", error)
         }
       }
-    MIO.pure(lambda)
-  }
+    }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
   private def deriveTraverseBody[F[_]](
@@ -411,326 +415,387 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & St
 
     val parentCtor = FCtor.asUntyped
 
-    val enumInt = Enum.parse(using FCtor.apply[Int].asInstanceOf[Type[Any]]).toEither match {
-      case Right(e) => e
-      case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[Int] as enum"))
-    }
-    val enumString = Enum.parse(using FCtor.apply[String].asInstanceOf[Type[Any]]).toEither match {
-      case Right(e) => e
-      case Left(_)  => return MIO.fail(new RuntimeException("Cannot parse F[String] as enum"))
-    }
+    parseEnumMIO[Any]("F[Int]")(using FCtor.apply[Int].asInstanceOf[Type[Any]])
+      .parTuple(parseEnumMIO[Any]("F[String]")(using FCtor.apply[String].asInstanceOf[Type[Any]]))
+      .flatMap { case (enumInt, enumString) =>
+        case class ChildFieldInfo(
+            directFields: Set[String],
+            nestedInstances: Map[String, Expr[Any]],
+            selfRecursiveFields: Set[String]
+        )
 
-    case class ChildFieldInfo(
-        directFields: Set[String],
-        nestedInstances: Map[String, Expr[Any]],
-        selfRecursiveFields: Set[String]
-    )
-
-    val childInfo: Map[String, ChildFieldInfo] = runSafe {
-      val result = scala.collection.mutable.Map.empty[String, ChildFieldInfo]
-      val childrenInt = enumInt.directChildren.toList
-      val childrenString = enumString.directChildren.toList
-      childrenInt.zip(childrenString).foreach { case ((childName, childI), (_, childS)) =>
-        import childI.Underlying as ChildI
-        import childS.Underlying as ChildS
-        val ccI = CaseClass.parse[ChildI].toEither
-        val ccS = CaseClass.parse[ChildS].toEither
-        (ccI, ccS) match {
-          case (Right(cI), Right(cS)) =>
-            val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
-            val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
-            val direct = scala.collection.mutable.Set.empty[String]
-            val nested = scala.collection.mutable.Map.empty[String, Expr[Any]]
-            val selfRec = scala.collection.mutable.Set.empty[String]
-            fieldsI.zip(fieldsS).foreach { case ((name, pI), (_, pS)) =>
-              val tI = pI.tpe.Underlying
-              val tS = pS.tpe.Underlying
-              if (tI =:= IntType && tS =:= StringType) direct += name
-              else if (tI =:= tS) ()
-              else {
-                val param = fieldsI.find(_._1 == name).get._2
-                import param.tpe.Underlying as FT
-                summonTraverseForFieldType(Type[FT].asInstanceOf[Type[Any]]) match {
-                  case Some(expr) => nested += (name -> expr)
-                  case None       =>
-                    mkCtor1FromTypeTraverse(Type[FT].asInstanceOf[Type[Any]]) match {
-                      case Some(ut) if ut == parentCtor => selfRec += name
-                      case _ => throw new RuntimeException(s"No Traverse for nested field $name in $childName")
-                    }
-                }
-              }
-            }
-            result += (childName -> ChildFieldInfo(direct.toSet, nested.toMap, selfRec.toSet))
-          case _ =>
-            result += (childName -> ChildFieldInfo(Set.empty, Map.empty, Set.empty))
-        }
-      }
-      MIO.pure(result.toMap)
-    }
-
-    val hasSelfRecursive = childInfo.values.exists(_.selfRecursiveFields.nonEmpty)
-
-    import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-
-    def mkTraverseBody(
-        faExpr: Expr[F[Any]],
-        fExpr: Expr[Any],
-        gExpr: Expr[Any],
-        selfOpt: Option[Expr[Any]]
-    ): Expr[Any] = runSafe {
-      enumm
-        .matchOn[MIO, Any](faExpr) { matched =>
-          import matched.{value as caseValue, Underlying as CT}
-          val cn = Type[CT].shortName
-          childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
-            case Some(info) =>
-              val cc = CaseClass.parse[CT].toEither match {
-                case Right(c) => c; case Left(e) => throw new RuntimeException(e.toString)
-              }
-              val fields = cc.caseFieldValuesAt(caseValue).toList
-              if (fields.isEmpty) {
-                val gE = Expr.quote(Expr.splice(gExpr).asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]])
-                MIO.pure(Expr.quote(Expr.splice(gE).pure(Expr.splice(caseValue.upcast[Any]))).upcast[Any])
-              } else {
-                val gFieldExprs: List[Expr[CatsDerivationFactories.AnyF[Any]]] = fields.collect {
-                  case (fn, fv) if info.directFields.contains(fn) =>
-                    import fv.Underlying as Field
-                    val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
-                    Expr.quote(
-                      Expr.splice(fExpr).asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]](Expr.splice(fe))
-                    )
-                  case (fn, fv) if info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn) =>
-                    import fv.Underlying as Field
-                    val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
-                    val travE =
-                      if (info.selfRecursiveFields.contains(fn))
-                        selfOpt.getOrElse(throw new RuntimeException("No self"))
-                      else info.nestedInstances(fn)
-                    Expr.quote(
-                      hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                        .traverseNested(Expr.splice(travE), Expr.splice(fe), Expr.splice(fExpr), Expr.splice(gExpr))
-                        .asInstanceOf[CatsDerivationFactories.AnyF[Any]]
-                    )
-                }
-                val traversableFields = info.directFields ++ info.nestedInstances.keySet ++ info.selfRecursiveFields
-
-                val reconLambda: Expr[List[Any] => Any] = runSafe {
-                  val lambda = LambdaBuilder.of1[List[Any]]("newVals").buildWith { newValsExpr =>
-                    var currentList: Expr[List[Any]] = newValsExpr
-                    val fieldExprs: List[(String, Expr_??)] = fields.map { case (fn2, fv2) =>
-                      import fv2.Underlying as Field2
-                      if (traversableFields.contains(fn2)) {
-                        val headExpr: Expr[Any] = Expr.quote(Expr.splice(currentList).head)
-                        val tailExpr: Expr[List[Any]] = Expr.quote(Expr.splice(currentList).tail)
-                        currentList = tailExpr
-                        val typed: Expr[Field2] = Expr.quote(Expr.splice(headExpr).asInstanceOf[Field2])
-                        (fn2, typed.as_??)
-                      } else {
-                        (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
+        val childInfo: Map[String, ChildFieldInfo] = runSafe {
+          val childrenInt = enumInt.directChildren.toList
+          val childrenString = enumString.directChildren.toList
+          childrenInt
+            .zip(childrenString)
+            .traverse { case ((childName, childI), (_, childS)) =>
+              import childI.Underlying as ChildI
+              import childS.Underlying as ChildS
+              val ccI = CaseClass.parse[ChildI].toEither
+              val ccS = CaseClass.parse[ChildS].toEither
+              (ccI, ccS) match {
+                case (Right(cI), Right(cS)) =>
+                  val fieldsI = cI.primaryConstructor.totalParameters.flatten.toList
+                  val fieldsS = cS.primaryConstructor.totalParameters.flatten.toList
+                  val direct = scala.collection.mutable.Set.empty[String]
+                  val nested = scala.collection.mutable.Map.empty[String, Expr[Any]]
+                  val selfRec = scala.collection.mutable.Set.empty[String]
+                  fieldsI
+                    .zip(fieldsS)
+                    .traverse { case ((name, pI), (_, pS)) =>
+                      val tI = pI.tpe.Underlying
+                      val tS = pS.tpe.Underlying
+                      if (tI =:= IntType && tS =:= StringType) {
+                        direct += name
+                        MIO.void
+                      } else if (tI =:= tS) MIO.void
+                      else {
+                        val param = fieldsI.find(_._1 == name).get._2
+                        import param.tpe.Underlying as FT
+                        summonTraverseForFieldType(Type[FT].asInstanceOf[Type[Any]]) match {
+                          case Some(expr) =>
+                            nested += (name -> expr)
+                            MIO.void
+                          case None =>
+                            mkCtor1FromTypeTraverse(Type[FT].asInstanceOf[Type[Any]]) match {
+                              case Some(ut) if ut == parentCtor =>
+                                selfRec += name
+                                MIO.void
+                              case _ =>
+                                failDerivation[Unit](
+                                  CatsDerivationError.MissingInstanceForField("Traverse", name, childName)
+                                )
+                            }
+                        }
                       }
                     }
-                    cc.primaryConstructor.fold(
-                      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                      onTypes = _ => Map.empty,
-                      onValues = _ => fieldExprs.toMap
-                    ) match {
-                      case Right(expr) => expr.value.asInstanceOf[Expr[Any]]
-                      case Left(err)   => throw new RuntimeException(s"Cannot construct $cn: $err")
+                    .map(_ => childName -> ChildFieldInfo(direct.toSet, nested.toMap, selfRec.toSet))
+                case _ =>
+                  MIO.pure(childName -> ChildFieldInfo(Set.empty, Map.empty, Set.empty))
+              }
+            }
+            .map(_.toMap)
+        }
+
+        val hasSelfRecursive = childInfo.values.exists(_.selfRecursiveFields.nonEmpty)
+
+        import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+
+        def mkTraverseBody(
+            faExpr: Expr[F[Any]],
+            fExpr: Expr[Any],
+            gExpr: Expr[Any],
+            selfOpt: Option[Expr[Any]]
+        ): Expr[Any] = runSafe {
+          val selfOrFail: MIO[Expr[Any]] = selfOpt match {
+            case Some(self) => MIO.pure(self)
+            case None       => failDerivation(CatsDerivationError.MissingSelfReference("Traverse"))
+          }
+          enumm
+            .matchOn[MIO, Any](faExpr) { matched =>
+              import matched.{value as caseValue, Underlying as CT}
+              val cn = Type[CT].shortName
+              childInfo.get(cn) match {
+                case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Traverse", cn))
+                case Some(info) =>
+                  parseCaseClassMIO[CT](s"child $cn").flatMap { cc =>
+                    val fields = cc.caseFieldValuesAt(caseValue).toList
+                    if (fields.isEmpty) {
+                      val gE =
+                        Expr.quote(Expr.splice(gExpr).asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]])
+                      MIO.pure(Expr.quote(Expr.splice(gE).pure(Expr.splice(caseValue.upcast[Any]))).upcast[Any])
+                    } else {
+                      val gFieldExprsMIO: MIO[List[Option[Expr[CatsDerivationFactories.AnyF[Any]]]]] =
+                        fields.traverse { case (fn, fv) =>
+                          import fv.Underlying as Field
+                          if (info.directFields.contains(fn)) {
+                            val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
+                            MIO.pure(
+                              Option(
+                                Expr.quote(
+                                  Expr
+                                    .splice(fExpr)
+                                    .asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]](Expr.splice(fe))
+                                )
+                              )
+                            )
+                          } else if (info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn)) {
+                            val fe = fv.value.asInstanceOf[Expr[Field]].upcast[Any]
+                            val travEMIO: MIO[Expr[Any]] =
+                              if (info.selfRecursiveFields.contains(fn)) selfOrFail
+                              else MIO.pure(info.nestedInstances(fn))
+                            travEMIO.map { travE =>
+                              Option(
+                                Expr.quote(
+                                  hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                    .traverseNested(
+                                      Expr.splice(travE),
+                                      Expr.splice(fe),
+                                      Expr.splice(fExpr),
+                                      Expr.splice(gExpr)
+                                    )
+                                    .asInstanceOf[CatsDerivationFactories.AnyF[Any]]
+                                )
+                              )
+                            }
+                          } else MIO.pure(Option.empty[Expr[CatsDerivationFactories.AnyF[Any]]])
+                        }
+                      gFieldExprsMIO.flatMap { gFieldOpts =>
+                        val gFieldExprs = gFieldOpts.flatten
+                        val traversableFields =
+                          info.directFields ++ info.nestedInstances.keySet ++ info.selfRecursiveFields
+
+                        // LambdaBuilder callbacks are synchronous and cannot return MIO, so failures
+                        // inside the callback throw the typed CatsDerivationError; the enclosing
+                        // MIO(...) converts the NonFatal throw into an MIO error-channel failure.
+                        val reconLambda: Expr[List[Any] => Any] = runSafe {
+                          MIO {
+                            LambdaBuilder.of1[List[Any]]("newVals").buildWith { newValsExpr =>
+                              var currentList: Expr[List[Any]] = newValsExpr
+                              val fieldExprs: List[(String, Expr_??)] = fields.map { case (fn2, fv2) =>
+                                import fv2.Underlying as Field2
+                                if (traversableFields.contains(fn2)) {
+                                  val headExpr: Expr[Any] = Expr.quote(Expr.splice(currentList).head)
+                                  val tailExpr: Expr[List[Any]] = Expr.quote(Expr.splice(currentList).tail)
+                                  currentList = tailExpr
+                                  val typed: Expr[Field2] = Expr.quote(Expr.splice(headExpr).asInstanceOf[Field2])
+                                  (fn2, typed.as_??)
+                                } else {
+                                  (fn2, fv2.value.asInstanceOf[Expr[Field2]].as_??)
+                                }
+                              }
+                              foldInstanceFree(cc.primaryConstructor, "Constructor")(
+                                onTypes = _ => Map.empty,
+                                onValues = _ => fieldExprs.toMap
+                              ) match {
+                                case Right(expr) => expr.value.asInstanceOf[Expr[Any]]
+                                case Left(err)   => throw CatsDerivationError.CannotConstructResult(cn, err)
+                              }
+                            }
+                          }
+                        }
+
+                        val gListExpr = gFieldExprs.foldRight(
+                          Expr.quote(
+                            Expr
+                              .splice(gExpr)
+                              .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                              .pure(Nil: List[Any])
+                          )
+                        ) { (gvExpr, accExpr) =>
+                          Expr.quote(
+                            Expr
+                              .splice(gExpr)
+                              .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                              .map2[Any, List[Any], List[Any]](Expr.splice(gvExpr), Expr.splice(accExpr))(_ :: _)
+                          )
+                        }
+                        val result = Expr.quote {
+                          val recon: List[Any] => Any = Expr.splice(reconLambda)
+                          val _ = recon
+                          Expr
+                            .splice(gExpr)
+                            .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                            .map[List[Any], Any](Expr.splice(gListExpr))(newVals => recon(newVals))
+                        }
+                        MIO.pure(result.upcast[Any])
+                      }
                     }
                   }
-                  MIO.pure(lambda)
-                }
-
-                val gListExpr = gFieldExprs.foldRight(
-                  Expr.quote(
-                    Expr.splice(gExpr).asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]].pure(Nil: List[Any])
-                  )
-                ) { (gvExpr, accExpr) =>
-                  Expr.quote(
-                    Expr
-                      .splice(gExpr)
-                      .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
-                      .map2[Any, List[Any], List[Any]](Expr.splice(gvExpr), Expr.splice(accExpr))(_ :: _)
-                  )
-                }
-                val result = Expr.quote {
-                  val recon: List[Any] => Any = Expr.splice(reconLambda)
-                  val _ = recon
-                  Expr
-                    .splice(gExpr)
-                    .asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
-                    .map[List[Any], Any](Expr.splice(gListExpr))(newVals => recon(newVals))
-                }
-                MIO.pure(result.upcast[Any])
               }
+            }
+            .flatMap {
+              case Some(r) => MIO.pure(r)
+              case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any]].prettyPrint))
+            }
+        }
+
+        def mkFoldLeftBody(
+            faExpr: Expr[F[Any]],
+            bExpr: Expr[Any],
+            fExpr: Expr[(Any, Any) => Any],
+            selfOpt: Option[Expr[Any]]
+        ): Expr[Any] = runSafe {
+          val selfOrFail: MIO[Expr[Any]] = selfOpt match {
+            case Some(self) => MIO.pure(self)
+            case None       => failDerivation(CatsDerivationError.MissingSelfReference("Traverse"))
           }
-        }
-        .flatMap {
-          case Some(r) => MIO.pure(r)
-          case None    => MIO.fail(new RuntimeException("No children"))
-        }
-    }
-
-    def mkFoldLeftBody(
-        faExpr: Expr[F[Any]],
-        bExpr: Expr[Any],
-        fExpr: Expr[(Any, Any) => Any],
-        selfOpt: Option[Expr[Any]]
-    ): Expr[Any] = runSafe {
-      enumm
-        .matchOn[MIO, Any](faExpr) { matched =>
-          import matched.{value as caseValue, Underlying as CT}
-          val cn = Type[CT].shortName
-          childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
-            case Some(info) =>
-              val cc = CaseClass.parse[CT].toEither match {
-                case Right(c) => c; case Left(e) => throw new RuntimeException(e.toString)
+          enumm
+            .matchOn[MIO, Any](faExpr) { matched =>
+              import matched.{value as caseValue, Underlying as CT}
+              val cn = Type[CT].shortName
+              childInfo.get(cn) match {
+                case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Traverse", cn))
+                case Some(info) =>
+                  parseCaseClassMIO[CT](s"child $cn").flatMap { cc =>
+                    val fields = cc.caseFieldValuesAt(caseValue).toList
+                    var result: Expr[Any] = bExpr
+                    fields
+                      .traverse { case (fn, fv) =>
+                        import fv.Underlying as Field
+                        val fe = fv.value.asInstanceOf[Expr[Field]]
+                        if (info.directFields.contains(fn)) {
+                          result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fe.upcast[Any])))
+                          MIO.void
+                        } else if (info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn)) {
+                          val foldEMIO: MIO[Expr[Any]] =
+                            if (info.selfRecursiveFields.contains(fn)) selfOrFail
+                            else MIO.pure(info.nestedInstances(fn))
+                          foldEMIO.map { foldE =>
+                            result = Expr.quote(
+                              hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                .foldLeftNested(
+                                  Expr.splice(foldE),
+                                  Expr.splice(fe.upcast[Any]),
+                                  Expr.splice(result),
+                                  Expr.splice(fExpr)
+                                )
+                            )
+                          }
+                        } else MIO.void
+                      }
+                      .map(_ => result)
+                  }
               }
-              val fields = cc.caseFieldValuesAt(caseValue).toList
-              var result: Expr[Any] = bExpr
-              fields.foreach { case (fn, fv) =>
-                import fv.Underlying as Field
-                val fe = fv.value.asInstanceOf[Expr[Field]]
-                if (info.directFields.contains(fn))
-                  result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fe.upcast[Any])))
-                else if (info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn)) {
-                  val foldE =
-                    if (info.selfRecursiveFields.contains(fn))
-                      selfOpt.getOrElse(throw new RuntimeException("No self"))
-                    else info.nestedInstances(fn)
-                  result = Expr.quote(
-                    hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                      .foldLeftNested(
-                        Expr.splice(foldE),
-                        Expr.splice(fe.upcast[Any]),
-                        Expr.splice(result),
-                        Expr.splice(fExpr)
+            }
+            .flatMap {
+              case Some(r) => MIO.pure(r)
+              case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any]].prettyPrint))
+            }
+        }
+
+        def mkFoldRightBody(
+            faExpr: Expr[F[Any]],
+            lbExpr: Expr[cats.Eval[Any]],
+            fExpr: Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]],
+            selfOpt: Option[Expr[Any]]
+        ): Expr[cats.Eval[Any]] = runSafe {
+          val selfOrFail: MIO[Expr[Any]] = selfOpt match {
+            case Some(self) => MIO.pure(self)
+            case None       => failDerivation(CatsDerivationError.MissingSelfReference("Traverse"))
+          }
+          enumm
+            .matchOn[MIO, cats.Eval[Any]](faExpr) { matched =>
+              import matched.{value as caseValue, Underlying as CT}
+              val cn = Type[CT].shortName
+              childInfo.get(cn) match {
+                case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Traverse", cn))
+                case Some(info) =>
+                  parseCaseClassMIO[CT](s"child $cn").flatMap { cc =>
+                    val fields = cc.caseFieldValuesAt(caseValue).toList
+                    val foldableMIO: MIO[List[Option[(Expr[Any], Option[Expr[Any]])]]] =
+                      fields.traverse { case (fn, fv) =>
+                        import fv.Underlying as Field
+                        if (info.directFields.contains(fn))
+                          MIO.pure(
+                            Option((fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option.empty[Expr[Any]]))
+                          )
+                        else if (info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn)) {
+                          val feMIO: MIO[Expr[Any]] =
+                            if (info.selfRecursiveFields.contains(fn)) selfOrFail
+                            else MIO.pure(info.nestedInstances(fn))
+                          feMIO.map { fe =>
+                            Option((fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option(fe)))
+                          }
+                        } else MIO.pure(Option.empty[(Expr[Any], Option[Expr[Any]])])
+                      }
+                    foldableMIO.map { foldableOpts =>
+                      foldableOpts.flatten.foldRight(lbExpr) { case ((fieldExpr, foldableOpt), acc) =>
+                        foldableOpt match {
+                          case None =>
+                            Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                          case Some(foldableE) =>
+                            Expr.quote(
+                              hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                .foldRightNested(
+                                  Expr.splice(foldableE),
+                                  Expr.splice(fieldExpr),
+                                  Expr.splice(acc),
+                                  Expr.splice(fExpr)
+                                )
+                            )
+                        }
+                      }
+                    }
+                  }
+              }
+            }
+            .flatMap {
+              case Some(r) => MIO.pure(r)
+              case None    => failDerivation(CatsDerivationError.EnumHasNoChildren(Type[F[Any]].prettyPrint))
+            }
+        }
+
+        if (hasSelfRecursive) {
+          MIO.pure {
+            Expr.quote {
+              var self$macro: Any = null
+              self$macro = CatsDerivationFactories.traverseInstance[F](
+                traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFa; val _ = fAny; val _ = gAny
+                  Expr.splice(
+                    mkTraverseBody(Expr.quote(anyFa), Expr.quote(fAny), Expr.quote(gAny), Some(Expr.quote(self$macro)))
+                  )
+                },
+                foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFa; val _ = anyB; val _ = anyF
+                  Expr.splice(
+                    mkFoldLeftBody(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF), Some(Expr.quote(self$macro)))
+                  )
+                },
+                foldRightFn = {
+                  (
+                      fa: F[CatsDerivationFactories.W1],
+                      anyLb: cats.Eval[Any],
+                      anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                  ) =>
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val _ = anyFa; val _ = anyLb; val _ = anyF
+                    Expr.splice(
+                      mkFoldRightBody(
+                        Expr.quote(anyFa),
+                        Expr.quote(anyLb),
+                        Expr.quote(anyF),
+                        Some(Expr.quote(self$macro))
                       )
-                  )
-                }
-              }
-              MIO.pure(result)
-          }
-        }
-        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
-    }
-
-    def mkFoldRightBody(
-        faExpr: Expr[F[Any]],
-        lbExpr: Expr[cats.Eval[Any]],
-        fExpr: Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]],
-        selfOpt: Option[Expr[Any]]
-    ): Expr[cats.Eval[Any]] = runSafe {
-      enumm
-        .matchOn[MIO, cats.Eval[Any]](faExpr) { matched =>
-          import matched.{value as caseValue, Underlying as CT}
-          val cn = Type[CT].shortName
-          childInfo.get(cn) match {
-            case None       => MIO.fail(new RuntimeException(s"No info for $cn"))
-            case Some(info) =>
-              val cc = CaseClass.parse[CT].toEither match {
-                case Right(c) => c; case Left(e) => throw new RuntimeException(e.toString)
-              }
-              val fields = cc.caseFieldValuesAt(caseValue).toList
-              val foldable: List[(Expr[Any], Option[Expr[Any]])] = fields.collect {
-                case (fn, fv) if info.directFields.contains(fn) =>
-                  import fv.Underlying as Field
-                  (fv.value.asInstanceOf[Expr[Field]].upcast[Any], None)
-                case (fn, fv) if info.selfRecursiveFields.contains(fn) || info.nestedInstances.contains(fn) =>
-                  import fv.Underlying as Field
-                  val fe =
-                    if (info.selfRecursiveFields.contains(fn))
-                      selfOpt.getOrElse(throw new RuntimeException("No self"))
-                    else info.nestedInstances(fn)
-                  (fv.value.asInstanceOf[Expr[Field]].upcast[Any], Some(fe))
-              }
-              val result = foldable.foldRight(lbExpr) { case ((fieldExpr, foldableOpt), acc) =>
-                foldableOpt match {
-                  case None =>
-                    Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
-                  case Some(foldableE) =>
-                    Expr.quote(
-                      hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                        .foldRightNested(
-                          Expr.splice(foldableE),
-                          Expr.splice(fieldExpr),
-                          Expr.splice(acc),
-                          Expr.splice(fExpr)
-                        )
                     )
                 }
-              }
-              MIO.pure(result)
+              )
+              self$macro.asInstanceOf[cats.Traverse[F]]
+            }
+          }
+        } else {
+          MIO.pure {
+            Expr.quote {
+              CatsDerivationFactories.traverseInstance[F](
+                traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFa; val _ = fAny; val _ = gAny
+                  Expr.splice(mkTraverseBody(Expr.quote(anyFa), Expr.quote(fAny), Expr.quote(gAny), None))
+                },
+                foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val _ = anyFa; val _ = anyB; val _ = anyF
+                  Expr.splice(mkFoldLeftBody(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF), None))
+                },
+                foldRightFn = {
+                  (
+                      fa: F[CatsDerivationFactories.W1],
+                      anyLb: cats.Eval[Any],
+                      anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                  ) =>
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val _ = anyFa; val _ = anyLb; val _ = anyF
+                    Expr.splice(mkFoldRightBody(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF), None))
+                }
+              )
+            }
           }
         }
-        .flatMap { case Some(r) => MIO.pure(r); case None => MIO.fail(new RuntimeException("No children")) }
-    }
-
-    if (hasSelfRecursive) {
-      MIO.pure {
-        Expr.quote {
-          var self$macro: Any = null
-          self$macro = CatsDerivationFactories.traverseInstance[F](
-            traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-              val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-              val _ = anyFa; val _ = fAny; val _ = gAny
-              Expr.splice(
-                mkTraverseBody(Expr.quote(anyFa), Expr.quote(fAny), Expr.quote(gAny), Some(Expr.quote(self$macro)))
-              )
-            },
-            foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
-              val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-              val _ = anyFa; val _ = anyB; val _ = anyF
-              Expr.splice(
-                mkFoldLeftBody(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF), Some(Expr.quote(self$macro)))
-              )
-            },
-            foldRightFn = {
-              (
-                  fa: F[CatsDerivationFactories.W1],
-                  anyLb: cats.Eval[Any],
-                  anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
-              ) =>
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFa; val _ = anyLb; val _ = anyF
-                Expr.splice(
-                  mkFoldRightBody(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF), Some(Expr.quote(self$macro)))
-                )
-            }
-          )
-          self$macro.asInstanceOf[cats.Traverse[F]]
-        }
       }
-    } else {
-      MIO.pure {
-        Expr.quote {
-          CatsDerivationFactories.traverseInstance[F](
-            traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-              val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-              val _ = anyFa; val _ = fAny; val _ = gAny
-              Expr.splice(mkTraverseBody(Expr.quote(anyFa), Expr.quote(fAny), Expr.quote(gAny), None))
-            },
-            foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
-              val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-              val _ = anyFa; val _ = anyB; val _ = anyF
-              Expr.splice(mkFoldLeftBody(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF), None))
-            },
-            foldRightFn = {
-              (
-                  fa: F[CatsDerivationFactories.W1],
-                  anyLb: cats.Eval[Any],
-                  anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
-              ) =>
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFa; val _ = anyLb; val _ = anyF
-                Expr.splice(mkFoldRightBody(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF), None))
-            }
-          )
-        }
-      }
-    }
   }
 
   protected object TraverseTypes {

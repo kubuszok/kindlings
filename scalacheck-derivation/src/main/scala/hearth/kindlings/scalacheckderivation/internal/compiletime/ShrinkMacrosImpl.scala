@@ -8,6 +8,7 @@ import org.scalacheck.Shrink
 
 trait ShrinkMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.ShrinkUseCachedRuleImpl
     with rules.ShrinkUseImplicitRuleImpl
     with rules.ShrinkBuiltInRuleImpl
@@ -186,5 +187,11 @@ private[compiletime] object ShrinkDerivationError {
   final case class UnsupportedType(tpeName: String, reasons: List[String]) extends ShrinkDerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any Shrink derivation rule:\n${reasons.mkString("\n")}"
+  }
+  final case class EnumHasNoCases(tpeName: String) extends ShrinkDerivationError {
+    override def message: String = s"Enum $tpeName has no cases"
+  }
+  final case class CannotConstructType(tpeName: String, reason: String) extends ShrinkDerivationError {
+    override def message: String = s"Cannot construct $tpeName: $reason"
   }
 }

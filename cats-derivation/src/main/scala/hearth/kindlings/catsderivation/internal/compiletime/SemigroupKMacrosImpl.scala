@@ -2,12 +2,15 @@ package hearth.kindlings.catsderivation.internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.effect.*
+import hearth.fp.instances.*
+import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** SemigroupK derivation: combines F[A] values field-wise by summoning Semigroup for each field type in F[Any]. */
-trait SemigroupKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveSemigroupK[F[_]](
@@ -49,9 +52,10 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
               }
             }
           case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+            failDerivation(
+              CatsDerivationError.CannotParseCaseClass(
+                Type[F[Any]].prettyPrint,
+                s"$reason. $macroName can only be derived for case classes."
               )
             )
         }
@@ -80,32 +84,31 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & 
     val fieldsX = caseClass.caseFieldValuesAt(xExpr).toList
     val fieldsY = caseClass.caseFieldValuesAt(yExpr).toList
 
-    val combinedFields: List[(String, Expr_??)] =
-      fieldsX.zip(fieldsY).map { case ((fieldName, fieldValueX), (_, fieldValueY)) =>
+    val combinedFieldsMIO: MIO[List[(String, Expr_??)]] =
+      fieldsX.zip(fieldsY).traverse { case ((fieldName, fieldValueX), (_, fieldValueY)) =>
         import fieldValueX.Underlying as Field
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        val sgExpr = SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
-          case Right(sg)    => sg
+        SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          case Right(sgExpr) =>
+            val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
+            MIO.pure((fieldName, combined.as_??))
           case Left(reason) =>
-            throw new RuntimeException(
-              s"No Semigroup instance found for field '$fieldName': ${Field.prettyPrint}: $reason"
+            failDerivation(
+              CatsDerivationError.MissingInstanceForField(
+                "Semigroup",
+                fieldName,
+                Type[F[Any]].prettyPrint,
+                Some(s"${Field.prettyPrint}: $reason")
+              )
             )
         }
-        val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
-        (fieldName, combined.as_??)
       }
 
-    caseClass.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => combinedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        MIO.pure(constructExpr.value.asInstanceOf[Expr[F[Any]]])
-      case Left(error) =>
-        MIO.fail(new RuntimeException(s"Cannot construct combined result: $error"))
+    combinedFieldsMIO.flatMap { combinedFields =>
+      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "combined result")(combinedFields.toMap)
+        .map(constructExpr => constructExpr.value.asInstanceOf[Expr[F[Any]]])
     }
   }
 

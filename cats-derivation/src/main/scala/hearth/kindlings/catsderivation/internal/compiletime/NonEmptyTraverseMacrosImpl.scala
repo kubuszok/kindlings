@@ -15,7 +15,8 @@ import hearth.kindlings.catsderivation.LogDerivation
   * For nonEmptyTraverse, instead of seeding with G.pure (which requires Applicative), we seed with the first field
   * mapped through f (giving G[B]), then combine remaining fields using G.map2.
   */
-trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
+trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+  this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveNonEmptyTraverse[F[_]](
@@ -39,14 +40,8 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
               implicit val IntType: Type[Int] = NETTypes.Int
               implicit val StringType: Type[String] = NETTypes.String
 
-              val ccInt = CaseClass.parse(using FCtor.apply[Int]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[Int]: $e")
-              }
-              val ccString = CaseClass.parse(using FCtor.apply[String]).toEither match {
-                case Right(cc) => cc
-                case Left(e)   => throw new RuntimeException(s"Cannot parse F[String]: $e")
-              }
+              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
               val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
               val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
@@ -67,17 +62,28 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
               }
 
               if (nestedFields.nonEmpty) {
-                throw new RuntimeException(
-                  s"Cannot derive NonEmptyTraverse: fields ${nestedFields.mkString(", ")} contain nested type constructors. " +
-                    "Only direct type parameter fields (A) and invariant fields are supported."
-                )
+                runSafe {
+                  failDerivation[Unit](
+                    CatsDerivationError.UnsupportedFieldShape(
+                      "NonEmptyTraverse",
+                      nestedFields.mkString(", "),
+                      "the fields contain nested type constructors - " +
+                        "only direct type parameter fields (A) and invariant fields are supported"
+                    )
+                  )
+                }
               }
 
               if (directFields.isEmpty) {
-                throw new RuntimeException(
-                  "Cannot derive NonEmptyTraverse: no direct type parameter fields found. " +
-                    "NonEmptyTraverse requires at least one field of the type parameter."
-                )
+                runSafe {
+                  failDerivation[Unit](
+                    CatsDerivationError.DerivationFailed(
+                      "NonEmptyTraverse",
+                      "no direct type parameter fields found - " +
+                        "NonEmptyTraverse requires at least one field of the type parameter"
+                    )
+                  )
+                }
               }
 
               val directFieldSet: Set[String] = directFields.toSet
@@ -207,9 +213,10 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
               }
             }
           case Left(reason) =>
-            MIO.fail(
-              new RuntimeException(
-                s"$macroName: Cannot derive for type: $reason. Can only be derived for case classes."
+            failDerivation(
+              CatsDerivationError.CannotParseCaseClass(
+                Type[F[Any]].prettyPrint,
+                s"$reason. $macroName can only be derived for case classes."
               )
             )
         }
@@ -263,8 +270,11 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
       FAnyType: Type[F[Any]],
       AnyType: Type[Any],
       ListAnyType: Type[List[Any]]
-  ): MIO[Expr[(List[Any], Any) => Any]] = {
-    val lambda =
+  ): MIO[Expr[(List[Any], Any) => Any]] =
+    // LambdaBuilder callbacks are synchronous and cannot return MIO, so failures inside the
+    // callback throw the typed CatsDerivationError; the enclosing MIO(...) converts the
+    // NonFatal throw into a proper MIO error-channel failure.
+    MIO {
       LambdaBuilder.of2[List[Any], Any]("newVals", "original").buildWith { case (newValsExpr, originalExpr) =>
         val faExpr: Expr[F[Any]] = Expr.quote(Expr.splice(originalExpr).asInstanceOf[F[Any]])
         val fields = caseClass.caseFieldValuesAt(faExpr).toList
@@ -280,18 +290,16 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout { this: MacroComm
             (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
           }
         }
-        caseClass.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+        foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
           onTypes = _ => Map.empty,
           onValues = _ => fieldExprs.toMap
         ) match {
           case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[Any]]
           case Left(error)          =>
-            throw new RuntimeException(s"Cannot construct traversed result: $error")
+            throw CatsDerivationError.CannotConstructResult("traversed result", error)
         }
       }
-    MIO.pure(lambda)
-  }
+    }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
   private def deriveNETFoldLeftBody[F[_]](

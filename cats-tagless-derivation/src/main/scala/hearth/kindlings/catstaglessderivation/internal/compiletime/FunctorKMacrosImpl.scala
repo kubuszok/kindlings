@@ -49,7 +49,8 @@ trait FunctorKMacrosImpl
               else s" - ${rule.name}: ${reasons.mkString(", ")}"
             }
             .toList
-          val err = FunctorKDerivationError.UnsupportedType(
+          val err = CatsTaglessDerivationError.UnsupportedType(
+            "FunctorK",
             fkctx.functorKAlgType.prettyPrint,
             reasonsStrings
           )
@@ -124,131 +125,123 @@ trait FunctorKMacrosImpl
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val ccOption = CaseClass.parse(using AlgOptionType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val ccList = CaseClass.parse(using AlgListType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+    parsedOrFail(CaseClass.parse(using AlgOptionType).toEither, "Alg[Option]")
+      .parTuple(parsedOrFail(CaseClass.parse(using AlgListType).toEither, "Alg[List]"))
+      .flatMap { case (ccOption, ccList) =>
+        val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
+        val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
 
-    val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
-    val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
+        val directFields = scala.collection.mutable.Set.empty[String]
+        val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
 
-    val directFields = scala.collection.mutable.Set.empty[String]
-    val nestedFieldExprs = scala.collection.mutable.Map.empty[String, Expr[Any]]
+        val functorKAnchor = Type
+          .of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]
+          .asInstanceOf[Type[Any]]
+        val invariantKAnchor = Type
+          .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
+          .asInstanceOf[Type[Any]]
 
-    val functorKAnchor = Type
-      .of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]
-      .asInstanceOf[Type[Any]]
-    val invariantKAnchor = Type
-      .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
-      .asInstanceOf[Type[Any]]
+        val nestedFieldDerivations: MIO[Unit] =
+          fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
+            val tOption = pOption.tpe.Underlying
+            val tList = pList.tpe.Underlying
+            val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
+            val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
 
-    val nestedFieldDerivations: MIO[Unit] =
-      fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
-        val tOption = pOption.tpe.Underlying
-        val tList = pList.tpe.Underlying
-        val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
-        val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
-
-        (optionUnapply, listUnapply) match {
-          case (Some(innerOption), Some(innerList)) =>
-            import innerOption.Underlying as InnerO
-            import innerList.Underlying as InnerL
-            if (InnerO =:= InnerL) { directFields += name; acc }
-            else
-              acc >> MIO.fail(
-                new RuntimeException(
-                  s"Cannot derive FunctorK: field '$name' has type constructor parameter " +
-                    "nested within its own type argument (e.g. F[F[X]]). This is not supported."
-                )
-              )
-          case (None, None) =>
-            if (tOption =:= tList) acc
-            else {
-              acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], functorKAnchor) match {
-                case Some(info) =>
-                  val nestedCtorK1 = Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
-                  val nestedFKType =
-                    info.typeClassType.asInstanceOf[Type[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]]
-                  val nestedCtx =
-                    FunctorKCtx[CatsTaglessFactories.DummyHKT](nestedCtorK1, nestedFKType, ctx.cache, ctx.derivedType)
-                  deriveFunctorKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map { nestedExpr =>
-                    nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
-                    ()
-                  }
-                case None =>
-                  val invariantKAvailable =
-                    constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], invariantKAnchor)
-                      .exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
-                  val hint =
-                    if (invariantKAvailable)
-                      " An InvariantK instance exists for it — consider using InvariantK.derived instead."
-                    else ""
-                  MIO.fail(
-                    new RuntimeException(
-                      s"Cannot derive FunctorK: field '$name' depends on the type constructor parameter " +
-                        s"but no FunctorK instance could be derived for its outer type constructor.$hint"
-                    )
+            (optionUnapply, listUnapply) match {
+              case (Some(innerOption), Some(innerList)) =>
+                import innerOption.Underlying as InnerO
+                import innerList.Underlying as InnerL
+                if (InnerO =:= InnerL) { directFields += name; acc }
+                else
+                  acc >> failUnsupportedField(
+                    "FunctorK",
+                    name,
+                    "has type constructor parameter " +
+                      "nested within its own type argument (e.g. F[F[X]]). This is not supported."
                   )
-              })
+              case (None, None) =>
+                if (tOption =:= tList) acc
+                else {
+                  acc >> (constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], functorKAnchor) match {
+                    case Some(info) =>
+                      val nestedCtorK1 = Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](info.ctorK1Untyped)
+                      val nestedFKType =
+                        info.typeClassType.asInstanceOf[Type[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]]
+                      val nestedCtx =
+                        FunctorKCtx[CatsTaglessFactories.DummyHKT](
+                          nestedCtorK1,
+                          nestedFKType,
+                          ctx.cache,
+                          ctx.derivedType
+                        )
+                      deriveFunctorKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map { nestedExpr =>
+                        nestedFieldExprs += (name -> nestedExpr.asInstanceOf[Expr[Any]])
+                        ()
+                      }
+                    case None =>
+                      val invariantKAvailable =
+                        constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], invariantKAnchor)
+                          .exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
+                      val hint =
+                        if (invariantKAvailable)
+                          " An InvariantK instance exists for it — consider using InvariantK.derived instead."
+                        else ""
+                      failUnsupportedField(
+                        "FunctorK",
+                        name,
+                        "depends on the type constructor parameter " +
+                          s"but no FunctorK instance could be derived for its outer type constructor.$hint"
+                      )
+                  })
+                }
+              case _ =>
+                acc >> failUnsupportedField("FunctorK", name, "has inconsistent probe decomposition.")
             }
-          case _ =>
-            acc >> MIO.fail(
-              new RuntimeException(
-                s"Cannot derive FunctorK: field '$name' has inconsistent probe decomposition."
-              )
-            )
-        }
-      }
-
-    for {
-      _ <- nestedFieldDerivations
-      result <- {
-        val sourceCC = CaseClass.parse(using AlgWCtor1Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-        }
-        val targetCC = CaseClass.parse(using AlgWCtor2Type).toEither match {
-          case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-        }
-        val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
-        val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
-          case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
-        }.toMap
-
-        val directFieldSet = directFields.toSet
-        val nestedFieldMap = nestedFieldExprs.toMap
-
-        val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
-          import fieldValue.Underlying as Field
-          val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-
-          if (directFieldSet.contains(fieldName)) {
-            val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
-            val mapped = mkApplyFk[Field](fkExpr, fieldExpr.upcast[Any])(tgt)
-            (fieldName, mapped.as_??(tgt))
-          } else if (nestedFieldMap.contains(fieldName)) {
-            val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
-            val mapped = mkNestedMapK[Field](nestedFieldMap(fieldName), fieldExpr.upcast[Any], fkExpr)(tgt)
-            (fieldName, mapped.as_??(tgt))
-          } else {
-            (fieldName, fieldExpr.as_??)
           }
-        }
 
-        targetCC.primaryConstructor.fold(
-          onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-          onTypes = _ => Map.empty,
-          onValues = _ => mappedFields.toMap
-        ) match {
-          case Right(constructExpr) =>
-            import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
-          case Left(error) => MIO.fail(new RuntimeException(s"Cannot construct FunctorK result: $error"))
-        }
+        for {
+          _ <- nestedFieldDerivations
+          sourceAndTarget <- parsedOrFail(CaseClass.parse(using AlgWCtor1Type).toEither, "Alg[WCtor1]")
+            .parTuple(parsedOrFail(CaseClass.parse(using AlgWCtor2Type).toEither, "Alg[WCtor2]"))
+          result <- {
+            val (sourceCC, targetCC) = sourceAndTarget
+            val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
+            val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
+              case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
+            }.toMap
+
+            val directFieldSet = directFields.toSet
+            val nestedFieldMap = nestedFieldExprs.toMap
+
+            val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
+              import fieldValue.Underlying as Field
+              val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+              if (directFieldSet.contains(fieldName)) {
+                val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
+                val mapped = mkApplyFk[Field](fkExpr, fieldExpr.upcast[Any])(tgt)
+                (fieldName, mapped.as_??(tgt))
+              } else if (nestedFieldMap.contains(fieldName)) {
+                val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
+                val mapped = mkNestedMapK[Field](nestedFieldMap(fieldName), fieldExpr.upcast[Any], fkExpr)(tgt)
+                (fieldName, mapped.as_??(tgt))
+              } else {
+                (fieldName, fieldExpr.as_??)
+              }
+            }
+
+            foldInstanceFree(targetCC.primaryConstructor, "Constructor")(
+              onTypes = _ => Map.empty,
+              onValues = _ => mappedFields.toMap
+            ) match {
+              case Right(constructExpr) =>
+                import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
+              case Left(error) => failCannotConstruct("FunctorK", error)
+            }
+          }
+        } yield result
       }
-    } yield result
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
@@ -262,18 +255,4 @@ trait FunctorKMacrosImpl
         .mapK(Expr.splice(functorKExpr), Expr.splice(fieldExpr), Expr.splice(fkExpr))
         .asInstanceOf[Result]
     }
-}
-
-sealed private[compiletime] trait FunctorKDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
-  def message: String
-  override def getMessage(): String = message
-}
-private[compiletime] object FunctorKDerivationError {
-  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends FunctorKDerivationError {
-    override def message: String =
-      s"The type $tpeName was not handled by any FunctorK derivation rule:\n${reasons.mkString("\n")}"
-  }
 }

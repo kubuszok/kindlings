@@ -171,4 +171,7 @@ private[compiletime] object CogenDerivationError {
     override def message: String =
       s"The type $tpeName was not handled by any Cogen derivation rule:\n${reasons.mkString("\n")}"
   }
+  final case class EnumHasNoCases(tpeName: String) extends CogenDerivationError {
+    override def message: String = s"Enum $tpeName has no cases"
+  }
 }

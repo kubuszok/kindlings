@@ -13,7 +13,8 @@ trait SemigroupMacrosImpl
     with rules.SemigroupUseImplicitRuleImpl
     with rules.SemigroupBuiltInRuleImpl
     with rules.SemigroupCaseClassRuleImpl
-    with CatsDerivationTimeout {
+    with CatsDerivationTimeout
+    with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")

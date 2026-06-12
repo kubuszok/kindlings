@@ -49,29 +49,13 @@ trait SemigroupCaseClassRuleImpl {
             }
             .flatMap { combinedFields =>
               val fieldMap: Map[String, Expr_??] = combinedFields.toList.toMap
-              caseClass.primaryConstructor.fold(
-                onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-                onTypes = _ => Map.empty,
-                onValues = _ => fieldMap
-              ) match {
-                case Right(constructExpr) =>
-                  MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                case Left(error) =>
-                  MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
-              }
+              constructInstanceFree(caseClass.primaryConstructor, "Constructor", Type[A].prettyPrint)(fieldMap)
+                .map(constructExpr => constructExpr.value.asInstanceOf[Expr[A]])
             }
         case None =>
           // No fields — just construct an empty instance
-          caseClass.primaryConstructor.fold(
-            onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-            onTypes = _ => Map.empty,
-            onValues = _ => Map.empty
-          ) match {
-            case Right(constructExpr) =>
-              MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-            case Left(error) =>
-              MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
-          }
+          constructInstanceFree(caseClass.primaryConstructor, "Constructor", Type[A].prettyPrint)(Map.empty)
+            .map(constructExpr => constructExpr.value.asInstanceOf[Expr[A]])
       }
     }
   }

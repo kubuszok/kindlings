@@ -29,15 +29,16 @@ trait DecoderHandleAsOneValueClassRuleImpl {
               case (fName, param) :: Nil if IsValueType.unapply(Type[A]).isEmpty =>
                 import param.tpe.Underlying as Field
                 deriveDecoderRecursively[Field](using dctx.nest[Field](dctx.reader)).flatMap { decodedField =>
-                  cc.primaryConstructor.fold(
-                    onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
+                  foldInstanceFree(cc.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => Map(fName -> decodedField.as_??)
                   ) match {
                     case Right(constructExpr) =>
                       MIO.pure(Rule.matched(constructExpr.value.asInstanceOf[Expr[A]]))
                     case Left(error) =>
-                      MIO.fail(new RuntimeException(s"Cannot construct ${Type[A].prettyPrint}: $error"))
+                      val err =
+                        CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                      Log.error(err.message) >> MIO.fail(err)
                   }
                 }
               case _ =>

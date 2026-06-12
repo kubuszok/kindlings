@@ -86,12 +86,8 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
     val isTrait = AnonymousInstance.parse(using AlgWCtor1Type).toEither.isRight
 
     if (!isCaseClass && !isTrait) {
-      MIO.fail(
-        new RuntimeException(
-          s"Cannot derive Instrument for ${ctx.instrumentAlgType.prettyPrint}: " +
-            "type is neither a case class nor a trait"
-        )
-      )
+      val err = CatsTaglessDerivationError.NotCaseClassOrTrait("Instrument", ctx.instrumentAlgType.prettyPrint)
+      Log.error(err.message) >> MIO.fail(err)
     } else if (isCaseClass) {
       buildInstrumentCaseClassExpr[Alg](runSafe)
     } else {
@@ -163,71 +159,63 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val ccOption = CaseClass.parse(using AlgOptionType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val ccList = CaseClass.parse(using AlgListType).toEither match {
-      case Right(cc) => cc
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+    parsedOrFail(CaseClass.parse(using AlgOptionType).toEither, "Alg[Option]")
+      .parTuple(parsedOrFail(CaseClass.parse(using AlgListType).toEither, "Alg[List]"))
+      .flatMap { case (ccOption, ccList) =>
+        val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
+        val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
 
-    val fieldsOption = ccOption.primaryConstructor.parameters.flatten.toList
-    val fieldsList = ccList.primaryConstructor.parameters.flatten.toList
+        // Classify fields: direct F[X] fields get wrapped in Instrumentation
+        val directFields = scala.collection.mutable.Set.empty[String]
 
-    // Classify fields: direct F[X] fields get wrapped in Instrumentation
-    val directFields = scala.collection.mutable.Set.empty[String]
+        fieldsOption.zip(fieldsList).foreach { case ((name, pOption), (_, pList)) =>
+          val tOption = pOption.tpe.Underlying
+          val tList = pList.tpe.Underlying
+          val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
+          val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
 
-    fieldsOption.zip(fieldsList).foreach { case ((name, pOption), (_, pList)) =>
-      val tOption = pOption.tpe.Underlying
-      val tList = pList.tpe.Underlying
-      val optionUnapply = OptionCtor.unapply(tOption.asInstanceOf[Type[Any]])
-      val listUnapply = ListCtor.unapply(tList.asInstanceOf[Type[Any]])
+          (optionUnapply, listUnapply) match {
+            case (Some(innerOption), Some(innerList)) =>
+              import innerOption.Underlying as InnerO
+              import innerList.Underlying as InnerL
+              if (InnerO =:= InnerL) directFields += name
+            case _ => // invariant or nested — pass through
+          }
+        }
 
-      (optionUnapply, listUnapply) match {
-        case (Some(innerOption), Some(innerList)) =>
-          import innerOption.Underlying as InnerO
-          import innerList.Underlying as InnerL
-          if (InnerO =:= InnerL) directFields += name
-        case _ => // invariant or nested — pass through
+        parsedOrFail(CaseClass.parse(using AlgWCtor1Type).toEither, "Alg[WCtor1]")
+          .parTuple(parsedOrFail(CaseClass.parse(using AlgWCtor2Type).toEither, "Alg[WCtor2]"))
+          .flatMap { case (sourceCC, targetCC) =>
+            val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
+            val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
+              case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
+            }.toMap
+
+            val directFieldSet = directFields.toSet
+
+            val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
+              import fieldValue.Underlying as Field
+              val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+
+              if (directFieldSet.contains(fieldName)) {
+                val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
+                val mapped = mkInstrumentation[Field](fieldExpr.upcast[Any], algebraName, fieldName)(tgt)
+                (fieldName, mapped.as_??(tgt))
+              } else {
+                (fieldName, fieldExpr.as_??)
+              }
+            }
+
+            foldInstanceFree(targetCC.primaryConstructor, "Constructor")(
+              onTypes = _ => Map.empty,
+              onValues = _ => mappedFields.toMap
+            ) match {
+              case Right(constructExpr) =>
+                import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
+              case Left(error) => failCannotConstruct("Instrument", error)
+            }
+          }
       }
-    }
-
-    val sourceCC = CaseClass.parse(using AlgWCtor1Type).toEither match {
-      case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-    }
-    val targetCC = CaseClass.parse(using AlgWCtor2Type).toEither match {
-      case Right(cc) => cc; case Left(e) => throw new RuntimeException(s"Cannot parse: $e")
-    }
-    val sourceFields = sourceCC.caseFieldValuesAt(afExpr).toList
-    val targetParamTypes: Map[String, Type[Any]] = targetCC.primaryConstructor.parameters.flatten.toList.map {
-      case (n, p) => import p.tpe.Underlying as PF; (n, Type[PF].asInstanceOf[Type[Any]])
-    }.toMap
-
-    val directFieldSet = directFields.toSet
-
-    val mappedFields: List[(String, Expr_??)] = sourceFields.map { case (fieldName, fieldValue) =>
-      import fieldValue.Underlying as Field
-      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-
-      if (directFieldSet.contains(fieldName)) {
-        val tgt: Type[Field] = targetParamTypes(fieldName).asInstanceOf[Type[Field]]
-        val mapped = mkInstrumentation[Field](fieldExpr.upcast[Any], algebraName, fieldName)(tgt)
-        (fieldName, mapped.as_??(tgt))
-      } else {
-        (fieldName, fieldExpr.as_??)
-      }
-    }
-
-    targetCC.primaryConstructor.fold(
-      onInstance = _ => throw new RuntimeException("Constructor should not need instance"),
-      onTypes = _ => Map.empty,
-      onValues = _ => mappedFields.toMap
-    ) match {
-      case Right(constructExpr) =>
-        import constructExpr.Underlying; MIO.pure(constructExpr.value.upcast(using implicitly, AlgWCtor2Type))
-      case Left(error) => MIO.fail(new RuntimeException(s"Cannot construct Instrument result: $error"))
-    }
   }
 
   // --- Trait: wrap each F[X] method return in Instrumentation(methodName, af.method(args)) ---
@@ -296,104 +284,124 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
     val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
     val AlgListType = AlgCtorK1.apply[List](using ListCtor)
 
-    val anonInstance = AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[WCtor2] as anonymous instance: $e")
-    }
+    parsedOrFail(
+      AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither,
+      "Alg[WCtor2] as anonymous instance"
+    )
+      .parTuple(
+        parsedOrFail(
+          AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither,
+          "Alg[WCtor1] as anonymous instance"
+        )
+      )
+      .parTuple(
+        parsedOrFail(AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither, "Alg[Option]")
+      )
+      .parTuple(parsedOrFail(AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither, "Alg[List]"))
+      .flatMap { case (((anonInstance, anonInstanceSource), aiOption), aiList) =>
+        val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
+        val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
 
-    val anonInstanceSource = AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai
-      case Left(e)   => throw new RuntimeException(s"Cannot parse Alg[WCtor1] as anonymous instance: $e")
-    }
+        // Pre-validate that every method we must override exists on the source instance, so that the
+        // OverrideBody callbacks below can never hit a missing source method.
+        val missingSourceMethods: List[CatsTaglessDerivationError] = anonInstance.mustOverride
+          .map(_.method.name)
+          .filterNot(n => anonInstanceSource.mustOverride.exists(_.method.name == n))
+          .map(n => CatsTaglessDerivationError.SourceMethodNotFound(n))
 
-    val aiOption = AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[Option]: $e")
-    }
-    val aiList = AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither match {
-      case Right(ai) => ai; case Left(e) => throw new RuntimeException(s"Cannot parse Alg[List]: $e")
-    }
+        missingSourceMethods match {
+          case head :: tail =>
+            Log.error((head :: tail).map(_.message).mkString("\n")) >> MIO.fail(head, tail*)
+          case Nil =>
 
-    val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
-    val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
+            val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
+              val methodName = cm.method.name
+              val sourceMethodOpt = anonInstanceSource.mustOverride.find(_.method.name == methodName)
 
-    val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
-      val methodName = cm.method.name
-      val sourceMethodOpt = anonInstanceSource.mustOverride.find(_.method.name == methodName)
-
-      val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
-        case (Some(om), Some(lm)) =>
-          (om.method.knownReturning, lm.method.knownReturning) match {
-            case (Some(or), Some(lr)) =>
-              (
-                OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
-                ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
-              ) match {
-                case (Some(io), Some(il)) =>
-                  import io.Underlying as IO; import il.Underlying as IL
-                  IO =:= IL
+              val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
+                case (Some(om), Some(lm)) =>
+                  (om.method.knownReturning, lm.method.knownReturning) match {
+                    case (Some(or), Some(lr)) =>
+                      (
+                        OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
+                        ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
+                      ) match {
+                        case (Some(io), Some(il)) =>
+                          import io.Underlying as IO; import il.Underlying as IL
+                          IO =:= IL
+                        case _ => false
+                      }
+                    case _ => false
+                  }
                 case _ => false
               }
-            case _ => false
-          }
-        case _ => false
-      }
 
-      val body: OverrideBody = new OverrideBody {
-        def apply(octx: OverrideContext): Expr_?? = {
-          val returnT = octx.returnType
+              val body: OverrideBody = new OverrideBody {
+                def apply(octx: OverrideContext): Expr_?? = {
+                  val returnT = octx.returnType
 
-          // Call the same method on the source (af) instance
-          val sourceCall: Expr[Any] = sourceMethodOpt match {
-            case Some(sourceCM) =>
-              val sm = sourceCM.method
-              try
-                sm.fold(
-                  onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                  onTypes = _ => Map.empty,
-                  onValues = av => {
-                    val paramNames = av.totalParameters.flatten.toList.map(_._1)
-                    paramNames.zip(octx.parameters).toMap
+                  // Call the same method on the source (af) instance
+                  // OverrideBody is a synchronous callback invoked inside `anonInstance.construct`; it cannot
+                  // return MIO. Typed errors thrown here are caught by the MIO block wrapping `construct`
+                  // below and routed into the MIO error channel.
+                  val sourceCall: Expr[Any] = sourceMethodOpt match {
+                    case Some(sourceCM) =>
+                      val sm = sourceCM.method
+                      try
+                        sm.fold(
+                          onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
+                          onTypes = _ => Map.empty,
+                          onValues = av => {
+                            val paramNames = av.totalParameters.flatten.toList.map(_._1)
+                            paramNames.zip(octx.parameters).toMap
+                          }
+                        ) match {
+                          case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
+                          case Left(e)      =>
+                            throw CatsTaglessDerivationError.MethodForwardingFailed(
+                              methodName,
+                              s"fold returned Left: $e"
+                            )
+                        }
+                      catch {
+                        case e: CatsTaglessDerivationError  => throw e
+                        case scala.util.control.NonFatal(e) =>
+                          throw CatsTaglessDerivationError.MethodForwardingFailed(
+                            methodName,
+                            s"fold crashed (${sm.getClass.getSimpleName}, " +
+                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${e.getMessage}"
+                          )
+                      }
+                    case None =>
+                      // Unreachable: validated via missingSourceMethods before building overrides.
+                      throw CatsTaglessDerivationError.SourceMethodNotFound(methodName)
                   }
-                ) match {
-                  case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
-                  case Left(e)      => throw new RuntimeException(s"fold returned Left for $methodName: $e")
-                }
-              catch {
-                case e: RuntimeException => throw e
-                case e: Throwable        =>
-                  throw new RuntimeException(
-                    s"fold crashed for method $methodName (${sm.getClass.getSimpleName}, " +
-                      s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${e.getMessage}",
-                    e
-                  )
-              }
-            case None =>
-              throw new RuntimeException(s"Source method $methodName not found")
-          }
 
-          if (isDirectF) {
-            import returnT.Underlying as RT
-            mkInstrumentation[RT](sourceCall, algebraName, methodName)(returnT.Underlying).as_??(returnT.Underlying)
-          } else {
-            import returnT.Underlying as RT
-            Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
-          }
+                  if (isDirectF) {
+                    import returnT.Underlying as RT
+                    mkInstrumentation[RT](sourceCall, algebraName, methodName)(returnT.Underlying).as_??(
+                      returnT.Underlying
+                    )
+                  } else {
+                    import returnT.Underlying as RT
+                    Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
+                  }
+                }
+              }
+
+              cm.method.asUntyped -> body
+            }.toMap
+
+            // The MIO wrapper captures typed errors thrown from the OverrideBody callbacks invoked
+            // synchronously inside `construct` and routes them into the error channel.
+            MIO(anonInstance.construct(None, Map.empty, overrides)).flatMap {
+              case Right(expr) =>
+                MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
+              case Left(errors) =>
+                failCannotConstruct("Instrument", s"trait instance: ${errors.toVector.mkString(", ")}")
+            }
         }
       }
-
-      cm.method.asUntyped -> body
-    }.toMap
-
-    anonInstance.construct(None, Map.empty, overrides) match {
-      case Right(expr) =>
-        MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
-      case Left(errors) =>
-        MIO.fail(
-          new RuntimeException(
-            s"Cannot construct Instrument trait instance: ${errors.toVector.mkString(", ")}"
-          )
-        )
-    }
   }
 
   // --- Helpers ---
@@ -411,19 +419,5 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
         .mkInstrumentation(Expr.splice(valueExpr), Expr.splice(algNameExpr), Expr.splice(methodNameExpr))
         .asInstanceOf[Result]
     }
-  }
-}
-
-sealed private[compiletime] trait InstrumentDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
-  def message: String
-  override def getMessage(): String = message
-}
-private[compiletime] object InstrumentDerivationError {
-  final case class UnsupportedType(tpeName: String, reasons: List[String]) extends InstrumentDerivationError {
-    override def message: String =
-      s"The type $tpeName was not handled by any Instrument derivation rule:\n${reasons.mkString("\n")}"
   }
 }
