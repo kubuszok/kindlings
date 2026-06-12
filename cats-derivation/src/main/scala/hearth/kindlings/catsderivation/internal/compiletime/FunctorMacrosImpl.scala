@@ -19,20 +19,50 @@ trait FunctorMacrosImpl
     with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
-  protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
+  /** Summon `cats.Functor[G]` for the type constructor `G` of the applied type `G[X]`, using Hearth's `Type.decompose1`
+    * to discover `G` and `Type.CtorK1#apply` to build `Type[cats.Functor[G]]` to summon for. Returns None when the
+    * field is not an applied type or no `Functor` instance is in scope.
+    *
+    * Replaces the former platform-specific `summonFunctorForFieldType` (Issue #284: HKT ctor primitives).
+    */
+  final protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
+    Type.decompose1(using fieldType).flatMap { case (gCtor, _) =>
+      implicit val FunctorOfG: Type[cats.Functor[AnyK]] =
+        CatsFunctorCtor.apply(using gCtor).asInstanceOf[Type[cats.Functor[AnyK]]]
+      Expr.summonImplicit[cats.Functor[AnyK]].toOption.map(_.asInstanceOf[Expr[Any]])
+    }
 
-  protected def mkCtor1FromType(appliedType: Type[Any]): Option[(Type.Ctor1[AnyK], UntypedType)]
+  /** Decompose an applied type `G[X]` into its (live) type constructor `G` and that constructor's untyped form. The
+    * returned `Type.Ctor1` can be re-applied (`ctor[B]`) or compared (`sameTypeConstructorAs`). Returns None for
+    * non-applied types.
+    *
+    * Replaces the former platform-specific `mkCtor1FromType` (Issue #284).
+    */
+  final protected def mkCtor1FromType(appliedType: Type[Any]): Option[(Type.Ctor1[AnyK], UntypedType)] =
+    Type.decompose1(using appliedType).map { case (gCtor, _) =>
+      (gCtor.asInstanceOf[Type.Ctor1[AnyK]], gCtor.asUntyped)
+    }
 
   /** Given an applied type `G[X]`, extract the single type argument `X` as a `Type[Any]`. Returns None if the type is
     * not a single-argument applied type.
+    *
+    * Replaces the former platform-specific `extractSingleTypeArg` (Issue #284).
     */
-  protected def extractSingleTypeArg(appliedType: Type[Any]): Option[Type[Any]]
+  final protected def extractSingleTypeArg(appliedType: Type[Any]): Option[Type[Any]] =
+    Type.decompose1(using appliedType).map { case (_, arg) => arg.Underlying.asInstanceOf[Type[Any]] }
 
   /** Check whether the given applied type `G[X]` has an inner type argument `X` whose type constructor matches the
     * given parent constructor. For example, `Option[Search[Int]]` with parent `Search` would return true because
     * `Search` (from `Search[Int]`) matches the parent.
+    *
+    * Replaces the former platform-specific `isNestedSelfRecursive` (Issue #284).
     */
-  protected def isNestedSelfRecursive(fieldType: Type[Any], parentCtor: UntypedType): Boolean
+  final protected def isNestedSelfRecursive(fieldType: Type[Any], parentCtor: UntypedType): Boolean =
+    Type.decompose1(using fieldType).exists { case (_, innerArg) =>
+      Type.decompose1(using innerArg.Underlying.asInstanceOf[Type[Any]]).exists { case (innerCtor, _) =>
+        innerCtor.sameTypeConstructorAs(parentCtor)
+      }
+    }
 
   final case class FunctorCaseClassResult[F[_]](
       FCtor: Type.Ctor1[F],
@@ -455,6 +485,11 @@ trait FunctorMacrosImpl
   }
 
   protected type AnyK[X] = Any
+
+  /** Higher-kinded constructor for `cats.Functor`, used to build `Type[cats.Functor[G]]` for a discovered `G` via
+    * `CatsFunctorCtor.apply(using gCtor)` (Issue #284).
+    */
+  protected lazy val CatsFunctorCtor: Type.CtorK1[cats.Functor] = Type.CtorK1.of[cats.Functor]
 
   protected object FunctorTypes {
     val Any: Type[Any] = Type.of[Any]

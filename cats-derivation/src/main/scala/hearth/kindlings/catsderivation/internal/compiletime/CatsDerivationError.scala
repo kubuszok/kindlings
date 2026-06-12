@@ -5,10 +5,7 @@ package hearth.kindlings.catsderivation.internal.compiletime
   * Routed through the MIO error channel (`Log.error(err.message) >> MIO.fail(err)`) instead of throwing, so that the
   * compiler reports a proper derivation error rather than crashing.
   */
-sealed private[compiletime] trait CatsDerivationError
-    extends util.control.NoStackTrace
-    with Product
-    with Serializable {
+sealed private[compiletime] trait CatsDerivationError extends util.control.NoStackTrace with Product with Serializable {
   def message: String
   override def getMessage(): String = message
 }
