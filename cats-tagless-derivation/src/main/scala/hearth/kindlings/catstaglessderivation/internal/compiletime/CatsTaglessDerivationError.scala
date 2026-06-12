@@ -42,8 +42,7 @@ private[compiletime] object CatsTaglessDerivationError {
   }
 
   /** A method required by the target instance was not found on the source instance. */
-  final case class SourceMethodNotFound(methodName: String, details: String = "")
-      extends CatsTaglessDerivationError {
+  final case class SourceMethodNotFound(methodName: String, details: String = "") extends CatsTaglessDerivationError {
     override def message: String = s"Source method $methodName not found$details"
   }
 
