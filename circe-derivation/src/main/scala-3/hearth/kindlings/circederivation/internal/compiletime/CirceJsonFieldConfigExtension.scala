@@ -14,17 +14,11 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     val sc3 = ctx.asInstanceOf[MacroCommonsScala3]
     import sc3.quotes.reflect.{Apply as QApply, Literal as QLiteral, StringConstant as QStringConstant, Term as QTerm}
 
-    // Bootstrap Type values by bypassing cross-quotes Type.of, which on both Scala 2
-    // and 3 generates code that resolves implicit/given Type[A] — causing an
-    // inescapable self-referential cycle when the Type[A] being defined IS the
-    // implicit in scope. Use scala.quoted.Type.of directly (only needs Quotes).
-    given scala.quoted.Quotes = sc3.quotes
-    implicit val ConfigT: Type[Configuration] =
-      scala.quoted.Type.of[Configuration].asInstanceOf[Type[Configuration]]
-    implicit val FieldNameT: Type[annotations.fieldName] =
-      scala.quoted.Type.of[annotations.fieldName].asInstanceOf[Type[annotations.fieldName]]
-    implicit val TransientFieldT: Type[annotations.transientField] =
-      scala.quoted.Type.of[annotations.transientField].asInstanceOf[Type[annotations.transientField]]
+    // Self-referential implicit val Type.of definitions now work in cross-quotes (Hearth issue #285):
+    // the Scala 3 plugin excludes the self-definition from injected casted givens.
+    implicit val ConfigT: Type[Configuration] = Type.of[Configuration]
+    implicit val FieldNameT: Type[annotations.fieldName] = Type.of[annotations.fieldName]
+    implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
 
     Expr.summonImplicit[Configuration].toOption match {
       case Some(configExpr) =>

@@ -4,8 +4,7 @@ import hearth.MacroCommons
 
 trait MethodFolds { this: MacroCommons =>
 
-  /** Folds a method that should never require an instance (constructors, default-value accessors, companion
-    * `apply`s).
+  /** Folds a method that should never require an instance (constructors, default-value accessors, companion `apply`s).
     *
     * `Method.fold` forces an `onInstance` branch that can only return an `Expr_??` — for instance-free methods the
     * branch is unreachable, and modules used to put `throw new RuntimeException(...)` there, which would crash the

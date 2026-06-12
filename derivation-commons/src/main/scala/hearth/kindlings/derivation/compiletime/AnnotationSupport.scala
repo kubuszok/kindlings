@@ -6,37 +6,57 @@ import hearth.std.*
 /** Cross-platform access to annotations on constructor parameters and types, plus literal extraction from annotation
   * trees.
   *
-  * Platform implementations live in [[AnnotationSupportScala2]] / [[AnnotationSupportScala3]]; each derivation module
-  * re-exports all three traits via thin delegates in its own `internal.compiletime` package (same approach as
-  * [[LoadStandardExtensionsOnce]]).
-  *
-  * This trait exists only because Hearth currently has no typed cross-platform annotation API — see
-  * `docs/research/hearth-gap-annotation-extraction.md`. Once Hearth provides one, this whole hierarchy should be
-  * deleted.
+  * As of Hearth issue #283, this is implemented entirely on top of Hearth's typed cross-platform annotation API
+  * (`Parameter#annotationsOfType` / `Type#annotationsOfType` for `<:<` lookup, and
+  * `Annotations.decodedConstructorArguments` for literal extraction). No platform-specific code is required — the
+  * former `AnnotationSupportScala2` / `AnnotationSupportScala3` halves are obsolete.
   */
 trait AnnotationSupport { this: MacroCommons & StdExtensions =>
 
-  protected def findAnnotationOfType[Ann: Type](param: Parameter): Option[UntypedExpr]
+  // ----- Lookup (was abstract / platform-specific; now shared via Hearth's typed annotation API) -----
 
-  protected def findTypeAnnotationOfType[Ann: Type, A: Type]: Option[UntypedExpr]
+  protected def findAnnotationOfType[Ann: Type](param: Parameter): Option[Expr[Ann]] =
+    param.annotationsOfType[Ann].headOption
 
-  protected def findAllAnnotationsOfType[Ann: Type](param: Parameter): List[UntypedExpr]
+  protected def findTypeAnnotationOfType[Ann: Type, A: Type]: Option[Expr[Ann]] =
+    Type[A].annotationsOfType[Ann].headOption
 
-  protected def findAllTypeAnnotationsOfType[Ann: Type, A: Type]: List[UntypedExpr]
+  protected def findAllAnnotationsOfType[Ann: Type](param: Parameter): List[Expr[Ann]] =
+    param.annotationsOfType[Ann]
 
-  /** Collect ALL annotations on a parameter (regardless of type). */
-  protected def allParamAnnotations(param: Parameter): List[UntypedExpr]
+  protected def findAllTypeAnnotationsOfType[Ann: Type, A: Type]: List[Expr[Ann]] =
+    Type[A].annotationsOfType[Ann]
 
-  /** Collect ALL annotations on a type (regardless of type). */
-  protected def allTypeAnnotations[A: Type]: List[UntypedExpr]
+  // ----- Literal extraction from annotation constructor arguments (shared) -----
 
-  protected def extractStringLiteralFromAnnotation(annotation: UntypedExpr): Option[String]
+  private def decodedArgs[Ann](annotation: Expr[Ann]): List[Either[String, Any]] =
+    Annotations.decodedConstructorArguments(annotation).getOrElse(Nil)
 
-  protected def extractIntLiteralFromAnnotation(annotation: UntypedExpr): Option[Int]
+  protected def extractStringLiteralFromAnnotation[Ann](annotation: Expr[Ann]): Option[String] =
+    decodedArgs(annotation) match {
+      case List(Right(value: String)) => Some(value)
+      case _                          => None
+    }
 
-  protected def extractTwoStringLiteralsFromAnnotation(annotation: UntypedExpr): Option[(String, String)]
+  protected def extractIntLiteralFromAnnotation[Ann](annotation: Expr[Ann]): Option[Int] =
+    decodedArgs(annotation) match {
+      case List(Right(value: Int)) => Some(value)
+      case _                       => None
+    }
 
-  protected def extractTwoIntLiteralsFromAnnotation(annotation: UntypedExpr): Option[(Int, Int)]
+  protected def extractTwoStringLiteralsFromAnnotation[Ann](annotation: Expr[Ann]): Option[(String, String)] =
+    decodedArgs(annotation) match {
+      case List(Right(v1: String), Right(v2: String)) => Some((v1, v2))
+      case _                                          => None
+    }
+
+  protected def extractTwoIntLiteralsFromAnnotation[Ann](annotation: Expr[Ann]): Option[(Int, Int)] =
+    decodedArgs(annotation) match {
+      case List(Right(v1: Int), Right(v2: Int)) => Some((v1, v2))
+      case _                                    => None
+    }
+
+  // ----- Public API (signatures unchanged; call sites unaffected) -----
 
   final def hasAnnotationType[Ann: Type](param: Parameter): Boolean =
     findAnnotationOfType[Ann](param).isDefined

@@ -23,14 +23,9 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     // Pre-resolve ExprCodec before introducing cross-quotes implicits
     // to avoid diverging implicit expansion caused by import ctx.* in Scala 2.
 
-    // Bootstrap Type[Configuration] from raw Scala 2 compiler type, bypassing
-    // cross-quotes Type.of which causes SOE: on Scala 2, the Type.of[A] macro
-    // expansion generates an implicit conversion (Type[T] → WeakTypeTag[T]) that
-    // resolves Type[A] at runtime — creating an inescapable self-referential cycle
-    // when the very Type[A] being defined IS the implicit in scope.
-    // Using sc2.c.universe.typeOf[X] + UntypedType.toTyped avoids this entirely.
-    implicit val ConfigT: Type[Configuration] =
-      UntypedType.toTyped[Configuration](sc2.c.universe.typeOf[Configuration].asInstanceOf[UntypedType])
+    // Self-referential implicit val Type.of definitions now work in cross-quotes (Hearth issue #285):
+    // the Scala 2 generated block shadows the in-definition implicit.
+    implicit val ConfigT: Type[Configuration] = Type.of[Configuration]
 
     // Annotation types only need UntypedType for comparison — get directly from
     // Scala 2 universe to avoid additional cross-quotes Type.of forward references.
