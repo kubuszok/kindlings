@@ -10,7 +10,7 @@ import scala.jdk.CollectionConverters.*
 
 object PureConfigDerivationUtils {
 
-  private[kindlings] class CollectionBuildException(val error: ConfigReaderFailures)
+  class CollectionBuildException(val error: ConfigReaderFailures)
       extends RuntimeException("pureconfig collection decoding error")
 
   def liftStringError(cursor: ConfigCursor, msg: String): ConfigReaderFailures =
