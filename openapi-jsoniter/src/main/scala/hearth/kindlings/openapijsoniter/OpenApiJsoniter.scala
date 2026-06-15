@@ -3,7 +3,7 @@ package hearth.kindlings.openapijsoniter
 import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
 import hearth.kindlings.jsoniterjson.Json
 import hearth.kindlings.jsoniterjson.codec.JsonCodec.jsonValueCodec
-import sttp.apispec._
+import sttp.apispec.*
 import sttp.apispec.openapi.OpenAPI
 
 /** Circe-free jsoniter-scala codecs for the sttp-apispec OpenAPI + JSON-Schema model.
@@ -15,8 +15,8 @@ import sttp.apispec.openapi.OpenAPI
   *   - [[circe_openapi_3_0_3]] — OpenAPI 3.0.3 (the `nullable`, `exclusiveMinimum/Maximum`-as-boolean, `example`,
   *     `enum`-instead-of-`const` translations)
   *
-  * Each variant exposes the underlying [[internal.Encoder]] / [[internal.Decoder]] type classes as implicits (so
-  * model types compose) plus convenience [[JsonValueCodec]]s for the top-level [[OpenAPI]] and [[Schema]] models.
+  * Each variant exposes the underlying [[internal.Encoder]] / [[internal.Decoder]] type classes as implicits (so model
+  * types compose) plus convenience [[JsonValueCodec]]s for the top-level [[OpenAPI]] and [[Schema]] models.
   */
 object OpenApiJsoniter {
 
@@ -58,8 +58,8 @@ package internal {
     */
   trait OpenApiCodecs extends OpenApiEncoders with OpenApiDecoders {
 
-    /** Builds a [[JsonValueCodec]] from an [[Encoder]] / [[Decoder]] pair by going through the kindlings [[Json]]
-      * AST and the hand-written `JsonValueCodec[Json]`.
+    /** Builds a [[JsonValueCodec]] from an [[Encoder]] / [[Decoder]] pair by going through the kindlings [[Json]] AST
+      * and the hand-written `JsonValueCodec[Json]`.
       */
     final def codecFor[A](nullVal: A)(implicit enc: Encoder[A], dec: Decoder[A]): JsonValueCodec[A] =
       new JsonValueCodec[A] {

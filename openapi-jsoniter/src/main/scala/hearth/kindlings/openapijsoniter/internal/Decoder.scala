@@ -6,7 +6,7 @@ import hearth.kindlings.jsoniterjson.Json
 import scala.collection.immutable.ListMap
 
 /** Decoding failure carrying a human-readable message. */
-private[openapijsoniter] final case class DecodingFailure(message: String)
+final private[openapijsoniter] case class DecodingFailure(message: String)
 
 /** Minimal circe-style `Decoder` for the kindlings [[Json]] AST.
   *
@@ -21,8 +21,7 @@ private[openapijsoniter] trait Decoder[A] { self =>
   final def emap[B](f: A => Either[String, B]): Decoder[B] = (json: Json) =>
     self.apply(json).flatMap(a => f(a).left.map(DecodingFailure(_)))
 
-  final def flatMap[B](f: A => Decoder[B]): Decoder[B] = (json: Json) =>
-    self.apply(json).flatMap(a => f(a).apply(json))
+  final def flatMap[B](f: A => Decoder[B]): Decoder[B] = (json: Json) => self.apply(json).flatMap(a => f(a).apply(json))
 
   /** Tries `self`; on failure falls back to `other`. Mirrors circe's `Decoder#or`. */
   final def or[AA >: A](other: => Decoder[AA]): Decoder[AA] = (json: Json) =>
@@ -90,13 +89,12 @@ private[openapijsoniter] object Decoder {
   /** circe's `decodeMapLike[K, V, ListMap]` preserving insertion order. */
   def decodeListMap[K, V](implicit k: KeyDecoder[K], v: Decoder[V]): Decoder[ListMap[K, V]] = instance {
     case Json.Obj(obj) =>
-      obj.fields.foldLeft[Either[DecodingFailure, ListMap[K, V]]](Right(ListMap.empty)) {
-        case (acc, (key, value)) =>
-          for {
-            m <- acc
-            dk <- k(key).toRight(DecodingFailure(s"could not decode key '$key'"))
-            dv <- v(value)
-          } yield m.updated(dk, dv)
+      obj.fields.foldLeft[Either[DecodingFailure, ListMap[K, V]]](Right(ListMap.empty)) { case (acc, (key, value)) =>
+        for {
+          m <- acc
+          dk <- k(key).toRight(DecodingFailure(s"could not decode key '$key'"))
+          dv <- v(value)
+        } yield m.updated(dk, dv)
       }
     case other => fail(s"expected object, got $other")
   }
@@ -114,10 +112,10 @@ private[openapijsoniter] object KeyDecoder {
   implicit val decodeKeyString: KeyDecoder[String] = Some(_)
 }
 
-/** A focused JSON cursor mirroring the bits of circe's `HCursor` the apispec decoders use:
-  * `get`, `getOrElse`, `as`, `focus`, `withFocus`/`mapObject`.
+/** A focused JSON cursor mirroring the bits of circe's `HCursor` the apispec decoders use: `get`, `getOrElse`, `as`,
+  * `focus`, `withFocus`/`mapObject`.
   */
-private[openapijsoniter] final class Cursor(val focus: Json) {
+final private[openapijsoniter] class Cursor(val focus: Json) {
 
   def as[A](implicit d: Decoder[A]): Either[DecodingFailure, A] = d(focus)
 

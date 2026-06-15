@@ -5,8 +5,8 @@ import hearth.kindlings.jsoniterjson.{Json, JsonNumber}
 
 /** Minimal circe-style `Encoder` for the kindlings [[Json]] AST.
   *
-  * Mirrors the subset of circe's `Encoder` / `KeyEncoder` API that the sttp-apispec codecs rely on. Encoders are
-  * plain `A => Json` functions; the `:=` syntax builds ordered `(String, Json)` object entries exactly like circe.
+  * Mirrors the subset of circe's `Encoder` / `KeyEncoder` API that the sttp-apispec codecs rely on. Encoders are plain
+  * `A => Json` functions; the `:=` syntax builds ordered `(String, Json)` object entries exactly like circe.
   */
 private[openapijsoniter] trait Encoder[A] { self =>
   def apply(a: A): Json
@@ -30,8 +30,7 @@ private[openapijsoniter] object Encoder {
     case None    => Json.Null
   }
 
-  /** Empty `List`s encode as `null` (then dropped by `dropNulls`), matching circe's `encodeList` in the apispec
-    * codecs.
+  /** Empty `List`s encode as `null` (then dropped by `dropNulls`), matching circe's `encodeList` in the apispec codecs.
     */
   implicit def encodeList[A](implicit e: Encoder[A]): Encoder[List[A]] = {
     case Nil => Json.Null

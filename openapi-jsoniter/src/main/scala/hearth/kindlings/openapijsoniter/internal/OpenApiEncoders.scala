@@ -2,8 +2,8 @@ package hearth.kindlings.openapijsoniter
 package internal
 
 import hearth.kindlings.jsoniterjson.{Json, JsonObject}
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
@@ -366,7 +366,7 @@ private[openapijsoniter] trait OpenApiEncoders extends JsonSchemaEncoders {
     val secReqEnc = doEncodeListMap[String, Vector[String]](nullWhenEmpty = true)
     val securityEnc: Encoder[List[SecurityRequirement]] = Encoder.encodeList(secReqEnc)
     val webhooksEnc: Encoder[Option[Map[String, ReferenceOr[PathItem]]]] = Encoder.instance {
-      case None => Json.Null
+      case None    => Json.Null
       case Some(m) =>
         Json.Obj(JsonObject(m.iterator.map { case (k, v) => k -> encoderReferenceOr(encoderPathItem)(v) }.toVector))
     }

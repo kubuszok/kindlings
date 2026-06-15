@@ -12,8 +12,8 @@ import hearth.kindlings.jsoniterjson.codec.JsonCodec.jsonValueCodec
   */
 private[openapijsoniter] object JsonAstOps {
 
-  /** Pretty-printed JSON with two-space indentation, matching circe's `Json#spaces2` (used by the
-    * `ExtensionValue` decoder to round-trip arbitrary JSON through a `String`).
+  /** Pretty-printed JSON with two-space indentation, matching circe's `Json#spaces2` (used by the `ExtensionValue`
+    * decoder to round-trip arbitrary JSON through a `String`).
     */
   private val spaces2Config: WriterConfig = WriterConfig.withIndentionStep(2)
 
@@ -45,7 +45,7 @@ private[openapijsoniter] object JsonAstOps {
   def expandExtensions(obj: JsonObject): JsonObject = {
     val withoutExt = filterKeys(obj, _ != "extensions")
     obj("extensions").flatMap(_.asObject) match {
-      case None => withoutExt
+      case None            => withoutExt
       case Some(extObject) =>
         val allKeys = (withoutExt.keys ++ extObject.keys).distinct
         allKeys.foldLeft(JsonObject.empty) { (acc, key) =>
@@ -60,8 +60,8 @@ private[openapijsoniter] object JsonAstOps {
   def dropNullsExpandExtensions(obj: JsonObject): JsonObject =
     expandExtensions(dropNulls(obj))
 
-  /** Recursive deep merge mirroring circe's `Json#deepMerge` exactly, including key ordering: the accumulator starts
-    * as the right-hand object and folds over the left-hand object's keys, so right-hand-only keys appear first and
+  /** Recursive deep merge mirroring circe's `Json#deepMerge` exactly, including key ordering: the accumulator starts as
+    * the right-hand object and folds over the left-hand object's keys, so right-hand-only keys appear first and
     * conflicting keys recurse with `left.value.deepMerge(right.value)`.
     */
   def deepMerge(left: Json, right: Json): Json = (left, right) match {

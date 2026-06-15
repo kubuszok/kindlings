@@ -2,13 +2,13 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec._
+import sttp.apispec.*
 
 import scala.collection.immutable.ListMap
 
 final class SchemaCodecSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe._
+  import OpenApiJsoniter.circe.*
 
   private def enc(s: Schema): String = writeToString(s)(schemaCodec)
   private def dec(json: String): Schema = readFromString[Schema](json)(schemaCodec)

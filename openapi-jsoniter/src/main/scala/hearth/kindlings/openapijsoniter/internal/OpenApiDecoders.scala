@@ -2,8 +2,8 @@ package hearth.kindlings.openapijsoniter
 package internal
 
 import hearth.kindlings.jsoniterjson.Json
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
@@ -179,8 +179,19 @@ private[openapijsoniter] trait OpenApiDecoders extends JsonSchemaDecoders {
       example <- c.get[Option[ExampleValue]]("example")
       examples <- c.getOrElse[ListMap[String, ReferenceOr[Example]]]("examples")(ListMap.empty)
       content <- c.getOrElse[ListMap[String, MediaType]]("content")(ListMap.empty)
-    } yield Header(description, required, deprecated, allowEmptyValue, style, explode, allowReserved, schema,
-      example, examples, content)
+    } yield Header(
+      description,
+      required,
+      deprecated,
+      allowEmptyValue,
+      style,
+      explode,
+      allowReserved,
+      schema,
+      example,
+      examples,
+      content
+    )
   }
 
   implicit val mediaTypeDecoder: Decoder[MediaType] = withExtensions(Decoder.fromCursor { c =>
@@ -250,8 +261,22 @@ private[openapijsoniter] trait OpenApiDecoders extends JsonSchemaDecoders {
       examples <- c.getOrElse[ListMap[String, ReferenceOr[Example]]]("examples")(ListMap.empty)
       content <- c.getOrElse[ListMap[String, MediaType]]("content")(ListMap.empty)
       extensions <- c.getOrElse[ListMap[String, ExtensionValue]]("extensions")(ListMap.empty)
-    } yield Parameter(name, in, description, required, deprecated, allowEmptyValue, style, explode, allowReserved,
-      schema, example, examples, content, extensions)
+    } yield Parameter(
+      name,
+      in,
+      description,
+      required,
+      deprecated,
+      allowEmptyValue,
+      style,
+      explode,
+      allowReserved,
+      schema,
+      example,
+      examples,
+      content,
+      extensions
+    )
   })
 
   implicit val callbackDecoder: Decoder[Callback] = Decoder.fromCursor { c =>
@@ -275,8 +300,21 @@ private[openapijsoniter] trait OpenApiDecoders extends JsonSchemaDecoders {
         security <- c.getOrElse[List[SecurityRequirement]]("security")(List.empty)
         servers <- c.getOrElse[List[Server]]("servers")(List.empty)
         extensions <- c.getOrElse[ListMap[String, ExtensionValue]]("extensions")(ListMap.empty)
-      } yield Operation(tags, summary, description, externalDocs, operationId, parameters, requestBody, responses,
-        callbacks, deprecated, security, servers, extensions)
+      } yield Operation(
+        tags,
+        summary,
+        description,
+        externalDocs,
+        operationId,
+        parameters,
+        requestBody,
+        responses,
+        callbacks,
+        deprecated,
+        security,
+        servers,
+        extensions
+      )
     })
   }
 
@@ -298,8 +336,22 @@ private[openapijsoniter] trait OpenApiDecoders extends JsonSchemaDecoders {
         servers <- c.getOrElse[List[Server]]("servers")(List.empty)
         parameters <- c.getOrElse[List[ReferenceOr[Parameter]]]("parameters")(List.empty)
         extensions <- c.getOrElse[ListMap[String, ExtensionValue]]("extensions")(ListMap.empty)
-      } yield PathItem(ref, summary, description, get, put, post, delete, options, head, patch, trace, servers,
-        parameters, extensions)
+      } yield PathItem(
+        ref,
+        summary,
+        description,
+        get,
+        put,
+        post,
+        delete,
+        options,
+        head,
+        patch,
+        trace,
+        servers,
+        parameters,
+        extensions
+      )
     })
   }
 
@@ -328,8 +380,18 @@ private[openapijsoniter] trait OpenApiDecoders extends JsonSchemaDecoders {
       links <- getComp[Link]("links")
       callbacks <- getComp[Callback]("callbacks")
       extensions <- c.getOrElse[ListMap[String, ExtensionValue]]("extensions")(ListMap.empty)
-    } yield Components(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links,
-      callbacks, extensions)
+    } yield Components(
+      schemas,
+      responses,
+      parameters,
+      examples,
+      requestBodies,
+      headers,
+      securitySchemes,
+      links,
+      callbacks,
+      extensions
+    )
   })
 
   implicit val openAPIDecoder: Decoder[OpenAPI] = withExtensions(Decoder.fromCursor { c =>
