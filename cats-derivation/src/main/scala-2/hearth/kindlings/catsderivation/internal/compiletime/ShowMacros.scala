@@ -7,7 +7,7 @@ import scala.reflect.macros.blackbox
 final private[catsderivation] class ShowMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with ShowMacrosImpl
-    with AnnotationSupportScala2 {
+    with AnnotationSupport {
 
   def deriveShowImpl[A: c.WeakTypeTag]: c.Expr[cats.Show[A]] = deriveShow[A]
 }

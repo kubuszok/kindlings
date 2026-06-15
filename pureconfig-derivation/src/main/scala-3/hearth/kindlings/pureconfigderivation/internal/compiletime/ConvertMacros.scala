@@ -7,7 +7,7 @@ import scala.quoted.*
 
 final private[pureconfigderivation] class ConvertMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      AnnotationSupportScala3,
+      AnnotationSupport,
       LoadStandardExtensionsOnce,
       ReaderMacrosImpl,
       WriterMacrosImpl,

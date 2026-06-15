@@ -6,7 +6,7 @@ import scala.quoted.*
 
 final private[sconfigderivation] class ReaderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      AnnotationSupportScala3,
+      AnnotationSupport,
       LoadStandardExtensionsOnce,
       ReaderMacrosImpl
 

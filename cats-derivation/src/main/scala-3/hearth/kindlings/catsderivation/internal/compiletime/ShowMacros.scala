@@ -7,7 +7,7 @@ import scala.quoted.*
 final private[catsderivation] class ShowMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       ShowMacrosImpl,
-      AnnotationSupportScala3
+      AnnotationSupport
 private[catsderivation] object ShowMacros {
 
   def deriveShowImpl[A: Type](using q: Quotes): Expr[cats.Show[A]] =
