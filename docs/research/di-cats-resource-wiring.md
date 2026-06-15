@@ -1,7 +1,55 @@
 # di-cats: F-agnostic `Resource[F, _]` wiring (design + macwire autocats analysis)
 
-Status: design captured 2026-06-14. Implements the `di-cats` module — an F-agnostic
-re-imagining of macwire's `autocats` (`com.softwaremill.macwire.autocats.autowire`).
+Status: design captured 2026-06-14; **V2 implemented 2026-06-15** (factory methods,
+recursive intermediate construction with sharing, topological ordering, unused-provider
+error, macwire-style missing-dependency path messages). Implements the `di-cats` module —
+an F-agnostic re-imagining of macwire's `autocats`
+(`com.softwaremill.macwire.autocats.autowire`).
+
+## V2 implementation notes (2026-06-15)
+
+The construction core was rewritten from the V1 "classify + fold monadic providers"
+shape into a memoized graph walk (modelled on `di`'s `autowire`), emitting a
+`Resource[F, T]` chain:
+
+- **Resolution phase** (compile-time, no tree building): DFS from the root `T`. For each
+  needed type, find the single provider whose `resultType <:< type` (Instance / Resource /
+  Effect / **Factory**), or — if none and the type is wireable (not `java.*`/`scala.*`) —
+  **recursively construct** it from the graph. Each type is memoized by fqcn, so a type
+  feeding several params is built **once and shared**. Missing deps are collected with a
+  breadcrumb path; unmet `[constructor/method Owner].param` crumbs become the macwire
+  message `Failed to create an instance of [T].\nMissing dependency of type [X]. Path …`.
+- **Emission phase**: monadic nodes (Resource / Effect / Factory-result / constructed
+  intermediate wrapped in `Resource.pure`) are folded **child-before-parent** (a valid
+  topological order, since a param's node is registered before its owner's) into nested
+  `flatMap`s; instances are spliced directly. Innermost body = `Resource.pure[F, T](root)`
+  (or the bound root provider when a provider matches `T` directly).
+- **Factory (FunctionN) deps**: classified by `Type.fqcn[D].startsWith("scala.Function")`
+  (the same reliable check `di`'s `autowire` uses — simpler and more robust across 2.13/3
+  than `Type.Ctor2.fromUntyped[Function1]` decomposition, which is only needed when you
+  must split the *function type's* arg/return; here we read the SAM `apply`'s params and
+  `knownReturning` directly). The factory's own params are resolved from the graph; its
+  result is wrapped per its return shape (`Resource`/`F[_]`/plain). Verified on 2.13 + 3,
+  JVM + JS.
+
+### Deliberate divergence from macwire (`constructInputProvider`)
+
+macwire NEVER reuses a directly-passed root instance — it always rebuilds the root via a
+creator, so `autowire[B](new B(new A("s")))` FAILS on the missing `String` (macwire flags
+this itself: `// TODO we should add a warning in this case.`). **di-cats deliberately
+diverges**: a provided instance whose type matches the root is reused as the root (wrapped
+in `Resource.pure`). Rationale: least-surprising, and consistent with how every other
+parameter resolves to a provided value by type. Tested in `ResourceWiringSpec` ("deliberate
+divergence from macwire").
+
+### Deferred
+
+- `taggingParameters` (softwaremill `@@`-tagged disambiguation) — needs a tagging-type
+  provider; left cleanly unimplemented (no failing test).
+
+---
+
+Original design (V1) follows.
 
 ## Goal vs macwire
 
