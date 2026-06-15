@@ -75,6 +75,8 @@ more module/wrapper combinations.
 
 | Issue | Resolution |
 |---|---|
+| Annotation extraction (#283) | **Fixed in Hearth 0.3.1-45** — `annotationTypes` / `annotationsOfType` / `hasAnnotationOfType` / `Annotations.decodedConstructorArguments`. Kindlings already migrated off the workaround (shared `AnnotationSupport` is native-API-backed convenience only). Gap doc deleted 2026-06-15. |
+| HKT ctor primitives, first-order (#284) | **Fixed in Hearth 0.3.1-45** — `decompose1/2` + `CtorK1` + summon. `cats-derivation` migrated off the bridges. The higher-order `CtorK1`-argument case (`cats-tagless`) is still open — see `hearth-gap-hkt-ctor-primitives.md`. |
 | Splice isolation: `Option[SealedTrait]` on Scala 3 | Fixed in Hearth 0.4.0. |
 | Default values for generic case classes on Scala 3 | Fixed in Hearth 0.3.0-94. |
 | Scala 2 anonymous instance scope | Fixed in Hearth 0.3.0-96. |
