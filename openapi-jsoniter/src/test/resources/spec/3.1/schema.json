@@ -1,0 +1,113 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "schemas": {
+      "type 'null'": {
+        "type": "null",
+        "description": "type 'null'"
+      },
+      "nullable string": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "nullable string"
+      },
+      "nullable enum" : {
+        "description" : "nullable enum",
+        "enum" : [
+          "a",
+          "b",
+          null
+        ]
+      },
+      "nullable reference": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Foo"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "nullable reference"
+      },
+      "single example": {
+        "type": "string",
+        "description": "single example",
+        "examples": [
+          "exampleValue"
+        ]
+      },
+      "multi valued example" : {
+        "type" : "array",
+        "description" : "multi valued example",
+        "examples" : [
+          [
+            "ex1",
+            "ex1"
+          ]
+        ]
+      },
+      "object with example" : {
+        "description" : "object with example",
+        "examples" : [
+          {
+            "a" : 1,
+            "b" : null
+          }
+        ],
+        "type" : "object"
+      },
+      "min/max": {
+        "minimum": 10,
+        "maximum": 20,
+        "description": "min/max"
+      },
+      "const" : {
+        "const" : "const1",
+        "description" : "const"
+      },
+      "enum" : {
+        "description" : "enum",
+        "enum" : [
+          "enum1",
+          "enum2"
+        ]
+      },
+      "exclusive min/max": {
+        "exclusiveMinimum": 10,
+        "exclusiveMaximum": 20,
+        "description": "exclusive min/max"
+      },
+      "exclusiveMinimum false": {
+        "minimum": 10,
+        "description": "exclusiveMinimum false"
+      },
+      "array": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "array"
+      },
+      "array with unique items": {
+        "type": "array",
+        "uniqueItems": true,
+        "description": "array with unique items"
+      },
+      "multiple examples": {
+        "type": "string",
+        "description": "multiple examples",
+        "examples": [
+          "ex1",
+          "ex2"
+        ]
+      }
+    }
+  }
+}
