@@ -23,8 +23,8 @@ There is no Hearth-provided way to obtain a `Type[A]` that bypasses implicit res
 
 ## Impact in Kindlings
 
-Four files exist only to host this workaround (plus the annotation-access duplication
-they drag in, see `hearth-gap-annotation-extraction.md`):
+Four files exist only to host this workaround (their annotation-access code is now on the
+native Hearth API — #283 is resolved — so only the `Type.of` bypass below remains):
 
 - `circe-derivation/src/main/scala-2/.../CirceJsonFieldConfigExtension.scala` (~102 lines)
 - `circe-derivation/src/main/scala-3/.../CirceJsonFieldConfigExtension.scala` (~90 lines)
