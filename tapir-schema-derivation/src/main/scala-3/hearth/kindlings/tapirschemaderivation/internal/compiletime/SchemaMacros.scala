@@ -8,7 +8,7 @@ import scala.quoted.*
 
 final private[tapirschemaderivation] class SchemaMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      AnnotationSupportScala3,
+      AnnotationSupport,
       JsonSchemaConfigs,
       SchemaMacrosImpl
 private[tapirschemaderivation] object SchemaMacros {
