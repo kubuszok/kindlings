@@ -2,13 +2,13 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec._
+import sttp.apispec.*
 
 /** Cross-platform (no resource IO) tests for the OAS 3.0.3 Schema translations and their decode inverses. */
 final class Oas30Spec extends MacroSuite {
 
-  import OpenApiJsoniter.circe_openapi_3_0_3.{schemaCodec => codec30}
-  import OpenApiJsoniter.circe.{schemaCodec => codec31}
+  import OpenApiJsoniter.circe_openapi_3_0_3.schemaCodec as codec30
+  import OpenApiJsoniter.circe.schemaCodec as codec31
 
   private def enc30(s: Schema): String = writeToString(s)(codec30)
   private def dec30(s: String): Schema = readFromString[Schema](s)(codec30)

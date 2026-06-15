@@ -2,13 +2,13 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec.openapi._
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
 final class OpenApiCodecSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe._
+  import OpenApiJsoniter.circe.*
 
   private val sampleDoc: OpenAPI = SampleDocs.sampleDoc
 

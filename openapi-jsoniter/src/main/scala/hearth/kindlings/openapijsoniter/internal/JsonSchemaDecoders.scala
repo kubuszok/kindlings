@@ -2,7 +2,7 @@ package hearth.kindlings.openapijsoniter
 package internal
 
 import hearth.kindlings.jsoniterjson.{Json, JsonObject}
-import sttp.apispec._
+import sttp.apispec.*
 
 import scala.collection.immutable.ListMap
 
@@ -139,17 +139,63 @@ private[openapijsoniter] trait JsonSchemaDecoders {
         externalDocs <- c.get[Option[ExternalDocumentation]]("externalDocs")
         extensions <- c.getOrElse[ListMap[String, ExtensionValue]]("extensions")(ListMap.empty)
       } yield Schema(
-        $schema, $vocabulary, $id, $anchor, $dynamicAnchor, $ref, $dynamicRef, $comment, $defs,
-        title, description, default, deprecated, readOnly, writeOnly, examples,
-        tpe, enum_, const, format,
-        allOf, anyOf, oneOf, not, if_, then_, else_, dependentSchemas,
-        multipleOf, minimum, exclusiveMinimum, maximum, exclusiveMaximum,
-        maxLength, minLength, pattern,
-        maxItems, minItems, uniqueItems, maxContains, minContains,
-        prefixItems, items, contains, unevaluatedItems,
-        maxProperties, minProperties, required, dependentRequired, discriminator,
-        properties, patternProperties, additionalProperties, propertyNames, unevaluatedProperties,
-        externalDocs, extensions
+        $schema,
+        $vocabulary,
+        $id,
+        $anchor,
+        $dynamicAnchor,
+        $ref,
+        $dynamicRef,
+        $comment,
+        $defs,
+        title,
+        description,
+        default,
+        deprecated,
+        readOnly,
+        writeOnly,
+        examples,
+        tpe,
+        enum_,
+        const,
+        format,
+        allOf,
+        anyOf,
+        oneOf,
+        not,
+        if_,
+        then_,
+        else_,
+        dependentSchemas,
+        multipleOf,
+        minimum,
+        exclusiveMinimum,
+        maximum,
+        exclusiveMaximum,
+        maxLength,
+        minLength,
+        pattern,
+        maxItems,
+        minItems,
+        uniqueItems,
+        maxContains,
+        minContains,
+        prefixItems,
+        items,
+        contains,
+        unevaluatedItems,
+        maxProperties,
+        minProperties,
+        required,
+        dependentRequired,
+        discriminator,
+        properties,
+        patternProperties,
+        additionalProperties,
+        propertyNames,
+        unevaluatedProperties,
+        externalDocs,
+        extensions
       )
     }
 

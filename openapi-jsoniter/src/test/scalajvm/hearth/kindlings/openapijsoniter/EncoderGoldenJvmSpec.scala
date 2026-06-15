@@ -4,8 +4,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString
 import hearth.MacroSuite
 import hearth.kindlings.jsoniterjson.{Json, JsonObject}
 import hearth.kindlings.jsoniterjson.codec.JsonCodec.jsonValueCodec
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 import scala.io.Source
@@ -38,56 +38,20 @@ final class EncoderGoldenJvmSpec extends MacroSuite {
   private def schemaComponent(desc: String)(schema: Schema): (String, Schema) =
     desc -> schema.copy(description = Some(desc))
 
-  private val fullSchemaOpenApi = {
-    val components = Components(
-      schemas = ListMap(
-        schemaComponent("type 'null'")(Schema(SchemaType.Null)),
-        schemaComponent("nullable string")(Schema(SchemaType.String, SchemaType.Null)),
-        schemaComponent("nullable reference")(Schema.referenceTo("#/components/schemas/", "Foo").nullable),
-        schemaComponent("nullable enum")(Schema(`enum` = Some(List("a", "b", null).map(ExampleSingleValue(_))))),
-        schemaComponent("single example")(
-          Schema(SchemaType.String).copy(examples = Some(List(ExampleSingleValue("exampleValue"))))
-        ),
-        schemaComponent("multi valued example")(
-          Schema(SchemaType.Array).copy(examples = Some(List(ExampleMultipleValue(List("ex1", "ex1")))))
-        ),
-        schemaComponent("object with example")(
-          Schema(SchemaType.Object).copy(examples = Some(List(ExampleSingleValue("""{"a": 1, "b": null}"""))))
-        ),
-        schemaComponent("min/max")(Schema(minimum = Some(BigDecimal(10)), maximum = Some(BigDecimal(20)))),
-        schemaComponent("exclusive min/max")(
-          Schema(exclusiveMinimum = Some(BigDecimal(10)), exclusiveMaximum = Some(BigDecimal(20)))
-        ),
-        schemaComponent("exclusiveMinimum false")(Schema(minimum = Some(BigDecimal(10)))),
-        schemaComponent("array")(Schema(SchemaType.Array).copy(items = Some(Schema(SchemaType.String)))),
-        schemaComponent("array with unique items")(Schema(SchemaType.Array).copy(uniqueItems = Some(true))),
-        schemaComponent("const")(Schema(const = Some("const1").map(ExampleSingleValue(_)))),
-        schemaComponent("enum")(Schema(`enum` = Some(List("enum1", "enum2").map(ExampleSingleValue(_)))))
-      )
-    )
-    OpenAPI(info = Info(title = "API", version = "1.0.0"), components = Some(components))
-  }
+  private val fullSchemaOpenApi = HandBuiltDocs.fullSchemaOpenApi
 
   test("full 3.1 schema") {
-    import OpenApiJsoniter.circe._
-    val schemas31 = ListMap(
-      schemaComponent("multiple examples")(
-        Schema(SchemaType.String).copy(examples = Some(List("ex1", "ex2").map(ExampleSingleValue(_))))
-      )
-    )
-    val model = fullSchemaOpenApi.copy(
-      components = fullSchemaOpenApi.components.map(c => c.copy(schemas = c.schemas ++ schemas31))
-    )
-    assertEncodes(model, "/spec/3.1/schema.json")
+    import OpenApiJsoniter.circe.*
+    assertEncodes(HandBuiltDocs.fullSchemaOpenApi31, "/spec/3.1/schema.json")
   }
 
   test("full 3.0 schema") {
-    import OpenApiJsoniter.circe_openapi_3_0_3._
-    assertEncodes(fullSchemaOpenApi.copy(openapi = "3.0.1"), "/spec/3.0/schema.json")
+    import OpenApiJsoniter.circe_openapi_3_0_3.*
+    assertEncodes(HandBuiltDocs.fullSchemaOpenApi30, "/spec/3.0/schema.json")
   }
 
   test("replace const by single enum value in 3.0 schema") {
-    import OpenApiJsoniter.circe_openapi_3_0_3._
+    import OpenApiJsoniter.circe_openapi_3_0_3.*
     val components = Components(
       schemas = ListMap(
         schemaComponent("const and enum")(
@@ -98,6 +62,9 @@ final class EncoderGoldenJvmSpec extends MacroSuite {
         )
       )
     )
-    assertEncodes(fullSchemaOpenApi.copy(openapi = "3.0.1", components = Some(components)), "/spec/3.0/const_and_enum.json")
+    assertEncodes(
+      fullSchemaOpenApi.copy(openapi = "3.0.1", components = Some(components)),
+      "/spec/3.0/const_and_enum.json"
+    )
   }
 }

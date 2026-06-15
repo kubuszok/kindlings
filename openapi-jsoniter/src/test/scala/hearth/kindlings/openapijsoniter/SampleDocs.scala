@@ -1,7 +1,7 @@
 package hearth.kindlings.openapijsoniter
 
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 

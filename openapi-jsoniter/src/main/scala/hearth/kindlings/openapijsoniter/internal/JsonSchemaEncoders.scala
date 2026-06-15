@@ -2,7 +2,7 @@ package hearth.kindlings.openapijsoniter
 package internal
 
 import hearth.kindlings.jsoniterjson.{Json, JsonObject}
-import sttp.apispec._
+import sttp.apispec.*
 
 import scala.collection.immutable.ListMap
 import scala.language.implicitConversions
@@ -19,12 +19,12 @@ private[openapijsoniter] trait JsonSchemaEncoders {
   def openApi30: Boolean = false
 
   // --- `:=` syntax, building ordered object entries exactly like circe ---
-  protected final class KeyOps(private val key: String) {
+  final protected class KeyOps(private val key: String) {
     def :=[A](value: A)(implicit e: Encoder[A]): (String, Json) = key -> e(value)
   }
-  protected implicit final def keyOps(key: String): KeyOps = new KeyOps(key)
+  implicit final protected def keyOps(key: String): KeyOps = new KeyOps(key)
 
-  protected final def jsonObj(entries: Vector[(String, Json)]): Json =
+  final protected def jsonObj(entries: Vector[(String, Json)]): Json =
     Json.Obj(JsonObject(entries))
 
   // --- ExtensionValue: parse the raw string, falling back to a JSON string ---
@@ -80,8 +80,8 @@ private[openapijsoniter] trait JsonSchemaEncoders {
       JsonAstOps.dropNullsExpandExtensions(
         JsonObject(
           Vector(
-            "description" := e.description,
             "url" := e.url,
+            "description" := e.description,
             "extensions" := e.extensions
           )
         )
@@ -117,10 +117,10 @@ private[openapijsoniter] trait JsonSchemaEncoders {
     }
 
     val typeAndNullable = s.`type` match {
-      case Some(List(tpe))                            => Vector("type" := tpe)
+      case Some(List(tpe))                               => Vector("type" := tpe)
       case Some(List(tpe, SchemaType.Null)) if openApi30 => Vector("type" := tpe, "nullable" := true)
-      case None if wrappedNullableRef30.isDefined     => Vector("nullable" := true)
-      case t                                          => Vector("type" := t)
+      case None if wrappedNullableRef30.isDefined        => Vector("nullable" := true)
+      case t                                             => Vector("type" := t)
     }
 
     val minFields = (s.minimum, s.exclusiveMinimum) match {

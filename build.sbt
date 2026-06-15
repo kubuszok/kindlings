@@ -359,6 +359,7 @@ val openapiJsoniterJvmOnlyTestDeps = List(
     project.settings(
       libraryDependencies ++= Seq(
         "com.softwaremill.sttp.tapir" %%% "tapir-openapi-docs" % versions.tapir % Test,
+        "com.softwaremill.sttp.tapir" %%% "tapir-json-circe" % versions.tapir % Test,
         "com.softwaremill.sttp.apispec" %%% "openapi-circe" % versions.sttpApispec % Test
       )
     )
