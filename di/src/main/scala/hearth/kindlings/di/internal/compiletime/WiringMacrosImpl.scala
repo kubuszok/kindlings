@@ -11,6 +11,13 @@ import hearth.fp.DirectStyle
   */
 private[di] trait WiringMacrosImpl { this: MacroCommons =>
 
+  /** One in-scope candidate value: the expression that reads it, together with the source-level identifier (member
+    * name) it was read from — `theDatabaseAccess`, `theB1`, ... The name is what makes ambiguity errors actionable
+    * ("Found multiple values of type [A]: [theB1, theB2]"), mirroring macwire which reports member names rather than
+    * only the type.
+    */
+  final protected case class Candidate(name: String, value: Expr_??)
+
   /** macwire-style `wire[A]`: construct an `A` by resolving each parameter of its primary constructor (or, failing
     * that, of a single matching companion `apply`) from a value of a compatible type found in the enclosing lexical
     * scope. Implicit parameters are resolved by implicit search rather than from scope.
@@ -37,8 +44,14 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
 
   /** macwire-style `wireWith[RES](factory)`: resolve each parameter of the supplied factory function from the enclosing
     * scope, then apply the factory to the resolved values. The factory is any `FunctionN` value (a lambda or an
-    * eta-expanded method/constructor reference); implicit parameters of the underlying method are assumed already
-    * applied at the call site, exactly as in macwire.
+    * eta-expanded method/constructor reference).
+    *
+    * Implicit parameters of the underlying method: macwire resolves them by implicit search at the wire site (see its
+    * `wireWithImplicits` test, where `A.make(n)(implicit s: String)` is wired with an `implicit s` from scope). We
+    * mirror that — [[resolveArguments]] routes every implicit parameter through [[resolveParameter]], which performs
+    * implicit search. Note that an eta-expanded reference to a method with implicit parameters whose implicits are
+    * resolvable at the eta-expansion site already has them applied (so the `FunctionN` SAM only exposes the explicit
+    * params); when the eta-expansion exposes the implicit param as a SAM parameter, we resolve it here.
     */
   def wireWith[RES: Type](factory: Expr[Any]): Expr[RES] = {
     val scopes = collectScopes
@@ -75,13 +88,13 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   def wireList[A: Type]: Expr[List[A]] =
     buildList[A](matchingCandidates(collectScopes, Type[A].as_??))
 
-  private def buildSet[A: Type](elements: List[Expr_??]): Expr[Set[A]] =
-    elements.foldRight(Expr.quote(Set.empty[A]))((element, acc) => consSet[A](upcastTo[A](element), acc))
+  private def buildSet[A: Type](elements: List[Candidate]): Expr[Set[A]] =
+    elements.foldRight(Expr.quote(Set.empty[A]))((element, acc) => consSet[A](upcastTo[A](element.value), acc))
   private def consSet[A: Type](element: Expr[A], acc: Expr[Set[A]]): Expr[Set[A]] =
     Expr.quote(Expr.splice(acc) + Expr.splice(element))
 
-  private def buildList[A: Type](elements: List[Expr_??]): Expr[List[A]] =
-    elements.foldRight(Expr.quote(List.empty[A]))((element, acc) => consList[A](upcastTo[A](element), acc))
+  private def buildList[A: Type](elements: List[Candidate]): Expr[List[A]] =
+    elements.foldRight(Expr.quote(List.empty[A]))((element, acc) => consList[A](upcastTo[A](element.value), acc))
   private def consList[A: Type](element: Expr[A], acc: Expr[List[A]]): Expr[List[A]] =
     Expr.quote(Expr.splice(element) :: Expr.splice(acc))
 
@@ -106,19 +119,22 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     * Resolution then prefers the nearest scope that yields exactly one match (see [[resolveSingle]]); set/list wiring
     * flattens across all scopes.
     */
-  protected def collectScopes: List[List[Expr_??]] =
-    enclosingScope.iterator.flatMap {
-      case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members)
-      case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members)
-      case enc: Enclosure.Method => List(enc.localValues.map(_.ref))
-      case _: Enclosure.Value    => Nil
-      case _: Enclosure.Package  => Nil
-    }.toList.filter(_.nonEmpty)
+  protected def collectScopes: List[List[Candidate]] =
+    enclosingScope.iterator
+      .flatMap {
+        case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members)
+        case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members)
+        case enc: Enclosure.Method => List(enc.localValues.map(lv => Candidate(lv.name, lv.ref)))
+        case _: Enclosure.Value    => Nil
+        case _: Enclosure.Package  => Nil
+      }
+      .toList
+      .filter(_.nonEmpty)
 
   /** Direct members of an enclosing instance form one scope; the public parameterless members of any `@Module`-typed
     * value among them form an immediately-wider scope.
     */
-  private def scopesForMembers(self: Option[Expr_??], members: List[Method]): List[List[Expr_??]] =
+  private def scopesForMembers(self: Option[Expr_??], members: List[Method]): List[List[Candidate]] =
     self.toList.flatMap { s =>
       val direct = membersAsValues(s, members)
       val moduleExpanded = direct.flatMap(expandIfModule)
@@ -128,9 +144,9 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** If `value`'s type is annotated with [[Module]] (or inherits such a type), expose its public parameterless members
     * as candidate values read off `value`.
     */
-  private def expandIfModule(value: Expr_??): List[Expr_??] = {
-    import value.Underlying as T
-    if (isModuleType[T]) membersAsValues(value, Class[T].methods) else Nil
+  private def expandIfModule(candidate: Candidate): List[Candidate] = {
+    import candidate.value.Underlying as T
+    if (isModuleType[T]) membersAsValues(candidate.value, Class[T].methods) else Nil
   }
 
   /** A value counts as a module when its type — or any of its base classes, mirroring macwire's
@@ -144,15 +160,28 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     }
   }
 
-  /** Turn the accessible nullary members of an enclosing instance into candidate value expressions. */
-  private def membersAsValues(self: Expr_??, members: List[Method]): List[Expr_??] = {
+  /** The universal members every reference inherits from `java.lang.Object`/`scala.Any`. They are nullary with a known
+    * return type (`hashCode: Int`, `toString: String`, ...), so without this guard they would leak into the candidate
+    * pool — e.g. `hashCode`/`##` would match an `Int` parameter and `toString` a `String` one. macwire excludes them
+    * too (its `import base._` only ever exposes genuine members); we mirror that by name, the only
+    * cross-platform-stable signal available here.
+    */
+  private val ObjectMemberNames: Set[String] =
+    Set("hashCode", "##", "toString", "getClass", "clone", "notify", "notifyAll", "finalize")
+
+  /** Turn the accessible nullary members of an enclosing instance into candidate value expressions, each tagged with
+    * the member name it was read from. Universal `Object` members are filtered out (see [[ObjectMemberNames]]).
+    */
+  private def membersAsValues(self: Expr_??, members: List[Method]): List[Candidate] = {
     import self.value as selfExpr
     members.collect {
-      case m: Method.OnInstance if m.isNullary && m.knownReturning.isDefined && m.isAvailable(AtCallSite) =>
+      case m: Method.OnInstance
+          if m.isNullary && m.knownReturning.isDefined && m.isAvailable(AtCallSite) &&
+            !ObjectMemberNames.contains(m.name) =>
         m.apply(selfExpr.asInstanceOf[Expr[m.Instance]]) match {
           case r: Method.Result[?] =>
             import r.Returned
-            r.build().toOption.map(_.as_??)
+            r.build().toOption.map(e => Candidate(m.name, e.as_??))
           case _ => None
         }
     }.flatten
@@ -165,20 +194,36 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** Resolve a single constructor/apply parameter: implicit parameters go through implicit search, everything else is
     * resolved from the collected scope candidates.
     */
-  protected def resolveParameter(scopes: List[List[Expr_??]], recursive: Boolean)(
+  protected def resolveParameter(scopes: List[List[Candidate]], recursive: Boolean)(
       parameter: Parameter
-  ): Either[String, Expr_??] =
+  ): Either[String, Expr_??] = {
+    // For a by-name parameter (`=> A`) the declared type is the `<byname>[A]` wrapper; we resolve a strict `A` from
+    // scope and let the method application thunk it (mirroring macwire's `wireByNameParameters` handling).
+    val effectiveType = effectiveParamType(parameter)
     if (parameter.isImplicit) {
-      import parameter.tpe.Underlying as P
+      import effectiveType.Underlying as P
       Expr.summonImplicit[P].toOption match {
         case Some(found) => Right(found.as_??)
         case None        => Left(s"Cannot find an implicit value of type: [${Type.prettyPrint[P]}]")
       }
-    } else if (recursive && matchingCandidates(scopes, parameter.tpe).isEmpty && isWireable(parameter.tpe)) {
+    } else if (recursive && matchingCandidates(scopes, effectiveType).isEmpty && isWireable(effectiveType)) {
       // Nothing of this type is in scope; in recursive mode, build it from scratch.
-      import parameter.tpe.Underlying as P
+      import effectiveType.Underlying as P
       buildInstance[P](scopes, recursive = true).map(_.as_??)
-    } else resolveSingle(scopes)(parameter.tpe)
+    } else resolveSingle(scopes)(effectiveType)
+  }
+
+  /** The type to resolve a parameter against. By-name parameters (`=> A`) carry a `<byname>[A]` wrapper type; we strip
+    * it down to the underlying `A` so a strict value from scope satisfies it (the call site thunks it back).
+    */
+  private def effectiveParamType(parameter: Parameter): ?? =
+    if (parameter.isByName) {
+      import parameter.tpe.Underlying as P
+      Type.typeArguments[P] match {
+        case underlying :: Nil => underlying
+        case _                 => parameter.tpe
+      }
+    } else parameter.tpe
 
   /** macwire's `isWireable`: refuse to recursively construct standard-library types (`java.*`/`scala.*`), which have no
     * meaningful wiring and would otherwise loop or produce confusing errors.
@@ -193,16 +238,17 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     * the innermost scope outward and return as soon as a scope yields matches — one match wins, several in the same
     * scope are an ambiguity error (mirroring macwire's `findInFirstScope` and its error messages).
     */
-  protected def resolveSingle(scopes: List[List[Expr_??]])(parameterType: ??): Either[String, Expr_??] = {
+  protected def resolveSingle(scopes: List[List[Candidate]])(parameterType: ??): Either[String, Expr_??] = {
     import parameterType.Underlying as P
-    def search(remaining: List[List[Expr_??]]): Either[String, Expr_??] = remaining match {
+    def search(remaining: List[List[Candidate]]): Either[String, Expr_??] = remaining match {
       case Nil           => Left(s"Cannot find a value of type: [${Type.prettyPrint[P]}]")
       case scope :: rest =>
         matchingIn(scope, parameterType) match {
           case Nil           => search(rest)
-          case single :: Nil => Right(single)
-          case multiple      =>
-            Left(s"Found multiple values of type [${Type.prettyPrint[P]}]: [${multiple.map(describe).mkString(", ")}]")
+          case single :: Nil => Right(single.value)
+          // macwire reports the conflicting member NAMES so the error is actionable; we mirror that.
+          case multiple =>
+            Left(s"Found multiple values of type [${Type.prettyPrint[P]}]: [${multiple.map(_.name).mkString(", ")}]")
         }
     }
     search(scopes)
@@ -211,23 +257,18 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** Every candidate of every scope whose type conforms to `parameterType` (flattened, innermost first) — used by
     * set/list wiring.
     */
-  protected def matchingCandidates(scopes: List[List[Expr_??]], parameterType: ??): List[Expr_??] =
+  protected def matchingCandidates(scopes: List[List[Candidate]], parameterType: ??): List[Candidate] =
     scopes.flatMap(matchingIn(_, parameterType))
 
   /** Candidates within a single scope whose type conforms to `parameterType` (excluding the bottom types
     * `Nothing`/`Null`).
     */
-  private def matchingIn(scope: List[Expr_??], parameterType: ??): List[Expr_??] = {
+  private def matchingIn(scope: List[Candidate], parameterType: ??): List[Candidate] = {
     import parameterType.Underlying as P
     scope.filter { c =>
-      import c.Underlying as C
+      import c.value.Underlying as C
       Type[C] <:< Type[P] && !(Type[C] =:= Type.of[Nothing]) && !(Type[C] =:= Type.of[Null])
     }
-  }
-
-  protected def describe(candidate: Expr_??): String = {
-    import candidate.Underlying as C
-    Type.prettyPrint[C]
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -237,36 +278,60 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** Build an `A`: prefer its accessible primary constructor; otherwise fall back to a single matching companion
     * `apply`. Errors from both attempts are combined to explain why wiring failed.
     */
-  private def buildInstance[A: Type](scopes: List[List[Expr_??]], recursive: Boolean): Either[String, Expr[A]] =
+  private def buildInstance[A: Type](scopes: List[List[Candidate]], recursive: Boolean): Either[String, Expr[A]] =
     constructViaConstructor[A](scopes, recursive) match {
-      case Right(expr)        => Right(expr)
-      case Left(ctorError)    =>
+      case Right(expr) => Right(expr)
+      // The constructor is present but its parameters could not be wired — that IS the real error; reporting the
+      // companion-apply fallback on top would only obscure it (mirrors macwire, which never falls back in this case).
+      case Left(WiringFailed(error)) => Left(error)
+      // The constructor is inaccessible/absent — try a companion `apply`, combining both explanations on failure.
+      case Left(NoPublicCtor(ctorMsg)) =>
         constructViaCompanionApply[A](scopes, recursive) match {
-          case Right(expr)       => Right(expr)
-          case Left(applyError)  => Left(s"$ctorError\n$applyError")
+          case Right(expr)      => Right(expr)
+          case Left(applyError) => Left(s"$ctorMsg\n$applyError")
         }
     }
 
-  private def constructViaConstructor[A: Type](scopes: List[List[Expr_??]], recursive: Boolean): Either[String, Expr[A]] =
-    Type[A].primaryConstructor.filter(_.isAvailable(AtCallSite)) match {
-      case None       => Left(s"Cannot find a public constructor for ${Type.prettyPrint[A]}")
+  /** Why constructing `A` via its primary constructor was abandoned. [[NoPublicCtor]] means there is no accessible
+    * primary constructor (so a companion `apply` should be tried); [[WiringFailed]] means the constructor exists but
+    * its parameters could not be resolved (a real, final error).
+    */
+  sealed private trait CtorFailure
+  final private case class NoPublicCtor(message: String) extends CtorFailure
+  final private case class WiringFailed(message: String) extends CtorFailure
+
+  private def constructViaConstructor[A: Type](
+      scopes: List[List[Candidate]],
+      recursive: Boolean
+  ): Either[CtorFailure, Expr[A]] =
+    Type[A].primaryConstructor.filter(_ => isInstantiable[A]).filter(_.isAvailable(AtCallSite)) match {
+      case None       => Left(NoPublicCtor(s"No public primary constructor found for [${Type.prettyPrint[A]}]"))
       case Some(ctor) =>
-        DirectStyle[Either[String, *]].scoped { runSafe =>
-          val arguments = resolveArguments(ctor, scopes, recursive, runSafe)
-          upcastResult[A](runSafe(applyArguments(ctor, arguments)))
-        }
+        DirectStyle[Either[String, *]]
+          .scoped { runSafe =>
+            val arguments = resolveArguments(ctor, scopes, recursive, runSafe)
+            upcastResult[A](runSafe(applyArguments(ctor, arguments)))
+          }
+          .left
+          .map(WiringFailed.apply)
     }
 
-  private def constructViaCompanionApply[A: Type](scopes: List[List[Expr_??]], recursive: Boolean): Either[String, Expr[A]] =
+  private def constructViaCompanionApply[A: Type](
+      scopes: List[List[Candidate]],
+      recursive: Boolean
+  ): Either[String, Expr[A]] =
     Type.companionObject[A] match {
-      case None                => Left(s"Companion object for ${Type.prettyPrint[A]} has no apply methods.")
+      case None =>
+        Left(s"Companion object for [${Type.prettyPrint[A]}] has no apply methods constructing target type.")
       case Some(companionExpr) =>
         import companionExpr.{Underlying as Companion, value as companion}
+        // Filter to `apply`s that actually return `A` (a subtype) — `apply`s with a foreign return type are "fake".
         val applyMethods = Class[Companion].method("apply").collect {
           case m: Method.OnInstance if m.isAvailable(AtCallSite) && returnsSubtypeOf[A](m) => m
         }
         applyMethods match {
-          case Nil           => Left(s"Companion object for ${Type.prettyPrint[A]} has no apply methods constructing it.")
+          case Nil =>
+            Left(s"Companion object for [${Type.prettyPrint[A]}] has no apply methods constructing target type.")
           case single :: Nil =>
             DirectStyle[Either[String, *]].scoped { runSafe =>
               val arguments = resolveArguments(single, scopes, recursive, runSafe)
@@ -274,7 +339,9 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
               upcastResult[A](runSafe(applyArguments(applied, arguments)))
             }
           case _ =>
-            Left(s"Multiple matching apply methods in the companion object of ${Type.prettyPrint[A]} were found.")
+            Left(
+              s"and multiple matching apply methods in its companion object were found for [${Type.prettyPrint[A]}]."
+            )
         }
     }
 
@@ -288,12 +355,12 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     Type[R] <:< Type[A]
   }
 
-  /** Resolve every value parameter of `method` (implicit lookups included), aborting the surrounding direct-style
-    * scope with the first failure.
+  /** Resolve every value parameter of `method` (implicit lookups included), aborting the surrounding direct-style scope
+    * with the first failure.
     */
   private def resolveArguments(
       method: Method,
-      scopes: List[List[Expr_??]],
+      scopes: List[List[Candidate]],
       recursive: Boolean,
       runSafe: DirectStyle.RunSafe[Either[String, *]]
   ): Map[String, Expr_??] =
@@ -357,7 +424,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
         memo.getOrElseUpdate(
           Type.fqcn[T], {
             verifyNotCyclic(t, breadcrumb)
-            verifyNotPrimitive(t)
+            verifyNotPrimitive(t, breadcrumb)
             findInstanceProvider(t, rawDeps) match {
               case Some((dep, i)) =>
                 used += i
@@ -375,7 +442,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
                       case None         =>
                         Environment.reportErrorAndAbort(
                           s"cannot find a provided dependency, public constructor or public apply method for: ${Type
-                              .prettyPrint[T]}"
+                              .prettyPrint[T]}; ${wiringPath(breadcrumb :+ t)}"
                         )
                     }
                 }
@@ -416,9 +483,13 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** The highest-arity `apply` of a factory function value (its single SAM, ignoring specialized/bridge variants). */
   private def factoryApply(dep: Expr_??): Option[Method.OnInstance] = {
     import dep.Underlying as D
-    new Class[D]().method("apply").collect {
-      case m: Method.OnInstance if m.isAvailable(AtCallSite) => m
-    }.sortBy(m => -m.totalParameters.flatten.size).headOption
+    new Class[D]()
+      .method("apply")
+      .collect {
+        case m: Method.OnInstance if m.isAvailable(AtCallSite) => m
+      }
+      .sortBy(m => -m.totalParameters.flatten.size)
+      .headOption
   }
 
   private def findInstanceProvider(t: ??, rawDeps: List[Expr_??]): Option[(Expr_??, Int)] = {
@@ -433,21 +504,31 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
 
   private def findFactoryProvider(t: ??, rawDeps: List[Expr_??]): Option[(Expr_??, Int, Method.OnInstance)] = {
     import t.Underlying as T
-    rawDeps.zipWithIndex.iterator.flatMap { case (dep, i) =>
-      if (isFunctionExpr(dep)) factoryApply(dep).flatMap { applyM =>
-        applyM.knownReturning.collect {
-          case rt if { import rt.Underlying as R; Type[R] <:< Type[T] } => (dep, i, applyM)
+    rawDeps.zipWithIndex.iterator
+      .flatMap { case (dep, i) =>
+        if (isFunctionExpr(dep)) factoryApply(dep).flatMap { applyM =>
+          applyM.knownReturning.collect {
+            case rt if { import rt.Underlying as R; Type[R] <:< Type[T] } => (dep, i, applyM)
+          }
         }
+        else None
       }
-      else None
-    }.nextOption()
+      .nextOption()
   }
 
   /** A callable [[Method]] producing `T`: its public primary constructor, or a single matching companion `apply`
     * (already applied to the companion module).
     */
   private def providerCallable[T: Type]: Option[Method] =
-    Type[T].primaryConstructor.filter(_.isAvailable(AtCallSite)).orElse(companionAppliedMethod[T])
+    Type[T].primaryConstructor
+      .filter(_ => isInstantiable[T])
+      .filter(_.isAvailable(AtCallSite))
+      .orElse(companionAppliedMethod[T])
+
+  /** A type can be built via its primary constructor only when it is concrete — not a `trait` and not `abstract`
+    * (mirroring macwire, which refuses to instantiate abstract types and reports them as un-constructible).
+    */
+  private def isInstantiable[T: Type]: Boolean = !Type[T].isAbstract && !Type[T].isTrait
 
   private def companionAppliedMethod[T: Type]: Option[Method] =
     Type.companionObject[T].flatMap { companionExpr =>
@@ -464,7 +545,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     import pt.Underlying as P
     Expr.summonImplicit[P].toOption match {
       case Some(found) => found.as_??
-      case None        => Environment.reportErrorAndAbort(s"Cannot find an implicit value of type: [${Type.prettyPrint[P]}]")
+      case None => Environment.reportErrorAndAbort(s"Cannot find an implicit value of type: [${Type.prettyPrint[P]}]")
     }
   }
 
@@ -472,33 +553,54 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     val seen = scala.collection.mutable.ListBuffer.empty[??]
     rawDeps.foreach { dep =>
       import dep.Underlying as D
-      val clash = seen.exists { s =>
-        import s.Underlying as S
-        Type[S] <:< Type[D] || Type[D] <:< Type[S]
+      // Only instance dependencies can collide on type; factory functions are matched by their return type elsewhere.
+      if (!isFunctionExpr(dep)) {
+        val clash = seen.exists { s =>
+          import s.Underlying as S
+          Type[S] <:< Type[D] || Type[D] <:< Type[S]
+        }
+        if (clash)
+          Environment.reportErrorAndAbort(
+            s"duplicate type in dependencies list: ${Type.prettyPrint[D]}, for: ${describeDep(dep)}"
+          )
+        val _ = seen += Type[D].as_??
       }
-      if (clash) Environment.reportErrorAndAbort(s"duplicate type in dependencies list: ${Type.prettyPrint[D]}")
-      val _ = seen += Type[D].as_??
     }
   }
+
+  /** A best-effort source rendering of a provided dependency, used in autowire diagnostics ("for: a", "unused
+    * dependencies: C.apply()"). Falls back to the type when the original source text is unavailable.
+    */
+  private def describeDep(dep: Expr_??): String =
+    dep.value.sourceCode.getOrElse(dep.value.plainPrint)
+
+  /** macwire-style breadcrumb of the in-progress wiring graph, e.g. `wiring path: A -> B -> A`. Surfacing it makes
+    * autowire errors (cycles, missing providers, primitive leaves) actionable by showing HOW the failing type was
+    * reached from the root.
+    */
+  private def wiringPath(path: List[??]): String =
+    "wiring path: " + path.map { p => import p.Underlying as P; Type.prettyPrint[P] }.mkString(" -> ")
 
   private def verifyNotCyclic(t: ??, breadcrumb: List[??]): Unit = {
     import t.Underlying as T
     if (breadcrumb.exists { b => import b.Underlying as B; Type[B] <:< Type[T] })
-      Environment.reportErrorAndAbort(s"cyclic dependencies detected while wiring ${Type.prettyPrint[T]}")
+      Environment.reportErrorAndAbort(s"cyclic dependencies detected; ${wiringPath(breadcrumb :+ t)}")
   }
 
-  private def verifyNotPrimitive(t: ??): Unit = {
+  private def verifyNotPrimitive(t: ??, breadcrumb: List[??]): Unit = {
     import t.Underlying as T
     val isPrimitive =
       Type[T] =:= Type.of[Int] || Type[T] =:= Type.of[Long] || Type[T] =:= Type.of[Byte] ||
         Type[T] =:= Type.of[Short] || Type[T] =:= Type.of[Char] || Type[T] =:= Type.of[Boolean] ||
         Type[T] =:= Type.of[Double] || Type[T] =:= Type.of[Float] || Type[T] =:= Type.of[String]
     if (isPrimitive)
-      Environment.reportErrorAndAbort(s"cannot use a primitive type or String in autowiring: ${Type.prettyPrint[T]}")
+      Environment.reportErrorAndAbort(
+        s"cannot use a primitive type or String in autowiring; ${wiringPath(breadcrumb :+ t)}"
+      )
   }
 
   private def verifyAllDependenciesUsed(rawDeps: List[Expr_??], used: Set[Int]): Unit = {
-    val unused = rawDeps.zipWithIndex.collect { case (dep, i) if !used.contains(i) => describe(dep) }
+    val unused = rawDeps.zipWithIndex.collect { case (dep, i) if !used.contains(i) => describeDep(dep) }
     if (unused.nonEmpty) Environment.reportErrorAndAbort(s"unused dependencies: ${unused.mkString(", ")}")
   }
 }
