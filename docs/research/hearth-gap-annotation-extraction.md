@@ -1,7 +1,15 @@
 # Hearth gap: no typed cross-platform annotation extraction
 
-Last updated: 2026-06-12. Status: **workaround in place** (shared `AnnotationSupport` in
-`derivation-commons`); should be deleted once Hearth provides the API.
+> **RESOLVED in Hearth `0.3.1-45-gca3bcdb` (verified 2026-06-15).** Hearth now exposes
+> `UntypedMethod`/`UntypedType.annotationTypes: List[UntypedType]` (on Scala 2 via `_.tree.tpe`,
+> which is NOT run through `c.untypecheck`, so the annotation type is preserved), plus the typed
+> `Method`/`Parameter` API `annotations: List[Expr_??]` (expr zipped with its type),
+> `annotationsOfType[Ann]`, and `hasAnnotationOfType[Ann]` — matching an annotation by type IS now
+> possible on both platforms. **Kindlings cleanup pending:** the shared `derivation-commons`
+> `AnnotationSupport` + per-module delegates are being migrated to the native API; this doc deletes
+> once they are. Original report (now historical) below.
+
+Last updated: 2026-06-12. Status: ~~workaround in place~~ **resolved upstream; kindlings migration in progress.**
 Filed as [kubuszok/hearth#283](https://github.com/kubuszok/hearth/issues/283).
 
 ## Problem

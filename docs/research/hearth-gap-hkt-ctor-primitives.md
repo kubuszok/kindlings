@@ -1,7 +1,15 @@
 # Hearth gap: no cross-platform primitives for type constructors obtained at macro runtime
 
-Last updated: 2026-06-12. Status: **open** — ~790 lines of per-platform bridge code in
-kindlings exist solely because of this gap.
+> **RESOLVED in Hearth `0.3.1-45-gca3bcdb` (verified 2026-06-15).** All six operations are
+> now provided cross-platform: `Type.decompose1`/`decompose2` (1+2 extract ctor+args),
+> `Type.CtorN.apply`/`fromUntyped` (3 re-apply), `Type.CtorK1.of`/`#apply` + `Expr.summonImplicit`
+> (4+5 build `Type[TC[G]]` and summon), `UntypedType.sameTypeConstructorAs` (6 compare).
+> `cats-derivation/FunctorMacrosImpl.scala` already uses them. **Kindlings cleanup pending:**
+> the remaining HKT bridges (cats-derivation `ConsK`/`Foldable`/`Traverse`, cats-tagless) still
+> carry the old per-platform code and are being migrated off it; this doc deletes once they are.
+> Original report (now historical) below.
+
+Last updated: 2026-06-12. Status: ~~open~~ **resolved upstream; kindlings migration in progress.**
 Filed as [kubuszok/hearth#284](https://github.com/kubuszok/hearth/issues/284).
 
 ## Problem
