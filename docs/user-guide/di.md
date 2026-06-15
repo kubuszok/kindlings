@@ -16,7 +16,7 @@ cross-compiles to **JVM, Scala.js and Scala Native** on both Scala 2.13 and Scal
 !!! example "Scala CLI"
 
     ```scala
-    //> using dep com.kubuszok::kindlings-di::{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-di:{{ kindlings_version() }}
     ```
 
 The [`com.softwaremill.common::tagging`](https://github.com/softwaremill/scala-common) library is pulled in

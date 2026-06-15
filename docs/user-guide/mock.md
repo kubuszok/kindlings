@@ -21,7 +21,7 @@ rather than just using ScalaMock.)
 !!! example "Scala CLI"
 
     ```scala
-    //> using dep com.kubuszok::kindlings-mock::{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-mock:{{ kindlings_version() }}
     ```
 
 ## Quick start

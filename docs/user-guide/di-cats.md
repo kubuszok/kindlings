@@ -20,7 +20,7 @@ works for `IO`, `SyncIO`, or any other effect — and needs **no** `Sync`/`Async
 !!! example "Scala CLI"
 
     ```scala
-    //> using dep com.kubuszok::kindlings-di-cats::{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-di-cats:{{ kindlings_version() }}
     ```
 
 `kindlings-di-cats` is published for the JVM and Scala.js. (Scala Native support follows the Cats-Effect Native
