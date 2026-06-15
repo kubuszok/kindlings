@@ -7,7 +7,7 @@ import scala.reflect.macros.blackbox
 final private[fastshowpretty] class FastShowPrettyMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with FastShowPrettyMacrosImpl
-    with AnnotationSupportScala2 {
+    with AnnotationSupport {
 
   import c.universe.*
 

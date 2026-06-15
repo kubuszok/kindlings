@@ -2,7 +2,7 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec._
+import sttp.apispec.*
 
 import scala.collection.immutable.ListMap
 
@@ -15,7 +15,7 @@ import scala.collection.immutable.ListMap
   */
 final class SchemaKeywordSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe._
+  import OpenApiJsoniter.circe.*
 
   private def enc(s: Schema): String = writeToString(s)(schemaCodec)
   private def roundTrip(s: Schema): Unit = {

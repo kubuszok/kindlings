@@ -4,13 +4,13 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString
 import hearth.MacroSuite
 import hearth.kindlings.jsoniterjson.Json
 import hearth.kindlings.jsoniterjson.codec.JsonCodec.jsonValueCodec
-import io.circe.generic.auto._
+import io.circe.generic.auto.*
 import sttp.apispec.openapi.{Info, OpenAPI}
 import sttp.apispec.openapi.circe.SttpOpenAPICirceEncoders
-import sttp.tapir._
+import sttp.tapir.*
 import sttp.tapir.docs.openapi.OpenAPIDocsInterpreter
-import sttp.tapir.generic.auto._
-import sttp.tapir.json.circe._
+import sttp.tapir.generic.auto.*
+import sttp.tapir.json.circe.*
 
 /** The module's headline promise: drive tapir's `OpenAPIDocsInterpreter` to produce an `sttp.apispec.openapi.OpenAPI`,
   * serialise it with OUR jsoniter codec, and assert the bytes equal circe's `encoderOpenAPI(doc).noSpaces` AND that it
@@ -26,7 +26,7 @@ final class TapirInteropJvmSpec extends MacroSuite {
 
   /** Assert our serialisation equals circe's, byte-for-byte, and round-trips to the same model. */
   private def crossCheckAndRoundTrip(doc: OpenAPI): Unit = {
-    import OpenApiJsoniter.circe._
+    import OpenApiJsoniter.circe.*
     val ours = writeToString(doc)(openAPICodec)
     ast(ours) ==> ast(circe.encoderOpenAPI(doc).noSpaces)
     readFromString[OpenAPI](ours)(openAPICodec) ==> doc
@@ -52,9 +52,12 @@ final class TapirInteropJvmSpec extends MacroSuite {
   }
 
   test("oneOf output (sealed trait coproduct)") {
-    import TapirInteropJvmSpec._
+    import TapirInteropJvmSpec.*
     implicit val entitySchema: Schema[Entity] =
-      Schema.oneOfUsingField[Entity, String](_.kind, identity)("person" -> Schema.derived[Person], "org" -> Schema.derived[Organization])
+      Schema.oneOfUsingField[Entity, String](_.kind, identity)(
+        "person" -> Schema.derived[Person],
+        "org" -> Schema.derived[Organization]
+      )
     val e = endpoint.get.in("entities").out(jsonBody[Entity])
     crossCheckAndRoundTrip(interpreter.toOpenAPI(e, Info("Entity API", "1.0")))
   }
@@ -70,7 +73,7 @@ final class TapirInteropJvmSpec extends MacroSuite {
   // by HandBuiltDocs.fullBranchDoc in the circe cross-check.
 
   test("multiple endpoints with shared schema components") {
-    import TapirInteropJvmSpec._
+    import TapirInteropJvmSpec.*
     val list = endpoint.get.in("fruits").out(jsonBody[List[FruitAmount]])
     val create = endpoint.post.in("fruits").in(jsonBody[FruitAmount]).out(jsonBody[FruitAmount])
     crossCheckAndRoundTrip(interpreter.toOpenAPI(List(list, create), Info("Fruits", "1.0")))

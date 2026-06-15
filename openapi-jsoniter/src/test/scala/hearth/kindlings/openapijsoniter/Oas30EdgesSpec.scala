@@ -2,8 +2,8 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
@@ -19,11 +19,13 @@ final class Oas30EdgesSpec extends MacroSuite {
 
   group("nullable only applies to a 2-element anyOf [ref, null]") {
     test("anyOf with a non-empty (3-element) list is NOT collapsed to allOf+nullable") {
-      val s = Schema(anyOf = List(
-        Schema($ref = Some("#/A")),
-        Schema($ref = Some("#/B")),
-        Schema(`type` = Some(List(SchemaType.Null)))
-      ))
+      val s = Schema(anyOf =
+        List(
+          Schema($ref = Some("#/A")),
+          Schema($ref = Some("#/B")),
+          Schema(`type` = Some(List(SchemaType.Null)))
+        )
+      )
       val json = enc30(s)
       // Not the nullable-$ref special case: stays as anyOf, no top-level "nullable".
       json.contains("\"anyOf\"") ==> true
@@ -31,10 +33,12 @@ final class Oas30EdgesSpec extends MacroSuite {
     }
 
     test("anyOf [non-ref, null] is NOT collapsed (only $ref schemas trigger the translation)") {
-      val s = Schema(anyOf = List(
-        Schema(`type` = Some(List(SchemaType.String))),
-        Schema(`type` = Some(List(SchemaType.Null)))
-      ))
+      val s = Schema(anyOf =
+        List(
+          Schema(`type` = Some(List(SchemaType.String))),
+          Schema(`type` = Some(List(SchemaType.Null)))
+        )
+      )
       val json = enc30(s)
       json.contains("\"anyOf\"") ==> true
       json.contains("\"allOf\"") ==> false
@@ -67,7 +71,9 @@ final class Oas30EdgesSpec extends MacroSuite {
   group("circeObjectAnySchema in 3.0 mode") {
     test("AnySchema.Anything encodes as {} (object) and Nothing as {\"not\":{}}") {
       writeToString(AnySchema.Anything: SchemaLike)(OpenApiJsoniter.circeObjectAnySchema.schemaLikeCodec) ==> "{}"
-      writeToString(AnySchema.Nothing: SchemaLike)(OpenApiJsoniter.circeObjectAnySchema.schemaLikeCodec) ==> """{"not":{}}"""
+      writeToString(AnySchema.Nothing: SchemaLike)(
+        OpenApiJsoniter.circeObjectAnySchema.schemaLikeCodec
+      ) ==> """{"not":{}}"""
     }
     test("object-any + 3.0 flag combined still emits object form") {
       val codec = OpenApiJsoniter.custom(openApi30Flag = true, anyEncoding = AnySchema.Encoding.Object).schemaLikeCodec
@@ -77,7 +83,7 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("ReferenceOr round-trips preserve summary/description") {
-    import OpenApiJsoniter.circe._
+    import OpenApiJsoniter.circe.*
     test("Left(Reference) with summary + description round-trips") {
       val ref: ReferenceOr[Response] = Left(Reference("#/x", summary = Some("s"), description = Some("d")))
       val components = Components(responses = ListMap("r" -> ref))
@@ -91,11 +97,13 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("extensions on containers that call dropNullsExpand") {
-    import OpenApiJsoniter.circe._
+    import OpenApiJsoniter.circe.*
     // Every such container hoists x-* extensions; verify the hoist for a representative spread of them.
     test("Info / Contact / License / Server / Tag / Components / Response / Operation / PathItem extensions hoist") {
       val doc = OpenAPI(
-        info = Info("API", "1.0",
+        info = Info(
+          "API",
+          "1.0",
           contact = Some(Contact(name = Some("J"), extensions = ListMap("x-c" -> ExtensionValue("1")))),
           license = Some(License("L", None, extensions = ListMap("x-l" -> ExtensionValue("1")))),
           extensions = ListMap("x-info" -> ExtensionValue("1"))
@@ -104,15 +112,24 @@ final class Oas30EdgesSpec extends MacroSuite {
         tags = List(Tag(name = "t", extensions = ListMap("x-tag" -> ExtensionValue("1")))),
         components = Some(Components(extensions = ListMap("x-cmp" -> ExtensionValue("1")))),
         extensions = ListMap("x-root" -> ExtensionValue("1"))
-      ).addPathItem("/p", PathItem(
-        extensions = ListMap("x-pi" -> ExtensionValue("1")),
-        get = Some(Operation(
-          responses = Responses(ListMap(ResponsesCodeKey(200) -> Right(
-            Response(description = "ok", extensions = ListMap("x-resp" -> ExtensionValue("1")))
-          ))),
-          extensions = ListMap("x-op" -> ExtensionValue("1"))
-        ))
-      ))
+      ).addPathItem(
+        "/p",
+        PathItem(
+          extensions = ListMap("x-pi" -> ExtensionValue("1")),
+          get = Some(
+            Operation(
+              responses = Responses(
+                ListMap(
+                  ResponsesCodeKey(200) -> Right(
+                    Response(description = "ok", extensions = ListMap("x-resp" -> ExtensionValue("1")))
+                  )
+                )
+              ),
+              extensions = ListMap("x-op" -> ExtensionValue("1"))
+            )
+          )
+        )
+      )
       val json = writeToString(doc)(openAPICodec)
       List("x-c", "x-l", "x-info", "x-srv", "x-tag", "x-cmp", "x-root", "x-pi", "x-resp", "x-op")
         .foreach(k => json.contains("\"" + k + "\"") ==> true)
@@ -122,7 +139,7 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("non-JSON extension value falls back to a JSON string") {
-    import OpenApiJsoniter.circe._
+    import OpenApiJsoniter.circe.*
     test("an extension value that is not valid JSON is emitted as a JSON string") {
       val schema = Schema(
         `type` = Some(List(SchemaType.String)),

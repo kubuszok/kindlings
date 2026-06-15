@@ -2,8 +2,8 @@ package hearth.kindlings.openapijsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
@@ -20,7 +20,7 @@ import scala.collection.immutable.ListMap
   */
 final class ValueRoundTripSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe._
+  import OpenApiJsoniter.circe.*
 
   private def encDoc(doc: OpenAPI): String = writeToString(doc)(openAPICodec)
   private def roundTripOpenAPI(doc: OpenAPI): Unit =
@@ -57,10 +57,12 @@ final class ValueRoundTripSpec extends MacroSuite {
   )
   private val rtRequestBody = RequestBody(
     description = Some("the body"),
-    content = ListMap("multipart/form-data" -> MediaType(
-      schema = Some(Schema(`type` = Some(List(SchemaType.Object)))),
-      encoding = ListMap("file" -> rtEncoding)
-    )),
+    content = ListMap(
+      "multipart/form-data" -> MediaType(
+        schema = Some(Schema(`type` = Some(List(SchemaType.Object)))),
+        encoding = ListMap("file" -> rtEncoding)
+      )
+    ),
     required = Some(true),
     extensions = ListMap("x-rb" -> ExtensionValue("1"))
   )
@@ -82,7 +84,10 @@ final class ValueRoundTripSpec extends MacroSuite {
   )
   // ServerVariable / Link: extension-free so round-trip equality holds (circe drops their x-* on decode).
   private val rtServerVariable = ServerVariable(
-    `enum` = Some(List("8443", "443")), default = "8443", description = Some("port"), extensions = ListMap.empty
+    `enum` = Some(List("8443", "443")),
+    default = "8443",
+    description = Some("port"),
+    extensions = ListMap.empty
   )
   private val rtLink = Link(
     operationId = Some("getUser"),
@@ -111,7 +116,8 @@ final class ValueRoundTripSpec extends MacroSuite {
 
     test("RequestBody + multipart Encoding via Operation.requestBody") {
       val doc = OpenAPI(info = Info("API", "1.0")).addPathItem(
-        "/x", PathItem(post = Some(Operation(requestBody = Some(Right(rtRequestBody)))))
+        "/x",
+        PathItem(post = Some(Operation(requestBody = Some(Right(rtRequestBody)))))
       )
       val json = encDoc(doc)
       json.contains("\"encoding\"") ==> true
@@ -154,9 +160,13 @@ final class ValueRoundTripSpec extends MacroSuite {
     test("ExternalDocumentation via Tag + Schema") {
       val doc = OpenAPI(info = Info("API", "1.0")).copy(
         tags = List(Tag(name = "t", externalDocs = Some(rtExternalDocs))),
-        components = Some(Components(schemas = ListMap(
-          "S" -> Schema(`type` = Some(List(SchemaType.Object)), externalDocs = Some(rtExternalDocs))
-        )))
+        components = Some(
+          Components(schemas =
+            ListMap(
+              "S" -> Schema(`type` = Some(List(SchemaType.Object)), externalDocs = Some(rtExternalDocs))
+            )
+          )
+        )
       )
       val json = encDoc(doc)
       json.contains("\"https://docs.example.com\"") ==> true
@@ -167,9 +177,22 @@ final class ValueRoundTripSpec extends MacroSuite {
 
     test("standalone Encoding via MediaType.encoding") {
       val doc = OpenAPI(info = Info("API", "1.0")).addPathItem(
-        "/u", PathItem(post = Some(Operation(requestBody = Some(Right(RequestBody(content = ListMap(
-          "multipart/form-data" -> MediaType(encoding = ListMap("file" -> rtEncoding))
-        )))))))
+        "/u",
+        PathItem(post =
+          Some(
+            Operation(requestBody =
+              Some(
+                Right(
+                  RequestBody(content =
+                    ListMap(
+                      "multipart/form-data" -> MediaType(encoding = ListMap("file" -> rtEncoding))
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
       )
       encDoc(doc).contains("\"contentType\":\"application/json\"") ==> true
       roundTripOpenAPI(doc)
@@ -216,12 +239,15 @@ final class ValueRoundTripSpec extends MacroSuite {
 
   group("range Responses keys") {
     test("5XX range key encodes as \"5XX\" and round-trips") {
-      val responses = Responses(ListMap(
-        ResponsesCodeKey(200) -> Right(Response(description = "ok")),
-        ResponsesRangeKey(5) -> Right(Response(description = "server error")),
-        ResponsesDefaultKey -> Right(Response(description = "default"))
-      ))
-      val doc = OpenAPI(info = Info("API", "1.0")).addPathItem("/x", PathItem(get = Some(Operation(responses = responses))))
+      val responses = Responses(
+        ListMap(
+          ResponsesCodeKey(200) -> Right(Response(description = "ok")),
+          ResponsesRangeKey(5) -> Right(Response(description = "server error")),
+          ResponsesDefaultKey -> Right(Response(description = "default"))
+        )
+      )
+      val doc =
+        OpenAPI(info = Info("API", "1.0")).addPathItem("/x", PathItem(get = Some(Operation(responses = responses))))
       val json = encDoc(doc)
       json.contains("\"5XX\"") ==> true
       readFromString[OpenAPI](json)(openAPICodec) ==> doc
