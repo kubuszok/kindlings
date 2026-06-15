@@ -6,24 +6,23 @@ import scala.collection.mutable
   *
   * A mock produced by [[Mock.mock]] overrides each abstract member of the mocked type with a body that forwards the
   * call into the [[MockContext]] that was in scope when the mock was created (`handle`). Expectations are registered up
-  * front (`expecting`) and matched against incoming calls; at the end of a test [[verifyExpectations]] checks that every
-  * expectation was satisfied.
+  * front (`expecting`) and matched against incoming calls; at the end of a test [[verifyExpectations]] checks that
+  * every expectation was satisfied.
   *
   * This is the cross-platform, pure-Scala (no reflection, no bytecode generation) core that works identically on the
   * JVM, Scala.js and Scala Native.
+  *
+  * Overloaded methods (same name, different arity) are disambiguated by the actual argument count of each call;
+  * call-ordering across arbitrarily nested `inSequence`/`inAnyOrder` blocks is enforced by an ordering tree.
   */
 final class MockContext {
 
   private val handlers: mutable.Map[String, mutable.ListBuffer[CallHandler]] = mutable.Map.empty
   private val callLog: mutable.ListBuffer[(String, Seq[Any])] = mutable.ListBuffer.empty
 
-  /** Ordered `inSequence` groups: each id maps to the handlers registered inside that block, in registration order
-    * (possibly spanning several methods). Eligibility for sequenced handlers is enforced in [[handle]].
-    */
-  private val sequences: mutable.Map[Int, mutable.ListBuffer[CallHandler]] = mutable.Map.empty
-  private var nextSequenceId: Int = 0
-  // The sequence id (if any) that expectations registered right now belong to; `None` means unordered.
-  private var currentSequence: Option[Int] = None
+  // Root of the ordering tree (unordered). `currentNode` is the node new expectations attach to while building.
+  private val rootNode: OrderingNode = new OrderingNode(ordered = false, parent = null)
+  private var currentNode: OrderingNode = rootNode
 
   /** Register an expectation for a call to `methodName` with arguments matching `expectedArgs`.
     *
@@ -37,61 +36,55 @@ final class MockContext {
     *
     * Passing an empty `Seq` matches a call with any arguments (including none).
     */
-  def expectingSeq(methodName: String, expectedArgs: Seq[Any]): CallHandler = {
+  def expectingSeq(methodName: String, expectedArgs: Seq[Any]): CallHandler =
+    register(methodName, expectedArgs, arity = if (expectedArgs.isEmpty) -1 else expectedArgs.length, stub = false)
+
+  /** Faithful-DSL registration that also pins the overload arity, so an expectation matching "any args" still targets
+    * the right overload. Used by the `(m.method _).expects(...)` macro.
+    */
+  def expectingArity(methodName: String, arity: Int, expectedArgs: Seq[Any]): CallHandler =
+    register(methodName, expectedArgs, arity = arity, stub = false)
+
+  private def register(methodName: String, expectedArgs: Seq[Any], arity: Int, stub: Boolean): CallHandler = {
     val handler = new CallHandler(methodName, if (expectedArgs.isEmpty) None else Some(expectedArgs))
+    handler.arity = arity
+    if (stub) { val _ = handler.anyNumberOfTimes() }
     val _ = handlers.getOrElseUpdate(methodName, mutable.ListBuffer.empty).append(handler)
-    currentSequence.foreach { sid =>
-      val group = sequences.getOrElseUpdate(sid, mutable.ListBuffer.empty)
-      handler.sequenceId = Some(sid)
-      handler.sequencePos = group.length
-      val _ = group.append(handler)
-    }
+    if (!stub) currentNode.addChild(Right(handler))
     handler
   }
 
   /** Register the expectations created inside `block` as an ordered group: calls must arrive in the order the
     * expectations were declared (mirrors ScalaMock's `inSequence`). Sequences may span several methods and may be
-    * nested with [[inAnyOrder]].
+    * arbitrarily nested with [[inAnyOrder]].
     */
-  def inSequence[T](block: => T): T = {
-    val previous = currentSequence
-    val sid = nextSequenceId
-    nextSequenceId += 1
-    currentSequence = Some(sid)
-    try block
-    finally currentSequence = previous
-  }
+  def inSequence[T](block: => T): T = withNode(ordered = true)(block)
 
   /** Register the expectations created inside `block` without ordering constraints, even when nested inside an
     * [[inSequence]] block (mirrors ScalaMock's `inAnyOrder`). This is the default at the top level.
     */
-  def inAnyOrder[T](block: => T): T = {
-    val previous = currentSequence
-    currentSequence = None
+  def inAnyOrder[T](block: => T): T = withNode(ordered = false)(block)
+
+  private def withNode[T](ordered: Boolean)(block: => T): T = {
+    val previous = currentNode
+    val node = new OrderingNode(ordered, previous)
+    previous.addChild(Left(node))
+    currentNode = node
     try block
-    finally currentSequence = previous
+    finally currentNode = previous
   }
 
-  /** A sequenced handler may only fire once every earlier handler in its sequence is satisfied and no later handler has
-    * fired yet; unsequenced handlers are always eligible.
+  /** Dispatch a call coming from a generated mock body. The `default` is the type-appropriate fallback for the method's
+    * return type, returned when the matching expectation set no `returning`/`throwing`/`onCall` (mirrors ScalaMock).
+    * Used by macro-generated code only.
     */
-  private def sequenceEligible(handler: CallHandler): Boolean = handler.sequenceId match {
-    case None => true
-    case Some(sid) =>
-      val group = sequences.getOrElse(sid, mutable.ListBuffer.empty)
-      group.forall { other =>
-        if (other.sequencePos < handler.sequencePos) other.isSatisfied
-        else if (other.sequencePos > handler.sequencePos) other.callCount == 0
-        else true
-      }
-  }
-
-  /** Dispatch a call coming from a generated mock body. Used by macro-generated code only. */
-  def handle(methodName: String, args: Seq[Any]): Any = {
+  def handle(methodName: String, args: Seq[Any], default: => Any): Any = {
     callLog.append(methodName -> args)
     val candidates = handlers.getOrElse(methodName, mutable.ListBuffer.empty)
-    candidates.find(h => !h.isExhausted && sequenceEligible(h) && h.matches(args)) match {
-      case Some(handler) => handler.call(args)
+    candidates.find(h =>
+      !h.isExhausted && h.matchesArity(args.length) && OrderingNode.eligible(h) && h.matches(args)
+    ) match {
+      case Some(handler) => handler.call(args, default)
       case None          =>
         throw new MockExpectationException(
           s"Unexpected call: $methodName(${args.mkString(", ")})" +
@@ -119,20 +112,22 @@ final class MockContext {
   def when(methodName: String, expectedArgs: Any*): CallHandler = whenSeq(methodName, expectedArgs)
 
   /** [[when]] taking the expected arguments as a `Seq` (used by the faithful `(s.method _).when(...)` DSL macro). */
-  def whenSeq(methodName: String, expectedArgs: Seq[Any]): CallHandler = {
-    val handler = new CallHandler(methodName, if (expectedArgs.isEmpty) None else Some(expectedArgs))
-    val _ = handler.anyNumberOfTimes()
-    val _ = handlers.getOrElseUpdate(methodName, mutable.ListBuffer.empty).append(handler)
-    handler
-  }
+  def whenSeq(methodName: String, expectedArgs: Seq[Any]): CallHandler =
+    register(methodName, expectedArgs, arity = if (expectedArgs.isEmpty) -1 else expectedArgs.length, stub = true)
+
+  /** [[when]] that also pins the overload arity (faithful DSL). */
+  def whenArity(methodName: String, arity: Int, expectedArgs: Seq[Any]): CallHandler =
+    register(methodName, expectedArgs, arity = arity, stub = true)
 
   /** Dispatch a call from a generated `stub` body: record it, run a matching preset if any, otherwise return `default`
     * (never throws on an unexpected call). Used by macro-generated code only.
     */
   def handleStub(methodName: String, args: Seq[Any], default: => Any): Any = {
     callLog.append(methodName -> args)
-    handlers.getOrElse(methodName, mutable.ListBuffer.empty).find(h => !h.isExhausted && h.matches(args)) match {
-      case Some(handler) => handler.call(args)
+    handlers
+      .getOrElse(methodName, mutable.ListBuffer.empty)
+      .find(h => !h.isExhausted && h.matchesArity(args.length) && h.matches(args)) match {
+      case Some(handler) => handler.call(args, default)
       case None          => default
     }
   }
@@ -146,7 +141,27 @@ final class MockContext {
   /** Post-hoc verification of a stubbed call (ScalaMock's `(s.method _).verify(args).once()`). */
   def verify(methodName: String, expectedArgs: Any*): VerifyTarget = verifySeq(methodName, expectedArgs)
 
-  /** [[verify]] taking the expected arguments as a `Seq` (used by the faithful `(s.method _).verify(...)` DSL macro). */
+  /** [[verify]] taking the expected arguments as a `Seq` (used by the faithful `(s.method _).verify(...)` DSL macro).
+    */
   def verifySeq(methodName: String, expectedArgs: Seq[Any]): VerifyTarget =
     new VerifyTarget(this, methodName, expectedArgs)
+
+  /** Post-hoc assert that the given `(methodName, expectedArgs)` calls were recorded in this exact relative order
+    * (ScalaMock's stub verify-in-sequence). Calls in between are allowed; the listed calls must appear as a subsequence
+    * of the recorded call log, in order. Each expected-args `Seq` may contain [[ArgMatcher]]s. Throws on a mismatch.
+    */
+  def verifyInSequence(calls: (String, Seq[Any])*): Unit = {
+    val recorded = callLog.toList
+    var cursor = 0
+    calls.foreach { case (name, expectedArgs) =>
+      val probe = new CallHandler(name, if (expectedArgs.isEmpty) None else Some(expectedArgs))
+      val found = recorded.indexWhere({ case (n, args) => n == name && probe.matches(args) }, cursor)
+      if (found < 0)
+        throw new MockExpectationException(
+          s"Expected call $name(${expectedArgs.mkString(", ")}) in sequence after position $cursor, " +
+            s"but it was not found.\nRecorded:\n${recorded.map { case (n, a) => s"  $n(${a.mkString(", ")})" }.mkString("\n")}"
+        )
+      cursor = found + 1
+    }
+  }
 }

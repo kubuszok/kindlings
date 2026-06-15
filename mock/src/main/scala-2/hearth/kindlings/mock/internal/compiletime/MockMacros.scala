@@ -14,10 +14,10 @@ final private[mock] class MockMacros(val c: blackbox.Context) extends MacroCommo
     * application; recover it from `c.prefix`, alongside the `args` packed into a `Seq[Any]`.
     */
   private def dslOperands(dsl: String, args: Seq[c.Expr[Any]]): (c.Expr[Any], c.Expr[Seq[Any]]) = {
-    import c.universe._
+    import c.universe.*
     val fTree: Tree = c.prefix.tree match {
       case Apply(_, List(inner)) => inner
-      case other =>
+      case other                 =>
         c.abort(c.enclosingPosition, s"`.$dsl` could not extract the method reference from: ${showRaw(other)}")
     }
     (c.Expr[Any](fTree), c.Expr[Seq[Any]](q"_root_.scala.Seq(..${args.map(_.tree)})"))

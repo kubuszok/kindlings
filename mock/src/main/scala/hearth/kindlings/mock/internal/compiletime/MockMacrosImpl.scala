@@ -75,24 +75,27 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
 
   /** Faithful `(m.method _).expects(args...)` DSL. Given the eta-expanded method reference `f` and the expected
     * arguments as a `Seq[Any]`, register an expectation for that method on the [[MockContext]] that is implicitly in
-    * scope at the call site (the same context the mock was created with). Mirrors ScalaMock's `expects`, but routes into
-    * our name-keyed runtime rather than per-method `MockFunction` fields.
+    * scope at the call site (the same context the mock was created with). Mirrors ScalaMock's `expects`, but routes
+    * into our name-keyed runtime rather than per-method `MockFunction` fields.
     */
   def expectsType(f: Expr[Any], args: Expr[Seq[Any]]): Expr[CallHandler] =
     withMockContext[CallHandler]("expects") { ctx =>
-      Expr.quote(Expr.splice(ctx).expectingSeq(Expr.splice(Expr(extractMethodName(f))), Expr.splice(args)))
+      val (name, arity) = extractMethodRef(f)
+      Expr.quote(Expr.splice(ctx).expectingArity(Expr.splice(Expr(name)), Expr.splice(Expr(arity)), Expr.splice(args)))
     }
 
   /** Faithful `(s.method _).when(args...)` DSL — preset a stub's behaviour for the referenced method. */
   def whenType(f: Expr[Any], args: Expr[Seq[Any]]): Expr[CallHandler] =
     withMockContext[CallHandler]("when") { ctx =>
-      Expr.quote(Expr.splice(ctx).whenSeq(Expr.splice(Expr(extractMethodName(f))), Expr.splice(args)))
+      val (name, arity) = extractMethodRef(f)
+      Expr.quote(Expr.splice(ctx).whenArity(Expr.splice(Expr(name)), Expr.splice(Expr(arity)), Expr.splice(args)))
     }
 
   /** Faithful `(s.method _).verify(args...)` DSL — post-hoc assert how often the referenced method was called. */
   def verifyType(f: Expr[Any], args: Expr[Seq[Any]]): Expr[VerifyTarget] =
     withMockContext[VerifyTarget]("verify") { ctx =>
-      Expr.quote(Expr.splice(ctx).verifySeq(Expr.splice(Expr(extractMethodName(f))), Expr.splice(args)))
+      val (name, _) = extractMethodRef(f)
+      Expr.quote(Expr.splice(ctx).verifySeq(Expr.splice(Expr(name)), Expr.splice(args)))
     }
 
   /** Summon the implicit [[MockContext]] in scope at the call site and hand it to `build`; aborts with a helpful
@@ -114,11 +117,11 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
     * or the call itself). The outermost [[hearth.typed.Exprs.DestructuredExpr.MethodCall]] in the parsed tree is the
     * referenced method.
     */
-  private def extractMethodName(f: Expr[Any]): String = {
+  private def extractMethodRef(f: Expr[Any]): (String, Int) = {
     implicit val anyType: Type[Any] = Type.of[Any]
     val parsed = DestructuredExpr.parse[Any](f)
     parsed.collect { case mc: DestructuredExpr.MethodCall => mc }.headOption match {
-      case Some(mc) => mc.method.name
+      case Some(mc) => (mc.method.name, mc.method.arity)
       case None     =>
         Environment.reportErrorAndAbort(
           "`.expects` must be applied to a method reference of the form `(m.method _)`; " +
@@ -138,24 +141,38 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
       val args: Expr[Vector[Any]] =
         octx.parameters.foldRight(Expr.quote(Vector.empty[Any]))(prependArg)
 
-      forwardCall[R](ctx, methodName, args).as_??
+      forwardCall[R](ctx, methodName, args, summonDefault[R]).as_??
     }
   }
 
   /** Prepend one argument expression to the accumulated `Vector[Any]`. A helper with a regular type parameter so the
-    * spliced argument's (path-dependent) type does not leak into the generated tree on Scala 2.
+    * spliced argument's (path-dependent) type does not leak into the generated tree on Scala 2. The spliced reference
+    * forces a by-name parameter to its value (it is bound to an `Any` local before use).
     */
   private def prependArg(parameter: Expr_??, acc: Expr[Vector[Any]]): Expr[Vector[Any]] = {
     import parameter.Underlying as P
     prepend[P](parameter.value, acc)
   }
   private def prepend[P: Type](parameter: Expr[P], acc: Expr[Vector[Any]]): Expr[Vector[Any]] =
-    Expr.quote(Expr.splice(parameter) +: Expr.splice(acc))
+    // Bind to `Any` first: this forces a by-name parameter to its value exactly once (so the runtime never receives a
+    // `Function0` thunk that would `ClassCastException` on Scala 3), and ascribing to `Any` — rather than the param's
+    // own (possibly singleton/path-dependent) type — keeps the generated tree valid on both platforms.
+    Expr.quote {
+      val forced: Any = Expr.splice(parameter)
+      forced +: Expr.splice(acc)
+    }
 
-  /** Build `ctx.handle(name, args).asInstanceOf[R]`. A helper with a regular type parameter `R` so the
-    * path-dependent return type (`overrideContext.returnType.Underlying`) does not leak into the generated tree on
-    * Scala 2 (see the cross-compilation pitfalls skill).
+  /** Build `ctx.handle(name, args).asInstanceOf[R]`. A helper with a regular type parameter `R` so the path-dependent
+    * return type (`overrideContext.returnType.Underlying`) does not leak into the generated tree on Scala 2 (see the
+    * cross-compilation pitfalls skill).
     */
-  private def forwardCall[R: Type](ctx: Expr[MockContext], methodName: Expr[String], args: Expr[Vector[Any]]): Expr[R] =
-    Expr.quote(Expr.splice(ctx).handle(Expr.splice(methodName), Expr.splice(args)).asInstanceOf[R])
+  private def forwardCall[R: Type](
+      ctx: Expr[MockContext],
+      methodName: Expr[String],
+      args: Expr[Vector[Any]],
+      default: Expr[R]
+  ): Expr[R] =
+    Expr.quote(
+      Expr.splice(ctx).handle(Expr.splice(methodName), Expr.splice(args), Expr.splice(default)).asInstanceOf[R]
+    )
 }
