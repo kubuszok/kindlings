@@ -16,7 +16,25 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
-  protected def summonFoldableForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
+  protected type AnyK[X] = Any
+
+  /** Higher-kinded constructor for `cats.Foldable`, used to build `Type[cats.Foldable[G]]` for a discovered `G` via
+    * `CatsFoldableCtor.apply(using gCtor)` (Issue #284).
+    */
+  protected lazy val CatsFoldableCtor: Type.CtorK1[cats.Foldable] = Type.CtorK1.of[cats.Foldable]
+
+  /** Summon `cats.Foldable[G]` for the type constructor `G` of the applied field type `G[X]`, using Hearth's
+    * `Type.decompose1` to discover `G` and `Type.CtorK1#apply` to build `Type[cats.Foldable[G]]` to summon for. Returns
+    * None when the field is not an applied type or no `Foldable` instance is in scope.
+    *
+    * Replaces the former platform-specific `summonFoldableForFieldType` (Issue #284: HKT ctor primitives).
+    */
+  protected def summonFoldableForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
+    Type.decompose1(using fieldType).flatMap { case (gCtor, _) =>
+      implicit val FoldableOfG: Type[cats.Foldable[AnyK]] =
+        CatsFoldableCtor.apply(using gCtor).asInstanceOf[Type[cats.Foldable[AnyK]]]
+      Expr.summonImplicit[cats.Foldable[AnyK]].toOption.map(_.asInstanceOf[Expr[Any]])
+    }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveFoldable[F[_]](
@@ -218,7 +236,13 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }
 
-  protected def mkCtor1FromTypeFoldable(appliedType: Type[Any]): Option[UntypedType]
+  /** Decompose an applied field type `G[X]` and return its (live) type constructor `G` in untyped form for
+    * self-recursion comparison (`== parentCtor`). Returns None for non-applied types.
+    *
+    * Replaces the former platform-specific `mkCtor1FromTypeFoldable` (Issue #284).
+    */
+  protected def mkCtor1FromTypeFoldable(appliedType: Type[Any]): Option[UntypedType] =
+    Type.decompose1(using appliedType).map { case (gCtor, _) => gCtor.asUntyped }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   private def deriveFoldableForEnum[F[_]](

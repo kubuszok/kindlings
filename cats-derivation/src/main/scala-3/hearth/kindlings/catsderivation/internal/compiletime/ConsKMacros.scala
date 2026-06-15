@@ -12,25 +12,6 @@ final private[catsderivation] class ConsKMacros(q: Quotes) extends MacroCommonsS
   /** Create Type[alleycats.ConsK[G]] from scala.quoted.Type. */
   def mkConsKType[G[_]](using scala.quoted.Type[G]): Type[alleycats.ConsK[G]] =
     scala.quoted.Type.of[alleycats.ConsK[G]].asInstanceOf[Type[alleycats.ConsK[G]]]
-
-  protected def summonConsKForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
-    import q.reflect.*
-    val repr = TypeRepr.of(using fieldType.asInstanceOf[scala.quoted.Type[Any]])
-    repr.dealias match {
-      case AppliedType(fieldCtor, _ :: Nil) =>
-        // Get ConsK's type constructor by destructuring ConsK[List]
-        val consKCtor = TypeRepr.of[alleycats.ConsK[List]] match {
-          case AppliedType(ctor, _) => ctor
-          case _                    => return None
-        }
-        val consKGType = consKCtor.appliedTo(fieldCtor)
-        Implicits.search(consKGType) match {
-          case iss: ImplicitSearchSuccess => Some(iss.tree.asExpr.asInstanceOf[Expr[Any]])
-          case _                          => None
-        }
-      case _ => None
-    }
-  }
 }
 private[catsderivation] object ConsKMacros {
 

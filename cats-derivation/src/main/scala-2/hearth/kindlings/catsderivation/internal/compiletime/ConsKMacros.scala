@@ -19,15 +19,4 @@ final private[catsderivation] class ConsKMacros(val c: blackbox.Context)
 
     deriveConsK[F](fCtor, consKFType)
   }
-
-  protected def summonConsKForFieldType(fieldType: Type[Any]): Option[Expr[Any]] = {
-    val tpe = fieldType.asInstanceOf[c.WeakTypeTag[Any]].tpe
-    val ctor = tpe.typeConstructor
-    val consKCtor = c.universe.weakTypeOf[alleycats.ConsK[List]].typeConstructor
-    val consKGType = c.universe.appliedType(consKCtor, List(ctor))
-    c.inferImplicitValue(consKGType) match {
-      case c.universe.EmptyTree => None
-      case tree                 => Some(c.Expr[Any](tree).asInstanceOf[Expr[Any]])
-    }
-  }
 }
