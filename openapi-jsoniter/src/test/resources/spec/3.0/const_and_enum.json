@@ -1,0 +1,17 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "schemas": {
+      "const and enum" : {
+        "description" : "const and enum",
+        "enum" : [
+          "const1"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "schemas": {
+      "type 'null'": {
+        "type": "null",
+        "description": "type 'null'"
+      },
+      "nullable string": {
+        "type": "string",
+        "nullable": true,
+        "description": "nullable string"
+      },
+      "nullable enum" : {
+        "description" : "nullable enum",
+        "enum" : [
+          "a",
+          "b",
+          null
+        ]
+      },
+      "nullable reference": {
+        "nullable": true,
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Foo"
+          }
+        ],
+        "description": "nullable reference"
+      },
+      "single example": {
+        "type": "string",
+        "description": "single example",
+        "example": "exampleValue"
+      },
+      "multi valued example" : {
+        "type" : "array",
+        "description" : "multi valued example",
+        "example" : [
+          "ex1",
+          "ex1"
+        ]
+      },
+      "object with example" : {
+        "description" : "object with example",
+        "example" : {
+          "a" : 1,
+          "b" : null
+        },
+        "type" : "object"
+      },
+      "min/max": {
+        "minimum": 10,
+        "maximum": 20,
+        "description": "min/max"
+      },
+      "const" : {
+        "description" : "const",
+        "enum" : [
+          "const1"
+        ]
+      },
+      "enum" : {
+        "description" : "enum",
+        "enum" : [
+          "enum1",
+          "enum2"
+        ]
+      },
+      "exclusive min/max": {
+        "minimum": 10,
+        "exclusiveMinimum": true,
+        "maximum": 20,
+        "exclusiveMaximum": true,
+        "description": "exclusive min/max"
+      },
+      "exclusiveMinimum false": {
+        "minimum": 10,
+        "description": "exclusiveMinimum false"
+      },
+      "array": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "array"
+      },
+      "array with unique items": {
+        "type": "array",
+        "uniqueItems": true,
+        "description": "array with unique items"
+      }
+    }
+  }
+}

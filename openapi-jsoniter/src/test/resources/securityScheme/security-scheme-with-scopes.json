@@ -1,0 +1,11 @@
+{
+  "type" : "oauth2",
+  "flows" : {
+    "clientCredentials" : {
+      "tokenUrl" : "openapi-circe-token",
+      "scopes" : {
+        "example" : "description"
+      }
+    }
+  }
+}

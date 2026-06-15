@@ -15,7 +15,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.3.1-31-g20a332e-SNAPSHOT"
+  val hearth = "0.3.1-45-gca3bcdb-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val avro4s213 = "4.1.2"
@@ -28,6 +28,9 @@ val versions = new {
   val pureconfig = "0.17.10"
   val tapir = "1.13.21"
   val refined = "0.11.3"
+  val sttpApispec = "0.11.10"
+  val catsEffect = "3.6.3"
+  val tagging = "2.3.5"
   val scalacheck = "1.19.0"
   val scalaJavaTime = "2.7.0"
   val scalaSaxParser = "0.1.0"
@@ -221,7 +224,11 @@ lazy val aliases = new Aliases(
     sconfigDerivation,
     diffDerivation,
     avroDerivation,
-    pureconfigDerivation
+    pureconfigDerivation,
+    di,
+    diCats,
+    mock,
+    openapiJsoniter
   ),
   testOnly = Seq(integrationTests),
   compileOnly = Seq(benchmarks)
@@ -252,6 +259,10 @@ lazy val root = project
   .aggregate(scalacheckDerivation.projectRefs *)
   .aggregate(catsIntegration.projectRefs *)
   .aggregate(diffDerivation.projectRefs *)
+  .aggregate(di.projectRefs *)
+  .aggregate(diCats.projectRefs *)
+  .aggregate(mock.projectRefs *)
+  .aggregate(openapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
   .settings(
@@ -290,6 +301,88 @@ lazy val diffDerivation = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
+
+lazy val di = projectMatrix
+  .in(file("di"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-di",
+    name := "kindlings-di",
+    description := "Compile-time dependency injection (macwire-style) using Hearth's enclosingScope"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies += "com.softwaremill.common" %%% "tagging" % versions.tagging
+  )
+
+lazy val diCats = projectMatrix
+  .in(file("di-cats"))
+  // JVM + JS only: cats-effect for Scala Native 0.5 is published from 3.7.0+, but we pin 3.6.3 (which has no
+  // `cats-effect_native0.5_3` artifact). Add `VirtualAxis.native` here once the cats-effect pin moves to >= 3.7.0.
+  .someVariations(versions.scalas, List(VirtualAxis.jvm, VirtualAxis.js))((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .dependsOn(di)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-di-cats",
+    name := "kindlings-di-cats",
+    description := "F-agnostic Cats-Effect Resource[F, _] dependency injection wiring using Hearth"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.typelevel" %%% "cats-effect" % versions.catsEffect
+    )
+  )
+
+lazy val mock = projectMatrix
+  .in(file("mock"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-mock",
+    name := "kindlings-mock",
+    description := "Pure-macro mocking framework (scalamock-style) using Hearth's AnonymousInstance"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+
+// openapi-circe / tapir-openapi-docs (Test-only, for the circe cross-check) are not published for Scala Native,
+// so they are added on JVM only. The JS/Native rows still build and run the cross-platform (value-based) specs.
+val openapiJsoniterJvmOnlyTestDeps = List(
+  MatrixAction.ForPlatform(VirtualAxis.jvm).Configure { project =>
+    project.settings(
+      libraryDependencies ++= Seq(
+        "com.softwaremill.sttp.tapir" %%% "tapir-openapi-docs" % versions.tapir % Test,
+        "com.softwaremill.sttp.apispec" %%% "openapi-circe" % versions.sttpApispec % Test
+      )
+    )
+  }
+)
+
+lazy val openapiJsoniter = projectMatrix
+  .in(file("openapi-jsoniter"))
+  .someVariations(versions.scalas, versions.platforms)((dev.only1VersionInIDE ++ openapiJsoniterJvmOnlyTestDeps) *)
+  .dependsOn(jsoniterJson, jsoniterDerivation)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-openapi-jsoniter",
+    name := "kindlings-openapi-jsoniter",
+    description := "Circe-free jsoniter-scala serialization for the sttp-apispec OpenAPI model"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.softwaremill.sttp.apispec" %%% "openapi-model" % versions.sttpApispec
+    )
+  )
 
 lazy val fastShowPretty = projectMatrix
   .in(file("fast-show-pretty"))
