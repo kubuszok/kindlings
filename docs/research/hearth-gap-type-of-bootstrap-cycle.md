@@ -1,7 +1,13 @@
 # Hearth gap: `Type.of[A]` bootstrap cycle inside StandardMacroExtension contexts
 
-Last updated: 2026-06-12. Status: **open** — ~380 lines of per-platform workaround in
-circe-derivation and jsoniter-derivation field-config extensions.
+> **UNDER RE-VERIFICATION against Hearth `0.3.1-45-gca3bcdb` (2026-06-15).** Unlike sibling
+> gaps #283/#284 (both confirmed resolved upstream), this one is NOT yet confirmed: `UntypedType.toTyped[A]`
+> exists but the workaround still needs an `asInstanceOf` bridge to obtain the `UntypedType`, and
+> whether cross-quotes `Type.of[A]` still self-cycles inside a `StandardMacroExtension` can only be
+> settled by removing the bypass in one extension and recompiling. That check is pending; treat the
+> "open" status below as provisional until then. Original report below.
+
+Last updated: 2026-06-12. Status: **open (provisional — pending an empirical recheck, see banner).**
 Filed as [kubuszok/hearth#285](https://github.com/kubuszok/hearth/issues/285).
 
 ## Problem
