@@ -35,12 +35,26 @@ shape into a memoized graph walk (modelled on `di`'s `autowire`), emitting a
 ### Deliberate divergence from macwire (`constructInputProvider`)
 
 macwire NEVER reuses a directly-passed root instance — it always rebuilds the root via a
-creator, so `autowire[B](new B(new A("s")))` FAILS on the missing `String` (macwire flags
-this itself: `// TODO we should add a warning in this case.`). **di-cats deliberately
-diverges**: a provided instance whose type matches the root is reused as the root (wrapped
-in `Resource.pure`). Rationale: least-surprising, and consistent with how every other
-parameter resolves to a provided value by type. Tested in `ResourceWiringSpec` ("deliberate
-divergence from macwire").
+creator, so `autowire[B](new B(new A("s")))` FAILS on the missing `String`.
+
+**This is not a correctness safeguard — it is a self-acknowledged macwire wart.** Verified
+against the macwire source: the behaviour comes from one rule, *"We assume that we cannot use
+input provider directly, so we create a result object with available constructors. It's a
+mimic of `wire`'s property"* (`autocats/internals/CatsProvidersGraphContext.scala`), i.e.
+`autowire[T]` is modelled as "always **construct** T from the supplied dependency pieces", and
+passing a `T` itself falls outside that model. The macwire test for this case
+(`constructInputProvider.failure`) is even annotated `// TODO we should add a warning in this
+case.` — the authors consider the resulting confusing missing-dependency error *suboptimal*,
+not desirable. No bug was ever caused by reusing an instance.
+
+**di-cats deliberately diverges** (confirmed the right call): a provided instance whose type
+matches the root is reused as the root (wrapped in `Resource.pure`). Rationale: least-
+surprising ("if you hand me a value of the type I'm building, I use it"), consistent with how
+every other parameter resolves to a provided value by type, and it avoids exactly the
+confusing failure macwire flagged as a TODO. The only consequence (expected): a fully-
+constructed root's *own* transitive dependencies are not lifecycle-managed — the caller
+constructed them eagerly. Tested in `ResourceWiringSpec` ("deliberate divergence from
+macwire").
 
 ### Deferred
 
