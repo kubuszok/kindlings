@@ -1,36 +1,25 @@
 package hearth.kindlings.circederivation
 package internal.compiletime
 
-import hearth.{MacroCommons, MacroCommonsScala2}
+import hearth.MacroCommons
 import hearth.std.StdExtensions
 import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 
 final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
-  @scala.annotation.nowarn("msg=is unchecked since it is eliminated by erasure")
   override protected def extendJsonConfig(ctx: MacroCommons & StdExtensions & JsonSchemaConfigs): Unit = {
     import ctx.*
 
-    // Access Scala 2 context for annotation tree matching with preserved type info
-    val sc2 = ctx.asInstanceOf[MacroCommonsScala2]
-    import sc2.c.universe.{Apply as SApply, Literal as SLiteral, Constant as SConstant}
-
     // Pre-resolve ExprCodec[String] with explicit companion access to avoid
-    // diverging implicit expansion caused by import ctx.* in Scala 2.
+    // diverging implicit expansion caused by import ctx.* in Scala 2. Harmless on
+    // Scala 3, so this platform-agnostic file uses it on both platforms.
     val stringCodec = ExprCodec.StringExprCodec
     def mkStringExpr(s: String): Expr[String] = Expr.apply(s)(stringCodec)
 
-    // Pre-resolve ExprCodec before introducing cross-quotes implicits
-    // to avoid diverging implicit expansion caused by import ctx.* in Scala 2.
-
-    // Self-referential implicit val Type.of definitions now work in cross-quotes (Hearth issue #285):
-    // the Scala 2 generated block shadows the in-definition implicit.
+    // Self-referential implicit val Type.of definitions now work in cross-quotes (Hearth issue #285).
     implicit val ConfigT: Type[Configuration] = Type.of[Configuration]
-
-    // Annotation types only need UntypedType for comparison — get directly from
-    // Scala 2 universe to avoid additional cross-quotes Type.of forward references.
-    val fieldNameTpe: UntypedType = sc2.c.universe.typeOf[annotations.fieldName].asInstanceOf[UntypedType]
-    val transientFieldTpe: UntypedType = sc2.c.universe.typeOf[annotations.transientField].asInstanceOf[UntypedType]
+    implicit val FieldNameT: Type[annotations.fieldName] = Type.of[annotations.fieldName]
+    implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
 
     Expr.summonImplicit[Configuration].toOption match {
       case Some(configExpr) =>
@@ -40,17 +29,13 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           def configType: UntypedType = UntypedType.fromTyped[Configuration]
 
           def resolveFieldName(param: Parameter, scalaName: String): Expr[String] = {
-            // On Scala 2, param.asUntyped.annotations strips types via c.untypecheck.
-            // Access symbol.annotations directly for type-preserved annotation info.
-            val sc2Param = param.asUntyped.asInstanceOf[sc2.UntypedParameter]
-            val customName: Option[String] = sc2Param.symbol.annotations
-              .find(ann => ann.tree.tpe.asInstanceOf[UntypedType] =:= fieldNameTpe)
-              .flatMap { ann =>
-                sc2.c.untypecheck(ann.tree) match {
-                  case SApply(_, List(SLiteral(SConstant(value: String)))) => Some(value)
-                  case _                                                   => None
-                }
-              }
+            // Native Hearth annotation API (Hearth issue #283): read the @fieldName(...) String literal.
+            val customName: Option[String] = param
+              .annotationsOfType[annotations.fieldName]
+              .headOption
+              .flatMap(ann => Annotations.decodedConstructorArguments(ann))
+              .flatMap(_.headOption.flatMap(_.toOption))
+              .collect { case s: String => s }
             customName match {
               case Some(name) => mkStringExpr(name)
               case None       =>
@@ -60,10 +45,8 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
             }
           }
 
-          def isTransientField(param: Parameter): Boolean = {
-            val sc2Param = param.asUntyped.asInstanceOf[sc2.UntypedParameter]
-            sc2Param.symbol.annotations.exists(ann => ann.tree.tpe.asInstanceOf[UntypedType] =:= transientFieldTpe)
-          }
+          def isTransientField(param: Parameter): Boolean =
+            param.hasAnnotationOfType[annotations.transientField]
 
           def resolveConstructorName(scalaName: String): Expr[String] =
             Expr.quote {
