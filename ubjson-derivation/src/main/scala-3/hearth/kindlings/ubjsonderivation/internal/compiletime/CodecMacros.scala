@@ -6,7 +6,7 @@ import scala.quoted.*
 
 final private[ubjsonderivation] class CodecMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
-      AnnotationSupportScala3,
+      AnnotationSupport,
       CodecMacrosImpl
 private[ubjsonderivation] object CodecMacros {
 

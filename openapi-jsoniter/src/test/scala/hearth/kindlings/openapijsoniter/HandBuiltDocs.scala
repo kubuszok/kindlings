@@ -1,12 +1,12 @@
 package hearth.kindlings.openapijsoniter
 
-import sttp.apispec._
-import sttp.apispec.openapi._
+import sttp.apispec.*
+import sttp.apispec.openapi.*
 
 import scala.collection.immutable.ListMap
 
-/** Hand-built model fixtures that exercise encoder/decoder branches not reached by the golden resource fixtures:
-  * every `SecurityScheme` flavor, every `ParameterStyle`, range `Responses` keys, multipart `Encoding`, the
+/** Hand-built model fixtures that exercise encoder/decoder branches not reached by the golden resource fixtures: every
+  * `SecurityScheme` flavor, every `ParameterStyle`, range `Responses` keys, multipart `Encoding`, the
   * never-instantiated model types (`RequestBody`, `Encoding`, `Link`, `Example`, `ServerVariable`, full `Parameter`,
   * full `Header`, `ExternalDocumentation`).
   *
@@ -23,31 +23,42 @@ object HandBuiltDocs {
   val ssHttpBearer: SecurityScheme =
     SecurityScheme(`type` = "http", scheme = Some("bearer"), bearerFormat = Some("JWT"))
   val ssOpenIdConnect: SecurityScheme =
-    SecurityScheme(`type` = "openIdConnect", openIdConnectUrl = Some("https://example.com/.well-known/openid-configuration"))
+    SecurityScheme(
+      `type` = "openIdConnect",
+      openIdConnectUrl = Some("https://example.com/.well-known/openid-configuration")
+    )
   val ssMutualTLS: SecurityScheme =
     SecurityScheme(`type` = "mutualTLS", description = Some("mTLS"))
   val ssOauth2: SecurityScheme = SecurityScheme(
     `type` = "oauth2",
     flows = Some(
       OAuthFlows(
-        `implicit` = Some(OAuthFlow(
-          authorizationUrl = Some("https://example.com/auth"),
-          scopes = ListMap("read" -> "read access")
-        )),
-        password = Some(OAuthFlow(
-          tokenUrl = Some("https://example.com/token"),
-          scopes = ListMap.empty
-        )),
-        clientCredentials = Some(OAuthFlow(
-          tokenUrl = Some("https://example.com/token"),
-          refreshUrl = Some("https://example.com/refresh"),
-          scopes = ListMap("admin" -> "admin access")
-        )),
-        authorizationCode = Some(OAuthFlow(
-          authorizationUrl = Some("https://example.com/auth"),
-          tokenUrl = Some("https://example.com/token"),
-          scopes = ListMap("write" -> "write access")
-        ))
+        `implicit` = Some(
+          OAuthFlow(
+            authorizationUrl = Some("https://example.com/auth"),
+            scopes = ListMap("read" -> "read access")
+          )
+        ),
+        password = Some(
+          OAuthFlow(
+            tokenUrl = Some("https://example.com/token"),
+            scopes = ListMap.empty
+          )
+        ),
+        clientCredentials = Some(
+          OAuthFlow(
+            tokenUrl = Some("https://example.com/token"),
+            refreshUrl = Some("https://example.com/refresh"),
+            scopes = ListMap("admin" -> "admin access")
+          )
+        ),
+        authorizationCode = Some(
+          OAuthFlow(
+            authorizationUrl = Some("https://example.com/auth"),
+            tokenUrl = Some("https://example.com/token"),
+            scopes = ListMap("write" -> "write access")
+          )
+        )
       )
     )
   )
@@ -184,10 +195,12 @@ object HandBuiltDocs {
                       description = "ok",
                       headers = ListMap("X-Rate" -> Right(header)),
                       links = ListMap("self" -> Right(link)),
-                      content = ListMap("application/json" -> MediaType(
-                        schema = Some(Schema(`type` = Some(List(SchemaType.Object)))),
-                        examples = ListMap("ex" -> Right(example))
-                      ))
+                      content = ListMap(
+                        "application/json" -> MediaType(
+                          schema = Some(Schema(`type` = Some(List(SchemaType.Object)))),
+                          examples = ListMap("ex" -> Right(example))
+                        )
+                      )
                     )
                   ),
                   ResponsesRangeKey(5) -> Right(Response(description = "server error"))

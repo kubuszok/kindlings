@@ -6,7 +6,7 @@ import scala.reflect.macros.blackbox
 
 final private[ubjsonderivation] class CodecMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
-    with AnnotationSupportScala2
+    with AnnotationSupport
     with CodecMacrosImpl {
 
   def deriveCodecImpl[A: c.WeakTypeTag](

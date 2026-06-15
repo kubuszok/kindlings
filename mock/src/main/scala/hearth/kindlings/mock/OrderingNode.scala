@@ -12,7 +12,7 @@ import scala.collection.mutable
   * for every ordered ancestor on its path to the root, all earlier-positioned siblings are already complete and no
   * later-positioned sibling has been started. This makes arbitrarily deep `inSequence`/`inAnyOrder` nesting work.
   */
-private[mock] final class OrderingNode(val ordered: Boolean, val parent: OrderingNode) {
+final private[mock] class OrderingNode(val ordered: Boolean, val parent: OrderingNode) {
 
   /** Either a nested node or a leaf handler, in registration order. */
   val children: mutable.ListBuffer[Either[OrderingNode, CallHandler]] = mutable.ListBuffer.empty
