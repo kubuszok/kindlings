@@ -19,7 +19,25 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
 
-  protected def summonTraverseForFieldType(fieldType: Type[Any]): Option[Expr[Any]]
+  protected type AnyK[X] = Any
+
+  /** Higher-kinded constructor for `cats.Traverse`, used to build `Type[cats.Traverse[G]]` for a discovered `G` via
+    * `CatsTraverseCtor.apply(using gCtor)` (Issue #284).
+    */
+  protected lazy val CatsTraverseCtor: Type.CtorK1[cats.Traverse] = Type.CtorK1.of[cats.Traverse]
+
+  /** Summon `cats.Traverse[G]` for the type constructor `G` of the applied field type `G[X]`, using Hearth's
+    * `Type.decompose1` to discover `G` and `Type.CtorK1#apply` to build `Type[cats.Traverse[G]]` to summon for. Returns
+    * None when the field is not an applied type or no `Traverse` instance is in scope.
+    *
+    * Replaces the former platform-specific `summonTraverseForFieldType` (Issue #284: HKT ctor primitives).
+    */
+  protected def summonTraverseForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
+    Type.decompose1(using fieldType).flatMap { case (gCtor, _) =>
+      implicit val TraverseOfG: Type[cats.Traverse[AnyK]] =
+        CatsTraverseCtor.apply(using gCtor).asInstanceOf[Type[cats.Traverse[AnyK]]]
+      Expr.summonImplicit[cats.Traverse[AnyK]].toOption.map(_.asInstanceOf[Expr[Any]])
+    }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveTraverse[F[_]](
@@ -395,7 +413,13 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     MIO.pure(result)
   }
 
-  protected def mkCtor1FromTypeTraverse(appliedType: Type[Any]): Option[UntypedType]
+  /** Decompose an applied field type `G[X]` and return its (live) type constructor `G` in untyped form for
+    * self-recursion comparison (`== parentCtor`). Returns None for non-applied types.
+    *
+    * Replaces the former platform-specific `mkCtor1FromTypeTraverse` (Issue #284).
+    */
+  protected def mkCtor1FromTypeTraverse(appliedType: Type[Any]): Option[UntypedType] =
+    Type.decompose1(using appliedType).map { case (gCtor, _) => gCtor.asUntyped }
 
   @scala.annotation.nowarn(
     "msg=is never used|unused explicit parameter|unused local definition|unused implicit parameter"
