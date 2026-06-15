@@ -1,9 +1,9 @@
 package hearth.kindlings.dicats
 
 /** Compile-time, F-agnostic `Resource[F, _]` dependency injection — an F-abstracted re-imagining of
-  * [[https://github.com/softwaremill/macwire macwire]]'s `autocats.autowire` (which hardcodes `Resource[cats.effect.IO, _]`).
-  * Built on Hearth's macro-agnostic API so the very same implementation works on Scala 2.13 and Scala 3, across the JVM,
-  * Scala.js and Scala Native.
+  * [[https://github.com/softwaremill/macwire macwire]]'s `autocats.autowire` (which hardcodes
+  * `Resource[cats.effect.IO, _]`). Built on Hearth's macro-agnostic API so the very same implementation works on Scala
+  * 2.13 and Scala 3, across the JVM, Scala.js and Scala Native.
   *
   * `wireResource[F, T](deps*)` constructs a `T` from the supplied dependencies and wraps the whole construction in a
   * `Resource[F, T]`. Each dependency is classified by its type:
