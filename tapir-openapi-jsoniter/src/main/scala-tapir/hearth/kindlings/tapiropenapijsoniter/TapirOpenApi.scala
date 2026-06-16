@@ -55,7 +55,8 @@ object TapirOpenApi {
     new TapirOpenApiInterpreter(OpenAPIDocsInterpreter(options))
 }
 
-/** A [[TapirOpenApi]]-style facade bound to a specific [[OpenAPIDocsInterpreter]] (see [[TapirOpenApi.withOptions]]). */
+/** A [[TapirOpenApi]]-style facade bound to a specific [[OpenAPIDocsInterpreter]] (see [[TapirOpenApi.withOptions]]).
+  */
 final class TapirOpenApiInterpreter(interpreter: OpenAPIDocsInterpreter) {
 
   def toOpenAPI(endpoint: AnyEndpoint, info: Info): OpenAPI = interpreter.toOpenAPI(endpoint, info)
