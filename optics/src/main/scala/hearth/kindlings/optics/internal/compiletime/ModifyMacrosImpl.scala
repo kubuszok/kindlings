@@ -183,8 +183,6 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
       if (fieldHeaded.isEmpty) sExpr
       else
         CaseClass.parse[S] match {
-          case ClassViewResult.Incompatible(reason) =>
-            abort(s"`modify` can only descend into case classes, but [${Type.prettyPrint[S]}] is not one: $reason")
           case ClassViewResult.Compatible(caseClass) =>
             val fieldValues = caseClass.caseFieldValuesAt(sExpr)
             val grouped: Map[String, List[List[PathStep]]] =
@@ -198,6 +196,28 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
               acc.updated(field, rebuiltFocused)
             }
             reconstruct[S](caseClass, updated)
+          // Sealed hierarchy / enum: match over the subtypes and apply the field-headed paths within each case.
+          case ClassViewResult.Incompatible(ccReason) =>
+            Enum.parse[S] match {
+              case ClassViewResult.Compatible(enm) =>
+                enm
+                  .matchOn[Id, S](sExpr) { childExpr =>
+                    import childExpr.Underlying as Child
+                    val childPaths: List[List[PathStep]] =
+                      fieldHeaded.map { case (name, tail) => (PathStep.Field(name): PathStep) :: tail }
+                    val rebuilt: Expr[Child] =
+                      buildModifyMulti[Child](childExpr.value, childPaths)(leaf =>
+                        transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Child]]
+                      )
+                    whenUpcast[Child, S](rebuilt)
+                  }
+                  .getOrElse(abort(s"`modify`: [${Type.prettyPrint[S]}] is a sealed hierarchy with no cases"))
+              case ClassViewResult.Incompatible(_) =>
+                abort(
+                  s"`modify` can only descend a field into a case class or a sealed hierarchy/enum, but " +
+                    s"[${Type.prettyPrint[S]}] is neither: $ccReason"
+                )
+            }
         }
 
     // 2. Apply each non-field-headed path independently, folded on top.
@@ -534,8 +554,6 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
       transformLeaf: Expr[S] => Expr[S]
   ): Expr[S] =
     CaseClass.parse[S] match {
-      case ClassViewResult.Incompatible(reason) =>
-        abort(s"`modify` can only descend into case classes, but [${Type.prettyPrint[S]}] is not one: $reason")
       case ClassViewResult.Compatible(caseClass) =>
         val fieldValues = caseClass.caseFieldValuesAt(sExpr)
         val focused = fieldValues.getOrElse(
@@ -544,7 +562,40 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
         )
         val rebuiltFocused = recurseInto(focused, rest, transformLeaf)
         reconstruct[S](caseClass, fieldValues.updated(field, rebuiltFocused))
+      // Not a case class — if it is a sealed hierarchy / `enum`, descend the field into EVERY subtype (each must have
+      // the field) by generating an exhaustive match. This is quicklens-style common-field modification, so a field
+      // shared by all cases can be modified directly without writing `.when[Sub]` per case.
+      case ClassViewResult.Incompatible(ccReason) =>
+        Enum.parse[S] match {
+          case ClassViewResult.Compatible(enm) => buildFieldStepEnum[S](enm, sExpr, field, rest)(transformLeaf)
+          case ClassViewResult.Incompatible(_) =>
+            abort(
+              s"`modify` can only descend a field into a case class or a sealed hierarchy/enum (whose every case has " +
+                s"that field), but [${Type.prettyPrint[S]}] is neither: $ccReason"
+            )
+        }
     }
+
+  /** Descend field `field` (and `rest`) into every subtype of a sealed hierarchy / `enum`, generating an exhaustive
+    * `s match { case c: Child => <field path on c> }`. Each subtype is recursed through [[buildFieldStep]] (so a
+    * subtype must itself be a case class with `field`, or a nested sealed hierarchy), and its rebuilt value is widened
+    * back to `S` in-tree (sound: `Child <: S`).
+    */
+  private def buildFieldStepEnum[S: Type](enm: Enum[S], sExpr: Expr[S], field: String, rest: List[PathStep])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr[S] =
+    enm
+      .matchOn[Id, S](sExpr) { childExpr =>
+        import childExpr.Underlying as Child
+        val rebuilt: Expr[Child] =
+          buildFieldStep[Child](childExpr.value, field, rest)(leaf =>
+            transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Child]]
+          )
+        whenUpcast[Child, S](rebuilt)
+      }
+      .getOrElse(
+        abort(s"`modify`: [${Type.prettyPrint[S]}] is a sealed hierarchy with no cases to descend `$field` into")
+      )
 
   /** Emit the `.each` step over `sExpr: S` (where `S` IS the container type `F[A]`/`M[K,A]`). Summon the relevant
     * functor, build the element lambda `a => <rest of path on a>` via `LambdaBuilder`, and call the runtime helper.
