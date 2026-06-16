@@ -229,7 +229,8 @@ lazy val aliases = new Aliases(
     diCats,
     mock,
     tapirOpenapiJsoniter,
-    optics
+    optics,
+    opticsCats
   ),
   testOnly = Seq(integrationTests),
   compileOnly = Seq(benchmarks)
@@ -264,6 +265,7 @@ lazy val root = project
   .aggregate(diCats.projectRefs *)
   .aggregate(mock.projectRefs *)
   .aggregate(optics.projectRefs *)
+  .aggregate(opticsCats.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
@@ -353,6 +355,21 @@ lazy val optics = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
+
+lazy val opticsCats = projectMatrix
+  .in(file("optics-cats"))
+  .someVariations(versions.scalas, versions.platforms)(dev.only1VersionInIDE *)
+  .dependsOn(optics)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-optics-cats",
+    name := "kindlings-optics-cats",
+    description := "QuicklensFunctor instances so kindlings-optics `.each` works over cats non-empty collections"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
 
 lazy val mock = projectMatrix
   .in(file("mock"))
