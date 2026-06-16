@@ -228,7 +228,7 @@ lazy val aliases = new Aliases(
     di,
     diCats,
     mock,
-    openapiJsoniter,
+    tapirOpenapiJsoniter,
     optics
   ),
   testOnly = Seq(integrationTests),
@@ -264,7 +264,7 @@ lazy val root = project
   .aggregate(diCats.projectRefs *)
   .aggregate(mock.projectRefs *)
   .aggregate(optics.projectRefs *)
-  .aggregate(openapiJsoniter.projectRefs *)
+  .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
   .settings(
@@ -367,29 +367,39 @@ lazy val mock = projectMatrix
   .settings(dependencies *)
   .settings(publishSettings *)
 
-// openapi-circe / tapir-openapi-docs (Test-only, for the circe cross-check) are not published for Scala Native,
-// so they are added on JVM only. The JS/Native rows still build and run the cross-platform (value-based) specs.
-val openapiJsoniterJvmOnlyTestDeps = List(
-  MatrixAction.ForPlatform(VirtualAxis.jvm).Configure { project =>
-    project.settings(
-      libraryDependencies ++= Seq(
-        "com.softwaremill.sttp.tapir" %%% "tapir-openapi-docs" % versions.tapir % Test,
-        "com.softwaremill.sttp.tapir" %%% "tapir-json-circe" % versions.tapir % Test,
-        "com.softwaremill.sttp.apispec" %%% "openapi-circe" % versions.sttpApispec % Test
+// The pure jsoniter codecs for the sttp-apispec OpenAPI model are cross-platform (JVM/JS/Native).
+// The production tapir bridge (endpoints -> OpenAPI -> jsoniter JSON, circe-free) depends on
+// `tapir-openapi-docs`, which is published for JVM + JS but NOT Scala Native; it is compiled from an
+// extra `src/main/scala-tapir` source directory on those two platforms only. `openapi-circe` /
+// `tapir-json-circe` (the test-only circe cross-check) are JVM-only.
+val tapirOpenapiJsoniterPlatformDeps =
+  List(VirtualAxis.jvm, VirtualAxis.js).map { platform =>
+    MatrixAction.ForPlatform(platform).Configure { project =>
+      project.settings(
+        libraryDependencies += "com.softwaremill.sttp.tapir" %%% "tapir-openapi-docs" % versions.tapir,
+        Compile / unmanagedSourceDirectories += (Compile / sourceDirectory).value / "scala-tapir"
       )
-    )
-  }
-)
+    }
+  } ++ List(
+    MatrixAction.ForPlatform(VirtualAxis.jvm).Configure { project =>
+      project.settings(
+        libraryDependencies ++= Seq(
+          "com.softwaremill.sttp.tapir" %%% "tapir-json-circe" % versions.tapir % Test,
+          "com.softwaremill.sttp.apispec" %%% "openapi-circe" % versions.sttpApispec % Test
+        )
+      )
+    }
+  )
 
-lazy val openapiJsoniter = projectMatrix
-  .in(file("openapi-jsoniter"))
-  .someVariations(versions.scalas, versions.platforms)((dev.only1VersionInIDE ++ openapiJsoniterJvmOnlyTestDeps) *)
+lazy val tapirOpenapiJsoniter = projectMatrix
+  .in(file("tapir-openapi-jsoniter"))
+  .someVariations(versions.scalas, versions.platforms)((dev.only1VersionInIDE ++ tapirOpenapiJsoniterPlatformDeps) *)
   .dependsOn(jsoniterJson, jsoniterDerivation)
   .disablePlugins(WelcomePlugin)
   .settings(
-    moduleName := "kindlings-openapi-jsoniter",
-    name := "kindlings-openapi-jsoniter",
-    description := "Circe-free jsoniter-scala serialization for the sttp-apispec OpenAPI model"
+    moduleName := "kindlings-tapir-openapi-jsoniter",
+    name := "kindlings-tapir-openapi-jsoniter",
+    description := "Circe-free jsoniter-scala serialization of tapir-generated OpenAPI (sttp-apispec model)"
   )
   .settings(settings *)
   .settings(dependencies *)
