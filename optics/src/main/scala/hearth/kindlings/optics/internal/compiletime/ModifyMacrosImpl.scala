@@ -107,6 +107,123 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
   }
 
+  /** `obj.modifyAll(_.a, _.b.each, _.c)` → `PathModify[S, A]`. Parses each path into its own list of [[PathStep]]s,
+    * then merges them into a single copy-with-modification function that applies `mod` to EVERY focused leaf.
+    * Overlapping field prefixes are shared — `modifyAll(_.a.b, _.a.c)` copies `a` exactly once (quicklens semantics).
+    * All paths must focus the same leaf type `A` (the call site pins this).
+    */
+  def modifyAll[S: Type, A: Type](obj: Expr[S], paths: List[Expr[S => A]]): Expr[PathModify[S, A]] = {
+    if (paths.isEmpty) abort("`modifyAll` requires at least one path")
+    val pathSteps: List[List[PathStep]] = paths.map(parsePath[S, A])
+    val doModify: Expr[(S, A => A) => S] =
+      Expr.quote { (s: S, mod: A => A) =>
+        Expr.splice {
+          buildModifyMulti[S](Expr.quote(s), pathSteps) { leaf =>
+            applyLeaf[S, A](Expr.quote(mod), leaf)
+          }
+        }
+      }
+    Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+  }
+
+  /** `modifyLens[T](_.a.b)` → `PathLazyModify[T, U]`: a reusable lens NOT bound to an object. Same machinery as
+    * [[modify]], but the rebuilt value is a function of the lambda parameter `t` rather than a captured object.
+    */
+  def modifyLens[T: Type, Foc: Type](path: Expr[T => Foc]): Expr[PathLazyModify[T, Foc]] = {
+    val steps: List[PathStep] = parsePath[T, Foc](path)
+    val doModify: Expr[(T, Foc => Foc) => T] =
+      Expr.quote { (t: T, mod: Foc => Foc) =>
+        Expr.splice {
+          buildModify[T](Expr.quote(t), steps) { leaf =>
+            applyLeaf[T, Foc](Expr.quote(mod), leaf)
+          }
+        }
+      }
+    Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+  }
+
+  /** `modifyAllLens[T](_.a, _.b)` → `PathLazyModify[T, Foc]`: the multi-path reusable lens form. Same shared-prefix
+    * merge as [[modifyAll]], but unbound from any object.
+    */
+  def modifyAllLens[T: Type, Foc: Type](paths: List[Expr[T => Foc]]): Expr[PathLazyModify[T, Foc]] = {
+    if (paths.isEmpty) abort("`modifyAllLens` requires at least one path")
+    val pathSteps: List[List[PathStep]] = paths.map(parsePath[T, Foc])
+    val doModify: Expr[(T, Foc => Foc) => T] =
+      Expr.quote { (t: T, mod: Foc => Foc) =>
+        Expr.splice {
+          buildModifyMulti[T](Expr.quote(t), pathSteps) { leaf =>
+            applyLeaf[T, Foc](Expr.quote(mod), leaf)
+          }
+        }
+      }
+    Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+  }
+
+  /** Rebuild `sExpr: S` applying `transformLeaf` at the focus of EVERY path in `paths`, sharing common `Field` prefixes
+    * so a field on the shared prefix is copied only once. Strategy:
+    *
+    *   - paths that bottom out here (empty) apply `transformLeaf` to the whole `S` (fold each on top);
+    *   - `Field`-headed paths are grouped by field name; for each group we descend once, recurse on the group's tails,
+    *     and rebuild the case class with all touched fields replaced together (one `.copy`);
+    *   - non-field-headed paths (`.each`/`.at`/`.when`/...) cannot share a copy node, so each is applied independently
+    *     via the single-path [[buildModify]] folded on top of the result.
+    *
+    * Folding the independent transforms is observably identical to quicklens: disjoint paths touch disjoint parts, so
+    * order does not matter; overlapping field prefixes go through the shared `.copy`.
+    */
+  private def buildModifyMulti[S: Type](sExpr: Expr[S], paths: List[List[PathStep]])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr[S] = {
+    val leafHere = paths.filter(_.isEmpty)
+    val fieldHeaded = paths.collect { case (f: PathStep.Field) :: rest => (f.name, rest) }
+    val otherHeaded = paths.filter(p => p.nonEmpty && !p.head.isInstanceOf[PathStep.Field])
+
+    // 1. Rebuild the shared `.copy` for all field-headed paths (grouped by field name), if any.
+    val afterFields: Expr[S] =
+      if (fieldHeaded.isEmpty) sExpr
+      else
+        CaseClass.parse[S] match {
+          case ClassViewResult.Incompatible(reason) =>
+            abort(s"`modify` can only descend into case classes, but [${Type.prettyPrint[S]}] is not one: $reason")
+          case ClassViewResult.Compatible(caseClass) =>
+            val fieldValues = caseClass.caseFieldValuesAt(sExpr)
+            val grouped: Map[String, List[List[PathStep]]] =
+              fieldHeaded.groupBy(_._1).map { case (name, group) => name -> group.map(_._2) }
+            val updated = grouped.foldLeft(fieldValues) { case (acc, (field, subPaths)) =>
+              val focused = acc.getOrElse(
+                field,
+                abort(s"`modify`: no accessible field `$field` on [${Type.prettyPrint[S]}]")
+              )
+              val rebuiltFocused = recurseIntoMulti(focused, subPaths, transformLeaf)
+              acc.updated(field, rebuiltFocused)
+            }
+            reconstruct[S](caseClass, updated)
+        }
+
+    // 2. Apply each non-field-headed path independently, folded on top.
+    val afterOthers: Expr[S] = otherHeaded.foldLeft(afterFields) { (acc, path) =>
+      buildModify[S](acc, path)(transformLeaf)
+    }
+
+    // 3. Apply each leaf-here transform on top.
+    leafHere.foldLeft(afterOthers)((acc, _) => transformLeaf(acc))
+  }
+
+  /** Multi-path counterpart of [[recurseInto]]: descend into a focused field carrying its existential type, applying
+    * all `subPaths` (which share this field) via [[buildModifyMulti]], without leaking the path-dependent `Underlying`
+    * into an `Expr.quote`.
+    */
+  private def recurseIntoMulti[S: Type](
+      focused: Expr_??,
+      subPaths: List[List[PathStep]],
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr_?? = {
+    import focused.Underlying as F
+    buildModifyMulti[F](focused.value, subPaths)(leaf =>
+      transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[F]]
+    ).as_??
+  }
+
   /** Parse the path lambda `_.a.each.b` into an ordered list of [[PathStep]]s (root → leaf).
     *
     * Walks the [[hearth.typed.Exprs.DestructuredExpr.MethodCall]] chain: a call with only an instance argument is a

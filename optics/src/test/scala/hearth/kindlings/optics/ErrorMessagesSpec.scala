@@ -29,6 +29,11 @@ final class ErrorMessagesSpec extends MacroSuite {
         "field-access path"
       )
     }
+
+    // NOTE: the `.each`/`.at`/`.when`/... markers carry `@compileTimeOnly` + a `sys.error` body so that using them
+    // outside a `modify(...)` path is guarded. We deliberately do NOT assert the compile-time message here, because
+    // `@compileTimeOnly` fires on the Scala 3 `extension` marker but not on the Scala 2 `implicit class` one (a genuine
+    // platform difference), so the error text is not uniform across platforms; the runtime `sys.error` is the floor.
   }
 }
 

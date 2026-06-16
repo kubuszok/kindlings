@@ -62,6 +62,7 @@ nav:
       - "FastShowPretty": "fast-show-pretty.md"
       - "Jsoniter Scala": "jsoniter-derivation.md"
       - "Mocking (ScalaMock-style)": "mock.md"
+      - "Optics (quicklens-style lenses)": "optics.md"
       - "PureConfig": "pureconfig-derivation.md"
       - "ScalaCheck": "scalacheck-derivation.md"
       - "sconfig (HOCON)": "sconfig-derivation.md"
