@@ -4,8 +4,8 @@ import hearth.MacroSuite
 
 final class ModifyFieldSpec extends MacroSuite {
 
-  import ModifyFieldSpec._
-  import hearth.kindlings.optics.syntax._
+  import ModifyFieldSpec.*
+  import hearth.kindlings.optics.syntax.*
 
   group("modify single field") {
 
