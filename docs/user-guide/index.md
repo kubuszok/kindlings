@@ -29,9 +29,17 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     libraryDependencies += "com.kubuszok" %% "kindlings-cats-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-iron-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-refined-integration" % "{{ kindlings_version() }}"
-    
+
+    // macro utilities (not derivation):
+    libraryDependencies += "com.kubuszok" %% "kindlings-di" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-di-cats" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-mock" % "{{ kindlings_version() }}" % Test
+    libraryDependencies += "com.kubuszok" %% "kindlings-optics" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-optics-cats" % "{{ kindlings_version() }}"
+
     // extra:
     libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-json" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-tapir-openapi-jsoniter" % "{{ kindlings_version() }}"
     ```
 
 !!! example "Scala CLI"
@@ -56,9 +64,17 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
-    
+
+    // macro utilities (not derivation):
+    //> using dep com.kubuszok::kindlings-di:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-di-cats:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-mock:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-optics-cats:{{ kindlings_version() }}
+
     // extra:
     //> using dep com.kubuszok::kindlings-jsoniter-json:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-tapir-openapi-jsoniter:{{ kindlings_version() }}
     ```
 
 ??? example "Minimal example"
@@ -219,8 +235,23 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
 
 Add the integration jar to your build and the types work transparently — no imports, no configuration. The macro extension system discovers providers at compile time via SPI.
 
+## Macro utilities
+
+Not type-class derivation, but built on the same Hearth macro-agnostic API and cross-compiled the same way — these modules reimplement popular libraries from scratch (no dependency on the originals).
+
+| Module | Reimplements | What it does |
+|---|---|---|
+| [kindlings-di](di.md) | macwire | Compile-time dependency injection — `wire`/`autowire`/`wiredInModule`, no reflection |
+| [kindlings-di-cats](di-cats.md) | — | Cats-Effect `Resource`/`IO` wiring on top of `kindlings-di` |
+| [kindlings-mock](mock.md) | ScalaMock | Compile-time mocks (`mock[T]`) with expectations, generated without reflection or bytecode |
+| [kindlings-optics](optics.md) | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses |
+| [kindlings-optics-cats](optics.md#cats-non-empty-collections) | — | `QuicklensFunctor` instances so optics `.each` works on cats `NonEmptyList`/`NonEmptyVector`/`NonEmptyChain`/`Chain`/`NonEmptyMap` |
+
+`kindlings-mock` is test-scope; the rest are cross-compiled for Scala 2.13 and 3 on JVM, Scala.js, and Scala Native.
+
 ## Extra
 
 | Module | Description |
 |---|---|
 | [kindlings-jsoniter-json](jsoniter-json.md) | Minimal JSON AST with optics and `JsonValueCodec` for jsoniter-scala — no Circe/Cats dependencies |
+| [kindlings-tapir-openapi-jsoniter](tapir-openapi-jsoniter.md) | Serialize tapir-generated OpenAPI (sttp-apispec model) to JSON with jsoniter — no Circe dependency. JVM + Scala.js |

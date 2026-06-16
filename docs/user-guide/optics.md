@@ -91,6 +91,33 @@ println(team.modify(_.members.each).using(_.toUpperCase).members.mkString(","))
 // ANN,BOB,CID
 ```
 
+### Cats non-empty collections
+
+`.each` is container-agnostic: it summons a `QuicklensFunctor[F]` for the focused container, so any container with such
+an instance in scope works — nothing about the supported containers is hard-coded in the macro. The companion module
+`kindlings-optics-cats` provides instances for cats' `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain` and `Chain`; just
+add the dependency and import them:
+
+```scala
+//> using scala {{ scala.2_13 }}
+//> using dep com.kubuszok::kindlings-optics-cats:{{ kindlings_version() }}
+//> using dep org.typelevel::cats-core:{{ libraries.cats }}
+
+import hearth.kindlings.optics._
+import hearth.kindlings.optics.CatsQuicklensFunctors._
+import cats.data.NonEmptyList
+
+final case class Team(members: NonEmptyList[String])
+val team = Team(NonEmptyList.of("ann", "bob", "cid"))
+
+println(team.modify(_.members.each).using(_.toUpperCase).members.toList.mkString(","))
+// expected output:
+// ANN,BOB,CID
+```
+
+(`NonEmptyMap`/`NonEmptySet` are not covered — the value traversal is pinned to `scala.collection.immutable.Map`, and a
+`NonEmptySet` cannot be rebuilt by `map` without an `Order`.)
+
 ## Indexed access — `.at`, `.index`, `.atOrElse`
 
 `.at(i)` focuses the element at index `i` (throwing if absent); `.index(i)` is a no-op when absent; `.atOrElse(i, d)`
