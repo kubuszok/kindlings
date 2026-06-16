@@ -24,7 +24,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     */
   def wire[A: Type]: Expr[A] = {
     val scopes = collectScopes
-    buildInstance[A](scopes, recursive = false) match {
+    buildInstance[A](scopes, recursive = false, Nil) match {
       case Right(expr)  => expr
       case Left(errors) => Environment.reportErrorAndAbort(errors)
     }
@@ -36,7 +36,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     */
   def wireRec[A: Type]: Expr[A] = {
     val scopes = collectScopes
-    buildInstance[A](scopes, recursive = true) match {
+    buildInstance[A](scopes, recursive = true, Nil) match {
       case Right(expr)  => expr
       case Left(errors) => Environment.reportErrorAndAbort(errors)
     }
@@ -66,7 +66,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
       case Some(applyM) =>
         DirectStyle[Either[String, *]].scoped { runSafe =>
           val applied = applyM.apply(factory.asInstanceOf[Expr[applyM.Instance]])
-          val arguments = resolveArguments(applied, scopes, recursive = false, runSafe)
+          val arguments = resolveArguments(applied, scopes, recursive = false, runSafe, Nil)
           upcastResult[RES](runSafe(applyArguments(applied, arguments)))
         }
     }
@@ -101,6 +101,50 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   private def upcastTo[A: Type](candidate: Expr_??): Expr[A] = {
     import candidate.Underlying
     candidate.value.upcast[A]
+  }
+
+  /** macwire-style `wiredInModule(instance)`: capture every public, parameterless member (`val`/no-arg `def`) of
+    * `instance` whose type is a reference type into a runtime [[hearth.kindlings.di.Wired]] registry, each keyed by its
+    * declared type. Primitive-typed members are excluded (mirroring macwire's `result <:< AnyRef` filter). The registry
+    * stores factories (`() => Any`) so a `def` member is re-read on each lookup.
+    */
+  def wiredInModule(instance: Expr[Any]): Expr[Wired] = {
+    val typed = preciseExpr(instance)
+    import typed.Underlying as T
+    val members = membersAsValues(typed, Class[T].methods).filter { c =>
+      import c.value.Underlying as M
+      Type[M] <:< Type.of[AnyRef]
+    }
+    val entries = members.foldRight(Expr.quote(List.empty[(java.lang.Class[Any], () => Any)])) { (candidate, acc) =>
+      import candidate.value.Underlying as M
+      consWiredEntry[M](candidate.value.value, acc)
+    }
+    Expr.quote(Wired(Expr.splice(entries)))
+  }
+
+  /** Prepend one `(class, () => member)` entry to the accumulated registry list. A helper with a regular type parameter
+    * `M` so the member's (path-dependent) type does not leak into the generated tree on Scala 2.
+    *
+    * The class key is obtained from a summoned `ClassTag[M]` rather than a `classOf[M]` literal: `classOf[M]` cannot be
+    * written for the abstract type parameter `M` (it is type-checked at macro-definition time → "class type required"),
+    * and reifying `classOf` from a `Type` is not exposed uniformly by Hearth across platforms. Summoning `ClassTag[M]`
+    * (materialised by the compiler at macro-execution time, where `M` is the concrete member type) and reading its
+    * `runtimeClass` is fully cross-platform.
+    */
+  private def consWiredEntry[M: Type](
+      member: Expr[M],
+      acc: Expr[List[(java.lang.Class[Any], () => Any)]]
+  ): Expr[List[(java.lang.Class[Any], () => Any)]] = {
+    implicit val classTagType: Type[scala.reflect.ClassTag[M]] = Type.of[scala.reflect.ClassTag[M]]
+    Expr.summonImplicit[scala.reflect.ClassTag[M]].toOption match {
+      case Some(classTag) =>
+        Expr.quote {
+          (Expr.splice(classTag).runtimeClass.asInstanceOf[java.lang.Class[Any]], (() => (Expr.splice(member): Any))) ::
+            Expr.splice(acc)
+        }
+      // No ClassTag materialisable (should not happen for a concrete member type) — skip the entry.
+      case None => acc
+    }
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -194,7 +238,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** Resolve a single constructor/apply parameter: implicit parameters go through implicit search, everything else is
     * resolved from the collected scope candidates.
     */
-  protected def resolveParameter(scopes: List[List[Candidate]], recursive: Boolean)(
+  protected def resolveParameter(scopes: List[List[Candidate]], recursive: Boolean, breadcrumb: List[??])(
       parameter: Parameter
   ): Either[String, Expr_??] = {
     // For a by-name parameter (`=> A`) the declared type is the `<byname>[A]` wrapper; we resolve a strict `A` from
@@ -207,23 +251,20 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
         case None        => Left(s"Cannot find an implicit value of type: [${Type.prettyPrint[P]}]")
       }
     } else if (recursive && matchingCandidates(scopes, effectiveType).isEmpty && isWireable(effectiveType)) {
-      // Nothing of this type is in scope; in recursive mode, build it from scratch.
+      // Nothing of this type is in scope; in recursive mode, build it from scratch. The breadcrumb threads the chain
+      // of types currently under construction so [[buildInstance]] can detect a dependency cycle instead of looping.
       import effectiveType.Underlying as P
-      buildInstance[P](scopes, recursive = true).map(_.as_??)
+      buildInstance[P](scopes, recursive = true, breadcrumb).map(_.as_??)
     } else resolveSingle(scopes)(effectiveType)
   }
 
-  /** The type to resolve a parameter against. By-name parameters (`=> A`) carry a `<byname>[A]` wrapper type; we strip
-    * it down to the underlying `A` so a strict value from scope satisfies it (the call site thunks it back).
+  /** The type to resolve a parameter against. For a by-name parameter (`=> A`) we resolve the underlying `A` so a
+    * strict value from scope satisfies it (the call site thunks it back). Hearth's `Parameter.byNameUnderlying`
+    * surfaces that `A` directly on both platforms (Scala 3's `ByNameType` is not an applied type, so the old
+    * `typeArguments` strip could not recover it — Hearth 0.3.1-48 closes that gap).
     */
   private def effectiveParamType(parameter: Parameter): ?? =
-    if (parameter.isByName) {
-      import parameter.tpe.Underlying as P
-      Type.typeArguments[P] match {
-        case underlying :: Nil => underlying
-        case _                 => parameter.tpe
-      }
-    } else parameter.tpe
+    parameter.byNameUnderlying.getOrElse(parameter.tpe)
 
   /** macwire's `isWireable`: refuse to recursively construct standard-library types (`java.*`/`scala.*`), which have no
     * meaningful wiring and would otherwise loop or produce confusing errors.
@@ -278,19 +319,28 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   /** Build an `A`: prefer its accessible primary constructor; otherwise fall back to a single matching companion
     * `apply`. Errors from both attempts are combined to explain why wiring failed.
     */
-  private def buildInstance[A: Type](scopes: List[List[Candidate]], recursive: Boolean): Either[String, Expr[A]] =
-    constructViaConstructor[A](scopes, recursive) match {
+  private def buildInstance[A: Type](
+      scopes: List[List[Candidate]],
+      recursive: Boolean,
+      breadcrumb: List[??]
+  ): Either[String, Expr[A]] = {
+    // Detect a dependency cycle before descending — without this, recursive wiring of a self-referential graph loops
+    // the compiler (a StackOverflow). Mirrors `autowire`'s `verifyNotCyclic`. The chain passed downward includes `A`.
+    verifyNotCyclic(Type[A].as_??, breadcrumb)
+    val chain = breadcrumb :+ Type[A].as_??
+    constructViaConstructor[A](scopes, recursive, chain) match {
       case Right(expr) => Right(expr)
       // The constructor is present but its parameters could not be wired — that IS the real error; reporting the
       // companion-apply fallback on top would only obscure it (mirrors macwire, which never falls back in this case).
       case Left(WiringFailed(error)) => Left(error)
       // The constructor is inaccessible/absent — try a companion `apply`, combining both explanations on failure.
       case Left(NoPublicCtor(ctorMsg)) =>
-        constructViaCompanionApply[A](scopes, recursive) match {
+        constructViaCompanionApply[A](scopes, recursive, chain) match {
           case Right(expr)      => Right(expr)
           case Left(applyError) => Left(s"$ctorMsg\n$applyError")
         }
     }
+  }
 
   /** Why constructing `A` via its primary constructor was abandoned. [[NoPublicCtor]] means there is no accessible
     * primary constructor (so a companion `apply` should be tried); [[WiringFailed]] means the constructor exists but
@@ -302,14 +352,15 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
 
   private def constructViaConstructor[A: Type](
       scopes: List[List[Candidate]],
-      recursive: Boolean
+      recursive: Boolean,
+      breadcrumb: List[??]
   ): Either[CtorFailure, Expr[A]] =
     Type[A].primaryConstructor.filter(_ => isInstantiable[A]).filter(_.isAvailable(AtCallSite)) match {
       case None       => Left(NoPublicCtor(s"No public primary constructor found for [${Type.prettyPrint[A]}]"))
       case Some(ctor) =>
         DirectStyle[Either[String, *]]
           .scoped { runSafe =>
-            val arguments = resolveArguments(ctor, scopes, recursive, runSafe)
+            val arguments = resolveArguments(ctor, scopes, recursive, runSafe, breadcrumb)
             upcastResult[A](runSafe(applyArguments(ctor, arguments)))
           }
           .left
@@ -318,7 +369,8 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
 
   private def constructViaCompanionApply[A: Type](
       scopes: List[List[Candidate]],
-      recursive: Boolean
+      recursive: Boolean,
+      breadcrumb: List[??]
   ): Either[String, Expr[A]] =
     Type.companionObject[A] match {
       case None =>
@@ -334,7 +386,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
             Left(s"Companion object for [${Type.prettyPrint[A]}] has no apply methods constructing target type.")
           case single :: Nil =>
             DirectStyle[Either[String, *]].scoped { runSafe =>
-              val arguments = resolveArguments(single, scopes, recursive, runSafe)
+              val arguments = resolveArguments(single, scopes, recursive, runSafe, breadcrumb)
               val applied = single.apply(companion.asInstanceOf[Expr[single.Instance]])
               upcastResult[A](runSafe(applyArguments(applied, arguments)))
             }
@@ -362,10 +414,11 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
       method: Method,
       scopes: List[List[Candidate]],
       recursive: Boolean,
-      runSafe: DirectStyle.RunSafe[Either[String, *]]
+      runSafe: DirectStyle.RunSafe[Either[String, *]],
+      breadcrumb: List[??]
   ): Map[String, Expr_??] =
     method.totalParameters.flatten.toList.map { case (name, parameter) =>
-      name -> runSafe(resolveParameter(scopes, recursive)(parameter))
+      name -> runSafe(resolveParameter(scopes, recursive, breadcrumb)(parameter))
     }.toMap
 
   /** Apply resolved arguments to a callable [[Method]] step (constructor or `apply`) and build the result. */
@@ -468,6 +521,52 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     implicit val anyType: Type[Any] = Type.of[Any]
     toTypedExpr(DestructuredExpr.parse(e))
   }
+
+  /** [[autowire]] entry point that first expands any `DI.autowireMembersOf(instance)` marker argument into the public
+    * parameterless members of `instance` (each as an instance dependency), mirroring macwire's `autowireMembersOf`.
+    * Non-marker arguments are precise-typed as usual. The expanded members flow through the ordinary `autowire` pool,
+    * so they participate in the same duplicate-type detection (a member type clashing with another dependency fails).
+    */
+  def autowireWithMembers[A: Type](rawArgs: List[Expr[Any]]): Expr[A] = {
+    implicit val anyType: Type[Any] = Type.of[Any]
+    val expanded: List[Expr_??] = rawArgs.flatMap { raw =>
+      val parsed = DestructuredExpr.parse(raw)
+      membersOfMarkerInstance(parsed) match {
+        case Some(instance) => expandMembersOf(instance)
+        case None           => List(toTypedExpr(parsed))
+      }
+    }
+    autowire[A](expanded)
+  }
+
+  /** If `parsed` is a `DI.autowireMembersOf(instance)` call, recover the (precise-typed) wrapped `instance`. Recognized
+    * by the marker method name (as macwire does) and the single value argument it was applied to.
+    */
+  private def membersOfMarkerInstance(parsed: DestructuredExpr): Option[Expr_??] =
+    parsed
+      .collect { case mc: DestructuredExpr.MethodCall if mc.method.name == "autowireMembersOf" => mc }
+      .headOption
+      .flatMap(_.applied.collectFirst { case av: DestructuredExpr.MethodCall.AppliedValues => av.args })
+      .flatMap(_.headOption)
+      .map(toTypedExpr)
+
+  /** Every public, parameterless member of `instance` (`val`/no-arg `def`) as an instance dependency, matched by its
+    * declared type — reuses [[membersAsValues]] (which already filters `Object` members and keeps only accessible
+    * nullary members), additionally dropping synthetic case-class/tuple accessors so they cannot leak as providers.
+    */
+  private def expandMembersOf(instance: Expr_??): List[Expr_??] = {
+    import instance.Underlying as T
+    membersAsValues(instance, Class[T].methods).collect {
+      case c if !isSyntheticMember(c.name) => c.value
+    }
+  }
+
+  /** Synthetic, structurally-generated members that macwire's `providersFromMembersOf` also excludes (so e.g. a case
+    * class's `productArity: Int` does not become an `Int` provider, nor a tuple's `_1`/`_2`).
+    */
+  private def isSyntheticMember(name: String): Boolean =
+    name == "productArity" || name == "productPrefix" || name == "productIterator" ||
+      name == "productElementNames" || name.matches("_\\d+")
 
   private def toTypedExpr(e: DestructuredExpr): Expr_?? = {
     import e.tpe.Underlying as T
