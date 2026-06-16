@@ -7,8 +7,8 @@ import hearth.MacroSuite
   */
 final class SealedFieldSpec extends MacroSuite {
 
-  import SealedFieldSpec._
-  import hearth.kindlings.optics._
+  import SealedFieldSpec.*
+  import hearth.kindlings.optics.*
 
   group("modify a common field across a sealed hierarchy") {
 
