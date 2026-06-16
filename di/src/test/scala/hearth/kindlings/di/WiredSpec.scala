@@ -35,7 +35,7 @@ final class WiredSpec extends MacroSuite {
       wired.withInstances(x).lookup(classOf[WiredSpec.X]) ==> List(x)
 
       var n = 0
-      val w2 = wired.withInstanceFactory(() => { n += 1; new WiredSpec.X })
+      val w2 = wired.withInstanceFactory { () => n += 1; new WiredSpec.X }
       val a = w2.lookup(classOf[WiredSpec.X]).head
       val b = w2.lookup(classOf[WiredSpec.X]).head
       (a ne b) ==> true
