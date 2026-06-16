@@ -82,6 +82,16 @@ For higher-level rules around extension loading and `LambdaBuilder` scope, see
 | 33 | [`primaryConstructor` type-checks field expressions strictly](pitfalls.md#33-primaryconstructor-type-checks-strictly) | HIGH | Both |
 | 34 | [`parTraverse` and `ValDefsCache` state threading](pitfalls.md#34-partraverse-and-valdefscache-threading) | HIGH | Both |
 
+### Non-derivation macro modules (di / mock / optics)
+
+| # | Pitfall | Severity | Platforms |
+|---|---------|----------|-----------|
+| 35 | [`classOf[M]` impossible for an abstract type param (use `ClassTag[M].runtimeClass`)](pitfalls.md#35-classofm-is-impossible-for-an-abstract-macro-type-parameter) | HIGH | Both |
+| 36 | [`Class` shadowed by Hearth's cake `Class[A]` (use `java.lang.Class`)](pitfalls.md#36-class-is-shadowed-by-hearths-cake-classa-inside-macro-code) | MEDIUM | Both |
+| 37 | [`@compileTimeOnly` fires on S3 `extension` not S2 `implicit class`](pitfalls.md#37-compiletimeonly-fires-on-the-scala-3-extension-but-not-the-scala-2-implicit-class) | MEDIUM | Scala 2 |
+| 38 | [Marker DSLs need INVARIANT evidence to pin element types](pitfalls.md#38-marker-dsls-need-invariant-evidence-to-pin-element-types-scala-2-widening) | HIGH | Scala 2 |
+| 39 | [Context-function values are eta-applied in tests](pitfalls.md#39-scala-3-context-function-values-are-eta-applied-in-tests-storing-b--c) | MEDIUM | Scala 3 |
+
 ### Resolved Hearth issues (for context only)
 
 | # | Issue | Status |
