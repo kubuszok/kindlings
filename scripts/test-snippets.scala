@@ -121,6 +121,7 @@ class KindlingsExtendedRunner(runner: Runner)(
     "scalacheck-derivation.md#Installation[3]" -> "Dep-only snippet",
     "sconfig-derivation.md#Installation[3]" -> "Dep-only snippet",
     "tapir-schema-derivation.md#Installation[4]" -> "Dep-only snippet",
+    "tapir-openapi-jsoniter.md#Installation[2]" -> "Dep-only snippet",
     "ubjson-derivation.md#Installation[3]" -> "Dep-only snippet",
     "xml-derivation.md#Installation[4]" -> "Dep-only snippet",
     "yaml-derivation.md#Installation[3]" -> "Dep-only snippet",
