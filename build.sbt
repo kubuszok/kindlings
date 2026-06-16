@@ -15,7 +15,7 @@ val versions = new {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.3.1-47-g374c34d-SNAPSHOT"
+  val hearth = "0.3.1-49-gda694fd-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val avro4s213 = "4.1.2"
@@ -228,7 +228,8 @@ lazy val aliases = new Aliases(
     di,
     diCats,
     mock,
-    openapiJsoniter
+    openapiJsoniter,
+    optics
   ),
   testOnly = Seq(integrationTests),
   compileOnly = Seq(benchmarks)
@@ -262,6 +263,7 @@ lazy val root = project
   .aggregate(di.projectRefs *)
   .aggregate(diCats.projectRefs *)
   .aggregate(mock.projectRefs *)
+  .aggregate(optics.projectRefs *)
   .aggregate(openapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
@@ -338,6 +340,19 @@ lazy val diCats = projectMatrix
       "org.typelevel" %%% "cats-effect" % versions.catsEffect
     )
   )
+
+lazy val optics = projectMatrix
+  .in(file("optics"))
+  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  .disablePlugins(WelcomePlugin)
+  .settings(
+    moduleName := "kindlings-optics",
+    name := "kindlings-optics",
+    description := "Quicklens-style optics/lenses (modify/setTo) reimplemented using Hearth"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
 
 lazy val mock = projectMatrix
   .in(file("mock"))

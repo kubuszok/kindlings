@@ -49,17 +49,8 @@ final class MockScala3Spec extends MacroSuite {
     }
   }
 
-  group("this.type return") {
-
-    // deferred: a `def self: this.type` cannot be mocked. AnonymousInstance types the override's return as the parent
-    // trait `Fluent`, not the synthesized anonymous class's `this.type`, so the override is rejected ("error overriding
-    // method self ... has incompatible type"). Needs Hearth to map a `this.type` return onto the new subtype's
-    // `this.type`. Probed in isolation — same failure.
-    test("a method returning this.type".ignore) {
-      // elided: `Mock.mock[MockScala3Spec.Fluent]` does not compile (override return type `Fluent` vs `this.type`).
-      ()
-    }
-  }
+  // NOTE: the `this.type` return shape is now covered in the shared `MockSpec` — Hearth 0.3.1-48 fixed it on BOTH
+  // platforms (it was broken on Scala 2 too, not only Scala 3), so it no longer belongs in a Scala-3-only spec.
 
   group("opaque parameter type") {
 
@@ -75,15 +66,19 @@ final class MockScala3Spec extends MacroSuite {
 
   group("context-function return type") {
 
-    // deferred: `def build(key: String): Config ?=> String` mocks but mismatches at runtime — the context-function
-    // return is treated as a trailing implicit parameter clause, so the generated override packs the summoned `Config`
-    // as a second argument (`handle("build", Vector("k", config))`). The arity-2 call then misses the arity-1
-    // expectation registered by `expecting("build", "k")` and the body casts the default `String` to `Config ?=> String`
-    // ("String cannot be cast to Function1"). Needs Hearth to distinguish a context-function *return* from an implicit
-    // parameter clause in OverrideContext.
-    test("a method returning a context function".ignore) {
-      // elided: runtime arity mismatch (context-function return packed as an extra implicit argument).
-      ()
+    test("a method returning a context function") {
+      // Resolved in Hearth 0.3.1-49: the context-function return (`Config ?=> String`) keeps its `ContextFunctionN`
+      // shape on Scala 3.8.4 (previously `safeMemberType` desugared it into a trailing `using` clause → a String
+      // reached a Function1 position). No mock-side change was needed.
+      given ctx: MockContext = new MockContext
+      val m = Mock.mock[MockScala3Spec.CtxReturn]
+      // No `given Config` anywhere in this scope — `cfg` is a plain val applied EXPLICITLY at the call site. This keeps
+      // the context-function value un-applied through `returning(...)` (Scala 3 only eta-applies a context function
+      // when a matching `given` is in scope), so the mock genuinely round-trips a `Config ?=> String`.
+      val cfg = new MockScala3Spec.Config {}
+      val _ = ctx.expecting("build", "k").returning(MockScala3Spec.buildResult)
+      m.build("k")(using cfg) ==> "built"
+      ctx.verifyExpectations()
     }
   }
 }
@@ -109,10 +104,6 @@ object MockScala3Spec {
     def make: A & B
   }
 
-  trait Fluent {
-    def self: this.type
-  }
-
   opaque type UserId = Int
   object UserId {
     def apply(i: Int): UserId = i
@@ -127,4 +118,9 @@ object MockScala3Spec {
   trait CtxReturn {
     def build(key: String): Config ?=> String
   }
+
+  // A plain `Function1` used as the mocked context-function result. A `val: Config ?=> String` cannot be referenced
+  // without a `given Config` in scope (every reference eta-applies it); a regular `Config => String` is stored as-is
+  // and is the same `scala.Function1` at runtime, so the `build` override casts it to `Config ?=> String` cleanly.
+  val buildResult: Config => String = (_: Config) => "built"
 }

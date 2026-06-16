@@ -130,6 +130,31 @@ final class WiringSpec extends MacroSuite {
       // both RecService and RecHandler must receive the very same db instance
       assert(app.service.databaseAccess eq app.handler.databaseAccess)
     }
+
+    test("autowireMembersOf seeds the pool from an instance's public parameterless members") {
+      val deps = new WiringSpec.MembDeps(new WiringSpec.MembA {}, new WiringSpec.MembB {})
+      val c = DI.autowire[WiringSpec.MembC](DI.autowireMembersOf(deps))
+      // `a` is provided by the val `a`; `b` is provided by the no-arg `def bb` (the private ctor param is not exposed,
+      // and `cc` has a parameter so it is not a provider).
+      (c.a eq deps.a) ==> true
+      (c.b eq deps.bb) ==> true
+    }
+
+    test("an autowireMembersOf member type clashing with an explicit dependency is a duplicate error") {
+      // Ported from macwire's `autowire/autowireMembersOfDuplicate.failure`: `deps.a` (a MembA) and the explicit
+      // `new MembA {}` both provide MembA.
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        import hearth.kindlings.di.WiringSpec.*
+        val deps = new MembDeps(new MembA {}, new MembB {})
+        DI.autowire[MembC](DI.autowireMembersOf(deps), new MembA {})
+        """
+      ).check(
+        "duplicate type in dependencies list",
+        "MembA"
+      )
+    }
   }
 
   group("DI.wireSet / DI.wireList") {
@@ -186,11 +211,8 @@ final class WiringSpec extends MacroSuite {
       assert(WiringSpec.Diamond.service.dependency eq WiringSpec.Diamond.anotherService.dependency)
     }
 
-    // Self-type providers (`this: AProvider =>`) are a PLATFORM DIFFERENCE: supported on Scala 3, not on Scala 2.
-    // Hearth's `enclosingScope` exposes self-type members of an enclosing trait on Scala 3 but not on Scala 2 (its
-    // member list comes from the class symbol's own type, which on Scala 2 omits self-type requirements). The positive
-    // test lives in di/src/test/scala-3 and the negative (documented-limitation) test in di/src/test/scala-2. See
-    // docs/research/di-self-type-limitation.md.
+    // Self-type providers (`this: AProvider =>`) are wired on BOTH platforms (Hearth's `enclosingScope` exposes the
+    // self-type members of an enclosing trait on Scala 2 and Scala 3 as of 0.3.1-48). Positive test: `SelfTypeSpec`.
   }
 
   group("DI.wire candidate-source eligibility") {
@@ -220,10 +242,8 @@ final class WiringSpec extends MacroSuite {
     }
   }
 
-  // By-name (`=> A`) constructor parameters are a PLATFORM DIFFERENCE: wired on Scala 2, pending on Scala 3.
-  // The by-name wrapper type is decomposable from the typed API on Scala 2 (`<byname>[A]` exposes `A` via type
-  // arguments) but not on Scala 3 (the `ByNameType` is not surfaced as an applied type). Positive test in
-  // di/src/test/scala-2, documented-limitation test in di/src/test/scala-3. See docs/research/di-by-name-limitation.md.
+  // By-name (`=> A`) constructor parameters are wired on BOTH platforms (`Parameter.byNameUnderlying`, Hearth 0.3.1-48,
+  // recovers the underlying `A` on Scala 2 and Scala 3). Positive test: `SelfTypeSpec`.
 
   group("DI.wireRec breadth") {
 
@@ -249,6 +269,25 @@ final class WiringSpec extends MacroSuite {
       ).check(
         "Cannot find a value of type: [",
         "String"
+      )
+    }
+
+    test("detects a cyclic dependency instead of looping the compiler") {
+      // The root is wired to a supertype (CycBase), so neither cyclic type is resolvable from scope and wireRec
+      // recurses to build them — exercising the cycle guard rather than the in-scope lazy-val resolution.
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        trait CycBase
+        class CycA(val b: CycB) extends CycBase
+        class CycB(val a: CycA)
+        class CycModule {
+          lazy val base: CycBase = DI.wireRec[CycA]
+        }
+        """
+      ).check(
+        "cyclic dependencies detected",
+        "wiring path"
       )
     }
   }
@@ -387,6 +426,44 @@ final class WiringSpec extends MacroSuite {
         "Target"
       )
     }
+
+    test("a wireWith factory whose parameter is not in scope fails with a clear error") {
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        class Dep()
+        class Service(val dep: Dep)
+        class M {
+          // No Dep value in scope, so the factory parameter cannot be wired.
+          lazy val service: Service = DI.wireWith((dep: Dep) => new Service(dep))
+        }
+        """
+      ).check(
+        "Cannot find a value of type",
+        "Dep"
+      )
+    }
+
+    test("members of an outer (non-immediate) enclosing class are NOT reachable (documented limitation)") {
+      // Only the immediate enclosing class/objects are in scope; an outer class's members are not. If Hearth ever
+      // exposes the outer `this`, this guard test will flip and should be promoted to a positive wiring assertion.
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        class Dep()
+        class Needs(val dep: Dep)
+        class Outer {
+          lazy val dep: Dep = new Dep()
+          class Inner {
+            lazy val needs: Needs = DI.wire[Needs]
+          }
+        }
+        """
+      ).check(
+        "Cannot find a value of type",
+        "Dep"
+      )
+    }
   }
 
   group("DI.autowire compile-time errors") {
@@ -496,6 +573,16 @@ object WiringSpec {
   class DatabaseAccess()
   class SecurityFilter()
   class UserFinder(val databaseAccess: DatabaseAccess, val securityFilter: SecurityFilter)
+
+  // macwire `autowireMembersOf` fixture (ported from its `autowire/autowireMembersOf.success` test case): `b` is a
+  // plain (private) ctor param exposed only via the no-arg `def bb`; `cc` has a parameter and must NOT be a provider.
+  trait MembA
+  trait MembB
+  class MembDeps(val a: MembA, b: MembB) {
+    def bb: MembB = b
+    def cc(z: Int): MembA = a
+  }
+  case class MembC(a: MembA, b: MembB)
 
   class UserModule {
     lazy val databaseAccess = new DatabaseAccess()

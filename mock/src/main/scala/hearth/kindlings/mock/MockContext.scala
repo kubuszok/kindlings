@@ -21,7 +21,7 @@ final class MockContext {
   private val callLog: mutable.ListBuffer[(String, Seq[Any])] = mutable.ListBuffer.empty
 
   // Root of the ordering tree (unordered). `currentNode` is the node new expectations attach to while building.
-  private val rootNode: OrderingNode = new OrderingNode(ordered = false, parent = null)
+  private var rootNode: OrderingNode = new OrderingNode(ordered = false, parent = null)
   private var currentNode: OrderingNode = rootNode
 
   /** Register an expectation for a call to `methodName` with arguments matching `expectedArgs`.
@@ -100,6 +100,33 @@ final class MockContext {
       throw new MockExpectationException(
         s"Unsatisfied expectation(s):\n${unsatisfied.map("  " + _).mkString("\n")}"
       )
+  }
+
+  /** Clear every expectation, preset and recorded call, returning this context to its freshly-constructed state so a
+    * single instance can be reused across independent tests/blocks (used by [[withExpectations]] and by auto-verifying
+    * suite integrations).
+    */
+  def reset(): Unit = {
+    handlers.clear()
+    callLog.clear()
+    rootNode = new OrderingNode(ordered = false, parent = null)
+    currentNode = rootNode
+  }
+
+  /** Run `body`, then automatically [[verifyExpectations]] (ScalaMock's `withExpectations`). On success the body's
+    * value is returned after a passing verification. If `body` itself throws a non-fatal exception the ORIGINAL
+    * exception is rethrown and no unsatisfied-expectation error is raised on top of it (so the real failure is never
+    * masked — ScalaMock issue #72). The context is reset afterwards either way, so it can scope many blocks.
+    */
+  def withExpectations[T](body: => T): T = {
+    val result =
+      try body
+      catch {
+        case scala.util.control.NonFatal(t) => reset(); throw t
+      }
+    try verifyExpectations()
+    finally reset()
+    result
   }
 
   // -------------------------------------------------------------------------------------------------------------------

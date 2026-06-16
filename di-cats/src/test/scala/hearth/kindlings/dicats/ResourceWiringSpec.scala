@@ -1,7 +1,7 @@
 package hearth.kindlings.dicats
 
 import hearth.MacroSuite
-import cats.effect.{Resource, SyncIO}
+import cats.effect.{IO, Resource, SyncIO}
 import scala.collection.mutable.ListBuffer
 
 final class ResourceWiringSpec extends MacroSuite {
@@ -271,6 +271,41 @@ final class ResourceWiringSpec extends MacroSuite {
       (out.first eq out.second) ==> true
       allocated.length ==> 1
     }
+
+    test("a single auto-built dependency is shared across a diamond (built exactly once)") {
+      val created = ListBuffer.empty[String]
+      val mkA: () => A2 = () => { created += "a"; new A2 }
+      // A2 feeds B2, C2 and Diamond directly — all three references must resolve to one shared instance.
+      val res: Resource[SyncIO, Diamond] = DICats.wireResource[SyncIO, Diamond](mkA)
+      val out = res.use(d => SyncIO(d)).unsafeRunSync()
+      (out.b.a eq out.c.a) ==> true
+      (out.a eq out.b.a) ==> true
+      created.toList ==> List("a")
+    }
+  }
+
+  group("DICats.wireResource — F-agnostic (not hardcoded to SyncIO)") {
+
+    test("the same derivation produces a Resource[IO, T] (proves F is abstract)") {
+      import cats.effect.unsafe.implicits.global
+      val config = new Config("db-url")
+      val logger = new Logger
+      val res: Resource[IO, App] = DICats.wireResource[IO, App](config, logger)
+      val app = res.use(a => IO.pure(a)).unsafeRunSync()
+      app.config ==> config
+      app.logger ==> logger
+    }
+
+    test("an IO effect dependency is wrapped in Resource.eval and evaluated during acquisition") {
+      import cats.effect.unsafe.implicits.global
+      val log = ListBuffer.empty[String]
+      val config = new Config("c")
+      val dbEffect: IO[Db] = IO { log += "eval-db"; new Db(config) }
+      val res: Resource[IO, AppWithDb] = DICats.wireResource[IO, AppWithDb](config, dbEffect)
+      val out = res.use(a => IO { log += "use"; a }).unsafeRunSync()
+      out.db.config ==> config
+      log.toList ==> List("eval-db", "use")
+    }
   }
 
   group("DICats.wireResource — deliberate divergence from macwire") {
@@ -353,6 +388,44 @@ final class ResourceWiringSpec extends MacroSuite {
         """
       ).check("Ambiguous instances of types", "TImplA", "TImplB")
     }
+
+    test("a cyclic dependency is reported instead of looping the compiler") {
+      compileErrors(
+        """
+        import hearth.kindlings.dicats.DICats
+        import cats.effect.{Resource, SyncIO}
+        import hearth.kindlings.dicats.ResourceWiringSpec.*
+        DICats.wireResource[SyncIO, CycA]()
+        """
+      ).check("Cyclic dependency detected", "CycA")
+    }
+
+    test("an instance and a factory both providing the same type are ambiguous") {
+      compileErrors(
+        """
+        import hearth.kindlings.dicats.DICats
+        import cats.effect.{Resource, SyncIO}
+        import hearth.kindlings.dicats.ResourceWiringSpec.*
+        val mk: () => Config = () => new Config("d")
+        DICats.wireResource[SyncIO, OnlyConfig](new Config("c"), mk)
+        """
+      ).check("Ambiguous instances of types", "Config")
+    }
+
+    test("a factory whose parameter is unresolvable reports the [method ...].param path") {
+      compileErrors(
+        """
+        import hearth.kindlings.dicats.DICats
+        import cats.effect.{Resource, SyncIO}
+        import hearth.kindlings.dicats.ResourceWiringSpec.*
+        val mkDb: String => Db = (s: String) => new Db(new Config(s))
+        DICats.wireResource[SyncIO, AppWithDb](mkDb, new Config("c"))
+        """
+      ).check(
+        "Missing dependency of type [java.lang.String]",
+        "[method"
+      )
+    }
   }
 }
 
@@ -392,6 +465,16 @@ object ResourceWiringSpec {
   // Genuinely-missing dependency (String is non-wireable): drives the macwire-style missing-path error.
   final class NeedsString(val s: String)
   final class NeedsNeedsString(val n: NeedsString)
+
+  // Cyclic construction graph (neither type provided): drives the cycle guard instead of a compile-time StackOverflow.
+  final class CycA(val b: CycB)
+  final class CycB(val a: CycA)
+
+  // Diamond sharing: A2 is needed by B2, C2 AND Diamond — a single (factory-built) A2 must be shared by all three.
+  final class A2
+  final class B2(val a: A2)
+  final class C2(val a: A2)
+  final class Diamond(val b: B2, val c: C2, val a: A2)
 
   // Factory-method / chaining fixtures.
   final class ServiceC(val a: ServiceA, val b: ServiceB)

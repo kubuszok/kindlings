@@ -23,4 +23,12 @@ package hearth.kindlings.di
   * }
   * }}}
   */
-object DI extends DICompanionCompat
+object DI extends DICompanionCompat {
+
+  /** Marker used only inside [[autowire]]: `DI.autowire[A](DI.autowireMembersOf(instance), ...)` seeds the dependency
+    * pool with every public, parameterless member (`val` / no-arg `def`) of `instance`, each matched by its declared
+    * type — mirroring macwire's `autowireMembersOf`. Outside `autowire` it is the identity; `autowire` rewrites the
+    * call at compile time, so this body is never actually evaluated in that position.
+    */
+  def autowireMembersOf[T](instance: T): T = instance
+}

@@ -16,6 +16,11 @@ private[di] trait DICompanionCompat {
     internal.compiletime.WiringMacros.autowireImpl[A]('dependencies)
   }
 
+  /** Capture every public, parameterless reference-typed member of `instance` into a runtime [[Wired]] registry keyed
+    * by each member's declared type (macwire's `wiredInModule`).
+    */
+  inline def wiredInModule(inline in: AnyRef): Wired = ${ internal.compiletime.WiringMacros.wiredInModuleImpl('in) }
+
   /** Collect all values of a type conforming to `A` from the enclosing scope into a `Set[A]`. */
   inline def wireSet[A]: Set[A] = ${ internal.compiletime.WiringMacros.wireSetImpl[A] }
 

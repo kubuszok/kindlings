@@ -618,25 +618,54 @@ final class MockSpec extends MacroSuite {
       ctx.verifyExpectations()
     }
 
-    // deferred: AnonymousInstance does not emit an override for operator/symbolic-named abstract methods (`def +(x)`),
-    // so the synthesized subtype reports "Missing implementation for member ... def +". Probed in isolation (a trait
-    // with only `def +(x: Int): Int`) — same failure, so it is a Hearth gap, not our packing. Re-enable once Hearth
-    // overrides symbolic members.
-    test("operator / symbolic method name".ignore) {
-      // elided: `Mock.mock[MockSpec.Ops]` does not compile (missing override for `+`).
-      ()
+    test("a parameterized trait, with its type parameter bound at the use site, mocks fine") {
+      // NOTE: distinct from the deferred case below — here the type parameter is on the TRAIT (`Repo[A]`) and is
+      // concretely bound to `String` at the `mock[Repo[String]]` site, so methods have concrete signatures.
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.Repo[String]]
+      val _ = ctx.expecting("get", 7).returning("seven")
+      m.get(7) ==> "seven"
+      ctx.verifyExpectations()
     }
 
-    // deferred: methods carrying their OWN type parameters (`def describe[T](x: T): String`) cannot be mocked yet.
-    // Hearth's AnonymousInstance does not type-apply such methods, so `OverrideContext.returnType` falls back to the
-    // erased `Any` (via `knownReturning.getOrElse(Any)`) even when the declared return type is concrete (`String`).
-    // The generated body is then typed `Any` and fails to satisfy the override's `String` return ("found Any, required
-    // String"). Needs Hearth to surface the (re-bound) per-override type parameters and resolved return type to
-    // OverrideContext. Non-generic methods of every other shape mock fine.
-    test("polymorphic method (deferred — see comment)".ignore) {
-      // Body intentionally elided: `Mock.mock[MockSpec.PolyConcrete]` does not even COMPILE (the macro expands at
-      // compile time regardless of `.ignore`). Kept as a documented placeholder until Hearth resolves the gap above.
-      ()
+    test("a class with constructor arguments is mocked (dummy ctor args synthesized, real ctor runs)") {
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.ServiceWithCtor]
+      val _ = ctx.expecting("handle", 1).returning(42)
+      m.handle(1) ==> 42
+      // the concrete (non-abstract) member runs the REAL superclass impl over the dummy ctor args.
+      (m.describe.endsWith("#0")) ==> true
+      ctx.verifyExpectations()
+    }
+
+    test("operator / symbolic method name") {
+      // Resolved in Hearth 0.3.1-48 (Issue B — `unsafeNewSubtype` now overrides symbolic-named members).
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.Ops]
+      val _ = ctx.expecting("+", 2).returning(5)
+      (m + 2) ==> 5
+      ctx.verifyExpectations()
+    }
+
+    test("polymorphic method (own type parameter) with a concrete return type") {
+      // Resolved in Hearth 0.3.1-48 (Issue A — `OverrideContext` now carries the method's type params and the resolved
+      // return type, so the `String` return is no longer erased to `Any`). The own-type-parameter `x: T` argument is
+      // packed like any other.
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.PolyConcrete]
+      val _ = ctx.expecting("describe", 42).returning("forty-two")
+      m.describe(42) ==> "forty-two"
+      ctx.verifyExpectations()
+    }
+
+    test("a method returning this.type returns the mock itself") {
+      // Resolved in Hearth 0.3.1-49 (`OverrideContext.returnsThisType`). A fluent `this.type` method returns `this`
+      // (the mock), still routing through the context so the expectation is recorded/verified.
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.Fluent]
+      val _ = ctx.expecting("self")
+      (m.self: MockSpec.Fluent) ==> m
+      ctx.verifyExpectations()
     }
 
     test("many parameters (>= 9)") {
@@ -662,12 +691,13 @@ final class MockSpec extends MacroSuite {
       m.concreteVal ==> "concrete"
     }
 
-    // deferred: AnonymousInstance overrides every member with a `def` (DefDef), which cannot override an abstract
-    // `val abstractVal: String` ("stable, immutable value required to override"). Needs Hearth to emit a `val` override
-    // for abstract vals. Probed in isolation — same failure.
-    test("abstract val returns default".ignore) {
-      // elided: `Mock.mock[MockSpec.WithAbstractVal]` does not compile (def cannot override abstract val).
-      ()
+    test("abstract val is overridable and yields the default") {
+      // Resolved in Hearth 0.3.1-48 (Issue B — a `val` target now emits a `val` override, not a `def`). The override is
+      // an eager `val` whose initializer runs at construction, so it is exercised via `stub` (a strict `mock` would
+      // dispatch the val before any expectation could be registered); the unpreset stub yields the Defaultable default.
+      implicit val ctx: MockContext = new MockContext
+      val s = Mock.stub[MockSpec.WithAbstractVal]
+      (s.abstractVal: String) ==> ""
     }
   }
 
@@ -681,13 +711,66 @@ final class MockSpec extends MacroSuite {
       ctx.verifyExpectations()
     }
 
-    // deferred: AnonymousInstance emits override parameter clauses as plain (explicit) params — the implicit clause of
-    // `def run(cmd: String)(implicit cfg: Int)` is generated as a second EXPLICIT clause, so the abstract `run` is left
-    // unimplemented ("Missing implementation for member ... def run(cmd)(implicit cfg)"). Probed in isolation — same
-    // failure. Needs Hearth to preserve the `implicit`/`using` flag on override parameter clauses.
-    test("implicit parameter is packed like a normal argument".ignore) {
-      // elided: `Mock.mock[MockSpec.WithImplicit]` does not compile (implicit clause not preserved on the override).
-      ()
+    test("implicit parameter is packed like a normal argument") {
+      // Resolved in Hearth 0.3.1-48 (Issue B — the `implicit`/`using` modifier is preserved on the override's parameter
+      // clause). The summoned `cfg` is packed alongside the explicit `cmd`.
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.WithImplicit]
+      implicit val cfg: Int = 99
+      val _ = ctx.expecting("run", "cmd", 99).returning("ran")
+      m.run("cmd") ==> "ran"
+      ctx.verifyExpectations()
+    }
+  }
+
+  group("auto-verification (withExpectations / reset)") {
+
+    test("withExpectations auto-verifies a satisfied block and returns its value (no manual verify)") {
+      implicit val ctx: MockContext = new MockContext
+      val out = ctx.withExpectations {
+        val m = Mock.mock[MockSpec.Greeter]
+        val _ = ctx.expecting("greet", "world").returning("hi")
+        m.greet("world")
+      }
+      out ==> "hi"
+    }
+
+    test("withExpectations fails the block when an expectation is left unsatisfied") {
+      implicit val ctx: MockContext = new MockContext
+      intercept[MockExpectationException] {
+        ctx.withExpectations {
+          val _ = Mock.mock[MockSpec.Greeter]
+          val _ = ctx.expecting("greet", "world").returning("hi")
+          () // never call greet -> unsatisfied -> verify fails at block exit
+        }
+      }
+    }
+
+    test("withExpectations rethrows the body's own failure unmasked (does not raise an unsatisfied error on top)") {
+      implicit val ctx: MockContext = new MockContext
+      val boom = intercept[RuntimeException] {
+        ctx.withExpectations {
+          val _ = Mock.mock[MockSpec.Greeter]
+          val _ = ctx.expecting("greet", "world").returning("hi") // also left unsatisfied
+          throw new RuntimeException("boom")
+        }
+      }
+      boom.getMessage ==> "boom"
+      // and the context was reset, so a fresh block on the same context starts clean
+      ctx.withExpectations(())
+    }
+
+    test("reset clears expectations and recorded calls so a context can be reused") {
+      implicit val ctx: MockContext = new MockContext
+      val m = Mock.mock[MockSpec.Greeter]
+      val _ = ctx.expecting("greet", "a").returning("x")
+      m.greet("a") ==> "x"
+      ctx.reset()
+      // after reset there are no expectations, so verify passes and a new expectation can be set
+      ctx.verifyExpectations()
+      val _ = ctx.expecting("greet", "b").returning("y")
+      m.greet("b") ==> "y"
+      ctx.verifyExpectations()
     }
   }
 }
@@ -742,6 +825,18 @@ object MockSpec {
     def describe[T](x: T): String
   }
 
+  // Type parameter on the TRAIT (bound concretely at the mock site), NOT on the method — this works.
+  trait Repo[A] {
+    def get(id: Int): A
+  }
+
+  // A CLASS (not a trait) with constructor arguments: mocking it must synthesize dummy ctor args and invoke the real
+  // superclass constructor. `name` is a val ctor param, `count` a plain one; `handle` is the abstract member to mock.
+  abstract class ServiceWithCtor(val name: String, count: Int) {
+    def handle(x: Int): Int
+    def describe: String = s"$name#$count"
+  }
+
   trait ManyParams {
     def sum(a: Int, b: Int, c: Int, d: Int, e: Int, f: Int, g: Int, h: Int, i: Int): Int
   }
@@ -754,6 +849,10 @@ object MockSpec {
 
   trait WithAbstractVal {
     val abstractVal: String
+  }
+
+  trait Fluent {
+    def self: this.type
   }
 
   trait WithDefaults {
