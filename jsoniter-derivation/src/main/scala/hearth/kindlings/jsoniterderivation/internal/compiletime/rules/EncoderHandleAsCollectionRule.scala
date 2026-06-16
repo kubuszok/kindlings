@@ -37,14 +37,14 @@ trait EncoderHandleAsCollectionRuleImpl {
       deriveEncoderRecursively[Item](using ectx.nest(dummyItem)).flatMap { _ =>
         ectx.getHelper[Item].map { helperOpt =>
           val helper = helperOpt.get
-          val iterableExpr = isCollection.asIterable(ectx.value)
+          // `foreach` lets the collection provider pick the cheapest iteration (e.g. arrays iterate by index,
+          // skipping the intermediate `asIterable` wrapper) instead of materialising an `Iterator`.
+          val writeElems = isCollection.foreach(ectx.value) { itemExpr =>
+            helper(itemExpr, ectx.writer, ectx.config)
+          }
           Rule.matched(Expr.quote {
             Expr.splice(ectx.writer).writeArrayStart()
-            val iter = Expr.splice(iterableExpr).iterator
-            while (iter.hasNext) {
-              val item: Item = iter.next()
-              Expr.splice(helper(Expr.quote(item), ectx.writer, ectx.config))
-            }
+            Expr.splice(writeElems)
             Expr.splice(ectx.writer).writeArrayEnd()
           })
         }
