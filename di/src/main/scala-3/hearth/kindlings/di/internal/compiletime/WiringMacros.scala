@@ -22,9 +22,11 @@ private[di] object WiringMacros {
   def autowireImpl[A: Type](dependencies: Expr[Seq[Any]])(using q: Quotes): Expr[A] = {
     val m = new WiringMacros(q)
     dependencies match {
-      case Varargs(es) => m.autowire[A](es.toList.map(m.preciseExpr))
+      case Varargs(es) => m.autowireWithMembers[A](es.toList)
       case _           =>
         q.reflect.report.errorAndAbort("autowire dependencies must be provided directly as varargs parameters.")
     }
   }
+
+  def wiredInModuleImpl(in: Expr[Any])(using q: Quotes): Expr[Wired] = new WiringMacros(q).wiredInModule(in)
 }

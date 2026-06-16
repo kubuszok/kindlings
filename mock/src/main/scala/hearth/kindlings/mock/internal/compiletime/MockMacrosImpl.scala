@@ -17,7 +17,8 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
       case ClassViewResult.Compatible(ai) =>
         val overrides: Map[UntypedMethod, OverrideBody] =
           ai.mustOverride.map(cm => cm.method.asUntyped -> forwardingBody(ctx, cm)).toMap
-        ai.construct(None, Map.empty, overrides) match {
+        val (ctor, ctorArgs) = constructorAndArgs(ai.classParent)
+        ai.construct(ctor, ctorArgs, overrides) match {
           case Right(instance) => instance
           case Left(errors)    =>
             Environment.reportErrorAndAbort(s"Cannot mock ${Type.prettyPrint[A]}: ${errors.toVector.mkString("; ")}")
@@ -35,11 +36,30 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
       case ClassViewResult.Compatible(ai) =>
         val overrides: Map[UntypedMethod, OverrideBody] =
           ai.mustOverride.map(cm => cm.method.asUntyped -> stubBody(ctx, cm)).toMap
-        ai.construct(None, Map.empty, overrides) match {
+        val (ctor, ctorArgs) = constructorAndArgs(ai.classParent)
+        ai.construct(ctor, ctorArgs, overrides) match {
           case Right(instance) => instance
           case Left(errors)    =>
             Environment.reportErrorAndAbort(s"Cannot stub ${Type.prettyPrint[A]}: ${errors.toVector.mkString("; ")}")
         }
+    }
+
+  /** When mocking a CLASS (not a trait), Hearth's `AnonymousInstance` exposes the parent's accessible constructors in
+    * `classParent`; the synthesized subtype must invoke one. We pick the primary (first) constructor and supply a dummy
+    * value for each of its parameters — a summoned `Defaultable` (or `null`), mirroring ScalaMock's
+    * `Defaultable`-seeded `new T(...)`. The real superclass constructor IS run with these dummies (so ctor side effects
+    * fire, as in ScalaMock). Trait parents have no constructor, so this yields `(None, empty)` and the original
+    * behaviour.
+    */
+  private def constructorAndArgs(classParent: Option[(??, List[Method])]): (Option[Method], Map[String, Expr_??]) =
+    classParent.flatMap(_._2.headOption) match {
+      case Some(ctor) =>
+        val args = ctor.totalParameters.flatten.toList.map { case (name, parameter) =>
+          import parameter.tpe.Underlying as P
+          name -> summonDefault[P].as_??
+        }.toMap
+        (Some(ctor), args)
+      case None => (None, Map.empty)
     }
 
   /** Body of one stubbed method: forward to `ctx.handleStub(name, args, default)`, where `default` is the value of a
@@ -141,9 +161,37 @@ private[mock] trait MockMacrosImpl { this: MacroCommons =>
       val args: Expr[Vector[Any]] =
         octx.parameters.foldRight(Expr.quote(Vector.empty[Any]))(prependArg)
 
-      forwardCall[R](ctx, methodName, args, summonDefault[R]).as_??
+      // A `this.type` (fluent) method cannot have a value synthesized for it — the only inhabitant of the synthesized
+      // subtype's `this.type` is `this`. `octx.returnsThisType` (Hearth 0.3.1-49) is the signal `returnType` can't give
+      // (it widens to the parent). So we still route through the context (recording + strict expectation match) but
+      // return `octx.self` (the mock itself), WITHOUT casting it to the widened `returnType`.
+      if (octx.returnsThisType) selfReturnBody(ctx, methodName, args, octx.self)
+      else forwardCall[R](ctx, methodName, args, summonDefault[R]).as_??
     }
   }
+
+  /** Body for a `this.type` return: record the call (so strict expectations still match/verify), then return `this`.
+    * `self` is already typed as the synthesized subtype's `this.type`, so it is returned as-is (no cast).
+    */
+  private def selfReturnBody(
+      ctx: Expr[MockContext],
+      methodName: Expr[String],
+      args: Expr[Vector[Any]],
+      self: Expr_??
+  ): Expr_?? = {
+    import self.Underlying as S
+    selfReturnBodyImpl[S](ctx, methodName, args, self.value).as_??
+  }
+  private def selfReturnBodyImpl[S: Type](
+      ctx: Expr[MockContext],
+      methodName: Expr[String],
+      args: Expr[Vector[Any]],
+      self: Expr[S]
+  ): Expr[S] =
+    Expr.quote {
+      val _ = Expr.splice(ctx).handle(Expr.splice(methodName), Expr.splice(args), ())
+      Expr.splice(self)
+    }
 
   /** Prepend one argument expression to the accumulated `Vector[Any]`. A helper with a regular type parameter so the
     * spliced argument's (path-dependent) type does not leak into the generated tree on Scala 2. The spliced reference

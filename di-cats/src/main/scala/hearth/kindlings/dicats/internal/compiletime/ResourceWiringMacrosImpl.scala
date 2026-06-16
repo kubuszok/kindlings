@@ -227,6 +227,8 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     val instanceBindings: scala.collection.mutable.LinkedHashMap[String, Expr_??] =
       scala.collection.mutable.LinkedHashMap.empty
     val planned: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
+    // Keys currently under construction (the DFS stack), used to detect dependency cycles before they recurse forever.
+    val inProgress: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
     val used: scala.collection.mutable.Set[Int] = scala.collection.mutable.Set.empty
 
     /** Providers whose `resultType` conforms to `t` (subtype-aware, excluding bottom types), with their input index. */
@@ -477,8 +479,15 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     import t.Underlying as P
     val key = Type.fqcn[P]
     if (resolver.planned.contains(key)) return Some((bound: Map[String, Expr_??]) => bound(key))
+    // Cycle guard: a type re-entered while still under construction (its node not yet `planned`) is a dependency
+    // cycle. Without this the DFS recurses forever — a compile-time StackOverflow. Mirrors di's `verifyNotCyclic`.
+    if (resolver.inProgress.contains(key)) {
+      val pathStr = if (path.isEmpty) "" else s" Path ${path.mkString(" -> ")}"
+      Environment.reportErrorAndAbort(s"Cyclic dependency detected for [${Type.prettyPrint[P]}].$pathStr")
+    }
+    resolver.inProgress += key
 
-    callableFor(t) match {
+    val result: Option[Map[String, Expr_??] => Expr_??] = callableFor(t) match {
       case None                       => recordMissing(missing, t, path); None
       case Some((method, ownerLabel)) =>
         val paramResolvers: List[(String, Option[Map[String, Expr_??] => Expr_??])] =
@@ -495,6 +504,8 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
         }
         if (anyMissing) None else Some((bound: Map[String, Expr_??]) => bound(key))
     }
+    resolver.inProgress -= key
+    result
   }
 
   /** A callable producing `t`: its primary constructor (label `[constructor T]`), or a single companion `apply` (label

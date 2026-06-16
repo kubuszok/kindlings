@@ -17,5 +17,7 @@ final private[di] class WiringMacros(val c: blackbox.Context) extends MacroCommo
   def wireWithImpl[RES: c.WeakTypeTag](factory: c.Tree): c.Expr[RES] = wireWith[RES](c.Expr[Any](factory))
 
   def autowireImpl[A: c.WeakTypeTag](dependencies: c.Expr[Any]*): c.Expr[A] =
-    autowire[A](dependencies.toList.map(preciseExpr))
+    autowireWithMembers[A](dependencies.toList)
+
+  def wiredInModuleImpl(in: c.Tree): c.Expr[Wired] = wiredInModule(c.Expr[Any](in))
 }
