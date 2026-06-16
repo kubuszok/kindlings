@@ -1,7 +1,7 @@
 package hearth.kindlings.dicats
 
 import hearth.MacroSuite
-import cats.effect.{IO, Resource, SyncIO}
+import cats.effect.{Resource, SyncIO}
 import scala.collection.mutable.ListBuffer
 
 final class ResourceWiringSpec extends MacroSuite {
@@ -284,29 +284,8 @@ final class ResourceWiringSpec extends MacroSuite {
     }
   }
 
-  group("DICats.wireResource — F-agnostic (not hardcoded to SyncIO)") {
-
-    test("the same derivation produces a Resource[IO, T] (proves F is abstract)") {
-      import cats.effect.unsafe.implicits.global
-      val config = new Config("db-url")
-      val logger = new Logger
-      val res: Resource[IO, App] = DICats.wireResource[IO, App](config, logger)
-      val app = res.use(a => IO.pure(a)).unsafeRunSync()
-      app.config ==> config
-      app.logger ==> logger
-    }
-
-    test("an IO effect dependency is wrapped in Resource.eval and evaluated during acquisition") {
-      import cats.effect.unsafe.implicits.global
-      val log = ListBuffer.empty[String]
-      val config = new Config("c")
-      val dbEffect: IO[Db] = IO { log += "eval-db"; new Db(config) }
-      val res: Resource[IO, AppWithDb] = DICats.wireResource[IO, AppWithDb](config, dbEffect)
-      val out = res.use(a => IO { log += "use"; a }).unsafeRunSync()
-      out.db.config ==> config
-      log.toList ==> List("eval-db", "use")
-    }
-  }
+  // F-agnosticism via `cats.effect.IO` lives in `ResourceWiringJvmSpec` (JVM only — `IO.unsafeRunSync()` cannot block
+  // on Scala.js). `SyncIO` above already exercises the F-abstraction on every platform.
 
   group("DICats.wireResource — deliberate divergence from macwire") {
 
