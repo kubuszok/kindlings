@@ -14,7 +14,7 @@ final class ErrorMessagesSpec extends MacroSuite {
         new NotACaseClass("x").modify(_.value).setTo("y")
         """
       ).check(
-        "can only descend into case classes"
+        "can only descend a field into a case class or a sealed hierarchy"
       )
     }
 
