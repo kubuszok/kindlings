@@ -1,0 +1,58 @@
+package hearth.kindlings.optics
+
+import _root_.cats.data.{Chain, NonEmptyChain, NonEmptyList, NonEmptyVector}
+import hearth.MacroSuite
+
+/** `.each` over cats non-empty collections, enabled purely by importing the [[CatsQuicklensFunctors]] runtime givens —
+  * no macro changes, proving the optics `.each` step is container-agnostic.
+  */
+final class CatsEachSpec extends MacroSuite {
+
+  import hearth.kindlings.optics.*
+  import hearth.kindlings.optics.CatsQuicklensFunctors.*
+
+  group("`.each` over cats non-empty collections") {
+
+    test("NonEmptyList") {
+      val team = CatsEachSpec.Nel(NonEmptyList.of("ann", "bob", "cid"))
+      team.modify(_.xs.each).using(_.toUpperCase) ==> CatsEachSpec.Nel(NonEmptyList.of("ANN", "BOB", "CID"))
+    }
+
+    test("NonEmptyVector") {
+      val team = CatsEachSpec.Nev(NonEmptyVector.of(1, 2, 3))
+      team.modify(_.xs.each).using(_ + 10) ==> CatsEachSpec.Nev(NonEmptyVector.of(11, 12, 13))
+    }
+
+    test("NonEmptyChain") {
+      val team = CatsEachSpec.Nec(NonEmptyChain.of("a", "b"))
+      team.modify(_.xs.each).using(_ + "!") ==> CatsEachSpec.Nec(NonEmptyChain.of("a!", "b!"))
+    }
+
+    test("Chain") {
+      val team = CatsEachSpec.Ch(Chain("x", "y", "z"))
+      team.modify(_.xs.each).using(_.toUpperCase) ==> CatsEachSpec.Ch(Chain("X", "Y", "Z"))
+    }
+
+    test("nested field descent after `.each`") {
+      val roster = CatsEachSpec.Roster(NonEmptyList.of(CatsEachSpec.Player("ann", 1), CatsEachSpec.Player("bob", 2)))
+      roster.modify(_.players.each.name).using(_.toUpperCase) ==>
+        CatsEachSpec.Roster(NonEmptyList.of(CatsEachSpec.Player("ANN", 1), CatsEachSpec.Player("BOB", 2)))
+    }
+
+    test("`.eachWhere` over a NonEmptyList") {
+      val team = CatsEachSpec.Nel(NonEmptyList.of("ann", "bob", "cid"))
+      team.modify(_.xs.eachWhere(_.startsWith("b"))).using(_.toUpperCase) ==>
+        CatsEachSpec.Nel(NonEmptyList.of("ann", "BOB", "cid"))
+    }
+  }
+}
+
+object CatsEachSpec {
+  final case class Nel(xs: NonEmptyList[String])
+  final case class Nev(xs: NonEmptyVector[Int])
+  final case class Nec(xs: NonEmptyChain[String])
+  final case class Ch(xs: Chain[String])
+
+  final case class Player(name: String, number: Int)
+  final case class Roster(players: NonEmptyList[Player])
+}
