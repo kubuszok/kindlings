@@ -149,6 +149,29 @@ println(a.modify(_.when[Dog].name).using(_.toUpperCase))
 // Dog(REX)
 ```
 
+## Sealed hierarchies & enums — common fields
+
+When a field is declared on a sealed trait or Scala 3 `enum` (and present on every case), modify it directly with a
+plain `_.field` path — the macro generates the match over all subtypes for you, so `.when[Sub]` per case is not needed:
+
+```scala
+//> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+
+import hearth.kindlings.optics._
+
+sealed trait Animal { def name: String }
+final case class Dog(name: String, age: Int) extends Animal
+final case class Cat(name: String, indoor: Boolean) extends Animal
+
+val a: Animal = Dog("Rex", 3)
+
+println(a.modify(_.name).using(_.toUpperCase))
+// expected output:
+// Dog(REX,3)
+```
+
+(Reach for `.when[Sub]` instead when the field exists on only *some* subtypes.)
+
 ## Several paths at once — `modifyAll`
 
 `obj.modifyAll(_.a, _.b, _.c)` focuses several paths (which must share the same focus type) and applies the **same**
@@ -236,9 +259,14 @@ message naming the unsupported step.
 
 ## Notes & limitations
 
-- **Sources must be case classes.** Field descent reads the case fields and rebuilds via the primary constructor.
-  Product-like classes that expose a hand-written `copy` (but are not case classes) are **not** supported yet.
+- **What you can descend into.** A `_.field` step works on **case classes** and on **sealed hierarchies / Scala 3
+  `enum`s** — if a field is declared on the trait/enum (and present on every case), `modify(_.field)` generates the
+  match over subtypes for you, no `.when[Sub]` needed. **Collections, `Option`, `Either` and `Map`s** are traversed
+  with their combinators (`.each`, `.at`/`.index`/`.atOrElse`, `.eachLeft`/`.eachRight`), not by field descent — so all
+  of those work out of the box. The remaining gap is a **product-like class with a hand-written `copy`** that is neither
+  a case class nor a sealed hierarchy — that is **not** supported yet.
 - Documentation snippets here mirror the module's passing test suite (`ModifyFieldSpec`, `EachSpec`, `AtIndexSpec`,
-  `EitherSpec`, `WhenSpec`, `ModifyAllSpec`, `LensCompositionSpec`); their full snippet-test execution runs in CI.
+  `EitherSpec`, `WhenSpec`, `SealedFieldSpec`, `ModifyAllSpec`, `LensCompositionSpec`); their full snippet-test
+  execution runs in CI.
 </content>
 </invoke>
