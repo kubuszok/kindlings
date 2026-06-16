@@ -4,8 +4,8 @@ import hearth.MacroSuite
 
 final class EachSpec extends MacroSuite {
 
-  import EachSpec._
-  import hearth.kindlings.optics.syntax._
+  import EachSpec.*
+  import hearth.kindlings.optics.syntax.*
 
   group("`.each` over List/Vector/Seq of case classes") {
 
