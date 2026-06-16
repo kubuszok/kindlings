@@ -7,8 +7,8 @@ package hearth.kindlings.di
   * (subtype-aware). Entries are factories (`() => Any`) re-invoked on each lookup, so a `def` member is re-read each
   * time, exactly like reading it off the module.
   *
-  * The reflective dynamic-instantiation half of macwire's `Wired` (`wireClassInstance`/`wireClassInstanceByName`,
-  * which construct a class by reflectively resolving its constructor parameters from the registry) is intentionally NOT
+  * The reflective dynamic-instantiation half of macwire's `Wired` (`wireClassInstance`/`wireClassInstanceByName`, which
+  * construct a class by reflectively resolving its constructor parameters from the registry) is intentionally NOT
   * ported: it relies on JVM-only `java.lang.reflect` and a context classloader, which would not link on Scala.js /
   * Scala Native. Subtype matching here uses only [[java.lang.Class.isAssignableFrom]], which is portable.
   */
@@ -22,7 +22,8 @@ final class Wired private (private val entries: List[(java.lang.Class[Any], () =
   def lookupSingleOrThrow[T](cls: java.lang.Class[T]): T = lookup(cls) match {
     case single :: Nil => single
     case Nil           => throw new IllegalArgumentException(s"No instance of [${cls.getName}] is registered")
-    case many => throw new IllegalArgumentException(s"Multiple instances of [${cls.getName}] are registered: ${many.size}")
+    case many          =>
+      throw new IllegalArgumentException(s"Multiple instances of [${cls.getName}] are registered: ${many.size}")
   }
 
   /** A new [[Wired]] with the given instances added, each keyed by its runtime class. */
