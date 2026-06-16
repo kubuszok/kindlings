@@ -45,17 +45,17 @@ object QuicklensFunctor {
     def each[A, B](fa: Set[A])(f: A => B): Set[B] = fa.map(f)
   }
 
-  // A single, element-type-agnostic `Array` functor: rebuilding an array needs a `ClassTag`, but rather than requiring
-  // one per element type (which the macro cannot supply when summoning for the erased constructor), the result array is
-  // built reflectively. `.each`/`modify` keeps the element type, so the output reuses the *input* array's component type
-  // (e.g. `int` for an `Array[Int]`), and `java.lang.reflect.Array.set` unboxes into primitive arrays as needed.
+  // A single, element-type-agnostic `Array` functor. Rebuilding an array normally needs a `ClassTag`, which the macro
+  // cannot supply when summoning for the erased constructor. Since `.each`/`modify` keeps the element type (the leaf
+  // modification is `A => A`, so `B = A`), we `clone()` the input array — which preserves its component type and links
+  // on JVM/JS/Native (unlike `java.lang.reflect.Array`, which is unsupported on Scala.js) — and overwrite each slot in
+  // place. The generic array-update unboxes into primitive arrays as needed.
   implicit val arrayQuicklensFunctor: QuicklensFunctor[Array] = new QuicklensFunctor[Array] {
     def each[A, B](fa: Array[A])(f: A => B): Array[B] = {
-      val componentType = fa.getClass.getComponentType
-      val out = java.lang.reflect.Array.newInstance(componentType, fa.length)
+      val out = fa.clone().asInstanceOf[Array[B]]
       var i = 0
-      while (i < fa.length) { java.lang.reflect.Array.set(out, i, f(fa(i)).asInstanceOf[AnyRef]); i += 1 }
-      out.asInstanceOf[Array[B]]
+      while (i < fa.length) { out(i) = f(fa(i)); i += 1 }
+      out
     }
   }
 }
