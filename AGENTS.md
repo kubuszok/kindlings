@@ -153,6 +153,24 @@ Reference implementations:
 - `circe-derivation/DecoderMacrosImpl.scala` — **decoder-style** derivation (constructing types)
 - `jsoniter-derivation/CodecMacrosImpl.scala` — **combined codec** (encoder + decoder)
 
+### Non-derivation macro modules & DSL parsing (di / mock / optics)
+
+For macros that are NOT type-class derivation — wiring (`di`), mocking (`mock`), or a
+path/selector DSL (`optics`) — follow:
+
+- `docs/contributing/hearth-expr-parsing-dsl/SKILL.md` — parsing selector/path lambdas
+  (`_.a.b.each.when[T]`) with `DestructuredExpr`, building marker-based optics-like DSLs
+  (per-platform markers + invariant evidence + `@compileTimeOnly`), `CaseClass`
+  copy-with-modification, non-exhaustive `MatchCase`, runtime-typeclass delegation, and the
+  non-derivation 3-layer module recipe.
+- `docs/contributing/hearth-cross-compilation/SKILL.md` pitfalls #35–#39 — `classOf` vs
+  `ClassTag`, `java.lang.Class` shadowing, `@compileTimeOnly`, invariant evidence,
+  context-function eta-application.
+
+Reference implementations: `di/.../WiringMacrosImpl.scala` (wiring + `wiredInModule`),
+`mock/.../MockMacrosImpl.scala` (`AnonymousInstance` mocks, `this.type`/ctor-arg overrides),
+`optics/.../ModifyMacrosImpl.scala` (the path DSL).
+
 ### Runtime performance — follow `docs/contributing/kindlings-runtime-perf/SKILL.md`
 
 When optimizing the runtime performance of generated codecs/encoders/decoders. Key techniques:

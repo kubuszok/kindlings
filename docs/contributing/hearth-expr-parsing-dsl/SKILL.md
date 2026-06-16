@@ -1,0 +1,184 @@
+---
+name: hearth-expr-parsing-dsl
+description: >
+  Parsing selector/path lambdas (`_.a.b.each.when[T]`) and building optics-like marker DSLs
+  with Hearth. DestructuredExpr step-chain walking, per-platform markers + invariant
+  evidence, CaseClass copy-with-modification, non-exhaustive MatchCase, runtime-typeclass
+  delegation. Reference: the `optics` module (quicklens reimplemented).
+paths:
+  - "optics/**/*.scala"
+  - "**/syntax.scala"
+  - "**/internal/compiletime/*.scala"
+user-invocable: false
+---
+
+# Skill: Parsing expressions & building optics-like DSLs
+
+How to take a user-written **selector lambda** like `_.address.city`,
+`_.people.each.name`, `_.xs.at(0)`, or `_.animal.when[Dog].name`, parse it at compile time,
+and emit a transformation. This is the machinery behind the `optics` module (a Hearth
+reimplementation of SoftwareMill quicklens) and applies to any "path DSL" (lenses, query
+builders, the mock `.expects` DSL).
+
+This is a **non-derivation macro module** — no rule chain, no `MIO`, no `ValDefsCache`, no
+standard extensions. Use the 3-layer recipe from [the non-derivation modules](#module-recipe)
+(`di`, `mock`, `optics`), NOT [kindlings-new-module](../kindlings-new-module/SKILL.md) (which
+is for type-class derivation).
+
+## 1. Parse the selector lambda
+
+`DestructuredExpr` turns an `Expr` tree into **semantic** structure (not a raw AST mirror).
+Key entry points (verify signatures in `hearth/typed/Exprs.scala` and via MCP):
+
+- `DestructuredExpr.parse(expr): DestructuredExpr` — full parse; `.collect { case ... }` walks
+  it pre-order.
+- `DestructuredExpr.extractLambda(expr)` — strip `Inlined`/`Block(DefDef…)` wrappers to the
+  lambda body.
+- `DestructuredExpr.extractFieldPath[S, A](path): Either[String, FieldPath]` — **field-only**
+  paths (`_.a.b.c`) → `FieldPath { def fieldNames: List[String] }`. Purpose-built and simple;
+  it `Left`s the moment a step is a method call (`.each`, `.at`, ...). Use it for Phase-1
+  field-only lenses; use the `MethodCall` walker (below) once `.each`/`.at`/`.when` enter.
+- `DestructuredExpr.MethodCall` — a resolved method/field call with
+  `method: Method` and `applied: List[MethodCall.Applied]`, where `Applied` is one of:
+  - `AppliedInstance(value: DestructuredExpr)` — the receiver,
+  - `AppliedTypes(typeArgs: List[??])` — a `[T]` clause,
+  - `AppliedValues(args: List[DestructuredExpr])` — a `(...)` clause.
+
+**Extract the referenced method name** (e.g. for the mock `.expects` DSL): the OUTERMOST
+`MethodCall` in the parsed tree is the referenced method —
+`parse(f).collect { case mc: DestructuredExpr.MethodCall => mc }.headOption.map(_.method.name)`.
+
+**Recover a precise existential** from a parsed node: `toTypedExpr(node) =
+node.toUntypedExpr.asTyped[node.tpe.Underlying].as_??` (see di's `preciseExpr`).
+
+## 2. Walk the step chain (mixed fields + markers)
+
+A path like `_.people.each.name` is a chain of steps. Walk the `MethodCall` chain and classify
+each node by `mc.method.name` into a step ADT — `Field(name)`, `Each`, `At`, `When`, ... — and
+recover each step's data from its `applied` clauses:
+
+- a plain field access → `Field(mc.method.name)`;
+- a marker call (`each`/`at`/`when`/...) → the corresponding step, with:
+  - the **receiver/prefix** from `AppliedInstance.value` (e.g. `s.people: List[Person]`),
+  - **value args** (`.at(i)`, `.atOrElse(i, default)`, `.eachWhere(pred)`) from
+    `AppliedValues.args`,
+  - **type args** (`.when[T]`) from `AppliedTypes.typeArgs`.
+
+⚠️ **Scala 3 desugars an `extension [C] def when[T <: C]` into TWO `AppliedTypes` clauses** —
+the extension's `[C]` then the method's `[T]`. Take the **last** type-arg clause's last arg,
+or you pick the parent type and break narrowing.
+
+⚠️ Filter out **evidence value-args**: a marker that takes a `using`/implicit evidence (see §3)
+exposes it as a leading value arg on Scala 3. Drop args whose type `<:<` a shared
+`sealed trait PathStepEvidence` marker before reading the real `i`/`default`/`pred`.
+
+## 3. Build the marker DSL (per platform) with invariant evidence
+
+The `.each`/`.at`/`.when` "methods" are **markers** that only let the path type-check; the
+macro rewrites them and never runs their bodies. They are **per-platform** (a genuine language
+difference, like the `di`/`mock` bridges — NOT hidden failures):
+
+- **Scala 2**: `implicit class EachOps[C, A](c: C)(implicit ev: IsElementOf.Aux[C, A]) { ... def each: A }`
+- **Scala 3**: `extension [C, A](c: C)(using IsElementOf.Aux[C, A]) def each: A`
+
+Each marker body is `sys.error("...only usable inside modify...")` and carries
+`@scala.annotation.compileTimeOnly(...)`.
+
+⚠️ **`@compileTimeOnly` fires on the Scala 3 `extension` but NOT the Scala 2 `implicit class`**
+— so `.each` outside `modify` is compile-rejected on S3 but only `sys.error`s at runtime on S2.
+Do not assert its compile message cross-platform.
+
+⚠️ **Invariant evidence is mandatory** to pin the element type. A bare `extension [F[_], A](fa: F[A])`
+marker lets Scala 2 widen `List[Int].each` to `A = Any` (since `List[Int] <: List[Any]`). Fix:
+key the marker on an **invariantly-parameterised** evidence on the exact container type:
+
+```scala
+sealed trait IsElementOf[C] { type Elem }
+object IsElementOf {
+  type Aux[C, A] = IsElementOf[C] { type Elem = A }
+  // one instance per shape, derived so the natural `modify[A](path: S => A)` signature still infers A:
+  implicit def fromFunctor[F[_], A](implicit @unused F: QuicklensFunctor[F]): Aux[F[A], A] = of
+  implicit def map[K, V]: Aux[Map[K, V], V] = of
+  // ...
+}
+```
+
+This keeps the simple `def modify[A](path: S => A): PathModify[S, A]` entry (no whitebox macro).
+The marker's `A` then comes out invariantly correct on both platforms. Mirror with
+`IsIndexedElementOf`/`IsSingleElementOf`/`IsEither` for `.at`/Option/`Either`.
+
+## 4. Emit copy-with-modification (case classes)
+
+To rebuild `S` with one field replaced (`.copy(field = …)`):
+
+```scala
+CaseClass.parse[S] match {
+  case ClassViewResult.Compatible(cc) =>
+    val fields: Map[String, Expr_??] = cc.caseFieldValuesAt(sExpr) // read every field
+    val rebuilt = cc.construct[Id](p => fields(p.name))            // primary ctor, by name
+  case ClassViewResult.Incompatible(reason) => Environment.reportErrorAndAbort(...)
+}
+```
+
+- `construct` needs an `Applicative`+`DirectStyle` `F`. `Either[String, *]` has no `Applicative`
+  in hearth-micro-fp; use `Id` and abort errors directly via `Environment.reportErrorAndAbort`.
+- Recurse into the focused field via a **helper method with a regular type parameter** so the
+  field's path-dependent `Underlying` never enters an `Expr.quote` (the Scala 2 leak — see
+  [cross-compilation pitfall #3](../hearth-cross-compilation/pitfalls.md)). Pattern (optics
+  `recurseInto`): `import focused.Underlying as F; buildModify[F](focused.value, rest)(...)`.
+
+## 5. Non-exhaustive subtype match (`.when[Subtype]`)
+
+`.when[Sub]` is `v match { case s: Sub => f(s); case other => other }` — NOT exhaustive enum
+derivation. Build it with two `MatchCase` arms (no wildcard primitive needed):
+
+```scala
+MatchCase.matchOn[S, S](scrutinee)(NonEmptyVector(
+  MatchCase.typeMatch[Sub](...),  // arm: narrow + recurse
+  MatchCase.typeMatch[S](...)     // catch-all: match the PARENT type, return unchanged
+))
+```
+
+Matching the parent type as the second arm is the fall-through. On Scala 3 `matchOn` annotates
+the scrutinee `@unchecked`, so the non-exhaustive match is warning-free on both platforms.
+
+## 6. Delegate collection steps to runtime typeclasses
+
+`.each`/`.at`/Either follow quicklens: the macro summons a runtime functor and emits a call,
+rather than open-coding collection iteration. Summon `QuicklensFunctor[F]` (recover `F` from the
+prefix type via `Type.Ctor1`/`Type.CtorK1`) with `Expr.summonImplicit`, and build the element
+lambda with `LambdaBuilder` (the sanctioned [LambdaBuilder](../hearth-lambda-builder/SKILL.md)
+use — it IS collection iteration). The `Seq` functor must be bounded so it rebuilds the concrete
+subtype (`F[X] <: immutable.Seq[X] & SeqOps[X, F, F[X]]`); a `Vector`-then-`asInstanceOf[List]`
+rebuild `ClassCastException`s.
+
+## <a name="module-recipe"></a>7. Non-derivation 3-layer module recipe
+
+Same shape as `di`/`mock`/`optics`:
+
+- **Shared** `private[mod] trait XMacrosImpl { this: MacroCommons => def x[...]: Expr[...] }`.
+- **Per-platform bridge** `internal/compiletime/XMacros.scala`: S2
+  `class XMacros(val c: blackbox.Context) extends MacroCommonsScala2 with XMacrosImpl`; S3
+  `class XMacros(q: Quotes) extends MacroCommonsScala3(using q), XMacrosImpl` + an object with
+  `xImpl[...](...): Expr[...] = new XMacros(q).x[...]`.
+- **Per-platform `syntax.scala`** for the DSL surface: S2 `implicit class … def x = macro …`;
+  S3 `extension (inline obj) inline def x = ${ … }`. A `package object` mixes the same trait in
+  for bare imports.
+
+## Reference
+
+- `optics/` — the full path DSL: `internal/compiletime/ModifyMacrosImpl.scala` (parser + copy
+  gen), `QuicklensFunctors.scala` (runtime typeclasses + `IsElementOf` evidence), per-platform
+  `syntax.scala` (markers). Plan: `docs/research/optics-port-plan.md`; findings:
+  `docs/research/optics-each-inference.md`.
+- `mock/.../MockMacrosImpl.scala` `extractMethodRef` — the `.expects` method-name extraction.
+- `di/.../WiringMacrosImpl.scala` `preciseExpr` / `autowireWithMembers` — `DestructuredExpr`
+  type recovery + marker (`autowireMembersOf`) detection.
+
+## Related skills
+
+- [hearth-cross-compilation](../hearth-cross-compilation/SKILL.md) — path-dependent leaks,
+  invariant-evidence, `@compileTimeOnly`, `classOf`/`ClassTag`, context-function pitfalls.
+- [hearth-api-reference](../hearth-api-reference/SKILL.md) — `DestructuredExpr`/`MatchCase`/
+  `CaseClass` signatures.
+- [hearth-lambda-builder](../hearth-lambda-builder/SKILL.md) — element-lambda construction.

@@ -109,6 +109,44 @@ Living cache of hearth API signatures used in kindlings. **Always verify with `k
 | `nt.construct[F](f)` | `(ConstructField[F], Accessible): F[Option[Expr[A]]]` | Construct named tuple |
 | `param.tpe` | `: Existential[Type]` | Parameter's type (existential) |
 | `param.index` | `: Int` | Parameter position index |
+| `param.isImplicit` / `param.isByName` | `: Boolean` | Implicit / by-name parameter flags |
+| `param.byNameUnderlying` | `: Option[??]` | Underlying `A` of a by-name (`=> A`) param, both platforms (Hearth 0.3.1-48+) |
+
+## Expression destructuring & DSL parsing (`DestructuredExpr`)
+
+Parse selector/path lambdas (`_.a.b.each.when[T]`) and method references. See
+[hearth-expr-parsing-dsl](../hearth-expr-parsing-dsl/SKILL.md).
+
+| API | Signature | Description |
+|-----|-----------|-------------|
+| `DestructuredExpr.parse(e)` | `(Expr[A]): DestructuredExpr` | Semantic parse; `.collect { case ... }` walks pre-order |
+| `DestructuredExpr.extractLambda(e)` | strips `Inlined`/`Block(DefDef…)` | Get the lambda body |
+| `DestructuredExpr.extractFieldPath[S, A](p)` | `: Either[String, FieldPath]` | FIELD-ONLY path `_.a.b`; `Left`s on any method-call step |
+| `fieldPath.fieldNames` | `: List[String]` | The field names of a `FieldPath` |
+| `DestructuredExpr.MethodCall` | `{ method: Method; applied: List[Applied] }` | A resolved call node |
+| `MethodCall.AppliedInstance` | `{ value: DestructuredExpr }` | Receiver |
+| `MethodCall.AppliedTypes` | `{ typeArgs: List[??] }` | A `[T]` clause (S3 extension `[C]` THEN method `[T]` → take the LAST) |
+| `MethodCall.AppliedValues` | `{ args: List[DestructuredExpr] }` | A `(...)` value clause |
+| `node.tpe` / `node.toUntypedExpr` | `: ??` / `: UntypedExpr` | Recover precise type: `node.toUntypedExpr.asTyped[node.tpe.Underlying].as_??` |
+
+## Class building & matching (`AnonymousInstance`, `MatchCase`)
+
+| API | Signature | Description |
+|-----|-----------|-------------|
+| `AnonymousInstance.parse[A]` | `: ClassViewResult[AnonymousInstance[A]]` | Synthesize a subtype of a trait/class |
+| `ai.mustOverride` | `: List[ClassifiedMethod]` | Members the subtype must implement |
+| `ai.classParent` | `: Option[(??, List[Method])]` | For a CLASS parent: its accessible constructors |
+| `ai.construct(ctor, ctorArgs, overrides)` | `(Option[Method], Arguments, Map[UntypedMethod, OverrideBody]): Either[NEV[String], Expr[A]]` | Build it. For a class parent pass `Some(ai.classParent.flatMap(_._2.headOption))` + dummy `ctorArgs` (e.g. summoned `Defaultable`/`ClassTag`) |
+| `OverrideContext` | `{ self: Expr_??; method; parameters: List[Expr_??]; returnType: ??; returnsThisType: Boolean }` | Override body context. `returnsThisType` (Hearth 0.3.1-49+) ⇒ return `octx.self` uncast (do NOT cast to the widened `returnType`) |
+| `MatchCase.typeMatch[Sub]()` | builds a `case s: Sub => …` arm | One arm of a type match |
+| `MatchCase.matchOn[S, R](scrutinee)(arms)` | `(NonEmptyVector[MatchCase]): Expr[R]` | Emit the match. Non-exhaustive `.when[Sub]`: arm `typeMatch[Sub]` + catch-all `typeMatch[Parent]` (returns unchanged). S3 marks scrutinee `@unchecked` |
+
+## Class lookup (`Type.classOfType`)
+
+| API | Signature | Description |
+|-----|-----------|-------------|
+| `Type.classOfType[A]` / `Type[A].getRuntimeClass` | `: Option[java.lang.Class[A]]` | Runtime class at compile time — only for CLASSPATH types (not the current project) |
+| (emit `classOf[M]`) | — | NOT possible for abstract `M`; summon `ClassTag[M]` + `.runtimeClass` instead — see cross-compilation pitfall #35 |
 
 ## Type extractors (std extensions)
 
