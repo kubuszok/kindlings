@@ -15,7 +15,17 @@ private[optics] trait OpticsSyntax {
 
   implicit class ModifyOps[S](val obj: S) {
     def modify[A](path: S => A): PathModify[S, A] = macro internal.compiletime.ModifyMacros.modifyImpl[S, A]
+
+    /** `obj.modifyAll(_.a, _.b, _.c)` — modify several same-focus paths from one object at once. */
+    def modifyAll[A](path: S => A, paths: (S => A)*): PathModify[S, A] =
+      macro internal.compiletime.ModifyMacros.modifyAllImpl[S, A]
   }
+
+  /** `modifyLens[T](_.a.b)` — a reusable lens NOT bound to an object; its terminals return a `T => T`. */
+  def modifyLens[T]: ModifyLensFactory[T] = new ModifyLensFactory[T]
+
+  /** `modifyAllLens[T](_.a, _.b)` — the multi-path reusable lens form. */
+  def modifyAllLens[T]: ModifyAllLensFactory[T] = new ModifyAllLensFactory[T]
 
   // Marker extensions that let a `modify` path type-check past a `.each`/`.eachWhere` step. They have no usable runtime
   // behaviour — `modify(_.xs.each.field)` is rewritten by the macro, which never evaluates these bodies; they exist only
@@ -83,6 +93,22 @@ private[optics] trait OpticsSyntax {
     @scala.annotation.compileTimeOnly("`.when` is only usable inside a `modify(...)` path")
     def when[T <: C]: T = sys.error("`.when` is only usable inside a `modify(...)` path")
   }
+}
+
+/** Curries the explicit root type `T` of `modifyLens[T](_.a.b)`, leaving the focused type `U` to be inferred from the
+  * path lambda.
+  */
+final class ModifyLensFactory[T] {
+  // The focused type is named `Foc` (not `U`) to avoid shadowing the `Universe`-typed `U` the Scala 2 `WeakTypeTag`
+  // materializer introduces into this method's generated body.
+  def apply[Foc](path: T => Foc): PathLazyModify[T, Foc] =
+    macro internal.compiletime.ModifyMacros.modifyLensImpl[T, Foc]
+}
+
+/** Curries the explicit root type `T` of `modifyAllLens[T](_.a, _.b)`. */
+final class ModifyAllLensFactory[T] {
+  def apply[Foc](path: T => Foc, paths: (T => Foc)*): PathLazyModify[T, Foc] =
+    macro internal.compiletime.ModifyMacros.modifyAllLensImpl[T, Foc]
 }
 
 object syntax extends OpticsSyntax
