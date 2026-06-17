@@ -3,15 +3,15 @@ package hearth.kindlings.optics
 import _root_.cats.data.{Chain, NonEmptyChain, NonEmptyList, NonEmptyVector}
 import hearth.MacroSuite
 
-/** `.each` over cats non-empty collections, enabled purely by importing the [[CatsQuicklensFunctors]] runtime givens —
-  * no macro changes, proving the optics `.each` step is container-agnostic.
+/** `.each` over cats collections works with NO optics-specific cats code — purely because `kindlings-cats-integration`
+  * (a TEST dependency here) registers `IsCollection` providers on the classpath, which the `modify` macro discovers via
+  * `loadStandardExtensions`. The only import is the optics DSL itself.
   */
 final class CatsEachSpec extends MacroSuite {
 
   import hearth.kindlings.optics.*
-  import hearth.kindlings.optics.CatsQuicklensFunctors.*
 
-  group("`.each` over cats non-empty collections") {
+  group("`.each` over cats collections via the IsCollection SPI") {
 
     test("NonEmptyList") {
       val team = CatsEachSpec.Nel(NonEmptyList.of("ann", "bob", "cid"))
@@ -33,7 +33,7 @@ final class CatsEachSpec extends MacroSuite {
       team.modify(_.xs.each).using(_.toUpperCase) ==> CatsEachSpec.Ch(Chain("X", "Y", "Z"))
     }
 
-    test("nested field descent after `.each`") {
+    test("field descent after `.each` over a NonEmptyList") {
       val roster = CatsEachSpec.Roster(NonEmptyList.of(CatsEachSpec.Player("ann", 1), CatsEachSpec.Player("bob", 2)))
       roster.modify(_.players.each.name).using(_.toUpperCase) ==>
         CatsEachSpec.Roster(NonEmptyList.of(CatsEachSpec.Player("ANN", 1), CatsEachSpec.Player("BOB", 2)))

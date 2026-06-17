@@ -90,14 +90,9 @@ final class EachSpec extends MacroSuite {
     }
   }
 
-  group("custom user functor") {
-
-    test("a user-defined QuicklensFunctor makes `.each` work for a custom container") {
-      import EachSpec.customFunctor
-      val box = BoxOfBox(MyBox(Person("ann", 1)))
-      box.modify(_.b.each.name).setTo("zed") ==> BoxOfBox(MyBox(Person("zed", 1)))
-    }
-  }
+  // `.each` extensibility (custom containers) is now via Hearth's `IsCollection.Provider` SPI, not a user-provided
+  // `QuicklensFunctor`. See `CatsEachSpec` (cats `NonEmpty*` lit up purely by `kindlings-cats-integration` on the
+  // test classpath) for the cross-module demonstration.
 }
 
 object EachSpec {
@@ -118,12 +113,4 @@ object EachSpec {
 
   final case class MapBox(m: Map[String, Int])
   final case class MapPeople(m: Map[String, Person])
-
-  // A custom unary container with a user-provided QuicklensFunctor, to prove extensibility.
-  final case class MyBox[A](value: A)
-  final case class BoxOfBox(b: MyBox[Person])
-
-  implicit val customFunctor: QuicklensFunctor[MyBox] = new QuicklensFunctor[MyBox] {
-    def each[A, B](fa: MyBox[A])(f: A => B): MyBox[B] = MyBox(f(fa.value))
-  }
 }

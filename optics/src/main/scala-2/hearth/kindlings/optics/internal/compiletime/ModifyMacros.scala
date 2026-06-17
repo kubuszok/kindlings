@@ -2,9 +2,13 @@ package hearth.kindlings.optics
 package internal.compiletime
 
 import hearth.MacroCommonsScala2
+import hearth.std.StdExtensions
 import scala.reflect.macros.blackbox
 
-final private[optics] class ModifyMacros(val c: blackbox.Context) extends MacroCommonsScala2 with ModifyMacrosImpl {
+final private[optics] class ModifyMacros(val c: blackbox.Context)
+    extends MacroCommonsScala2
+    with StdExtensions
+    with ModifyMacrosImpl {
 
   /** `obj.modify(path)` desugars to `new syntax.ModifyOps[S](obj).modify[A](path)`. The macro method only receives
     * `path` as a value argument; the wrapped `obj` is recovered from the implicit-class application in `c.prefix` (`new
