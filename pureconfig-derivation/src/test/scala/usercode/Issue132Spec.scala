@@ -4,6 +4,7 @@ import hearth.MacroSuite
 import hearth.kindlings.pureconfigderivation.KindlingsConfigConvert
 import pureconfig.ConfigConvert
 
+/** Regression test for [[https://github.com/kubuszok/kindlings/issues/132 kindlings#132]]. */
 final class Issue132Spec extends MacroSuite {
   import Issue132Spec.*
 
