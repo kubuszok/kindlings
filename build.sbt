@@ -26,6 +26,7 @@ val versions = new {
   val jsoniterScala = "2.38.14"
   val kittens = "3.5.0"
   val pureconfig = "0.17.10"
+  val quicklens = "1.9.12"
   val tapir = "1.13.21"
   val refined = "0.11.3"
   val sttpApispec = "0.11.10"
@@ -888,7 +889,10 @@ lazy val benchmarks = projectMatrix
     avroDerivation,
     pureconfigDerivation,
     sconfigDerivation,
-    tapirSchemaDerivation
+    tapirSchemaDerivation,
+    optics,
+    opticsCats,
+    tapirOpenapiJsoniter
   )
   .disablePlugins(WelcomePlugin)
   .settings(noPublishSettings *)
@@ -904,6 +908,10 @@ lazy val benchmarks = projectMatrix
       "io.circe" %% "circe-generic" % versions.circe,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Provided,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-circe" % versions.jsoniterScala,
+      // optics baseline: SoftwareMill quicklens (which kindlings-optics reimplements)
+      "com.softwaremill.quicklens" %% "quicklens" % versions.quicklens,
+      // tapir-openapi-jsoniter baseline: sttp-apispec's circe codecs (which the module avoids depending on)
+      "com.softwaremill.sttp.apispec" %% "openapi-circe" % versions.sttpApispec,
       "org.typelevel" %% "kittens" % versions.kittens,
       "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3
                                                 else versions.avro4s213)
