@@ -67,8 +67,14 @@ trait AvroSchemaForHandleAsNamedTupleRuleImpl {
               val javaFieldsExpr = fieldPairs.toList.foldRight(
                 Expr.quote(List.empty[Schema.Field])
               ) { case ((fName, fieldSchema), acc) =>
-                val nameExpr: Expr[String] = Expr.quote {
-                  Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                val nameExpr: Expr[String] = sfctx.evaluatedConfig match {
+                  // Config statically known: map the field name at compile time to a constant string,
+                  // dropping the per-field runtime `config.transformFieldNames(name)` call.
+                  case Some(cfg) => Expr(cfg.transformFieldNames(fName))
+                  case None      =>
+                    Expr.quote {
+                      Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                    }
                 }
                 val fieldExpr: Expr[Schema.Field] = Expr.quote {
                   AvroDerivationUtils.createField(
