@@ -6,7 +6,7 @@ import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json, JsonObject}
 
 object CirceDerivationUtils {
 
-  private[kindlings] class CollectionBuildException(val failure: DecodingFailure)
+  class CollectionBuildException(val failure: DecodingFailure)
       extends RuntimeException("circe collection decoding error")
 
   // --- Encoder helpers ---
