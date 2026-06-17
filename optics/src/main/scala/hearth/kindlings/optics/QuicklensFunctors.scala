@@ -1,96 +1,10 @@
 package hearth.kindlings.optics
 
-/** Runtime type class for the `.each` collection traversal step of a `modify` path.
-  *
-  * `obj.modify(_.xs.each.field)` summons a `QuicklensFunctor[F]` for the collection constructor `F` (recovered from the
-  * focused field's type) and emits `functor.each(xs, elem => <continue path on elem>)`. The macro only ever calls
-  * [[each]] — the conditional traversal of `.eachWhere` is implemented on top of [[each]] at runtime.
-  *
-  * Mirrors SoftwareMill quicklens' `QuicklensFunctor`. Users can provide their own givens to make `.each` work over
-  * custom container types.
-  */
-trait QuicklensFunctor[F[_]] {
-
-  /** Apply `f` to every element of `fa`, rebuilding the container. */
-  def each[A, B](fa: F[A])(f: A => B): F[B]
-
-  /** Apply `f` only to the elements of `fa` matching `cond`, leaving the rest untouched. Defaults to a filtered
-    * [[each]]; containers with a cheaper conditional traversal may override.
-    */
-  def eachWhere[A](fa: F[A], cond: A => Boolean)(f: A => A): F[A] =
-    each(fa)(a => if (cond(a)) f(a) else a)
-}
-
-object QuicklensFunctor {
-
-  def apply[F[_]](implicit F: QuicklensFunctor[F]): QuicklensFunctor[F] = F
-
-  implicit val optionQuicklensFunctor: QuicklensFunctor[Option] = new QuicklensFunctor[Option] {
-    def each[A, B](fa: Option[A])(f: A => B): Option[B] = fa.map(f)
-  }
-
-  implicit val listQuicklensFunctor: QuicklensFunctor[List] = new QuicklensFunctor[List] {
-    def each[A, B](fa: List[A])(f: A => B): List[B] = fa.map(f)
-  }
-
-  implicit val vectorQuicklensFunctor: QuicklensFunctor[Vector] = new QuicklensFunctor[Vector] {
-    def each[A, B](fa: Vector[A])(f: A => B): Vector[B] = fa.map(f)
-  }
-
-  implicit val seqQuicklensFunctor: QuicklensFunctor[Seq] = new QuicklensFunctor[Seq] {
-    def each[A, B](fa: Seq[A])(f: A => B): Seq[B] = fa.map(f)
-  }
-
-  implicit val setQuicklensFunctor: QuicklensFunctor[Set] = new QuicklensFunctor[Set] {
-    def each[A, B](fa: Set[A])(f: A => B): Set[B] = fa.map(f)
-  }
-
-  // A single, element-type-agnostic `Array` functor. Rebuilding an array normally needs a `ClassTag`, which the macro
-  // cannot supply when summoning for the erased constructor. Since `.each`/`modify` keeps the element type (the leaf
-  // modification is `A => A`, so `B = A`), we `clone()` the input array — which preserves its component type and links
-  // on JVM/JS/Native (unlike `java.lang.reflect.Array`, which is unsupported on Scala.js) — and overwrite each slot in
-  // place. The generic array-update unboxes into primitive arrays as needed.
-  implicit val arrayQuicklensFunctor: QuicklensFunctor[Array] = new QuicklensFunctor[Array] {
-    def each[A, B](fa: Array[A])(f: A => B): Array[B] = {
-      val out = fa.clone().asInstanceOf[Array[B]]
-      var i = 0
-      while (i < fa.length) { out(i) = f(fa(i)); i += 1 }
-      out
-    }
-  }
-}
-
-/** Runtime type class for the `.each` traversal over the *values* of a map-like container `M[K, _]` (the keys are left
-  * untouched). `obj.modify(_.m.each.field)` over a `Map[K, V]` summons a `QuicklensMapFunctor[Map, K]`.
-  *
-  * Mirrors quicklens' map-values `each`.
-  */
-trait QuicklensMapFunctor[M[_, _], K] {
-
-  /** Apply `f` to every value of `fa`, leaving the keys untouched. */
-  def each[A, B](fa: M[K, A])(f: A => B): M[K, B]
-
-  /** Apply `f` only to the values matching `cond`. */
-  def eachWhere[A](fa: M[K, A], cond: A => Boolean)(f: A => A): M[K, A] =
-    each(fa)(a => if (cond(a)) f(a) else a)
-}
-
-object QuicklensMapFunctor {
-
-  def apply[M[_, _], K](implicit F: QuicklensMapFunctor[M, K]): QuicklensMapFunctor[M, K] = F
-
-  implicit def mapQuicklensFunctor[K]: QuicklensMapFunctor[Map, K] = new QuicklensMapFunctor[Map, K] {
-    def each[A, B](fa: Map[K, A])(f: A => B): Map[K, B] = fa.view.mapValues(f).toMap
-  }
-
-  /** Unary (`* -> *`) projection of [[QuicklensMapFunctor]] over `scala.collection.immutable.Map` for a fixed key `K`.
-    *
-    * The macro discovers the key type `K` of a `Map[K, V]` container and summons `QuicklensMapFunctor[Map, K]` by
-    * building `Type[ForMap[K]]` via Hearth's unary `Type.Ctor1` (there is no `* -> (*,*) -> *` constructor primitive in
-    * Hearth, so the binary `M[_, _]` slot is pinned to `Map` here).
-    */
-  type ForMap[K] = QuicklensMapFunctor[Map, K]
-}
+// `.each` / `.eachWhere` (collections, map values, Option) and `.eachLeft` / `.eachRight` (Either) are handled by the
+// `modify` macro directly through Hearth's `IsCollection` / `IsMap` / `IsOption` / `IsEither` SPI — no runtime functor
+// type class. What remains here are (a) the runtime type classes for the indexed `.at` / `.index` / `.atOrElse` steps
+// (for which Hearth has no positional-update SPI, so they stay bespoke — see docs/research) and (b) the invariant
+// compile-time marker evidences that let the path lambda type-check.
 
 /** Runtime type class for the indexed `.at` / `.index` / `.atOrElse` steps over a container `F[T]` keyed by `I` (a
   * `Seq` keyed by `Int`, or a `Map[K, V]` keyed by `K`).
@@ -180,58 +94,17 @@ object QuicklensSingleAtFunctor {
   }
 }
 
-/** Runtime type class for the `.eachLeft` / `.eachRight` steps over an `Either[L, R]`. Mirrors quicklens'
-  * `QuicklensEitherFunctor`. The non-targeted branch is left untouched.
-  */
-trait QuicklensEitherFunctor[T[_, _], L, R] {
-  def eachLeft(fa: T[L, R])(f: L => L): T[L, R]
-  def eachRight(fa: T[L, R])(f: R => R): T[L, R]
-}
-
-object QuicklensEitherFunctor {
-
-  implicit def eitherFunctor[L, R]: QuicklensEitherFunctor[Either, L, R] =
-    new QuicklensEitherFunctor[Either, L, R] {
-      def eachLeft(fa: Either[L, R])(f: L => L): Either[L, R] = fa.left.map(f)
-      def eachRight(fa: Either[L, R])(f: R => R): Either[L, R] = fa.map(f)
-    }
-
-  /** Unary projection for a fixed `Either` and right type `R`, used to summon the left-branch functor by `L`. */
-  type ForLeft[L] = QuicklensEitherFunctor[Either, L, Any]
-
-  /** Unary projection for a fixed `Either` and left type `L`, used to summon the right-branch functor by `R`. */
-  type ForRight[R] = QuicklensEitherFunctor[Either, Any, R]
-}
-
-/** Runtime entry points the `.each` macro codegen calls into. The macro summons a [[QuicklensFunctor]] /
-  * [[QuicklensMapFunctor]] (erased to `Any` at the call site, since the discovered constructor is not statically known)
-  * and forwards the container and the per-element function here, where the casts are concentrated. Safe because the
-  * macro only ever pairs a functor with a container of the matching constructor.
+/** Runtime entry points the indexed `.at` / `.index` / `.atOrElse` macro codegen calls into. The macro summons the
+  * relevant indexed functor (erased to `Any` at the call site, since the discovered constructor is not statically
+  * known) and forwards the container, index/key and per-element function here, where the casts are concentrated. Safe
+  * because the macro only ever pairs a functor with a container of the matching constructor.
   */
 object QuicklensRuntime {
 
-  // The element/value type `A` is erased to `Any`; `F`/`M` are erased on the JVM, so summoning a `QuicklensFunctor[F]`
-  // and calling it as a `QuicklensFunctor[Id]` is sound — the underlying `map`/`mapValues` operate on the real runtime
-  // container regardless of the phantom constructor.
+  // The element/value type `A` is erased to `Any`; `F`/`M` are erased on the JVM, so summoning an indexed functor and
+  // calling it through `Id`/`MapId` is sound — the underlying operations run on the real runtime container.
   private type Id[X] = X
-
-  /** `functor.each(fa)(f)` for a unary container functor, all arguments erased. */
-  def eachFunctor(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensFunctor[Id]].each[Any, Any](fa)(f)
-
-  /** `functor.eachWhere(fa, cond)(f)` for a unary container functor, all arguments erased. */
-  def eachFunctorWhere(functor: Any, fa: Any, cond: Any => Boolean, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensFunctor[Id]].eachWhere[Any](fa, cond)(f)
-
   private type MapId[K, V] = V
-
-  /** `functor.each(fa)(f)` for a map-values functor, all arguments erased. */
-  def eachMap(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensMapFunctor[MapId, Any]].each[Any, Any](fa)(f)
-
-  /** `functor.eachWhere(fa, cond)(f)` for a map-values functor, all arguments erased. */
-  def eachMapWhere(functor: Any, fa: Any, cond: Any => Boolean, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensMapFunctor[MapId, Any]].eachWhere[Any](fa, cond)(f)
 
   // --- Indexed `.at` / `.index` / `.atOrElse` over a `Seq`-like container (keyed by `Int`). ---
 
@@ -259,44 +132,35 @@ object QuicklensRuntime {
     functor.asInstanceOf[QuicklensSingleAtFunctor[Id]].atOrElse[Any](fa, default)(f)
   def indexSingle(functor: Any, fa: Any, f: Any => Any): Any =
     functor.asInstanceOf[QuicklensSingleAtFunctor[Id]].index[Any](fa)(f)
-
-  // --- `.eachLeft` / `.eachRight` over an `Either`. ---
-
-  private type EitherId[L, R] = Any
-
-  def eachLeft(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensEitherFunctor[EitherId, Any, Any]].eachLeft(fa)(f)
-  def eachRight(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensEitherFunctor[EitherId, Any, Any]].eachRight(fa)(f)
 }
 
-/** Evidence that `C` is a container whose traversable element (for `.each`) is the type member `Elem`. `Elem` is fixed
-  * *invariantly* by the matching `given`, so it cannot be widened to a supertype the way a bare `F[A]` element would
-  * be. Instances cover the unary functors (`Seq`/`List`/`Vector`/`Set`/`Option`/`Array` via `QuicklensFunctor`) and map
-  * values.
+/** Compile-time evidence that lets `_.xs.each` type-check, pinning the traversed element type as the member `Elem`
+  * (invariantly, so it cannot be widened). This is ONLY a typer gate: whether `C` is actually traversable — and the
+  * rebuild — is decided by the `modify` macro via Hearth's `IsCollection`/`IsMap`/`IsOption` SPI. Keeping the evidence
+  * permissive (any `F[A]`/`Array`/`Map`) is what lets a provider jar on the classpath (cats `NonEmpty*`, java
+  * collections, ...) light up `.each` with NO per-type given.
   */
-@scala.annotation.implicitNotFound(
-  "`.each` is not supported on ${C} — provide a QuicklensFunctor/QuicklensMapFunctor for its element type"
-)
+@scala.annotation.implicitNotFound("`.each` expects a collection/map/Option-shaped container, but ${C} is not one")
 sealed trait IsElementOf[C] { type Elem }
 
-object IsElementOf {
+object IsElementOf extends LowPriorityIsElementOf {
   type Aux[C, A] = IsElementOf[C] { type Elem = A }
-  private val instance: IsElementOf[Any] = new IsElementOf[Any] { type Elem = Any }
-  private def of[C, A]: Aux[C, A] = instance.asInstanceOf[Aux[C, A]]
+  private[optics] val instance: IsElementOf[Any] = new IsElementOf[Any] { type Elem = Any }
+  private[optics] def of[C, A]: Aux[C, A] = instance.asInstanceOf[Aux[C, A]]
 
-  // Map values traverse to the value type `V` (the `Map[_, _]` constructor is binary, so it does not match the unary
-  // `fromFunctor` rule).
+  // Map values traverse to the value type `V`. `Array[A]` does not unify the unary `F[A]` shape, so it needs its own
+  // rule. Both sit at higher priority than the catch-all `fromUnary`, so `Map`/`Array` resolve unambiguously.
   implicit def map[K, V]: Aux[Map[K, V], V] = of
-
-  // `Array[A]` does not unify against the unary `F[A]` shape of `fromFunctor` (Hearth/Scala treat it specially), so it
-  // gets a dedicated rule. The runtime `arrayQuicklensFunctor` handles the rebuild reflectively.
   implicit def array[A]: Aux[Array[A], A] = of
+}
 
-  // Any unary container `F[A]` with a `QuicklensFunctor[F]` in scope — built-in (`List`/`Vector`/`Seq`/`Set`/`Option`)
-  // or user-provided. `F` and `A` are unified from the *exact* container type `F[A]`, so `A` is the precise element type
-  // (no covariant widening).
-  implicit def fromFunctor[F[_], A](implicit @scala.annotation.unused F: QuicklensFunctor[F]): Aux[F[A], A] = of
+sealed trait LowPriorityIsElementOf {
+
+  /** Catch-all: any unary `F[A]` is `.each`-able at the type level (precise element `A` by unification). Lower priority
+    * than [[IsElementOf.map]]/[[IsElementOf.array]] so `Map`/`Array` don't become ambiguous. The `modify` macro decides
+    * real support via the `IsCollection`/`IsMap`/`IsOption` SPI and errors clearly otherwise.
+    */
+  implicit def fromUnary[F[_], A]: IsElementOf.Aux[F[A], A] = IsElementOf.of
 }
 
 /** Common (non-parameterised) supertype of the Phase 3 marker evidences, so the macro can recognise a synthesized

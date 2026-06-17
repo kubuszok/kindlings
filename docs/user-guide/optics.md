@@ -74,9 +74,12 @@ println(p.modify(_.age).setTo(31).age)
 
 ## Collections — `.each`
 
-`.each` focuses every element of a `Seq`/`List`/`Vector`/`Set`/`Array`, every value of an `Option`, or every value of a
-`Map`. `.eachWhere(cond)` restricts the traversal to elements matching a predicate. (You can support your own container
-by providing a `QuicklensFunctor[F]`.)
+`.each` focuses every element of any collection, every value of an `Option`, or every value of a `Map`. `.eachWhere(cond)`
+restricts the traversal to elements matching a predicate. The container is resolved through Hearth's
+`IsCollection`/`IsMap`/`IsOption` SPI, so **every container a provider supports works** — the built-ins (`List`,
+`Vector`, `Seq`, `Set`, `Array`, `IArray`, java collections, …) plus anything a jar on the classpath registers (see
+[Cats non-empty collections](#cats-non-empty-collections)). To support a custom container, register an
+`IsCollection.Provider` (the same SPI the derivation modules use) — no optics-specific code.
 
 ```scala
 //> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
@@ -93,18 +96,18 @@ println(team.modify(_.members.each).using(_.toUpperCase).members.mkString(","))
 
 ### Cats non-empty collections
 
-`.each` is container-agnostic: it summons a `QuicklensFunctor[F]` for the focused container, so any container with such
-an instance in scope works — nothing about the supported containers is hard-coded in the macro. The companion module
-`kindlings-optics-cats` provides instances for cats' `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain` and `Chain`; just
-add the dependency and import them:
+Because `.each` goes through the `IsCollection`/`IsMap` SPI, cats' `NonEmptyList`/`NonEmptyVector`/`NonEmptyChain`/`Chain`
+(and `NonEmptyMap` for map values) work **automatically once `kindlings-cats-integration` is on the classpath** — it
+registers the providers, and the optics macro discovers them. There is **no optics-specific cats module and no import**
+beyond the DSL:
 
 ```scala
 //> using scala {{ scala.2_13 }}
-//> using dep com.kubuszok::kindlings-optics-cats:{{ kindlings_version() }}
+//> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+//> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
 //> using dep org.typelevel::cats-core:{{ libraries.cats }}
 
 import hearth.kindlings.optics._
-import hearth.kindlings.optics.CatsQuicklensFunctors._
 import cats.data.NonEmptyList
 
 final case class Team(members: NonEmptyList[String])
@@ -114,9 +117,6 @@ println(team.modify(_.members.each).using(_.toUpperCase).members.toList.mkString
 // expected output:
 // ANN,BOB,CID
 ```
-
-(`NonEmptyMap`/`NonEmptySet` are not covered — the value traversal is pinned to `scala.collection.immutable.Map`, and a
-`NonEmptySet` cannot be rebuilt by `map` without an `Order`.)
 
 ## Indexed access — `.at`, `.index`, `.atOrElse`
 

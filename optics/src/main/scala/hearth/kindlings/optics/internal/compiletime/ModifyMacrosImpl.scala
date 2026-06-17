@@ -2,6 +2,7 @@ package hearth.kindlings.optics
 package internal.compiletime
 
 import hearth.MacroCommons
+import hearth.std.StdExtensions
 import hearth.fp.Id
 import hearth.fp.data.NonEmptyVector
 import hearth.fp.instances.*
@@ -12,20 +13,33 @@ import hearth.fp.syntax.*
   * Mixed into the per-platform macro bundles (`MacroCommonsScala2`/`MacroCommonsScala3`), so every method here can use
   * the full cross-platform Hearth API (`Type`, `Expr`, `CaseClass`, `DestructuredExpr`, ...).
   *
-  * Phase 1 supports field access only (`_.a.b.c`). Phase 2 adds quicklens-style collection traversal: a path may
-  * interleave `.each` / `.eachWhere(cond)` steps (over `Seq`/`List`/`Vector`/`Option`/`Set`/`Array` via
-  * [[hearth.kindlings.optics.QuicklensFunctor]], and over map values via
-  * [[hearth.kindlings.optics.QuicklensMapFunctor]]). The path lambda is parsed with
-  * [[hearth.typed.Exprs.DestructuredExpr.parse]] into an ordered list of [[PathStep]]s; field steps emit a nested
-  * copy-with-modification (Phase 1 machinery), and `.each` steps summon the relevant functor by type and emit a call to
-  * a runtime helper with an element lambda built via [[hearth.typed.Exprs.LambdaBuilder]] (the sanctioned use).
+  * Field access (`_.a.b.c`) emits a nested copy-with-modification. Traversal steps go through Hearth's std SPI: `.each`
+  * / `.eachWhere(cond)` matches the container against `IsCollection` (rebuild via `factory`/`build`), `IsMap` (map
+  * values) or `IsOption`; `.eachLeft`/`.eachRight` matches `IsEither`. This makes `.each` work over EVERY container a
+  * provider supports — the built-ins plus anything registered on the classpath (cats `NonEmpty*` via
+  * `kindlings-cats-integration`, java collections, ...). The path lambda is parsed with
+  * [[hearth.typed.Exprs.DestructuredExpr.parse]] into an ordered list of [[PathStep]]s.
   *
-  * Phase 3 adds indexed access (`.at`/`.index`/`.atOrElse` over Seq/Map and Option), Either traversal
-  * (`.eachLeft`/`.eachRight`), and the `.when[Subtype]` prism (a non-exhaustive 2-case
-  * `value match { case s: Subtype => f(s); case other => other }` built via [[MatchCase.typeMatch]]). `modifyAll` and
-  * lens composition are later phases.
+  * The indexed steps `.at`/`.index`/`.atOrElse` (Seq/Map/Option) have no Hearth positional SPI (see
+  * `docs/research/hearth-indexed-update-spi-gap.md`), so they stay on the bespoke `QuicklensIndexedFunctor` /
+  * `QuicklensMapAtFunctor` / `QuicklensSingleAtFunctor` runtime type classes summoned by the macro. The
+  * `.when[Subtype]` prism is a non-exhaustive 2-case `value match { case s: Subtype => f(s); case other => other }`
+  * built via [[MatchCase.typeMatch]]. `modifyAll` and lens composition (`modifyLens`/`andThenModify`) build on the same
+  * steps.
   */
-private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
+private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
+
+  // optics consumes Hearth's collection/map/option/either SPI (`IsCollection`/`IsMap`/`IsOption`/`IsEither`) to traverse
+  // `.each`/`.eachLeft`/... over ANY supported container — built-ins plus anything a provider jar on the classpath
+  // registers (e.g. cats `NonEmptyList` via `kindlings-cats-integration`). The providers are discovered by
+  // `Environment.loadStandardExtensions()`, which must run before the first `Is*` match. `modify` is a direct-style
+  // macro (not MIO), so we use a local once-guard rather than `derivation-commons`' MIO-based `ensureStandardExtensionsLoaded`.
+  private var standardExtensionsLoaded: Boolean = false
+  private def ensureStdExtensionsLoaded(): Unit =
+    if (!standardExtensionsLoaded) {
+      val _ = Environment.loadStandardExtensions()
+      standardExtensionsLoaded = true
+    }
 
   /** A single step of a parsed `modify` path. */
   sealed private trait PathStep
@@ -34,10 +48,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     /** A plain field access `_.field`. */
     final case class Field(name: String) extends PathStep
 
-    /** A `.each` / `.eachWhere(cond)` over a container `container` (`F[elem]` or `M[k, elem]`).
-      *
-      * `predicate`, when present, is the `cond: elem => Boolean` of `.eachWhere`. `isMap` distinguishes the map-values
-      * traversal (summon [[QuicklensMapFunctor]]) from the single-arg-functor traversal (summon [[QuicklensFunctor]]).
+    /** A `.each` / `.eachWhere(cond)` over a container. `predicate`, when present, is the `cond: elem => Boolean` of
+      * `.eachWhere`. `container`/`elem`/`isMap` are parse-time hints; the build step re-derives everything by matching
+      * `Type[S]` against `IsMap`/`IsCollection`/`IsOption`.
       */
     final case class Each(container: ??, elem: ??, predicate: Option[Expr_??], isMap: Boolean) extends PathStep
 
@@ -90,6 +103,7 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     * from the parsed container, so the codegen never depends on `A`'s inference being perfect.
     */
   def modify[S: Type, A: Type](obj: Expr[S], path: Expr[S => A]): Expr[PathModify[S, A]] = {
+    ensureStdExtensionsLoaded()
     val steps: List[PathStep] = parsePath[S, A](path)
     // Build the copy-with-modification function `(s, mod) => <rebuilt s>`, where the leaf transformation applied at the
     // focus is exactly `mod(<leaf>)`. The lambda parameters `s`/`mod` are quote-bound; their `Expr` handles are
@@ -113,6 +127,7 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     * All paths must focus the same leaf type `A` (the call site pins this).
     */
   def modifyAll[S: Type, A: Type](obj: Expr[S], paths: List[Expr[S => A]]): Expr[PathModify[S, A]] = {
+    ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAll` requires at least one path")
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[S, A])
     val doModify: Expr[(S, A => A) => S] =
@@ -130,6 +145,7 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     * [[modify]], but the rebuilt value is a function of the lambda parameter `t` rather than a captured object.
     */
   def modifyLens[T: Type, Foc: Type](path: Expr[T => Foc]): Expr[PathLazyModify[T, Foc]] = {
+    ensureStdExtensionsLoaded()
     val steps: List[PathStep] = parsePath[T, Foc](path)
     val doModify: Expr[(T, Foc => Foc) => T] =
       Expr.quote { (t: T, mod: Foc => Foc) =>
@@ -146,6 +162,7 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     * merge as [[modifyAll]], but unbound from any object.
     */
   def modifyAllLens[T: Type, Foc: Type](paths: List[Expr[T => Foc]]): Expr[PathLazyModify[T, Foc]] = {
+    ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAllLens` requires at least one path")
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[T, Foc])
     val doModify: Expr[(T, Foc => Foc) => T] =
@@ -602,49 +619,152 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     */
   private def buildEachStep[S: Type](sExpr: Expr[S], each: PathStep.Each, rest: List[PathStep])(
       transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] = {
-    import each.elem.Underlying as Elem
-    // The element lambda transforms one element of type `Elem` by applying the remaining path steps. The leaf transform
-    // is the same `transformLeaf` re-typed: `transformLeaf` is over `S`, but at the leaf the element type and `S`/`A`
-    // coincide structurally (it is only ever invoked when `rest` bottoms out at the focus), so the casts are sound.
-    // The element lambda is built directly as `Any => Any` (rather than `Elem => Elem` cast macro-side) so its tree
-    // genuinely has type `Any => Any` and conforms to the erased runtime-helper parameter. The `Any` input is cast
-    // in-tree to `Elem`, the remaining path is applied, and the `Elem` result is cast back to `Any` in-tree.
-    implicit val anyType: Type[Any] = Type.of[Any]
-    val elementLambda: Expr[Any => Any] =
-      LambdaBuilder
-        .of1[Any]("each$elem")
-        .buildWith { (anyA: Expr[Any]) =>
-          val a = castInTree[Elem](anyA)
-          val rebuilt: Expr[Elem] =
-            buildModify[Elem](a, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Elem]])
-          // Widen `Expr[Elem]` to `Expr[Any]` macro-side (the lambda body position expects `Any`); the underlying tree
-          // is still the `Elem`-typed `rebuilt`, which conforms since `Elem <: Any`.
-          rebuilt.asInstanceOf[Expr[Any]]
-        }
-
-    val functor = summonFunctor[S](each, each.isMap)
-    // The user predicate is `Elem => Boolean`; wrap it as a genuine `Any => Boolean` tree (`(x: Any) =>
-    // pred(x.asInstanceOf[Elem])`) so it conforms to the erased runtime-helper parameter (a macro-side cast would leave
-    // the tree typed `Elem => Boolean`, which does not conform to `Any => Boolean`).
-    implicit val boolType: Type[Boolean] = Type.of[Boolean]
-    val pred: Option[Expr[Any => Boolean]] = each.predicate.map { p =>
-      val predElem = p.value.asInstanceOf[Expr[Elem => Boolean]]
-      LambdaBuilder
-        .of1[Any]("each$pred")
-        .buildWith { (anyA: Expr[Any]) =>
-          val a = castInTree[Elem](anyA)
-          Expr.quote(Expr.splice(predElem).apply(Expr.splice(a)))
-        }
+  ): Expr[S] =
+    // Dispatch the `.each` traversal on Hearth's std SPI: `IsMap` (checked first — `Map <: Iterable`), then
+    // `IsCollection`, then `IsOption`. This covers every container a provider supports — the built-ins plus anything a
+    // jar on the classpath registers (cats `NonEmptyList`/`NonEmptyMap` via `kindlings-cats-integration`, java
+    // collections, `Optional`, ...). The element type is taken from the matcher, not from `each.elem`.
+    Type[S] match {
+      case IsMap(m) =>
+        import m.Underlying as Pair
+        buildEachMap[S, Pair](sExpr, m.value, each.predicate, rest)(transformLeaf)
+      case IsCollection(c) =>
+        import c.Underlying as Item
+        buildEachCollection[S, Item](sExpr, c.value, each.predicate, rest)(transformLeaf)
+      case IsOption(o) =>
+        import o.Underlying as Inner
+        buildEachOption[S, Inner](sExpr, o.value, each.predicate, rest)(transformLeaf)
+      case _ =>
+        abort(
+          s"`modify`: `.each` is not supported on [${Type.prettyPrint[S]}] — it must be a collection, map or Option, " +
+            "i.e. a type with an IsCollection/IsMap/IsOption provider (the built-ins, or e.g. cats `NonEmpty*` once " +
+            "`kindlings-cats-integration` is on the classpath)."
+        )
     }
 
-    (each.isMap, pred) match {
-      case (false, None)       => eachFunctor[S](functor, sExpr, elementLambda)
-      case (false, Some(cond)) => eachFunctorWhere[S](functor, sExpr, cond, elementLambda)
-      case (true, None)        => eachMap[S](functor, sExpr, elementLambda)
-      case (true, Some(cond))  => eachMapWhere[S](functor, sExpr, cond, elementLambda)
+  /** Transform one element/value `elemExpr` by applying the remaining path steps; for `.eachWhere` apply the transform
+    * only when the predicate holds, otherwise keep the element. The leaf transform is `transformLeaf` (over the
+    * container `S`) re-typed at the structurally-coincident element type `Elem` (sound: it only fires when `rest`
+    * bottoms out at the focus, where `S`/`Elem` coincide).
+    */
+  private def transformElementExpr[S: Type, Elem: Type](
+      elemExpr: Expr[Elem],
+      rest: List[PathStep],
+      predicate: Option[Expr_??]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[Elem] = {
+    val transformed: Expr[Elem] =
+      buildModify[Elem](elemExpr, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Elem]])
+    predicate match {
+      case None    => transformed
+      case Some(p) =>
+        val pred = p.value.asInstanceOf[Expr[Elem => Boolean]]
+        Expr.quote {
+          if (Expr.splice(pred).apply(Expr.splice(elemExpr))) Expr.splice(transformed) else Expr.splice(elemExpr)
+        }
     }
   }
+
+  /** `.each` over a collection via `IsCollection`: iterate the source, transform each element, and rebuild the same
+    * collection type through the provider's `factory`/`build` (a `mutable.Builder` fed in a `while` loop, then handed
+    * to `build.ctor`). Mirrors the decoder rules' builder pattern, but reading from the existing collection.
+    */
+  private def buildEachCollection[S: Type, Item: Type](
+      sExpr: Expr[S],
+      isColl: IsCollectionOf[S, Item],
+      predicate: Option[Expr_??],
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import isColl.CtorResult
+    val factoryExpr = isColl.factory
+    val srcIterable = isColl.asIterable(sExpr)
+    val builderExpr: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
+      val src = Expr.splice(srcIterable)
+      val builder = Expr.splice(factoryExpr).newBuilder
+      val it = src.iterator
+      while (it.hasNext) {
+        val x: Item = it.next()
+        val _ = builder += Expr.splice(transformElementExpr[S, Item](Expr.quote(x), rest, predicate)(transformLeaf))
+      }
+      builder
+    }
+    fromCtorResult[S, Item, CtorResult](isColl.build, builderExpr)
+  }
+
+  /** `.each` over the *values* of a map via `IsMap`: iterate the entries, transform each value, keep keys, and rebuild
+    * via the provider's `factory`/`build` and `pair`/`key`/`value`.
+    */
+  private def buildEachMap[S: Type, Pair: Type](
+      sExpr: Expr[S],
+      isMap: IsMapOf[S, Pair],
+      predicate: Option[Expr_??],
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import isMap.{Value, CtorResult}
+    val factoryExpr = isMap.factory
+    val srcIterable = isMap.asIterable(sExpr)
+    val builderExpr: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
+      val src = Expr.splice(srcIterable)
+      val builder = Expr.splice(factoryExpr).newBuilder
+      val it = src.iterator
+      while (it.hasNext) {
+        val p: Pair = it.next()
+        val _ = builder += Expr.splice {
+          val pExpr: Expr[Pair] = Expr.quote(p)
+          val newValue: Expr[Value] = transformElementExpr[S, Value](isMap.value(pExpr), rest, predicate)(transformLeaf)
+          isMap.pair(isMap.key(pExpr), newValue)
+        }
+      }
+      builder
+    }
+    fromCtorResult[S, Pair, CtorResult](isMap.build, builderExpr)
+  }
+
+  /** `.each` over an `Option` via `IsOption`: map the contained value (None untouched). */
+  private def buildEachOption[S: Type, Inner: Type](
+      sExpr: Expr[S],
+      isOpt: IsOptionOf[S, Inner],
+      predicate: Option[Expr_??],
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] =
+    isOpt.fold[S](sExpr)(
+      isOpt.empty,
+      (v: Expr[Inner]) => isOpt.of(transformElementExpr[S, Inner](v, rest, predicate)(transformLeaf))
+    )
+
+  /** Turn a populated `Builder[Item, CtorResult]` into the rebuilt collection `Expr[S]` via `build.ctor`, handling all
+    * five `CtorLikeOf` shapes. `.each` is size-preserving over a valid source, so the smart-constructor
+    * (`Either`-typed) shapes never legitimately fail; a `Left` there indicates a broken provider and throws a clear
+    * error.
+    */
+  private def fromCtorResult[S: Type, Item: Type, CtorResult: Type](
+      build: CtorLikeOf[scala.collection.mutable.Builder[Item, CtorResult], S],
+      builderExpr: Expr[scala.collection.mutable.Builder[Item, CtorResult]]
+  ): Expr[S] = {
+    val built = build.ctor(builderExpr)
+    build match {
+      // `Result[S] = S` — the ctor already yields the collection.
+      case _: CtorLikeOf.PlainValue[?, ?] => built.asInstanceOf[Expr[S]]
+      // Smart-constructor collections yield `Either[_, S]`; `.each` preserves size over a valid source, so a `Left` is
+      // unreachable in practice. Unwrap to `S`, surfacing a clear error in the impossible case.
+      case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+        unwrapSmartCtor[S](built.asInstanceOf[Expr[Either[Any, S]]])
+      case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+        unwrapSmartCtor[S](built.asInstanceOf[Expr[Either[Any, S]]])
+      case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+        unwrapSmartCtor[S](built.asInstanceOf[Expr[Either[Any, S]]])
+      case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+        unwrapSmartCtor[S](built.asInstanceOf[Expr[Either[Any, S]]])
+    }
+  }
+
+  private def unwrapSmartCtor[S: Type](built: Expr[Either[Any, S]]): Expr[S] =
+    Expr.quote {
+      Expr.splice(built) match {
+        case Right(value) => value
+        case Left(_)      =>
+          throw new RuntimeException("optics `.each`: the collection's smart constructor rejected the rebuilt value")
+      }
+    }
 
   /** Build the per-element `Any => Any` transformation lambda for a non-field step over `S` whose focused element type
     * is `Elem`: cast the erased `Any` input to `Elem` in-tree, apply the remaining path, widen the `Elem` result to
@@ -693,17 +813,30 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
     }
   }
 
-  /** Emit a `.eachLeft` / `.eachRight` step over `sExpr: S` (an `Either[L, R]`). Summon the branch functor, build the
-    * branch element lambda for `rest`, and call the runtime helper.
+  /** Emit a `.eachLeft` / `.eachRight` step over `sExpr: S` (an `Either[L, R]`) via Hearth's `IsEither` SPI: fold the
+    * either, transform the targeted branch, and rebuild with `left`/`right`. The other branch is left untouched.
     */
   private def buildEitherStep[S: Type](sExpr: Expr[S], step: PathStep.EachEither, rest: List[PathStep])(
       transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] = {
-    import step.branch.Underlying as Branch
-    val f = elementLambdaFor[S, Branch](if (step.isLeft) "eachLeft$elem" else "eachRight$elem", rest)(transformLeaf)
-    val functor = summonEitherFunctor[S](step)
-    if (step.isLeft) eachLeftRT[S](functor, sExpr, f) else eachRightRT[S](functor, sExpr, f)
-  }
+  ): Expr[S] =
+    Type[S] match {
+      case IsEither(e) =>
+        import e.{LeftValue, RightValue}
+        if (step.isLeft)
+          e.value.fold[S](sExpr)(
+            (l: Expr[LeftValue]) => e.value.left(transformElementExpr[S, LeftValue](l, rest, None)(transformLeaf)),
+            (r: Expr[RightValue]) => e.value.right(r)
+          )
+        else
+          e.value.fold[S](sExpr)(
+            (l: Expr[LeftValue]) => e.value.left(l),
+            (r: Expr[RightValue]) => e.value.right(transformElementExpr[S, RightValue](r, rest, None)(transformLeaf))
+          )
+      case _ =>
+        abort(
+          s"`modify`: `.eachLeft`/`.eachRight` is only supported on `Either`, but [${Type.prettyPrint[S]}] is not one."
+        )
+    }
 
   /** Emit a `.when[Subtype]` prism step over `sExpr: S`: a non-exhaustive 2-case match
     * `s match { case t: Subtype => <rest on t>; case other => other }`. Built with `MatchCase.typeMatch[Subtype]`
@@ -747,68 +880,7 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
   private def castInTree[T: Type](e: Expr[Any]): Expr[T] =
     Expr.quote(Expr.splice(e).asInstanceOf[T])
 
-  // The runtime helpers return `Any` (the discovered container constructor is erased), so the result is cast back to
-  // `S` *inside* the quote — a real `.asInstanceOf[S]` tree node, so the emitted expression is genuinely typed `S` (a
-  // macro-side `Expr` reinterpretation would leave the tree typed `Any`, widening the inferred `A` to `Any`).
-  private def eachFunctor[S: Type](functor: Expr[Any], sExpr: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .eachFunctor(
-          Expr.splice(functor),
-          Expr.splice(sExpr.asInstanceOf[Expr[Any]]),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  private def eachFunctorWhere[S: Type](
-      functor: Expr[Any],
-      sExpr: Expr[S],
-      cond: Expr[Any => Boolean],
-      f: Expr[Any => Any]
-  ): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .eachFunctorWhere(
-          Expr.splice(functor),
-          Expr.splice(sExpr.asInstanceOf[Expr[Any]]),
-          Expr.splice(cond),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  private def eachMap[S: Type](functor: Expr[Any], sExpr: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .eachMap(
-          Expr.splice(functor),
-          Expr.splice(sExpr.asInstanceOf[Expr[Any]]),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  private def eachMapWhere[S: Type](
-      functor: Expr[Any],
-      sExpr: Expr[S],
-      cond: Expr[Any => Boolean],
-      f: Expr[Any => Any]
-  ): Expr[S] =
-    Expr
-      .quote {
-        QuicklensRuntime
-          .eachMapWhere(
-            Expr.splice(functor),
-            Expr.splice(sExpr.asInstanceOf[Expr[Any]]),
-            Expr.splice(cond),
-            Expr.splice(f)
-          )
-          .asInstanceOf[S]
-      }
-      .asInstanceOf[Expr[S]]
-
-  // --- Runtime-helper calls for `.at`/`.index`/`.atOrElse` and Either. Each splices the erased functor, the container
+  // --- Runtime-helper calls for `.at`/`.index`/`.atOrElse`. Each splices the erased functor, the container
   // (widened to `Any` in-tree), the index/default (already erased `Any`), and the element lambda, then casts the `Any`
   // result back to `S` in-tree (a real `.asInstanceOf[S]` node, so the emitted tree is genuinely typed `S`).
 
@@ -909,77 +981,21 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
         .asInstanceOf[S]
     }
 
-  private def eachLeftRT[S: Type](functor: Expr[Any], s: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .eachLeft(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def eachRightRT[S: Type](functor: Expr[Any], s: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .eachRight(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
   /** Phantom unary constructor label for summoning a functor whose constructor was discovered at runtime. */
   private type AnyK[X] = Any
 
-  private lazy val QuicklensFunctorCtor: Type.CtorK1[QuicklensFunctor] = Type.CtorK1.of[QuicklensFunctor]
-  private lazy val MapFunctorCtor: Type.Ctor1[QuicklensMapFunctor.ForMap] = Type.Ctor1.of[QuicklensMapFunctor.ForMap]
   private lazy val IndexedFunctorCtor: Type.CtorK1[IntKeyedIndexedFunctor] =
     Type.CtorK1.of[IntKeyedIndexedFunctor]
   private lazy val MapAtFunctorCtor: Type.Ctor1[QuicklensMapAtFunctor.ForMap] =
     Type.Ctor1.of[QuicklensMapAtFunctor.ForMap]
   private lazy val SingleAtFunctorCtor: Type.CtorK1[QuicklensSingleAtFunctor] =
     Type.CtorK1.of[QuicklensSingleAtFunctor]
-  private lazy val EitherLeftFunctorCtor: Type.Ctor1[QuicklensEitherFunctor.ForLeft] =
-    Type.Ctor1.of[QuicklensEitherFunctor.ForLeft]
-  private lazy val EitherRightFunctorCtor: Type.Ctor1[QuicklensEitherFunctor.ForRight] =
-    Type.Ctor1.of[QuicklensEitherFunctor.ForRight]
 
   /** A `* -> *` projection of [[QuicklensIndexedFunctor]] with the index pinned to `Int` (the `Seq`-like shape). The
     * macro discovers the container constructor `F` and summons `QuicklensIndexedFunctor[F, Int]` by building
     * `Type[IntKeyedIndexedFunctor[F]]` via `Type.CtorK1#apply`.
     */
   private type IntKeyedIndexedFunctor[F[_]] = QuicklensIndexedFunctor[F, Int]
-
-  /** Summon a `QuicklensFunctor[F]` (or, for `isMap`, a `QuicklensMapFunctor[Map, K]`) for the container type,
-    * returning it erased as `Expr[Any]`. The container's constructor is discovered via `Type.decompose1`/`decompose2`,
-    * the functor type is built with `Type.CtorK1#apply` (`F[_]`) / `Type.Ctor1#apply` (the unary `ForMap[K]`
-    * projection), and the instance is summoned by type — mirroring cats-derivation's `summonConsKForFieldType`.
-    */
-  private def summonFunctor[S: Type](each: PathStep.Each, isMap: Boolean): Expr[Any] = {
-    import each.container.Underlying as C
-    if (isMap) {
-      Type.decompose2[C] match {
-        case Some((_, (keyTpe, _))) =>
-          import keyTpe.Underlying as K
-          implicit val mapFunctorType: Type[QuicklensMapFunctor.ForMap[K]] = MapFunctorCtor.apply[K]
-          Expr.summonImplicit[QuicklensMapFunctor.ForMap[K]].toOption match {
-            case Some(f) => f.asInstanceOf[Expr[Any]]
-            case None    =>
-              abort(s"`modify`: no `QuicklensMapFunctor` for [${Type.prettyPrint[C]}] is in scope for `.each`")
-          }
-        case None =>
-          abort(s"`modify`: `.each` over a map expected a `M[K, V]` container, but [${Type.prettyPrint[C]}] is not one")
-      }
-    } else {
-      Type.decompose1[C] match {
-        case Some((fCtor, _)) =>
-          implicit val functorType: Type[QuicklensFunctor[AnyK]] =
-            QuicklensFunctorCtor.apply(using fCtor).asInstanceOf[Type[QuicklensFunctor[AnyK]]]
-          Expr.summonImplicit[QuicklensFunctor[AnyK]].toOption match {
-            case Some(f) => f.asInstanceOf[Expr[Any]]
-            case None    =>
-              abort(s"`modify`: no `QuicklensFunctor` for [${Type.prettyPrint[C]}] is in scope for `.each`")
-          }
-        case None =>
-          abort(s"`modify`: `.each` expected a container `F[A]`, but [${Type.prettyPrint[C]}] is not an applied type")
-      }
-    }
-  }
 
   /** Summon the indexed functor for a `.at`/`.index`/`.atOrElse` step, erased to `Expr[Any]`: a
     * `QuicklensIndexedFunctor[F, Int]` for the `Seq` shape, a `QuicklensMapAtFunctor[Map, K]` for the `Map` shape, or a
@@ -1025,35 +1041,6 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons =>
           case None =>
             abort(s"`modify`: `.at` expected a container `F[A]`, but [${Type.prettyPrint[C]}] is not applied")
         }
-    }
-  }
-
-  /** Summon the `QuicklensEitherFunctor[Either, L, R]` for a `.eachLeft`/`.eachRight` step, erased to `Expr[Any]`. For
-    * `.eachLeft` we summon by the left type via the `ForLeft[L]` projection; for `.eachRight` by the right type via
-    * `ForRight[R]`. The runtime instance is the same `eitherFunctor` regardless, so pinning the other branch to `Any`
-    * is sound (it is never inspected at the type level past summoning).
-    */
-  private def summonEitherFunctor[S: Type](step: PathStep.EachEither): Expr[Any] = {
-    import step.container.Underlying as C
-    Type.decompose2[C] match {
-      case Some((_, (leftTpe, rightTpe))) =>
-        if (step.isLeft) {
-          import leftTpe.Underlying as L
-          implicit val leftType: Type[QuicklensEitherFunctor.ForLeft[L]] = EitherLeftFunctorCtor.apply[L]
-          Expr.summonImplicit[QuicklensEitherFunctor.ForLeft[L]].toOption match {
-            case Some(f) => f.asInstanceOf[Expr[Any]]
-            case None    => abort(s"`modify`: no `QuicklensEitherFunctor` for [${Type.prettyPrint[C]}] is in scope")
-          }
-        } else {
-          import rightTpe.Underlying as R
-          implicit val rightType: Type[QuicklensEitherFunctor.ForRight[R]] = EitherRightFunctorCtor.apply[R]
-          Expr.summonImplicit[QuicklensEitherFunctor.ForRight[R]].toOption match {
-            case Some(f) => f.asInstanceOf[Expr[Any]]
-            case None    => abort(s"`modify`: no `QuicklensEitherFunctor` for [${Type.prettyPrint[C]}] is in scope")
-          }
-        }
-      case None =>
-        abort(s"`modify`: `.eachLeft`/`.eachRight` expected an `Either[L, R]`, but [${Type.prettyPrint[C]}] is not one")
     }
   }
 

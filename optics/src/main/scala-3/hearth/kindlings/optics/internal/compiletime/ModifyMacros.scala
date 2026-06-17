@@ -2,9 +2,10 @@ package hearth.kindlings.optics
 package internal.compiletime
 
 import hearth.MacroCommonsScala3
+import hearth.std.StdExtensions
 import scala.quoted.*
 
-final private[optics] class ModifyMacros(q: Quotes) extends MacroCommonsScala3(using q), ModifyMacrosImpl
+final private[optics] class ModifyMacros(q: Quotes) extends MacroCommonsScala3(using q), StdExtensions, ModifyMacrosImpl
 
 private[optics] object ModifyMacros {
 
