@@ -20,6 +20,9 @@ final private[optics] class ModifyMacros(val c: whitebox.Context)
     * reaches the call site.
     */
   def isElementOfImpl[C: c.WeakTypeTag]: c.Expr[IsElementOf[C]] = deriveIsElementOf[C]
+  def isIndexedElementOfImpl[C: c.WeakTypeTag]: c.Expr[IsIndexedElementOf[C]] = deriveIsIndexedElementOf[C]
+  def isSingleElementOfImpl[C: c.WeakTypeTag]: c.Expr[IsSingleElementOf[C]] = deriveIsSingleElementOf[C]
+  def isEitherImpl[C: c.WeakTypeTag]: c.Expr[_root_.hearth.kindlings.optics.IsEither[C]] = deriveIsEither[C]
 
   /** `obj.modify(path)` desugars to `new syntax.ModifyOps[S](obj).modify[A](path)`. The macro method only receives
     * `path` as a value argument; the wrapped `obj` is recovered from the implicit-class application in `c.prefix` (`new
