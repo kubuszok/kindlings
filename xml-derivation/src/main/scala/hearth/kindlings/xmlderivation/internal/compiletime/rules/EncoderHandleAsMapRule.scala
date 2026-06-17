@@ -27,7 +27,8 @@ trait EncoderHandleAsMapRuleImpl {
         }
       }
 
-    private def deriveMapEntries[A: EncoderCtx, Pair: Type](
+    // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
+    private[rules] def deriveMapEntries[A: EncoderCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[scala.xml.Elem]]] = {
       import isMap.{Key, Value}

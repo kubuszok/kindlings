@@ -11,91 +11,99 @@ import hearth.kindlings.ubjsonderivation.UBJsonReader
 trait DecoderHandleAsCollectionRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
-  object DecoderHandleAsCollectionRule extends DecoderDerivationRule("handle as collection when possible") {
+  object DecoderHandleAsCollectionRule extends DecoderDerivationRule("handle as collection or map when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
-      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection") >> {
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection or map") >> {
         Type[A] match {
           case IsCollection(isCollection) =>
+            // A map is an `IsCollectionOf` whose proof is an `IsMapOf`. Parse `IsCollection` ONCE and dispatch on
+            // that, instead of the old map-rule (`IsMap.parse` = `IsCollection.parse` + cast) followed by a separate
+            // collection rule that parsed `IsCollection` again — every non-map field paid for the parse twice.
             import isCollection.Underlying as Item
-            import isCollection.value.CtorResult
-            implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
+            isCollection.value.asMap match {
+              case Some(isMapOf) =>
+                DecoderHandleAsMapRule.decodeMapEntries[A, Item](isMapOf)
+              case None =>
+                import isCollection.value.CtorResult
+                implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
 
-            LambdaBuilder
-              .of1[UBJsonReader]("itemReader")
-              .traverse { itemReaderExpr =>
-                deriveDecoderRecursively[Item](using dctx.nest[Item](itemReaderExpr))
-              }
-              .map { builder =>
-                val decodeFn = builder.build[Item]
-                val factoryExpr = isCollection.value.factory
-                val buildStep = isCollection.value.build
-
-                val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
-                  val decodeFnVal = Expr.splice(decodeFn)
-                  val reader = Expr.splice(dctx.reader)
-                  val maxInserts = Expr.splice(dctx.config).setMaxInsertNumber
-                  val collBuilder = Expr.splice(factoryExpr).newBuilder
-                  reader.readArrayStart()
-                  var count = 0
-                  while (!reader.isArrayEnd()) {
-                    count += 1
-                    if (count > maxInserts)
-                      reader.decodeError("too many collection items (max: " + maxInserts + ")")
-                    collBuilder += decodeFnVal(reader)
+                LambdaBuilder
+                  .of1[UBJsonReader]("itemReader")
+                  .traverse { itemReaderExpr =>
+                    deriveDecoderRecursively[Item](using dctx.nest[Item](itemReaderExpr))
                   }
-                  collBuilder
-                }
-                val buildResultExpr = buildStep.ctor(readLoop)
+                  .map { builder =>
+                    val decodeFn = builder.build[Item]
+                    val factoryExpr = isCollection.value.factory
+                    val buildStep = isCollection.value.build
 
-                buildStep match {
-                  case _: CtorLikeOf.PlainValue[?, ?] =>
-                    Rule.matched(buildResultExpr.asInstanceOf[Expr[A]])
-
-                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(eitherExpr) match {
-                        case Right(value) => value
-                        case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
+                    val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
+                      val decodeFnVal = Expr.splice(decodeFn)
+                      val reader = Expr.splice(dctx.reader)
+                      val maxInserts = Expr.splice(dctx.config).setMaxInsertNumber
+                      val collBuilder = Expr.splice(factoryExpr).newBuilder
+                      reader.readArrayStart()
+                      var count = 0
+                      while (!reader.isArrayEnd()) {
+                        count += 1
+                        if (count > maxInserts)
+                          reader.decodeError("too many collection items (max: " + maxInserts + ")")
+                        collBuilder += decodeFnVal(reader)
                       }
-                    })
+                      collBuilder
+                    }
+                    val buildResultExpr = buildStep.ctor(readLoop)
 
-                  case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(eitherExpr) match {
-                        case Right(value) => value
-                        case Left(errs)   =>
-                          Expr.splice(dctx.reader).decodeError(errs.mkString(", "))
-                      }
-                    })
+                    buildStep match {
+                      case _: CtorLikeOf.PlainValue[?, ?] =>
+                        Rule.matched(buildResultExpr.asInstanceOf[Expr[A]])
 
-                  case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(eitherExpr) match {
-                        case Right(value) => value
-                        case Left(err)    => throw err
-                      }
-                    })
+                      case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(eitherExpr) match {
+                            case Right(value) => value
+                            case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
+                          }
+                        })
 
-                  case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(eitherExpr) match {
-                        case Right(value) => value
-                        case Left(errs)   =>
-                          val iter = errs.iterator
-                          if (iter.hasNext) throw iter.next()
-                          else Expr.splice(dctx.reader).decodeError("collection construction failed")
-                      }
-                    })
-                }
-              }
+                      case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(eitherExpr) match {
+                            case Right(value) => value
+                            case Left(errs)   =>
+                              Expr.splice(dctx.reader).decodeError(errs.mkString(", "))
+                          }
+                        })
+
+                      case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(eitherExpr) match {
+                            case Right(value) => value
+                            case Left(err)    => throw err
+                          }
+                        })
+
+                      case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+                        Rule.matched(Expr.quote {
+                          Expr.splice(eitherExpr) match {
+                            case Right(value) => value
+                            case Left(errs)   =>
+                              val iter = errs.iterator
+                              if (iter.hasNext) throw iter.next()
+                              else Expr.splice(dctx.reader).decodeError("collection construction failed")
+                          }
+                        })
+                    }
+                  }
+            }
 
           case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
   }

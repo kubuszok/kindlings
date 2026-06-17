@@ -324,7 +324,9 @@ trait CodecMacrosImpl
           EncoderHandleAsBuiltInRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
-          EncoderHandleAsMapRule,
+          // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
+          // so the standalone EncoderHandleAsMapRule is no longer in the chain (its object is kept for
+          // deriveMapEntries).
           EncoderHandleAsCollectionRule,
           EncoderHandleAsSingletonRule,
           EncoderHandleAsCaseClassRule,
@@ -461,7 +463,9 @@ trait CodecMacrosImpl
           DecoderHandleAsBuiltInRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
-          DecoderHandleAsMapRule,
+          // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
+          // so the standalone DecoderHandleAsMapRule is no longer in the chain (its object is kept for
+          // decodeMapEntries).
           DecoderHandleAsCollectionRule,
           DecoderHandleAsSingletonRule,
           DecoderHandleAsCaseClassRule,

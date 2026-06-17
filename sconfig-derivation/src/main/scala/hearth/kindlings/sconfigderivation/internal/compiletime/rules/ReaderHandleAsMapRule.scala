@@ -28,8 +28,9 @@ trait ReaderHandleAsMapRuleImpl {
         }
       }
 
+    // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
     @scala.annotation.nowarn("msg=is never used")
-    private def decodeMapEntries[A: ReaderCtx, Pair: Type](
+    private[rules] def decodeMapEntries[A: ReaderCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] = {
       import isMap.{Key, Value, CtorResult}
