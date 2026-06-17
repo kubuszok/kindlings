@@ -8,7 +8,7 @@ import scala.collection.immutable.ListMap
 
 final class SchemaCodecSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe.*
+  import OpenApiJsoniter.openapi_3_1.*
 
   private def enc(s: Schema): String = writeToString(s)(schemaCodec)
   private def dec(json: String): Schema = readFromString[Schema](json)(schemaCodec)

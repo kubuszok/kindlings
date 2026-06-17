@@ -20,7 +20,7 @@ import scala.collection.immutable.ListMap
   */
 final class ValueRoundTripSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe.*
+  import OpenApiJsoniter.openapi_3_1.*
 
   private def encDoc(doc: OpenAPI): String = writeToString(doc)(openAPICodec)
   private def roundTripOpenAPI(doc: OpenAPI): Unit =

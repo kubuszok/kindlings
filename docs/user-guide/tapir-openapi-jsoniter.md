@@ -80,7 +80,7 @@ import hearth.kindlings.tapiropenapijsoniter.OpenApiJsoniter
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import sttp.apispec.openapi.OpenAPI
 
-import OpenApiJsoniter.circe._ // OpenAPI 3.1 codecs (the name mirrors sttp-apispec's `circe` entry point)
+import OpenApiJsoniter.openapi_3_1._ // OpenAPI 3.1 codecs (no Circe involved — named after the OpenAPI version)
 
 def render(doc: OpenAPI): String = writeToString(doc)
 def parse(json: String): OpenAPI = readFromString[OpenAPI](json)
@@ -91,9 +91,9 @@ def parse(json: String): OpenAPI = readFromString[OpenAPI](json)
 The model is the same; only the JSON translation differs (`nullable`, `exclusiveMinimum/Maximum` as booleans, `example`,
 `enum`-instead-of-`const`). Pick the entry point that matches the version you advertise:
 
-- `OpenApiJsoniter.circe` / `TapirOpenApi.toJson` — OpenAPI **3.1** (JSON Schema draft 2020-12), the default.
-- `OpenApiJsoniter.circe_openapi_3_0_3` / `TapirOpenApi.toJson30` — OpenAPI **3.0.3**.
-- `OpenApiJsoniter.circeObjectAnySchema` — 3.1, encoding `AnySchema` as `{}` / `{"not":{}}` objects rather than booleans.
+- `OpenApiJsoniter.openapi_3_1` / `TapirOpenApi.toJson` — OpenAPI **3.1** (JSON Schema draft 2020-12), the default.
+- `OpenApiJsoniter.openapi_3_0` / `TapirOpenApi.toJson30` — OpenAPI **3.0.3**.
+- `OpenApiJsoniter.openapi_3_1_objectAny` — 3.1, encoding `AnySchema` as `{}` / `{"not":{}}` objects rather than booleans.
 - `OpenApiJsoniter.custom(openApi30Flag, anyEncoding)` — build your own combination.
 
 ## Notes

@@ -44,7 +44,7 @@ final class GoldenRoundTripJvmSpec extends MacroSuite {
   }
 
   group("OpenAPI 3.1 encoder fixpoints") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     test("basic petstore")(roundTrip[OpenAPI]("/petstore/basic-petstore.json"))
     test("header petstore")(roundTrip[OpenAPI]("/petstore/header-petstore.json"))
     test("full 3.1 schema")(roundTrip[OpenAPI]("/spec/3.1/schema.json"))
@@ -52,23 +52,23 @@ final class GoldenRoundTripJvmSpec extends MacroSuite {
   }
 
   group("OpenAPI 3.0.3 encoder fixpoints") {
-    import OpenApiJsoniter.circe_openapi_3_0_3.*
+    import OpenApiJsoniter.openapi_3_0.*
     test("callbacks")(roundTrip[OpenAPI]("/callbacks/callbacks.json"))
   }
 
   group("AnySchema object encoding") {
-    import OpenApiJsoniter.circeObjectAnySchema.*
+    import OpenApiJsoniter.openapi_3_1_objectAny.*
     test("any and nothing (object)")(roundTrip[OpenAPI]("/spec/3.1/any_and_nothing2.json"))
   }
 
   group("security schemes") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     test("with scopes")(roundTrip[SecurityScheme]("/securityScheme/security-scheme-with-scopes.json"))
     test("with empty scopes")(roundTrip[SecurityScheme]("/securityScheme/security-scheme-with-empty-scopes.json"))
   }
 
   group("decode-only fixtures") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
 
     test("self-describing schema decodes") {
       val json = loadAst("/self-describing-schema.json")
@@ -85,7 +85,7 @@ final class GoldenRoundTripJvmSpec extends MacroSuite {
 
   // Ported from sttp-apispec openapi-circe DecoderTest.
   group("decode semantics (ported from sttp-apispec)") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
 
     def decodeOpenAPI(path: String): OpenAPI =
       readFromString[OpenAPI](writeToString(loadAst(path))(jsonValueCodec))(openAPICodec)
@@ -131,7 +131,7 @@ final class GoldenRoundTripJvmSpec extends MacroSuite {
     test("callbacks decode") {
       val openapi =
         readFromString[OpenAPI](writeToString(loadAst("/callbacks/callbacks.json"))(jsonValueCodec))(
-          OpenApiJsoniter.circe_openapi_3_0_3.openAPICodec
+          OpenApiJsoniter.openapi_3_0.openAPICodec
         )
       val callback = openapi.paths
         .pathItems("/pets")

@@ -36,11 +36,11 @@ object TapirOpenApi {
 
   /** Serialize an OpenAPI model to JSON via this module's jsoniter codec (OpenAPI 3.1, circe-free). */
   def toJson(doc: OpenAPI): String =
-    writeToString(doc)(OpenApiJsoniter.circe.openAPICodec)
+    writeToString(doc)(OpenApiJsoniter.openapi_3_1.openAPICodec)
 
   /** Serialize an OpenAPI model to JSON via this module's jsoniter codec, using the OpenAPI 3.0.3 translation. */
   def toJson30(doc: OpenAPI): String =
-    writeToString(doc)(OpenApiJsoniter.circe_openapi_3_0_3.openAPICodec)
+    writeToString(doc)(OpenApiJsoniter.openapi_3_0.openAPICodec)
 
   /** One call: tapir endpoint -> OpenAPI 3.1 JSON, with no circe on the classpath. */
   def endpointToJson(endpoint: AnyEndpoint, info: Info): String =

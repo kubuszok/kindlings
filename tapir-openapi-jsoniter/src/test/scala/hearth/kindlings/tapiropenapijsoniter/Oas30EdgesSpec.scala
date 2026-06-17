@@ -12,7 +12,7 @@ import scala.collection.immutable.ListMap
   */
 final class Oas30EdgesSpec extends MacroSuite {
 
-  private val codec30 = OpenApiJsoniter.circe_openapi_3_0_3.schemaCodec
+  private val codec30 = OpenApiJsoniter.openapi_3_0.schemaCodec
 
   private def enc30(s: Schema): String = writeToString(s)(codec30)
   private def dec30(s: String): Schema = readFromString[Schema](s)(codec30)
@@ -68,11 +68,11 @@ final class Oas30EdgesSpec extends MacroSuite {
     }
   }
 
-  group("circeObjectAnySchema in 3.0 mode") {
+  group("openapi_3_1_objectAny in 3.0 mode") {
     test("AnySchema.Anything encodes as {} (object) and Nothing as {\"not\":{}}") {
-      writeToString(AnySchema.Anything: SchemaLike)(OpenApiJsoniter.circeObjectAnySchema.schemaLikeCodec) ==> "{}"
+      writeToString(AnySchema.Anything: SchemaLike)(OpenApiJsoniter.openapi_3_1_objectAny.schemaLikeCodec) ==> "{}"
       writeToString(AnySchema.Nothing: SchemaLike)(
-        OpenApiJsoniter.circeObjectAnySchema.schemaLikeCodec
+        OpenApiJsoniter.openapi_3_1_objectAny.schemaLikeCodec
       ) ==> """{"not":{}}"""
     }
     test("object-any + 3.0 flag combined still emits object form") {
@@ -83,7 +83,7 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("ReferenceOr round-trips preserve summary/description") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     test("Left(Reference) with summary + description round-trips") {
       val ref: ReferenceOr[Response] = Left(Reference("#/x", summary = Some("s"), description = Some("d")))
       val components = Components(responses = ListMap("r" -> ref))
@@ -97,7 +97,7 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("extensions on containers that call dropNullsExpand") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     // Every such container hoists x-* extensions; verify the hoist for a representative spread of them.
     test("Info / Contact / License / Server / Tag / Components / Response / Operation / PathItem extensions hoist") {
       val doc = OpenAPI(
@@ -139,7 +139,7 @@ final class Oas30EdgesSpec extends MacroSuite {
   }
 
   group("non-JSON extension value falls back to a JSON string") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     test("an extension value that is not valid JSON is emitted as a JSON string") {
       val schema = Schema(
         `type` = Some(List(SchemaType.String)),

@@ -8,7 +8,7 @@ import scala.collection.immutable.ListMap
 
 final class OpenApiCodecSpec extends MacroSuite {
 
-  import OpenApiJsoniter.circe.*
+  import OpenApiJsoniter.openapi_3_1.*
 
   private val sampleDoc: OpenAPI = SampleDocs.sampleDoc
 

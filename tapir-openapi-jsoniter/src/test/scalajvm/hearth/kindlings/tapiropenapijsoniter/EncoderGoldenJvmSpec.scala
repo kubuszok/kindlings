@@ -41,17 +41,17 @@ final class EncoderGoldenJvmSpec extends MacroSuite {
   private val fullSchemaOpenApi = HandBuiltDocs.fullSchemaOpenApi
 
   test("full 3.1 schema") {
-    import OpenApiJsoniter.circe.*
+    import OpenApiJsoniter.openapi_3_1.*
     assertEncodes(HandBuiltDocs.fullSchemaOpenApi31, "/spec/3.1/schema.json")
   }
 
   test("full 3.0 schema") {
-    import OpenApiJsoniter.circe_openapi_3_0_3.*
+    import OpenApiJsoniter.openapi_3_0.*
     assertEncodes(HandBuiltDocs.fullSchemaOpenApi30, "/spec/3.0/schema.json")
   }
 
   test("replace const by single enum value in 3.0 schema") {
-    import OpenApiJsoniter.circe_openapi_3_0_3.*
+    import OpenApiJsoniter.openapi_3_0.*
     val components = Components(
       schemas = ListMap(
         schemaComponent("const and enum")(
