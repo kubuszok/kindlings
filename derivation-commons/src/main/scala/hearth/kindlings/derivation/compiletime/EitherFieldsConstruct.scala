@@ -66,10 +66,17 @@ trait EitherFieldsConstruct { this: MacroCommons & StdExtensions =>
         case Nil =>
           resultEither.right(construct(boundReversed.reverse))
         case result :: rest =>
-          fieldEither.fold[Either[E, A]](result)(
-            onLeft = (e: Expr[E]) => resultEither.left(e),
-            onRight = (value: Expr[Any]) => loop(rest, value :: boundReversed)
-          )
+          // Bind each field result to a local `val` before folding. This is both the "decode into a val" shape and a
+          // tree-hygiene necessity: matching directly on a field-decode expression that contains its own definitions
+          // (e.g. a nested case-class field whose decoder uses a `flatMap` lambda) trips Scala 3's "Block contains
+          // definitions with different owners". The `val` keeps the scrutinee a clean reference. The val is only
+          // reached once all earlier fields succeeded, so short-circuiting is preserved.
+          ValDefs.createVal[Either[E, Any]](result).use { boundResult =>
+            fieldEither.fold[Either[E, A]](boundResult)(
+              onLeft = (e: Expr[E]) => resultEither.left(e),
+              onRight = (value: Expr[Any]) => loop(rest, value :: boundReversed)
+            )
+          }
       }
 
     loop(fieldResults, Nil)

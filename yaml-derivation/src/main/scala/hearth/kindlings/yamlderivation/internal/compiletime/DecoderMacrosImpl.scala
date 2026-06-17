@@ -13,6 +13,7 @@ import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 trait DecoderMacrosImpl
     extends YamlDerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
