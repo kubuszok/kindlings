@@ -3,12 +3,23 @@ package internal.compiletime
 
 import hearth.MacroCommonsScala2
 import hearth.std.StdExtensions
-import scala.reflect.macros.blackbox
+import scala.reflect.macros.whitebox
 
-final private[optics] class ModifyMacros(val c: blackbox.Context)
+/** A **whitebox** bundle (`val c: whitebox.Context`): `modify`/`modifyAll`/... still return their declared types (so
+  * they behave exactly like blackbox macros), but `isElementOfImpl` must return a type MORE SPECIFIC than its signature
+  * (`IsElementOf.Aux[C, Elem]` from `IsElementOf[C]`) to materialize the `.each` evidence — only whitebox macros may do
+  * that. `whitebox.Context <: blackbox.Context`, so Hearth's `MacroCommonsScala2` (which only needs `blackbox.Context`)
+  * is satisfied; Hearth is no different from any other Scala 2 macro here.
+  */
+final private[optics] class ModifyMacros(val c: whitebox.Context)
     extends MacroCommonsScala2
     with StdExtensions
     with ModifyMacrosImpl {
+
+  /** Materializer for the `.each` evidence (`IsElementOf`), backed by the std SPI; whitebox so the refined `Elem`
+    * reaches the call site.
+    */
+  def isElementOfImpl[C: c.WeakTypeTag]: c.Expr[IsElementOf[C]] = deriveIsElementOf[C]
 
   /** `obj.modify(path)` desugars to `new syntax.ModifyOps[S](obj).modify[A](path)`. The macro method only receives
     * `path` as a value argument; the wrapped `obj` is recovered from the implicit-class application in `c.prefix` (`new

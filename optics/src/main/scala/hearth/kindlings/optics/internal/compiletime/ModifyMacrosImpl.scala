@@ -120,6 +120,44 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
   }
 
+  /** Materialize the `.each` evidence `IsElementOf.Aux[C, Elem]` by checking the std SPI: `Elem` is the value type of
+    * an `IsMap`, the item of an `IsCollection`, or the inner of an `IsOption`. Used by a whitebox (Scala 2) /
+    * transparent inline (Scala 3) given so `_.xs.each` type-checks ONLY when `xs`'s type actually has a provider, with
+    * the precise element type taken from that provider — and a new provider jar on the classpath enables `.each`
+    * automatically. The declared return type is widened to `Expr[IsElementOf[C]]`, but the emitted tree is the precise
+    * `IsElementOf.witness[C, Elem]` (typed `Aux[C, Elem]`), which whitebox/transparent expose to the call site.
+    */
+  def deriveIsElementOf[C: Type]: Expr[IsElementOf[C]] = {
+    ensureStdExtensionsLoaded()
+    Type[C] match {
+      case IsMap(m) =>
+        import m.Underlying as Pair
+        isElementOfWitnessForMap[C, Pair](m.value)
+      case IsCollection(coll) =>
+        import coll.Underlying as Elem
+        isElementOfWitness[C, Elem]
+      case IsOption(opt) =>
+        import opt.Underlying as Elem
+        isElementOfWitness[C, Elem]
+      case _ =>
+        abort(
+          s"`.each` is not supported on [${Type.prettyPrint[C]}] — it must be a collection, map or Option, i.e. a type " +
+            "with an IsCollection/IsMap/IsOption provider (the built-ins, or e.g. cats `NonEmpty*` once " +
+            "`kindlings-cats-integration` is on the classpath)."
+        )
+    }
+  }
+
+  // `.each` over a Map traverses to the value type, which lives on the `IsMapOf` (a helper method so the value `Type`
+  // is a regular type parameter rather than a path-dependent member leaking into the quote).
+  private def isElementOfWitnessForMap[C: Type, Pair: Type](isMap: IsMapOf[C, Pair]): Expr[IsElementOf[C]] = {
+    import isMap.Value
+    isElementOfWitness[C, Value]
+  }
+
+  private def isElementOfWitness[C: Type, Elem: Type]: Expr[IsElementOf[C]] =
+    Expr.quote(IsElementOf.witness[C, Elem]).asInstanceOf[Expr[IsElementOf[C]]]
+
   /** `obj.modifyAll(_.a, _.b.each, _.c)` → `PathModify[S, A]`. Parses each path into its own list of [[PathStep]]s,
     * then merges them into a single copy-with-modification function that applies `mod` to EVERY focused leaf.
     * Overlapping field prefixes are shared — `modifyAll(_.a.b, _.a.c)` copies `a` exactly once (quicklens semantics).
@@ -473,7 +511,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     instanceArg.flatMap(unwrapEachWrapper)
   }
 
-  private val EachWrapperNames = Set("EachOps", "AtOps", "SingleAtOps", "EitherOps", "WhenOps", "<init>")
+  // `toEachOps` is the Scala 2 implicit CONVERSION for `.each`/`.eachWhere` (`toEachOps(container)(evidence).each`); its
+  // first value argument is the container. The others are the marker implicit classes (constructor application).
+  private val EachWrapperNames = Set("EachOps", "toEachOps", "AtOps", "SingleAtOps", "EitherOps", "WhenOps", "<init>")
 
   /** Strip the marker implicit-class wrapper (`EachOps`/`AtOps`/... constructor or its `new …` call), yielding the
     * wrapped container expression. If the instance is already the container (no wrapper node survived destructuring,
