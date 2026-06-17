@@ -8,11 +8,11 @@ import sttp.apispec.openapi.OpenAPI
 
 /** Circe-free jsoniter-scala codecs for the sttp-apispec OpenAPI + JSON-Schema model.
   *
-  * The byte-level encoding reproduces `sttp-apispec`'s circe codecs exactly. Two variants are provided, mirroring
-  * sttp-apispec's `circe` / `circe_openapi_3_0_3` entry points:
+  * The byte-level encoding reproduces `sttp-apispec`'s circe codecs exactly, but the entry points are named after the
+  * OpenAPI version they target (no Circe is involved on our side). Two variants are provided:
   *
-  *   - [[circe]] — OpenAPI 3.1 (JSON Schema draft 2020-12 semantics)
-  *   - [[circe_openapi_3_0_3]] — OpenAPI 3.0.3 (the `nullable`, `exclusiveMinimum/Maximum`-as-boolean, `example`,
+  *   - [[openapi_3_1]] — OpenAPI 3.1 (JSON Schema draft 2020-12 semantics)
+  *   - [[openapi_3_0]] — OpenAPI 3.0.3 (the `nullable`, `exclusiveMinimum/Maximum`-as-boolean, `example`,
   *     `enum`-instead-of-`const` translations)
   *
   * Each variant exposes the underlying [[internal.Encoder]] / [[internal.Decoder]] type classes as implicits (so model
@@ -21,19 +21,19 @@ import sttp.apispec.openapi.OpenAPI
 object OpenApiJsoniter {
 
   /** OpenAPI 3.1 codecs (default). */
-  object circe extends internal.OpenApiCodecs {
+  object openapi_3_1 extends internal.OpenApiCodecs {
     override def openApi30: Boolean = false
     override def anyObjectEncoding: AnySchema.Encoding = AnySchema.Encoding.Boolean
   }
 
   /** OpenAPI 3.0.3 codecs. */
-  object circe_openapi_3_0_3 extends internal.OpenApiCodecs {
+  object openapi_3_0 extends internal.OpenApiCodecs {
     override def openApi30: Boolean = true
     override def anyObjectEncoding: AnySchema.Encoding = AnySchema.Encoding.Boolean
   }
 
   /** OpenAPI 3.1 codecs that encode [[AnySchema]] as objects (`{}` / `{"not":{}}`) rather than booleans. */
-  object circeObjectAnySchema extends internal.OpenApiCodecs {
+  object openapi_3_1_objectAny extends internal.OpenApiCodecs {
     override def openApi30: Boolean = false
     override def anyObjectEncoding: AnySchema.Encoding = AnySchema.Encoding.Object
   }
@@ -53,8 +53,8 @@ object OpenApiJsoniter {
 
 package internal {
 
-  /** Bundles the full encoder + decoder set and exposes JSON byte codecs. Mixed into the public `circe` /
-    * `circe_openapi_3_0_3` objects.
+  /** Bundles the full encoder + decoder set and exposes JSON byte codecs. Mixed into the public `openapi_3_1` /
+    * `openapi_3_0` objects.
     */
   trait OpenApiCodecs extends OpenApiEncoders with OpenApiDecoders {
 

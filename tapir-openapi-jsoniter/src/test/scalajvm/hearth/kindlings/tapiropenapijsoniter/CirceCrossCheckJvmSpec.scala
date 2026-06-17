@@ -29,7 +29,7 @@ import scala.io.Source
   */
 final class CirceCrossCheckJvmSpec extends MacroSuite {
 
-  // --- circe variants, mirroring OpenApiJsoniter.{circe, circe_openapi_3_0_3, circeObjectAnySchema} ---
+  // --- circe variants, mirroring OpenApiJsoniter.{openapi_3_1, openapi_3_0, openapi_3_1_objectAny} ---
   private object circe31 extends sttp.apispec.openapi.circe.SttpOpenAPICirceEncoders
   private object circe303 extends sttp.apispec.openapi.circe.SttpOpenAPI3_0_3CirceEncoders {
     override def anyObjectEncoding: AnySchema.Encoding = AnySchema.Encoding.Boolean
@@ -58,7 +58,7 @@ final class CirceCrossCheckJvmSpec extends MacroSuite {
     ast(writeToString(model)(ourCodec)) ==> ast(circeEnc(model).noSpaces)
 
   group("OpenAPI 3.1 fixtures cross-checked against openapi-circe") {
-    val ours = OpenApiJsoniter.circe
+    val ours = OpenApiJsoniter.openapi_3_1
     // Note: fixtures that carry `Any`-typed example/extension values (e.g. /spec/3.1/schema.json's "object with example")
     // are NOT comparable through circe's encoder once decoded by us — our decoder stores them as our `Json` AST, which
     // circe's encoder serialises via its `.toString` fallback. Those models are cross-checked from in-memory native
@@ -76,8 +76,8 @@ final class CirceCrossCheckJvmSpec extends MacroSuite {
     )
   }
 
-  group("OpenAPI 3.0.3 fixtures cross-checked against circe_openapi_3_0_3") {
-    val ours = OpenApiJsoniter.circe_openapi_3_0_3
+  group("OpenAPI 3.0.3 fixtures cross-checked against openapi_3_0") {
+    val ours = OpenApiJsoniter.openapi_3_0
     def check(path: String): Unit = crossCheckModel[OpenAPI](path)(ours.openAPICodec)(circe303.encoderOpenAPI)
     test("callbacks")(check("/callbacks/callbacks.json"))
     test("3.0 schema (in-memory native values)")(
@@ -87,20 +87,20 @@ final class CirceCrossCheckJvmSpec extends MacroSuite {
   }
 
   group("AnySchema object-encoding cross-checked against circe (object encoding)") {
-    val ours = OpenApiJsoniter.circeObjectAnySchema
+    val ours = OpenApiJsoniter.openapi_3_1_objectAny
     def check(path: String): Unit = crossCheckModel[OpenAPI](path)(ours.openAPICodec)(circeObjAny.encoderOpenAPI)
     test("any and nothing (object)")(check("/spec/3.1/any_and_nothing2.json"))
   }
 
   group("Schema fixtures cross-checked against jsonschema-circe") {
-    val ours = OpenApiJsoniter.circe
+    val ours = OpenApiJsoniter.openapi_3_1
     def check(path: String): Unit = crossCheckModel[Schema](path)(ours.schemaCodec)(sttp.apispec.circe.encoderSchema)
     test("self-describing schema")(check("/self-describing-schema.json"))
     test("extending-recursive schema")(check("/extending-recursive.json"))
   }
 
   group("SecurityScheme fixtures cross-checked against circe") {
-    val ours = OpenApiJsoniter.circe
+    val ours = OpenApiJsoniter.openapi_3_1
     def check(path: String): Unit =
       crossCheckModel[SecurityScheme](path)(ours.securitySchemeCodec)(circe31.encoderSecurityScheme)
     test("security scheme with scopes")(check("/securityScheme/security-scheme-with-scopes.json"))
@@ -109,7 +109,7 @@ final class CirceCrossCheckJvmSpec extends MacroSuite {
 
   // --- Hand-built documents exercising encoder branches not covered by the fixtures ---
   group("hand-built documents exercising rarely-used encoder branches (3.1)") {
-    val ours = OpenApiJsoniter.circe
+    val ours = OpenApiJsoniter.openapi_3_1
     val schemaLikeCodec: JsonValueCodec[SchemaLike] = ours.schemaLikeCodec
     def checkSchema(s: SchemaLike): Unit =
       crossCheckValue[SchemaLike](s)(schemaLikeCodec)(sttp.apispec.circe.encoderSchemaLike)
