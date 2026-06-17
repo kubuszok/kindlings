@@ -370,7 +370,7 @@ trait DecoderMacrosImpl
           AvroDecoderHandleAsValueTypeRule,
           AvroDecoderHandleAsOptionRule,
           AvroDecoderHandleAsEitherRule,
-          AvroDecoderHandleAsMapRule,
+          // Map handling is folded into the collection rule (single IsCollection parse, dispatched via `.asMap`).
           AvroDecoderHandleAsCollectionRule,
           AvroDecoderHandleAsNamedTupleRule,
           AvroDecoderHandleAsSingletonRule,

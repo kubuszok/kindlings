@@ -306,7 +306,9 @@ trait EncoderMacrosImpl
           EncoderUseImplicitWhenAvailableRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
-          EncoderHandleAsMapRule,
+          // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
+          // so the standalone EncoderHandleAsMapRule is no longer in the chain (its object is kept for
+          // deriveMapEntries / deriveKeyEncoder).
           EncoderHandleAsCollectionRule,
           EncoderHandleAsNamedTupleRule,
           EncoderHandleAsSingletonRule,

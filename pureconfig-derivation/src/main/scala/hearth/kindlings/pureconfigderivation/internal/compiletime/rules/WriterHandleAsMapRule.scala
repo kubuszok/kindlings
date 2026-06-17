@@ -30,7 +30,8 @@ trait WriterHandleAsMapRuleImpl {
         }
       }
 
-    private def deriveMapEntries[A: WriterCtx, Pair: Type](
+    // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
+    private[rules] def deriveMapEntries[A: WriterCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[ConfigValue]]] = {
       import isMap.{Key, Value}
