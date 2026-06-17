@@ -99,8 +99,7 @@ Built on the same Hearth macro-agnostic API and cross-compiled the same way, but
 | `kindlings-di` | macwire | Compile-time dependency injection — `wire`/`autowire`/`wiredInModule`, no reflection |
 | `kindlings-di-cats` | _(original)_ | Cats-Effect `Resource`/`IO` wiring on top of `kindlings-di` |
 | `kindlings-mock` | ScalaMock | Compile-time mocks (`mock[T]`) with expectations, no reflection or bytecode (test-scope) |
-| `kindlings-optics` | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses |
-| `kindlings-optics-cats` | _(original)_ | `QuicklensFunctor` instances so optics `.each` works on cats `NonEmpty*` collections |
+| `kindlings-optics` | quicklens | `obj.modify(_.a.b)` lenses — nested copy/`.each`/`.at`/`.when`; `.each` works over any `IsCollection`/`IsMap`/`IsOption` container, incl. cats `NonEmpty*` via `kindlings-cats-integration` |
 
 ### Extra
 

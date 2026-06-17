@@ -230,8 +230,7 @@ lazy val aliases = new Aliases(
     diCats,
     mock,
     tapirOpenapiJsoniter,
-    optics,
-    opticsCats
+    optics
   ),
   testOnly = Seq(integrationTests),
   compileOnly = Seq(benchmarks)
@@ -266,7 +265,6 @@ lazy val root = project
   .aggregate(diCats.projectRefs *)
   .aggregate(mock.projectRefs *)
   .aggregate(optics.projectRefs *)
-  .aggregate(opticsCats.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
@@ -347,6 +345,10 @@ lazy val diCats = projectMatrix
 lazy val optics = projectMatrix
   .in(file("optics"))
   .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  // cats-integration is a TEST dependency only: its `IsCollection`/`IsMap` providers are loaded from the classpath by
+  // `loadStandardExtensions`, demonstrating that `.each` lights up over cats `NonEmpty*` purely because the provider
+  // jar is present — no optics-specific cats code (see `CatsEachSpec`).
+  .dependsOn(catsIntegration % Test)
   .disablePlugins(WelcomePlugin)
   .settings(
     moduleName := "kindlings-optics",
@@ -356,21 +358,6 @@ lazy val optics = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
-
-lazy val opticsCats = projectMatrix
-  .in(file("optics-cats"))
-  .someVariations(versions.scalas, versions.platforms)(dev.only1VersionInIDE *)
-  .dependsOn(optics)
-  .disablePlugins(WelcomePlugin)
-  .settings(
-    moduleName := "kindlings-optics-cats",
-    name := "kindlings-optics-cats",
-    description := "QuicklensFunctor instances so kindlings-optics `.each` works over cats non-empty collections"
-  )
-  .settings(settings *)
-  .settings(dependencies *)
-  .settings(publishSettings *)
-  .settings(libraryDependencies += "org.typelevel" %%% "cats-core" % versions.cats)
 
 lazy val mock = projectMatrix
   .in(file("mock"))
@@ -891,7 +878,6 @@ lazy val benchmarks = projectMatrix
     sconfigDerivation,
     tapirSchemaDerivation,
     optics,
-    opticsCats,
     tapirOpenapiJsoniter
   )
   .disablePlugins(WelcomePlugin)

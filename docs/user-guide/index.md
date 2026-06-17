@@ -35,7 +35,6 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     libraryDependencies += "com.kubuszok" %% "kindlings-di-cats" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-mock" % "{{ kindlings_version() }}" % Test
     libraryDependencies += "com.kubuszok" %% "kindlings-optics" % "{{ kindlings_version() }}"
-    libraryDependencies += "com.kubuszok" %% "kindlings-optics-cats" % "{{ kindlings_version() }}"
 
     // extra:
     libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-json" % "{{ kindlings_version() }}"
@@ -70,7 +69,6 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     //> using dep com.kubuszok::kindlings-di-cats:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-mock:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
-    //> using dep com.kubuszok::kindlings-optics-cats:{{ kindlings_version() }}
 
     // extra:
     //> using dep com.kubuszok::kindlings-jsoniter-json:{{ kindlings_version() }}
@@ -244,8 +242,7 @@ Not type-class derivation, but built on the same Hearth macro-agnostic API and c
 | [kindlings-di](di.md) | macwire | Compile-time dependency injection — `wire`/`autowire`/`wiredInModule`, no reflection |
 | [kindlings-di-cats](di-cats.md) | — | Cats-Effect `Resource`/`IO` wiring on top of `kindlings-di` |
 | [kindlings-mock](mock.md) | ScalaMock | Compile-time mocks (`mock[T]`) with expectations, generated without reflection or bytecode |
-| [kindlings-optics](optics.md) | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses |
-| [kindlings-optics-cats](optics.md#cats-non-empty-collections) | — | `QuicklensFunctor` instances so optics `.each` works on cats `NonEmptyList`/`NonEmptyVector`/`NonEmptyChain`/`Chain`/`NonEmptyMap` |
+| [kindlings-optics](optics.md) | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses. `.each` works over any `IsCollection`/`IsMap`/`IsOption` container (built-ins + cats `NonEmpty*` via `kindlings-cats-integration`) |
 
 `kindlings-mock` is test-scope; the rest are cross-compiled for Scala 2.13 and 3 on JVM, Scala.js, and Scala Native.
 
