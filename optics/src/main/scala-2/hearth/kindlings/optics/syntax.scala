@@ -49,12 +49,10 @@ private[optics] trait OpticsSyntax {
 
   implicit def toEachOps[C](c: C)(implicit ev: IsElementOf[C]): EachOps[C, ev.Elem] = new EachOps[C, ev.Elem](c)
 
-  // Marker extensions for the indexed `.at`/`.index`/`.atOrElse` steps over a `Seq` (Int index) or `Map` (key). The
-  // index type `I` and element type `A` are pinned invariantly from the *exact* container `C` via
-  // `IsIndexedElementOf.Aux[C, I, A]`, so the path type-checks past `.at(i): A` with no covariant widening.
-  implicit final class AtOps[C, I, A](@scala.annotation.unused private val c: C)(implicit
-      @scala.annotation.unused ev: IsIndexedElementOf.Aux[C, I, A]
-  ) {
+  // Indexed `.at`/`.index`/`.atOrElse` over a `Seq` (Int index) or `Map` (key). Same conversion trick as `.each`: the
+  // whitebox-materialized `IsIndexedElementOf[C]` carries the index `Idx` and element `Elem`, projected into the ops
+  // type params by `toAtOps` so `.at(i): A` type-checks with no covariant widening.
+  final class AtOps[C, I, A](@scala.annotation.unused private val c: C) {
     @scala.annotation.compileTimeOnly("`.at` is only usable inside a `modify(...)` path")
     def at(@scala.annotation.unused idx: I): A = sys.error("`.at` is only usable inside a `modify(...)` path")
 
@@ -66,11 +64,12 @@ private[optics] trait OpticsSyntax {
       sys.error("`.atOrElse` is only usable inside a `modify(...)` path")
   }
 
-  // Marker extensions for the no-index `.at`/`.index`/`.atOrElse` over an `Option`-like container. Only one of `AtOps`
-  // (indexed, for Seq/Map) and `SingleAtOps` (for Option) ever applies, since their evidences are mutually exclusive.
-  implicit final class SingleAtOps[C, A](@scala.annotation.unused private val c: C)(implicit
-      @scala.annotation.unused ev: IsSingleElementOf.Aux[C, A]
-  ) {
+  implicit def toAtOps[C](c: C)(implicit ev: IsIndexedElementOf[C]): AtOps[C, ev.Idx, ev.Elem] =
+    new AtOps[C, ev.Idx, ev.Elem](c)
+
+  // No-index `.at`/`.index`/`.atOrElse` over an `Option`-like container. Only one of `toAtOps` (Seq/Map) and
+  // `toSingleAtOps` (Option) ever applies, since their evidence macros materialize for disjoint container kinds.
+  final class SingleAtOps[C, A](@scala.annotation.unused private val c: C) {
     @scala.annotation.compileTimeOnly("`.at` is only usable inside a `modify(...)` path")
     def at: A = sys.error("`.at` is only usable inside a `modify(...)` path")
 
@@ -82,17 +81,20 @@ private[optics] trait OpticsSyntax {
       sys.error("`.atOrElse` is only usable inside a `modify(...)` path")
   }
 
-  // Marker extensions for `.eachLeft`/`.eachRight` over an `Either[L, R]`. The branch types are pinned invariantly via
-  // `IsEither.Aux[C, L, R]`.
-  implicit final class EitherOps[C, L, R](@scala.annotation.unused private val c: C)(implicit
-      @scala.annotation.unused ev: IsEither.Aux[C, L, R]
-  ) {
+  implicit def toSingleAtOps[C](c: C)(implicit ev: IsSingleElementOf[C]): SingleAtOps[C, ev.Elem] =
+    new SingleAtOps[C, ev.Elem](c)
+
+  // `.eachLeft`/`.eachRight` over an `Either[L, R]`; branch types projected from the whitebox-materialized `IsEither[C]`.
+  final class EitherOps[C, L, R](@scala.annotation.unused private val c: C) {
     @scala.annotation.compileTimeOnly("`.eachLeft` is only usable inside a `modify(...)` path")
     def eachLeft: L = sys.error("`.eachLeft` is only usable inside a `modify(...)` path")
 
     @scala.annotation.compileTimeOnly("`.eachRight` is only usable inside a `modify(...)` path")
     def eachRight: R = sys.error("`.eachRight` is only usable inside a `modify(...)` path")
   }
+
+  implicit def toEitherOps[C](c: C)(implicit ev: IsEither[C]): EitherOps[C, ev.Left, ev.Right] =
+    new EitherOps[C, ev.Left, ev.Right](c)
 
   // Marker extension for the `.when[Subtype]` prism: narrows the focus `C` to a subtype `T <: C`. The macro emits a
   // non-exhaustive 2-case match (`case t: T => f(t); case other => other`).
