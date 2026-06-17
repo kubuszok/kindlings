@@ -20,12 +20,11 @@ import hearth.fp.syntax.*
   * `kindlings-cats-integration`, java collections, ...). The path lambda is parsed with
   * [[hearth.typed.Exprs.DestructuredExpr.parse]] into an ordered list of [[PathStep]]s.
   *
-  * The indexed steps `.at`/`.index`/`.atOrElse` (Seq/Map/Option) have no Hearth positional SPI (see
-  * `docs/research/hearth-indexed-update-spi-gap.md`), so they stay on the bespoke `QuicklensIndexedFunctor` /
-  * `QuicklensMapAtFunctor` / `QuicklensSingleAtFunctor` runtime type classes summoned by the macro. The
-  * `.when[Subtype]` prism is a non-exhaustive 2-case `value match { case s: Subtype => f(s); case other => other }`
-  * built via [[MatchCase.typeMatch]]. `modifyAll` and lens composition (`modifyLens`/`andThenModify`) build on the same
-  * steps.
+  * The indexed steps `.at`/`.index`/`.atOrElse` are just iterate-and-rebuild at one position/key, so they go through
+  * the SAME SPI: `IsCollection` (positional, with an index counter), `IsMap` (by key), `IsOption` (the single value) —
+  * no positional-update SPI or runtime functor needed. The `.when[Subtype]` prism is a non-exhaustive 2-case
+  * `value match { case s: Subtype => f(s); case other => other }` built via [[MatchCase.typeMatch]]. `modifyAll` and
+  * lens composition (`modifyLens`/`andThenModify`) build on the same steps.
   */
 private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
 
@@ -424,31 +423,22 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
 
   private def exprOf(d: DestructuredExpr): Expr_?? = d.toUntypedExpr.as_??
 
-  /** Decide the [[PathStep.AtShape]] of a container targeted by `.at`/`.index`/`.atOrElse`: a binary `M[K, V]` is a
-    * `Map`; a unary `F[A]` that is an `Option`-like (matched by [[QuicklensSingleAtFunctor]]'s shape) is `Single`;
-    * otherwise a `Seq`-like is `Seq`. We distinguish `Single` from `Seq` by checking the constructor: `Option` summons
-    * a `QuicklensSingleAtFunctor`, everything else a `QuicklensIndexedFunctor`. We probe summonability of the single-at
-    * functor first.
+  /** Decide the [[PathStep.AtShape]] of a container targeted by `.at`/`.index`/`.atOrElse` via the std SPI: an `IsMap`
+    * is a `Map` (by key), an `IsOption` is `Single`, an `IsCollection` is a positional `Seq`. (`IsMap` is checked first
+    * since `Map <: Iterable`.)
     */
   private def atShapeOf(container: ??): PathStep.AtShape = {
     import container.Underlying as C
-    if (isMapContainer(container)) PathStep.AtShape.Map
-    else
-      Type.decompose1[C] match {
-        case Some((fCtor, _)) =>
-          // Prefer the single-at (Option) shape when a `QuicklensSingleAtFunctor[F]` is summonable; otherwise treat it
-          // as an indexed `Seq`-like.
-          if (canSummonSingleAt(fCtor)) PathStep.AtShape.Single else PathStep.AtShape.Seq
-        case None =>
-          abort(s"`modify`: `.at`/`.index`/`.atOrElse` expected a container `F[A]`, but [${Type
-              .prettyPrint[C]}] is not applied")
-      }
-  }
-
-  private def canSummonSingleAt(fCtor: Type.Ctor1[AnyK1]): Boolean = {
-    implicit val singleType: Type[QuicklensSingleAtFunctor[AnyK]] =
-      SingleAtFunctorCtor.apply(using fCtor).asInstanceOf[Type[QuicklensSingleAtFunctor[AnyK]]]
-    Expr.summonImplicit[QuicklensSingleAtFunctor[AnyK]].toOption.isDefined
+    Type[C] match {
+      case IsMap(_)        => PathStep.AtShape.Map
+      case IsOption(_)     => PathStep.AtShape.Single
+      case IsCollection(_) => PathStep.AtShape.Seq
+      case _               =>
+        abort(
+          s"`modify`: `.at`/`.index`/`.atOrElse` is not supported on [${Type.prettyPrint[C]}] — it must be a Seq, Map " +
+            "or Option."
+        )
+    }
   }
 
   /** The focused element type of an `.at`/`.index`/`.atOrElse` over a container of the given [[PathStep.AtShape]]. */
@@ -766,51 +756,205 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
       }
     }
 
-  /** Build the per-element `Any => Any` transformation lambda for a non-field step over `S` whose focused element type
-    * is `Elem`: cast the erased `Any` input to `Elem` in-tree, apply the remaining path, widen the `Elem` result to
-    * `Any`. Shared by `.each`/`.at`/`.eachLeft`/`.eachRight` (each delegates to a runtime helper expecting an erased
-    * `Any => Any`). The leaf transform re-types `transformLeaf` (over `S`) at the structurally-coincident `Elem`.
-    */
-  private def elementLambdaFor[S: Type, Elem: Type](label: String, rest: List[PathStep])(
-      transformLeaf: Expr[S] => Expr[S]
-  ): Expr[Any => Any] = {
-    implicit val anyType: Type[Any] = Type.of[Any]
-    LambdaBuilder
-      .of1[Any](label)
-      .buildWith { (anyA: Expr[Any]) =>
-        val a = castInTree[Elem](anyA)
-        val rebuilt: Expr[Elem] =
-          buildModify[Elem](a, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Elem]])
-        rebuilt.asInstanceOf[Expr[Any]]
-      }
-  }
-
   /** Emit a `.at(i)` / `.index(i)` / `.atOrElse(i, default)` (Seq/Map) or `.at` / `.index` / `.atOrElse(default)`
     * (Option) step over `sExpr: S` (where `S` IS the container). Summon the relevant indexed functor, build the element
     * lambda for `rest`, and call the matching runtime helper, threading the index/default through as erased `Any`s.
     */
+  /** Emit a `.at(i)` / `.index(i)` / `.atOrElse(i, default)` step. Indexed access is just iterate-and-rebuild applied
+    * at one position/key, so it goes through the same SPI as `.each`: `IsCollection` (positional, with an index
+    * counter), `IsMap` (by key), `IsOption` (the single value). No positional-update SPI or bespoke functor is needed.
+    */
   private def buildAtStep[S: Type](sExpr: Expr[S], at: PathStep.At, rest: List[PathStep])(
       transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] = {
-    import at.elem.Underlying as Elem
-    val f = elementLambdaFor[S, Elem]("at$elem", rest)(transformLeaf)
-    val functor = summonAtFunctor[S](at)
-    def idx: Expr[Any] =
-      at.idx.map(eraseToAny).getOrElse(abort(s"`modify`: `.${at.kind}` is missing its index argument"))
-    def default: Expr[Any] =
-      at.default.map(eraseToAny).getOrElse(abort(s"`modify`: `.atOrElse` is missing its default argument"))
-    import PathStep.{AtKind, AtShape}
-    (at.shape, at.kind) match {
-      case (AtShape.Seq, AtKind.At)          => atIndexedRT[S](functor, sExpr, idx, f)
-      case (AtShape.Seq, AtKind.Index)       => indexIndexedRT[S](functor, sExpr, idx, f)
-      case (AtShape.Seq, AtKind.AtOrElse)    => atOrElseIndexedRT[S](functor, sExpr, idx, default, f)
-      case (AtShape.Map, AtKind.At)          => atMapRT[S](functor, sExpr, idx, f)
-      case (AtShape.Map, AtKind.Index)       => indexMapRT[S](functor, sExpr, idx, f)
-      case (AtShape.Map, AtKind.AtOrElse)    => atOrElseMapRT[S](functor, sExpr, idx, default, f)
-      case (AtShape.Single, AtKind.At)       => atSingleRT[S](functor, sExpr, f)
-      case (AtShape.Single, AtKind.Index)    => indexSingleRT[S](functor, sExpr, f)
-      case (AtShape.Single, AtKind.AtOrElse) => atOrElseSingleRT[S](functor, sExpr, default, f)
+  ): Expr[S] =
+    Type[S] match {
+      case IsMap(m) =>
+        import m.Underlying as Pair
+        buildAtMap[S, Pair](sExpr, m.value, at, rest)(transformLeaf)
+      case IsOption(o) =>
+        import o.Underlying as Inner
+        buildAtOption[S, Inner](sExpr, o.value, at, rest)(transformLeaf)
+      case IsCollection(c) =>
+        import c.Underlying as Item
+        buildAtSeq[S, Item](sExpr, c.value, at, rest)(transformLeaf)
+      case _ =>
+        abort(
+          s"`modify`: `.at`/`.index`/`.atOrElse` is not supported on [${Type.prettyPrint[S]}] — it must be a Seq " +
+            "(positional), a Map (by key) or an Option."
+        )
     }
+
+  /** `.at(i)` / `.index(i)` / `.atOrElse(i, default)` over a `Seq` via `IsCollection`: iterate with an index counter,
+    * transform the element at `i`, and rebuild. `.at` throws if `i` is out of range; `.index` is a no-op if absent;
+    * `.atOrElse` appends `f(default)` when `i` is exactly one past the end.
+    */
+  private def buildAtSeq[S: Type, Item: Type](
+      sExpr: Expr[S],
+      isColl: IsCollectionOf[S, Item],
+      at: PathStep.At,
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import isColl.CtorResult
+    import PathStep.AtKind
+    val factoryExpr = isColl.factory
+    val srcIterable = isColl.asIterable(sExpr)
+    val idxExpr = at.idx
+      .getOrElse(abort("`modify`: `.at`/`.index`/`.atOrElse` over a Seq needs an index"))
+      .value
+      .asInstanceOf[Expr[Int]]
+    def tx(itemExpr: Expr[Item]): Expr[Item] = transformElementExpr[S, Item](itemExpr, rest, None)(transformLeaf)
+    val builderExpr: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = at.kind match {
+      case AtKind.Index =>
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val target = Expr.splice(idxExpr)
+          val it = Expr.splice(srcIterable).iterator
+          var i = 0
+          while (it.hasNext) {
+            val x: Item = it.next()
+            val _ = builder += (if (i == target) Expr.splice(tx(Expr.quote(x))) else x)
+            i += 1
+          }
+          builder
+        }
+      case AtKind.At =>
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val target = Expr.splice(idxExpr)
+          val it = Expr.splice(srcIterable).iterator
+          var i = 0
+          var found = false
+          while (it.hasNext) {
+            val x: Item = it.next()
+            if (i == target) { found = true; val _ = builder += Expr.splice(tx(Expr.quote(x))) }
+            else { val _ = builder += x }
+            i += 1
+          }
+          if (!found) throw new NoSuchElementException("Index " + target + " not found")
+          builder
+        }
+      case AtKind.AtOrElse =>
+        val defaultExpr =
+          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Item]]
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val target = Expr.splice(idxExpr)
+          val it = Expr.splice(srcIterable).iterator
+          var i = 0
+          var found = false
+          while (it.hasNext) {
+            val x: Item = it.next()
+            if (i == target) { found = true; val _ = builder += Expr.splice(tx(Expr.quote(x))) }
+            else { val _ = builder += x }
+            i += 1
+          }
+          if (!found) {
+            if (target == i) { val _ = builder += Expr.splice(tx(defaultExpr)) }
+            else throw new IndexOutOfBoundsException("Index " + target + " out of range for atOrElse")
+          }
+          builder
+        }
+    }
+    fromCtorResult[S, Item, CtorResult](isColl.build, builderExpr)
+  }
+
+  /** `.at(key)` / `.index(key)` / `.atOrElse(key, default)` over a `Map` via `IsMap`: iterate entries, transform the
+    * value whose key matches, and rebuild. `.at` throws if absent; `.index` is a no-op; `.atOrElse` inserts `(key,
+    * f(default))`.
+    */
+  private def buildAtMap[S: Type, Pair: Type](
+      sExpr: Expr[S],
+      isMap: IsMapOf[S, Pair],
+      at: PathStep.At,
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import isMap.{Key, Value, CtorResult}
+    import PathStep.AtKind
+    val factoryExpr = isMap.factory
+    val srcIterable = isMap.asIterable(sExpr)
+    val keyExpr = at.idx
+      .getOrElse(abort("`modify`: `.at`/`.index`/`.atOrElse` over a Map needs a key"))
+      .value
+      .asInstanceOf[Expr[Key]]
+    def entry(pExpr: Expr[Pair]): Expr[Pair] =
+      isMap.pair(isMap.key(pExpr), transformElementExpr[S, Value](isMap.value(pExpr), rest, None)(transformLeaf))
+    val builderExpr: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = at.kind match {
+      case AtKind.Index =>
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val key = Expr.splice(keyExpr)
+          val it = Expr.splice(srcIterable).iterator
+          while (it.hasNext) {
+            val p: Pair = it.next()
+            val _ = builder += (if (Expr.splice(isMap.key(Expr.quote(p))) == key) Expr.splice(entry(Expr.quote(p)))
+                                else p)
+          }
+          builder
+        }
+      case AtKind.At =>
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val key = Expr.splice(keyExpr)
+          val it = Expr.splice(srcIterable).iterator
+          var found = false
+          while (it.hasNext) {
+            val p: Pair = it.next()
+            if (Expr.splice(isMap.key(Expr.quote(p))) == key) {
+              found = true; val _ = builder += Expr.splice(entry(Expr.quote(p)))
+            } else { val _ = builder += p }
+          }
+          if (!found) throw new NoSuchElementException("key not found: " + key)
+          builder
+        }
+      case AtKind.AtOrElse =>
+        val defaultExpr =
+          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Value]]
+        val newEntry = isMap.pair(keyExpr, transformElementExpr[S, Value](defaultExpr, rest, None)(transformLeaf))
+        Expr.quote {
+          val builder = Expr.splice(factoryExpr).newBuilder
+          val key = Expr.splice(keyExpr)
+          val it = Expr.splice(srcIterable).iterator
+          var found = false
+          while (it.hasNext) {
+            val p: Pair = it.next()
+            if (Expr.splice(isMap.key(Expr.quote(p))) == key) {
+              found = true; val _ = builder += Expr.splice(entry(Expr.quote(p)))
+            } else { val _ = builder += p }
+          }
+          if (!found) { val _ = builder += Expr.splice(newEntry) }
+          builder
+        }
+    }
+    fromCtorResult[S, Pair, CtorResult](isMap.build, builderExpr)
+  }
+
+  /** `.at` / `.index` / `.atOrElse(default)` over an `Option` via `IsOption`: transform the contained value. `.at`
+    * throws on `None`; `.index` is a no-op on `None`; `.atOrElse` transforms the value or the default.
+    */
+  private def buildAtOption[S: Type, Inner: Type](
+      sExpr: Expr[S],
+      isOpt: IsOptionOf[S, Inner],
+      at: PathStep.At,
+      rest: List[PathStep]
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import PathStep.AtKind
+    def tx(v: Expr[Inner]): Expr[Inner] = transformElementExpr[S, Inner](v, rest, None)(transformLeaf)
+    at.kind match {
+      case AtKind.Index =>
+        isOpt.fold[S](sExpr)(isOpt.empty, (v: Expr[Inner]) => isOpt.of(tx(v)))
+      case AtKind.At =>
+        isOpt.fold[S](sExpr)(throwAsS[S]("None.at"), (v: Expr[Inner]) => isOpt.of(tx(v)))
+      case AtKind.AtOrElse =>
+        val defaultExpr =
+          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Inner]]
+        isOpt.of(tx(isOpt.getOrElse(sExpr)(defaultExpr)))
+    }
+  }
+
+  /** A `throw new NoSuchElementException(msg)` expression ascribed to `S` (for the `None`-branch of Option `.at`). */
+  private def throwAsS[S: Type](msg: String): Expr[S] = {
+    val m = Expr(msg)
+    Expr.quote(throw new NoSuchElementException(Expr.splice(m))).asInstanceOf[Expr[S]]
   }
 
   /** Emit a `.eachLeft` / `.eachRight` step over `sExpr: S` (an `Either[L, R]`) via Hearth's `IsEither` SPI: fold the
@@ -868,181 +1012,6 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     */
   private def whenUpcast[Sub: Type, S: Type](e: Expr[Sub]): Expr[S] =
     Expr.quote(Expr.splice(e).asInstanceOf[S])
-
-  /** Erase a value-argument expression to `Expr[Any]` in-tree (so it conforms to the erased runtime-helper `Any`
-    * parameter). The underlying tree keeps its precise type, which conforms since everything `<: Any`.
-    */
-  private def eraseToAny(e: Expr_??): Expr[Any] = e.value.asInstanceOf[Expr[Any]]
-
-  /** A real, in-tree `.asInstanceOf[T]` cast (a genuine cast node typed `T`), as opposed to a macro-side `Expr`
-    * reinterpretation which would leave the tree's underlying type unchanged.
-    */
-  private def castInTree[T: Type](e: Expr[Any]): Expr[T] =
-    Expr.quote(Expr.splice(e).asInstanceOf[T])
-
-  // --- Runtime-helper calls for `.at`/`.index`/`.atOrElse`. Each splices the erased functor, the container
-  // (widened to `Any` in-tree), the index/default (already erased `Any`), and the element lambda, then casts the `Any`
-  // result back to `S` in-tree (a real `.asInstanceOf[S]` node, so the emitted tree is genuinely typed `S`).
-
-  private def atIndexedRT[S: Type](functor: Expr[Any], s: Expr[S], idx: Expr[Any], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atIndexed(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(idx), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def indexIndexedRT[S: Type](functor: Expr[Any], s: Expr[S], idx: Expr[Any], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .indexIndexed(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(idx), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def atOrElseIndexedRT[S: Type](
-      functor: Expr[Any],
-      s: Expr[S],
-      idx: Expr[Any],
-      default: Expr[Any],
-      f: Expr[Any => Any]
-  ): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atOrElseIndexed(
-          Expr.splice(functor),
-          Expr.splice(s.asInstanceOf[Expr[Any]]),
-          Expr.splice(idx),
-          Expr.splice(default),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  private def atMapRT[S: Type](functor: Expr[Any], s: Expr[S], key: Expr[Any], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atMap(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(key), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def indexMapRT[S: Type](functor: Expr[Any], s: Expr[S], key: Expr[Any], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .indexMap(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(key), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def atOrElseMapRT[S: Type](
-      functor: Expr[Any],
-      s: Expr[S],
-      key: Expr[Any],
-      default: Expr[Any],
-      f: Expr[Any => Any]
-  ): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atOrElseMap(
-          Expr.splice(functor),
-          Expr.splice(s.asInstanceOf[Expr[Any]]),
-          Expr.splice(key),
-          Expr.splice(default),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  private def atSingleRT[S: Type](functor: Expr[Any], s: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atSingle(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def indexSingleRT[S: Type](functor: Expr[Any], s: Expr[S], f: Expr[Any => Any]): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .indexSingle(Expr.splice(functor), Expr.splice(s.asInstanceOf[Expr[Any]]), Expr.splice(f))
-        .asInstanceOf[S]
-    }
-
-  private def atOrElseSingleRT[S: Type](
-      functor: Expr[Any],
-      s: Expr[S],
-      default: Expr[Any],
-      f: Expr[Any => Any]
-  ): Expr[S] =
-    Expr.quote {
-      QuicklensRuntime
-        .atOrElseSingle(
-          Expr.splice(functor),
-          Expr.splice(s.asInstanceOf[Expr[Any]]),
-          Expr.splice(default),
-          Expr.splice(f)
-        )
-        .asInstanceOf[S]
-    }
-
-  /** Phantom unary constructor label for summoning a functor whose constructor was discovered at runtime. */
-  private type AnyK[X] = Any
-
-  private lazy val IndexedFunctorCtor: Type.CtorK1[IntKeyedIndexedFunctor] =
-    Type.CtorK1.of[IntKeyedIndexedFunctor]
-  private lazy val MapAtFunctorCtor: Type.Ctor1[QuicklensMapAtFunctor.ForMap] =
-    Type.Ctor1.of[QuicklensMapAtFunctor.ForMap]
-  private lazy val SingleAtFunctorCtor: Type.CtorK1[QuicklensSingleAtFunctor] =
-    Type.CtorK1.of[QuicklensSingleAtFunctor]
-
-  /** A `* -> *` projection of [[QuicklensIndexedFunctor]] with the index pinned to `Int` (the `Seq`-like shape). The
-    * macro discovers the container constructor `F` and summons `QuicklensIndexedFunctor[F, Int]` by building
-    * `Type[IntKeyedIndexedFunctor[F]]` via `Type.CtorK1#apply`.
-    */
-  private type IntKeyedIndexedFunctor[F[_]] = QuicklensIndexedFunctor[F, Int]
-
-  /** Summon the indexed functor for a `.at`/`.index`/`.atOrElse` step, erased to `Expr[Any]`: a
-    * `QuicklensIndexedFunctor[F, Int]` for the `Seq` shape, a `QuicklensMapAtFunctor[Map, K]` for the `Map` shape, or a
-    * `QuicklensSingleAtFunctor[F]` for the `Single` (Option) shape — mirroring `summonFunctor`.
-    */
-  private def summonAtFunctor[S: Type](at: PathStep.At): Expr[Any] = {
-    import at.container.Underlying as C
-    at.shape match {
-      case PathStep.AtShape.Map =>
-        Type.decompose2[C] match {
-          case Some((_, (keyTpe, _))) =>
-            import keyTpe.Underlying as K
-            implicit val mapAtType: Type[QuicklensMapAtFunctor.ForMap[K]] = MapAtFunctorCtor.apply[K]
-            Expr.summonImplicit[QuicklensMapAtFunctor.ForMap[K]].toOption match {
-              case Some(f) => f.asInstanceOf[Expr[Any]]
-              case None    =>
-                abort(s"`modify`: no `QuicklensMapAtFunctor` for [${Type.prettyPrint[C]}] is in scope")
-            }
-          case None =>
-            abort(s"`modify`: `.at` over a map expected `M[K, V]`, but [${Type.prettyPrint[C]}] is not one")
-        }
-      case PathStep.AtShape.Single =>
-        Type.decompose1[C] match {
-          case Some((fCtor, _)) =>
-            implicit val singleType: Type[QuicklensSingleAtFunctor[AnyK]] =
-              SingleAtFunctorCtor.apply(using fCtor).asInstanceOf[Type[QuicklensSingleAtFunctor[AnyK]]]
-            Expr.summonImplicit[QuicklensSingleAtFunctor[AnyK]].toOption match {
-              case Some(f) => f.asInstanceOf[Expr[Any]]
-              case None    => abort(s"`modify`: no `QuicklensSingleAtFunctor` for [${Type.prettyPrint[C]}] is in scope")
-            }
-          case None =>
-            abort(s"`modify`: `.at` expected a container `F[A]`, but [${Type.prettyPrint[C]}] is not applied")
-        }
-      case PathStep.AtShape.Seq =>
-        Type.decompose1[C] match {
-          case Some((fCtor, _)) =>
-            implicit val indexedType: Type[IntKeyedIndexedFunctor[AnyK]] =
-              IndexedFunctorCtor.apply(using fCtor).asInstanceOf[Type[IntKeyedIndexedFunctor[AnyK]]]
-            Expr.summonImplicit[IntKeyedIndexedFunctor[AnyK]].toOption match {
-              case Some(f) => f.asInstanceOf[Expr[Any]]
-              case None    => abort(s"`modify`: no `QuicklensIndexedFunctor` for [${Type.prettyPrint[C]}] is in scope")
-            }
-          case None =>
-            abort(s"`modify`: `.at` expected a container `F[A]`, but [${Type.prettyPrint[C]}] is not applied")
-        }
-    }
-  }
 
   /** Recurse into a focused field expression carrying its existential type, so the path-dependent `Underlying` never
     * leaks into an `Expr.quote` (the di/mock Scala 2 pitfall). The `transformLeaf` is over `S`, but at the leaf the

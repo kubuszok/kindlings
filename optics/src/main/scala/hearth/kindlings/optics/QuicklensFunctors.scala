@@ -1,138 +1,9 @@
 package hearth.kindlings.optics
 
-// `.each` / `.eachWhere` (collections, map values, Option) and `.eachLeft` / `.eachRight` (Either) are handled by the
-// `modify` macro directly through Hearth's `IsCollection` / `IsMap` / `IsOption` / `IsEither` SPI — no runtime functor
-// type class. What remains here are (a) the runtime type classes for the indexed `.at` / `.index` / `.atOrElse` steps
-// (for which Hearth has no positional-update SPI, so they stay bespoke — see docs/research) and (b) the invariant
-// compile-time marker evidences that let the path lambda type-check.
-
-/** Runtime type class for the indexed `.at` / `.index` / `.atOrElse` steps over a container `F[T]` keyed by `I` (a
-  * `Seq` keyed by `Int`, or a `Map[K, V]` keyed by `K`).
-  *
-  *   - [[at]] transforms the element at `i`, throwing if it is absent;
-  *   - [[index]] transforms the element at `i` if present, leaving the container unchanged otherwise;
-  *   - [[atOrElse]] transforms the element at `i`, inserting `default` first if it is absent.
-  *
-  * Mirrors SoftwareMill quicklens' `QuicklensIndexedFunctor`.
-  */
-trait QuicklensIndexedFunctor[F[_], I] {
-  def at[A](fa: F[A], idx: I)(f: A => A): F[A]
-  def atOrElse[A](fa: F[A], idx: I, default: => A)(f: A => A): F[A]
-  def index[A](fa: F[A], idx: I)(f: A => A): F[A]
-}
-
-object QuicklensIndexedFunctor {
-
-  /** `Seq`-like containers indexed by `Int` (covers `List`/`Vector`/`Seq`). The runtime helper always rebuilds via the
-    * generic `Seq` API, so a single given for `Seq` serves all of them on the JVM (the concrete subtype is preserved by
-    * the underlying collection's `updated`).
-    */
-  // Bounded on `scala.collection.SeqOps` so the rebuild uses the collection's own `updated`/`appended`, which preserve
-  // the concrete type (`List.updated` returns a `List`, `Vector.updated` a `Vector`, ...) — rebuilding via a generic
-  // `Vector` would break the macro's `.asInstanceOf[F[A]]` cast on the focused field's declared type.
-  implicit def seqIndexedFunctor[F[X] <: scala.collection.immutable.Seq[X] & scala.collection.SeqOps[X, F, F[X]]]
-      : QuicklensIndexedFunctor[F, Int] =
-    new QuicklensIndexedFunctor[F, Int] {
-      def at[A](fa: F[A], idx: Int)(f: A => A): F[A] =
-        if (idx >= 0 && idx < fa.length) fa.updated(idx, f(fa(idx)))
-        else throw new NoSuchElementException(s"Index $idx not found")
-      def atOrElse[A](fa: F[A], idx: Int, default: => A)(f: A => A): F[A] =
-        if (idx >= 0 && idx < fa.length) fa.updated(idx, f(fa(idx)))
-        else if (idx == fa.length) fa.appended(f(default)) // absent index just past the end: insert the default
-        else throw new IndexOutOfBoundsException(s"Index $idx out of range for atOrElse")
-      def index[A](fa: F[A], idx: Int)(f: A => A): F[A] =
-        if (idx >= 0 && idx < fa.length) fa.updated(idx, f(fa(idx))) else fa
-    }
-}
-
-/** Runtime type class for the indexed `.at` / `.index` / `.atOrElse` steps over the *values* of a map-like container
-  * `M[K, _]`, keyed by `K`. Mirrors quicklens' map-keyed indexing.
-  */
-trait QuicklensMapAtFunctor[M[_, _], K] {
-  def at[A](fa: M[K, A], key: K)(f: A => A): M[K, A]
-  def atOrElse[A](fa: M[K, A], key: K, default: => A)(f: A => A): M[K, A]
-  def index[A](fa: M[K, A], key: K)(f: A => A): M[K, A]
-}
-
-object QuicklensMapAtFunctor {
-
-  implicit def mapAtFunctor[K]: QuicklensMapAtFunctor[Map, K] = new QuicklensMapAtFunctor[Map, K] {
-    def at[A](fa: Map[K, A], key: K)(f: A => A): Map[K, A] =
-      fa.updated(key, f(fa.getOrElse(key, throw new NoSuchElementException(s"key not found: $key"))))
-    def atOrElse[A](fa: Map[K, A], key: K, default: => A)(f: A => A): Map[K, A] =
-      fa.updated(key, f(fa.getOrElse(key, default)))
-    def index[A](fa: Map[K, A], key: K)(f: A => A): Map[K, A] =
-      fa.get(key).fold(fa)(a => fa.updated(key, f(a)))
-  }
-
-  /** Unary projection for a fixed key `K`, so the macro can summon `QuicklensMapAtFunctor[Map, K]` via Hearth's unary
-    * `Type.Ctor1` (there is no `* -> (*,*) -> *` constructor primitive). The binary slot is pinned to `Map`.
-    */
-  type ForMap[K] = QuicklensMapAtFunctor[Map, K]
-}
-
-/** Runtime type class for the single-element `.at` / `.index` / `.atOrElse` steps over an `Option`-like container
-  * `F[_]`. Mirrors quicklens' `QuicklensSingleAtFunctor`.
-  *
-  *   - [[at]] transforms the contained element, throwing if it is absent;
-  *   - [[index]] transforms it if present, leaving the container unchanged otherwise;
-  *   - [[atOrElse]] transforms it, inserting `default` first if it is absent.
-  */
-trait QuicklensSingleAtFunctor[F[_]] {
-  def at[A](fa: F[A])(f: A => A): F[A]
-  def atOrElse[A](fa: F[A], default: => A)(f: A => A): F[A]
-  def index[A](fa: F[A])(f: A => A): F[A]
-}
-
-object QuicklensSingleAtFunctor {
-
-  implicit val optionSingleAtFunctor: QuicklensSingleAtFunctor[Option] = new QuicklensSingleAtFunctor[Option] {
-    def at[A](fa: Option[A])(f: A => A): Option[A] =
-      Some(f(fa.getOrElse(throw new NoSuchElementException("None.at"))))
-    def atOrElse[A](fa: Option[A], default: => A)(f: A => A): Option[A] = Some(f(fa.getOrElse(default)))
-    def index[A](fa: Option[A])(f: A => A): Option[A] = fa.map(f)
-  }
-}
-
-/** Runtime entry points the indexed `.at` / `.index` / `.atOrElse` macro codegen calls into. The macro summons the
-  * relevant indexed functor (erased to `Any` at the call site, since the discovered constructor is not statically
-  * known) and forwards the container, index/key and per-element function here, where the casts are concentrated. Safe
-  * because the macro only ever pairs a functor with a container of the matching constructor.
-  */
-object QuicklensRuntime {
-
-  // The element/value type `A` is erased to `Any`; `F`/`M` are erased on the JVM, so summoning an indexed functor and
-  // calling it through `Id`/`MapId` is sound — the underlying operations run on the real runtime container.
-  private type Id[X] = X
-  private type MapId[K, V] = V
-
-  // --- Indexed `.at` / `.index` / `.atOrElse` over a `Seq`-like container (keyed by `Int`). ---
-
-  def atIndexed(functor: Any, fa: Any, idx: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensIndexedFunctor[Id, Any]].at[Any](fa, idx)(f)
-  def atOrElseIndexed(functor: Any, fa: Any, idx: Any, default: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensIndexedFunctor[Id, Any]].atOrElse[Any](fa, idx, default)(f)
-  def indexIndexed(functor: Any, fa: Any, idx: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensIndexedFunctor[Id, Any]].index[Any](fa, idx)(f)
-
-  // --- Indexed `.at` / `.index` / `.atOrElse` over the values of a map-like container (keyed by `K`). ---
-
-  def atMap(functor: Any, fa: Any, key: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensMapAtFunctor[MapId, Any]].at[Any](fa, key)(f)
-  def atOrElseMap(functor: Any, fa: Any, key: Any, default: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensMapAtFunctor[MapId, Any]].atOrElse[Any](fa, key, default)(f)
-  def indexMap(functor: Any, fa: Any, key: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensMapAtFunctor[MapId, Any]].index[Any](fa, key)(f)
-
-  // --- Single-element `.at` / `.index` / `.atOrElse` over an `Option`-like container. ---
-
-  def atSingle(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensSingleAtFunctor[Id]].at[Any](fa)(f)
-  def atOrElseSingle(functor: Any, fa: Any, default: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensSingleAtFunctor[Id]].atOrElse[Any](fa, default)(f)
-  def indexSingle(functor: Any, fa: Any, f: Any => Any): Any =
-    functor.asInstanceOf[QuicklensSingleAtFunctor[Id]].index[Any](fa)(f)
-}
+// ALL traversal/indexed steps (`.each`/`.eachWhere`, `.at`/`.index`/`.atOrElse`, `.eachLeft`/`.eachRight`) are handled
+// by the `modify` macro directly through Hearth's `IsCollection`/`IsMap`/`IsOption`/`IsEither` SPI — there are NO runtime
+// functor type classes. What remains here are only the invariant compile-time marker evidences that let the path lambda
+// type-check (the macro decides real support and does the rebuild).
 
 /** Compile-time evidence that lets `_.xs.each` type-check, pinning the traversed element type as the member `Elem`
   * (invariantly, so it cannot be widened). This is ONLY a typer gate: whether `C` is actually traversable — and the
@@ -186,10 +57,8 @@ object IsIndexedElementOf {
   // Map values, keyed by the key type `K`.
   implicit def map[K, V]: Aux[Map[K, V], K, V] = of
 
-  // Any `Seq`-like `F[A]` with a `QuicklensIndexedFunctor[F, Int]` in scope, keyed by `Int`.
-  implicit def fromIndexed[F[_], A](implicit
-      @scala.annotation.unused F: QuicklensIndexedFunctor[F, Int]
-  ): Aux[F[A], Int, A] = of
+  // Any immutable `Seq`-like `F[A]`, keyed by `Int`. The macro rebuilds positionally via `IsCollection`.
+  implicit def seq[F[X] <: scala.collection.immutable.Seq[X], A]: Aux[F[A], Int, A] = of
 }
 
 /** Evidence that `C` is a single-element container `F[A]` (an `Option`-like) whose contained element is `Elem`, fixed
@@ -203,9 +72,8 @@ object IsSingleElementOf {
   private val instance: IsSingleElementOf[Any] = new IsSingleElementOf[Any] { type Elem = Any }
   private def of[C, A]: Aux[C, A] = instance.asInstanceOf[Aux[C, A]]
 
-  implicit def fromSingleAt[F[_], A](implicit
-      @scala.annotation.unused F: QuicklensSingleAtFunctor[F]
-  ): Aux[F[A], A] = of
+  // `Option` only; the macro handles it via `IsOption`.
+  implicit def option[A]: Aux[Option[A], A] = of
 }
 
 /** Evidence that `C` is an `Either[L, R]` whose left branch is `Left` and right branch is `Right`, both fixed
