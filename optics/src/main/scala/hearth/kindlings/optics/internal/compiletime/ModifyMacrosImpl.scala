@@ -7,6 +7,10 @@ import hearth.fp.Id
 import hearth.fp.data.NonEmptyVector
 import hearth.fp.instances.*
 import hearth.fp.syntax.*
+// The Hearth std SPI mixes in an `IsEither` extractor that shadows the optics `IsEither` evidence trait inside this
+// trait's scope; alias the optics one so `deriveIsEither` can name both (the SPI `IsEither` as the `case` extractor,
+// `OpticsEither` for the evidence type/`witness`).
+import _root_.hearth.kindlings.optics.IsEither as OpticsEither
 
 /** Shared, macro-platform-agnostic implementation of the `modify` optics macro.
   *
@@ -157,6 +161,75 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
 
   private def isElementOfWitness[C: Type, Elem: Type]: Expr[IsElementOf[C]] =
     Expr.quote(IsElementOf.witness[C, Elem]).asInstanceOf[Expr[IsElementOf[C]]]
+
+  /** Materialize the `.eachLeft`/`.eachRight` evidence `IsEither.Aux[C, L, R]` from the `IsEither` SPI (the branch
+    * types). Whitebox (Scala 2) / transparent inline (Scala 3), like [[deriveIsElementOf]].
+    */
+  def deriveIsEither[C: Type]: Expr[OpticsEither[C]] = {
+    ensureStdExtensionsLoaded()
+    Type[C] match {
+      case IsEither(e) =>
+        import e.{LeftValue, RightValue}
+        // NB: reference the optics `IsEither` by its FULL path inside the quote — the local `OpticsEither` alias is only
+        // an import rename, so emitting it into the generated tree would produce an unresolvable `OpticsEither` symbol.
+        Expr
+          .quote(_root_.hearth.kindlings.optics.IsEither.witness[C, LeftValue, RightValue])
+          .asInstanceOf[Expr[OpticsEither[C]]]
+      case _ =>
+        abort(
+          s"`modify`: `.eachLeft`/`.eachRight` is only supported on `Either`, but [${Type.prettyPrint[C]}] is not one."
+        )
+    }
+  }
+
+  /** Materialize the no-index `.at`/`.index`/`.atOrElse` (Option) evidence `IsSingleElementOf.Aux[C, Elem]` from the
+    * `IsOption` SPI.
+    */
+  def deriveIsSingleElementOf[C: Type]: Expr[IsSingleElementOf[C]] = {
+    ensureStdExtensionsLoaded()
+    Type[C] match {
+      case IsOption(o) =>
+        import o.Underlying as Inner
+        Expr.quote(IsSingleElementOf.witness[C, Inner]).asInstanceOf[Expr[IsSingleElementOf[C]]]
+      case _ =>
+        abort(
+          s"`modify`: the no-index `.at`/`.index`/`.atOrElse` is only supported on `Option`, but [${Type
+              .prettyPrint[C]}] is not one."
+        )
+    }
+  }
+
+  /** Materialize the indexed `.at`/`.index`/`.atOrElse` evidence `IsIndexedElementOf.Aux[C, Idx, Elem]` from the SPI: a
+    * `Map` is keyed by its key type (`IsMap`), a `Seq` is positional (`Int`, element from `IsCollection`). Restricted
+    * to `immutable.Seq` so positional `.at` is not offered on unordered collections (e.g. `Set`).
+    */
+  def deriveIsIndexedElementOf[C: Type]: Expr[IsIndexedElementOf[C]] = {
+    ensureStdExtensionsLoaded()
+    Type[C] match {
+      case IsMap(m) =>
+        import m.Underlying as Pair
+        isIndexedWitnessForMap[C, Pair](m.value)
+      case IsCollection(coll) if isImmutableSeq[C] =>
+        import coll.Underlying as Item
+        Expr.quote(IsIndexedElementOf.witness[C, Int, Item]).asInstanceOf[Expr[IsIndexedElementOf[C]]]
+      case _ =>
+        abort(
+          s"`modify`: `.at`/`.index`/`.atOrElse` works on a `Seq` (by `Int`) or a `Map` (by key), but [${Type
+              .prettyPrint[C]}] is neither."
+        )
+    }
+  }
+
+  // For a Map, the index is the key type and the element is the value type (both off the `IsMapOf`).
+  private def isIndexedWitnessForMap[C: Type, Pair: Type](isMap: IsMapOf[C, Pair]): Expr[IsIndexedElementOf[C]] = {
+    import isMap.{Key, Value}
+    Expr.quote(IsIndexedElementOf.witness[C, Key, Value]).asInstanceOf[Expr[IsIndexedElementOf[C]]]
+  }
+
+  private def isImmutableSeq[C: Type]: Boolean = {
+    implicit val seqAny: Type[scala.collection.immutable.Seq[Any]] = Type.of[scala.collection.immutable.Seq[Any]]
+    Type.isSubtypeOf[C, scala.collection.immutable.Seq[Any]]
+  }
 
   /** `obj.modifyAll(_.a, _.b.each, _.c)` → `PathModify[S, A]`. Parses each path into its own list of [[PathStep]]s,
     * then merges them into a single copy-with-modification function that applies `mod` to EVERY focused leaf.
@@ -511,9 +584,21 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     instanceArg.flatMap(unwrapEachWrapper)
   }
 
-  // `toEachOps` is the Scala 2 implicit CONVERSION for `.each`/`.eachWhere` (`toEachOps(container)(evidence).each`); its
-  // first value argument is the container. The others are the marker implicit classes (constructor application).
-  private val EachWrapperNames = Set("EachOps", "toEachOps", "AtOps", "SingleAtOps", "EitherOps", "WhenOps", "<init>")
+  // The Scala 2 marker wrappers: implicit CONVERSIONS (`toEachOps`/`toAtOps`/`toSingleAtOps`/`toEitherOps`, applied as
+  // `toXOps(container)(evidence).step`, whose first value argument is the container) and the `WhenOps` implicit class.
+  private val EachWrapperNames =
+    Set(
+      "EachOps",
+      "toEachOps",
+      "AtOps",
+      "toAtOps",
+      "SingleAtOps",
+      "toSingleAtOps",
+      "EitherOps",
+      "toEitherOps",
+      "WhenOps",
+      "<init>"
+    )
 
   /** Strip the marker implicit-class wrapper (`EachOps`/`AtOps`/... constructor or its `new …` call), yielding the
     * wrapped container expression. If the instance is already the container (no wrapper node survived destructuring,
