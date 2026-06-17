@@ -228,27 +228,27 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | Original auto | vs best original |
 |------|-------|---------------|---------------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 30.8M | 30.9M | 20.9M | 20.9M | **1.5x faster** |
-| SimpleCC | 3 | 33.8M | 38.5M | 17.6M | 17.6M | **2.2x faster** |
-| SimpleADT | 2.13 | 32.1M | 28.7M | 14.8M | 18.4M | **1.7x faster** |
-| SimpleADT | 3 | 31.3M | 31.2M | 25.5M | 25.6M | **1.2x faster** |
-| Person | 2.13 | 3.8M | 3.7M | 2.6M | 2.9M | **1.3x faster** |
-| Person | 3 | 3.8M | 3.4M | 2.4M | 2.1M | **1.6x faster** |
-| Event | 2.13 | 3.1M | 3.1M | 2.3M | 2.4M | **1.3x faster** |
-| Event | 3 | 3.1M | 3.1M | 2.0M | 2.0M | **1.5x faster** |
+| SimpleCC | 2.13 | 30.3M | 30.9M | 18.8M | 19.0M | **1.63x faster** |
+| SimpleCC | 3 | 31.2M | 31.2M | 21.8M | 20.9M | **1.43x faster** |
+| SimpleADT | 2.13 | 27.5M | 27.1M | 13.4M | 13.9M | **1.98x faster** |
+| SimpleADT | 3 | 26.8M | 25.7M | 26.6M | 27.1M | **0.99x faster** |
+| Person | 2.13 | 4.5M | 4.5M | 3.0M | 3.1M | **1.45x faster** |
+| Person | 3 | 4.4M | 4.5M | 3.1M | 3.2M | **1.41x faster** |
+| Event | 2.13 | 3.4M | 3.4M | 2.3M | 2.4M | **1.42x faster** |
+| Event | 3 | 3.3M | 3.4M | 2.4M | 2.3M | **1.42x faster** |
 
 #### Decode
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | Original auto | vs best original |
 |------|-------|---------------|---------------|--------------|--------------|-----------------|
-| SimpleCC | 2.13 | 46.1M | 46.3M | 38.5M | 38.8M | **1.2x faster** |
-| SimpleCC | 3 | 40.6M | 41.3M | 18.3M | 17.9M | **2.3x faster** |
-| SimpleADT | 2.13 | 38.8M | 39.1M | 30.2M | 30.2M | **1.3x faster** |
-| SimpleADT | 3 | 39.5M | 41.6M | 25.7M | 25.1M | **1.6x faster** |
-| Person | 2.13 | 3.1M | 3.2M | 2.3M | 2.5M | **1.3x faster** |
-| Person | 3 | 3.1M | 3.1M | 2.4M | 2.5M | **1.3x faster** |
-| Event | 2.13 | 2.5M | 2.5M | 2.2M | 2.1M | **1.2x faster** |
-| Event | 3 | 2.5M | 2.6M | 2.0M | 1.9M | **1.3x faster** |
+| SimpleCC | 2.13 | 88.3M | 93.2M | 42.0M | 42.6M | **2.19x faster** |
+| SimpleCC | 3 | 91.9M | 92.1M | 20.5M | 21.2M | **4.34x faster** |
+| SimpleADT | 2.13 | 56.3M | 55.9M | 25.0M | 25.7M | **2.19x faster** |
+| SimpleADT | 3 | 58.3M | 54.6M | 27.9M | 28.0M | **2.08x faster** |
+| Person | 2.13 | 5.4M | 5.3M | 3.5M | 3.6M | **1.50x faster** |
+| Person | 3 | 5.5M | 5.4M | 2.7M | 2.6M | **2.04x faster** |
+| Event | 2.13 | 3.3M | 3.5M | 2.7M | 2.7M | **1.30x faster** |
+| Event | 3 | 3.5M | 3.3M | 2.1M | 2.2M | **1.59x faster** |
 
 ### End-to-end with jsoniter-scala-circe booster
 
@@ -260,26 +260,26 @@ The booster is an optional add-on — Kindlings works with standard Circe parsin
 
 | Type | Scala | Kindlings + booster | Original + booster | Kindlings (no booster) | Original (no booster) |
 |------|-------|--------------------|--------------------|----------------------|---------------------|
-| SimpleCC | 2.13 | **8.3M** | 7.3M | 7.2M | 6.7M |
-| SimpleCC | 3 | **12.1M** | 7.6M | 8.0M | 6.6M |
-| SimpleADT | 2.13 | **13.2M** | 7.1M | 7.6M | 6.4M |
-| SimpleADT | 3 | **9.7M** | 8.8M | 7.3M | 7.4M |
-| Person | 2.13 | **1.5M** | 1.4M | 922.5K | 845.8K |
-| Person | 3 | **1.6M** | 1.4M | 1.0M | 917.5K |
-| Event | 2.13 | **1.3M** | 1.1M | 795.0K | 714.9K |
-| Event | 3 | **1.3M** | 1.1M | 872.2K | 768.4K |
+| SimpleCC | 2.13 | **13.9M** | 10.5M | 6.8M | 5.4M |
+| SimpleCC | 3 | **15.5M** | 12.0M | 7.2M | 6.7M |
+| SimpleADT | 2.13 | **14.3M** | 8.1M | 7.8M | 5.9M |
+| SimpleADT | 3 | **15.6M** | 11.7M | 8.1M | 6.9M |
+| Person | 2.13 | **1.6M** | 1.4M | 985K | 882K |
+| Person | 3 | **1.7M** | 1.5M | 1.1M | 964K |
+| Event | 2.13 | **1.3M** | 1.1M | 831K | 764K |
+| Event | 3 | **1.4M** | 1.2M | 939K | 805K |
 
 #### Decode (bytes/String to domain type)
 
 | Type | Scala | Kindlings + booster | Original + booster | Kindlings (no booster) | Original (no booster) |
 |------|-------|--------------------|--------------------|----------------------|---------------------|
-| SimpleCC | 2.13 | **8.0M** | 6.8M | 7.5M | 6.8M |
-| SimpleCC | 3 | **9.6M** | 6.2M | 7.3M | 5.1M |
-| SimpleADT | 2.13 | **9.0M** | 8.8M | 7.2M | 7.2M |
-| SimpleADT | 3 | **10.7M** | 8.9M | 9.3M | 7.3M |
-| Person | 2.13 | **957.0K** | 799.3K | 695.8K | 521.2K |
-| Person | 3 | **1.1M** | 1.0M | 747.5K | 704.6K |
-| Event | 2.13 | **845.5K** | 717.6K | 598.3K | 576.1K |
-| Event | 3 | **992.4K** | 787.3K | 683.3K | 627.8K |
+| SimpleCC | 2.13 | **9.3M** | 8.1M | 6.1M | 5.9M |
+| SimpleCC | 3 | **8.8M** | 6.6M | 7.1M | 5.9M |
+| SimpleADT | 2.13 | **11.2M** | 9.1M | 8.7M | 7.4M |
+| SimpleADT | 3 | **10.9M** | 9.2M | 9.8M | 8.5M |
+| Person | 2.13 | **1.3M** | 1.1M | 918K | 879K |
+| Person | 3 | **1.3M** | 1.0M | 1.1M | 874K |
+| Event | 2.13 | **1.0M** | 906K | 736K | 724K |
+| Event | 3 | **996K** | 825K | 836K | 703K |
 
 Note: Kindlings semi-automatic and automatic derivation produce identical performance — this is the "sanely-automatic" design.

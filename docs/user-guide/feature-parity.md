@@ -178,18 +178,18 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Type class | Scala | Kindlings | kittens best | vs kittens |
 |---|---|---|---|---|
-| Show (SimpleCC) | 2.13 | 48.1M | 18.0M | **2.7x faster** |
-| Show (SimpleCC) | 3 | 47.8M | 14.3M | **3.3x faster** |
-| Eq (SimpleCC) | 2.13 | 97.4M | 46.0M | **2.1x faster** |
-| Hash (SimpleCC) | 2.13 | 264M | 37.4M | **7.1x faster** |
-| Hash (SimpleCC) | 3 | 234M | 53.4M | **4.4x faster** |
-| Semigroup (IntPair) | 2.13 | 508M | 71.6M | **7.1x faster** |
-| Monoid (IntPair) | 2.13 | 561M | 72.9M | **7.7x faster** |
-| Functor (map) | 2.13 | 205M | 4.4M | **47x faster** |
-| Functor (map) | 3 | 238M | 84.9M | **2.8x faster** |
-| Foldable (foldLeft) | 3 | 1006M | 120M | **8.4x faster** |
-| Traverse (traverse) | 3 | 123M | 24.2M | **5.1x faster** |
-| ShowPretty (SimpleCC) | 3 | 50.0M | 6.2M | **8.1x faster** |
+| Show (SimpleCC) | 2.13 | 38.2M | 7.5M | **5.1x faster** |
+| Show (SimpleCC) | 3 | 27.2M | 19.9M | **1.4x faster** |
+| Eq (SimpleCC) | 2.13 | 100.2M | 46.1M | **2.2x faster** |
+| Hash (SimpleCC) | 2.13 | 824.9M | 27.4M | **30.1x faster** |
+| Hash (SimpleCC) | 3 | 828.3M | 110.0M | **7.5x faster** |
+| Semigroup (IntPair) | 2.13 | 194.1M | 54.3M | **3.6x faster** |
+| Monoid (IntPair) | 2.13 | 192.8M | 49.0M | **3.9x faster** |
+| Functor (map) | 2.13 | 277.3M | 5.7M | **49x faster** |
+| Functor (map) | 3 | 275.9M | 65.2M | **4.2x faster** |
+| Foldable (foldLeft) | 3 | 1.6B | 109.6M | **14.6x faster** |
+| Traverse (traverse) | 3 | 164.2M | 18.7M | **8.8x faster** |
+| ShowPretty (SimpleCC) | 3 | 34.3M | 5.4M | **6.4x faster** |
 
 ### Not ported
 
