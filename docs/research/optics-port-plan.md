@@ -145,7 +145,7 @@ element lambda itself (which *is* collection iteration → permitted use of `Lam
 optics/src/main/
 ├── scala/hearth/kindlings/optics/
 │   ├── PathModify.scala            # runtime: PathModify[S,A], PathLazyModify[T,U]
-│   ├── QuicklensFunctors.scala     # runtime typeclasses + givens
+│   ├── PathStepEvidence.scala      # shared marker supertype of the path-step evidences
 │   ├── debug/package.scala         # LogDerivation import
 │   └── internal/compiletime/
 │       └── ModifyMacrosImpl.scala  # SHARED macro core: path parse, PathTree, copy gen

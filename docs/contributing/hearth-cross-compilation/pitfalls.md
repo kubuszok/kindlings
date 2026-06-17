@@ -584,10 +584,18 @@ A path-DSL marker typed on a bare covariant container — `extension [F[_], A](f
 — lets Scala 2 widen `List[Int].each` to `A = Any` (since `List[Int] <: List[Any]`), so the
 path's leaf type is lost. Pin the element/index/branch type with an **invariantly-parameterised
 evidence on the exact container type** (`IsElementOf.Aux[C, A]`, `IsIndexedElementOf`,
-`IsEither`), derived so the natural `modify[A](path: S => A)` signature still infers `A` (no
-whitebox macro needed). See [hearth-expr-parsing-dsl](../hearth-expr-parsing-dsl/SKILL.md) §3.
+`IsSingleElementOf`, `IsEither`). The evidence is **materialized by a macro** that consults
+Hearth's `IsCollection`/`IsMap`/`IsOption`/`IsEither` SPI — a **whitebox** macro on Scala 2
+(`val c: whitebox.Context` on the bundle, so it may return the refined `Aux[C, …]`) and a
+`transparent inline given` on Scala 3 — so adding a new provider on the classpath turns the
+step on with no extra module. On Scala 2 the refined `Aux` is then projected into the ops
+class' type params via an implicit *conversion* (`toEachOps[C](c)(implicit ev): EachOps[C,
+ev.Elem]`); an `implicit class` can't infer a class type param from a whitebox expansion. See
+[hearth-expr-parsing-dsl](../hearth-expr-parsing-dsl/SKILL.md) §3.
 
-**Reference:** optics `QuicklensFunctors.scala` (`IsElementOf` and friends).
+**Reference:** optics per-platform `IsElementOf.scala` / `PathStepEvidences.scala` (the
+evidence macros), shared `PathStepEvidence.scala` (their common marker supertype),
+`internal/compiletime/ModifyMacrosImpl.scala` (`deriveIsElementOf` and friends).
 
 ### 39. Scala 3 context-function values are eta-applied in tests (storing `B ?=> C`)
 
