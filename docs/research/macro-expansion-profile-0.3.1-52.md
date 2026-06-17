@@ -52,3 +52,20 @@ rule's outsized self-time (≈11% combined) despite few map-typed fields in the 
 Memoization of type comparisons remains the irreducible floor; the double-parse is the one clearly
 removable redundancy. Runtime codegen is already at/above parity with best-in-class libraries (see the
 0.3.1-52 ratio scan), so compile-time is where the remaining macro headroom is.
+
+## Implemented (jsoniter, Hearth 0.3.1-53)
+
+- Hearth: added `IsCollectionOf.asMap: Option[IsMapOf[CollA, Item]]` (default `None`, `Some(this)` in
+  `IsMapOf`) so a held `IsCollectionOf` reveals map-ness without re-parsing or an erasure-unsound
+  `isInstanceOf`. `IsMap.parse` uses it.
+- jsoniter: merged the map rule into the collection rule — `case IsCollection(c) => c.value.asMap match
+  { case Some(m) => deriveMapEntries(m); case None => …collection… }`. The standalone map rule is out of
+  the encoder/decoder chains (its object kept for `deriveMapEntries` / `deriveKeyEncoding`). Every
+  non-map field now parses `IsCollection` once instead of twice. 340 (3) + 324 (2.13) green; generated
+  code (and runtime) unchanged.
+
+**Measurement caveat:** the macro-compile wall-time delta is **within shared-machine noise** — runs
+on the (concurrently loaded) dev box bounced 11.1s ↔ 7.7s ↔ 11.0s regardless of the change. The win is
+*structural* (provably one fewer `IsCollection.parse` per non-map field + one fewer rule traversal),
+not a measured wall-time number; a clean magnitude needs a low-load/controlled run. Rollout to the
+other modules (circe, yaml, pureconfig, avro, …) is the same mechanical change.

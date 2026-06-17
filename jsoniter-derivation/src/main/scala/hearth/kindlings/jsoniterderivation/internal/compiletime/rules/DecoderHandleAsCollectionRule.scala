@@ -11,20 +11,27 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 trait DecoderHandleAsCollectionRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
-  object DecoderHandleAsCollectionRule extends DecoderDerivationRule("handle as collection when possible") {
+  object DecoderHandleAsCollectionRule extends DecoderDerivationRule("handle as collection or map when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
-      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection") >> {
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection or map") >> {
         Type[A] match {
           case IsCollection(isCollection) =>
+            // A map is an `IsCollectionOf` whose proof is an `IsMapOf`. Parse `IsCollection` ONCE and dispatch on
+            // that, instead of the old map-rule (`IsMap.parse` = `IsCollection.parse` + cast) followed by a separate
+            // collection rule that parsed `IsCollection` again — every non-map field paid for the parse twice.
             import isCollection.Underlying as Item
-            implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
-
-            if (dctx.evaluatedConfig.isDefined) decodeCollectionInline[A, Item](isCollection.value)
-            else decodeCollectionViaHelper[A, Item](isCollection.value)
+            isCollection.value.asMap match {
+              case Some(isMapOf) =>
+                DecoderHandleAsMapRule.decodeMapEntries[A, Item](isMapOf)
+              case None =>
+                implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+                if (dctx.evaluatedConfig.isDefined) decodeCollectionInline[A, Item](isCollection.value)
+                else decodeCollectionViaHelper[A, Item](isCollection.value)
+            }
 
           case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
 
