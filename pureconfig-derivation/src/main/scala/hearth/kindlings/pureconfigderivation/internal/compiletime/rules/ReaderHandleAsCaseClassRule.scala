@@ -276,28 +276,22 @@ trait ReaderHandleAsCaseClassRuleImpl {
                             .asInstanceOf[Either[ConfigReaderFailures, Any]]
                         }
                   }
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                  // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
+                  // intermediate `Array[Any]`.
+                  val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
                     val typedExpr = Expr.quote {
-                      PureConfigDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
-                        Expr.splice(readerExpr)
-                      )
+                      PureConfigDerivationUtils.unsafeCast(Expr.splice(valExpr), Expr.splice(readerExpr))
                     }
                     (fName, typedExpr.as_??)
                   }
-                  (decodeExpr, makeAccessor, keyExpr)
+                  (decodeExpr, makeFieldArg, keyExpr)
                 }
               }
             }
             .flatMap { fieldData =>
               val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
+              val makeFieldArgs = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
-
-              val listExpr: Expr[List[Either[ConfigReaderFailures, Any]]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
-                }
 
               // Build the runtime expected-keys set from the per-field key expressions.
               // Used by the strict-mode (`allowUnknownKeys = false`) check at the end.
@@ -310,51 +304,43 @@ trait ReaderHandleAsCaseClassRuleImpl {
                     Expr.quote(Expr.splice(acc) + Expr.splice(k))
                   }
 
-              LambdaBuilder
-                .of1[Array[Any]]("decodedValues")
-                .traverse { decodedValuesExpr =>
-                  val nonTransientFieldMap: Map[String, Expr_??] =
-                    makeAccessors.map(_(decodedValuesExpr)).toMap
-                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                    onTypes = _ => Map.empty,
-                    onValues = _ => fieldMap
-                  ) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                    case Left(error)          =>
-                      val err = ReaderDerivationError.CannotConstructType(
-                        Type[A].prettyPrint,
-                        isSingleton = false,
-                        Some(error)
-                      )
-                      Log.error(err.message) >> MIO.fail(err)
+              // Zero-allocation fail-fast construction: nested zero-closure `Either` folds short-circuit on the first
+              // `Left`, with no intermediate `List`, `Array[Any]`, `sequence`, or closure.
+              def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
+                val nonTransientFieldMap: Map[String, Expr_??] =
+                  makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
+                val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
+                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                  onTypes = _ => Map.empty,
+                  onValues = _ => fieldMap
+                ) match {
+                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                  case Left(error)          =>
+                    Environment.reportErrorAndAbort(
+                      ReaderDerivationError
+                        .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                        .message
+                    )
+                }
+              }
+              val ffConstructed: Expr[Either[ConfigReaderFailures, A]] =
+                buildEitherFailFast[ConfigReaderFailures, A](decodeExprs)(constructFF)
+
+              MIO.pure(
+                // When allowUnknownKeys is statically true, skip the checkUnknownKeys call entirely.
+                if (staticAllowUnknownKeys.contains(true)) ffConstructed
+                else
+                  Expr.quote {
+                    val coreResult: Either[ConfigReaderFailures, A] = Expr.splice(ffConstructed)
+                    PureConfigDerivationUtils.checkUnknownKeys[A](
+                      Expr.splice(rctx.cursor),
+                      coreResult,
+                      Expr.splice(expectedKeysExpr),
+                      Expr.splice(allowUnknownKeysExpr),
+                      Expr.splice(rctx.config).discriminator
+                    )
                   }
-                }
-                .map { builder =>
-                  val constructLambda = builder.build[A]
-                  // When allowUnknownKeys is statically true, skip the checkUnknownKeys
-                  // call entirely — it's a no-op that just returns coreResult.
-                  if (staticAllowUnknownKeys.contains(true))
-                    Expr.quote {
-                      PureConfigDerivationUtils
-                        .sequenceResults(Expr.splice(listExpr))
-                        .map(Expr.splice(constructLambda))
-                    }
-                  else
-                    Expr.quote {
-                      val coreResult: Either[ConfigReaderFailures, A] =
-                        PureConfigDerivationUtils
-                          .sequenceResults(Expr.splice(listExpr))
-                          .map(Expr.splice(constructLambda))
-                      PureConfigDerivationUtils.checkUnknownKeys[A](
-                        Expr.splice(rctx.cursor),
-                        coreResult,
-                        Expr.splice(expectedKeysExpr),
-                        Expr.splice(allowUnknownKeysExpr),
-                        Expr.splice(rctx.config).discriminator
-                      )
-                    }
-                }
+              )
             }
       }
     }
