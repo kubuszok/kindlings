@@ -312,11 +312,16 @@ object AvroDerivationUtils {
 
   def getFieldByNameOrAlias(record: GenericRecord, name: String, aliases: List[String]): Any = {
     val schema = record.getSchema
-    if (schema.getField(name) != null) return record.get(name)
+    // One hash lookup (`getField`) + position access via `field.pos()`, instead of `getField(name)` followed by
+    // `record.get(name)` — which internally repeats the `getField(name)` hash lookup. `field.pos()` is the field's
+    // position in the *record's own* schema, so this stays correct for schema-evolved/reordered records (the case
+    // that makes a compile-time constant index unsafe). Halves the per-field hash-lookup cost of the hot decode path.
+    val field = schema.getField(name)
+    if (field != null) return record.get(field.pos())
     var remaining = aliases
     while (remaining.nonEmpty) {
-      val alias = remaining.head
-      if (schema.getField(alias) != null) return record.get(alias)
+      val aliasField = schema.getField(remaining.head)
+      if (aliasField != null) return record.get(aliasField.pos())
       remaining = remaining.tail
     }
     null
