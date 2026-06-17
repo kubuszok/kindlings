@@ -81,10 +81,17 @@ difference, like the `di`/`mock` bridges — NOT hidden failures):
 
 - **Scala 2**: an `EachOps[C, A]` class plus an implicit **conversion** `toEachOps[C](c: C)(implicit
   ev: IsElementOf[C]): EachOps[C, ev.Elem]` — NOT an `implicit class`. See the whitebox note below.
-- **Scala 3**: `extension [C, A](c: C)(using IsElementOf.Aux[C, A]) def each: A`
+- **Scala 3**: `extension [C, A](c: C)(using IsElementOf.Aux[C, A], OpticsContext) def each: A`
 
 Each marker body is `sys.error("...only usable inside modify...")` and carries
 `@scala.annotation.compileTimeOnly(...)`.
+
+💡 **Scala 3 — confine the markers to `modify` with a phantom context function.** Take the path as
+`OpticsContext ?=> (S => A)` and require each marker `(using OpticsContext)`. The `?=>` injects a
+`given OpticsContext` for the path body only, so outside `modify` the markers don't even appear in
+completion (the `sealed` `OpticsContext` has no public instance). The macro peels the context layer
+with `Expr.betaReduce` then unwraps the resulting `val`-binding `Block` — see
+[cross-compilation pitfall #40](../hearth-cross-compilation/pitfalls.md) for the two unwrap traps.
 
 ⚠️ **`@compileTimeOnly` fires on the Scala 3 `extension` but NOT the Scala 2 `implicit class`**
 — so `.each` outside `modify` is compile-rejected on S3 but only `sys.error`s at runtime on S2.
@@ -196,7 +203,8 @@ Same shape as `di`/`mock`/`optics`:
 - `optics/` — the full path DSL: `internal/compiletime/ModifyMacrosImpl.scala` (parser + copy
   gen), per-platform `IsElementOf.scala` / `PathStepEvidences.scala` (the whitebox-S2 /
   transparent-inline-S3 evidence macros) with shared `PathStepEvidence.scala` (their marker
-  supertype), per-platform `syntax.scala` (markers). Plan: `docs/research/optics-port-plan.md`; findings:
+  supertype), per-platform `syntax.scala` (markers), scala-3 `OpticsContext.scala` + `peelContext`
+  (the context-function marker gating). Plan: `docs/research/optics-port-plan.md`; findings:
   `docs/research/optics-each-inference.md`.
 - `mock/.../MockMacrosImpl.scala` `extractMethodRef` — the `.expects` method-name extraction.
 - `di/.../WiringMacrosImpl.scala` `preciseExpr` / `autowireWithMembers` — `DestructuredExpr`
