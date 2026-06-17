@@ -91,6 +91,7 @@ For higher-level rules around extension loading and `LambdaBuilder` scope, see
 | 37 | [`@compileTimeOnly` fires on S3 `extension` not S2 `implicit class`](pitfalls.md#37-compiletimeonly-fires-on-the-scala-3-extension-but-not-the-scala-2-implicit-class) | MEDIUM | Scala 2 |
 | 38 | [Marker DSLs need INVARIANT evidence to pin element types](pitfalls.md#38-marker-dsls-need-invariant-evidence-to-pin-element-types-scala-2-widening) | HIGH | Scala 2 |
 | 39 | [Context-function values are eta-applied in tests](pitfalls.md#39-scala-3-context-function-values-are-eta-applied-in-tests-storing-b--c) | MEDIUM | Scala 3 |
+| 40 | [Gate S3 DSL markers behind a phantom context function (peel with `betaReduce` + `Block` unwrap)](pitfalls.md#40-gate-scala-3-dsl-markers-behind-a-phantom-context-function--peel-it-with-betareduce--unwrap-the-block) | MEDIUM | Scala 3 |
 
 ### Resolved Hearth issues (for context only)
 
