@@ -30,6 +30,9 @@ trait EncoderMacrosImpl
   def deriveInlineEncode[A: Type](valueExpr: Expr[A], configExpr: Expr[AvroConfig]): Expr[Any] = {
     implicit val AnyT: Type[Any] = EncTypes.Any
     implicit val ConfigT: Type[AvroConfig] = EncTypes.AvroConfig
+    // Evaluate the config at compile time when possible, so field-name mapping is a compile-time constant
+    // (no per-field `config.transformFieldNames(name)` call). Falls back to the runtime call when not evaluable.
+    val evConfig: Option[AvroConfig] = configExpr.semiEval.toOption
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Any]("AvroEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -38,7 +41,15 @@ trait EncoderMacrosImpl
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
             Expr.splice(
-              fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, outerConfig = Some(configVal)))
+              fromCtx(
+                EncoderCtx.from(
+                  valueVal,
+                  configVal,
+                  derivedType = None,
+                  outerConfig = Some(configVal),
+                  evaluatedConfig = evConfig
+                )
+              )
             )
           }
         }
@@ -53,6 +64,7 @@ trait EncoderMacrosImpl
     implicit val SchemaT: Type[Schema] = EncTypes.Schema
     implicit val ConfigT: Type[AvroConfig] = EncTypes.AvroConfig
     val selfType: Option[??] = Some(Type[A].as_??)
+    val evConfig: Option[AvroConfig] = configExpr.semiEval.toOption
 
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
@@ -99,7 +111,8 @@ trait EncoderMacrosImpl
                         config = c,
                         cache = cache,
                         derivedType = selfType,
-                        outerConfig = Some(outerConfigExpr)
+                        outerConfig = Some(outerConfigExpr),
+                        evaluatedConfig = evConfig
                       )
                     )
                   )
@@ -240,7 +253,8 @@ trait EncoderMacrosImpl
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
       precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None,
-      outerConfig: Option[Expr[AvroConfig]] = None
+      outerConfig: Option[Expr[AvroConfig]] = None,
+      evaluatedConfig: Option[AvroConfig] = None
   ) {
 
     def schemaConfig: Expr[AvroConfig] = outerConfig.getOrElse(config)
@@ -320,7 +334,8 @@ trait EncoderMacrosImpl
         config: Expr[AvroConfig],
         derivedType: Option[??],
         precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None,
-        outerConfig: Option[Expr[AvroConfig]] = None
+        outerConfig: Option[Expr[AvroConfig]] = None,
+        evaluatedConfig: Option[AvroConfig] = None
     ): EncoderCtx[A] = EncoderCtx(
       tpe = Type[A],
       value = value,
@@ -328,7 +343,8 @@ trait EncoderMacrosImpl
       cache = ValDefsCache.mlocal,
       derivedType = derivedType,
       precomputedSchema = precomputedSchema,
-      outerConfig = outerConfig
+      outerConfig = outerConfig,
+      evaluatedConfig = evaluatedConfig
     )
   }
 

@@ -108,7 +108,13 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
               val avroFieldNameExpr: Expr[String] = nameOverride match {
                 case Some(custom) => Expr(custom)
                 case None         =>
-                  Expr.quote(Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName))))
+                  dctx.evaluatedConfig match {
+                    // Config statically known: map the field name at compile time to a constant string,
+                    // dropping the per-field runtime `config.transformFieldNames(name)` call.
+                    case Some(cfg) => Expr(cfg.transformFieldNames(fName))
+                    case None      =>
+                      Expr.quote(Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName))))
+                  }
               }
               val aliases = getAllAnnotationStringArgs[avroAlias](param)
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)

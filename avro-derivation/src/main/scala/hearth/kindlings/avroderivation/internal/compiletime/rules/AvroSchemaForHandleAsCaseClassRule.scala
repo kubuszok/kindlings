@@ -230,8 +230,14 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
           val nameExpr: Expr[String] = nameOverride match {
             case Some(customName) => Expr(customName)
             case None             =>
-              Expr.quote {
-                Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+              sfctx.evaluatedConfig match {
+                // Config statically known: map the field name at compile time to a constant string,
+                // dropping the per-field runtime `config.transformFieldNames(name)` call.
+                case Some(cfg) => Expr(cfg.transformFieldNames(fName))
+                case None      =>
+                  Expr.quote {
+                    Expr.splice(sfctx.config).transformFieldNames(Expr.splice(Expr(fName)))
+                  }
               }
           }
           val baseFieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
