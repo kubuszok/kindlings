@@ -70,7 +70,8 @@ or you pick the parent type and break narrowing.
 
 ⚠️ Filter out **evidence value-args**: a marker that takes a `using`/implicit evidence (see §3)
 exposes it as a leading value arg on Scala 3. Drop args whose type `<:<` a shared
-`sealed trait PathStepEvidence` marker before reading the real `i`/`default`/`pred`.
+`trait PathStepEvidence` marker (not `sealed` — the per-platform evidences extend it from their
+own files) before reading the real `i`/`default`/`pred`.
 
 ## 3. Build the marker DSL (per platform) with invariant evidence
 
@@ -78,7 +79,8 @@ The `.each`/`.at`/`.when` "methods" are **markers** that only let the path type-
 macro rewrites them and never runs their bodies. They are **per-platform** (a genuine language
 difference, like the `di`/`mock` bridges — NOT hidden failures):
 
-- **Scala 2**: `implicit class EachOps[C, A](c: C)(implicit ev: IsElementOf.Aux[C, A]) { ... def each: A }`
+- **Scala 2**: an `EachOps[C, A]` class plus an implicit **conversion** `toEachOps[C](c: C)(implicit
+  ev: IsElementOf[C]): EachOps[C, ev.Elem]` — NOT an `implicit class`. See the whitebox note below.
 - **Scala 3**: `extension [C, A](c: C)(using IsElementOf.Aux[C, A]) def each: A`
 
 Each marker body is `sys.error("...only usable inside modify...")` and carries
@@ -93,19 +95,37 @@ marker lets Scala 2 widen `List[Int].each` to `A = Any` (since `List[Int] <: Lis
 key the marker on an **invariantly-parameterised** evidence on the exact container type:
 
 ```scala
-sealed trait IsElementOf[C] { type Elem }
+sealed trait IsElementOf[C] extends PathStepEvidence { type Elem }
 object IsElementOf {
   type Aux[C, A] = IsElementOf[C] { type Elem = A }
-  // one instance per shape, derived so the natural `modify[A](path: S => A)` signature still infers A:
-  implicit def fromFunctor[F[_], A](implicit @unused F: QuicklensFunctor[F]): Aux[F[A], A] = of
-  implicit def map[K, V]: Aux[Map[K, V], V] = of
-  // ...
+  def witness[C, A]: Aux[C, A] = instance.asInstanceOf[Aux[C, A]]
+  // ONE materializer macro that consults Hearth's IsCollection/IsMap/IsOption SPI and returns the refined Aux:
+  implicit def derived[C]: IsElementOf[C] = macro internal.compiletime.ModifyMacros.isElementOfImpl[C]   // Scala 2 (whitebox)
+  // Scala 3:  transparent inline given derived[C]: IsElementOf[C] = ${ ModifyMacros.isElementOfImpl[C] }
 }
 ```
 
-This keeps the simple `def modify[A](path: S => A): PathModify[S, A]` entry (no whitebox macro).
-The marker's `A` then comes out invariantly correct on both platforms. Mirror with
-`IsIndexedElementOf`/`IsSingleElementOf`/`IsEither` for `.at`/Option/`Either`.
+The evidence is **materialized by a macro** (`deriveIsElementOf` consults the SPI), so any type
+with an `IsCollection`/`IsMap`/`IsOption` provider — built-ins plus anything on the classpath
+(cats `NonEmpty*` via `kindlings-cats-integration`, java collections, …) — gets `.each` with no
+extra module. The macro must return a type **more specific** than its signature (the refined
+`Aux[C, Elem]`), which on Scala 2 requires a **whitebox** macro: declare `val c: whitebox.Context`
+on the Hearth bundle (`whitebox.Context <: blackbox.Context`, so `MacroCommonsScala2` is satisfied).
+On Scala 3 a `transparent inline given` does the same.
+
+⚠️ **Scala 2 consumption needs an implicit CONVERSION, not an `implicit class`.** Scala 2 can't
+infer a class type param (`A` in `EachOps[C, A]`) from a whitebox expansion, and a class *field*
+`val ev` would widen the refinement away. Instead summon the evidence as a **method** implicit and
+project its refined member into the ops type param: `implicit def toEachOps[C](c: C)(implicit ev:
+IsElementOf[C]): EachOps[C, ev.Elem]`. `ev.Elem` reduces to the concrete element type at the call
+site and is baked into `A`. Mirror with `IsIndexedElementOf`/`IsSingleElementOf`/`IsEither` for
+`.at`/Option/`Either` (the latter shares a `sealed`-free `PathStepEvidence` supertype so the parser
+can recognise a synthesized evidence value-arg with one `Type.isSubtypeOf[_, PathStepEvidence]`).
+
+⚠️ **Name clash inside the impl:** the std SPI mixes in an `IsEither` extractor that shadows the
+optics `IsEither` evidence; alias the optics one (`import …optics.{IsEither => OpticsEither}`) for
+the signature, and reference it by its **full `_root_` path inside the quote** (an import rename is
+not a real object name, so emitting it produces an unresolvable symbol).
 
 ## 4. Emit copy-with-modification (case classes)
 
@@ -142,15 +162,21 @@ MatchCase.matchOn[S, S](scrutinee)(NonEmptyVector(
 Matching the parent type as the second arm is the fall-through. On Scala 3 `matchOn` annotates
 the scrutinee `@unchecked`, so the non-exhaustive match is warning-free on both platforms.
 
-## 6. Delegate collection steps to runtime typeclasses
+## 6. Open-code collection steps through the SPI (no runtime typeclasses)
 
-`.each`/`.at`/Either follow quicklens: the macro summons a runtime functor and emits a call,
-rather than open-coding collection iteration. Summon `QuicklensFunctor[F]` (recover `F` from the
-prefix type via `Type.Ctor1`/`Type.CtorK1`) with `Expr.summonImplicit`, and build the element
-lambda with `LambdaBuilder` (the sanctioned [LambdaBuilder](../hearth-lambda-builder/SKILL.md)
-use — it IS collection iteration). The `Seq` functor must be bounded so it rebuilds the concrete
-subtype (`F[X] <: immutable.Seq[X] & SeqOps[X, F, F[X]]`); a `Vector`-then-`asInstanceOf[List]`
-rebuild `ClassCastException`s.
+`.each`/`.eachWhere`, `.at`/`.index`/`.atOrElse` and `.eachLeft`/`.eachRight` are emitted by the
+macro directly via Hearth's `IsCollection`/`IsMap`/`IsOption`/`IsEither` SPI — there are **no**
+runtime functor type classes. The macro dispatches on the container type
+(`Type[S] match { case IsMap(m) => …; case IsCollection(c) => …; case IsOption(o) => …; case _ => abort }`),
+rebuilds the container via the provider's `factory`/`build`, and recurses into the focused element.
+The indexed steps are the same iterate-and-rebuild at one position/key (a `Seq` keyed by `Int`, a
+`Map` by key, an `Option`'s single value) — **no positional-update SPI** is needed (`.at` has no
+bespoke `IsIndex` SPI). `.each` therefore works over EVERY container any provider supports — built-ins
+plus anything on the classpath — and a new provider jar turns it on with no code change here.
+
+Use `LambdaBuilder` ONLY for the actual collection/Optional iteration lambda
+([LambdaBuilder](../hearth-lambda-builder/SKILL.md) — that IS collection iteration). When rebuilding
+a `Seq`, restrict positional `.at` to `immutable.Seq` so it is not offered on unordered collections.
 
 ## <a name="module-recipe"></a>7. Non-derivation 3-layer module recipe
 
@@ -168,8 +194,9 @@ Same shape as `di`/`mock`/`optics`:
 ## Reference
 
 - `optics/` — the full path DSL: `internal/compiletime/ModifyMacrosImpl.scala` (parser + copy
-  gen), `QuicklensFunctors.scala` (runtime typeclasses + `IsElementOf` evidence), per-platform
-  `syntax.scala` (markers). Plan: `docs/research/optics-port-plan.md`; findings:
+  gen), per-platform `IsElementOf.scala` / `PathStepEvidences.scala` (the whitebox-S2 /
+  transparent-inline-S3 evidence macros) with shared `PathStepEvidence.scala` (their marker
+  supertype), per-platform `syntax.scala` (markers). Plan: `docs/research/optics-port-plan.md`; findings:
   `docs/research/optics-each-inference.md`.
 - `mock/.../MockMacrosImpl.scala` `extractMethodRef` — the `.expects` method-name extraction.
 - `di/.../WiringMacrosImpl.scala` `preciseExpr` / `autowireWithMembers` — `DestructuredExpr`
