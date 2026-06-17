@@ -1,6 +1,7 @@
 package hearth.kindlings.optics
 
 import scala.language.experimental.macros
+import scala.language.implicitConversions
 
 /** Quicklens-style modify DSL: `obj.modify(_.a.b.c).setTo(v)` / `.using(f)`.
   *
@@ -31,9 +32,13 @@ private[optics] trait OpticsSyntax {
   // behaviour — `modify(_.xs.each.field)` is rewritten by the macro, which never evaluates these bodies; they exist only
   // so `field` resolves against the element type `A`. The element type is recovered from the *exact* container `C` via
   // `IsElementOf.Aux[C, A]` (pinned invariantly), so `.each` yields the precise element type with no covariant widening.
-  implicit final class EachOps[C, A](@scala.annotation.unused private val c: C)(implicit
-      @scala.annotation.unused ev: IsElementOf.Aux[C, A]
-  ) {
+  // `.each`/`.eachWhere` recover the element type from a whitebox-materialized `IsElementOf[C]`. The element type is
+  // projected into the ops class' type parameter `A` by a manual implicit CONVERSION: `toEachOps[C]` summons the
+  // evidence as a METHOD implicit (kept at its refined `Aux[C, Elem]` type), and returns `EachOps[C, ev.Elem]` — so
+  // `ev.Elem` reduces to the concrete element type at the call site and is baked into `A`. (An `implicit class
+  // EachOps[C, A]` instead would leave `A` un-inferred — Scala 2 can't infer a class type param from a whitebox
+  // expansion; a class field `val ev` would widen the refinement away.)
+  final class EachOps[C, A](@scala.annotation.unused private val c: C) {
     @scala.annotation.compileTimeOnly("`.each` is only usable inside a `modify(...)` path")
     def each: A = sys.error("`.each` is only usable inside a `modify(...)` path")
 
@@ -41,6 +46,8 @@ private[optics] trait OpticsSyntax {
     def eachWhere(@scala.annotation.unused cond: A => Boolean): A =
       sys.error("`.eachWhere` is only usable inside a `modify(...)` path")
   }
+
+  implicit def toEachOps[C](c: C)(implicit ev: IsElementOf[C]): EachOps[C, ev.Elem] = new EachOps[C, ev.Elem](c)
 
   // Marker extensions for the indexed `.at`/`.index`/`.atOrElse` steps over a `Seq` (Int index) or `Map` (key). The
   // index type `I` and element type `A` are pinned invariantly from the *exact* container `C` via

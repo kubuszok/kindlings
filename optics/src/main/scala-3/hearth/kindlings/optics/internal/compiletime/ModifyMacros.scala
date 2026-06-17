@@ -12,6 +12,10 @@ private[optics] object ModifyMacros {
   def modifyImpl[S: Type, A: Type](obj: Expr[S], path: Expr[S => A])(using q: Quotes): Expr[PathModify[S, A]] =
     new ModifyMacros(q).modify[S, A](obj, path)
 
+  /** Materializer for the `.each` evidence (a `transparent inline given`), backed by the std SPI. */
+  def isElementOfImpl[C: Type](using q: Quotes): Expr[IsElementOf[C]] =
+    new ModifyMacros(q).deriveIsElementOf[C]
+
   def modifyAllImpl[S: Type, A: Type](obj: Expr[S], path: Expr[S => A], paths: Expr[Seq[S => A]])(using
       q: Quotes
   ): Expr[PathModify[S, A]] =
