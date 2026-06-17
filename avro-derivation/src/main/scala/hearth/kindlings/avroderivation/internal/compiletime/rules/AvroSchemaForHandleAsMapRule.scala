@@ -27,7 +27,8 @@ trait AvroSchemaForHandleAsMapRuleImpl {
         }
       }
 
-    private def deriveMapSchema[A: SchemaForCtx, Pair: Type](
+    // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
+    private[rules] def deriveMapSchema[A: SchemaForCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Schema]]] = {
       import isMap.{Key, Value}

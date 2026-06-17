@@ -375,7 +375,7 @@ trait EncoderMacrosImpl
           AvroEncoderHandleAsValueTypeRule,
           AvroEncoderHandleAsOptionRule,
           AvroEncoderHandleAsEitherRule,
-          AvroEncoderHandleAsMapRule,
+          // Map handling is folded into the collection rule (single IsCollection parse, dispatched via `.asMap`).
           AvroEncoderHandleAsCollectionRule,
           AvroEncoderHandleAsNamedTupleRule,
           AvroEncoderHandleAsSingletonRule,
