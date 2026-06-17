@@ -135,16 +135,20 @@ trait EncoderHandleAsMapRuleImpl {
       deriveEncoderRecursively[Value](using ectx.nest(dummyValue)).flatMap { _ =>
         ectx.getHelper[Value].map { helperOpt =>
           val helper = helperOpt.get
-          val iterableExpr = isMap.asIterable(ectx.value)
+          // `isMap.foreach` lowers to a zero-closure `while` loop over the map's iterator (Hearth's default
+          // `IsCollectionOf.foreach`), so this needs no hand-rolled loop — the optimisation lives in Hearth and is
+          // shared by every module that iterates a map.
+          val writeEntries = isMap.foreach(ectx.value) { pairExpr =>
+            Expr.quote {
+              val entry = Expr.splice(pairExpr).asInstanceOf[(String, Value)]
+              Expr.splice(ectx.writer).writeKey(entry._1)
+              Expr.splice(helper(Expr.quote(entry._2), ectx.writer, ectx.config))
+            }
+          }
           Rule.matched(Expr.quote {
             val out = Expr.splice(ectx.writer)
             out.writeObjectStart()
-            val iter = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]].iterator
-            while (iter.hasNext) {
-              val entry = iter.next()
-              out.writeKey(entry._1)
-              Expr.splice(helper(Expr.quote(entry._2), ectx.writer, ectx.config))
-            }
+            Expr.splice(writeEntries)
             out.writeObjectEnd()
           })
         }
