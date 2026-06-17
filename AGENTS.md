@@ -185,6 +185,15 @@ When optimizing the runtime performance of generated codecs/encoders/decoders. K
 
 Reference analysis: `docs/research/jsoniter-codegen-techniques.md`, `docs/research/perf-regression-analysis.md`
 
+### Profiling benchmarks (JFR) — follow `docs/contributing/kindlings-jfr-profiling/SKILL.md`
+
+When profiling JMH benchmarks to find the hot spot before applying a runtime-perf optimization.
+Covers JFR execution **sampling** (any JDK, the current workflow) and deterministic **method
+timing/tracing** (`jdk.MethodTiming` / `jdk.MethodTrace`, JEP 520, JDK 25+ — available on the
+GraalVM CE 25 dev machine, falls back to sampling on Temurin 17/CI). Exact `-prof jfr` commands,
+custom `.jfc` filters, discovering synthetic generated-codec method FQCNs, and `jfr view` analysis.
+Distinct from Hearth's MIO `.speedscope.json` flame graphs, which profile compile-time expansion.
+
 ### Factory instance pattern — follow `docs/contributing/kindlings-factory-instance/SKILL.md`
 
 When generating the final `new TypeClass[A] { ... }` expression, use factory methods + lambdas
