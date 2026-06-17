@@ -96,7 +96,7 @@ object SConfigDerivationUtils {
     if (failure != null) Left(failure) else Right(arr)
   }
 
-  private[kindlings] class CollectionBuildException(val error: ConfigDecodingError)
+  class CollectionBuildException(val error: ConfigDecodingError)
       extends RuntimeException("sconfig collection decoding error")
 
   /** Read a list value into a custom collection via the given item reader and factory. */

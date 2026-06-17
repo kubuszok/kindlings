@@ -109,8 +109,7 @@ object YamlDerivationUtils {
     if (isNullNode(node)) Right(None)
     else decode(node).map(Some(_))
 
-  private[kindlings] class CollectionBuildException(val error: ConstructError)
-      extends RuntimeException("yaml collection decoding error")
+  class CollectionBuildException(val error: ConstructError) extends RuntimeException("yaml collection decoding error")
 
   def decodeCollectionWith[Item, Coll](
       node: Node,

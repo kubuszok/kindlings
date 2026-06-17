@@ -59,7 +59,9 @@ trait DecoderHandleAsMapRuleImpl {
                 case MappingNode(mappings, _) =>
                   val iter = mappings.iterator
                   while (iter.hasNext) {
-                    val (keyNode, valueNode) = iter.next()
+                    val entry = iter.next()
+                    val keyNode = entry._1
+                    val valueNode = entry._2
                     val key = keyNode match {
                       case ScalarNode(value, _) => value
                       case other                =>
