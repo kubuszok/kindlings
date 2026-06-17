@@ -201,56 +201,42 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           .asInstanceOf[Either[ConstructError, Any]]
                       }
                   }
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                  // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
+                  // intermediate `Array[Any]`.
+                  val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
                     val typedExpr = Expr.quote {
-                      YamlDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
-                        Expr.splice(decoderExpr)
-                      )
+                      YamlDerivationUtils.unsafeCast(Expr.splice(valExpr), Expr.splice(decoderExpr))
                     }
                     (fName, typedExpr.as_??)
                   }
-                  (decodeExpr, makeAccessor)
+                  (decodeExpr, makeFieldArg)
                 }
               }
             }
             .flatMap { fieldData =>
               val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
+              val makeFieldArgs = fieldData.toList.map(_._2)
 
-              val listExpr: Expr[List[Either[ConstructError, Any]]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Either[ConstructError, Any]])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+              // Zero-allocation fail-fast construction: nested zero-closure `Either` folds short-circuit on the first
+              // `Left`, with no intermediate `List`, `Array[Any]`, `sequence`, or closure.
+              def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
+                val nonTransientFieldMap: Map[String, Expr_??] =
+                  makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
+                val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
+                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                  onTypes = _ => Map.empty,
+                  onValues = _ => fieldMap
+                ) match {
+                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                  case Left(error)          =>
+                    Environment.reportErrorAndAbort(
+                      DecoderDerivationError
+                        .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                        .message
+                    )
                 }
-
-              LambdaBuilder
-                .of1[Array[Any]]("decodedValues")
-                .traverse { decodedValuesExpr =>
-                  val nonTransientFieldMap: Map[String, Expr_??] =
-                    makeAccessors.map(_(decodedValuesExpr)).toMap
-                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                    onTypes = _ => Map.empty,
-                    onValues = _ => fieldMap
-                  ) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                    case Left(error)          =>
-                      val err = DecoderDerivationError.CannotConstructType(
-                        Type[A].prettyPrint,
-                        isSingleton = false,
-                        Some(error)
-                      )
-                      Log.error(err.message) >> MIO.fail(err)
-                  }
-                }
-                .map { builder =>
-                  val constructLambda = builder.build[A]
-                  Expr.quote {
-                    YamlDerivationUtils
-                      .sequenceDecodeResults(Expr.splice(listExpr))
-                      .map(Expr.splice(constructLambda))
-                  }
-                }
+              }
+              MIO.pure(buildEitherFailFast[ConstructError, A](decodeExprs)(constructFF))
             }
       }
     }
