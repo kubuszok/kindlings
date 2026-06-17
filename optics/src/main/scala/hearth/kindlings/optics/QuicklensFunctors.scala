@@ -5,34 +5,9 @@ package hearth.kindlings.optics
 // functor type classes. What remains here are only the invariant compile-time marker evidences that let the path lambda
 // type-check (the macro decides real support and does the rebuild).
 
-/** Compile-time evidence that lets `_.xs.each` type-check, pinning the traversed element type as the member `Elem`
-  * (invariantly, so it cannot be widened). This is ONLY a typer gate: whether `C` is actually traversable — and the
-  * rebuild — is decided by the `modify` macro via Hearth's `IsCollection`/`IsMap`/`IsOption` SPI. Keeping the evidence
-  * permissive (any `F[A]`/`Array`/`Map`) is what lets a provider jar on the classpath (cats `NonEmpty*`, java
-  * collections, ...) light up `.each` with NO per-type given.
-  */
-@scala.annotation.implicitNotFound("`.each` expects a collection/map/Option-shaped container, but ${C} is not one")
-sealed trait IsElementOf[C] { type Elem }
-
-object IsElementOf extends LowPriorityIsElementOf {
-  type Aux[C, A] = IsElementOf[C] { type Elem = A }
-  private[optics] val instance: IsElementOf[Any] = new IsElementOf[Any] { type Elem = Any }
-  private[optics] def of[C, A]: Aux[C, A] = instance.asInstanceOf[Aux[C, A]]
-
-  // Map values traverse to the value type `V`. `Array[A]` does not unify the unary `F[A]` shape, so it needs its own
-  // rule. Both sit at higher priority than the catch-all `fromUnary`, so `Map`/`Array` resolve unambiguously.
-  implicit def map[K, V]: Aux[Map[K, V], V] = of
-  implicit def array[A]: Aux[Array[A], A] = of
-}
-
-sealed trait LowPriorityIsElementOf {
-
-  /** Catch-all: any unary `F[A]` is `.each`-able at the type level (precise element `A` by unification). Lower priority
-    * than [[IsElementOf.map]]/[[IsElementOf.array]] so `Map`/`Array` don't become ambiguous. The `modify` macro decides
-    * real support via the `IsCollection`/`IsMap`/`IsOption` SPI and errors clearly otherwise.
-    */
-  implicit def fromUnary[F[_], A]: IsElementOf.Aux[F[A], A] = IsElementOf.of
-}
+// `IsElementOf` (the `.each` evidence) lives in the per-platform `IsElementOf.scala` files: it is materialized by a
+// whitebox (Scala 2) / transparent inline (Scala 3) given that consults the std SPI, so `.each` type-checks ONLY when the
+// container actually has an `IsCollection`/`IsMap`/`IsOption` provider, with the element type taken from it.
 
 /** Common (non-parameterised) supertype of the Phase 3 marker evidences, so the macro can recognise a synthesized
   * evidence value argument by a single `Type.isSubtypeOf[T, PathStepEvidence]` check (an invariant `IsXxx[C]` is not a
