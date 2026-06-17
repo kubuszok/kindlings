@@ -610,6 +610,35 @@ are not auto-applied; identical `scala.Function1` at runtime) and apply explicit
 
 **Reference:** mock `MockScala3Spec` context-function test.
 
+### 40. Gate Scala 3 DSL markers behind a phantom context function — peel it with `betaReduce` + unwrap the `Block`
+
+**Severity: MEDIUM | Platform: Scala 3**
+
+To make path-DSL markers (`.each`/`.at`/`.when`/…) resolve **only inside** `modify` (so they don't
+pollute IDE completion on every collection value), take the path as a **context function**
+`OpticsContext ?=> (S => A)` and require each marker `(using OpticsContext)`. The `?=>` injects a
+`given OpticsContext` for the path body only; `OpticsContext` is a `sealed trait` with no public
+instance/given, so outside `modify` the markers fail with "No given instance of type OpticsContext".
+A plain lambda `_.a.b` is auto-wrapped into the context function by the expected type, so call sites
+are unchanged. Make `OpticsContext extends PathStepEvidence` so the synthesized `using` arg is
+dropped by the same evidence-stripping the other markers use.
+
+The macro must **peel** the `OpticsContext` layer before parsing, and there are two traps:
+- `Expr.betaReduce('{ $path(using null.asInstanceOf[OpticsContext]) })` reduces the application but
+  lands a **`Block` that binds the throwaway arg to a `val`** (`{ val ctx$1 = null; <lambda> }`).
+  `DestructuredExpr.parse` only accepts a bare lambda, so strip that wrapper block.
+- But a lambda is itself encoded as `Block(List(DefDef($anonfun)), Closure)` — naively recursing
+  into every `Block`'s result expr lands on the bare `Closure` and loses the `DefDef`
+  (`<non-destructurable: $anonfun>`). Stop unwrapping at `Block(List(_: DefDef), _: Closure)`; only
+  strip the binding block. The peeled lambda still references the dropped `val` in its marker
+  evidence positions, but those args are `OpticsContext`-typed and the parser discards them.
+
+Scala 2 has no context functions, so this is Scala-3-only; the Scala 2 markers stay gated by
+`@compileTimeOnly` + the implicit-conversion projection (pitfall #38).
+
+**Reference:** optics `OpticsContext.scala`, scala-3 `syntax.scala` markers, scala-3
+`internal/compiletime/ModifyMacros.scala` `peelContext`.
+
 ---
 
 ## Resolved Hearth issues (for context only)
