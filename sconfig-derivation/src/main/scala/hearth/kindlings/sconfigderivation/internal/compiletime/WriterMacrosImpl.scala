@@ -236,7 +236,8 @@ trait WriterMacrosImpl
           WriterUseImplicitWhenAvailableRule,
           WriterHandleAsValueTypeRule,
           WriterHandleAsOptionRule,
-          WriterHandleAsMapRule,
+          // WriterHandleAsMapRule is merged into WriterHandleAsCollectionRule: a map is an `IsCollection` whose
+          // proof is an `IsMapOf`, so we parse `IsCollection` once and dispatch via `.asMap`.
           WriterHandleAsCollectionRule,
           WriterHandleAsNamedTupleRule,
           WriterHandleAsSingletonRule,
