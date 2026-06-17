@@ -320,65 +320,65 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17, 2 for
 
 | Type | Scala | Kindlings | kittens semi | kittens auto | vs best kittens |
 |------|-------|-----------|-------------|-------------|-----------------|
-| SimpleCC | 2.13 | 48.1M | 18.0M | 17.6M | **2.7x faster** |
-| SimpleCC | 3 | 47.8M | 14.3M | 12.3M | **3.3x faster** |
-| SimpleADT | 2.13 | 166M | 30.0M | 17.2M | **5.5x faster** |
-| SimpleADT | 3 | 97.6M | 34.1M | 35.0M | **2.8x faster** |
-| Person | 2.13 | 2.3M | — | 1.4M | **1.7x faster** |
-| Person | 3 | 1.8M | — | 1.5M | **1.2x faster** |
-| Event | 2.13 | 2.1M | 1.2M | 1.1M | **1.8x faster** |
-| Event | 3 | 1.9M | 567.5K | 1.3M | **1.5x faster** |
+| SimpleCC | 2.13 | 38.2M | 7.5M | 7.0M | **5.1x faster** |
+| SimpleCC | 3 | 27.2M | 19.6M | 19.9M | **1.4x faster** |
+| SimpleADT | 2.13 | 86.0M | 16.2M | 10.4M | **5.3x faster** |
+| SimpleADT | 3 | 72.8M | 51.9M | 52.8M | **1.4x faster** |
+| Person | 2.13 | 2.0M | — | 804K | **2.5x faster** |
+| Person | 3 | 1.6M | — | 1.4M | **1.1x faster** |
+| Event | 2.13 | 1.9M | 602K | 620K | **3.1x faster** |
+| Event | 3 | 1.5M | 535K | 1.2M | **1.3x faster** |
 
 #### Eq
 
 | Type | Scala | Kindlings | kittens best | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| SimpleCC (eq) | 2.13 | 97.4M | 46.0M | **2.1x faster** |
-| SimpleCC (eq) | 3 | 83.2M | 85.3M | **~tied** |
+| SimpleCC (eq) | 2.13 | 100.2M | 46.1M | **2.2x faster** |
+| SimpleCC (eq) | 3 | 102.3M | 92.2M | **1.1x faster** |
 
 #### Hash
 
 | Type | Scala | Kindlings | kittens best | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| SimpleCC | 2.13 | 264M | 37.4M | **7.1x faster** |
-| SimpleCC | 3 | 234M | 53.4M | **4.4x faster** |
+| SimpleCC | 2.13 | 824.9M | 27.4M | **30.1x faster** |
+| SimpleCC | 3 | 828.3M | 110.0M | **7.5x faster** |
 
 #### Order
 
 | Type | Scala | Kindlings | kittens best | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| SimpleCC | 2.13 | 451M | 72.0M | **6.3x faster** |
-| SimpleCC | 3 | 415M | 329M | **1.3x faster** |
+| SimpleCC | 2.13 | 424.8M | 389.7M | **1.1x faster** |
+| SimpleCC | 3 | 429.7M | 347.6M | **1.2x faster** |
 
 #### Semigroup
 
 | Type | Scala | Kindlings | kittens semi | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| IntPair | 2.13 | 508M | 71.6M | **7.1x faster** |
-| IntPair | 3 | 154M | 102M | **1.5x faster** |
+| IntPair | 2.13 | 194.1M | 54.3M | **3.6x faster** |
+| IntPair | 3 | 193.6M | 146.3M | **1.3x faster** |
 
 #### Monoid
 
 | Type | Scala | Kindlings | kittens semi | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| IntPair (combine) | 2.13 | 561M | 72.9M | **7.7x faster** |
-| IntPair (combine) | 3 | 155M | 101M | **1.5x faster** |
-| IntPair (empty) | 2.13 | 1896M | 1659M | **1.14x faster** |
-| IntPair (empty) | 3 | 2077M | 603M | **3.4x faster** |
+| IntPair (combine) | 2.13 | 192.8M | 49.0M | **3.9x faster** |
+| IntPair (combine) | 3 | 193.9M | 119.5M | **1.6x faster** |
+| IntPair (empty) | 2.13 | 3.6B | 1.7B | **2.1x faster** |
+| IntPair (empty) | 3 | 3.7B | 1.0B | **3.7x faster** |
 
 #### Functor
 
 | Type | Scala | Kindlings | kittens semi | vs kittens |
 |------|-------|-----------|-------------|-----------|
-| SimpleCCBox (map) | 2.13 | 205M | 4.4M | **47x faster** |
-| SimpleCCBox (map) | 3 | 238M | 84.9M | **2.8x faster** |
+| SimpleCCBox (map) | 2.13 | 277.3M | 5.7M | **49x faster** |
+| SimpleCCBox (map) | 3 | 275.9M | 65.2M | **4.2x faster** |
 
 #### Foldable / Traverse (Scala 3 only — kittens Scala 2 doesn't support these)
 
 | Type class | Kindlings | kittens semi | vs kittens |
 |-----------|-----------|-------------|-----------|
-| Foldable (foldLeft) | 1006M | 120M | **8.4x faster** |
-| Traverse (traverse) | 123M | 24.2M | **5.1x faster** |
+| Foldable (foldLeft) | 1.6B | 109.6M | **14.6x faster** |
+| Traverse (traverse) | 164.2M | 18.7M | **8.8x faster** |
 
 #### Show vs ShowPretty vs FastShowPretty
 
@@ -386,11 +386,11 @@ Pretty printing introduces indentation and multi-line output. The table below co
 
 | Approach | SimpleCC | Person | Notes |
 |----------|----------|--------|-------|
-| Kindlings Show | 49.0M | 2.0M | Plain single-line output |
-| Kindlings ShowPretty | 50.0M | 2.1M | Multi-line indented, ~0% overhead vs Show |
-| kittens ShowPretty | 6.2M | 644.7K | List[String] line accumulation |
-| Kindlings FastShowPretty | 27.3M | 1.4M | StringBuilder + escaped strings |
+| Kindlings Show | 27.0M | 1.7M | Plain single-line output |
+| Kindlings ShowPretty | 34.3M | 1.8M | Multi-line indented, ~0% overhead vs Show |
+| kittens ShowPretty | 5.4M | 557.0K | List[String] line accumulation |
+| Kindlings FastShowPretty | 18.0M | 1.3M | StringBuilder + escaped strings |
 
-Kindlings ShowPretty is **8.1x faster** than kittens ShowPretty for SimpleCC and **3.3x** for Person. The overhead vs plain Show is negligible because indentation is handled at runtime by a simple `indentSubsequentLines` helper on the result string.
+Kindlings ShowPretty is **6.4x faster** than kittens ShowPretty for SimpleCC and **3.2x** for Person. The overhead vs plain Show is negligible because indentation is handled at runtime by a simple `indentSubsequentLines` helper on the result string.
 
-FastShowPretty uses `StringBuilder` instead of string concatenation and produces a richer format (quoted strings with escape handling, type suffixes on numeric literals). The StringBuilder allocation + `.toString()` copy adds fixed overhead that dominates for small types but amortizes for larger ones (Person: only 1.5x behind ShowPretty).
+FastShowPretty uses `StringBuilder` instead of string concatenation and produces a richer format (quoted strings with escape handling, type suffixes on numeric literals). The StringBuilder allocation + `.toString()` copy adds fixed overhead that dominates for small types but amortizes for larger ones (Person: only 1.4x behind ShowPretty).

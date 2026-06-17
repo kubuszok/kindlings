@@ -236,24 +236,24 @@ scalacOptions += "-Xmacro-settings:jsoniterDerivation.logDerivation=true"
 All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 
 !!! note
-    Kindlings is at parity with jsoniter-scala's own macros: writes and reads are ~tied (within ~1.1x in both directions). The only consistent gap is SimpleCC read on Scala 2.13 (0.92x).
+    Kindlings matches jsoniter-scala's own macros: reads land at 0.96–1.04x and writes at 0.91–1.02x of the hand-tuned reference. The only consistent gap is SimpleADT write (0.91x on 2.13, 0.92x on 3).
 
 #### Write
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 59.5M | 60.2M | 62.4M | 0.97x |
-| SimpleCC | 3 | 62.0M | 62.4M | 58.4M | **1.07x faster** |
-| Person | 2.13 | 4.5M | 4.5M | 4.4M | **~tied** |
-| Person | 3 | 5.3M | 5.3M | 5.2M | **~tied** |
-| Event | 2.13 | 4.0M | 3.7M | 4.1M | **~tied** |
-| Event | 3 | 4.7M | 4.7M | 4.7M | **~tied** |
+| SimpleCC | 2.13 | 61.1M | 59.3M | 60.8M | **~tied** |
+| SimpleCC | 3 | 63.6M | 63.9M | 63.8M | **~tied** |
+| Person | 2.13 | 4.8M | 4.7M | 4.7M | **~tied** |
+| Person | 3 | 5.5M | 5.4M | 5.4M | **~tied** |
+| Event | 2.13 | 4.5M | 4.5M | 4.3M | **~tied** |
+| Event | 3 | 4.8M | 4.8M | 4.9M | **~tied** |
 
 #### Read
 
 | Type | Scala | Kindlings semi | Kindlings auto | Original semi | vs original |
 |------|-------|---------------|---------------|--------------|------------|
-| SimpleCC | 2.13 | 29.7M | 31.2M | 33.7M | 0.92x |
-| SimpleCC | 3 | 34.6M | 34.5M | 33.9M | **~tied** |
-| Person | 2.13 | 2.6M | 3.5M | 3.1M | **1.11x faster** |
-| Person | 3 | 3.6M | 3.6M | 3.6M | **~tied** |
+| SimpleCC | 2.13 | 36.4M | 35.8M | 35.5M | **~tied** |
+| SimpleCC | 3 | 36.4M | 36.4M | 35.1M | **~tied** |
+| Person | 2.13 | 3.6M | 3.6M | 3.8M | 0.96x |
+| Person | 3 | 3.6M | 3.7M | 3.8M | 0.98x |
