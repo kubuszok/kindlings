@@ -18,6 +18,7 @@ import pureconfig.error.ConfigReaderFailures
 trait ReaderMacrosImpl
     extends PureconfigDerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsValueTypeRuleImpl
