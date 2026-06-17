@@ -67,9 +67,16 @@ trait AvroEncoderHandleAsNamedTupleRuleImpl {
               val fieldsListExpr = fieldPairs.toList.foldRight(
                 Expr.quote(List.empty[(String, Any)])
               ) { case ((fName, fieldEncoded), acc) =>
+                val fieldNameExpr: Expr[String] = ectx.evaluatedConfig match {
+                  // Config statically known: map the field name at compile time to a constant string,
+                  // dropping the per-field runtime `config.transformFieldNames(name)` call.
+                  case Some(cfg) => Expr(cfg.transformFieldNames(fName))
+                  case None      =>
+                    Expr.quote(Expr.splice(ectx.config).transformFieldNames(Expr.splice(Expr(fName))))
+                }
                 Expr.quote {
                   (
-                    Expr.splice(ectx.config).transformFieldNames(Expr.splice(Expr(fName))),
+                    Expr.splice(fieldNameExpr),
                     Expr.splice(fieldEncoded)
                   ) :: Expr.splice(acc)
                 }

@@ -73,12 +73,16 @@ trait AvroDecoderHandleAsNamedTupleRuleImpl {
               import param.tpe.Underlying as Field
               Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { decoderExpr =>
+                  // Map the field name at compile time when the config is statically known (no runtime
+                  // `config.transformFieldNames(name)` call); fall back to the runtime call otherwise.
+                  val fieldNameExpr: Expr[String] = dctx.evaluatedConfig match {
+                    case Some(cfg) => Expr(cfg.transformFieldNames(fName))
+                    case None      =>
+                      Expr.quote(Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName))))
+                  }
                   val decodeExpr: Expr[Any] = Expr.quote {
                     val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                    val fieldValue = AvroDerivationUtils.decodeRecord(
-                      record,
-                      Expr.splice(dctx.config).transformFieldNames(Expr.splice(Expr(fName)))
-                    )
+                    val fieldValue = AvroDerivationUtils.decodeRecord(record, Expr.splice(fieldNameExpr))
                     Expr.splice(decoderExpr).decode(fieldValue): Any
                   }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
