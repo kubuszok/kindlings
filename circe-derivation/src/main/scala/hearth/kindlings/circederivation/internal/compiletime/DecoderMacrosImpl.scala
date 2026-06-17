@@ -406,7 +406,9 @@ trait DecoderMacrosImpl
           DecoderUseImplicitWhenAvailableRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
-          DecoderHandleAsMapRule,
+          // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
+          // so the standalone DecoderHandleAsMapRule is no longer in the chain (its object is kept for
+          // decodeMapEntries / deriveKeyDecoder).
           DecoderHandleAsCollectionRule,
           DecoderHandleAsNamedTupleRule,
           DecoderHandleAsSingletonRule,

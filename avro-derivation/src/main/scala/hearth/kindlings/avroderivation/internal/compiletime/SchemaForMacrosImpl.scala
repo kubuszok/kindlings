@@ -278,7 +278,7 @@ trait SchemaForMacrosImpl
           AvroSchemaForHandleAsValueTypeRule,
           AvroSchemaForHandleAsOptionRule,
           AvroSchemaForHandleAsEitherRule,
-          AvroSchemaForHandleAsMapRule,
+          // Map handling is folded into the collection rule (single IsCollection parse, dispatched via `.asMap`).
           AvroSchemaForHandleAsCollectionRule,
           AvroSchemaForHandleAsNamedTupleRule,
           AvroSchemaForHandleAsSingletonRule,
