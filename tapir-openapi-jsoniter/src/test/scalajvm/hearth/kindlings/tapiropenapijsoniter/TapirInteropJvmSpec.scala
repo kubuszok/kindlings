@@ -27,7 +27,7 @@ final class TapirInteropJvmSpec extends MacroSuite {
 
   /** Assert the bridge's serialisation equals circe's, byte-for-byte, and round-trips to the same model. */
   private def crossCheckAndRoundTrip(doc: OpenAPI): Unit = {
-    import OpenApiJsoniter.circe.openAPICodec
+    import OpenApiJsoniter.openapi_3_1.openAPICodec
     val ours = TapirOpenApi.toJson(doc)
     ast(ours) ==> ast(circe.encoderOpenAPI(doc).noSpaces)
     readFromString[OpenAPI](ours)(openAPICodec) ==> doc

@@ -30,7 +30,7 @@ object KindlingsOpenApiInstances {
   import com.github.plokhotnyuk.jsoniter_scala.core.*
   import hearth.kindlings.tapiropenapijsoniter.OpenApiJsoniter
 
-  implicit private val codec: JsonValueCodec[OpenAPI] = OpenApiJsoniter.circe.openAPICodec
+  implicit private val codec: JsonValueCodec[OpenAPI] = OpenApiJsoniter.openapi_3_1.openAPICodec
 
   def encode(doc: OpenAPI): String = writeToString(doc)
   def decode(json: String): OpenAPI = readFromString[OpenAPI](json)
