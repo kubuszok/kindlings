@@ -12,19 +12,27 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
 trait EncoderHandleAsCollectionRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
-  object EncoderHandleAsCollectionRule extends EncoderDerivationRule("handle as collection when possible") {
+  object EncoderHandleAsCollectionRule extends EncoderDerivationRule("handle as collection or map when possible") {
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
-      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection") >> {
+      Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection or map") >> {
         Type[A] match {
           case IsCollection(isCollection) =>
+            // A map is an `IsCollectionOf` whose proof is an `IsMapOf`. Parse `IsCollection` ONCE and dispatch on
+            // that, instead of the old map-rule (`IsMap.parse` = `IsCollection.parse` + cast) followed by a separate
+            // collection rule that parsed `IsCollection` again — every non-map field paid for the parse twice.
             import isCollection.Underlying as Item
-            if (ectx.evaluatedConfig.isDefined) encodeCollectionInline[A, Item](isCollection.value)
-            else encodeCollectionViaHelper[A, Item](isCollection.value)
+            isCollection.value.asMap match {
+              case Some(isMapOf) =>
+                EncoderHandleAsMapRule.deriveMapEntries[A, Item](isMapOf)
+              case None =>
+                if (ectx.evaluatedConfig.isDefined) encodeCollectionInline[A, Item](isCollection.value)
+                else encodeCollectionViaHelper[A, Item](isCollection.value)
+            }
 
           case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))
+            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
 

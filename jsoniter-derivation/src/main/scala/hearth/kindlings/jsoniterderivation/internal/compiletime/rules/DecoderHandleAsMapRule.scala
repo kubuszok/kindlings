@@ -26,7 +26,8 @@ trait DecoderHandleAsMapRuleImpl {
         }
       }
 
-    private def decodeMapEntries[A: DecoderCtx, Pair: Type](
+    // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
+    private[rules] def decodeMapEntries[A: DecoderCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[A]]] = {
       import isMap.{Key, Value, CtorResult}
