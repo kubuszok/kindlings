@@ -199,10 +199,10 @@ Or via scalac option:
 | Same API on Scala 2.13 and 3 | No (Scala 2 only) | Yes |
 | Arbitrary derivation | Yes | Yes |
 | Cogen derivation | Yes | Yes |
-| Shrink derivation | No | Yes |
-| Recursive types | Needs `Lazy` wrappers | Just works |
+| Shrink derivation | Yes | Yes |
+| Recursive types | Needs an explicit `Recursive[T]` (else `StackOverflowError`) | Just works (automatic size-based termination) |
 | Scala 3 enums | No | Yes |
-| Java enums | No | Yes |
+| Java enums | No (not derived) | Yes (JVM) |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |
 | No shapeless dependency | No | Yes |

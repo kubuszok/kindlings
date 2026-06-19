@@ -216,7 +216,7 @@ scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
 | Recursive types | Needs `Lazy` / workarounds | Just works |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |
-| Scala 3 enums | Partial | Yes |
+| Scala 3 enums | Partial (parameterless cases only, via `ConfiguredEnum*`) | Yes (full enums) |
 | Java enums | No | Yes |
 | `@ConfiguredJsonCodec` annotation | Yes | No (use `Configuration` directly) |
 

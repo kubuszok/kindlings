@@ -297,15 +297,15 @@ scalacOptions += "-Xmacro-settings:catsDerivation.logDerivation=true"
 | Eq, Order, PartialOrder, Hash | Yes | Yes | Yes |
 | Semigroup, Monoid | Yes | Yes | Yes |
 | CommutativeSemigroup, CommutativeMonoid | Yes | Yes | Yes |
-| Band, Semilattice, BoundedSemilattice | Yes | Yes | Yes |
-| Group, CommutativeGroup | Yes | Yes | Yes |
+| Band, Semilattice, BoundedSemilattice | No | Yes | Yes |
+| Group, CommutativeGroup | No | Yes | Yes |
 | Empty | Yes | Yes | Yes |
 | Functor, Contravariant, Invariant | Yes | Yes | Yes |
-| Apply, Applicative | No | Yes | Yes |
-| Foldable, Traverse | No | Yes | Yes |
-| Reducible, NonEmptyTraverse | No | Yes | Yes |
-| SemigroupK, MonoidK | No | Yes | Yes |
-| Pure, EmptyK | No | Yes | Yes |
+| Apply, Applicative | Yes | Yes | Yes |
+| Foldable, Traverse | Yes | Yes | Yes |
+| Reducible, NonEmptyTraverse | Yes | Yes | Yes |
+| SemigroupK, MonoidK | Yes | Yes | Yes |
+| Pure, EmptyK | Yes | Yes | Yes |
 | Bifunctor, Bifoldable, Bitraverse | No | Yes | Yes |
 | NonEmptyAlternative, Alternative | No | Yes | Yes |
 | ConsK | Yes | No | Yes |
@@ -373,7 +373,7 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17, 2 for
 | SimpleCCBox (map) | 2.13 | 277.3M | 5.7M | **49x faster** |
 | SimpleCCBox (map) | 3 | 275.9M | 65.2M | **4.2x faster** |
 
-#### Foldable / Traverse (Scala 3 only — kittens Scala 2 doesn't support these)
+#### Foldable / Traverse (Scala 3 benchmark only)
 
 | Type class | Kindlings | kittens semi | vs kittens |
 |-----------|-----------|-------------|-----------|

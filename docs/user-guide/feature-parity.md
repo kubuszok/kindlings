@@ -37,9 +37,9 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Custom properties (`@AvroProp` / `@avroProp`) | Yes | Yes (stackable) | Parity |
 | Aliases (`@AvroAlias` / `@avroAlias`) | Yes | Yes (stackable) | Parity |
 | Fixed size (`@AvroFixed` / `@avroFixed`) | Yes | Yes | Parity |
-| Error type (`@AvroError` / `@avroError`) | Yes | Yes | Parity |
+| Error type (`@AvroError` / `@avroError`) | v5 only (no v4 equivalent) | Yes (both Scala 2+3) | Improvement (we add it on Scala 2) |
 | Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
-| Default values (`@AvroDefault`) | From constructor defaults (automatic) | `@avroDefault(json)` (explicit JSON string) | Parity (different API) |
+| Default values | From constructor defaults (automatic; no `@AvroDefault` annotation exists upstream) | `@avroDefault(json)` (explicit JSON string) | Different API |
 | Subtype ordering (`@AvroUnionPosition` / `@avroSortPriority`) | Yes | Yes | Parity |
 | `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
 | `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |
@@ -54,7 +54,7 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | LocalDate | Yes | Yes | Parity |
 | LocalTime | Yes | Yes | Parity |
 | LocalDateTime | Yes | Yes | Parity |
-| BigDecimal | BYTES/FIXED with decimal logical type | BYTES with decimal logical type (when DecimalConfig provided); STRING fallback | Parity |
+| BigDecimal | BYTES + decimal logical type **by default** (`ScalePrecision(scale=2, precision=8)`) | STRING **by default**; BYTES + decimal logical type when `DecimalConfig` is provided | Parity (opposite default) |
 | Value classes | Unwrapped | Unwrapped | Parity |
 | Case classes → RECORD | Yes | Yes | Parity |
 | Sealed case objects → ENUM | Yes | Yes | Parity |
@@ -62,6 +62,10 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | `Either[A,B]` → UNION | Yes | Yes | Parity |
 | `Option[T]` → UNION(null,T) | Yes | Yes | Parity |
 | Recursive types | Yes (with caveats) | Yes | Parity |
+| Tuples (`Tuple2`..) → RECORD | Yes | Yes | Parity |
+| `Array[Byte]` / `Seq[Byte]` / `ByteBuffer` → BYTES | Yes | Yes | Parity |
+| `OffsetDateTime` | Yes (string + custom logical type) | Yes (as `timestamp-millis` long — different encoding) | Parity (different encoding) |
+| Scala `Enumeration` | Yes | No | Gap |
 | Shapeless Coproduct → UNION | Yes | No | Gap |
 
 ### Cross-compilation
@@ -79,11 +83,11 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
 | Refined types | `avro4s-refined` module — external ecosystem |
 | Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
-| `OffsetDateTime`, `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types |
+| `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types (we do support `OffsetDateTime`, though with a different encoding — see type-support table) |
+| Scala `Enumeration` | Upstream maps `scala.Enumeration#Value` to an Avro ENUM; Kindlings does not |
 | Timestamp precision variants (`TimestampMicros`, `TimestampNanos`) | Upstream supports micros/nanos; Kindlings uses millis |
-| Byte collection special-casing (`Array[Byte]` → `BYTES`) | Upstream auto-detects byte arrays/collections and maps to Avro BYTES |
 | Decoder type widening | Upstream widens `Int` → `Long`, `Float` → `Double` during decoding |
-| Generic type parameter names in schema | Upstream encodes generic type params in schema name (e.g., `Box[Int]`); Kindlings erases them (design decision) |
+| Byte-identical generic schema names | Both encode generic type params in the schema name, but Kindlings joins multiple type args with `__` (`Pair__String__Int`) where upstream uses a single `_` (`Pair__String_Int`) — names are not byte-identical for multi-arg generics |
 
 ### `@avroSortPriority` note
 
@@ -109,11 +113,11 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.kernel.Monoid` | Yes | Yes | Yes | Parity |
 | `cats.kernel.CommutativeSemigroup` | Yes | Yes | Yes | Parity |
 | `cats.kernel.CommutativeMonoid` | Yes | Yes | Yes | Parity |
-| `cats.kernel.Band` | Yes | Yes | Yes | Parity |
-| `cats.kernel.Semilattice` | Yes | Yes | Yes | Parity |
-| `cats.kernel.BoundedSemilattice` | Yes | Yes | Yes | Parity |
-| `cats.kernel.Group` | Yes | Yes | Yes | Parity |
-| `cats.kernel.CommutativeGroup` | Yes | Yes | Yes | Parity |
+| `cats.kernel.Band` | No | Yes | Yes | Parity+ |
+| `cats.kernel.Semilattice` | No | Yes | Yes | Parity+ |
+| `cats.kernel.BoundedSemilattice` | No | Yes | Yes | Parity+ |
+| `cats.kernel.Group` | No | Yes | Yes | Parity+ |
+| `cats.kernel.CommutativeGroup` | No | Yes | Yes | Parity+ |
 | `alleycats.Empty` | Yes | Yes | Yes | Parity |
 
 ### Type classes — polymorphic (kind `* -> *`)
@@ -158,7 +162,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 |---|---|---|---|
 | Case classes (products) | Yes | Yes | Parity |
 | Sealed traits (coproducts) — Show, Eq, Order, Hash | Yes | Yes | Parity |
-| Sealed traits (coproducts) — Functor, Foldable, Traverse (e.g., `IList[A]`) | Scala 3 only (partial) | Yes (both Scala 2+3) | Improvement |
+| Sealed traits (coproducts) — Functor, Foldable, Traverse (e.g., `IList[A]`) | Yes (both, via Shapeless on 2 / Mirrors on 3) | Yes (both Scala 2+3) | Parity |
 | Sealed traits (coproducts) — Bifunctor, Bifoldable, Bitraverse (e.g., `Result[A, E]`) | No | Yes | Improvement |
 | Sealed trait with case objects only | Yes | Yes | Parity |
 | Nested container fields (e.g., `Vector[A]`, `Option[A]` in `F[A]`) for Functor/Foldable/Traverse | Scala 2 only (Shapeless) | Yes (both Scala 2+3) | Improvement |
@@ -195,8 +199,56 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | Notes |
 |---|---|
-| `cats.Show` for enums using ordinal | kittens uses ordinal for Show of coproducts; Kindlings uses class name + fields |
 | Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
+| `cats.sequence` / `cats.lift` / `cats.replicateH` | kittens Scala-2/Shapeless utilities (sequencing over HLists/records, lifting functions, heterogeneous replicate); out of scope for type-class derivation |
+| `Iterable` derivation (`MkIterable`) | kittens Scala-2-only helper; not ported |
+
+---
+
+## cats-tagless-derivation
+
+**Replaces:** [cats-tagless](https://typelevel.org/cats-tagless/) derivation macros — `cats.tagless.Derive.*`, the `@auto*K` macro annotations (Scala 2), and the Scala 3 `derive`/`derived` givens.
+
+### Type classes — kind `(* -> *) -> *` (tagless-final algebras)
+
+| Type class | cats-tagless (Scala 2) | cats-tagless (Scala 3) | Kindlings | Status |
+|---|---|---|---|---|
+| `cats.tagless.FunctorK` | Yes | Yes | Yes | Parity |
+| `cats.tagless.ContravariantK` | Yes | Yes | Yes | Parity |
+| `cats.tagless.InvariantK` | Yes | Yes | Yes | Parity |
+| `cats.tagless.ApplyK` | Yes | Yes | Yes | Parity |
+| `cats.tagless.SemigroupalK` | Yes | Yes | Yes | Parity |
+| `cats.tagless.aop.Instrument` | Yes | Yes | Yes | Parity |
+
+### Algebra support
+
+| Feature | cats-tagless | Kindlings | Status |
+|---|---|---|---|
+| `trait Alg[F[_]]` algebras | Yes | Yes | Parity |
+| `case class Alg[F[_]]` algebras | Scala 3 only (separate `cats-tagless-data` module via `derives`; core `Derive.*` is trait-only) | Yes (Scala 2 + 3, same `.derived`) | Improvement |
+| Mixed members (`F[_]` + plain) | Yes | Yes | Parity |
+| `F[_]` in argument position (`InvariantK`) | Yes | Yes | Parity |
+| Nested algebras | Yes | Yes | Parity |
+| Recursive derivation of nested algebra without explicit instance | Partial | Yes | Improvement |
+
+### Derivation API
+
+| Feature | cats-tagless | Kindlings | Status |
+|---|---|---|---|
+| Semi-automatic (`Derive.functorK` / `KindlingsFunctorK.derived`) | Yes | Yes | Parity |
+| Macro-annotation derivation (`@autoFunctorK`, …) | Yes (Scala 2 only) | No (use `.derived`) | Trade-off |
+| Unified Scala 2 + 3 API | No — macro annotations on 2, inline `derive` on 3 | Yes — same `.derived` call shape on both | Improvement |
+| `@experimental` required (Scala 3) | Yes (`Derive.*` / `derives` are `@experimental`) | No | Improvement |
+| Cross-platform (JVM / JS / Native) | JVM + JS + Native | JVM + JS + Native | Parity |
+
+### Not ported
+
+| Feature | Notes |
+|---|---|
+| `@autoFunctorK` / `@finalAlg` / `@autoInstrument` macro annotations | Kindlings uses explicit `.derived` calls instead of annotation-driven companion generation |
+| `aop.Aspect` (general AOP) beyond `Instrument` | Only `Instrument` is derived; the more general `Aspect[Alg, Dom, Cod]` is not ported |
+| `Derive.const` / `Derive.void` / `Derive.readerT` algebra constructors | Not ported — out of scope (constant / `Unit` / `ReaderT`-forwarding algebra implementations) |
+| `Derive.semigroupK` / `Derive.monoidK` | Out of scope — these derive plain cats `SemigroupK`/`MonoidK` for `F[_]`, not `(* -> *) -> *` algebra type classes |
 
 ---
 
@@ -240,7 +292,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 ## circe-derivation
 
-**Replaces:** `circe-generic-extras` (Scala 2 only, community-maintained) + circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder`/`ConfiguredCodec`
+**Replaces:** `circe-generic-extras` (community-maintained; Scala 2 via Shapeless, Scala 3 via Mirrors — cross-published JVM/JS/Native since 0.14.5) + circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder`/`ConfiguredCodec`
 
 ### Configuration
 
@@ -251,7 +303,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `useDefaults` | Yes (Scala 3 needs `-Yretain-trees`) | Yes | Parity |
 | Discriminator field | Yes | Yes | Parity |
 | Strict decoding | Yes | Yes | Parity |
-| `enumAsStrings` config flag | Scala 2: `deriveEnumeration*`; Scala 3: `EnumEncoder`/`EnumDecoder` (parameterless only) | Yes (unified config flag, both Scala 2+3) | Improvement |
+| `enumAsStrings` config flag | Scala 2: `deriveEnumeration*`; Scala 3: `ConfiguredEnumEncoder`/`ConfiguredEnumDecoder`/`ConfiguredEnumCodec` (parameterless cases only) | Yes (unified config flag, both Scala 2+3, full enums) | Improvement |
 
 ### Type classes
 
@@ -273,19 +325,18 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | circe | Kindlings | Status |
 |---|---|---|---|
-| Value class unwrapping | `deriveUnwrapped*` (Scala 2 only! No Scala 3 equivalent) | Automatic (both Scala 2+3) | Improvement |
-| Recursive types | Scala 2: needs Shapeless `Lazy`; Scala 3: broken with auto-derivation ([#1980](https://github.com/circe/circe/issues/1980)) | Works without wrappers | Improvement |
-| Non-string map keys | Manual `KeyEncoder`/`KeyDecoder` | Derived (Int, Long, Double, Short, Byte, value classes) | Improvement |
-| `Option` null vs absent | No distinction | Yes | Improvement |
-| Scala 3 enums | Parameterless only (`EnumEncoder`/`EnumDecoder`) | Full support via `enumAsStrings` | Improvement |
+| Value class unwrapping | `deriveUnwrapped*` (explicit; both Scala 2+3) | Automatic (both Scala 2+3) | Improvement (automatic vs explicit) |
+| Recursive types | Scala 2: needs Shapeless `Lazy`; Scala 3: broken with fully-automatic `generic.auto` derivation ([#1980](https://github.com/circe/circe/issues/1980)) | Works without wrappers | Improvement |
+| Non-string map keys | Built-in for Int/Long/Double/Short/Byte/UUID/URI/Symbol; manual `KeyEncoder`/`KeyDecoder` for value classes & enums | Auto-derived (those primitives + value classes + enums) | Improvement (auto value-class/enum keys) |
+| Scala 3 enums | Parameterless cases only (`ConfiguredEnumEncoder`/`ConfiguredEnumDecoder`) | Full support via `enumAsStrings` | Improvement |
 
 ### Cross-compilation
 
 | Feature | circe | Kindlings | Status |
 |---|---|---|---|
 | Unified Scala 2+3 API | No — different modules, different APIs, feature gaps on Scala 3 | Yes | Improvement |
-| Cross-platform (JVM/JS/Native) | JVM focus (Shapeless-based on Scala 2) | JVM + JS + Native | Improvement |
-| Compile-time performance | Shapeless = slow, stack overflows on deep types | Hearth macros | Improvement |
+| Cross-platform (JVM/JS/Native) | Yes (circe core and circe-generic-extras 0.14.5+ both cross-publish) | JVM + JS + Native | Parity |
+| Compile-time performance | Scala 2: Shapeless = slow, stack overflows on deep types; Scala 3: Mirror-based | Hearth macros | Improvement (esp. vs Scala 2 Shapeless) |
 | Error messages | "could not find Lazy implicit value..." | Clear messages from Hearth | Improvement |
 
 ### Not ported
@@ -293,7 +344,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Feature | Notes |
 |---|---|
 | `@ConfiguredJsonCodec` macro annotation | Minor — `derives` / explicit derivation covers the same ground |
-| `incomplete`/`patch` decoders | Niche API for partial decoding — not ported |
+| `incomplete` decoders | Niche partial-decoding API — not ported (note: `patch` **is** ported, via `KindlingsDecoder.patch`) |
 | `ExtrasDecoder` | Extension of Decoder with extra metadata — not ported |
 | `@JsonNoDefault` equivalent | Upstream suppresses default for specific fields; Kindlings `@transientField` serves a different purpose (excludes from encoding entirely) |
 
@@ -311,7 +362,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | ADT leaf class name mapper | Yes | Yes | Parity |
 | Discriminator field | Yes (default `Some("type")`) | Yes | Parity |
 | Skip unexpected fields | Yes (default `true`) | Yes | Parity |
-| Enum as strings | Yes | Yes | Parity |
+| Enum as strings | No (controlled per-type/per-codec) | Yes (`withEnumAsStrings`, unified config flag) | Improvement |
 | Map as array | Yes | Yes | Parity |
 | `transientDefault` | Yes | Yes | Parity |
 | `transientEmpty` | Yes | Yes | Parity |
@@ -325,6 +376,11 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `bigDecimalPrecision`/`bigDecimalScaleLimit`/`bigDecimalDigitsLimit` | Yes (DoS protection) | Yes | Parity |
 | `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes | Parity |
 | `useScalaEnumValueId` | Yes | Yes | Parity |
+| `javaEnumValueNameMapper` | Yes | Yes (`withJavaEnumValueNameMapper`) | Parity |
+| `inlineOneValueClasses` | Yes | Yes (`withInlineOneValueClasses`) | Parity |
+| `bitSetValueLimit` (DoS protection) | Yes | Yes | Parity |
+| `skipNestedOptionValues` | Yes | Yes | Parity |
+| `alwaysEmitDiscriminator` | Yes | Yes (`withAlwaysEmitDiscriminator`) | Parity |
 
 ### Type classes
 
@@ -368,21 +424,28 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Feature | Notes |
 |---|---|
 | Convenience factories (`makeCirceLike`, etc.) | Pre-configured codec makers — trivially achievable with `JsoniterConfig.default.withCirceLikeObjectEncoding` |
-| `javaEnumValueNameMapper` | Separate mapper for Java enum values — not ported |
 | `requireCollectionFields` buffering | Config field exists but full buffering behavior not wired |
+| `bigIntDigitsLimit` (DoS protection) | Upstream has a separate digit cap for `BigInt` (default `308`); Kindlings ships the `BigDecimal` caps but not the `BigInt` counterpart |
+| `scalaTransientSupport` | Upstream can honor `scala.transient`; Kindlings only honors its own `@transientField` |
+| `transientNull` | Upstream can skip `null`-valued fields on encode; not implemented |
 
 **Design decisions** (not gaps):
 - `requireDiscriminatorFirst` — Kindlings always requires discriminator first (strict by design). No config to relax this.
+- `allowRecursiveTypes` — upstream gates recursive types behind a flag (default `false`); Kindlings always allows them, so no flag is needed.
 
 ### Default value differences
 
 | Config field | Upstream default | Kindlings default | Notes |
 |---|---|---|---|
-| `mapMaxInsertNumber` | `1024` | `1024` | Same |
-| `setMaxInsertNumber` | `1024` | `1024` | Same |
+| `mapMaxInsertNumber` | `1024` | `Int.MaxValue` | Kindlings: no map-size limit unless set explicitly |
+| `setMaxInsertNumber` | `1024` | `Int.MaxValue` | Kindlings: no collection-size limit unless set explicitly |
 | `transientDefault` | `true` | `false` | Kindlings requires explicit opt-in |
-| `transientEmpty` | `false` | `false` | Same |
-| `transientNone` | `false` | `false` | Same |
+| `transientEmpty` | `true` | `false` | Kindlings requires explicit opt-in |
+| `transientNone` | `true` | `false` | Kindlings requires explicit opt-in |
+| `checkFieldDuplication` | `true` | `false` | Kindlings is permissive by default |
+| `discriminatorFieldName` | `Some("type")` | `None` | Kindlings uses single-key wrapper encoding by default |
+
+`JsoniterConfig.jsoniterScalaDefaults` is a one-shot preset that restores upstream's defaults (1024 insert limits, `transientDefault`/`transientEmpty`/`transientNone = true`, etc.) for users who want byte-for-byte upstream behavior.
 
 ---
 
@@ -391,7 +454,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 **Replaces:** PureConfig's auto/semi-automatic derivation surfaces:
 - `pureconfig.generic.semiauto.{deriveReader, deriveWriter, deriveConvert}` (Scala 2 + Scala 3, Shapeless / Magnolia based)
 - `import pureconfig.generic.auto._` (Scala 2 only — fully recursive Shapeless auto-derivation)
-- `pureconfig.generic.derivation.default` (Scala 3 only — native `derives ConfigReader` syntax)
+- native `derives ConfigReader` (Scala 3 only — works without any import since 0.17.7; the older `pureconfig.generic.derivation.default._` import is now `@deprecated`)
 
 The kindlings type classes are **subtypes** of the upstream ones:
 
@@ -422,8 +485,9 @@ A derived instance is therefore a drop-in replacement for the upstream interface
 | Automatic (full recursion via import) | `pureconfig.generic.auto._` (Scala 2 only — Shapeless) | `KindlingsConfigReader.derived[A]` (sanely-automatic, both Scala 2 + 3) | Improvement |
 | Scala 3 native `derives` clause | `derives ConfigReader` via `pureconfig.generic.derivation.default` (Scala 3 only) | Same `derives` syntax via `KindlingsConfigReader` (both Scala 2 + 3) | Improvement |
 | Unified Scala 2 + 3 API | No — three separate derivation modules with overlapping APIs and feature gaps | Yes — single API, same call shape on both | Improvement |
-| `ConfigConvert` derivation on Scala 3 | Documented as not yet supported in `pureconfig.generic.derivation.default` | Yes (via inline composition of Reader + Writer) | Improvement |
+| Scala 3 native `derives` for Writer/Convert | Native `derives` / `derivation.default` supports only `ConfigReader`; `ConfigWriter`/`ConfigConvert` require the separate Magnolia `pureconfig-generic-scala3` module (`semiauto.deriveConvert`) | `derives KindlingsConfigWriter` / `KindlingsConfigConvert` work on both Scala 2 + 3 | Improvement |
 | Recursive types | Works on Scala 2 (Shapeless `Lazy`); Scala 3 native derivation has limitations | Works without `Lazy` or wrappers on both | Improvement |
+| `ProductHint`/`CoproductHint` respected on Scala 3 | Native `derives` ignores all hints in scope | `KindlingsProductHint`/`KindlingsCoproductHint` honored on both Scala 2 + 3 | Improvement |
 
 ### Configuration
 
@@ -496,7 +560,7 @@ loaded ==> Right(SimplePerson("Alice", 30))
 
 ### `summonExprIgnoring` filter
 
-To prevent infinite macro expansion, the kindlings macro filters out its own `derived` companion methods during implicit search (`KindlingsConfigReader.type` and `KindlingsConfigConvert.type` on the reader side; `KindlingsConfigWriter.type` and `KindlingsConfigConvert.type` on the writer side). Users who simultaneously import `pureconfig.generic.auto._` (Scala 2) or `pureconfig.generic.derivation.default._` (Scala 3) will get whichever derivation rule is more specific in implicit resolution; if both are in scope and you want the kindlings derivation, do not also import the upstream auto-derivation surfaces.
+To prevent infinite macro expansion, the kindlings macro filters out its own `derived` companion methods during implicit search (`KindlingsConfigReader.type` and `KindlingsConfigConvert.type` on the reader side; `KindlingsConfigWriter.type` and `KindlingsConfigConvert.type` on the writer side). Users who also enable upstream auto-derivation — `pureconfig.generic.auto._` (Scala 2) or a `derives ConfigReader` clause on the type itself (Scala 3; the `pureconfig.generic.derivation.default._` import is deprecated since 0.17.7) — will get whichever derivation rule is more specific in implicit resolution; if both are in scope and you want the kindlings derivation, do not also import the upstream auto-derivation surfaces.
 
 ### Not ported
 
@@ -512,15 +576,15 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 
 ## scalacheck-derivation
 
-**Replaces:** manual `Arbitrary` instance writing, [`scalacheck-shapeless`](https://github.com/alexarchambault/scalacheck-shapeless) (Scala 2 only, Shapeless-based)
+**Replaces:** manual `Arbitrary` instance writing, [`scalacheck-shapeless`](https://github.com/alexarchambault/scalacheck-shapeless) (Scala 2 only, Shapeless-based; cross-publishes JVM/JS/Native on Scala 2)
 
 ### Type classes
 
 | Feature | Manual / scalacheck-shapeless | Kindlings | Status |
 |---|---|---|---|
-| `Arbitrary[A]` | Manual or Shapeless-derived | Yes | Parity |
-| `Shrink[A]` | Manual only | Yes | Improvement |
-| `Cogen[A]` | Manual only | Yes | Improvement |
+| `Arbitrary[A]` | Shapeless-derived (`derivedArbitrary`) | Yes | Parity |
+| `Shrink[A]` | Shapeless-derived (`derivedShrink`) | Yes | Parity |
+| `Cogen[A]` | Shapeless-derived (`derivedCogen`) | Yes | Parity |
 
 ### Derivation API
 
@@ -537,7 +601,7 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 | `derives Cogen` (Scala 3) | No | Yes | Improvement |
 | Automatic (fully implicit) | Yes (import and forget) | No — sanely-automatic via `.derived` | Trade-off |
 | Unified Scala 2+3 API | No (Scala 2 only) | Yes | Improvement |
-| Cross-platform (JVM/JS/Native) | JVM only | JVM + JS + Native | Improvement |
+| Cross-platform (JVM/JS/Native) | Yes, but Scala 2 only | JVM + JS + Native on Scala 2 **and** 3 | Improvement |
 
 ### Type support
 
@@ -556,15 +620,15 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 | Value classes / opaque types | Manual only | Yes (via Hearth `IsValueType`) | Improvement |
 | Refined types | Manual only | Yes (via `kindlings-refined-integration` + `IsValueType`) | Improvement |
 | Iron types (Scala 3) | Manual only | Yes (via `kindlings-iron-integration` + `IsValueType`) | Improvement |
-| Java enums (Scala 3) | Manual only | Yes (via Hearth `Enum.parse`, Scala 3 only) | Improvement |
-| Recursive types | scalacheck-shapeless: needs `Lazy` | Yes (no wrappers needed, size-based termination) | Improvement |
+| Java enums | Manual only | Yes (via Hearth `Enum.parse`; JVM-only, both Scala 2.13 & 3) | Improvement |
+| Scala `Enumeration` | Manual only | Yes | Improvement |
+| Recursive types | scalacheck-shapeless: needs an explicit `Recursive[T]` to bound recursion (else `StackOverflowError`) | Yes (no wrappers needed, automatic size-based termination) | Improvement |
 | User-provided implicits | Implicit search | Yes (checked before derivation) | Parity |
 
 ### Not supported
 
 | Feature | Notes |
 |---|---|
-| Java enums (Scala 2) | Macro expansion fails on Scala 2.13 due to a Hearth/Scala 2 codegen limitation (`not found: value rassoc$1`) |
 | Configuration class | No configuration knobs (no field name transforms, etc. — generators don't need them) |
 | Annotations (`@fieldName`, `@transientField`) | Not applicable — generators don't interact with serialized field names |
 
@@ -739,7 +803,7 @@ The two modules are deliberately built to be drop-in equivalents at the API surf
 | `@title` | Yes | Yes | Parity |
 | `@encodedName` | Yes | Yes | Parity |
 | `@format` | Yes | Yes | Parity |
-| `@hidden` | Yes (was broken on Scala 3) | Yes | Parity |
+| `@hidden` | Yes | Yes | Parity |
 | `@deprecated` | Yes | Yes | Parity |
 | `@validate` | Yes | Yes | Parity |
 | `@validateEach` | Yes | Yes | Parity |
@@ -770,7 +834,7 @@ Discriminator metadata is fully propagated to child schemas:
 |---|---|
 | `Schema.oneOfWrapped` | Manual union schema builder |
 | `.modify(_.path)` post-derivation | Tapir core feature, not a derivation concern |
-| Value class unwrapping in schemas | Upstream unwraps value classes to their inner type's schema; Kindlings wraps them in an `SProduct` |
+| `Schema.derivedEnumeration` builder | Upstream's full enumeration-schema builder (`.defaultStringBased`, custom encode, …); Kindlings supports case-object-only sealed traits |
 
 ---
 
@@ -875,11 +939,14 @@ Discriminator metadata is fully propagated to child schemas:
 
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
-| Sealed trait handling | Brute-force try-each (ambiguous, O(n)) | Discriminator-based | Improvement |
+| Sealed trait handling | No discriminator: ordinal-based encode that drops type info + brute-force try-each decode (ambiguous, O(n), #363) | Discriminator-based | Improvement |
 | Enum support | Buggy ([#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Works | Improvement |
 | Option encoding | Buggy (documented) | Works | Improvement |
 | Recursive types | Undocumented | Yes | Improvement |
 | Value classes | Not documented | Automatic unwrapping | Improvement |
+| Java enums | No (Mirror-based derivation cannot) | Yes | Improvement |
+| Scala 3 named tuples | No | Yes | Improvement |
+| `Map[K, V]` | No special-casing | Yes (via Hearth `IsMap`) | Improvement |
 
 ### Cross-compilation
 
@@ -893,7 +960,7 @@ Discriminator metadata is fully propagated to child schemas:
 
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
-| `useDefaults` | Yes (runtime reflection) | Yes (compile-time) | Improvement |
+| `useDefaults` | Always on, not configurable (compile-time macro reflection) | Configurable, compile-time | Improvement |
 
 ---
 

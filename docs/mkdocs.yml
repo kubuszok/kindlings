@@ -55,6 +55,7 @@ nav:
   - "Modules":
       - "Avro": "avro-derivation.md"
       - "Cats": "cats-derivation.md"
+      - "Cats Tagless": "cats-tagless-derivation.md"
       - "Circe": "circe-derivation.md"
       - "DI (macwire)": "di.md"
       - "DI for Cats-Effect": "di-cats.md"

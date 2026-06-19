@@ -12,7 +12,8 @@ import pureconfig.{ConfigFieldMapping, KebabCase, PascalCase}
   *   - [[Field]] — discriminator-based encoding (matches upstream `FieldCoproductHint`)
   *   - [[Wrapped]] — single-key wrapping (kindlings-specific, but functionally equivalent to omitting the discriminator
   *     field by setting `PureConfig.discriminator = None`)
-  *   - [[FirstSuccess]] — try every subtype reader in sequence (matches upstream `FirstSuccessCoproductHint`)
+  *   - [[FirstSuccess]] — reserved to mirror upstream `FirstSuccessCoproductHint`; not yet wired up at the macro level
+  *     (currently falls back to the global discriminator config)
   *
   * Like [[KindlingsProductHint]], this trait does not have an implicit `default[A]`. The macro falls back to the global
   * [[PureConfig]] config when no per-type hint is in scope.
@@ -38,12 +39,12 @@ object KindlingsCoproductHint {
       transformConstructorNames: String => String = ConfigFieldMapping(PascalCase, KebabCase)
   ) extends KindlingsCoproductHint[A]
 
-  /** Try every subtype reader in order until one succeeds. There is no discriminator — the cursor is handed to each
-    * subtype in turn, and the first one whose reader succeeds wins. Matches upstream PureConfig's
-    * `FirstSuccessCoproductHint`.
+  /** Reserved to mirror upstream PureConfig's `FirstSuccessCoproductHint` ("try every subtype reader in order until one
+    * succeeds, no discriminator"). NOT yet wired up at the macro level — currently the macro treats it the same as the
+    * global discriminator config.
     *
-    * Use sparingly: it's quadratic in the number of subtypes and produces hard-to-read error messages when nothing
-    * matches.
+    * Upstream's first-success strategy is quadratic in the number of subtypes and produces hard-to-read error messages
+    * when nothing matches.
     */
   final case class FirstSuccess[A]() extends KindlingsCoproductHint[A] {
     override def transformConstructorNames: String => String = identity
