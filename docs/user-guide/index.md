@@ -13,6 +13,7 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     // derivations:
     libraryDependencies += "com.kubuszok" %% "kindlings-avro-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-cats-derivation" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-cats-tagless-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-diff-derivation" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-fast-show-pretty" % "{{ kindlings_version() }}"
@@ -47,9 +48,10 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     // derivations:
     //> using dep com.kubuszok::kindlings-avro-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-cats-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-cats-tagless-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-circe-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-diff-derivation:{{ kindlings_version() }}
-    //> using dep com.kubuszok::kindlings-fast-show-pretty-derivation:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-fast-show-pretty:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-jsoniter-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-pureconfig-derivation:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-scalacheck-derivation:{{ kindlings_version() }}
@@ -210,7 +212,9 @@ case class Order(quantity: Int Refined Positive, item: String)
 |---|---|---|
 | [kindlings-avro-derivation](avro-derivation.md) | avro4s (JVM only) | `AvroSchemaFor`, `AvroEncoder`, `AvroDecoder` |
 | [kindlings-cats-derivation](cats-derivation.md) | kittens | `Show`, `Eq`, `Order`, `Hash`, `Functor`, `Traverse`, and [29 more](cats-derivation.md) |
+| [kindlings-cats-tagless-derivation](cats-tagless-derivation.md) | cats-tagless macros | `FunctorK`, `ContravariantK`, `InvariantK`, `ApplyK`, `SemigroupalK`, `Instrument` |
 | [kindlings-circe-derivation](circe-derivation.md) | circe-generic-extras | `Encoder`, `Encoder.AsObject`, `Decoder` |
+| [kindlings-diff-derivation](diff-derivation.md) | _(original)_ | `Diff` |
 | [kindlings-fast-show-pretty](fast-show-pretty.md) | _(original)_ | `FastShowPretty` |
 | [kindlings-jsoniter-derivation](jsoniter-derivation.md) | jsoniter-scala `JsonCodecMaker` | `JsonValueCodec`, `JsonCodec`, `JsonKeyCodec` |
 | [kindlings-pureconfig-derivation](pureconfig-derivation.md) | PureConfig generic (JVM only) | `ConfigReader`, `ConfigWriter`, `ConfigConvert` |

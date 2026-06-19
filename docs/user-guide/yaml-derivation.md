@@ -62,15 +62,15 @@ Drop-in replacement for scala-yaml's built-in `derives` — derives `YamlEncoder
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsYamlEncoder.derive[A]` | `YamlEncoder[A]` | Semi-automatic encoder |
+| `KindlingsYamlEncoder.derived[A]` | `YamlEncoder[A]` | Semi-automatic encoder |
 | `KindlingsYamlEncoder.encode[A](value)` | `Node` | Inline encoding (no instance allocation) |
 | `KindlingsYamlEncoder.toYamlString[A](value)` | `String` | Inline encoding to YAML string |
 | `KindlingsYamlEncoder.derived[A]` | `KindlingsYamlEncoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsYamlDecoder.derive[A]` | `YamlDecoder[A]` | Semi-automatic decoder |
+| `KindlingsYamlDecoder.derived[A]` | `YamlDecoder[A]` | Semi-automatic decoder |
 | `KindlingsYamlDecoder.decode[A](node)` | `Either[ConstructError, A]` | Inline decoding from a YAML node |
 | `KindlingsYamlDecoder.fromYamlString[A](yaml)` | `Either[YamlError, A]` | Inline decoding from a YAML string |
 | `KindlingsYamlDecoder.derived[A]` | `KindlingsYamlDecoder[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsYamlCodec.derive[A]` | `KindlingsYamlCodec[A]` | Semi-automatic codec (encoder + decoder) |
+| `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Semi-automatic codec (encoder + decoder) |
 | `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Sanely-automatic codec |
 
 All methods take an implicit/using `YamlConfig` parameter (defaults to `YamlConfig.default`).
@@ -227,10 +227,10 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Feature | scala-yaml `derives` | Kindlings |
 |---------|---------------------|-----------|
 | Same API on Scala 2.13 and 3 | No (Scala 3 only) | Yes |
-| Sealed trait / ADT support | No | Yes |
+| Sealed trait / ADT support | Yes, but no discriminator (ordinal encode drops type info, brute-force decode — [#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Yes (discriminator-based) |
 | Configuration (naming, discriminator) | No | Yes (`YamlConfig`) |
 | Field name annotations | No | Yes (`@fieldName`) |
-| Default values | No | Yes (`withUseDefaults`) |
+| Default values | Always on, not configurable | Configurable (`withUseDefaults`) |
 | Enum handling | Broken in some cases | Correct |
 | Option decoding | Broken in some cases | Correct |
 | Inline encoding/decoding | No | Yes (`toYamlString`, `fromYamlString`) |

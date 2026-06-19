@@ -16,7 +16,7 @@ import pureconfig.{CamelCase, ConfigFieldMapping, KebabCase, PascalCase, Screami
   *   - `useDefaults = true` — fall back to a case-class field's compile-time default value when the corresponding HOCON
   *     key is missing (matching upstream `useDefaultArgs = true`).
   *   - `allowUnknownKeys = true` — HOCON objects may contain keys that aren't fields of the case class. Set to `false`
-  *     for strict mode (fail on unknown keys), matching upstream `allowUnknownKeys = false`.
+  *     for strict mode (fail on unknown keys). The default `true` matches upstream `ProductHint(allowUnknownKeys = true)`.
   *
   * For per-type customization (e.g. one case class wants `SnakeCase` while everything else stays kebab-case), define an
   * implicit [[KindlingsProductHint]] / [[KindlingsCoproductHint]] for the specific type. The macro looks them up at

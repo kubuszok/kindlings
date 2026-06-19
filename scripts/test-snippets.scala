@@ -107,6 +107,7 @@ class KindlingsExtendedRunner(runner: Runner)(
     "avro-derivation.md#Installation[2]" -> "Dep-only snippet",
     "cats-derivation.md#Installation[3]" -> "Dep-only snippet",
     "cats-integration.md#Installation[3]" -> "Dep-only snippet",
+    "cats-tagless-derivation.md#Installation[3]" -> "Dep-only snippet",
     "di.md#Installation[2]" -> "Dep-only snippet",
     "di-cats.md#Installation[2]" -> "Dep-only snippet",
     "mock.md#Installation[2]" -> "Dep-only snippet",

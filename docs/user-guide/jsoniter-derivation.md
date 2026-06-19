@@ -115,7 +115,12 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
 | `withBigDecimalDigitsLimit(n)` | Max BigDecimal digits |
 | `withMapMaxInsertNumber(n)` | Max map entries |
 | `withSetMaxInsertNumber(n)` | Max set entries |
+| `withBitSetValueLimit(n)` | Max value allowed in a `BitSet` (DoS protection, default `1024`) |
 | `withUseScalaEnumValueId` | Use enum value id for Scala enumerations |
+| `withJavaEnumValueNameMapper(f)` | Custom transform for Java enum value names |
+| `withSkipNestedOptionValues` | Skip writing `Some(None)` nested-option inner values |
+| `withAlwaysEmitDiscriminator` | Always write the discriminator field, even for the wrapper encoding |
+| `withInlineOneValueClasses` | Inline single-field case classes to their wrapped value |
 
 ## Annotations
 

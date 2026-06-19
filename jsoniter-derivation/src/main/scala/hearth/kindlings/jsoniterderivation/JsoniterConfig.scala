@@ -9,6 +9,10 @@ package hearth.kindlings.jsoniterderivation
 // |-------------------------|------------------|------------------|-------------------------------------------------|
 // | transientDefault        | true             | false            | All fields present in output by default;        |
 // |                         |                  |                  | avoids silent field omission surprising users.  |
+// | transientEmpty          | true             | false            | Empty collections are emitted by default;       |
+// |                         |                  |                  | opt-in via withTransientEmpty.                  |
+// | transientNone           | true             | false            | None fields are emitted (as null) by default;   |
+// |                         |                  |                  | opt-in via withTransientNone.                   |
 // | checkFieldDuplication   | true             | false            | Permissive parsing by default; opt-in to strict |
 // |                         |                  |                  | duplicate rejection when needed.                |
 // | discriminatorFieldName  | Some("type")     | None             | Wrapper-style ADT encoding by default; explicit |

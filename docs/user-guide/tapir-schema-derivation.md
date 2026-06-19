@@ -59,7 +59,8 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsSchema.derived[A]` | `Schema[A]` | Semi-automatic schema derivation |
+| `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Semi-automatic schema derivation |
+| `KindlingsSchema.derived[A].schema` | `Schema[A]` | The underlying Tapir `Schema[A]` |
 | `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Sanely-automatic (given/implicit) |
 
 Unlike other Kindlings modules, Tapir Schema derivation takes **no configuration parameter**. Instead, it automatically discovers JSON configuration from sibling modules (see below).
@@ -96,6 +97,9 @@ implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig
 | `@default(value)` | Field | Set the default value |
 | `@deprecated` | Type | Mark schema as deprecated |
 | `@hidden` | Field | Hide field from the schema |
+| `@encodedExample(value)` | Type, Field | Add an OpenAPI encoded example |
+| `@validateEach(validator)` | Field | Validate the elements of a collection/`Option` field |
+| `@customise(schema => schema)` | Type, Field | Apply an arbitrary transform to the derived schema |
 
 ```scala
 import sttp.tapir.Schema.annotations._
