@@ -288,8 +288,8 @@ import hearth.kindlings.avroderivation.annotations._
     // - UUID -> string with logicalType "uuid"
     // - Instant -> long with logicalType "timestamp-millis"
     // - LocalDate -> int with logicalType "date"
-    // - LocalTime -> int with logicalType "time-millis"
-    // - LocalDateTime -> long with logicalType "local-timestamp-millis"
+    // - LocalTime -> long with logicalType "time-micros"
+    // - LocalDateTime -> long with logicalType "timestamp-millis"
     val encoder = AvroEncoder.derived[EventRecord]
     val decoder = AvroDecoder.derived[EventRecord]
 
@@ -318,7 +318,7 @@ import hearth.kindlings.avroderivation.annotations._
     case class User(name: String)
 
     // Generic types encode type parameters in the schema name by default:
-    // Audited[User] -> "AuditedUser"
+    // Audited[User] -> "Audited__User" (type parameters joined with "__")
     val encoder = AvroEncoder.derived[Audited[User]]
     val decoder = AvroDecoder.derived[Audited[User]]
 
@@ -350,12 +350,12 @@ This enables `LogDerivation` implicits for `AvroSchemaFor`, `AvroEncoder`, and `
 | Recursive types | Needs workarounds | Yes | Just works |
 | Named tuples | No | No | Yes |
 | Scala 3 enums | No | Yes | Yes |
-| Java enums | No | Yes | Yes |
+| Java enums | Yes | Yes | Yes |
 | Opaque types | No | Partial | Yes |
 | Union types (Scala 3) | No | No | Yes |
 | Literal types (Scala 3) | No | No | Yes |
 | `@avroName` type renaming | Yes | Yes | Yes |
-| `@avroScalePrecision` per-field | Yes | Yes | Yes |
+| `@avroScalePrecision` per-field | No (v4: implicit `ScalePrecision` only) | Yes (param order `(scale, precision)`) | Yes (param order `(precision, scale)`) |
 | `@avroFqnParamNames` | No | No | Yes |
 
 ### Benchmarks

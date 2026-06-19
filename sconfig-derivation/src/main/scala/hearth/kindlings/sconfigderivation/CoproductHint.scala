@@ -9,7 +9,8 @@ package hearth.kindlings.sconfigderivation
   *
   *   - [[Field]] — discriminator-based encoding (matches upstream `FieldCoproductHint`)
   *   - [[Wrapped]] — single-key wrapping
-  *   - [[FirstSuccess]] — try every subtype reader in sequence (matches upstream `FirstSuccessCoproductHint`)
+  *   - [[FirstSuccess]] — reserved to mirror upstream `FirstSuccessCoproductHint`; not yet wired up at the macro level
+  *     (currently treated as discriminator-based)
   */
 sealed trait CoproductHint[A] {
   def transformConstructorNames: String => String
