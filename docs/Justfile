@@ -6,4 +6,4 @@ serve: build
 
 test-snippets:
   cd .. && sbt --client "publish-local-for-tests"
-  cd .. && scala-cli run scripts/test-snippets.scala -- --extra "kindlings-version=$(sbt -batch -error 'print fastShowPretty/version' 2>/dev/null | grep -oE '^[0-9][^ \[]*')" "$PWD/docs/user-guide"
+  cd .. && scala-cli run scripts/test-snippets.scala -- --extra "kindlings-version=$(sbt -batch -error 'print fastShowPretty/version' 2>/dev/null | sed -E 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | grep -oE '[0-9][^ []*-SNAPSHOT|[0-9][0-9.]+' | head -1)" "$PWD/docs/user-guide"
