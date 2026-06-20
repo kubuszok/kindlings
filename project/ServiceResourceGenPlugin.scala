@@ -116,7 +116,9 @@ object ServiceResourceGenPlugin extends AutoPlugin {
     // Ensure SPI files are available on the classpath for downstream modules.
     // compile alone doesn't trigger copyResources, so exported products
     // (used by dependsOn) won't include SPI files unless we add this.
-    Compile / exportedProducts := {
+    // sbt 2.0 caches task results and would require a sjsonnew.HashWriter for
+    // Classpath; opt out of caching for this passthrough via Def.uncached.
+    Compile / exportedProducts := Def.uncached {
       (Compile / copyResources).value
       (Compile / exportedProducts).value
     }
