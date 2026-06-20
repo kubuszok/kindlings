@@ -227,12 +227,19 @@ lazy val commandAliases: Seq[Def.Setting[State => State]] = {
   val platformName = Map("jvm" -> "JVM", "js" -> "JS", "native" -> "Native")
   val scalaBinary = Map("2_13" -> "2.13", "3" -> "3")
   def fullTests(commands: String): String = commands.replace("/test", "/testFull")
-  combos.flatMap { case (platform, scala) =>
+  val perAxis = combos.flatMap { case (platform, scala) =>
     val p = platformName(platform)
     val s = scalaBinary(scala)
     addCommandAlias(s"ci-$platform-$scala", fullTests(aliases.ci(p, s))) ++
       addCommandAlias(s"test-$platform-$scala", fullTests(aliases.test(p, s)))
   }
+  // `publish-local-for-tests` used to be registered by sbt-welcome's `usefulTasks`. sbt-welcome has
+  // no sbt-2.0 build, so re-register it here: `docs/Justfile` (`just test-snippets`, run in CI)
+  // calls `sbt --client "publish-local-for-tests"` to publishLocal every JVM 2.13 + 3 artifact
+  // before running the documentation snippets.
+  val publishLocalForTests =
+    addCommandAlias("publish-local-for-tests", aliases.publishLocalForTests((_, platform) => platform == "JVM"))
+  perAxis ++ publishLocalForTests
 }
 
 lazy val root = project
