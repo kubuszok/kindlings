@@ -5,5 +5,14 @@ serve: build
   docker run --rm -it -p 8000:8000 -v ${PWD}:/docs --env "CI_LATEST_TAG=$(git describe --tags)" mkdocs-kindlings-docs
 
 test-snippets:
-  cd .. && sbt --client "publish-local-for-tests"
-  cd .. && scala-cli run scripts/test-snippets.scala -- --extra "kindlings-version=$(sbt -batch -error 'print fastShowPretty/version' 2>/dev/null | sed -E 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | grep -oE '[0-9][^ []*-SNAPSHOT|[0-9][0-9.]+' | head -1)" "$PWD/docs/user-guide"
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd ..
+  sbt --client "publish-local-for-tests"
+  # Extract the published version. sbt 2.0's `print` output is prefixed with an ANSI erase
+  # sequence (\e[0J) in CI's non-TTY environment, so strip ANSI first and match a version token
+  # anywhere on the line (not anchored at start-of-line, which the old `grep -oE '^[0-9]…'` was).
+  kindlings_version="$(sbt --client 'print fastShowPretty/version' 2>/dev/null | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*' | head -1)"
+  if [ -z "${kindlings_version}" ]; then echo "ERROR: could not determine kindlings version" >&2; exit 1; fi
+  echo "Using kindlings-version=${kindlings_version}"
+  scala-cli run scripts/test-snippets.scala -- --extra "kindlings-version=${kindlings_version}" "$PWD/docs/user-guide"
