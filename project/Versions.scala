@@ -27,7 +27,7 @@ object versions {
   val cats = "2.13.0"
   val circe = "0.14.15"
   val iron = "3.3.1"
-  val jsoniterScala = "2.38.14"
+  val jsoniterScala = "2.38.16"
   val kittens = "3.5.0"
   val pureconfig = "0.17.10"
   val quicklens = "1.9.12"
