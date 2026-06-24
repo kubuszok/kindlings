@@ -30,7 +30,7 @@ object versions {
   val jsoniterScala = "2.38.16"
   val kittens = "3.5.0"
   val pureconfig = "0.17.10"
-  val quicklens = "1.9.12"
+  val quicklens = "1.9.15"
   val tapir = "1.13.23"
   val refined = "0.11.3"
   val sttpApispec = "0.11.10"
