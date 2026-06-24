@@ -39,7 +39,7 @@ object versions {
   val scalacheck = "1.19.0"
   val scalaJavaTime = "2.7.0"
   val scalaSaxParser = "0.1.1"
-  val scalaYaml = "0.3.1"
+  val scalaYaml = "0.3.2"
   val scalaXml = "2.4.0"
   val catsTagless = "0.16.5"
   val sconfig = "1.12.4"
