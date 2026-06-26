@@ -9,15 +9,14 @@ test-snippets:
   set -euo pipefail
   cd ..
   sbt --client "publish-local-for-tests"
-  # Extract the published version. sbt 2.0's `print` output is prefixed with an ANSI erase
-  # sequence (\e[0J) in CI's non-TTY environment, so strip ANSI first and match a version token
-  # anywhere on the line (not anchored at start-of-line, which the old `grep -oE '^[0-9]…'` was).
-  # Keep the sbt call and the grep pipeline as SEPARATE statements, each ended with `|| true`:
-  # under `set -euo pipefail`, folding them into one `$(... | grep | head)` made the recipe abort
-  # silently before the guard below — `grep` exits 1 on no match, and `head -1` closing the pipe
-  # gives upstream commands SIGPIPE (141); pipefail propagated either, set -e killed the script,
-  # and `2>/dev/null` hid the cause. Capture raw output so the guard can surface it on failure.
-  raw="$(sbt --client 'print fastShowPretty/version' 2>&1 || true)"
+  # Determine the published version with a NON-client sbt (`-batch -error`). `sbt --client`'s thin
+  # client does NOT write the `print` result to the captured stdout in a non-TTY, so `$(...)` came
+  # back empty and broke the release (it only "worked" in PR CI by winning a flush race). This is
+  # exactly how hearth queries its version, and it works for both SNAPSHOT and release. `-batch
+  # -error` prints just the value. Keep the sbt call and the grep pipeline as SEPARATE statements,
+  # each `|| true`, so `set -euo pipefail` can't abort silently (grep no-match -> 1; head SIGPIPE
+  # -> 141) before the guard. Capture raw output so the guard can surface it on failure.
+  raw="$(sbt -batch -error 'print fastShowPretty/version' 2>&1 || true)"
   kindlings_version="$(printf '%s\n' "${raw}" | sed -E 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9.+-]*' | head -1 || true)"
   if [ -z "${kindlings_version}" ]; then
     echo "ERROR: could not determine kindlings version. sbt output was:" >&2
