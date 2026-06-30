@@ -32,7 +32,7 @@ object versions {
   val pureconfig = "0.17.10"
   val quicklens = "1.9.15"
   val tapir = "1.13.25"
-  val refined = "0.11.3"
+  val refined = "0.11.4"
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.0"
   val tagging = "2.3.5"
