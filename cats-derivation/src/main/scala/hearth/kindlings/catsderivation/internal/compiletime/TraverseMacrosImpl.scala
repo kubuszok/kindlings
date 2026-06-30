@@ -45,6 +45,8 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
       TraverseFType: Type[cats.Traverse[F]]
   ): Expr[cats.Traverse[F]] = {
     val macroName = "Traverse.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(TraverseFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val TraverseFT: Type[cats.Traverse[F]] = TraverseFType

@@ -26,4 +26,14 @@ object FastShowPretty extends FastShowPrettyCompanionCompat {
     */
   sealed trait LogDerivation
   object LogDerivation extends LogDerivation
+
+  /** Opt-in marker for the derivation policy. When the build sets
+    * `-Xmacro-settings:fastShowPrettyDerivation.policy.enabled=opt-in` with `optInByImport=true`, importing an implicit
+    * of this type (see [[hearth.kindlings.fastshowpretty.policy.allowDerivationForFastShowPretty]]) permits structural
+    * derivation in the current scope.
+    *
+    * Kept OUTSIDE [[FastShowPretty]]'s implicit scope so it is never summoned automatically.
+    */
+  sealed trait AllowDerivation
+  object AllowDerivation extends AllowDerivation
 }

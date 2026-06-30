@@ -17,7 +17,8 @@ trait SchemaHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as enum") >> {
         Enum.parse[A].toEither match {
           case Right(e) =>
-            Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> Log.info(s"Deriving Schema for enum/sealed ${Type[A].prettyPrint}") >>
               sctx.inProgress.get.flatMap { inProgressSet =>
                 (for {
                   _ <- sctx.inProgress.set(inProgressSet + sctx.cacheKey)

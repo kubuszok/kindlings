@@ -15,6 +15,8 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveEmptyK[F[_]](FCtor0: Type.Ctor1[F], EmptyKFType: Type[alleycats.EmptyK[F]]): Expr[alleycats.EmptyK[F]] = {
     val macroName = "EmptyK.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(EmptyKFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val EmptyKFT: Type[alleycats.EmptyK[F]] = EmptyKFType

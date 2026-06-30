@@ -10,6 +10,7 @@ import org.ekrich.config.ConfigValue
 
 trait WriterMacrosImpl
     extends SconfigDerivationTimeout
+    with SconfigDerivationPolicy
     with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
     with rules.WriterHandleAsValueTypeRuleImpl
@@ -21,6 +22,8 @@ trait WriterMacrosImpl
     with rules.WriterHandleAsCaseClassRuleImpl
     with rules.WriterHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "ConfigWriter"
 
   // Entrypoints
 

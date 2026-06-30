@@ -18,7 +18,8 @@ trait WriterHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            encodeEnumCases[A](enumm).map(Rule.matched)
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> encodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

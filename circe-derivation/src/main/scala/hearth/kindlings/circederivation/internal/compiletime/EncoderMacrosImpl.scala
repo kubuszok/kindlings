@@ -10,6 +10,7 @@ import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 
 trait EncoderMacrosImpl
     extends CirceDerivationTimeout
+    with CirceDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
@@ -22,6 +23,8 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsEncoder"
 
   // Entrypoints
 

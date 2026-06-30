@@ -18,7 +18,8 @@ trait ContravariantKCaseClassRuleImpl {
       CaseClass.parse(using AlgWCtor1Type).toEither match {
         case Right(_) =>
           implicit val CKAlgType: Type[cats.tagless.ContravariantK[Alg]] = ckctx.contravariantKAlgType
-          for {
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicyForType(AlgWCtor1Type.prettyPrint) >> (for {
             _ <- MIO.scoped { runSafe =>
               val instanceExpr = buildContravariantKFactoryExpr[Alg](runSafe)
               runSafe {
@@ -31,7 +32,7 @@ trait ContravariantKCaseClassRuleImpl {
               }
             }
             result <- ContravariantKUseCachedRule[Alg]
-          } yield result
+          } yield result)
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

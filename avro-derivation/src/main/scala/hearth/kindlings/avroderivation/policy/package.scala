@@ -1,0 +1,8 @@
+package hearth.kindlings.avroderivation
+
+// $COVERAGE-OFF$
+package object policy {
+  /** Import to permit structural derivation in this scope under `opt-in` policy with `optInByImport=true`. */
+  implicit val allowDerivationForAvroDerivation: AllowDerivation = AllowDerivation
+}
+// $COVERAGE-ON$

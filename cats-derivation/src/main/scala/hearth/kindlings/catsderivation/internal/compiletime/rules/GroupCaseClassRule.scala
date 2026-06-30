@@ -15,7 +15,8 @@ trait GroupCaseClassRuleImpl {
     def apply[A: GroupCtx]: MIO[Rule.Applicability[GroupDerivationResult[A]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          deriveGroupCaseClass[A](caseClass).map(Rule.matched(_))
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> deriveGroupCaseClass[A](caseClass).map(Rule.matched(_))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

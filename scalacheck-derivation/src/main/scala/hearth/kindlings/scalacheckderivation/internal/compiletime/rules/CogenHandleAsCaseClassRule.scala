@@ -15,18 +15,21 @@ trait CogenHandleAsCaseClassRuleImpl { this: CogenMacrosImpl & MacroCommons & St
     def apply[A: CogenCtx]: MIO[Rule.Applicability[Expr[Cogen[A]]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          implicit val UnitT: Type[Unit] = CogenTypes.Unit
-          implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
-          val defBuilder = ValDefBuilder.ofDef1[Unit, Cogen[A]](s"cogenCaseClass_${Type[A].shortName}")
-          for {
-            _ <- cogenctx.cache.forwardDeclare("cached-cogen-method", defBuilder)
-            _ <- MIO.scoped { runSafe =>
-              runSafe(cogenctx.cache.buildCachedWith("cached-cogen-method", defBuilder) { case (_, _) =>
-                runSafe(deriveCaseClassCogen[A](caseClass))
-              })
-            }
-            result <- CogenUseCachedRule[A]
-          } yield result
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> {
+            implicit val UnitT: Type[Unit] = CogenTypes.Unit
+            implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
+            val defBuilder = ValDefBuilder.ofDef1[Unit, Cogen[A]](s"cogenCaseClass_${Type[A].shortName}")
+            for {
+              _ <- cogenctx.cache.forwardDeclare("cached-cogen-method", defBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(cogenctx.cache.buildCachedWith("cached-cogen-method", defBuilder) { case (_, _) =>
+                  runSafe(deriveCaseClassCogen[A](caseClass))
+                })
+              }
+              result <- CogenUseCachedRule[A]
+            } yield result
+          }
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

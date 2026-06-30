@@ -21,7 +21,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
             // Note: caching is handled by deriveDecoderRecursively
-            decodeCaseClassFields[A](caseClass).map(Rule.matched)
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> decodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

@@ -8,6 +8,7 @@ import org.scalacheck.Shrink
 
 trait ShrinkMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
+    with ScalacheckDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.ShrinkUseCachedRuleImpl
     with rules.ShrinkUseImplicitRuleImpl
@@ -19,6 +20,8 @@ trait ShrinkMacrosImpl
     with rules.ShrinkHandleAsSingletonRuleImpl
     with rules.ShrinkHandleAsCaseClassRuleImpl
     with rules.ShrinkHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "Shrink"
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 

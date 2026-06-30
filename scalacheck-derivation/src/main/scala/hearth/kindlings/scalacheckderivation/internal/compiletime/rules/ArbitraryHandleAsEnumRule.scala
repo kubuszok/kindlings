@@ -15,7 +15,9 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
     def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
       Enum.parse[A].toEither match {
         case Right(enumData) =>
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
           Log.info(s"Handling ${Type[A].prettyPrint} as enum") >>
+            enforceDerivationPolicy[A] >>
             deriveEnumArbitrary[A](enumData).map(Rule.matched(_))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason))

@@ -28,6 +28,7 @@ import org.apache.avro.Schema
 
 trait SchemaForMacrosImpl
     extends AvroDerivationTimeout
+    with AvroDerivationPolicy
     with rules.AvroSchemaForUseCachedDefWhenAvailableRuleImpl
     with rules.AvroSchemaForCheckSelfRecordRuleImpl
     with rules.AvroSchemaForUseImplicitWhenAvailableRuleImpl
@@ -43,6 +44,8 @@ trait SchemaForMacrosImpl
     with rules.AvroSchemaForHandleAsCaseClassRuleImpl
     with rules.AvroSchemaForHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "AvroSchemaFor"
 
   // Entrypoints
 

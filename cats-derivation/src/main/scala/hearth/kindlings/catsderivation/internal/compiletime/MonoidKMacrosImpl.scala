@@ -18,6 +18,8 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
       MonoidKFType: Type[cats.MonoidK[F]]
   ): Expr[cats.MonoidK[F]] = {
     val macroName = "MonoidK.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(MonoidKFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val MonoidKFT: Type[cats.MonoidK[F]] = MonoidKFType

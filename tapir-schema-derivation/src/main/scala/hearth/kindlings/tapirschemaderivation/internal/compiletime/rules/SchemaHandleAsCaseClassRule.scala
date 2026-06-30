@@ -17,7 +17,8 @@ trait SchemaHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(cc) =>
-            Log.info(s"Deriving Schema for case class ${Type[A].prettyPrint}") >>
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> Log.info(s"Deriving Schema for case class ${Type[A].prettyPrint}") >>
               sctx.inProgress.get.flatMap { inProgressSet =>
                 (for {
                   _ <- sctx.inProgress.set(inProgressSet + sctx.cacheKey)

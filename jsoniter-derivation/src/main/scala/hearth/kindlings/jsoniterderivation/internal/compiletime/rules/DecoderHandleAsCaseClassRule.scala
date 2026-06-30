@@ -209,11 +209,14 @@ trait DecoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            val useOptimized = dctx.evaluatedConfig.isDefined
-            val decodeMIO =
-              if (useOptimized) decodeCaseClassFieldsOptimized[A](caseClass)
-              else decodeCaseClassFields[A](caseClass)
-            decodeMIO.map(Rule.matched)
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> {
+              val useOptimized = dctx.evaluatedConfig.isDefined
+              val decodeMIO =
+                if (useOptimized) decodeCaseClassFieldsOptimized[A](caseClass)
+                else decodeCaseClassFields[A](caseClass)
+              decodeMIO.map(Rule.matched)
+            }
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

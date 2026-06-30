@@ -13,17 +13,20 @@ trait HashEnumRuleImpl {
     def apply[A: HashCtx]: MIO[Rule.Applicability[Expr[Int]]] =
       Enum.parse[A].toEither match {
         case Right(enumm) =>
-          implicit val IntType: Type[Int] = HashTypes.Int
-          val defBuilder = ValDefBuilder.ofDef1[A, Int](s"hash_${Type[A].shortName}")
-          for {
-            _ <- hctx.cache.forwardDeclare("cached-hash-method", defBuilder)
-            _ <- MIO.scoped { runSafe =>
-              runSafe(hctx.cache.buildCachedWith("cached-hash-method", defBuilder) { case (_, value) =>
-                runSafe(deriveEnumHash[A](enumm, value))
-              })
-            }
-            result <- HashUseCachedRule[A]
-          } yield result
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> {
+            implicit val IntType: Type[Int] = HashTypes.Int
+            val defBuilder = ValDefBuilder.ofDef1[A, Int](s"hash_${Type[A].shortName}")
+            for {
+              _ <- hctx.cache.forwardDeclare("cached-hash-method", defBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(hctx.cache.buildCachedWith("cached-hash-method", defBuilder) { case (_, value) =>
+                  runSafe(deriveEnumHash[A](enumm, value))
+                })
+              }
+              result <- HashUseCachedRule[A]
+            } yield result
+          }
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

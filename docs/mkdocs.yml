@@ -79,6 +79,7 @@ nav:
       - "Jsoniter JSON": "jsoniter-json.md"
       - "Tapir OpenAPI Jsoniter": "tapir-openapi-jsoniter.md"
   - "Debugging & Diagnostics": "debugging.md"
+  - "Derivation Policy": "derivation-policy.md"
   - "Feature Parity": "feature-parity.md"
   - "FAQ": "faq.md"
 

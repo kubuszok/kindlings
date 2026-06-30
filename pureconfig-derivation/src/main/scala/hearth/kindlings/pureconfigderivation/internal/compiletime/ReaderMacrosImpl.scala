@@ -17,6 +17,7 @@ import pureconfig.error.ConfigReaderFailures
 
 trait ReaderMacrosImpl
     extends PureconfigDerivationTimeout
+    with PureconfigDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
@@ -30,6 +31,8 @@ trait ReaderMacrosImpl
     with rules.ReaderHandleAsCaseClassRuleImpl
     with rules.ReaderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsConfigReader"
 
   // Entrypoints
 

@@ -15,17 +15,20 @@ trait DiffCaseClassRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtension
     def apply[A: DiffCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
-          val defBuilder = ValDefBuilder.ofDef2[A, A, DiffResult](s"diff_${Type[A].shortName}")
-          for {
-            _ <- dctx.cache.forwardDeclare("cached-diff-method", defBuilder)
-            _ <- MIO.scoped { runSafe =>
-              runSafe(dctx.cache.buildCachedWith("cached-diff-method", defBuilder) { case (_, (left, right)) =>
-                runSafe(deriveCaseClassDiff[A](caseClass, left, right))
-              })
-            }
-            result <- DiffUseCachedRule[A]
-          } yield result
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> {
+            implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
+            val defBuilder = ValDefBuilder.ofDef2[A, A, DiffResult](s"diff_${Type[A].shortName}")
+            for {
+              _ <- dctx.cache.forwardDeclare("cached-diff-method", defBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(dctx.cache.buildCachedWith("cached-diff-method", defBuilder) { case (_, (left, right)) =>
+                  runSafe(deriveCaseClassDiff[A](caseClass, left, right))
+                })
+              }
+              result <- DiffUseCachedRule[A]
+            } yield result
+          }
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

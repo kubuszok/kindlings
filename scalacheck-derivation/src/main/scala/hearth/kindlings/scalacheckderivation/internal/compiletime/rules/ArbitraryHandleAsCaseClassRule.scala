@@ -15,18 +15,21 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
     def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          implicit val UnitT: Type[Unit] = ArbitraryTypes.Unit
-          implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
-          val defBuilder = ValDefBuilder.ofDef1[Unit, Gen[A]](s"genCaseClass_${Type[A].shortName}")
-          for {
-            _ <- arbctx.cache.forwardDeclare("cached-arbitrary-method", defBuilder)
-            _ <- MIO.scoped { runSafe =>
-              runSafe(arbctx.cache.buildCachedWith("cached-arbitrary-method", defBuilder) { case (_, _) =>
-                runSafe(deriveCaseClassArbitrary[A](caseClass))
-              })
-            }
-            result <- ArbitraryUseCachedRule[A]
-          } yield result
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> {
+            implicit val UnitT: Type[Unit] = ArbitraryTypes.Unit
+            implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
+            val defBuilder = ValDefBuilder.ofDef1[Unit, Gen[A]](s"genCaseClass_${Type[A].shortName}")
+            for {
+              _ <- arbctx.cache.forwardDeclare("cached-arbitrary-method", defBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(arbctx.cache.buildCachedWith("cached-arbitrary-method", defBuilder) { case (_, _) =>
+                  runSafe(deriveCaseClassArbitrary[A](caseClass))
+                })
+              }
+              result <- ArbitraryUseCachedRule[A]
+            } yield result
+          }
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

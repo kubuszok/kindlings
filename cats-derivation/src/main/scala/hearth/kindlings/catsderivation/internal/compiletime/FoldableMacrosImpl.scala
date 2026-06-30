@@ -42,6 +42,8 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
       FoldableFType: Type[cats.Foldable[F]]
   ): Expr[cats.Foldable[F]] = {
     val macroName = "Foldable.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(FoldableFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val FoldableFT: Type[cats.Foldable[F]] = FoldableFType

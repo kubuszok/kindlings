@@ -23,6 +23,8 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
       ReducibleFType: Type[cats.Reducible[F]]
   ): Expr[cats.Reducible[F]] = {
     val macroName = "Reducible.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(ReducibleFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ReducibleFT: Type[cats.Reducible[F]] = ReducibleFType

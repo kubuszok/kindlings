@@ -20,7 +20,8 @@ trait DecoderHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            for {
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> (for {
               _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
                 decodeEnumCases[A](enumm)(using dctx.nestInCache(cursor, config, failFast))
               }
@@ -35,7 +36,7 @@ trait DecoderHandleAsEnumRuleImpl {
                 case None =>
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
-            } yield result
+            } yield result)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

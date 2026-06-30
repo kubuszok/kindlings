@@ -20,6 +20,34 @@ Sanely-automatic derivation means three things:
 
 If the same type is auto-derived at multiple call sites, each site derives independently. This is still cheaper than Shapeless/Mirrors-based automatic derivation, but if you want to guarantee a type is derived exactly once, use semi-automatic (`KindlingsEncoder.derived[A]`) and assign it to an `implicit val` / `given`.
 
+## Why not separate automatic and semi-automatic derivation?
+
+Most Scala libraries split derivation into "automatic" (an import makes instances appear wherever needed) and
+"semi-automatic" (you must write `deriveX[A]` for every type). Kindlings deliberately does **not** offer a separate
+semi-automatic-only mechanism, and it does **not** make recursion optional. The reasoning:
+
+- **The auto/semi distinction is mostly arbitrary.** Every library always supports primitives, collections, `Option`,
+  newtypes, refined types, etc. unconditionally. "Automatic vs semi-automatic" really only governs **case classes and
+  sealed hierarchies**. Explaining to a newcomer why a `List[String]` inside a case class "just works" while the case
+  class itself needs a special import — and why disabling recursion still leaves `Option`/`List`/newtypes working — is
+  hard, because the line is an implementation detail leaking into the API.
+
+- **The two-imports model hurts the people we most want to help.** Needing to learn that there are two sets of imports,
+  where swapping one silently changes your program's semantics, empowers Scala experts at the cost of newcomers and
+  people focused on the business problem rather than the language. Kindlings optimizes for lowering that barrier.
+
+- **Semi-automatic doesn't actually guarantee coherence anyway.** One stray import, a new instance added to a companion,
+  or an instance introduced up an inheritance hierarchy can still change runtime behavior — invisibly, during a
+  refactor. If you care about a wire contract, **golden tests** are the real guard (and they also catch serde library
+  bugs and migrations between JSON libraries, which no derivation strategy can).
+
+What Kindlings *does* offer for teams that want tighter control is a **global, per-library opt-out** of automatic
+derivation: the [Derivation Policy](derivation-policy.md). Set it to `opt-in` and structural derivation is only allowed
+in the scopes you designate (or behind an explicit import) — everywhere else you get a clear compile error telling you
+to define the instance explicitly. This achieves the "instances only appear where I decided" goal **without** a second
+API surface and **without** giving up recursive, single-expansion derivation. See
+[issue #85](https://github.com/kubuszok/kindlings/issues/85) for the full discussion.
+
 ## Can I use both Kindlings and the original library's derivation?
 
 Yes. Kindlings type classes extend their parent library's types (`KindlingsEncoder[A] extends Encoder[A]`, `KindlingsDecoder[A] extends Decoder[A]`, etc.). You can mix manually written instances with derived ones.

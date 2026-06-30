@@ -56,7 +56,9 @@ trait BifunctorCaseClassRuleImpl {
           )
         )
       } else {
-        MIO.pure(Rule.matched(BifunctorCaseClassResult(FCtor, leftFields.toSet, rightFields.toSet)))
+        // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+        enforceDerivationPolicyForType(FCtor.apply[Int, Int].prettyPrint) >>
+          MIO.pure(Rule.matched(BifunctorCaseClassResult(FCtor, leftFields.toSet, rightFields.toSet)))
       }
     }
   }

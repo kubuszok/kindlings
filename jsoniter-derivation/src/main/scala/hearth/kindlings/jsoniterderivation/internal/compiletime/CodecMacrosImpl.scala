@@ -20,6 +20,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
 trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with JsoniterDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
@@ -46,6 +47,8 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsJsonValueCodec"
 
   override protected def derivationSettingsNamespace: String = "jsoniterDerivation"
 

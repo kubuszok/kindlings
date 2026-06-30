@@ -17,6 +17,8 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
       BitraverseFType: Type[cats.Bitraverse[F]]
   ): Expr[cats.Bitraverse[F]] = {
     val macroName = "Bitraverse.derived"
+    // Derivation policy gate (issue kubuszok/kindlings#85).
+    enforceDerivationPolicyOrAbort(BitraverseFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor2[F] = FCtor0
     implicit val BitraverseFT: Type[cats.Bitraverse[F]] = BitraverseFType

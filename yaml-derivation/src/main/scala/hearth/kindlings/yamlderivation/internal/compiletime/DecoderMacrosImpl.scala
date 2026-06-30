@@ -12,6 +12,7 @@ import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 
 trait DecoderMacrosImpl
     extends YamlDerivationTimeout
+    with YamlDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
@@ -26,6 +27,8 @@ trait DecoderMacrosImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsYamlDecoder"
 
   // Entrypoints
 

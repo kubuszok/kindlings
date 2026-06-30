@@ -20,7 +20,8 @@ trait EncoderHandleAsEnumRuleImpl {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
             // Note: caching is handled by deriveEncoderRecursively — do NOT call setHelper here.
-            encodeEnumCases[A](enumm).map(Rule.matched)
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> encodeEnumCases[A](enumm).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

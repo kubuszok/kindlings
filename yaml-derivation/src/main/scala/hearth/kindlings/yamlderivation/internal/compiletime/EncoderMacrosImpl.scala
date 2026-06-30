@@ -11,6 +11,7 @@ import org.virtuslab.yaml.{Node, YamlEncoder}
 
 trait EncoderMacrosImpl
     extends YamlDerivationTimeout
+    with YamlDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
@@ -23,6 +24,8 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsYamlEncoder"
 
   // Entrypoints
 

@@ -15,7 +15,8 @@ trait MonoidCaseClassRuleImpl {
     def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          deriveMonoidCaseClassEmpty[A](caseClass).map { empty =>
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> deriveMonoidCaseClassEmpty[A](caseClass).map { empty =>
             val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
               // Use a fresh SemigroupCtx with its own cache so combine defs are self-contained
               val sgCtx = SemigroupCtx.from(x, y, moidctx.derivedType)

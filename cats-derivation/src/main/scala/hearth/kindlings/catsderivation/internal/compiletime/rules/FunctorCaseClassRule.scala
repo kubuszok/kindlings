@@ -89,7 +89,8 @@ trait FunctorCaseClassRuleImpl {
           )
         } else {
           val directFieldSet: Set[String] = directFields.toSet
-          MIO.pure(
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicyForType(FCtor.apply[Int].prettyPrint) >> MIO.pure(
             Rule.matched(
               FunctorCaseClassResult(
                 FCtor,
@@ -103,7 +104,10 @@ trait FunctorCaseClassRuleImpl {
         }
       } else {
         val directFieldSet: Set[String] = directFields.toSet
-        MIO.pure(Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet, Map.empty)))
+        // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+        enforceDerivationPolicyForType(FCtor.apply[Int].prettyPrint) >> MIO.pure(
+          Rule.matched(FunctorCaseClassResult(FCtor, directFieldSet, Map.empty))
+        )
       }
     }
   }

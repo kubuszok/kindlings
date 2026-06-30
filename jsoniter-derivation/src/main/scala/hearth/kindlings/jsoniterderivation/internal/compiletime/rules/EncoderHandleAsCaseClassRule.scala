@@ -131,7 +131,8 @@ trait EncoderHandleAsCaseClassRuleImpl {
           case Right(caseClass) =>
             // Note: caching is handled by deriveEncoderRecursively — do NOT call setHelper here
             // to avoid conflicts with the forward-declaration in deriveEncoderRecursively.
-            encodeCaseClassFields[A](caseClass).map(Rule.matched)
+            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+            enforceDerivationPolicy[A] >> encodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

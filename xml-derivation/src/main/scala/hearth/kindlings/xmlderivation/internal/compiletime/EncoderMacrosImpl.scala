@@ -9,6 +9,7 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait EncoderMacrosImpl
     extends XmlDerivationTimeout
+    with XmlDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -19,6 +20,8 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsSingletonRuleImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  override protected def derivationPolicyTypeClassName: String = "KindlingsXmlEncoder"
 
   // Entrypoints
 

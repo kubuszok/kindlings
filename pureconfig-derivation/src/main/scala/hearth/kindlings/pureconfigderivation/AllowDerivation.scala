@@ -1,0 +1,7 @@
+package hearth.kindlings.pureconfigderivation
+
+/** Opt-in marker for the derivation policy (issue kubuszok/kindlings#85). Importing
+  * hearth.kindlings.pureconfigderivation.policy.allowDerivationForPureconfigDerivation permits structural derivation
+  * under `opt-in` policy with `optInByImport=true`. Kept OUTSIDE implicit scope so it is never summoned automatically. */
+sealed trait AllowDerivation
+object AllowDerivation extends AllowDerivation

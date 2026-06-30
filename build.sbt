@@ -206,7 +206,7 @@ lazy val aliases = new Aliases(
     tapirOpenapiJsoniter,
     optics
   ),
-  testOnly = Seq(integrationTests),
+  testOnly = Seq(integrationTests, derivationPolicyTests),
   compileOnly = Seq(benchmarks)
 )
 
@@ -273,6 +273,7 @@ lazy val root = project
   .aggregate(optics.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
+  .aggregate(derivationPolicyTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
   .settings(
     moduleName := "kindlings",
@@ -861,6 +862,33 @@ lazy val integrationTests = projectMatrix
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq("io.github.iltotore" %% "iron" % versions.iron),
       for2_13 = Seq.empty
+    )
+  )
+
+lazy val derivationPolicyTests = projectMatrix
+  .in(file("derivation-policy-tests"))
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
+  .dependsOn(fastShowPretty, circeDerivation, jsoniterDerivation)
+  .settings(noPublishSettings *)
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(
+    moduleName := "kindlings-derivation-policy-tests",
+    name := "kindlings-derivation-policy-tests",
+    description := "Integration tests for the Kindlings derivation policy (issue #85)",
+    // The policy is global per compilation unit, so a single -Xmacro-settings config drives the whole module.
+    // Separate entries use ';' (never ',', which the Scala 3 compiler would split inside one option).
+    // fastShowPretty: opt-in with an allowed scope + opt-in-by-import (positive cases compile in those scopes).
+    // circe / jsoniter: opt-in with NO allowed scope so any derivation in this module is denied (negative cases only,
+    // asserted via compileErrors) — proves the gate fires in real codec modules across the encoder/decoder/codec shapes.
+    Test / scalacOptions ++= Seq(
+      "-Xmacro-settings:fastShowPrettyDerivation.policy.enabled=opt-in",
+      "-Xmacro-settings:fastShowPrettyDerivation.policy.allowedScopes=hearth.kindlings.policytest.allowed",
+      "-Xmacro-settings:fastShowPrettyDerivation.policy.optInByImport=true",
+      "-Xmacro-settings:circeDerivation.policy.enabled=opt-in",
+      "-Xmacro-settings:jsoniterDerivation.policy.enabled=opt-in"
     )
   )
 

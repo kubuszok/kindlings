@@ -12,17 +12,20 @@ trait OrderEnumRuleImpl {
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] =
       Enum.parse[A].toEither match {
         case Right(enumm) =>
-          implicit val IntType: Type[Int] = OrderTypes.Int
-          val defBuilder = ValDefBuilder.ofDef2[A, A, Int](s"compare_${Type[A].shortName}")
-          for {
-            _ <- octx.cache.forwardDeclare("cached-order-method", defBuilder)
-            _ <- MIO.scoped { runSafe =>
-              runSafe(octx.cache.buildCachedWith("cached-order-method", defBuilder) { case (_, (x, y)) =>
-                runSafe(deriveEnumOrder[A](enumm, x, y))
-              })
-            }
-            result <- OrderUseCachedRule[A]
-          } yield result
+          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
+          enforceDerivationPolicy[A] >> {
+            implicit val IntType: Type[Int] = OrderTypes.Int
+            val defBuilder = ValDefBuilder.ofDef2[A, A, Int](s"compare_${Type[A].shortName}")
+            for {
+              _ <- octx.cache.forwardDeclare("cached-order-method", defBuilder)
+              _ <- MIO.scoped { runSafe =>
+                runSafe(octx.cache.buildCachedWith("cached-order-method", defBuilder) { case (_, (x, y)) =>
+                  runSafe(deriveEnumOrder[A](enumm, x, y))
+                })
+              }
+              result <- OrderUseCachedRule[A]
+            } yield result
+          }
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

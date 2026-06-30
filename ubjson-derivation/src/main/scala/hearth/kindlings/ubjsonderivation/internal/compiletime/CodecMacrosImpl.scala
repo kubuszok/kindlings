@@ -11,6 +11,7 @@ import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn,
 trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with UbjsonDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -31,6 +32,8 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
+
+  override protected def derivationPolicyTypeClassName: String = "UBJsonValueCodec"
 
   override protected def derivationSettingsNamespace: String = "ubjsonDerivation"
 
