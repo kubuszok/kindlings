@@ -2,7 +2,7 @@ package hearth.kindlings.avroderivation.internal.compiletime
 
 import hearth.MacroCommons
 
-// $COVERAGE-OFF$ macro-only (compile-time) policy glue
+// $COVERAGE-OFF$
 trait AvroDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.avroderivation.policy.allowDerivationForAvroDerivation"

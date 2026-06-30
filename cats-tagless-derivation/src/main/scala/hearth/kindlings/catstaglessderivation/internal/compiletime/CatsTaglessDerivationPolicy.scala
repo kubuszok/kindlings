@@ -6,7 +6,7 @@ import hearth.MacroCommons
   * type-class name) so it can be mixed into the composed K-type-class impl hierarchy (e.g. `ApplyK extends FunctorK
   * with SemigroupalK`) without override/diamond conflicts.
   */
-// $COVERAGE-OFF$ macro-only (compile-time) policy glue
+// $COVERAGE-OFF$
 trait CatsTaglessDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy {
   this: MacroCommons =>
 
