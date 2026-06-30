@@ -37,7 +37,7 @@ final class DerivationPolicyIntegrationSpec extends hearth.MacroSuite {
     test("denies structural derivation outside allowed scopes and without the import marker") {
       compileErrors(
         """hearth.kindlings.fastshowpretty.FastShowPretty.derived[hearth.kindlings.policytest.model.Denied1]"""
-      ).check("is not allowed at this location")
+      ).check("is enabled only in the following scopes")
     }
   }
 
@@ -49,13 +49,13 @@ final class DerivationPolicyIntegrationSpec extends hearth.MacroSuite {
     test("circe: structural derivation is denied in a non-allowed scope") {
       compileErrors(
         """hearth.kindlings.circederivation.KindlingsEncoder.derived[hearth.kindlings.policytest.model.Denied1]"""
-      ).check("is not allowed at this location")
+      ).check("is globally disabled")
     }
 
     test("jsoniter: structural derivation is denied in a non-allowed scope") {
       compileErrors(
         """hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[hearth.kindlings.policytest.model.Denied1]"""
-      ).check("is not allowed at this location")
+      ).check("is globally disabled")
     }
   }
 }

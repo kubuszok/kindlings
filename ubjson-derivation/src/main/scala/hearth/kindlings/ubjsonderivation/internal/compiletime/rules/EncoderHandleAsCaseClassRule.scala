@@ -20,8 +20,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
             // Note: caching is handled by deriveEncoderRecursively
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> encodeCaseClassFields[A](caseClass).map(Rule.matched)
+            encodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

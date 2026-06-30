@@ -217,6 +217,14 @@ trait ReaderMacrosImpl
     def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object ReaderDerivationPolicyRule extends ReaderDerivationRule("derivation policy") {
+    def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // The actual derivation logic
 
   def deriveReaderRecursively[A: ReaderCtx]: MIO[Expr[Either[ConfigDecodingError, A]]] =
@@ -243,6 +251,7 @@ trait ReaderMacrosImpl
       .namedScope(s"Deriving reader via rules for type ${Type[A].prettyPrint}") {
         Rules(
           ReaderUseImplicitWhenAvailableRule,
+          ReaderDerivationPolicyRule,
           ReaderHandleAsValueTypeRule,
           ReaderHandleAsOptionRule,
           // ReaderHandleAsMapRule is merged into ReaderHandleAsCollectionRule: a map is an `IsCollection` whose

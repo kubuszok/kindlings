@@ -27,7 +27,6 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
       AltFType: Type[cats.Alternative[F]]
   ): Expr[cats.Alternative[F]] = {
     val macroName = "Alternative.derived"
-    // Derivation policy gate (issue kubuszok/kindlings#85).
     enforceDerivationPolicyOrAbort(AltFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0

@@ -96,11 +96,20 @@ trait OrderMacrosImpl
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object OrderDerivationPolicyRule extends OrderDerivationRule("derivation policy") {
+    def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   def deriveOrderRecursively[A: OrderCtx]: MIO[Expr[Int]] =
     Log.namedScope(s"Deriving Order for ${Type[A].prettyPrint}") {
       Rules(
         OrderUseCachedRule,
         OrderUseImplicitRule,
+        OrderDerivationPolicyRule,
         OrderBuiltInRule,
         OrderValueTypeRule,
         OrderSingletonRule,

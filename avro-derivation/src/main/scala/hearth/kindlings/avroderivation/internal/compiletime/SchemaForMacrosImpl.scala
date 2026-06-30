@@ -242,6 +242,14 @@ trait SchemaForMacrosImpl
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object AvroSchemaForDerivationPolicyRule extends SchemaDerivationRule("derivation policy") {
+    def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Expr[Schema]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   /** Derives a schema within a shared cache, for use by encoder/decoder derivation. */
   def deriveSchemaInSharedScope[B: Type](config: Expr[AvroConfig], cache: MLocal[ValDefsCache]): MIO[Expr[Schema]] = {
     val evConfig: Option[AvroConfig] = config.semiEval.toOption
@@ -287,6 +295,7 @@ trait SchemaForMacrosImpl
           AvroSchemaForCheckSelfRecordRule,
           AvroSchemaForHandleAsLiteralTypeRule,
           AvroSchemaForUseImplicitWhenAvailableRule,
+          AvroSchemaForDerivationPolicyRule,
           AvroSchemaForUseBuiltInSupportRule,
           AvroSchemaForHandleAsValueTypeRule,
           AvroSchemaForHandleAsOptionRule,

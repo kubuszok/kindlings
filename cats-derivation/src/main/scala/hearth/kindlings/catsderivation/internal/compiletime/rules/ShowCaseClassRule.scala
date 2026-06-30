@@ -19,27 +19,24 @@ trait ShowCaseClassRuleImpl {
       Log.info(s"Checking case class for Show[${Type[A].prettyPrint}]") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> {
-              implicit val SensitiveDataType: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
-                ShowTypes.SensitiveData
-              if (hasTypeAnnotation[hearth.kindlings.catsderivation.annotations.sensitiveData, A]) {
-                val reason =
-                  getTypeAnnotationStringArg[hearth.kindlings.catsderivation.annotations.sensitiveData, A]
-                MIO.pure(Rule.matched(Expr(redactedText(reason))))
-              } else {
-                implicit val StringType: Type[String] = ShowTypes.String
-                val defBuilder = ValDefBuilder.ofDef1[A, String](s"show_${Type[A].shortName}")
-                for {
-                  _ <- sctx.cache.forwardDeclare("cached-show-method", defBuilder)
-                  _ <- MIO.scoped { runSafe =>
-                    runSafe(sctx.cache.buildCachedWith("cached-show-method", defBuilder) { case (_, value) =>
-                      runSafe(deriveCaseClassShow[A](caseClass, value))
-                    })
-                  }
-                  result <- ShowUseCachedRule[A]
-                } yield result
-              }
+            implicit val SensitiveDataType: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
+              ShowTypes.SensitiveData
+            if (hasTypeAnnotation[hearth.kindlings.catsderivation.annotations.sensitiveData, A]) {
+              val reason =
+                getTypeAnnotationStringArg[hearth.kindlings.catsderivation.annotations.sensitiveData, A]
+              MIO.pure(Rule.matched(Expr(redactedText(reason))))
+            } else {
+              implicit val StringType: Type[String] = ShowTypes.String
+              val defBuilder = ValDefBuilder.ofDef1[A, String](s"show_${Type[A].shortName}")
+              for {
+                _ <- sctx.cache.forwardDeclare("cached-show-method", defBuilder)
+                _ <- MIO.scoped { runSafe =>
+                  runSafe(sctx.cache.buildCachedWith("cached-show-method", defBuilder) { case (_, value) =>
+                    runSafe(deriveCaseClassShow[A](caseClass, value))
+                  })
+                }
+                result <- ShowUseCachedRule[A]
+              } yield result
             }
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason.toString))

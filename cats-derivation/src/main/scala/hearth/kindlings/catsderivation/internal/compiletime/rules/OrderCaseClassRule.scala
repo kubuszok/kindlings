@@ -14,20 +14,17 @@ trait OrderCaseClassRuleImpl {
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicy[A] >> {
-            implicit val IntType: Type[Int] = OrderTypes.Int
-            val defBuilder = ValDefBuilder.ofDef2[A, A, Int](s"compare_${Type[A].shortName}")
-            for {
-              _ <- octx.cache.forwardDeclare("cached-order-method", defBuilder)
-              _ <- MIO.scoped { runSafe =>
-                runSafe(octx.cache.buildCachedWith("cached-order-method", defBuilder) { case (_, (x, y)) =>
-                  runSafe(deriveCaseClassOrder[A](caseClass, x, y))
-                })
-              }
-              result <- OrderUseCachedRule[A]
-            } yield result
-          }
+          implicit val IntType: Type[Int] = OrderTypes.Int
+          val defBuilder = ValDefBuilder.ofDef2[A, A, Int](s"compare_${Type[A].shortName}")
+          for {
+            _ <- octx.cache.forwardDeclare("cached-order-method", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(octx.cache.buildCachedWith("cached-order-method", defBuilder) { case (_, (x, y)) =>
+                runSafe(deriveCaseClassOrder[A](caseClass, x, y))
+              })
+            }
+            result <- OrderUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

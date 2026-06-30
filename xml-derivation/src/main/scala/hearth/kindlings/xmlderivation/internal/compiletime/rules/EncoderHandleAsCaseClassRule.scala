@@ -27,16 +27,13 @@ trait EncoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> {
-              val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
-              if (allFields.isEmpty)
-                MIO.pure(
-                  Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
-                )
-              else
-                encodeCaseClassFields[A](caseClass).map(Rule.matched)
-            }
+            val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+            if (allFields.isEmpty)
+              MIO.pure(
+                Rule.yielded(s"The type ${Type[A].prettyPrint} is an empty case class, handled by singleton rule")
+              )
+            else
+              encodeCaseClassFields[A](caseClass).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

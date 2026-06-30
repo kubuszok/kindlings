@@ -18,8 +18,7 @@ trait SemigroupalKCaseClassRuleImpl {
       CaseClass.parse(using AlgWCtor1Type).toEither match {
         case Right(_) =>
           implicit val SKAlgType: Type[cats.tagless.SemigroupalK[Alg]] = skctx.semigroupalKAlgType
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicyForType(AlgWCtor1Type.prettyPrint) >> (for {
+          for {
             _ <- MIO.scoped { runSafe =>
               val instanceExpr = buildSemigroupalKFactoryExpr[Alg](runSafe)
               runSafe {
@@ -32,7 +31,7 @@ trait SemigroupalKCaseClassRuleImpl {
               }
             }
             result <- SemigroupalKUseCachedRule[Alg]
-          } yield result)
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

@@ -14,9 +14,10 @@ user-invocable: false
 # Derivation Policy
 
 The **derivation policy** lets a build globally opt out of automatic (structural) derivation per library
-(issue [kubuszok/kindlings#85](https://github.com/kubuszok/kindlings/issues/85)). It gates ONLY the structural rules
-(case class + enum); built-in support, collections, `Option`, value types, named tuples, and any pre-existing in-scope
-implicit are reached BEFORE the structural rules and stay unconditional.
+(issue [kubuszok/kindlings#85](https://github.com/kubuszok/kindlings/issues/85)). It is checked **once per macro
+expansion** by a single root rule placed AFTER the "use implicit" and "use cached def" rules and BEFORE any derivation
+rule: a pre-existing in-scope implicit is used without gating (it is not derivation), a cached recursive type already
+passed at the first level, and when permitted at the outermost level all nested derivations are permitted too.
 
 The shared mechanism lives in `derivation-commons`
 (`hearth.kindlings.derivation.compiletime.DerivationPolicy`). Reference wiring: the **FastShowPretty** module.
@@ -31,8 +32,13 @@ semi-automatic derivation?".
 - reads `<namespace>.policy.{enabled,allowedScopes,optInByImport}` from `Environment.typedSettings`,
 - in `opt-in` mode, matches `enclosingScope` (the cake-level `enclosingScope: NonEmptyVector[Enclosure]`, Hearth ≥ 0.4.0)
   against `allowedScopes` (package-prefix aware), then falls back to the opt-in import marker,
-- exposes `protected def enforceDerivationPolicy[A: Type]: MIO[Unit]` — `MIO.pure(())` when allowed, else
-  `MIO.fail(new DerivationPolicy.PolicyViolation(<actionable message>))`.
+- exposes two enforcement entry points (both no-ops under the default `always-allowed`, both run the check at most once
+  per expansion via an internal flag):
+  - `protected def checkDerivationPolicyOncePerExpansion(typeName: => String): MIO[Unit]` — yields `()` when permitted,
+    else `MIO.fail(new DerivationPolicy.PolicyViolation(<message>))`. Used as the body of a per-module **root rule**.
+  - `protected def enforceDerivationPolicyOrAbort(typeName: => String): Unit` — eager variant that calls
+    `Environment.reportErrorAndAbort`, for polymorphic derivations that are NOT structured as a `Rules(...)` pipeline
+    (the cats / cats-tagless `deriveXxx[F]` entry points).
 
 The decision is a memoized `lazy val derivationPolicyDecision`, so it is computed once per expansion and short-circuits
 on the default `always-allowed` path before touching `enclosingScope`.
@@ -88,19 +94,26 @@ Pure, unit-tested helpers live in the `DerivationPolicy` companion: `parseMode`,
    }
    ```
 
-5. **Gate the structural rules.** Inside the MATCHED branch of the case-class rule and the enum rule (after
-   `CaseClass.parse`/`Enum.parse` succeeds), prefix the body with `enforceDerivationPolicy[A] >>`:
+5. **Insert ONE root rule into the `Rules(...)` chain** (for rule-pipeline modules). Define a rule whose body is the
+   shared check, and place it right after the `*UseImplicit*` rule (and after any `*UseCached*` rule) and before every
+   derivation rule — exactly like `FastShowPrettyMacrosImpl`:
 
    ```scala
-   case Right(caseClass) =>
-     enforceDerivationPolicy[A] >> {
-       ... existing body returning MIO[Rule.Applicability[...]] ...
-     }
+   object FooDerivationPolicyRule extends FooDerivationRule("derivation policy") {
+     def apply[A: FooCtx]: MIO[Rule.Applicability[Out]] =
+       checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+   }
+   // ...
+   Rules(FooUseCachedRule, FooUseImplicitRule, FooDerivationPolicyRule, FooBuiltInRule, ...)
    ```
 
-   Do NOT gate before the parse, and do NOT gate the non-structural rules — that would block found implicits, built-ins,
-   collections, etc. A denied `enforceDerivationPolicy` fails the `MIO`, which the module's existing entrypoint error
-   path renders.
+   The rule yields (so derivation proceeds) when permitted and fails the `MIO` when denied. Do **not** gate the
+   individual structural rules. For a module with two chains (encoder + decoder), add one root rule per chain.
+
+   **Polymorphic (HKT) modules** (cats `Functor`/`Apply`/`Traverse`/…, cats-tagless `*K`) don't derive through a
+   `*`-kinded `Rules(...)` chain, so instead call `enforceDerivationPolicyOrAbort(<InstanceType>.prettyPrint)` once at
+   the top of each `deriveXxx[F]` entry point (right after `val macroName = ...`), where the type-class instance `Type`
+   is available for a good message.
 
 ## List encoding gotcha (`allowedScopes`)
 
@@ -116,7 +129,7 @@ The integration module `derivation-policy-tests` (depends on `fastShowPretty`, w
 
 - a derivation in an `allowedScopes` package compiles (and renders at runtime),
 - a derivation behind the imported opt-in marker compiles,
-- a derivation outside both is a compile error asserted with `compileErrors(...).check("is not allowed at this location")`.
+- a derivation outside both is a compile error asserted with `compileErrors(...).check("is enabled only in the following scopes")` (or, for an opt-in build with no `allowedScopes`, `"is globally disabled"`).
 
 Because the policy is global per compilation unit, distinct configurations need distinct modules. The `optInByImport=false`
 and `always-allowed` branches are covered by the `DerivationPolicySpec` unit tests and the module's own default-config

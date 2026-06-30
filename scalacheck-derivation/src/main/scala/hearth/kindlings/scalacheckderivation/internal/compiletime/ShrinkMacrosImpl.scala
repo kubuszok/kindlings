@@ -126,6 +126,14 @@ trait ShrinkMacrosImpl
     def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object ShrinkDerivationPolicyRule extends ShrinkDerivationRule("derivation policy") {
+    def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Recursive derivation
 
   def deriveShrinkRecursively[A: ShrinkCtx]: MIO[Expr[Shrink[A]]] =
@@ -133,6 +141,7 @@ trait ShrinkMacrosImpl
       Rules(
         ShrinkUseCachedRule,
         ShrinkUseImplicitRule,
+        ShrinkDerivationPolicyRule,
         ShrinkBuiltInRule,
         ShrinkHandleAsValueTypeRule,
         ShrinkHandleAsOptionRule,

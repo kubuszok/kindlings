@@ -20,8 +20,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> decodeCaseClassFields[A](caseClass).map(Rule.matched)
+            decodeCaseClassFields[A](caseClass).map(Rule.matched)
 
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

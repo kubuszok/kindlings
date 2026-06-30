@@ -36,11 +36,20 @@ trait GroupMacrosImpl
     def apply[A: GroupCtx]: MIO[Rule.Applicability[GroupDerivationResult[A]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object GroupDerivationPolicyRule extends GroupDerivationRule("derivation policy") {
+    def apply[A: GroupCtx]: MIO[Rule.Applicability[GroupDerivationResult[A]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   def deriveGroupRecursively[A: GroupCtx]: MIO[GroupDerivationResult[A]] =
     Log.namedScope(s"Deriving Group for ${Type[A].prettyPrint}") {
       Rules(
         GroupUseCachedRule,
         GroupUseImplicitRule,
+        GroupDerivationPolicyRule,
         GroupBuiltInRule,
         GroupCaseClassRule
       )(_[A]).flatMap {

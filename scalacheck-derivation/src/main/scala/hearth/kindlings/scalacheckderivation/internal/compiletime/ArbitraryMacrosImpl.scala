@@ -134,6 +134,14 @@ trait ArbitraryMacrosImpl
     def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object ArbitraryDerivationPolicyRule extends ArbitraryDerivationRule("derivation policy") {
+    def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Expr[Gen[A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Recursive derivation
 
   def deriveArbitraryRecursively[A: ArbitraryCtx]: MIO[Expr[Gen[A]]] =
@@ -141,6 +149,7 @@ trait ArbitraryMacrosImpl
       Rules(
         ArbitraryUseCachedRule,
         ArbitraryUseImplicitRule,
+        ArbitraryDerivationPolicyRule,
         ArbitraryBuiltInRule,
         ArbitraryHandleAsValueTypeRule,
         ArbitraryHandleAsOptionRule,

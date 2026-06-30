@@ -398,6 +398,14 @@ trait DecoderMacrosImpl
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object DecoderDerivationPolicyRule extends DecoderDerivationRule("derivation policy") {
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // The actual derivation logic
 
   def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[Either[DecodingFailure, A]]] =
@@ -407,6 +415,7 @@ trait DecoderMacrosImpl
           DecoderUseCachedDefWhenAvailableRule,
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
+          DecoderDerivationPolicyRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
           // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),

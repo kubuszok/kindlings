@@ -54,9 +54,7 @@ trait ApplicativeCaseClassRuleImpl {
         implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
         CaseClass.parse[F[Any]].toEither match {
           case Right(caseClass) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicyForType(Type[F[Any]].prettyPrint) >>
-              MIO.pure(Rule.matched(ApplicativeCaseClassResult(FCtor, directFieldSet, caseClass)))
+            MIO.pure(Rule.matched(ApplicativeCaseClassResult(FCtor, directFieldSet, caseClass)))
           case Left(e) =>
             MIO.pure(Rule.yielded(s"Cannot parse F[Any]: $e"))
         }

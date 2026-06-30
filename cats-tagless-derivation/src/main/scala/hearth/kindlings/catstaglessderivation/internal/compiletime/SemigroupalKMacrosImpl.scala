@@ -68,6 +68,7 @@ trait SemigroupalKMacrosImpl
       SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]]
   ): Expr[cats.tagless.SemigroupalK[Alg]] = {
     val macroName = "SemigroupalK.derived"
+    enforceDerivationPolicyOrAbort(SemigroupalKAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1)

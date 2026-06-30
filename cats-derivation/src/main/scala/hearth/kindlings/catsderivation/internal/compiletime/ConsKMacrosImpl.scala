@@ -45,7 +45,6 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveConsK[F[_]](FCtor0: Type.Ctor1[F], ConsKFType: Type[alleycats.ConsK[F]]): Expr[alleycats.ConsK[F]] = {
     val macroName = "ConsK.derived"
-    // Derivation policy gate (issue kubuszok/kindlings#85).
     enforceDerivationPolicyOrAbort(ConsKFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0

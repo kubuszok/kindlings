@@ -125,6 +125,7 @@ trait BifunctorMacrosImpl
       BifunctorFType: Type[cats.Bifunctor[F]]
   ): Expr[cats.Bifunctor[F]] = {
     val macroName = "Bifunctor.derived"
+    enforceDerivationPolicyOrAbort(BifunctorFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor2[F] = FCtor0
     implicit val BifunctorFT: Type[cats.Bifunctor[F]] = BifunctorFType

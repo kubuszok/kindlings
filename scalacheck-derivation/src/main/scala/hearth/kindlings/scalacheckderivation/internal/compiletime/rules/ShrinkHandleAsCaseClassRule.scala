@@ -15,21 +15,18 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
     def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicy[A] >> {
-            implicit val UnitT: Type[Unit] = ShrinkTypes.Unit
-            implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
-            val defBuilder = ValDefBuilder.ofDef1[Unit, Shrink[A]](s"shrinkCaseClass_${Type[A].shortName}")
-            for {
-              _ <- shrinkctx.cache.forwardDeclare("cached-shrink-method", defBuilder)
-              _ <- MIO.scoped { runSafe =>
-                runSafe(shrinkctx.cache.buildCachedWith("cached-shrink-method", defBuilder) { case (_, _) =>
-                  runSafe(deriveCaseClassShrink[A](caseClass))
-                })
-              }
-              result <- ShrinkUseCachedRule[A]
-            } yield result
-          }
+          implicit val UnitT: Type[Unit] = ShrinkTypes.Unit
+          implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
+          val defBuilder = ValDefBuilder.ofDef1[Unit, Shrink[A]](s"shrinkCaseClass_${Type[A].shortName}")
+          for {
+            _ <- shrinkctx.cache.forwardDeclare("cached-shrink-method", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(shrinkctx.cache.buildCachedWith("cached-shrink-method", defBuilder) { case (_, _) =>
+                runSafe(deriveCaseClassShrink[A](caseClass))
+              })
+            }
+            result <- ShrinkUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

@@ -280,6 +280,14 @@ trait EncoderMacrosImpl
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object EncoderDerivationPolicyRule extends EncoderDerivationRule("derivation policy") {
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // The actual derivation logic
 
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[scala.xml.Elem]] =
@@ -306,6 +314,7 @@ trait EncoderMacrosImpl
       .namedScope(s"Deriving XML encoder via rules for type ${Type[A].prettyPrint}") {
         Rules(
           EncoderUseImplicitWhenAvailableRule,
+          EncoderDerivationPolicyRule,
           EncoderHandleAsBuiltInRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,

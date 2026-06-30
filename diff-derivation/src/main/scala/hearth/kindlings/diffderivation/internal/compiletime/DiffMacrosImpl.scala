@@ -64,6 +64,14 @@ trait DiffMacrosImpl
     def apply[A: DiffCtx]: MIO[Rule.Applicability[Expr[DiffResult]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object DiffDerivationPolicyRule extends DiffDerivationRule("derivation policy") {
+    def apply[A: DiffCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   @scala.annotation.nowarn("msg=is never used|unused")
   def deriveDiffRecursively[A: DiffCtx]: MIO[Expr[DiffResult]] =
     Log.namedScope(s"Deriving Diff for ${Type[A].prettyPrint}") {
@@ -71,6 +79,7 @@ trait DiffMacrosImpl
       Rules(
         DiffUseCachedRule,
         DiffUseImplicitRule,
+        DiffDerivationPolicyRule,
         DiffBuiltInRule,
         DiffValueTypeRule,
         DiffOptionRule,

@@ -15,7 +15,6 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
       BifoldableFType: Type[cats.Bifoldable[F]]
   ): Expr[cats.Bifoldable[F]] = {
     val macroName = "Bifoldable.derived"
-    // Derivation policy gate (issue kubuszok/kindlings#85).
     enforceDerivationPolicyOrAbort(BifoldableFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor2[F] = FCtor0

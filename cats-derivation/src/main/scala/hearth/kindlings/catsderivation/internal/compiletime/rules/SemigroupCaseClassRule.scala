@@ -14,19 +14,16 @@ trait SemigroupCaseClassRuleImpl {
     def apply[A: SemigroupCtx]: MIO[Rule.Applicability[Expr[A]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicy[A] >> {
-            val defBuilder = ValDefBuilder.ofDef2[A, A, A](s"combine_${Type[A].shortName}")
-            for {
-              _ <- sgctx.cache.forwardDeclare("cached-semigroup-method", defBuilder)
-              _ <- MIO.scoped { runSafe =>
-                runSafe(sgctx.cache.buildCachedWith("cached-semigroup-method", defBuilder) { case (_, (x, y)) =>
-                  runSafe(deriveCaseClassSemigroup[A](caseClass, x, y))
-                })
-              }
-              result <- SemigroupUseCachedRule[A]
-            } yield result
-          }
+          val defBuilder = ValDefBuilder.ofDef2[A, A, A](s"combine_${Type[A].shortName}")
+          for {
+            _ <- sgctx.cache.forwardDeclare("cached-semigroup-method", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(sgctx.cache.buildCachedWith("cached-semigroup-method", defBuilder) { case (_, (x, y)) =>
+                runSafe(deriveCaseClassSemigroup[A](caseClass, x, y))
+              })
+            }
+            result <- SemigroupUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

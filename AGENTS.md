@@ -135,8 +135,11 @@ Global, per-library opt-out of automatic (structural) derivation. Shared mechani
 timeout. Keys: `<ns>.policy.enabled=always-allowed|opt-in` (default `always-allowed`),
 `<ns>.policy.allowedScopes=<fqn>[;<fqn>]` (package-prefix aware; split on `;`/`|`, **never `,`** — Scala 3 splits a
 single `-Xmacro-settings` option on commas, Scala 2 does not), `<ns>.policy.optInByImport=true|false` (default `true`).
-Gates ONLY the structural case-class/enum rules via `enforceDerivationPolicy[A] >> ...` (built-ins, collections,
-`Option`, value types, named tuples, and found implicits are reached earlier and stay unconditional). Opt-in-by-import
+Enforced once per macro expansion by a single root rule (`checkDerivationPolicyOncePerExpansion`) inserted into each
+`Rules(...)` chain right after the use-implicit/use-cached rules and before any derivation rule — so found implicits,
+cached recursive types, built-ins, collections, value types, etc. stay unconditional. Polymorphic (HKT) derivations
+without a `*`-kinded rule chain (cats/cats-tagless `deriveXxx[F]`) instead call `enforceDerivationPolicyOrAbort` once at
+the entry point. Opt-in-by-import
 uses an `AllowDerivation` marker (parallel to `LogDerivation`) exposed from each module's `policy` package object.
 To wire it into a module, follow `docs/contributing/kindlings-derivation-policy/SKILL.md`. Reference impl:
 `fast-show-pretty`. Tested in `derivation-commons` (`DerivationPolicySpec`, pure logic) and the `derivation-policy-tests`

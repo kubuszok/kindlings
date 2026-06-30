@@ -111,11 +111,20 @@ trait CogenMacrosImpl
     def apply[A: CogenCtx]: MIO[Rule.Applicability[Expr[Cogen[A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object CogenDerivationPolicyRule extends CogenDerivationRule("derivation policy") {
+    def apply[A: CogenCtx]: MIO[Rule.Applicability[Expr[Cogen[A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   def deriveCogenRecursively[A: CogenCtx]: MIO[Expr[Cogen[A]]] =
     Log.namedScope(s"Deriving Cogen for ${Type[A].prettyPrint}") {
       Rules(
         CogenUseCachedRule,
         CogenUseImplicitRule,
+        CogenDerivationPolicyRule,
         CogenBuiltInRule,
         CogenHandleAsValueTypeRule,
         CogenHandleAsOptionRule,

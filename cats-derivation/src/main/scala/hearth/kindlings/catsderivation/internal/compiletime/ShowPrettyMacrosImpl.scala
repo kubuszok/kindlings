@@ -67,6 +67,7 @@ trait ShowPrettyMacrosImpl
       Rules(
         ShowPrettyUseCachedRule,
         ShowPrettyUseImplicitRule,
+        ShowDerivationPolicyRule,
         ShowBuiltInRule,
         ShowValueTypeRule,
         ShowOptionRule,

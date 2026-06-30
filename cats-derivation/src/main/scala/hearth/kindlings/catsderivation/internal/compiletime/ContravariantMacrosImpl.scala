@@ -23,7 +23,6 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationE
       ContravariantFType: Type[cats.Contravariant[F]]
   ): Expr[cats.Contravariant[F]] = {
     val macroName = "Contravariant.derived"
-    // Derivation policy gate (issue kubuszok/kindlings#85).
     enforceDerivationPolicyOrAbort(ContravariantFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0

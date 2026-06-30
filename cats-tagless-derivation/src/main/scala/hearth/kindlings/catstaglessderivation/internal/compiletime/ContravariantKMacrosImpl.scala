@@ -66,6 +66,7 @@ trait ContravariantKMacrosImpl
       ContravariantKAlgType: Type[cats.tagless.ContravariantK[Alg]]
   ): Expr[cats.tagless.ContravariantK[Alg]] = {
     val macroName = "ContravariantK.derived"
+    enforceDerivationPolicyOrAbort(ContravariantKAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1)

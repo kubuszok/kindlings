@@ -265,6 +265,14 @@ trait SchemaMacrosImpl
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object SchemaDerivationPolicyRule extends SchemaDerivationRule("derivation policy") {
+    def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   def deriveSchemaRecursively[A: SchemaCtx]: MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     sctx.cache.get0Ary[Schema[A]](sctx.cacheKey).flatMap {
@@ -281,6 +289,7 @@ trait SchemaMacrosImpl
       Rules(
         SchemaUseSelfRefWhenRecursiveRule,
         SchemaUseImplicitWhenAvailableRule,
+        SchemaDerivationPolicyRule,
         SchemaHandleAsOptionRule,
         SchemaHandleAsMapRule,
         SchemaHandleAsCollectionRule,

@@ -31,6 +31,7 @@ trait ApplyKMacrosImpl extends FunctorKMacrosImpl with SemigroupalKMacrosImpl { 
       SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]]
   ): Expr[cats.tagless.ApplyK[Alg]] = {
     val macroName = "ApplyK.derived"
+    enforceDerivationPolicyOrAbort(ApplyKAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1)

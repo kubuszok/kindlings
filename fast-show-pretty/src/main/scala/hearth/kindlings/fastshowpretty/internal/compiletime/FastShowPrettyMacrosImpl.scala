@@ -283,6 +283,14 @@ trait FastShowPrettyMacrosImpl
     def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object DerivationPolicyRule extends DerivationRule("derivation policy") {
+    def apply[A: DerivationCtx]: MIO[Rule.Applicability[Expr[StringBuilder]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Reusable components
 
   protected object Types {
@@ -362,6 +370,7 @@ trait FastShowPrettyMacrosImpl
       .namedScope(s"Deriving for type ${Type[A].prettyPrint}") {
         Rules(
           FastShowPrettyUseImplicitWhenAvailableRule,
+          DerivationPolicyRule,
           FastShowPrettyUseBuiltInSupportRule,
           FastShowPrettyHandleAsValueTypeRule,
           FastShowPrettyHandleAsOptionRule,

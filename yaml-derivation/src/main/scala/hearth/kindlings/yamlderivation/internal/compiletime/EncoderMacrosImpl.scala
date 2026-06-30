@@ -253,6 +253,14 @@ trait EncoderMacrosImpl
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object EncoderDerivationPolicyRule extends EncoderDerivationRule("derivation policy") {
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // The actual derivation logic
 
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[Node]] =
@@ -280,6 +288,7 @@ trait EncoderMacrosImpl
         Rules(
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
+          EncoderDerivationPolicyRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
           // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),

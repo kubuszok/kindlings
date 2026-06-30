@@ -128,25 +128,25 @@ object Handler {
 The error you would get from the commented-out line looks like:
 
 ```text
-FastShowPretty derivation of com.acme.show.User is not allowed at this location.
+Derivation of FastShowPretty[com.acme.show.User] is enabled only in the following scopes:
+ - com.acme.show
 
-This build enables an opt-in derivation policy (-Xmacro-settings:fastShowPrettyDerivation.policy.enabled=opt-in),
-which only permits automatic (structural) derivation of case classes and sealed hierarchies in designated scopes.
+Currently you are in the following scope: com.acme.web.Handler.
 
-  Location:         com.acme.web.Handler (at Handler.scala:...)
-  Allowed scopes:   com.acme.show
-  Opt-in by import: enabled
-
-To fix this, do ONE of the following:
-  1. Define the instance in an allowed scope and import/inherit it here, e.g.:
-       given FastShowPretty[com.acme.show.User] = FastShowPretty.derived
-  2. Add this location to the allowed scopes (separate entries with ';' or '|', never ','):
-       -Xmacro-settings:fastShowPrettyDerivation.policy.allowedScopes=<package-or-object>[;<more>]
-  3. Import the opt-in marker into this scope (opt-in-by-import is enabled):
-       import hearth.kindlings.fastshowpretty.policy.allowDerivationForFastShowPretty
-  4. Disable the policy for this build:
-       -Xmacro-settings:fastShowPrettyDerivation.policy.enabled=always-allowed
+You are allowed to enable this derivation locally by adding the import:
+import hearth.kindlings.fastshowpretty.policy.allowDerivationForFastShowPretty
 ```
+
+When `opt-in` is set with **no** `allowedScopes`, derivation is globally disabled and the message is instead:
+
+```text
+Derivation of FastShowPretty[com.acme.show.User] is globally disabled.
+
+You are allowed to enable this derivation locally by adding the import:
+import hearth.kindlings.fastshowpretty.policy.allowDerivationForFastShowPretty
+```
+
+(The import line is appended only when `optInByImport` is enabled.)
 
 ## Per-library namespaces
 

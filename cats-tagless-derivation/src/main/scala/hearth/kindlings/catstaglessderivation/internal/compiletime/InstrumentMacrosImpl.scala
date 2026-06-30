@@ -31,6 +31,7 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
       algebraName: String
   ): Expr[cats.tagless.aop.Instrument[Alg]] = {
     val macroName = "Instrument.derived"
+    enforceDerivationPolicyOrAbort(InstrumentAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1)

@@ -21,15 +21,14 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
         Enum.parse[A].toEither match {
           case Right(enumm) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> (for {
+            for {
               schemaExpr <- deriveEnumSchema[A](enumm)
               _ <- sfctx.setCachedSchema[A](schemaExpr)
               result <- sfctx.getCachedSchema[A].flatMap {
                 case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
                 case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
               }
-            } yield result)
+            } yield result
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

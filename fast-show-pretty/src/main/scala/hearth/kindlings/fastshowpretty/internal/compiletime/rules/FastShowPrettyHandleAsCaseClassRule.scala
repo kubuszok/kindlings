@@ -15,17 +15,14 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
         CaseClass.parse[A].toEither match {
           case Right(caseClass) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> {
-              implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
-                Types.SensitiveData
-              if (hasTypeAnnotation[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]) {
-                val reason = getTypeAnnotationStringArg[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]
-                val text = redactedText(reason)
-                MIO.pure(Rule.matched(Expr.quote(Expr.splice(ctx.sb).append(Expr.splice(Expr(text))))))
-              } else {
-                deriveCaseClassFields[A](caseClass).map(Rule.matched)
-              }
+            implicit val SensitiveDataType: Type[hearth.kindlings.fastshowpretty.annotations.sensitiveData] =
+              Types.SensitiveData
+            if (hasTypeAnnotation[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]) {
+              val reason = getTypeAnnotationStringArg[hearth.kindlings.fastshowpretty.annotations.sensitiveData, A]
+              val text = redactedText(reason)
+              MIO.pure(Rule.matched(Expr.quote(Expr.splice(ctx.sb).append(Expr.splice(Expr(text))))))
+            } else {
+              deriveCaseClassFields[A](caseClass).map(Rule.matched)
             }
 
           case Left(reason) =>

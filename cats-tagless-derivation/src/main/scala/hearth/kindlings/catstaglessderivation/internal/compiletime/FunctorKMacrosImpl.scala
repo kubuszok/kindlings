@@ -66,6 +66,7 @@ trait FunctorKMacrosImpl
       FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]]
   ): Expr[cats.tagless.FunctorK[Alg]] = {
     val macroName = "FunctorK.derived"
+    enforceDerivationPolicyOrAbort(FunctorKAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1)

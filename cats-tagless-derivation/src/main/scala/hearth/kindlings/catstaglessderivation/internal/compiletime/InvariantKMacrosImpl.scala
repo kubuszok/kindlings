@@ -107,6 +107,7 @@ trait InvariantKMacrosImpl
       InvariantKAlgType: Type[cats.tagless.InvariantK[Alg]]
   ): Expr[cats.tagless.InvariantK[Alg]] = {
     val macroName = "InvariantK.derived"
+    enforceDerivationPolicyOrAbort(InvariantKAlgType.prettyPrint)
 
     implicit val AlgCtorK1: Type.CtorK1[Alg] = AlgCtorK10
     hearth.fp.ignore(AlgCtorK1) // used by cross-quotes plugin

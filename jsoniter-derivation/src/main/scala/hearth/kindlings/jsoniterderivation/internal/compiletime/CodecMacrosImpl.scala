@@ -874,6 +874,14 @@ trait CodecMacrosImpl
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object EncoderDerivationPolicyRule extends EncoderDerivationRule("derivation policy") {
+    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Encoder derivation
 
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[Unit]] =
@@ -902,6 +910,7 @@ trait CodecMacrosImpl
           // included here because caching is handled by derive*Recursively (which wraps in setHelper).
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
+          EncoderDerivationPolicyRule,
           EncoderHandleAsBuiltInRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
@@ -1019,6 +1028,14 @@ trait CodecMacrosImpl
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object DecoderDerivationPolicyRule extends DecoderDerivationRule("derivation policy") {
+    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Decoder derivation
 
   // Guard to ensure loadStandardExtensions() is called at most once per expansion,
@@ -1091,6 +1108,7 @@ trait CodecMacrosImpl
           // included here because caching is handled by derive*Recursively (which wraps in setHelper).
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
+          DecoderDerivationPolicyRule,
           DecoderHandleAsBuiltInRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,

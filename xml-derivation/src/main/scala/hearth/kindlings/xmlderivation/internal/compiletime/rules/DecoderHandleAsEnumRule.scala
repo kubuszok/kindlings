@@ -19,8 +19,7 @@ trait DecoderHandleAsEnumRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a sealed trait/enum") >> {
         Enum.parse[A].toEither match {
           case Right(parsedEnum) =>
-            // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-            enforceDerivationPolicy[A] >> decodeEnumCases[A](parsedEnum).map(Rule.matched)
+            decodeEnumCases[A](parsedEnum).map(Rule.matched)
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

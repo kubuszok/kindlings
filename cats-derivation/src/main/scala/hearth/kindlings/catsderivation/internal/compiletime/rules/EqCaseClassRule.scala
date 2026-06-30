@@ -14,20 +14,17 @@ trait EqCaseClassRuleImpl {
     def apply[A: EqCtx]: MIO[Rule.Applicability[Expr[Boolean]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicy[A] >> {
-            implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
-            val defBuilder = ValDefBuilder.ofDef2[A, A, Boolean](s"eqv_${Type[A].shortName}")
-            for {
-              _ <- eqctx.cache.forwardDeclare("cached-eq-method", defBuilder)
-              _ <- MIO.scoped { runSafe =>
-                runSafe(eqctx.cache.buildCachedWith("cached-eq-method", defBuilder) { case (_, (x, y)) =>
-                  runSafe(deriveCaseClassEq[A](caseClass, x, y))
-                })
-              }
-              result <- EqUseCachedRule[A]
-            } yield result
-          }
+          implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
+          val defBuilder = ValDefBuilder.ofDef2[A, A, Boolean](s"eqv_${Type[A].shortName}")
+          for {
+            _ <- eqctx.cache.forwardDeclare("cached-eq-method", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(eqctx.cache.buildCachedWith("cached-eq-method", defBuilder) { case (_, (x, y)) =>
+                runSafe(deriveCaseClassEq[A](caseClass, x, y))
+              })
+            }
+            result <- EqUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

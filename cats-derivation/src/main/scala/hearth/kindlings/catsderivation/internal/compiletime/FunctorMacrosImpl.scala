@@ -158,6 +158,7 @@ trait FunctorMacrosImpl
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
   def deriveFunctor[F[_]](FCtor0: Type.Ctor1[F], FunctorFType: Type[cats.Functor[F]]): Expr[cats.Functor[F]] = {
     val macroName = "Functor.derived"
+    enforceDerivationPolicyOrAbort(FunctorFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val FunctorFT: Type[cats.Functor[F]] = FunctorFType

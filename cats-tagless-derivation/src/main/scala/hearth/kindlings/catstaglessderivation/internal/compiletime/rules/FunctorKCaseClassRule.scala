@@ -18,8 +18,7 @@ trait FunctorKCaseClassRuleImpl {
       CaseClass.parse(using AlgWCtor1Type).toEither match {
         case Right(_) =>
           implicit val FKAlgType: Type[cats.tagless.FunctorK[Alg]] = fkctx.functorKAlgType
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicyForType(AlgWCtor1Type.prettyPrint) >> (for {
+          for {
             _ <- MIO.scoped { runSafe =>
               val instanceExpr = buildFunctorKFactoryExpr[Alg](runSafe)
               runSafe {
@@ -32,7 +31,7 @@ trait FunctorKCaseClassRuleImpl {
               }
             }
             result <- FunctorKUseCachedRule[Alg]
-          } yield result)
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

@@ -101,6 +101,7 @@ trait ApplicativeMacrosImpl
       ApplicativeFType: Type[cats.Applicative[F]]
   ): Expr[cats.Applicative[F]] = {
     val macroName = "Applicative.derived"
+    enforceDerivationPolicyOrAbort(ApplicativeFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ApplicativeFT: Type[cats.Applicative[F]] = ApplicativeFType

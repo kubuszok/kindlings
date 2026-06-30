@@ -15,19 +15,16 @@ trait EmptyCaseClassRuleImpl {
     def apply[A: EmptyCtx]: MIO[Rule.Applicability[Expr[A]]] =
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
-          // Structural derivation: gate on the derivation policy (issue kubuszok/kindlings#85).
-          enforceDerivationPolicy[A] >> {
-            val defBuilder = ValDefBuilder.ofLazy[A](s"empty_${Type[A].shortName}")
-            for {
-              _ <- ectx.cache.forwardDeclare("cached-empty-value", defBuilder)
-              _ <- MIO.scoped { runSafe =>
-                runSafe(ectx.cache.buildCachedWith("cached-empty-value", defBuilder) { _ =>
-                  runSafe(deriveCaseClassEmpty[A](caseClass))
-                })
-              }
-              result <- EmptyUseCachedRule[A]
-            } yield result
-          }
+          val defBuilder = ValDefBuilder.ofLazy[A](s"empty_${Type[A].shortName}")
+          for {
+            _ <- ectx.cache.forwardDeclare("cached-empty-value", defBuilder)
+            _ <- MIO.scoped { runSafe =>
+              runSafe(ectx.cache.buildCachedWith("cached-empty-value", defBuilder) { _ =>
+                runSafe(deriveCaseClassEmpty[A](caseClass))
+              })
+            }
+            result <- EmptyUseCachedRule[A]
+          } yield result
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))
       }

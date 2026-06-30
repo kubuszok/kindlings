@@ -13,9 +13,10 @@ import hearth.fp.effect.*
   * actionable message telling the user to define the instance explicitly (e.g. `given X = TypeClass.derived`) in an
   * allowed place.
   *
-  * This gates ONLY the structural rules (`HandleAsCaseClass` / `HandleAsEnum`). Built-in primitives, collections,
-  * `Option`, value types, named tuples, and any pre-existing in-scope implicit are reached BEFORE the structural rules
-  * and are therefore always allowed - consistent with the project stance that those "always work".
+  * Enforced once per macro expansion by a root rule placed AFTER the "use implicit" and "use cached def" rules and
+  * BEFORE every derivation rule: a pre-existing in-scope implicit is used without gating (it is not derivation), and a
+  * cached recursive type already passed the check at the first level. When permitted at the first (outermost) level all
+  * nested derivations are permitted too; when denied, the macro fails fast before any nesting.
   *
   * Reuses the same per-module settings namespace as [[DerivationTimeout]] (`derivationSettingsNamespace`).
   * Configuration keys (all under `<namespace>.policy.`):
@@ -95,28 +96,32 @@ trait DerivationPolicy { this: MacroCommons =>
     }
   }
 
-  /** No-op when derivation is allowed at this expansion point; otherwise fails the [[MIO]] with a
-    * [[DerivationPolicy.PolicyViolation]] carrying a detailed, actionable message.
-    *
-    * Call this from inside the structural (case-class / enum) rules, AFTER they have matched, so that non-structural
-    * types and found implicits are never gated.
-    */
-  protected def enforceDerivationPolicy[A: Type]: MIO[Unit] = enforceDerivationPolicyForType(Type[A].prettyPrint)
+  private var derivationPolicyChecked = false
 
-  /** Same as [[enforceDerivationPolicy]] but takes the derived type's pretty name directly, for derivations whose type
-    * parameter is higher-kinded (e.g. cats-tagless `Alg[_[_]]`) and so cannot be passed to the `[A: Type]` form.
+  /** The single policy check, run at most once per macro expansion. Yields `()` when derivation is permitted here
+    * (recording, the first time, that the check passed so all nested derivations skip it); fails the [[MIO]] with a
+    * [[DerivationPolicy.PolicyViolation]] when denied.
+    *
+    * Intended to be the body of a per-module root rule placed AFTER the "use implicit" and "use cached def" rules and
+    * BEFORE every derivation rule: using an existing implicit is not derivation (so it is never gated), and anything
+    * found in the cache already passed this check at the first level. The rule yields, so the actual derivation rules
+    * run next; a denial fails fast before any nesting.
     */
-  protected def enforceDerivationPolicyForType(typeName: String): MIO[Unit] = derivationPolicyDecision match {
-    case DerivationPolicy.Decision.Allowed        => MIO.pure(())
-    case denied: DerivationPolicy.Decision.Denied =>
-      MIO.fail(new DerivationPolicy.PolicyViolation(derivationPolicyDeniedMessage(typeName, denied)))
+  protected def checkDerivationPolicyOncePerExpansion(typeName: => String): MIO[Unit] = MIO.pure(()).flatMap { _ =>
+    if (derivationPolicyChecked) MIO.pure(())
+    else
+      derivationPolicyDecision match {
+        case DerivationPolicy.Decision.Allowed =>
+          derivationPolicyChecked = true
+          MIO.pure(())
+        case denied: DerivationPolicy.Decision.Denied =>
+          MIO.fail(new DerivationPolicy.PolicyViolation(derivationPolicyDeniedMessage(typeName, denied)))
+      }
   }
 
-  /** Eager variant of [[enforceDerivationPolicy]] for derivations that are NOT structured as a `MIO` rule pipeline
-    * (e.g. the cats polymorphic entry points): when derivation is denied, immediately abort the macro with the
-    * actionable message. A no-op under the default `always-allowed` policy, so it never affects normal builds.
-    *
-    * `typeName` is by-name so it is only computed when the policy actually denies.
+  /** Eager variant for derivations that are NOT structured as a `MIO` rule pipeline (the cats polymorphic entry
+    * points): when derivation is denied, immediately abort the macro with the actionable message. A no-op under the
+    * default `always-allowed` policy. `typeName` is by-name so it is only computed when the policy actually denies.
     */
   protected def enforceDerivationPolicyOrAbort(typeName: => String): Unit = derivationPolicyDecision match {
     case DerivationPolicy.Decision.Allowed        => ()
@@ -125,38 +130,24 @@ trait DerivationPolicy { this: MacroCommons =>
   }
 
   private def derivationPolicyDeniedMessage(typeName: String, denied: DerivationPolicy.Decision.Denied): String = {
-    val ns = derivationSettingsNamespace
-    val tc = derivationPolicyTypeClassName
-    val location = denied.currentScope.getOrElse("<unknown scope>")
-    val position = Environment.currentPosition.prettyPrint
-    val scopesLine = if (denied.allowedScopes.isEmpty) "none configured" else denied.allowedScopes.mkString(", ")
-    val importOption =
-      if (denied.optInByImport)
-        s"""|  3. Import the opt-in marker into this scope (opt-in-by-import is enabled):
-            |       $derivationOptInImportHint""".stripMargin
-      else
-        s"""|  3. Opt-in-by-import is disabled for this build; enable it with
-            |       -Xmacro-settings:$ns.policy.optInByImport=true
-            |     and then import the opt-in marker, or use one of the other options.""".stripMargin
+    val target = s"$derivationPolicyTypeClassName[$typeName]"
 
-    s"""|$tc derivation of $typeName is not allowed at this location.
-        |
-        |This build enables an opt-in derivation policy (-Xmacro-settings:$ns.policy.enabled=opt-in),
-        |which only permits automatic (structural) derivation of case classes and sealed hierarchies
-        |in designated scopes.
-        |
-        |  Location:         $location (at $position)
-        |  Allowed scopes:   $scopesLine
-        |  Opt-in by import: ${if (denied.optInByImport) "enabled" else "disabled"}
-        |
-        |To fix this, do ONE of the following:
-        |  1. Define the instance in an allowed scope and import/inherit it here, e.g.:
-        |       given $tc[$typeName] = $tc.derived
-        |  2. Add this location to the allowed scopes (separate entries with ';' or '|', never ','):
-        |       -Xmacro-settings:$ns.policy.allowedScopes=<package-or-object>[;<more>]
-        |$importOption
-        |  4. Disable the policy for this build:
-        |       -Xmacro-settings:$ns.policy.enabled=always-allowed""".stripMargin
+    val base =
+      if (denied.allowedScopes.nonEmpty)
+        s"""Derivation of $target is enabled only in the following scopes:
+           |${denied.allowedScopes.map(" - " + _).mkString("\n")}
+           |
+           |Currently you are in the following scope: ${denied.currentScope.getOrElse("<unknown>")}.""".stripMargin
+      else
+        s"Derivation of $target is globally disabled."
+
+    if (denied.optInByImport)
+      base +
+        s"""|
+            |
+            |You are allowed to enable this derivation locally by adding the import:
+            |$derivationOptInImportHint""".stripMargin
+    else base
   }
 }
 

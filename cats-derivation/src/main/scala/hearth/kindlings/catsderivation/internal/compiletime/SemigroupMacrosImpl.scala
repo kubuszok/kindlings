@@ -57,6 +57,14 @@ trait SemigroupMacrosImpl
     def apply[A: SemigroupCtx]: MIO[Rule.Applicability[Expr[A]]]
   }
 
+  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
+    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
+    */
+  object SemigroupDerivationPolicyRule extends SemigroupDerivationRule("derivation policy") {
+    def apply[A: SemigroupCtx]: MIO[Rule.Applicability[Expr[A]]] =
+      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+  }
+
   // Recursive derivation
 
   def deriveSemigroupRecursively[A: SemigroupCtx]: MIO[Expr[A]] =
@@ -64,6 +72,7 @@ trait SemigroupMacrosImpl
       Rules(
         SemigroupUseCachedRule,
         SemigroupUseImplicitRule,
+        SemigroupDerivationPolicyRule,
         SemigroupBuiltInRule,
         SemigroupCaseClassRule
       )(_[A]).flatMap {

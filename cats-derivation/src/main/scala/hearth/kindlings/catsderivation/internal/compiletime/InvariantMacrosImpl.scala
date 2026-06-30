@@ -23,7 +23,6 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
       InvariantFType: Type[cats.Invariant[F]]
   ): Expr[cats.Invariant[F]] = {
     val macroName = "Invariant.derived"
-    // Derivation policy gate (issue kubuszok/kindlings#85).
     enforceDerivationPolicyOrAbort(InvariantFType.prettyPrint)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
