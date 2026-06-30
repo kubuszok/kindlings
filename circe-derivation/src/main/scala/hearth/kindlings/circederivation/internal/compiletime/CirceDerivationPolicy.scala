@@ -6,6 +6,7 @@ import hearth.MacroCommons
   * and import hint; each `*MacrosImpl` mixes this in (alongside [[CirceDerivationTimeout]]) and only supplies its own
   * `derivationPolicyTypeClassName`.
   */
+// $COVERAGE-OFF$ macro-only (compile-time) policy glue
 trait CirceDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
 
   override protected def derivationOptInImportHint: String =
@@ -17,3 +18,4 @@ trait CirceDerivationPolicy extends hearth.kindlings.derivation.compiletime.Deri
     Expr.summonImplicit[hearth.kindlings.circederivation.AllowDerivation].isDefined
   }
 }
+// $COVERAGE-ON$

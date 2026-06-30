@@ -33,6 +33,7 @@ import hearth.fp.effect.*
   * would also work but are noisier.)
   */
 trait DerivationPolicy { this: MacroCommons =>
+  // $COVERAGE-OFF$ macro-only (compile-time) glue; the runtime-tested logic lives in `object DerivationPolicy` below.
 
   /** Shared with [[DerivationTimeout]] - the per-module settings namespace (e.g. `fastShowPrettyDerivation`). */
   protected def derivationSettingsNamespace: String
@@ -149,6 +150,7 @@ trait DerivationPolicy { this: MacroCommons =>
             |$derivationOptInImportHint""".stripMargin
     else base
   }
+  // $COVERAGE-ON$
 }
 
 object DerivationPolicy {

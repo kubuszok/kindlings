@@ -2,6 +2,7 @@ package hearth.kindlings.yamlderivation.internal.compiletime
 
 import hearth.MacroCommons
 
+// $COVERAGE-OFF$ macro-only (compile-time) policy glue
 trait YamlDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
 
   override protected def derivationOptInImportHint: String =
@@ -13,3 +14,4 @@ trait YamlDerivationPolicy extends hearth.kindlings.derivation.compiletime.Deriv
     Expr.summonImplicit[hearth.kindlings.yamlderivation.AllowDerivation].isDefined
   }
 }
+// $COVERAGE-ON$

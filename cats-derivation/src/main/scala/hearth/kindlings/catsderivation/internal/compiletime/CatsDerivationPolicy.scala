@@ -6,6 +6,7 @@ import hearth.MacroCommons
   * type-class name is generic) so the trait can be mixed into the heavily-composed cats impl hierarchy (e.g.
   * `Monoid extends Semigroup`, `Hash extends Eq`) without override/diamond conflicts.
   */
+// $COVERAGE-OFF$ macro-only (compile-time) policy glue
 trait CatsDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
 
   override protected def derivationPolicyTypeClassName: String = "Cats"
@@ -19,3 +20,4 @@ trait CatsDerivationPolicy extends hearth.kindlings.derivation.compiletime.Deriv
     Expr.summonImplicit[hearth.kindlings.catsderivation.AllowDerivation].isDefined
   }
 }
+// $COVERAGE-ON$

@@ -2,6 +2,7 @@ package hearth.kindlings.diffderivation.internal.compiletime
 
 import hearth.MacroCommons
 
+// $COVERAGE-OFF$ macro-only (compile-time) policy glue
 trait DiffDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.diffderivation.policy.allowDerivationForDiffDerivation"
@@ -11,3 +12,4 @@ trait DiffDerivationPolicy extends hearth.kindlings.derivation.compiletime.Deriv
     Expr.summonImplicit[hearth.kindlings.diffderivation.AllowDerivation].isDefined
   }
 }
+// $COVERAGE-ON$

@@ -2,6 +2,7 @@ package hearth.kindlings.scalacheckderivation.internal.compiletime
 
 import hearth.MacroCommons
 
+// $COVERAGE-OFF$ macro-only (compile-time) policy glue
 trait ScalacheckDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy {
   this: MacroCommons =>
   override protected def derivationOptInImportHint: String =
@@ -12,3 +13,4 @@ trait ScalacheckDerivationPolicy extends hearth.kindlings.derivation.compiletime
     Expr.summonImplicit[hearth.kindlings.scalacheckderivation.AllowDerivation].isDefined
   }
 }
+// $COVERAGE-ON$
