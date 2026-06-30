@@ -22,7 +22,9 @@ trait DecoderMacrosImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsXmlDecoder"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

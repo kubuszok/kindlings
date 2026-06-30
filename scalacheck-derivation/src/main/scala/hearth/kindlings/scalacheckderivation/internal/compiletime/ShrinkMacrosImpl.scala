@@ -21,7 +21,9 @@ trait ShrinkMacrosImpl
     with rules.ShrinkHandleAsCaseClassRuleImpl
     with rules.ShrinkHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "Shrink"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 

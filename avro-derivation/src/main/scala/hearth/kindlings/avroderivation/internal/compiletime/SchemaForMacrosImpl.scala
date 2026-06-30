@@ -45,7 +45,9 @@ trait SchemaForMacrosImpl
     with rules.AvroSchemaForHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "AvroSchemaFor"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

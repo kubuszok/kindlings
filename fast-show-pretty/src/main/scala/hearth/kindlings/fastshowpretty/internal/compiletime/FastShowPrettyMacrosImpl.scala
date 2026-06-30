@@ -26,7 +26,9 @@ trait FastShowPrettyMacrosImpl
 
   // Derivation policy (issue kubuszok/kindlings#85)
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "FastShowPretty"
+  // $COVERAGE-ON$
 
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.fastshowpretty.policy.allowDerivationForFastShowPretty"

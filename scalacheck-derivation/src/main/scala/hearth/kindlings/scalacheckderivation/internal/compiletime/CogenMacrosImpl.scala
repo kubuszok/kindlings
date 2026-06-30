@@ -20,7 +20,9 @@ trait CogenMacrosImpl
     with rules.CogenHandleAsCaseClassRuleImpl
     with rules.CogenHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "Cogen"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 

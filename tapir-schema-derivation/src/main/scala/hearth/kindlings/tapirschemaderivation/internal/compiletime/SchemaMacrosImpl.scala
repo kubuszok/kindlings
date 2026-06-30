@@ -25,7 +25,9 @@ trait SchemaMacrosImpl
     with rules.SchemaHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsSchema"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "tapirSchemaDerivation"
 

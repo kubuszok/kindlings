@@ -28,7 +28,9 @@ trait DecoderMacrosImpl
     with rules.DecoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsYamlDecoder"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

@@ -21,7 +21,9 @@ trait DiffMacrosImpl
     with rules.DiffCaseClassRuleImpl
     with rules.DiffEnumRuleImpl { this: MacroCommons & StdExtensions =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "Diff"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "diffDerivation"
 

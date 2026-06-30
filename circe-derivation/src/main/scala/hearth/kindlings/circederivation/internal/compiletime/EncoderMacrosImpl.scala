@@ -24,7 +24,9 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsEncoder"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

@@ -21,7 +21,9 @@ trait ArbitraryMacrosImpl
     with rules.ArbitraryHandleAsCaseClassRuleImpl
     with rules.ArbitraryHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "Arbitrary"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
 

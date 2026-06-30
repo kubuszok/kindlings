@@ -27,7 +27,9 @@ trait DecoderMacrosImpl
     with rules.AvroDecoderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "AvroDecoder"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

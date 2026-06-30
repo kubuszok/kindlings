@@ -48,7 +48,9 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsJsonValueCodec"
+  // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "jsoniterDerivation"
 

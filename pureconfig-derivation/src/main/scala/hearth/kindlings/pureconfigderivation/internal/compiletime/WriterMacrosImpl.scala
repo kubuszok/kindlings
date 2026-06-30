@@ -29,7 +29,9 @@ trait WriterMacrosImpl
     with rules.WriterHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "KindlingsConfigWriter"
+  // $COVERAGE-ON$
 
   // Entrypoints
 

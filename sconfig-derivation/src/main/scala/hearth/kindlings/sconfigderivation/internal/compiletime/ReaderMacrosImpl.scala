@@ -24,7 +24,9 @@ trait ReaderMacrosImpl
     with rules.ReaderHandleAsEnumRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
+  // $COVERAGE-OFF$
   override protected def derivationPolicyTypeClassName: String = "ConfigReader"
+  // $COVERAGE-ON$
 
   // Entrypoints
 
