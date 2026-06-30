@@ -2,7 +2,8 @@ package hearth.kindlings.pureconfigderivation.internal.compiletime
 
 import hearth.MacroCommons
 
-trait PureconfigDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy { this: MacroCommons =>
+trait PureconfigDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy {
+  this: MacroCommons =>
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.pureconfigderivation.policy.allowDerivationForPureconfigDerivation"
   override protected def isDerivationOptInMarkerInScope: Boolean = {

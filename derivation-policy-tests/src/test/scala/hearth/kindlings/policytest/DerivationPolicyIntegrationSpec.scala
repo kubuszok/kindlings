@@ -12,8 +12,8 @@ import hearth.kindlings.policytest.model.{Allowed1, Imported1}
   * -Xmacro-settings:fastShowPrettyDerivation.policy.optInByImport=true
   * }}}
   *
-  * This spec lives in `hearth.kindlings.policytest` (NOT an allowed scope) and does NOT import the opt-in marker, so any
-  * structural derivation triggered directly from here is denied. It therefore uses the instances pre-derived in the
+  * This spec lives in `hearth.kindlings.policytest` (NOT an allowed scope) and does NOT import the opt-in marker, so
+  * any structural derivation triggered directly from here is denied. It therefore uses the instances pre-derived in the
   * allowed / opt-in-by-import scopes, and asserts the denial only via `compileErrors`.
   */
 final class DerivationPolicyIntegrationSpec extends hearth.MacroSuite {

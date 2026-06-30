@@ -17,8 +17,8 @@ import hearth.fp.effect.*
   * `Option`, value types, named tuples, and any pre-existing in-scope implicit are reached BEFORE the structural rules
   * and are therefore always allowed - consistent with the project stance that those "always work".
   *
-  * Reuses the same per-module settings namespace as [[DerivationTimeout]] (`derivationSettingsNamespace`). Configuration
-  * keys (all under `<namespace>.policy.`):
+  * Reuses the same per-module settings namespace as [[DerivationTimeout]] (`derivationSettingsNamespace`).
+  * Configuration keys (all under `<namespace>.policy.`):
   *
   * {{{
   * -Xmacro-settings:<ns>.policy.enabled=opt-in            // or always-allowed (default => current behavior)
@@ -28,8 +28,8 @@ import hearth.fp.effect.*
   *
   * '''Why `;`/`|` and not `,` for `allowedScopes`''': the Scala 3 compiler splits a single `-Xmacro-settings:a,b`
   * option on commas into `List("a","b")`, while Scala 2 keeps it as one `"a,b"` string - so a comma is not portable.
-  * `;` and `|` are never split by either compiler, so the value arrives intact and we split it ourselves. (Indexed
-  * keys would also work but are noisier.)
+  * `;` and `|` are never split by either compiler, so the value arrives intact and we split it ourselves. (Indexed keys
+  * would also work but are noisier.)
   */
 trait DerivationPolicy { this: MacroCommons =>
 
@@ -62,7 +62,7 @@ trait DerivationPolicy { this: MacroCommons =>
     } yield policy
 
     val mode = policyData.flatMap(_.get("enabled")).flatMap(_.asString) match {
-      case None => DerivationPolicy.Mode.AlwaysAllowed
+      case None      => DerivationPolicy.Mode.AlwaysAllowed
       case Some(raw) =>
         DerivationPolicy.parseMode(raw).getOrElse {
           Environment.reportWarn(
@@ -75,9 +75,13 @@ trait DerivationPolicy { this: MacroCommons =>
 
     mode match {
       case DerivationPolicy.Mode.AlwaysAllowed => DerivationPolicy.Decision.Allowed
-      case DerivationPolicy.Mode.OptIn =>
+      case DerivationPolicy.Mode.OptIn         =>
         val allowedScopes =
-          policyData.flatMap(_.get("allowedScopes")).flatMap(_.asString).map(DerivationPolicy.splitScopes).getOrElse(Nil)
+          policyData
+            .flatMap(_.get("allowedScopes"))
+            .flatMap(_.asString)
+            .map(DerivationPolicy.splitScopes)
+            .getOrElse(Nil)
         val optInByImport =
           policyData.flatMap(_.get("optInByImport")).flatMap(_.asBoolean).getOrElse(true)
         val enclosureFullNames = enclosingScope.toList.flatMap(_.fullName)
@@ -103,7 +107,7 @@ trait DerivationPolicy { this: MacroCommons =>
     * parameter is higher-kinded (e.g. cats-tagless `Alg[_[_]]`) and so cannot be passed to the `[A: Type]` form.
     */
   protected def enforceDerivationPolicyForType(typeName: String): MIO[Unit] = derivationPolicyDecision match {
-    case DerivationPolicy.Decision.Allowed => MIO.pure(())
+    case DerivationPolicy.Decision.Allowed        => MIO.pure(())
     case denied: DerivationPolicy.Decision.Denied =>
       MIO.fail(new DerivationPolicy.PolicyViolation(derivationPolicyDeniedMessage(typeName, denied)))
   }
@@ -115,7 +119,7 @@ trait DerivationPolicy { this: MacroCommons =>
     * `typeName` is by-name so it is only computed when the policy actually denies.
     */
   protected def enforceDerivationPolicyOrAbort(typeName: => String): Unit = derivationPolicyDecision match {
-    case DerivationPolicy.Decision.Allowed => ()
+    case DerivationPolicy.Decision.Allowed        => ()
     case denied: DerivationPolicy.Decision.Denied =>
       Environment.reportErrorAndAbort(derivationPolicyDeniedMessage(typeName, denied))
   }
@@ -176,9 +180,7 @@ object DerivationPolicy {
   /** Thrown (via `MIO.fail`) when structural derivation is attempted outside an allowed scope. Carries the actionable
     * message; rendered through each module's existing macro error path.
     */
-  final class PolicyViolation(message: String)
-      extends RuntimeException(message)
-      with scala.util.control.NoStackTrace
+  final class PolicyViolation(message: String) extends RuntimeException(message) with scala.util.control.NoStackTrace
 
   def parseMode(raw: String): Option[Mode] = raw.trim.toLowerCase match {
     case "always-allowed" | "always-allow" | "always" | "allowed" => Some(Mode.AlwaysAllowed)

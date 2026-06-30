@@ -6,7 +6,8 @@ trait DiffDerivationPolicy extends hearth.kindlings.derivation.compiletime.Deriv
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.diffderivation.policy.allowDerivationForDiffDerivation"
   override protected def isDerivationOptInMarkerInScope: Boolean = {
-    implicit val AllowDerivationT: Type[hearth.kindlings.diffderivation.AllowDerivation] = Type.of[hearth.kindlings.diffderivation.AllowDerivation]
+    implicit val AllowDerivationT: Type[hearth.kindlings.diffderivation.AllowDerivation] =
+      Type.of[hearth.kindlings.diffderivation.AllowDerivation]
     Expr.summonImplicit[hearth.kindlings.diffderivation.AllowDerivation].isDefined
   }
 }
