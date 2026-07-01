@@ -5,7 +5,6 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-
 trait EncoderDerivationPolicyRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 

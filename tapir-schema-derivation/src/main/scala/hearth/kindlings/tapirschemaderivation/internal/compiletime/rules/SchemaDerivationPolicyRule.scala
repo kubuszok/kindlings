@@ -7,7 +7,6 @@ import hearth.std.*
 
 import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
 
-
 trait SchemaDerivationPolicyRuleImpl {
   this: SchemaMacrosImpl & MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
 

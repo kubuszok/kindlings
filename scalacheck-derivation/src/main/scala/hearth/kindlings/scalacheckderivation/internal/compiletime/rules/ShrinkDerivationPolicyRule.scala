@@ -5,7 +5,6 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-
 trait ShrinkDerivationPolicyRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExtensions =>
 
   /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per

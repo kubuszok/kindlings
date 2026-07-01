@@ -5,7 +5,6 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-
 trait ReaderDerivationPolicyRuleImpl {
   this: ReaderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
