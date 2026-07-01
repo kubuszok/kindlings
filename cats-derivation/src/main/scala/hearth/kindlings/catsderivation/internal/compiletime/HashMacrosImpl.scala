@@ -34,6 +34,7 @@ import hearth.std.*
 trait HashMacrosImpl
     extends EqMacrosImpl
     with StrictDerivationSupport
+    with rules.HashDerivationPolicyRuleImpl
     with rules.HashUseCachedRuleImpl
     with rules.HashUseImplicitRuleImpl
     with rules.HashBuiltInRuleImpl
@@ -200,14 +201,6 @@ trait HashMacrosImpl
 
   abstract class HashDerivationRule(val name: String) extends Rule {
     def apply[A: HashCtx]: MIO[Rule.Applicability[Expr[Int]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object HashDerivationPolicyRule extends HashDerivationRule("derivation policy") {
-    def apply[A: HashCtx]: MIO[Rule.Applicability[Expr[Int]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // Recursive derivation

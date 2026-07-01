@@ -8,6 +8,7 @@ import hearth.kindlings.catsderivation.LogDerivation
 
 trait EqMacrosImpl
     extends StrictDerivationSupport
+    with rules.EqDerivationPolicyRuleImpl
     with rules.EqUseCachedRuleImpl
     with rules.EqUseImplicitRuleImpl
     with rules.EqBuiltInRuleImpl
@@ -98,14 +99,6 @@ trait EqMacrosImpl
 
   abstract class EqDerivationRule(val name: String) extends Rule {
     def apply[A: EqCtx]: MIO[Rule.Applicability[Expr[Boolean]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object EqDerivationPolicyRule extends EqDerivationRule("derivation policy") {
-    def apply[A: EqCtx]: MIO[Rule.Applicability[Expr[Boolean]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // Recursive derivation

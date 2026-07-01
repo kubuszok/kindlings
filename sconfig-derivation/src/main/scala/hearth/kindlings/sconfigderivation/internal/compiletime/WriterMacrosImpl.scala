@@ -20,7 +20,8 @@ trait WriterMacrosImpl
     with rules.WriterHandleAsNamedTupleRuleImpl
     with rules.WriterHandleAsSingletonRuleImpl
     with rules.WriterHandleAsCaseClassRuleImpl
-    with rules.WriterHandleAsEnumRuleImpl {
+    with rules.WriterHandleAsEnumRuleImpl
+    with rules.WriterDerivationPolicyRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -211,14 +212,6 @@ trait WriterMacrosImpl
 
   abstract class WriterDerivationRule(val name: String) extends Rule {
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object WriterDerivationPolicyRule extends WriterDerivationRule("derivation policy") {
-    def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // The actual derivation logic

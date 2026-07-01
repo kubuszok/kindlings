@@ -8,6 +8,7 @@ import hearth.std.*
 trait MonoidMacrosImpl
     extends SemigroupMacrosImpl
     with StrictDerivationSupport
+    with rules.MonoidDerivationPolicyRuleImpl
     with rules.MonoidUseCachedRuleImpl
     with rules.MonoidUseImplicitRuleImpl
     with rules.MonoidBuiltInRuleImpl
@@ -33,14 +34,6 @@ trait MonoidMacrosImpl
 
   abstract class MonoidDerivationRule(val name: String) extends Rule {
     def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object MonoidDerivationPolicyRule extends MonoidDerivationRule("derivation policy") {
-    def apply[A: MonoidCtx]: MIO[Rule.Applicability[MonoidDerivationResult[A]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // Recursive derivation

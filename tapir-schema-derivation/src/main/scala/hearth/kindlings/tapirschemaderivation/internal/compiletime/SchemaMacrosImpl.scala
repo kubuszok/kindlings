@@ -22,7 +22,8 @@ trait SchemaMacrosImpl
     with rules.SchemaHandleAsValueTypeRuleImpl
     with rules.SchemaHandleAsSingletonRuleImpl
     with rules.SchemaHandleAsCaseClassRuleImpl
-    with rules.SchemaHandleAsEnumRuleImpl {
+    with rules.SchemaHandleAsEnumRuleImpl
+    with rules.SchemaDerivationPolicyRuleImpl {
   this: MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
 
   // $COVERAGE-OFF$
@@ -265,14 +266,6 @@ trait SchemaMacrosImpl
 
   abstract class SchemaDerivationRule(val name: String) extends Rule {
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object SchemaDerivationPolicyRule extends SchemaDerivationRule("derivation policy") {
-    def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   def deriveSchemaRecursively[A: SchemaCtx]: MIO[Expr[Schema[A]]] = {

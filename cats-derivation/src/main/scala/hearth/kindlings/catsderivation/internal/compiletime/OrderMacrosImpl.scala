@@ -9,6 +9,7 @@ import hearth.kindlings.catsderivation.LogDerivation
 /** Order derivation: lexicographic comparison of case class fields, ordinal comparison for enums. */
 trait OrderMacrosImpl
     extends StrictDerivationSupport
+    with rules.OrderDerivationPolicyRuleImpl
     with rules.OrderUseCachedRuleImpl
     with rules.OrderUseImplicitRuleImpl
     with rules.OrderBuiltInRuleImpl
@@ -94,14 +95,6 @@ trait OrderMacrosImpl
 
   abstract class OrderDerivationRule(val name: String) extends Rule {
     def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object OrderDerivationPolicyRule extends OrderDerivationRule("derivation policy") {
-    def apply[A: OrderCtx]: MIO[Rule.Applicability[Expr[Int]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   def deriveOrderRecursively[A: OrderCtx]: MIO[Expr[Int]] =

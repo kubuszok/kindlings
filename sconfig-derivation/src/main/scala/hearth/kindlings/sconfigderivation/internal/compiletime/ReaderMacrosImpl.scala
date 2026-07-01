@@ -21,7 +21,8 @@ trait ReaderMacrosImpl
     with rules.ReaderHandleAsNamedTupleRuleImpl
     with rules.ReaderHandleAsSingletonRuleImpl
     with rules.ReaderHandleAsCaseClassRuleImpl
-    with rules.ReaderHandleAsEnumRuleImpl {
+    with rules.ReaderHandleAsEnumRuleImpl
+    with rules.ReaderDerivationPolicyRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -217,14 +218,6 @@ trait ReaderMacrosImpl
 
   abstract class ReaderDerivationRule(val name: String) extends Rule {
     def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object ReaderDerivationPolicyRule extends ReaderDerivationRule("derivation policy") {
-    def apply[A: ReaderCtx]: MIO[Rule.Applicability[Expr[Either[ConfigDecodingError, A]]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // The actual derivation logic

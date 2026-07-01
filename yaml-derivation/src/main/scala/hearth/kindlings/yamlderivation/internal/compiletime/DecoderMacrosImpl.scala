@@ -25,7 +25,8 @@ trait DecoderMacrosImpl
     with rules.DecoderHandleAsNamedTupleRuleImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
-    with rules.DecoderHandleAsEnumRuleImpl {
+    with rules.DecoderHandleAsEnumRuleImpl
+    with rules.DecoderDerivationPolicyRuleImpl {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -285,14 +286,6 @@ trait DecoderMacrosImpl
 
   abstract class DecoderDerivationRule(val name: String) extends Rule {
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object DecoderDerivationPolicyRule extends DecoderDerivationRule("derivation policy") {
-    def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[ConstructError, A]]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // The actual derivation logic

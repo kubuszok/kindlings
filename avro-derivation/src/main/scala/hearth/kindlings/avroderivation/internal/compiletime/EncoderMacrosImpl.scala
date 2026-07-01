@@ -23,7 +23,8 @@ trait EncoderMacrosImpl
     with rules.AvroEncoderHandleAsNamedTupleRuleImpl
     with rules.AvroEncoderHandleAsSingletonRuleImpl
     with rules.AvroEncoderHandleAsCaseClassRuleImpl
-    with rules.AvroEncoderHandleAsEnumRuleImpl {
+    with rules.AvroEncoderHandleAsEnumRuleImpl
+    with rules.AvroEncoderDerivationPolicyRuleImpl {
   this: MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -359,14 +360,6 @@ trait EncoderMacrosImpl
 
   abstract class EncoderDerivationRule(val name: String) extends Rule {
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]]
-  }
-
-  /** Root rule for the derivation policy (issue kubuszok/kindlings#85): runs the single policy check once per
-    * expansion, after the implicit/cache rules and before any derivation rule, then yields so derivation proceeds.
-    */
-  object AvroEncoderDerivationPolicyRule extends EncoderDerivationRule("derivation policy") {
-    def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
   }
 
   // The actual derivation logic
