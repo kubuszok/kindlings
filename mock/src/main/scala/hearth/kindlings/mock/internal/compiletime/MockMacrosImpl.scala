@@ -8,41 +8,54 @@ import hearth.MacroCommons
   * Uses Hearth's [[hearth.typed.Classes.AnonymousInstance]] to synthesize an anonymous subtype of the mocked type whose
   * every abstract member forwards into the runtime [[MockContext]] supplied at the call site.
   */
-private[mock] trait MockMacrosImpl { this: MacroCommons =>
+private[mock] trait MockMacrosImpl extends hearth.kindlings.macros.compiletime.GenerationLogging { this: MacroCommons =>
+
+  protected val generationLoggingNamespace: String = "mock"
+  protected def generationMarkerImported: Boolean = {
+    implicit val tpe: Type[Mock.LogGeneration] = Type.of[Mock.LogGeneration]
+    Expr.summonImplicit[Mock.LogGeneration].isDefined
+  }
 
   def mockType[A: Type](ctx: Expr[MockContext]): Expr[A] =
-    AnonymousInstance.parse[A] match {
-      case ClassViewResult.Incompatible(reason) =>
-        Environment.reportErrorAndAbort(s"Cannot mock ${Type.prettyPrint[A]}: $reason")
-      case ClassViewResult.Compatible(ai) =>
-        val overrides: Map[UntypedMethod, OverrideBody] =
-          ai.mustOverride.map(cm => cm.method.asUntyped -> forwardingBody(ctx, cm)).toMap
-        val (ctor, ctorArgs) = constructorAndArgs(ai.classParent)
-        ai.construct(ctor, ctorArgs, overrides) match {
-          case Right(instance) => instance
-          case Left(errors)    =>
-            Environment.reportErrorAndAbort(s"Cannot mock ${Type.prettyPrint[A]}: ${errors.toVector.mkString("; ")}")
-        }
+    synthesizeMock[A](kind = "mock", ctx, (c, cm) => forwardingBody(c, cm))
+
+  private def synthesizeMock[A: Type](
+      kind: String,
+      ctx: Expr[MockContext],
+      bodyFor: (Expr[MockContext], ClassifiedMethod) => OverrideBody
+  ): Expr[A] = {
+    val trace = new Trace
+    trace.scope(s"$kind[${Type.prettyPrint[A]}]") {
+      AnonymousInstance.parse[A] match {
+        case ClassViewResult.Incompatible(reason) =>
+          Environment.reportErrorAndAbort(s"Cannot $kind ${Type.prettyPrint[A]}: $reason")
+        case ClassViewResult.Compatible(ai) =>
+          val members = ai.mustOverride
+          trace.step(s"overriding ${members.size} member(s): ${members.map(_.method.name).mkString(", ")}")
+          val overrides: Map[UntypedMethod, OverrideBody] =
+            members.map(cm => cm.method.asUntyped -> bodyFor(ctx, cm)).toMap
+          val (ctor, ctorArgs) = constructorAndArgs(ai.classParent)
+          trace.step(ctor match {
+            case Some(_) => s"invoking parent constructor with ${ctorArgs.size} seeded argument(s)"
+            case None    => "trait parent — no constructor to invoke"
+          })
+          ai.construct(ctor, ctorArgs, overrides) match {
+            case Right(instance) =>
+              emitGenerationLog(s"Mock.$kind", trace, instance.prettyPrint)
+              instance
+            case Left(errors) =>
+              Environment.reportErrorAndAbort(s"Cannot $kind ${Type.prettyPrint[A]}: ${errors.toVector.mkString("; ")}")
+          }
+      }
     }
+  }
 
   /** `Mock.stub[A]`: like [[mockType]] but each abstract member forwards into [[MockContext.handleStub]] so unexpected
     * calls return a default (from a summoned [[Defaultable]], or `null`) instead of failing, and behaviour is preset
     * lazily via `when(...)` and checked post-hoc via `verify(...)`.
     */
   def stubType[A: Type](ctx: Expr[MockContext]): Expr[A] =
-    AnonymousInstance.parse[A] match {
-      case ClassViewResult.Incompatible(reason) =>
-        Environment.reportErrorAndAbort(s"Cannot stub ${Type.prettyPrint[A]}: $reason")
-      case ClassViewResult.Compatible(ai) =>
-        val overrides: Map[UntypedMethod, OverrideBody] =
-          ai.mustOverride.map(cm => cm.method.asUntyped -> stubBody(ctx, cm)).toMap
-        val (ctor, ctorArgs) = constructorAndArgs(ai.classParent)
-        ai.construct(ctor, ctorArgs, overrides) match {
-          case Right(instance) => instance
-          case Left(errors)    =>
-            Environment.reportErrorAndAbort(s"Cannot stub ${Type.prettyPrint[A]}: ${errors.toVector.mkString("; ")}")
-        }
-    }
+    synthesizeMock[A](kind = "stub", ctx, (c, cm) => stubBody(c, cm))
 
   /** When mocking a CLASS (not a trait), Hearth's `AnonymousInstance` exposes the parent's accessible constructors in
     * `classParent`; the synthesized subtype must invoke one. We pick the primary (first) constructor and supply a dummy
