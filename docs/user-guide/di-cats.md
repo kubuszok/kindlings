@@ -62,8 +62,8 @@ Each argument to `wireResource` is classified by its type:
 | plain `X`           | used directly — spliced into the construction with no `Resource` wrapping       |
 
 The target itself is built from its **public primary constructor** (or, failing that, a single matching companion
-`apply`). Acquisition happens in the order the dependencies are given and release happens in reverse, exactly as if you
-had written the nested `flatMap`s by hand.
+`apply`, or a companion `resource` factory — see below). Acquisition happens in the order the dependencies are given and
+release happens in reverse, exactly as if you had written the nested `flatMap`s by hand.
 
 ```scala
 import cats.effect.{Resource, SyncIO}
@@ -79,6 +79,45 @@ val cache: SyncIO[Cache] = SyncIO(new Cache)                // effect
 
 val app: Resource[SyncIO, App] = DICats.wireResource[SyncIO, App](config, db, cache)
 ```
+
+## Companion `resource[F]` factories
+
+A very common pattern is for a component to expose its own lifecycle via a companion method
+`def resource[F[_]: <constraints>]: Resource[F, T]`. `wireResource` **discovers and uses it automatically** — when it
+needs a `T` that no dependency provides, and `T`'s companion has a `resource` method, it applies your `F` and lets the
+compiler resolve the context-bound implicits (e.g. `Sync[F]`). You don't have to pass such a component in yourself:
+
+```scala
+import cats.effect.{Resource, Sync, SyncIO}
+
+class Connection
+object Connection {
+  // acquisition/release is defined here; `F` is chosen by whoever calls `wireResource`
+  def resource[F[_]: Sync]: Resource[F, Connection] =
+    Resource.make(Sync[F].delay(new Connection))(_ => Sync[F].unit)
+}
+
+class Service(connection: Connection)
+
+// Connection is built via `Connection.resource[SyncIO]` — no need to provide it explicitly
+val service: Resource[SyncIO, Service] = DICats.wireResource[SyncIO, Service]()
+```
+
+This is a Kindlings extension over macwire's `autocats` (it has no equivalent). Both constraint-free
+(`def resource[F[_]]`) and context-bounded (`def resource[F[_]: Sync]`) shapes are supported; a `resource` method that
+takes explicit value parameters is left to ordinary construction.
+
+## Debugging
+
+`di-cats` has the same debugging capabilities as [`kindlings-di`](di.md):
+
+- **Generation logging** — import `hearth.kindlings.dicats.debug._` (or set `-Xmacro-settings:diCats.logGeneration=true`)
+  to print the resolution logic, the wiring graph, and the generated `Resource` code.
+- **Wiring graph** — set `-Xmacro-settings:diCats.logWiring=tree` (or `=mermaid`) to see *only* how the resources
+  combine, as a ZIO-Magic-style dependency tree (or Mermaid diagram). Provided instances, `Resource`/effect
+  dependencies, factories, and `resource[F]` factories are each labelled in the graph.
+
+See [Debugging & Diagnostics](debugging.md).
 
 ## Errors
 

@@ -2,6 +2,7 @@ package hearth.kindlings.dicats
 package internal.compiletime
 
 import hearth.MacroCommons
+import hearth.kindlings.macros.compiletime.{NodeKind, Storage, WiringGraph}
 import cats.effect.kernel.Resource
 
 /** Shared, macro-platform-agnostic implementation of the `wireResource` macro.
@@ -28,7 +29,9 @@ import cats.effect.kernel.Resource
   *
   * Implemented:
   *   - plain instances (spliced directly), `Resource[F, X]` and `F[X]` effect dependencies (folded as `flatMap`s);
-  *   - root construction via the primary constructor OR a single companion `apply`;
+  *   - root/intermediate construction via the primary constructor, a single companion `apply`, OR a companion
+  *     `def resource[F[_]: <constraints>]: Resource[F, T]` factory (Kindlings extension over macwire — we apply OUR `F`
+  *     and let the compiler resolve the context-bound implicits; see `companionResourceCall`);
   *   - parameter resolution to the single provider whose `resultType <:< paramType` (subtype-aware), with
   *     macwire-parity errors (missing dependency path / ambiguous);
   *   - factory-method (`FunctionN`) dependencies: a passed lambda / eta-expanded method whose params are themselves
@@ -53,7 +56,16 @@ import cats.effect.kernel.Resource
   * macwire's `taggingParameters` (softwaremill `@@`-tagged dependency disambiguation) is not yet ported — it needs a
   * tagging-type provider. Left cleanly unimplemented (no failing test).
   */
-private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
+private[dicats] trait ResourceWiringMacrosImpl
+    extends hearth.kindlings.macros.compiletime.GenerationLogging
+    with hearth.kindlings.macros.compiletime.WiringGraphLogging { this: MacroCommons =>
+
+  protected val generationLoggingNamespace: String = "diCats"
+  protected val wiringLoggingNamespace: String = "diCats"
+  protected def generationMarkerImported: Boolean = {
+    implicit val tpe: Type[DICats.LogGeneration] = Type.of[DICats.LogGeneration]
+    Expr.summonImplicit[DICats.LogGeneration].isDefined
+  }
 
   // ---------------------------------------------------------------------------------------------------------------
   // Provider model (port of macwire's CatsProviders.scala)
@@ -230,6 +242,9 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     // Keys currently under construction (the DFS stack), used to detect dependency cycles before they recurse forever.
     val inProgress: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
     val used: scala.collection.mutable.Set[Int] = scala.collection.mutable.Set.empty
+    // Nodes collected for the ZIO-Magic-style wiring graph (keyed by type FQCN), populated during resolution.
+    val graphNodes: scala.collection.mutable.LinkedHashMap[String, WiringGraph.RawNode] =
+      scala.collection.mutable.LinkedHashMap.empty
 
     /** Providers whose `resultType` conforms to `t` (subtype-aware, excluding bottom types), with their input index. */
     def matchingProviders(t: ??): List[(Provider, Int)] = {
@@ -241,6 +256,44 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
       }
     }
   }
+
+  // ---------------------------------------------------------------------------------------------------------------
+  // Wiring-graph collection (ZIO-Magic style) — di-cats has no val/lazy/def storage (every node is shared via the
+  // monadic Resource chain), so nodes are always emitted with Storage.Inline (no storage annotation in the graph).
+  // ---------------------------------------------------------------------------------------------------------------
+
+  private def keyOf(t: ??): String = { import t.Underlying as T; Type.fqcn[T] }
+  private def displayOf(t: ??): String = {
+    import t.Underlying as T
+    Type.prettyPrint[T].replaceAll("\\[[0-9;]*m", "")
+  }
+
+  /** Record a graph node once (first write wins). */
+  private def recordGraphNode(resolver: Resolver, key: String, t: ??, kind: NodeKind, depKeys: List[String]): Unit =
+    if (!resolver.graphNodes.contains(key)) {
+      val _ = resolver.graphNodes += (key -> WiringGraph.RawNode(key, displayOf(t), kind, Storage.Inline, depKeys))
+    }
+
+  /** The graph key a dependency of type `t` resolves to — a single matching provider's result type, or (when nothing
+    * matches but `t` is wireable) `t` itself (a constructed intermediate). Mirrors [[resolveTypeViaResolver]]'s
+    * dispatch, read-only (does not consume `used`), so graph edges point at the same node keys the plan uses.
+    */
+  private def resolvedKeyOf(resolver: Resolver, t: ??): Option[String] =
+    resolver.matchingProviders(t) match {
+      case (provider, _) :: Nil => Some(keyOf(provider.resultType))
+      case Nil                  => if (isWireable(t)) Some(keyOf(t)) else None
+      case _                    => None
+    }
+
+  /** The graph keys of a method's/factory's parameters (implicit params are recorded as `Summoned` leaf nodes). */
+  private def depKeysOf(resolver: Resolver, params: List[(String, Parameter)]): List[String] =
+    params.flatMap { case (_, parameter) =>
+      if (parameter.isImplicit) {
+        val k = keyOf(parameter.tpe)
+        recordGraphNode(resolver, k, parameter.tpe, NodeKind.Summoned, Nil)
+        Some(k)
+      } else resolvedKeyOf(resolver, parameter.tpe)
+    }
 
   // ---------------------------------------------------------------------------------------------------------------
   // Build
@@ -288,7 +341,19 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
         // Unused-provider check (macwire's verifyOrder).
         val unused = providers.zipWithIndex.collect { case (p, i) if !resolver.used.contains(i) => p.describe }
         if (unused.nonEmpty) Left(s"Not used providers for the following types [${unused.mkString(", ")}]")
-        else Right(emitChain[F, T](resolver.nodes.toList, resolver.instanceBindings.toMap, rootBuilder))
+        else {
+          val expr = emitChain[F, T](resolver.nodes.toList, resolver.instanceBindings.toMap, rootBuilder)
+          val rootKey = resolvedKeyOf(resolver, Type[T].as_??).getOrElse(keyOf(Type[T].as_??))
+          emitWiringGraphIfEnabled("DICats.wireResource", rootKey, resolver.graphNodes, wiringLogModeFromSettings)
+          if (shouldWeLogGeneration) {
+            val trace = new Trace
+            trace.step(s"wireResource[${Type.prettyPrint[T]}] from ${providers.size} provided dependency(ies)")
+            trace.step("wiring graph:")
+            trace.step(wiringTreeFor(rootKey, resolver.graphNodes))
+            emitGenerationLog("DICats.wireResource", trace, expr.prettyPrint)
+          }
+          Right(expr)
+        }
     }
   }
 
@@ -335,14 +400,17 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
       case Instance(value) =>
         // Instances are spliced directly (no binding needed); record once for stability.
         if (!resolver.instanceBindings.contains(key)) resolver.instanceBindings += (key -> value)
+        recordGraphNode(resolver, key, x, NodeKind.Provided("instance"), Nil)
         (_: Map[String, Expr_??]) => resolver.instanceBindings.getOrElse(key, value)
 
       case ResourceP(value, _) =>
         ensureNode(resolver, key, x)(_ => value)
+        recordGraphNode(resolver, key, x, NodeKind.Provided("resource"), Nil)
         (bound: Map[String, Expr_??]) => bound(key)
 
       case EffectP(value, _) =>
         ensureNode(resolver, key, x)(_ => evalToResource[F, X](value))
+        recordGraphNode(resolver, key, x, NodeKind.Provided("effect"), Nil)
         (bound: Map[String, Expr_??]) => bound(key)
 
       case _: FactoryP =>
@@ -443,14 +511,16 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     val key = Type.fqcn[X]
     val methodLabel = s"[method ${f.applyM.name}]"
 
+    val factoryParams = f.applyM.totalParameters.flatten.toList
     // Resolve the factory's params (records their nodes/missing paths now).
     val paramResolvers: List[(String, Map[String, Expr_??] => Expr_??)] =
-      f.applyM.totalParameters.flatten.toList.map { case (pname, parameter) =>
+      factoryParams.map { case (pname, parameter) =>
         if (parameter.isImplicit) pname -> summonResolver(parameter)
         else
           pname -> resolveTypeViaResolver[F](resolver, parameter.tpe, path :+ s"$methodLabel.$pname", missing)
             .getOrElse((_: Map[String, Expr_??]) => nullPlaceholder(parameter.tpe))
       }
+    recordGraphNode(resolver, key, x, NodeKind.Provided("factory"), depKeysOf(resolver, factoryParams))
 
     ensureNode(resolver, key, x) { bound =>
       val args: Map[String, Expr_??] = paramResolvers.map { case (n, r) => n -> r(bound) }.toMap
@@ -460,6 +530,34 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     }
     (bound: Map[String, Expr_??]) => bound(key)
   }
+
+  /** Kindlings extension over macwire's autocats: use a companion `object T { def resource[F[_]: <constraints>]:
+    * Resource[F, T] }` factory when present. We apply OUR `F` as the method's type argument and summon its
+    * context-bound implicits (which Hearth does not auto-supply), then hand back the folded `Resource[F, T]`. Only
+    * methods whose sole value parameters are implicit (i.e. context bounds) are used — a `resource` method with
+    * explicit value parameters is left to ordinary construction. Returns the `Resource[F, T]` expression, or `None` if
+    * no suitable method exists.
+    */
+  private def tryCompanionResource[F[_]](
+      t: ??
+  )(implicit FCtor: Type.Ctor1[F], fAnyType: Type[F[Any]], anyType: Type[Any]): Option[Expr_??] = {
+    import t.Underlying as X
+    implicit val resourceFX: Type[Resource[F, X]] = Type.of[Resource[F, X]]
+    Type.companionObject[X].flatMap { companion =>
+      companionResourceCall(companion, "resource", FCtor.asUntyped.as_??, Type[Resource[F, X]].as_??)
+    }
+  }
+
+  /** Build `T.resource[F]` from `companion` (the companion object of `T`) and let the compiler apply the type argument
+    * `F` and resolve any context-bound implicits (`Sync[F]`, ...), ascribing the result to `expected` (`Resource[F,
+    * T]`). Returns `None` when there is no such method or it does not yield a `Resource[F, <:T]`.
+    *
+    * Platform specific: Hearth's `Method` API cannot supply an implicit/`using` clause that follows a type-parameter
+    * clause (it exposes it as an empty parameter list — see `UntypedMethodsScala3.methodExpectations`), so we build the
+    * call by raw reflection and rely on the compiler's own implicit search, which is exactly what the user's
+    * `def resource[F[_]: Sync]` expects anyway.
+    */
+  protected def companionResourceCall(companion: Expr_??, methodName: String, fType: ??, expected: ??): Option[Expr_??]
 
   /** Construct a value of type `t` via its primary constructor (or a single companion `apply`), resolving each
     * parameter via `resolveType`. Returns a builder producing the (constructed) value, or `None` if missing deps were
@@ -479,6 +577,15 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     import t.Underlying as P
     val key = Type.fqcn[P]
     if (resolver.planned.contains(key)) return Some((bound: Map[String, Expr_??]) => bound(key))
+    // Kindlings extension over macwire's autocats: prefer a companion `T.resource[F]: Resource[F, T]` factory if one
+    // exists — apply our `F`, summon its context-bound implicits, and fold the whole construction as a Resource node.
+    tryCompanionResource[F](t) match {
+      case Some(resExpr) =>
+        ensureNode(resolver, key, t)(_ => resExpr)
+        recordGraphNode(resolver, key, t, NodeKind.Provided("resource"), Nil)
+        return Some((bound: Map[String, Expr_??]) => bound(key))
+      case None => ()
+    }
     // Cycle guard: a type re-entered while still under construction (its node not yet `planned`) is a dependency
     // cycle. Without this the DFS recurses forever — a compile-time StackOverflow. Mirrors di's `verifyNotCyclic`.
     if (resolver.inProgress.contains(key)) {
@@ -490,12 +597,14 @@ private[dicats] trait ResourceWiringMacrosImpl { this: MacroCommons =>
     val result: Option[Map[String, Expr_??] => Expr_??] = callableFor(t) match {
       case None                       => recordMissing(missing, t, path); None
       case Some((method, ownerLabel)) =>
+        val ctorParams = method.totalParameters.flatten.toList
         val paramResolvers: List[(String, Option[Map[String, Expr_??] => Expr_??])] =
-          method.totalParameters.flatten.toList.map { case (pname, parameter) =>
+          ctorParams.map { case (pname, parameter) =>
             if (parameter.isImplicit) pname -> Some(summonResolver(parameter))
             else pname -> resolveType(parameter.tpe, path :+ s"$ownerLabel.$pname")
           }
         val anyMissing = paramResolvers.exists { case (_, r) => r.isEmpty }
+        recordGraphNode(resolver, key, t, NodeKind.Constructed, depKeysOf(resolver, ctorParams))
         // Reserve the memo key BEFORE building, so shared sub-structures resolve to a single binding.
         ensureNode(resolver, key, t) { bound =>
           val args = paramResolvers.collect { case (n, Some(r)) => n -> r(bound) }.toMap

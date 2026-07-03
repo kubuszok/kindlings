@@ -9,6 +9,22 @@ final private[dicats] class ResourceWiringMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with ResourceWiringMacrosImpl {
 
+  protected def companionResourceCall(
+      companion: Expr_??,
+      methodName: String,
+      fType: ??,
+      expected: ??
+  ): Option[Expr_??] = {
+    import c.universe.*
+    val companionTree: Tree = companion.value.tree
+    val fTpe: c.Type = fType.asUntyped
+    val expectedTpe: c.Type = expected.asUntyped
+    // `(companion.resource[F]): Resource[F, T]` — the ascription drives the compiler to insert any `implicit Sync[F]`
+    // clause via its own implicit search; typecheck validates the whole thing (and yields `None` if unsuitable).
+    val ascribed = q"($companionTree.${TermName(methodName)}[$fTpe]): $expectedTpe"
+    scala.util.Try(c.typecheck(ascribed)).toOption.map(typed => UntypedExpr.as_??(typed))
+  }
+
   def wireResourceImpl[F[_], T](dependencies: c.Tree*)(implicit
       ft: c.WeakTypeTag[F[Any]],
       tt: c.WeakTypeTag[T]
