@@ -193,8 +193,113 @@ class AppModule(dataModule: DataModule) {
 }
 ```
 
+## `DI.plan` — recursive, cached, customizable wiring (Kindlings' own)
+
+`wire` / `wireRec` / `autowire` follow **macwire's** conventions. `DI.plan[A]` is **Kindlings' own opinionated
+endpoint** — it is *always* recursive and *always* caches (each distinct type is built once and shared), and it lets
+you customize how the graph is assembled **without touching your domain classes**. Finish the builder chain with
+`.build`:
+
+```scala
+import hearth.kindlings.di.DI
+
+class DatabaseAccess()
+class UserFinder(databaseAccess: DatabaseAccess)
+class App(userFinder: UserFinder)
+
+object Main {
+  // builds the whole graph from public constructors: App -> UserFinder -> DatabaseAccess
+  val app: App = DI.plan[App].build
+}
+```
+
+### Storage strategy
+
+By default every constructed dependency is stored as a `val`. Change the whole-graph default, or override it per type:
+
+```scala
+import hearth.kindlings.di.DI
+
+class DatabaseAccess()
+class UserFinder(databaseAccess: DatabaseAccess)
+class App(userFinder: UserFinder)
+
+object Main {
+  val app: App =
+    DI.plan[App]
+      .asLazyVals                       // whole-graph default: val | asLazyVals | asDefs
+      .storeAsDef[DatabaseAccess]       // per-type override: storeAsVal | storeAsLazyVal | storeAsDef
+      .build
+}
+```
+
+- **`asVals`** (default) / **`storeAsVal[T]`** — created once, eagerly.
+- **`asLazyVals`** / **`storeAsLazyVal[T]`** — created once, on first use.
+- **`asDefs`** / **`storeAsDef[T]`** — re-created on every use (so a `def`-stored dependency is **not** shared).
+
+### Construction overrides
+
+Tell `plan` to initialise a specific type with your own factory instead of calling its constructor — "when you need a
+`T`, use this":
+
+```scala
+import hearth.kindlings.di.DI
+
+class DatabaseAccess()
+class UserFinder(databaseAccess: DatabaseAccess)
+class App(userFinder: UserFinder)
+
+object Main {
+  val app: App =
+    DI.plan[App]
+      .provide[DatabaseAccess](new DatabaseAccess()) // by-name factory, evaluated per the type's storage
+      .build
+}
+```
+
+## Seeing how things are wired — the wiring graph
+
+Inspired by [ZIO Magic / ZIO 2.0's automatic layer wiring](https://zio.dev) (`ZLayer.Debug.tree` /
+`ZLayer.Debug.mermaid`), every DI endpoint can print how the entities/resources combine, as a DAG-aware ASCII tree or a
+[Mermaid](https://mermaid.live) diagram. For `DI.plan` request it inline with `.debugTree` / `.debugMermaid`:
+
+```scala
+import hearth.kindlings.di.DI
+
+class DatabaseAccess()
+class RecService(databaseAccess: DatabaseAccess)
+class RecHandler(databaseAccess: DatabaseAccess)
+class RecApp(service: RecService, handler: RecHandler)
+
+object Main {
+  val app: RecApp = DI.plan[RecApp].debugTree.build
+}
+```
+
+prints (at compile time) the shared `DatabaseAccess` once, referencing it under the second consumer:
+
+```text
+RecApp
+├─ RecService  [val]
+│  ╰─ DatabaseAccess  [val]
+╰─ RecHandler  [val]
+   ╰─ DatabaseAccess  ↻ (shared, wired above)
+```
+
+For **any** endpoint (including `wire`/`autowire`), enable the graph project-wide with a scalac option — `tree` for the
+ASCII view, `mermaid` for the Mermaid diagram + a render link:
+
+```scala
+scalacOptions += "-Xmacro-settings:di.logWiring=mermaid"
+```
+
+To also see the full generation log (the resolution logic **and** the generated code), enable
+`di.logGeneration` — see [Debugging & Diagnostics](debugging.md).
+
 ## Differences from macwire
 
+- **`DI.plan` is not macwire.** `wire`/`wireRec`/`autowire` mirror macwire; `DI.plan` is Kindlings' own opinionated
+  endpoint (always recursive, always caching, customizable storage + construction overrides).
 - **Cross-platform.** macwire's request/session *scopes* rely on JVM bytecode proxies; this module targets JVM,
   Scala.js and Scala Native, so those JVM-only proxy scopes are intentionally not ported.
 - **Enclosing-method parameters / locals.** Local `val`s declared before the call site are discovered on Scala 2;

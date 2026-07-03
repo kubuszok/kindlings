@@ -29,4 +29,7 @@ private[di] object WiringMacros {
   }
 
   def wiredInModuleImpl(in: Expr[Any])(using q: Quotes): Expr[Wired] = new WiringMacros(q).wiredInModule(in)
+
+  def buildPlanImpl[A: Type](plan: Expr[DIPlan[A]])(using q: Quotes): Expr[A] =
+    new WiringMacros(q).buildPlan[A](plan)
 }

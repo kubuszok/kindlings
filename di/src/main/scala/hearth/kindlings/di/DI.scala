@@ -31,4 +31,11 @@ object DI extends DICompanionCompat {
     * call at compile time, so this body is never actually evaluated in that position.
     */
   def autowireMembersOf[T](instance: T): T = instance
+
+  /** Special marker type — if its implicit is in scope, the wiring macros log the generated code and the resolution
+    * logic that produced it. Import `hearth.kindlings.di.debug.*` to enable, or set
+    * `-Xmacro-settings:di.logGeneration=true`. Kept outside auto-summoned scope.
+    */
+  sealed trait LogGeneration
+  object LogGeneration extends LogGeneration
 }

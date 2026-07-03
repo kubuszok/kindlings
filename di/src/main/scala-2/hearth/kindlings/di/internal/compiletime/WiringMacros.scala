@@ -20,4 +20,20 @@ final private[di] class WiringMacros(val c: blackbox.Context) extends MacroCommo
     autowireWithMembers[A](dependencies.toList)
 
   def wiredInModuleImpl(in: c.Tree): c.Expr[Wired] = wiredInModule(c.Expr[Any](in))
+
+  /** `DI.plan[A]....build` — the builder chain is the `plan` field of the enclosing `DIPlanBuildOps` value class,
+    * recovered from `c.prefix` (`new DIPlanBuildOps(plan)`), then handed to the shared [[buildPlan]].
+    */
+  def buildPlanImpl[A: c.WeakTypeTag]: c.Expr[A] = {
+    import c.universe.*
+    val planTree: Tree = c.prefix.tree match {
+      case Apply(_, List(inner)) => inner
+      case other                 =>
+        c.abort(
+          c.enclosingPosition,
+          s"`DI.plan(...).build` could not extract the builder chain from: ${showRaw(other)}"
+        )
+    }
+    buildPlan[A](c.Expr[DIPlan[A]](planTree))
+  }
 }
