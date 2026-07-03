@@ -709,6 +709,21 @@ private[di] trait WiringMacrosImpl
       mc.applied.collect { case av: DestructuredExpr.MethodCall.AppliedValues => av.args }.flatten.headOption
     def overrideStorage(s: Storage): PlanConfig =
       typeArg.fold(acc) { t => import t.Underlying as T; acc.withOverride(Type.fqcn[T], s) }
+    // Enum-argument DSL: read the `PlanStorage.*` / `PlanDebug.*` case-object passed as the value argument by matching
+    // its (singleton) static type. Returns None if the argument is not one of the known singletons.
+    def storageArg: Option[Storage] = valueArg.flatMap { d =>
+      import d.tpe.Underlying as V
+      if (Type[V] <:< Type.of[PlanStorage.Val.type]) Some(Storage.Val)
+      else if (Type[V] <:< Type.of[PlanStorage.LazyVal.type]) Some(Storage.LazyVal)
+      else if (Type[V] <:< Type.of[PlanStorage.Def.type]) Some(Storage.Def)
+      else None
+    }
+    def debugArg: Option[WiringLogMode] = valueArg.flatMap { d =>
+      import d.tpe.Underlying as V
+      if (Type[V] <:< Type.of[PlanDebug.Tree.type]) Some(WiringLogMode.Tree)
+      else if (Type[V] <:< Type.of[PlanDebug.Mermaid.type]) Some(WiringLogMode.Mermaid)
+      else None
+    }
     mc.method.name match {
       case "asVals"         => acc.copy(default = Storage.Val)
       case "asLazyVals"     => acc.copy(default = Storage.LazyVal)
@@ -716,6 +731,10 @@ private[di] trait WiringMacrosImpl
       case "storeAsVal"     => overrideStorage(Storage.Val)
       case "storeAsLazyVal" => overrideStorage(Storage.LazyVal)
       case "storeAsDef"     => overrideStorage(Storage.Def)
+      // Enum-argument forms (Issue #4): the same effect, chosen by a `PlanStorage` / `PlanDebug` value.
+      case "defaultStorage" => storageArg.fold(acc)(s => acc.copy(default = s))
+      case "storeAs"        => storageArg.fold(acc)(overrideStorage)
+      case "debug"          => debugArg.fold(acc)(m => acc.copy(debug = Some(m)))
       case "provide"        =>
         (typeArg, valueArg) match {
           case (Some(t), Some(factory)) => acc.withProvider(t, factory)
