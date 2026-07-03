@@ -430,6 +430,16 @@ final class CatsDerivationSpec extends MacroSuite {
           List(examples.Search(40, None, List(examples.Search(50, None, Nil))))
         )
     }
+
+    test("sealed trait with case-object child: case class case") {
+      val p: examples.Perhaps[Int] = examples.Definitely(1)
+      examples.Perhaps.functorPerhaps.map(p)(_ * 10) ==> examples.Definitely(10)
+    }
+
+    test("sealed trait with case-object child: singleton case maps to identity") {
+      val p: examples.Perhaps[Int] = examples.Nope
+      examples.Perhaps.functorPerhaps.map(p)(_ * 10) ==> examples.Nope
+    }
   }
 
   group("Contravariant") {
@@ -634,6 +644,11 @@ final class CatsDerivationSpec extends MacroSuite {
         .value
       result ==> List(1, 2)
     }
+
+    test("foldLeft sealed trait with case-object child") {
+      examples.Perhaps.foldablePerhaps.foldLeft(examples.Definitely(42): examples.Perhaps[Int], 0)(_ + _) ==> 42
+      examples.Perhaps.foldablePerhaps.foldLeft(examples.Nope: examples.Perhaps[Int], 0)(_ + _) ==> 0
+    }
   }
 
   group("Traverse") {
@@ -743,6 +758,13 @@ final class CatsDerivationSpec extends MacroSuite {
       val list: examples.IList[Int] = examples.ICons(1, examples.ICons(2, examples.INil()))
       examples.IList.traverseIList.map(list)(_ * 10) ==>
         examples.ICons(10, examples.ICons(20, examples.INil()))
+    }
+
+    test("traverse sealed trait with case-object child") {
+      examples.Perhaps.traversePerhaps.traverse(examples.Definitely(1): examples.Perhaps[Int])(a => Option(a * 10)) ==>
+        Some(examples.Definitely(10))
+      examples.Perhaps.traversePerhaps.traverse(examples.Nope: examples.Perhaps[Int])(a => Option(a * 10)) ==>
+        Some(examples.Nope)
     }
   }
 

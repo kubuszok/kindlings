@@ -345,34 +345,38 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                 childInfo.get(cn) match {
                   case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Foldable", cn))
                   case Some(info) =>
-                    parseCaseClassMIO[CT](s"child $cn").flatMap { cc =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
-                      var result: Expr[Any] = bExpr
-                      fields
-                        .traverse { case (fn, fv) =>
-                          import fv.Underlying as Field
-                          val fe = fv.value.asInstanceOf[Expr[Field]]
-                          if (info.directFields.contains(fn)) {
-                            result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fe.upcast[Any])))
-                            MIO.void
-                          } else if (info.selfRecursiveFields.contains(fn) || info.nestedFoldables.contains(fn)) {
-                            val foldableEMIO: MIO[Expr[Any]] =
-                              if (info.selfRecursiveFields.contains(fn)) selfOrFail
-                              else MIO.pure(info.nestedFoldables(fn))
-                            foldableEMIO.map { foldableE =>
-                              result = Expr.quote {
-                                hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                                  .foldLeftNested(
-                                    Expr.splice(foldableE),
-                                    Expr.splice(fe.upcast[Any]),
-                                    Expr.splice(result),
-                                    Expr.splice(fExpr)
-                                  )
+                    // A case object / parameterless singleton case is NOT a case class: it carries no `A`,
+                    // so folding leaves the accumulator untouched (identity).
+                    CaseClass.parse[CT].toEither match {
+                      case Left(_)   => MIO.pure(bExpr)
+                      case Right(cc) =>
+                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        var result: Expr[Any] = bExpr
+                        fields
+                          .traverse { case (fn, fv) =>
+                            import fv.Underlying as Field
+                            val fe = fv.value.asInstanceOf[Expr[Field]]
+                            if (info.directFields.contains(fn)) {
+                              result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fe.upcast[Any])))
+                              MIO.void
+                            } else if (info.selfRecursiveFields.contains(fn) || info.nestedFoldables.contains(fn)) {
+                              val foldableEMIO: MIO[Expr[Any]] =
+                                if (info.selfRecursiveFields.contains(fn)) selfOrFail
+                                else MIO.pure(info.nestedFoldables(fn))
+                              foldableEMIO.map { foldableE =>
+                                result = Expr.quote {
+                                  hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                    .foldLeftNested(
+                                      Expr.splice(foldableE),
+                                      Expr.splice(fe.upcast[Any]),
+                                      Expr.splice(result),
+                                      Expr.splice(fExpr)
+                                    )
+                                }
                               }
-                            }
-                          } else MIO.void
-                        }
-                        .map(_ => result)
+                            } else MIO.void
+                          }
+                          .map(_ => result)
                     }
                 }
               }
@@ -399,44 +403,48 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                 childInfo.get(cn) match {
                   case None       => failDerivation(CatsDerivationError.MissingDerivationInfo("Foldable", cn))
                   case Some(info) =>
-                    parseCaseClassMIO[CT](s"child $cn").flatMap { cc =>
-                      val fields = cc.caseFieldValuesAt(caseValue).toList
-                      val foldableMIO: MIO[List[Option[(String, Expr[Any], Option[Expr[Any]])]]] =
-                        fields.traverse { case (fn, fv) =>
-                          import fv.Underlying as Field
-                          if (info.directFields.contains(fn))
-                            MIO.pure(
-                              Option(
-                                (fn, fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option.empty[Expr[Any]])
+                    // A case object / parameterless singleton case is NOT a case class: it carries no `A`,
+                    // so folding leaves the accumulator untouched (identity).
+                    CaseClass.parse[CT].toEither match {
+                      case Left(_)   => MIO.pure(lbExpr)
+                      case Right(cc) =>
+                        val fields = cc.caseFieldValuesAt(caseValue).toList
+                        val foldableMIO: MIO[List[Option[(String, Expr[Any], Option[Expr[Any]])]]] =
+                          fields.traverse { case (fn, fv) =>
+                            import fv.Underlying as Field
+                            if (info.directFields.contains(fn))
+                              MIO.pure(
+                                Option(
+                                  (fn, fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option.empty[Expr[Any]])
+                                )
                               )
-                            )
-                          else if (info.selfRecursiveFields.contains(fn) || info.nestedFoldables.contains(fn)) {
-                            val feMIO: MIO[Expr[Any]] =
-                              if (info.selfRecursiveFields.contains(fn)) selfOrFail
-                              else MIO.pure(info.nestedFoldables(fn))
-                            feMIO.map { fe =>
-                              Option((fn, fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option(fe)))
-                            }
-                          } else MIO.pure(Option.empty[(String, Expr[Any], Option[Expr[Any]])])
-                        }
-                      foldableMIO.map { foldableOpts =>
-                        foldableOpts.flatten.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
-                          foldableOpt match {
-                            case None =>
-                              Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
-                            case Some(foldableE) =>
-                              Expr.quote {
-                                hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                                  .foldRightNested(
-                                    Expr.splice(foldableE),
-                                    Expr.splice(fieldExpr),
-                                    Expr.splice(acc),
-                                    Expr.splice(fExpr)
-                                  )
+                            else if (info.selfRecursiveFields.contains(fn) || info.nestedFoldables.contains(fn)) {
+                              val feMIO: MIO[Expr[Any]] =
+                                if (info.selfRecursiveFields.contains(fn)) selfOrFail
+                                else MIO.pure(info.nestedFoldables(fn))
+                              feMIO.map { fe =>
+                                Option((fn, fv.value.asInstanceOf[Expr[Field]].upcast[Any], Option(fe)))
                               }
+                            } else MIO.pure(Option.empty[(String, Expr[Any], Option[Expr[Any]])])
+                          }
+                        foldableMIO.map { foldableOpts =>
+                          foldableOpts.flatten.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
+                            foldableOpt match {
+                              case None =>
+                                Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                              case Some(foldableE) =>
+                                Expr.quote {
+                                  hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                    .foldRightNested(
+                                      Expr.splice(foldableE),
+                                      Expr.splice(fieldExpr),
+                                      Expr.splice(acc),
+                                      Expr.splice(fExpr)
+                                    )
+                                }
+                            }
                           }
                         }
-                      }
                     }
                 }
               }
