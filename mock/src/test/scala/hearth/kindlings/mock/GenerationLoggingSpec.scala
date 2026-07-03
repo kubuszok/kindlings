@@ -3,9 +3,8 @@ package hearth.kindlings.mock
 import hearth.MacroSuite
 
 /** Smoke test for the opt-in generation logging: importing `hearth.kindlings.mock.debug.*` puts the `LogGeneration`
-  * marker in scope, so `Mock.mock`/`Mock.stub` emit the overridden members + generated code as a compiler-info
-  * message. Exercising a mock with the import in scope proves the logging path compiles and still generates a working
-  * mock.
+  * marker in scope, so `Mock.mock`/`Mock.stub` emit the overridden members + generated code as a compiler-info message.
+  * Exercising a mock with the import in scope proves the logging path compiles and still generates a working mock.
   */
 final class GenerationLoggingSpec extends MacroSuite {
 

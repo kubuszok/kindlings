@@ -181,6 +181,7 @@ val noPublishSettings =
 lazy val aliases = new Aliases(
   published = Seq(
     derivationCommons,
+    macroCommons,
     fastShowPretty,
     circeDerivation,
     jsoniterDerivation,
