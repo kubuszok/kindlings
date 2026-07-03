@@ -72,13 +72,14 @@ import hearth.kindlings.di.debug._
 | optics | `hearth.kindlings.optics.debug._` | `optics.logGeneration=true` |
 | mock | `hearth.kindlings.mock.debug._` | `mock.logGeneration=true` |
 | di | `hearth.kindlings.di.debug._` | `di.logGeneration=true` |
+| di-cats | `hearth.kindlings.dicats.debug._` | `diCats.logGeneration=true` |
 
 ### DI wiring graph (how things combine)
 
 To see **only** how entities/resources are wired together for a single DI run — without the full generation log — `di`
-additionally offers a [ZIO-Magic](https://zio.dev)-style wiring graph (`ZLayer.Debug.tree` / `ZLayer.Debug.mermaid`
-analog). Enable it project-wide with `di.logWiring=tree` (a DAG-aware ASCII dependency tree) or `di.logWiring=mermaid`
-(a Mermaid diagram + render link):
+(and `di-cats`, via `diCats.logWiring`) additionally offers a [ZIO-Magic](https://zio.dev)-style wiring graph
+(`ZLayer.Debug.tree` / `ZLayer.Debug.mermaid` analog). Enable it project-wide with `di.logWiring=tree` (a DAG-aware
+ASCII dependency tree) or `di.logWiring=mermaid` (a Mermaid diagram + render link):
 
 ```scala
 // build.sbt

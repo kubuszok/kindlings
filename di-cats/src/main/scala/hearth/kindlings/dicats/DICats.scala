@@ -28,4 +28,12 @@ package hearth.kindlings.dicats
   * No `Sync`/`Async`/`Applicative` constraint on `F` is required: in cats-effect 3 `Resource.pure`, `Resource.eval` and
   * `Resource#flatMap` are all constraint-free.
   */
-object DICats extends DICatsCompanionCompat
+object DICats extends DICatsCompanionCompat {
+
+  /** Special marker type — if its implicit is in scope, `wireResource` logs the generated code and the resolution logic
+    * that produced it. Import `hearth.kindlings.dicats.debug.*` to enable, or set
+    * `-Xmacro-settings:diCats.logGeneration=true`. Kept outside auto-summoned scope.
+    */
+  sealed trait LogGeneration
+  object LogGeneration extends LogGeneration
+}
