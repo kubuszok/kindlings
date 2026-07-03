@@ -26,6 +26,24 @@ package hearth.kindlings.di
   */
 final class DIPlan[A] private[di] () {
 
+  /** Set the whole-graph default storage strategy (enum-argument form of [[asVals]] / [[asLazyVals]] / [[asDefs]]).
+    *
+    * {{{DI.plan[App].defaultStorage(PlanStorage.LazyVal).build}}}
+    */
+  def defaultStorage(storage: PlanStorage): DIPlan[A] = this
+
+  /** Override the storage of `T` (enum-argument form of [[storeAsVal]] / [[storeAsLazyVal]] / [[storeAsDef]]).
+    *
+    * {{{DI.plan[App].storeAs[RequestScoped](PlanStorage.Def).build}}}
+    */
+  def storeAs[T](storage: PlanStorage): DIPlan[A] = this
+
+  /** Dump the wiring graph at the wiring site (enum-argument form of [[debugTree]] / [[debugMermaid]]).
+    *
+    * {{{DI.plan[App].debug(PlanDebug.Mermaid).build}}}
+    */
+  def debug(mode: PlanDebug): DIPlan[A] = this
+
   /** Store every constructed dependency as a `val` (the default — each is created once, eagerly). */
   def asVals: DIPlan[A] = this
 
@@ -54,4 +72,31 @@ final class DIPlan[A] private[di] () {
 
   /** Print the wiring graph as a Mermaid diagram + link (ZIO `ZLayer.Debug.mermaid` analog) at the wiring site. */
   def debugMermaid: DIPlan[A] = this
+}
+
+/** Storage strategy for a `DI.plan` graph, for the enum-argument builder methods [[DIPlan.defaultStorage]] /
+  * [[DIPlan.storeAs]]. `case object`s (not a Scala 3 `enum`) so the same values cross-compile to Scala 2.13 + 3.
+  */
+sealed trait PlanStorage
+object PlanStorage {
+
+  /** Store as a `val` — created once, eagerly. */
+  case object Val extends PlanStorage
+
+  /** Store as a `lazy val` — created once, on first use. */
+  case object LazyVal extends PlanStorage
+
+  /** Store as a `def` — re-created on every use. */
+  case object Def extends PlanStorage
+}
+
+/** Wiring-graph dump format for the enum-argument builder method [[DIPlan.debug]]. */
+sealed trait PlanDebug
+object PlanDebug {
+
+  /** ASCII dependency tree (ZIO `ZLayer.Debug.tree` analog). */
+  case object Tree extends PlanDebug
+
+  /** Mermaid diagram + link (ZIO `ZLayer.Debug.mermaid` analog). */
+  case object Mermaid extends PlanDebug
 }

@@ -73,4 +73,32 @@ final class DIPlanSpec extends MacroSuite {
       assert(app.service.databaseAccess eq app.handler.databaseAccess)
     }
   }
+
+  group("DI.plan enum-argument DSL (Issue #4)") {
+
+    test("defaultStorage(LazyVal) sets the whole-graph default (shared)") {
+      val app = DI.plan[WiringSpec.RecApp].defaultStorage(PlanStorage.LazyVal).build
+      assert(app.service.databaseAccess eq app.handler.databaseAccess)
+    }
+
+    test("defaultStorage(Def) re-creates a dependency on each use (not shared)") {
+      val app = DI.plan[WiringSpec.RecApp].defaultStorage(PlanStorage.Def).build
+      assert(app.service.databaseAccess ne app.handler.databaseAccess)
+    }
+
+    test("storeAs[T](Def) overrides storage for a single type while the rest stay vals") {
+      val app = DI.plan[WiringSpec.RecApp].storeAs[WiringSpec.DatabaseAccess](PlanStorage.Def).build
+      assert(app.service.databaseAccess ne app.handler.databaseAccess)
+    }
+
+    test("debug(Tree) compiles and produces a wired instance") {
+      val app = DI.plan[WiringSpec.RecApp].debug(PlanDebug.Tree).build
+      assert(app.service.databaseAccess eq app.handler.databaseAccess)
+    }
+
+    test("debug(Mermaid) combined with defaultStorage still wires correctly") {
+      val app = DI.plan[WiringSpec.RecApp].defaultStorage(PlanStorage.LazyVal).debug(PlanDebug.Mermaid).build
+      assert(app.service.databaseAccess eq app.handler.databaseAccess)
+    }
+  }
 }
