@@ -1,22 +1,20 @@
-package hearth.kindlings.di
-package internal.compiletime
+package hearth.kindlings.macros.compiletime
 
-/** A rendered view of how a wiring builds its object graph, inspired by ZIO Magic / ZIO 2.0's
-  * automatic layer wiring (`ZLayer.Debug.tree` and `ZLayer.Debug.mermaid`).
+/** A rendered view of how a wiring builds its object graph, inspired by ZIO Magic / ZIO 2.0's automatic layer wiring
+  * (`ZLayer.Debug.tree` and `ZLayer.Debug.mermaid`).
   *
-  * The macros populate a flat map of [[WiringGraph.RawNode]]s during resolution (keyed by a stable
-  * per-type key), then [[WiringGraph.fromResolved]] assembles a DAG-aware display tree: each shared
-  * dependency is drawn once and later reuses become a [[NodeKind.Reference]] leaf (so a diamond
-  * dependency is not duplicated). [[WiringGraph.renderTree]] prints that as an ASCII tree;
-  * [[WiringGraph.renderMermaid]] prints a Mermaid `graph` you can render as a real diagram.
+  * The macros populate a flat map of [[WiringGraph.RawNode]]s during resolution (keyed by a stable per-type key), then
+  * [[WiringGraph.fromResolved]] assembles a DAG-aware display tree: each shared dependency is drawn once and later
+  * reuses become a [[NodeKind.Reference]] leaf (so a diamond dependency is not duplicated). [[WiringGraph.renderTree]]
+  * prints that as an ASCII tree; [[WiringGraph.renderMermaid]] prints a Mermaid `graph` you can render as a real
+  * diagram.
   *
-  * This is compile-time-only code (executed by the macro on the JVM), but it lives in shared source
-  * that also links for Scala.js / Scala Native, so it deliberately avoids `java.util.*` (no
-  * `Base64`/`Deflater`, which the JS/Native javalibs do not provide) — the base64 used for the
-  * Mermaid link is a tiny pure-Scala implementation.
+  * This is compile-time-only code (executed by the macro on the JVM), but it lives in shared source that also links for
+  * Scala.js / Scala Native, so it deliberately avoids `java.util.*` (no `Base64`/`Deflater`, which the JS/Native
+  * javalibs do not provide) — the base64 used for the Mermaid link is a tiny pure-Scala implementation.
   */
-private[di] sealed trait NodeKind
-private[di] object NodeKind {
+sealed private[kindlings] trait NodeKind
+private[kindlings] object NodeKind {
 
   /** The root type the wiring was asked to build. */
   case object Root extends NodeKind
@@ -27,8 +25,8 @@ private[di] object NodeKind {
   /** Taken from a value found in the enclosing lexical scope (`wire`/`wireRec`). */
   case object FromScope extends NodeKind
 
-  /** Supplied explicitly — an `autowire` dependency, or a `DI.plan(...).provide[T](...)` override.
-    * `label` describes the source (e.g. `"instance"`, `"factory"`, `"provided"`).
+  /** Supplied explicitly — an `autowire` dependency, or a `DI.plan(...).provide[T](...)` override. `label` describes
+    * the source (e.g. `"instance"`, `"factory"`, `"provided"`).
     */
   final case class Provided(label: String) extends NodeKind
 
@@ -40,8 +38,8 @@ private[di] object NodeKind {
 }
 
 /** How a constructed value is stored in the generated code. */
-private[di] sealed abstract class Storage(val label: String)
-private[di] object Storage {
+sealed abstract private[kindlings] class Storage(val label: String)
+private[kindlings] object Storage {
   case object Inline extends Storage("inline")
   case object Val extends Storage("val")
   case object LazyVal extends Storage("lazy val")
@@ -49,23 +47,23 @@ private[di] object Storage {
 }
 
 /** One node of the assembled display tree. */
-private[di] final case class WiringNode(
+final private[kindlings] case class WiringNode(
     tpe: String,
     kind: NodeKind,
     storage: Storage,
     deps: List[WiringNode]
 )
 
-private[di] object WiringGraph {
+private[kindlings] object WiringGraph {
 
-  /** A node as collected during resolution, before the DAG-aware tree is assembled. `key` is a
-    * stable identity (a type FQCN); `depKeys` reference other collected nodes.
+  /** A node as collected during resolution, before the DAG-aware tree is assembled. `key` is a stable identity (a type
+    * FQCN); `depKeys` reference other collected nodes.
     */
   final case class RawNode(key: String, tpe: String, kind: NodeKind, storage: Storage, depKeys: List[String])
 
-  /** Assemble the display tree rooted at `rootKey`. The first time a key is reached it is expanded
-    * with its dependencies; any later reuse becomes a [[NodeKind.Reference]] leaf so shared
-    * dependencies (diamonds) are drawn exactly once — ZIO `Debug.tree` semantics.
+  /** Assemble the display tree rooted at `rootKey`. The first time a key is reached it is expanded with its
+    * dependencies; any later reuse becomes a [[NodeKind.Reference]] leaf so shared dependencies (diamonds) are drawn
+    * exactly once — ZIO `Debug.tree` semantics.
     */
   def fromResolved(rootKey: String, nodes: scala.collection.Map[String, RawNode]): Option[WiringNode] = {
     val seen = scala.collection.mutable.Set.empty[String]

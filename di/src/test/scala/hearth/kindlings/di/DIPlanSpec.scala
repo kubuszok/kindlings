@@ -2,8 +2,8 @@ package hearth.kindlings.di
 
 import hearth.MacroSuite
 
-/** Tests for `DI.plan[A]....build` — Kindlings' own opinionated wiring endpoint (always recursive, always caching,
-  * with a customizable storage strategy and per-type construction overrides). Reuses the `RecApp` diamond fixtures from
+/** Tests for `DI.plan[A]....build` — Kindlings' own opinionated wiring endpoint (always recursive, always caching, with
+  * a customizable storage strategy and per-type construction overrides). Reuses the `RecApp` diamond fixtures from
   * [[WiringSpec]] (`RecApp` needs a `RecService` and a `RecHandler`, both of which need a `DatabaseAccess`).
   */
 final class DIPlanSpec extends MacroSuite {
