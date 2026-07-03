@@ -32,6 +32,14 @@ object CatsConversions {
         Left("Cannot create NonEmptyMap from empty collection")
     }
 
+  def nonEmptyLazyListToIterable[A](a: Any): Iterable[A] =
+    a.asInstanceOf[cats.data.NonEmptyLazyList[A]].toLazyList.toList
+
+  def buildNonEmptyLazyList(list: List[Any]): Either[String, Any] =
+    if (list.nonEmpty) {
+      Right(cats.data.NonEmptyLazyList.fromLazyListUnsafe(scala.collection.immutable.LazyList.from(list)))
+    } else Left("Cannot create NonEmptyLazyList from empty collection")
+
   def nonEmptySetToIterable[A](a: Any): Iterable[A] =
     a.asInstanceOf[cats.data.NonEmptySet[A]].toSortedSet.toList
 

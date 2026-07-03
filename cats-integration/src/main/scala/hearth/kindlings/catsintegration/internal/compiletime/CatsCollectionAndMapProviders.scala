@@ -3,8 +3,9 @@ package hearth.kindlings.catsintegration.internal.compiletime
 import hearth.MacroCommons
 import hearth.std.{ProviderResult, StandardMacroExtension, StdExtensions}
 
-/** Registers IsCollection providers for Cats data types: NonEmptyList, NonEmptyVector, NonEmptyChain, Chain. Registers
-  * IsMap provider (via IsCollection) for NonEmptyMap. Registers IsCollection provider for NonEmptySet.
+/** Registers IsCollection providers for Cats data types: NonEmptyList, NonEmptyVector, NonEmptySeq, NonEmptyLazyList,
+  * NonEmptyChain, Chain. Registers IsMap provider (via IsCollection) for NonEmptyMap. Registers IsCollection provider
+  * for NonEmptySet.
   *
   * All `Expr.quote` blocks are inside helper methods where element types are regular type parameters (not
   * path-dependent from `elem.Underlying`). This avoids Scala 2 reification failures ("not found: value elem").
@@ -83,6 +84,72 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
                 if (list.nonEmpty)
                   Right(cats.data.NonEmptyVector.fromVectorUnsafe(list.toVector).asInstanceOf[A])
                 else Left("Cannot create NonEmptyVector from empty collection")
+              },
+            None
+          )
+      })
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    def mkNESeq[A, E](AT: Type[A], elemType: Type[E]): IsCollection[A] = {
+      implicit val eType: Type[E] = elemType
+      implicit val aType: Type[A] = AT
+      implicit val listEType: Type[List[E]] = ListType[E]
+      implicit val builderType: Type[scala.collection.mutable.Builder[E, List[E]]] = BuilderType[E, List[E]]
+
+      Existential[IsCollectionOf[A, *], E](new IsCollectionOf[A, E] {
+        override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
+          Expr.quote(Expr.splice(value).asInstanceOf[cats.data.NonEmptySeq[E]].toSeq)
+        override type CtorResult = List[E]
+        implicit override val CtorResult: Type[CtorResult] = listEType
+        override def factory: Expr[scala.collection.Factory[E, CtorResult]] = Expr.quote {
+          new scala.collection.Factory[E, List[E]] {
+            override def newBuilder: scala.collection.mutable.Builder[E, List[E]] = List.newBuilder[E]
+            override def fromSpecific(it: IterableOnce[E]): List[E] = List.from(it)
+          }
+        }
+        override def build: CtorLikeOf[scala.collection.mutable.Builder[E, CtorResult], A] =
+          CtorLikeOf.EitherStringOrValue(
+            (builder: Expr[scala.collection.mutable.Builder[E, List[E]]]) =>
+              Expr.quote {
+                val list = Expr.splice(builder).result()
+                if (list.nonEmpty)
+                  Right(cats.data.NonEmptySeq.fromSeqUnsafe(list).asInstanceOf[A])
+                else Left("Cannot create NonEmptySeq from empty collection")
+              },
+            None
+          )
+      })
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
+    def mkNELL[A, E](AT: Type[A], elemType: Type[E]): IsCollection[A] = {
+      implicit val eType: Type[E] = elemType
+      implicit val aType: Type[A] = AT
+      implicit val listEType: Type[List[E]] = ListType[E]
+      implicit val builderType: Type[scala.collection.mutable.Builder[E, List[E]]] = BuilderType[E, List[E]]
+
+      Existential[IsCollectionOf[A, *], E](new IsCollectionOf[A, E] {
+        override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
+          Expr.quote(
+            hearth.kindlings.catsintegration.internal.runtime.CatsConversions
+              .nonEmptyLazyListToIterable[E](Expr.splice(value))
+          )
+        override type CtorResult = List[E]
+        implicit override val CtorResult: Type[CtorResult] = listEType
+        override def factory: Expr[scala.collection.Factory[E, CtorResult]] = Expr.quote {
+          new scala.collection.Factory[E, List[E]] {
+            override def newBuilder: scala.collection.mutable.Builder[E, List[E]] = List.newBuilder[E]
+            override def fromSpecific(it: IterableOnce[E]): List[E] = List.from(it)
+          }
+        }
+        override def build: CtorLikeOf[scala.collection.mutable.Builder[E, CtorResult], A] =
+          CtorLikeOf.EitherStringOrValue(
+            (builder: Expr[scala.collection.mutable.Builder[E, List[E]]]) =>
+              Expr.quote {
+                hearth.kindlings.catsintegration.internal.runtime.CatsConversions
+                  .buildNonEmptyLazyList(Expr.splice(builder).result().asInstanceOf[List[Any]])
+                  .asInstanceOf[Either[String, A]]
               },
             None
           )
@@ -282,6 +349,40 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
         NEVCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNEV(tpe, elem.Underlying))
           case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyVector")
+        }
+    })
+
+    // --- NonEmptySeq ---
+    IsCollection.registerProvider(new IsCollection.Provider {
+      override def name: String = s"${loader.getClass.getName}#NonEmptySeq"
+
+      private lazy val NESeqCtor = {
+        val impl = Type.Ctor1.of[cats.data.NonEmptySeq]
+        Type.Ctor1.fromUntyped[cats.data.NonEmptySeq](impl.asUntyped)
+      }
+
+      @scala.annotation.nowarn("msg=is never used")
+      override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
+        NESeqCtor.unapply(tpe) match {
+          case Some(elem) => ProviderResult.Matched(mkNESeq(tpe, elem.Underlying))
+          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptySeq")
+        }
+    })
+
+    // --- NonEmptyLazyList ---
+    IsCollection.registerProvider(new IsCollection.Provider {
+      override def name: String = s"${loader.getClass.getName}#NonEmptyLazyList"
+
+      private lazy val NELLCtor = {
+        val impl = Type.Ctor1.of[cats.data.NonEmptyLazyList]
+        Type.Ctor1.fromUntyped[cats.data.NonEmptyLazyList](impl.asUntyped)
+      }
+
+      @scala.annotation.nowarn("msg=is never used")
+      override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
+        NELLCtor.unapply(tpe) match {
+          case Some(elem) => ProviderResult.Matched(mkNELL(tpe, elem.Underlying))
+          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyLazyList")
         }
     })
 
