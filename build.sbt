@@ -248,6 +248,7 @@ lazy val root = project
   .settings(publishSettings)
   .settings(noPublishSettings)
   .aggregate(derivationCommons.projectRefs *)
+  .aggregate(macroCommons.projectRefs *)
   .aggregate(fastShowPretty.projectRefs *)
   .aggregate(circeDerivation.projectRefs *)
   .aggregate(jsoniterDerivation.projectRefs *)
@@ -302,6 +303,7 @@ lazy val di = projectMatrix
   .someVariations(versions.scalas, versions.platforms)(
     (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
   )
+  .dependsOn(macroCommons)
   .settings(
     moduleName := "kindlings-di",
     name := "kindlings-di",
@@ -342,6 +344,7 @@ lazy val optics = projectMatrix
   // cats-integration is a TEST dependency only: its `IsCollection`/`IsMap` providers are loaded from the classpath by
   // `loadStandardExtensions`, demonstrating that `.each` lights up over cats `NonEmpty*` purely because the provider
   // jar is present — no optics-specific cats code (see `CatsEachSpec`).
+  .dependsOn(macroCommons)
   .dependsOn(catsIntegration % Test)
   .settings(
     moduleName := "kindlings-optics",
@@ -357,6 +360,7 @@ lazy val mock = projectMatrix
   .someVariations(versions.scalas, versions.platforms)(
     (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
   )
+  .dependsOn(macroCommons)
   .settings(
     moduleName := "kindlings-mock",
     name := "kindlings-mock",
@@ -643,6 +647,24 @@ lazy val derivationCommons = projectMatrix
     moduleName := "kindlings-derivation-commons",
     name := "kindlings-derivation-commons",
     description := "Shared compile-time utilities for Kindlings derivation modules"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+
+// Shared compile-time utilities for the NON-derivation, direct-style macro modules (optics, mock, di).
+// Kept separate from `derivation-commons` because those modules are not derivations and must not pull in
+// the derivation-specific machinery (DerivationPolicy/DerivationTimeout/...). Currently hosts the opt-in
+// generation-logging tracer (GenerationLogging).
+lazy val macroCommons = projectMatrix
+  .in(file("macro-commons"))
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
+  .settings(
+    moduleName := "kindlings-macro-commons",
+    name := "kindlings-macro-commons",
+    description := "Shared compile-time utilities for Kindlings direct-style (non-derivation) macro modules"
   )
   .settings(settings *)
   .settings(dependencies *)
