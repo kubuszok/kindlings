@@ -387,54 +387,59 @@ trait FunctorMacrosImpl
                     case None =>
                       failDerivation(CatsDerivationError.MissingDerivationInfo("Functor", childName))
                     case Some(info) =>
-                      parseCaseClassMIO[ChildType](s"child $childName").flatMap { childCC =>
-                        val fields = childCC.caseFieldValuesAt(caseValue).toList
-                        if (fields.isEmpty) {
+                      // A case object / parameterless singleton case (`case Nope`, no parens) is NOT a case class,
+                      // so `CaseClass.parse` fails; it carries no `A` and maps to identity (like a fieldless case).
+                      CaseClass.parse[ChildType].toEither match {
+                        case Left(_) =>
                           MIO.pure(caseValue.upcast[F[Any]])
-                        } else {
-                          val mappedMIO: MIO[List[(String, Expr_??)]] = fields.traverse {
-                            case (fieldName, fieldValue) =>
-                              import fieldValue.Underlying as Field
-                              val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-                              if (info.directFields.contains(fieldName)) {
-                                val m: Expr[Any] =
-                                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
-                                val typedM: Expr[Field] = Expr.quote(Expr.splice(m).asInstanceOf[Field])
-                                MIO.pure((fieldName, typedM.as_??))
-                              } else if (
-                                info.selfRecursiveFields.contains(fieldName) ||
-                                info.nestedFieldFunctors.contains(fieldName)
-                              ) {
-                                val functorExprMIO: MIO[Expr[Any]] =
-                                  if (info.selfRecursiveFields.contains(fieldName)) {
-                                    selfOpt match {
-                                      case Some(self) => MIO.pure(self)
-                                      case None       =>
-                                        failDerivation(CatsDerivationError.MissingSelfReference("Functor"))
+                        case Right(childCC) =>
+                          val fields = childCC.caseFieldValuesAt(caseValue).toList
+                          if (fields.isEmpty) {
+                            MIO.pure(caseValue.upcast[F[Any]])
+                          } else {
+                            val mappedMIO: MIO[List[(String, Expr_??)]] = fields.traverse {
+                              case (fieldName, fieldValue) =>
+                                import fieldValue.Underlying as Field
+                                val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+                                if (info.directFields.contains(fieldName)) {
+                                  val m: Expr[Any] =
+                                    Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr.upcast[Any])))
+                                  val typedM: Expr[Field] = Expr.quote(Expr.splice(m).asInstanceOf[Field])
+                                  MIO.pure((fieldName, typedM.as_??))
+                                } else if (
+                                  info.selfRecursiveFields.contains(fieldName) ||
+                                  info.nestedFieldFunctors.contains(fieldName)
+                                ) {
+                                  val functorExprMIO: MIO[Expr[Any]] =
+                                    if (info.selfRecursiveFields.contains(fieldName)) {
+                                      selfOpt match {
+                                        case Some(self) => MIO.pure(self)
+                                        case None       =>
+                                          failDerivation(CatsDerivationError.MissingSelfReference("Functor"))
+                                      }
+                                    } else MIO.pure(info.nestedFieldFunctors(fieldName))
+                                  functorExprMIO.map { functorExpr =>
+                                    val nested: Expr[Any] = Expr.quote {
+                                      hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                                        .mapNested(
+                                          Expr.splice(functorExpr),
+                                          Expr.splice(fieldExpr.upcast[Any]),
+                                          Expr.splice(fExpr)
+                                        )
                                     }
-                                  } else MIO.pure(info.nestedFieldFunctors(fieldName))
-                                functorExprMIO.map { functorExpr =>
-                                  val nested: Expr[Any] = Expr.quote {
-                                    hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                                      .mapNested(
-                                        Expr.splice(functorExpr),
-                                        Expr.splice(fieldExpr.upcast[Any]),
-                                        Expr.splice(fExpr)
-                                      )
+                                    val typedNested: Expr[Field] =
+                                      Expr.quote(Expr.splice(nested).asInstanceOf[Field])
+                                    (fieldName, typedNested.as_??)
                                   }
-                                  val typedNested: Expr[Field] =
-                                    Expr.quote(Expr.splice(nested).asInstanceOf[Field])
-                                  (fieldName, typedNested.as_??)
+                                } else {
+                                  MIO.pure((fieldName, fieldExpr.as_??))
                                 }
-                              } else {
-                                MIO.pure((fieldName, fieldExpr.as_??))
-                              }
+                            }
+                            mappedMIO.flatMap { mapped =>
+                              constructInstanceFree(childCC.primaryConstructor, "Constructor", childName)(mapped.toMap)
+                                .map(expr => expr.value.asInstanceOf[Expr[F[Any]]])
+                            }
                           }
-                          mappedMIO.flatMap { mapped =>
-                            constructInstanceFree(childCC.primaryConstructor, "Constructor", childName)(mapped.toMap)
-                              .map(expr => expr.value.asInstanceOf[Expr[F[Any]]])
-                          }
-                        }
                       }
                   }
                 }

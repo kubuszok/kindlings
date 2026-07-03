@@ -205,6 +205,18 @@ object examples {
     implicit val traverseIList: cats.Traverse[IList] = cats.Traverse.derived
   }
 
+  // Regression (kubuszok/kindlings): polymorphic sealed trait with a case-object (singleton) child.
+  // A parameterless enum case (`case Nope`, no parens) / case object must map to identity, unlike a
+  // parameterless case *class* (`case INil()`, with parens) which parses as a case class.
+  sealed trait Perhaps[+A]
+  final case class Definitely[+A](value: A) extends Perhaps[A]
+  case object Nope extends Perhaps[Nothing]
+  object Perhaps {
+    implicit val functorPerhaps: cats.Functor[Perhaps] = cats.Functor.derived
+    implicit val foldablePerhaps: cats.Foldable[Perhaps] = cats.Foldable.derived
+    implicit val traversePerhaps: cats.Traverse[Perhaps] = cats.Traverse.derived
+  }
+
   // Bifunctor examples — case classes with two type parameters
   final case class Pair[A, B](first: A, second: B)
   object Pair {
