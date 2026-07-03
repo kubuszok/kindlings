@@ -49,6 +49,45 @@ scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
 | xml-derivation | `hearth.kindlings.xmlderivation.debug._` | `xmlDerivation.logDerivation=true` |
 | fast-show-pretty | `hearth.kindlings.fastshowpretty.debug._` | `fastShowPretty.logDerivation=true` |
 
+## Generation logging for the non-derivation macro modules
+
+`optics`, `mock` and `di` are not type-class derivations, but they still generate code — so they offer the same
+"see the generated code and the logic that led to it" capability under the name **`logGeneration`**. Enable it the same
+two ways (a scoped `debug` import, or a scalac option). The message shows the parsed input (path steps / overridden
+members / resolution) and the pretty-printed generated code.
+
+```scala
+// optics — preview the parsed path + generated PathModify
+import hearth.kindlings.optics.debug._
+
+// mock — preview the overridden members + generated mock
+import hearth.kindlings.mock.debug._
+
+// di — preview the resolution + generated wiring (all endpoints, including DI.plan)
+import hearth.kindlings.di.debug._
+```
+
+| Module | Debug import | Scalac setting |
+|--------|-------------|----------------|
+| optics | `hearth.kindlings.optics.debug._` | `optics.logGeneration=true` |
+| mock | `hearth.kindlings.mock.debug._` | `mock.logGeneration=true` |
+| di | `hearth.kindlings.di.debug._` | `di.logGeneration=true` |
+
+### DI wiring graph (how things combine)
+
+To see **only** how entities/resources are wired together for a single DI run — without the full generation log — `di`
+additionally offers a [ZIO-Magic](https://zio.dev)-style wiring graph (`ZLayer.Debug.tree` / `ZLayer.Debug.mermaid`
+analog). Enable it project-wide with `di.logWiring=tree` (a DAG-aware ASCII dependency tree) or `di.logWiring=mermaid`
+(a Mermaid diagram + render link):
+
+```scala
+// build.sbt
+scalacOptions += "-Xmacro-settings:di.logWiring=tree"
+```
+
+For the `DI.plan` endpoint you can also request it inline with `.debugTree` / `.debugMermaid` — see the
+[DI guide](di.md#seeing-how-things-are-wired-the-wiring-graph).
+
 ## Flame graph generation
 
 Profile how long each derivation step takes using Hearth's built-in flame graph support. Add these scalac options:

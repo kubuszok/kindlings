@@ -9,7 +9,71 @@ import hearth.fp.DirectStyle
   * Mixed into the per-platform macro bundles (`MacroCommonsScala2`/`MacroCommonsScala3`), so every method here can use
   * the full cross-platform Hearth API (`Type`, `Expr`, `Method`, `enclosingScope`, ...).
   */
-private[di] trait WiringMacrosImpl { this: MacroCommons =>
+private[di] trait WiringMacrosImpl extends hearth.kindlings.macros.compiletime.GenerationLogging { this: MacroCommons =>
+
+  protected val generationLoggingNamespace: String = "di"
+  protected def generationMarkerImported: Boolean = {
+    implicit val tpe: Type[DI.LogGeneration] = Type.of[DI.LogGeneration]
+    Expr.summonImplicit[DI.LogGeneration].isDefined
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------
+  // Wiring-graph logging (ZIO-Magic style) — see WiringGraph. Independent of the full generation log: `di.logWiring`
+  // shows ONLY how things are wired together for a single DI run.
+  // -------------------------------------------------------------------------------------------------------------------
+
+  sealed protected trait WiringLogMode
+  protected object WiringLogMode {
+    case object Tree extends WiringLogMode
+    case object Mermaid extends WiringLogMode
+  }
+
+  /** `-Xmacro-settings:di.logWiring=tree|mermaid` (or `=true`, meaning `tree`) — request a standalone wiring-graph dump
+    * for every wiring in the compilation unit.
+    */
+  protected def wiringLogModeFromSettings: Option[WiringLogMode] =
+    (for {
+      data <- Environment.typedSettings.toOption
+      di <- data.get("di")
+      v <- di.get("logWiring")
+    } yield v).flatMap { v =>
+      v.asString
+        .map(_.trim.toLowerCase)
+        .collect {
+          case "mermaid" => WiringLogMode.Mermaid
+          case "tree"    => WiringLogMode.Tree
+        }
+        .orElse(v.asBoolean.collect { case true => WiringLogMode.Tree })
+    }
+
+  private def renderWiring(root: WiringNode, mode: WiringLogMode): String = mode match {
+    case WiringLogMode.Tree    => WiringGraph.renderTree(root)
+    case WiringLogMode.Mermaid => WiringGraph.renderMermaid(root)
+  }
+
+  /** Emit a standalone wiring graph (only when `mode` is defined). Roots the tree at `rootKey`, forcing that node's
+    * kind to [[NodeKind.Root]] so the root prints without a storage annotation.
+    */
+  protected def emitWiringGraphIfEnabled(
+      endpoint: String,
+      rootKey: String,
+      nodes: scala.collection.Map[String, WiringGraph.RawNode],
+      mode: Option[WiringLogMode]
+  ): Unit = mode.foreach { m =>
+    WiringGraph.fromResolved(rootKey, nodes).foreach { root =>
+      Environment.reportInfo(s"$endpoint — wiring graph\n${renderWiring(root.copy(kind = NodeKind.Root), m)}")
+    }
+  }
+
+  /** The wiring graph rendered as an ASCII tree, for embedding inside the full generation log (when both are on). */
+  protected def wiringTreeFor(
+      rootKey: String,
+      nodes: scala.collection.Map[String, WiringGraph.RawNode]
+  ): String =
+    WiringGraph
+      .fromResolved(rootKey, nodes)
+      .map(root => WiringGraph.renderTree(root.copy(kind = NodeKind.Root)))
+      .getOrElse("")
 
   /** One in-scope candidate value: the expression that reads it, together with the source-level identifier (member
     * name) it was read from — `theDatabaseAccess`, `theB1`, ... The name is what makes ambiguity errors actionable
@@ -22,10 +86,19 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     * that, of a single matching companion `apply`) from a value of a compatible type found in the enclosing lexical
     * scope. Implicit parameters are resolved by implicit search rather than from scope.
     */
-  def wire[A: Type]: Expr[A] = {
+  def wire[A: Type]: Expr[A] = wireLogged("DI.wire", recursive = false)
+
+  private def wireLogged[A: Type](endpoint: String, recursive: Boolean): Expr[A] = {
     val scopes = collectScopes
-    buildInstance[A](scopes, recursive = false, Nil) match {
-      case Right(expr)  => expr
+    buildInstance[A](scopes, recursive = recursive, Nil) match {
+      case Right(expr) =>
+        if (shouldWeLogGeneration) {
+          val trace = new Trace
+          trace.step(s"$endpoint[${Type.prettyPrint[A]}] (recursive=$recursive)")
+          trace.step(s"${scopes.map(_.size).sum} candidate value(s) in ${scopes.size} enclosing scope(s)")
+          emitGenerationLog(endpoint, trace, expr.prettyPrint)
+        }
+        expr
       case Left(errors) => Environment.reportErrorAndAbort(errors)
     }
   }
@@ -34,13 +107,7 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     * enclosing scope is itself constructed recursively (instead of failing), as long as it is "wireable" — i.e. not a
     * `java.*`/`scala.*` library type, mirroring macwire's `isWireable` guard.
     */
-  def wireRec[A: Type]: Expr[A] = {
-    val scopes = collectScopes
-    buildInstance[A](scopes, recursive = true, Nil) match {
-      case Right(expr)  => expr
-      case Left(errors) => Environment.reportErrorAndAbort(errors)
-    }
-  }
+  def wireRec[A: Type]: Expr[A] = wireLogged("DI.wireRec", recursive = true)
 
   /** macwire-style `wireWith[RES](factory)`: resolve each parameter of the supplied factory function from the enclosing
     * scope, then apply the factory to the resolved values. The factory is any `FunctionN` value (a lambda or an
@@ -450,6 +517,9 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
   def autowire[A: Type](rawDeps: List[Expr_??]): Expr[A] = {
     checkDuplicateDependencyTypes(rawDeps)
     val used = scala.collection.mutable.Set.empty[Int]
+    // Collected in resolution order, keyed by type FQCN — feeds both the ZIO-Magic wiring graph and the full log.
+    val graphNodes = scala.collection.mutable.LinkedHashMap.empty[String, WiringGraph.RawNode]
+    val rootKey: String = Type.fqcn[A]
 
     val block: Expr[A] = DirectStyle[ValDefs].scoped { runSafe =>
       val memo = scala.collection.mutable.LinkedHashMap.empty[String, Expr_??]
@@ -459,28 +529,40 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
         runSafe(ValDefs.createVal[T](built.value.upcast[T])).as_??
       }
 
-      def buildViaMethod(t: ??, method: Method, breadcrumb: List[??]): Expr_?? = {
-        val arguments: Map[String, Expr_??] = method.totalParameters.flatten.toList.map { case (name, parameter) =>
+      // Build via `method`, returning the expression AND the FQCN keys of the dependencies it consumed (for the graph).
+      def buildViaMethod(t: ??, method: Method, breadcrumb: List[??]): (Expr_??, List[String]) = {
+        val params = method.totalParameters.flatten.toList
+        val arguments: Map[String, Expr_??] = params.map { case (name, parameter) =>
           val ref =
-            if (parameter.isImplicit) summonOrAbort(parameter.tpe)
-            else expand(parameter.tpe, breadcrumb :+ t)
+            if (parameter.isImplicit) {
+              val pk = keyOf(parameter.tpe)
+              val _ = graphNodes.getOrElseUpdate(
+                pk,
+                WiringGraph.RawNode(pk, displayOf(parameter.tpe), NodeKind.Summoned, Storage.Inline, Nil)
+              )
+              summonOrAbort(parameter.tpe)
+            } else expand(parameter.tpe, breadcrumb :+ t)
           name -> ref
         }.toMap
+        val depKeys = params.map { case (_, parameter) => keyOf(parameter.tpe) }
         applyArguments(method, arguments) match {
-          case Right(built) => built
+          case Right(built) => (built, depKeys)
           case Left(err)    => Environment.reportErrorAndAbort(err)
         }
       }
 
       def expand(t: ??, breadcrumb: List[??]): Expr_?? = {
         import t.Underlying as T
+        val key = Type.fqcn[T]
         memo.getOrElseUpdate(
-          Type.fqcn[T], {
+          key, {
             verifyNotCyclic(t, breadcrumb)
             verifyNotPrimitive(t, breadcrumb)
             findInstanceProvider(t, rawDeps) match {
               case Some((dep, i)) =>
                 used += i
+                graphNodes(key) =
+                  WiringGraph.RawNode(key, displayOf(t), NodeKind.Provided("instance"), Storage.Inline, Nil)
                 import dep.Underlying
                 dep.value.upcast[T].as_??
               case None =>
@@ -488,11 +570,18 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
                   case Some((dep, i, applyM)) =>
                     used += i
                     val applied = applyM.apply(dep.value.asInstanceOf[Expr[applyM.Instance]])
-                    valNode[T](buildViaMethod(t, applied, breadcrumb))
+                    val (built, depKeys) = buildViaMethod(t, applied, breadcrumb)
+                    graphNodes(key) =
+                      WiringGraph.RawNode(key, displayOf(t), NodeKind.Provided("factory"), Storage.Val, depKeys)
+                    valNode[T](built)
                   case None =>
                     providerCallable[T] match {
-                      case Some(method) => valNode[T](buildViaMethod(t, method, breadcrumb))
-                      case None         =>
+                      case Some(method) =>
+                        val (built, depKeys) = buildViaMethod(t, method, breadcrumb)
+                        graphNodes(key) =
+                          WiringGraph.RawNode(key, displayOf(t), NodeKind.Constructed, Storage.Val, depKeys)
+                        valNode[T](built)
+                      case None =>
                         Environment.reportErrorAndAbort(
                           s"cannot find a provided dependency, public constructor or public apply method for: ${Type
                               .prettyPrint[T]}; ${wiringPath(breadcrumb :+ t)}"
@@ -510,7 +599,186 @@ private[di] trait WiringMacrosImpl { this: MacroCommons =>
     }.close
 
     verifyAllDependenciesUsed(rawDeps, used.toSet)
+    emitWiringGraphIfEnabled("DI.autowire", rootKey, graphNodes, wiringLogModeFromSettings)
+    if (shouldWeLogGeneration) {
+      val trace = new Trace
+      trace.step(s"autowire[${Type.prettyPrint[A]}] with ${rawDeps.size} provided dependency(ies)")
+      trace.step("wiring graph:")
+      trace.step(wiringTreeFor(rootKey, graphNodes))
+      emitGenerationLog("DI.autowire", trace, block.prettyPrint)
+    }
     block
+  }
+
+  /** Stable per-type key (FQCN) used to identify nodes in the wiring graph. */
+  private def keyOf(t: ??): String = { import t.Underlying as T; Type.fqcn[T] }
+
+  /** Human-readable type name for the wiring graph (ANSI colour codes from `prettyPrint` stripped for clean output). */
+  private def displayOf(t: ??): String = {
+    import t.Underlying as T
+    Type.prettyPrint[T].replaceAll("\u001b\\[[0-9;]*m", "")
+  }
+
+  // ===================================================================================================================
+  // DI.plan — Kindlings' own opinionated wiring endpoint (NOT macwire): always recursive, always caching, with a
+  // fluent builder for the storage strategy (val / lazy val / def, whole-graph default + per-type override) and
+  // per-type construction overrides (`provide[T]`). See DIPlan.
+  // ===================================================================================================================
+
+  /** One `provide[T](factory)` construction override: the target type and the (by-name) factory expression. */
+  final private case class PlanProvider(tpe: ??, factory: DestructuredExpr)
+
+  /** The configuration recovered from a `DI.plan[A]....` builder chain. */
+  final private case class PlanConfig(
+      default: Storage,
+      overrides: Map[String, Storage],
+      providers: Map[String, PlanProvider],
+      debug: Option[WiringLogMode]
+  ) {
+    def withOverride(key: String, s: Storage): PlanConfig = copy(overrides = overrides.updated(key, s))
+    def withProvider(t: ??, factory: DestructuredExpr): PlanConfig = {
+      import t.Underlying as T
+      copy(providers = providers.updated(Type.fqcn[T], PlanProvider(t, factory)))
+    }
+    def storageFor(key: String): Storage = overrides.getOrElse(key, default)
+  }
+  private object PlanConfig {
+    val empty: PlanConfig = PlanConfig(Storage.Val, Map.empty, Map.empty, None)
+  }
+
+  /** `DI.plan[A]....build`: parse the builder chain, then build a complete, always-cached object graph for `A`,
+    * honouring the requested storage strategy and construction overrides.
+    */
+  def buildPlan[A: Type](plan: Expr[DIPlan[A]]): Expr[A] = {
+    val config = parsePlanConfig[A](plan)
+    val graphNodes = scala.collection.mutable.LinkedHashMap.empty[String, WiringGraph.RawNode]
+    val rootKey: String = Type.fqcn[A]
+
+    val block: Expr[A] = DirectStyle[ValDefs].scoped { runSafe =>
+      val memo = scala.collection.mutable.LinkedHashMap.empty[String, Expr_??]
+
+      def store[T: Type](value: Expr[T], storage: Storage): Expr_?? = {
+        val vd = storage match {
+          case Storage.Val     => ValDefs.createVal[T](value)
+          case Storage.LazyVal => ValDefs.createLazy[T](value)
+          case Storage.Def     => ValDefs.createDef[T](value)
+          case Storage.Inline  => ValDefs.createVal[T](value)
+        }
+        runSafe(vd).as_??
+      }
+
+      def buildViaMethod(t: ??, method: Method, breadcrumb: List[??]): (Expr_??, List[String]) = {
+        val params = method.totalParameters.flatten.toList
+        val arguments: Map[String, Expr_??] = params.map { case (name, parameter) =>
+          val ref =
+            if (parameter.isImplicit) {
+              val pk = keyOf(parameter.tpe)
+              val _ = graphNodes.getOrElseUpdate(
+                pk,
+                WiringGraph.RawNode(pk, displayOf(parameter.tpe), NodeKind.Summoned, Storage.Inline, Nil)
+              )
+              summonOrAbort(parameter.tpe)
+            } else expand(parameter.tpe, breadcrumb :+ t)
+          name -> ref
+        }.toMap
+        val depKeys = params.map { case (_, parameter) => keyOf(parameter.tpe) }
+        applyArguments(method, arguments) match {
+          case Right(built) => (built, depKeys)
+          case Left(err)    => Environment.reportErrorAndAbort(err)
+        }
+      }
+
+      def expand(t: ??, breadcrumb: List[??]): Expr_?? = {
+        import t.Underlying as T
+        val key = Type.fqcn[T]
+        memo.getOrElseUpdate(
+          key, {
+            verifyNotCyclic(t, breadcrumb)
+            verifyNotPrimitive(t, breadcrumb)
+            val storage = config.storageFor(key)
+            config.providers.get(key) match {
+              case Some(provider) =>
+                // Construction override: initialise `T` with the user-supplied factory instead of a constructor.
+                val factory: Expr[T] = provider.factory.toUntypedExpr.asTyped[T]
+                graphNodes(key) = WiringGraph.RawNode(key, displayOf(t), NodeKind.Provided("provide"), storage, Nil)
+                store[T](factory, storage)
+              case None =>
+                providerCallable[T] match {
+                  case Some(method) =>
+                    val (built, depKeys) = buildViaMethod(t, method, breadcrumb)
+                    graphNodes(key) = WiringGraph.RawNode(key, displayOf(t), NodeKind.Constructed, storage, depKeys)
+                    import built.Underlying
+                    store[T](built.value.upcast[T], storage)
+                  case None =>
+                    Environment.reportErrorAndAbort(
+                      s"DI.plan: cannot find a public constructor, companion apply, or `.provide[_]` override for: ${Type
+                          .prettyPrint[T]}; ${wiringPath(breadcrumb :+ t)}"
+                    )
+                }
+            }
+          }
+        )
+      }
+
+      val rootRef = expand(Type[A].as_??, Nil)
+      import rootRef.Underlying
+      rootRef.value.upcast[A]
+    }.close
+
+    emitWiringGraphIfEnabled("DI.plan", rootKey, graphNodes, config.debug.orElse(wiringLogModeFromSettings))
+    if (shouldWeLogGeneration) {
+      val trace = new Trace
+      trace.step(s"plan[${Type.prettyPrint[A]}] (default storage: ${config.default.label})")
+      if (config.overrides.nonEmpty) trace.step(s"storage overrides: ${config.overrides.size}")
+      if (config.providers.nonEmpty) trace.step(s"construction overrides: ${config.providers.keys.mkString(", ")}")
+      trace.step("wiring graph:")
+      trace.step(wiringTreeFor(rootKey, graphNodes))
+      emitGenerationLog("DI.plan", trace, block.prettyPrint)
+    }
+    block
+  }
+
+  /** Walk the `DI.plan[A].asLazyVals.storeAsDef[X].provide[Y](f).debugTree` chain (via [[DestructuredExpr]]) and fold
+    * it into a [[PlanConfig]]. The receiver of each builder call is processed first, so an outer (later) call wins over
+    * an inner (earlier) one for the whole-graph default.
+    */
+  private def parsePlanConfig[A: Type](plan: Expr[DIPlan[A]]): PlanConfig = {
+    implicit val planTpe: Type[DIPlan[A]] = Type.of[DIPlan[A]]
+    def loop(d: DestructuredExpr, acc: PlanConfig): PlanConfig = d match {
+      case mc: DestructuredExpr.MethodCall =>
+        val receiver = mc.applied.collectFirst { case ai: DestructuredExpr.MethodCall.AppliedInstance => ai.value }
+        val base = receiver.map(loop(_, acc)).getOrElse(acc)
+        applyPlanCall(mc, base)
+      case _ => acc
+    }
+    loop(DestructuredExpr.parse[DIPlan[A]](plan), PlanConfig.empty)
+  }
+
+  private def applyPlanCall(mc: DestructuredExpr.MethodCall, acc: PlanConfig): PlanConfig = {
+    def typeArg: Option[??] =
+      mc.applied.collectFirst {
+        case at: DestructuredExpr.MethodCall.AppliedTypes if at.typeArgs.nonEmpty => at.typeArgs.last
+      }
+    def valueArg: Option[DestructuredExpr] =
+      mc.applied.collect { case av: DestructuredExpr.MethodCall.AppliedValues => av.args }.flatten.headOption
+    def overrideStorage(s: Storage): PlanConfig =
+      typeArg.fold(acc) { t => import t.Underlying as T; acc.withOverride(Type.fqcn[T], s) }
+    mc.method.name match {
+      case "asVals"         => acc.copy(default = Storage.Val)
+      case "asLazyVals"     => acc.copy(default = Storage.LazyVal)
+      case "asDefs"         => acc.copy(default = Storage.Def)
+      case "storeAsVal"     => overrideStorage(Storage.Val)
+      case "storeAsLazyVal" => overrideStorage(Storage.LazyVal)
+      case "storeAsDef"     => overrideStorage(Storage.Def)
+      case "provide"        =>
+        (typeArg, valueArg) match {
+          case (Some(t), Some(factory)) => acc.withProvider(t, factory)
+          case _                        => acc
+        }
+      case "debugTree"    => acc.copy(debug = Some(WiringLogMode.Tree))
+      case "debugMermaid" => acc.copy(debug = Some(WiringLogMode.Mermaid))
+      case _              => acc // `plan`, wrappers, etc.
+    }
   }
 
   /** Recover the precise static type of a single provided dependency expression. Both platforms hand the macro the

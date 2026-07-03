@@ -2,6 +2,16 @@ package hearth.kindlings.di
 
 private[di] trait DICompanionCompat {
 
+  /** Start a [[DIPlan]] builder for `A` — Kindlings' own opinionated wiring endpoint (always recursive, always caching,
+    * with customizable storage and per-type construction overrides). Finish the chain with `.build`.
+    */
+  def plan[A]: DIPlan[A] = new DIPlan[A]()
+
+  /** `DI.plan[A]....build`: consume the builder chain and generate the wired `A`. */
+  extension [A](inline plan: DIPlan[A]) {
+    inline def build: A = ${ internal.compiletime.WiringMacros.buildPlanImpl[A]('plan) }
+  }
+
   /** Construct an `A` by wiring its primary-constructor parameters from values found in the enclosing lexical scope. */
   inline def wire[A]: A = ${ internal.compiletime.WiringMacros.wireImpl[A] }
 
