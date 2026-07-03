@@ -1,6 +1,16 @@
 package hearth.kindlings.integrationtests
 
-import cats.data.{Chain, Const, NonEmptyChain, NonEmptyList, NonEmptyMap, NonEmptySet, NonEmptyVector}
+import cats.data.{
+  Chain,
+  Const,
+  NonEmptyChain,
+  NonEmptyLazyList,
+  NonEmptyList,
+  NonEmptyMap,
+  NonEmptySeq,
+  NonEmptySet,
+  NonEmptyVector
+}
 import hearth.MacroSuite
 import hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.core.*
@@ -29,6 +39,26 @@ final class CatsJsoniterSpec extends MacroSuite {
         val v = WithNEV(NonEmptyVector.of(10, 20))
         val decoded = roundTrip(v)
         decoded.values ==> NonEmptyVector.of(10, 20)
+      }
+    }
+
+    group("NonEmptySeq") {
+
+      test("round-trip") {
+        implicit val codec: JsonValueCodec[WithNESeq] = KindlingsJsonValueCodec.derived[WithNESeq]
+        val v = WithNESeq(NonEmptySeq.of(10, 20, 30))
+        val decoded = roundTrip(v)
+        decoded.values ==> NonEmptySeq.of(10, 20, 30)
+      }
+    }
+
+    group("NonEmptyLazyList") {
+
+      test("round-trip") {
+        implicit val codec: JsonValueCodec[WithNELL] = KindlingsJsonValueCodec.derived[WithNELL]
+        val v = WithNELL(NonEmptyLazyList(5, 6, 7))
+        val decoded = roundTrip(v)
+        assert(decoded.values.toLazyList.toList == List(5, 6, 7))
       }
     }
 
