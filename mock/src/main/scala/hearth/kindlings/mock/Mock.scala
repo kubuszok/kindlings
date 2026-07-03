@@ -17,4 +17,12 @@ package hearth.kindlings.mock
   * ctx.verifyExpectations()
   * }}}
   */
-object Mock extends MockCompanionCompat
+object Mock extends MockCompanionCompat {
+
+  /** Special marker type — if its implicit is in scope, the mock macros log the generated code and the logic
+    * (overridden members) that produced it. Import `hearth.kindlings.mock.debug.*` to enable, or set
+    * `-Xmacro-settings:mock.logGeneration=true`. Kept outside auto-summoned scope.
+    */
+  sealed trait LogGeneration
+  object LogGeneration extends LogGeneration
+}

@@ -297,3 +297,9 @@ message naming the unsupported step.
   execution runs in CI.
 </content>
 </invoke>
+
+## Debugging
+
+To preview the parsed path and the generated code for a `modify`/`modifyAll`/`modifyLens`, enable **generation
+logging** — either import `hearth.kindlings.optics.debug._` in the file, or set
+`-Xmacro-settings:optics.logGeneration=true`. See [Debugging & Diagnostics](debugging.md).

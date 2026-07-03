@@ -185,3 +185,9 @@ every platform Kindlings targets.
 
     The entire test suite for this module (`mock`/`stub`, both DSLs, ordering, matchers) passes on the JVM **and**
     Scala.js, which is exactly the gap this module closes versus ScalaMock's JVM-only proxy backend.
+
+## Debugging
+
+To preview the overridden members and the generated mock for `Mock.mock`/`Mock.stub`, enable **generation logging** —
+either import `hearth.kindlings.mock.debug._` in the file, or set `-Xmacro-settings:mock.logGeneration=true`. See
+[Debugging & Diagnostics](debugging.md).

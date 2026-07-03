@@ -30,7 +30,14 @@ import _root_.hearth.kindlings.optics.IsEither as OpticsEither
   * `value match { case s: Subtype => f(s); case other => other }` built via [[MatchCase.typeMatch]]. `modifyAll` and
   * lens composition (`modifyLens`/`andThenModify`) build on the same steps.
   */
-private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
+private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compiletime.GenerationLogging {
+  this: MacroCommons & StdExtensions =>
+
+  protected val generationLoggingNamespace: String = "optics"
+  protected def generationMarkerImported: Boolean = {
+    implicit val tpe: Type[LogGeneration] = Type.of[LogGeneration]
+    Expr.summonImplicit[LogGeneration].isDefined
+  }
 
   // optics consumes Hearth's collection/map/option/either SPI (`IsCollection`/`IsMap`/`IsOption`/`IsEither`) to traverse
   // `.each`/`.eachLeft`/... over ANY supported container — built-ins plus anything a provider jar on the classpath
@@ -105,9 +112,33 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     * so even leaf `.each`/`.eachWhere` paths produce a precise `A`. The macro additionally re-derives the element type
     * from the parsed container, so the codegen never depends on `A`'s inference being perfect.
     */
+  /** A compact human-readable rendering of a parsed path, for the generation log (e.g. `.a.xs.each.b`). */
+  private def describeSteps(steps: List[PathStep]): String =
+    if (steps.isEmpty) "(identity)" else steps.map(describeStep).mkString
+  private def describeStep(step: PathStep): String = step match {
+    case PathStep.Field(name)                  => s".$name"
+    case PathStep.Each(_, _, predicate, isMap) =>
+      val base = if (isMap) ".eachValue" else ".each"
+      if (predicate.isDefined) s"$base(where)" else base
+    case PathStep.At(_, _, kind, shape, _, _) =>
+      val k = kind match {
+        case PathStep.AtKind.At       => "at"
+        case PathStep.AtKind.Index    => "index"
+        case PathStep.AtKind.AtOrElse => "atOrElse"
+      }
+      s".$k<$shape>"
+    case PathStep.EachEither(_, _, isLeft) => if (isLeft) ".eachLeft" else ".eachRight"
+    case PathStep.When(subtype)            =>
+      import subtype.Underlying as T
+      s".when[${Type.prettyPrint[T]}]"
+  }
+
   def modify[S: Type, A: Type](obj: Expr[S], path: Expr[S => A]): Expr[PathModify[S, A]] = {
     ensureStdExtensionsLoaded()
+    val trace = new Trace
     val steps: List[PathStep] = parsePath[S, A](path)
+    trace.step(s"modify[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}]")
+    trace.step(s"parsed path: ${describeSteps(steps)}")
     // Build the copy-with-modification function `(s, mod) => <rebuilt s>`, where the leaf transformation applied at the
     // focus is exactly `mod(<leaf>)`. The lambda parameters `s`/`mod` are quote-bound; their `Expr` handles are
     // recovered for the macro-side `buildModify` via `Expr.quote(s)` / `Expr.quote(mod)` (the standard Hearth cross-quote
@@ -121,7 +152,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
         }
       }
 
-    Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    val result = Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    emitGenerationLog("modify", trace, result.prettyPrint)
+    result
   }
 
   /** Materialize the `.each` evidence `IsElementOf.Aux[C, Elem]` by checking the std SPI: `Elem` is the value type of
@@ -239,7 +272,10 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
   def modifyAll[S: Type, A: Type](obj: Expr[S], paths: List[Expr[S => A]]): Expr[PathModify[S, A]] = {
     ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAll` requires at least one path")
+    val trace = new Trace
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[S, A])
+    trace.step(s"modifyAll[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}] over ${pathSteps.size} path(s)")
+    pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
     val doModify: Expr[(S, A => A) => S] =
       Expr.quote { (s: S, mod: A => A) =>
         Expr.splice {
@@ -248,7 +284,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
       }
-    Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    val result = Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    emitGenerationLog("modifyAll", trace, result.prettyPrint)
+    result
   }
 
   /** `modifyLens[T](_.a.b)` → `PathLazyModify[T, U]`: a reusable lens NOT bound to an object. Same machinery as
@@ -256,7 +294,10 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
     */
   def modifyLens[T: Type, Foc: Type](path: Expr[T => Foc]): Expr[PathLazyModify[T, Foc]] = {
     ensureStdExtensionsLoaded()
+    val trace = new Trace
     val steps: List[PathStep] = parsePath[T, Foc](path)
+    trace.step(s"modifyLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}]")
+    trace.step(s"parsed path: ${describeSteps(steps)}")
     val doModify: Expr[(T, Foc => Foc) => T] =
       Expr.quote { (t: T, mod: Foc => Foc) =>
         Expr.splice {
@@ -265,7 +306,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
       }
-    Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    val result = Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    emitGenerationLog("modifyLens", trace, result.prettyPrint)
+    result
   }
 
   /** `modifyAllLens[T](_.a, _.b)` → `PathLazyModify[T, Foc]`: the multi-path reusable lens form. Same shared-prefix
@@ -274,7 +317,10 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
   def modifyAllLens[T: Type, Foc: Type](paths: List[Expr[T => Foc]]): Expr[PathLazyModify[T, Foc]] = {
     ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAllLens` requires at least one path")
+    val trace = new Trace
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[T, Foc])
+    trace.step(s"modifyAllLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}] over ${pathSteps.size} path(s)")
+    pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
     val doModify: Expr[(T, Foc => Foc) => T] =
       Expr.quote { (t: T, mod: Foc => Foc) =>
         Expr.splice {
@@ -283,7 +329,9 @@ private[optics] trait ModifyMacrosImpl { this: MacroCommons & StdExtensions =>
           }
         }
       }
-    Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    val result = Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    emitGenerationLog("modifyAllLens", trace, result.prettyPrint)
+    result
   }
 
   /** Rebuild `sExpr: S` applying `transformLeaf` at the focus of EVERY path in `paths`, sharing common `Field` prefixes
