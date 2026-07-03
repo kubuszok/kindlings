@@ -3,77 +3,23 @@ package internal.compiletime
 
 import hearth.MacroCommons
 import hearth.fp.DirectStyle
+import hearth.kindlings.macros.compiletime.{NodeKind, Storage, WiringGraph}
 
 /** Shared, macro-platform-agnostic implementation of the wiring macros.
   *
   * Mixed into the per-platform macro bundles (`MacroCommonsScala2`/`MacroCommonsScala3`), so every method here can use
   * the full cross-platform Hearth API (`Type`, `Expr`, `Method`, `enclosingScope`, ...).
   */
-private[di] trait WiringMacrosImpl extends hearth.kindlings.macros.compiletime.GenerationLogging { this: MacroCommons =>
+private[di] trait WiringMacrosImpl
+    extends hearth.kindlings.macros.compiletime.GenerationLogging
+    with hearth.kindlings.macros.compiletime.WiringGraphLogging { this: MacroCommons =>
 
   protected val generationLoggingNamespace: String = "di"
+  protected val wiringLoggingNamespace: String = "di"
   protected def generationMarkerImported: Boolean = {
     implicit val tpe: Type[DI.LogGeneration] = Type.of[DI.LogGeneration]
     Expr.summonImplicit[DI.LogGeneration].isDefined
   }
-
-  // -------------------------------------------------------------------------------------------------------------------
-  // Wiring-graph logging (ZIO-Magic style) — see WiringGraph. Independent of the full generation log: `di.logWiring`
-  // shows ONLY how things are wired together for a single DI run.
-  // -------------------------------------------------------------------------------------------------------------------
-
-  sealed protected trait WiringLogMode
-  protected object WiringLogMode {
-    case object Tree extends WiringLogMode
-    case object Mermaid extends WiringLogMode
-  }
-
-  /** `-Xmacro-settings:di.logWiring=tree|mermaid` (or `=true`, meaning `tree`) — request a standalone wiring-graph dump
-    * for every wiring in the compilation unit.
-    */
-  protected def wiringLogModeFromSettings: Option[WiringLogMode] =
-    (for {
-      data <- Environment.typedSettings.toOption
-      di <- data.get("di")
-      v <- di.get("logWiring")
-    } yield v).flatMap { v =>
-      v.asString
-        .map(_.trim.toLowerCase)
-        .collect {
-          case "mermaid" => WiringLogMode.Mermaid
-          case "tree"    => WiringLogMode.Tree
-        }
-        .orElse(v.asBoolean.collect { case true => WiringLogMode.Tree })
-    }
-
-  private def renderWiring(root: WiringNode, mode: WiringLogMode): String = mode match {
-    case WiringLogMode.Tree    => WiringGraph.renderTree(root)
-    case WiringLogMode.Mermaid => WiringGraph.renderMermaid(root)
-  }
-
-  /** Emit a standalone wiring graph (only when `mode` is defined). Roots the tree at `rootKey`, forcing that node's
-    * kind to [[NodeKind.Root]] so the root prints without a storage annotation.
-    */
-  protected def emitWiringGraphIfEnabled(
-      endpoint: String,
-      rootKey: String,
-      nodes: scala.collection.Map[String, WiringGraph.RawNode],
-      mode: Option[WiringLogMode]
-  ): Unit = mode.foreach { m =>
-    WiringGraph.fromResolved(rootKey, nodes).foreach { root =>
-      Environment.reportInfo(s"$endpoint — wiring graph\n${renderWiring(root.copy(kind = NodeKind.Root), m)}")
-    }
-  }
-
-  /** The wiring graph rendered as an ASCII tree, for embedding inside the full generation log (when both are on). */
-  protected def wiringTreeFor(
-      rootKey: String,
-      nodes: scala.collection.Map[String, WiringGraph.RawNode]
-  ): String =
-    WiringGraph
-      .fromResolved(rootKey, nodes)
-      .map(root => WiringGraph.renderTree(root.copy(kind = NodeKind.Root)))
-      .getOrElse("")
 
   /** One in-scope candidate value: the expression that reads it, together with the source-level identifier (member
     * name) it was read from — `theDatabaseAccess`, `theB1`, ... The name is what makes ambiguity errors actionable

@@ -1,7 +1,7 @@
 package hearth.kindlings.di
 
 import hearth.MacroSuite
-import hearth.kindlings.di.internal.compiletime.{NodeKind, Storage, WiringGraph}
+import hearth.kindlings.macros.compiletime.{NodeKind, Storage, WiringGraph}
 
 /** Pure unit tests for the ZIO-Magic-style wiring-graph renderers (no macro expansion). Exercises a diamond graph
   * (`App` depends on `Service` and `Handler`, both of which depend on the shared `Db`) to prove the tree view is
@@ -10,10 +10,10 @@ import hearth.kindlings.di.internal.compiletime.{NodeKind, Storage, WiringGraph}
 final class WiringGraphSpec extends MacroSuite {
 
   private val diamond: Map[String, WiringGraph.RawNode] = Map(
-    "App"     -> WiringGraph.RawNode("App", "App", NodeKind.Constructed, Storage.Val, List("Service", "Handler")),
+    "App" -> WiringGraph.RawNode("App", "App", NodeKind.Constructed, Storage.Val, List("Service", "Handler")),
     "Service" -> WiringGraph.RawNode("Service", "Service", NodeKind.Constructed, Storage.Val, List("Db")),
     "Handler" -> WiringGraph.RawNode("Handler", "Handler", NodeKind.Constructed, Storage.LazyVal, List("Db")),
-    "Db"      -> WiringGraph.RawNode("Db", "Db", NodeKind.Constructed, Storage.Val, Nil)
+    "Db" -> WiringGraph.RawNode("Db", "Db", NodeKind.Constructed, Storage.Val, Nil)
   )
 
   group("fromResolved") {
