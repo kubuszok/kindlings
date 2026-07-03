@@ -9,19 +9,61 @@ final private[dicats] class ResourceWiringMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with ResourceWiringMacrosImpl {
 
-  protected def companionResourceCall(
+  protected def companionResourceExplicitParamTypes(
       companion: Expr_??,
       methodName: String,
       fType: ??,
       expected: ??
+  ): Option[List[??]] = {
+    import c.universe.*
+    import companion.Underlying as Comp
+    val fTpe: c.Type = fType.asUntyped
+    val expectedTpe: c.Type = expected.asUntyped
+    // The companion tree from `Type.companionObject` is untyped on Scala 2 (`tree.tpe` is null), so read the owner type
+    // from the existential's `Underlying` (the companion object's type) rather than the tree.
+    val ownerTpe: c.Type = Type[Comp].asUntyped
+    val memberSym = ownerTpe.member(TermName(methodName))
+    val alts = if (memberSym == NoSymbol) Nil else memberSym.alternatives
+    // For each `resource` alternative: substitute our `F` for the method's type parameter, then walk the clauses,
+    // skipping IMPLICIT/`using` clauses (summoned later) and collecting EXPLICIT ones. We only support a single explicit
+    // clause; the (F-substituted) result must conform to `expected` (`Resource[F, <:T]`).
+    def tryOne(info: c.Type): Option[List[??]] = info match {
+      case PolyType(List(fSym), body) =>
+        def sub(tp: c.Type): c.Type = tp.substituteTypes(List(fSym), List(fTpe))
+        def collect(tpe: c.Type, clauses: List[List[c.Type]]): (List[List[c.Type]], c.Type) = tpe match {
+          case MethodType(params, res) =>
+            val isImplicit = params.nonEmpty && params.head.isImplicit
+            if (isImplicit) collect(res, clauses)
+            else collect(res, clauses :+ params.map(p => sub(p.typeSignature)))
+          case NullaryMethodType(res) => collect(res, clauses)
+          case other                  => (clauses, sub(other))
+        }
+        val (clauses, result) = collect(body, Nil)
+        if (clauses.sizeIs <= 1 && result <:< expectedTpe) Some(clauses.flatten.map(t => UntypedType.as_??(t)))
+        else None
+      case _ => None
+    }
+    alts.iterator.map(m => tryOne(m.infoIn(ownerTpe))).collectFirst { case Some(r) => r }
+  }
+
+  protected def companionResourceCall(
+      companion: Expr_??,
+      methodName: String,
+      fType: ??,
+      expected: ??,
+      explicitArgs: List[Expr_??]
   ): Option[Expr_??] = {
     import c.universe.*
     val companionTree: Tree = companion.value.tree
     val fTpe: c.Type = fType.asUntyped
     val expectedTpe: c.Type = expected.asUntyped
-    // `(companion.resource[F]): Resource[F, T]` — the ascription drives the compiler to insert any `implicit Sync[F]`
-    // clause via its own implicit search; typecheck validates the whole thing (and yields `None` if unsuitable).
-    val ascribed = q"($companionTree.${TermName(methodName)}[$fTpe]): $expectedTpe"
+    val argTrees: List[Tree] = explicitArgs.map(_.value.tree)
+    // `(companion.resource[F](args)): Resource[F, T]` — the applied `args` fill the explicit value clause; the ascription
+    // drives the compiler to insert any `implicit Sync[F]` clause via its own implicit search; typecheck validates the
+    // whole thing (and yields `None` if unsuitable).
+    val base = q"$companionTree.${TermName(methodName)}[$fTpe]"
+    val applied = if (argTrees.isEmpty) base else q"$base(..$argTrees)"
+    val ascribed = q"($applied): $expectedTpe"
     scala.util.Try(c.typecheck(ascribed)).toOption.map(typed => UntypedExpr.as_??(typed))
   }
 

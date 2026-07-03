@@ -531,33 +531,87 @@ private[dicats] trait ResourceWiringMacrosImpl
     (bound: Map[String, Expr_??]) => bound(key)
   }
 
-  /** Kindlings extension over macwire's autocats: use a companion `object T { def resource[F[_]: <constraints>]:
-    * Resource[F, T] }` factory when present. We apply OUR `F` as the method's type argument and summon its
-    * context-bound implicits (which Hearth does not auto-supply), then hand back the folded `Resource[F, T]`. Only
-    * methods whose sole value parameters are implicit (i.e. context bounds) are used — a `resource` method with
-    * explicit value parameters is left to ordinary construction. Returns the `Resource[F, T]` expression, or `None` if
-    * no suitable method exists.
+  /** Kindlings extension over macwire's autocats: use a companion `object T { def resource[F[_]:
+    * <constraints>](<explicit value params>): Resource[F, T] }` factory when present. We apply OUR `F` as the method's
+    * type argument, resolve any EXPLICIT value parameters from the wiring graph (just like a factory method's params),
+    * and summon its context-bound implicits (which Hearth does not auto-supply), then register the folded
+    * `Resource[F, T]` as a shared node. Returns a node builder, or `None` if no suitable `resource` method exists.
     */
   private def tryCompanionResource[F[_]](
-      t: ??
-  )(implicit FCtor: Type.Ctor1[F], fAnyType: Type[F[Any]], anyType: Type[Any]): Option[Expr_??] = {
+      resolver: Resolver,
+      t: ??,
+      path: List[String],
+      missing: scala.collection.mutable.LinkedHashSet[String]
+  )(implicit
+      FCtor: Type.Ctor1[F],
+      fAnyType: Type[F[Any]],
+      anyType: Type[Any]
+  ): Option[Map[String, Expr_??] => Expr_??] = {
     import t.Underlying as X
+    val key = Type.fqcn[X]
     implicit val resourceFX: Type[Resource[F, X]] = Type.of[Resource[F, X]]
     Type.companionObject[X].flatMap { companion =>
-      companionResourceCall(companion, "resource", FCtor.asUntyped.as_??, Type[Resource[F, X]].as_??)
+      companionResourceExplicitParamTypes(companion, "resource", FCtor.asUntyped.as_??, Type[Resource[F, X]].as_??)
+        .map { explicitTypes =>
+          // Resolve the resource method's EXPLICIT value params from the graph now (records their nodes + any missing
+          // paths). Its implicit / context-bound clauses are summoned by the compiler inside companionResourceCall.
+          val paramResolvers: List[Map[String, Expr_??] => Expr_??] =
+            explicitTypes.zipWithIndex.map { case (ptype, i) =>
+              resolveTypeViaResolver[F](resolver, ptype, path :+ s"[method resource].arg$i", missing)
+                .getOrElse((_: Map[String, Expr_??]) => nullPlaceholder(ptype))
+            }
+          val depKeys = explicitTypes.flatMap(pt => resolvedKeyOf(resolver, pt))
+          recordGraphNode(resolver, key, t, NodeKind.Provided("resource"), depKeys)
+          ensureNode(resolver, key, t) { bound =>
+            val explicitArgs = paramResolvers.map(_(bound))
+            companionResourceCall(
+              companion,
+              "resource",
+              FCtor.asUntyped.as_??,
+              Type[Resource[F, X]].as_??,
+              explicitArgs
+            ).getOrElse(
+              Environment.reportErrorAndAbort(s"Could not build [${Type.prettyPrint[X]}.resource[F]] from the graph.")
+            )
+          }
+          (bound: Map[String, Expr_??]) => bound(key)
+        }
     }
   }
 
-  /** Build `T.resource[F]` from `companion` (the companion object of `T`) and let the compiler apply the type argument
-    * `F` and resolve any context-bound implicits (`Sync[F]`, ...), ascribing the result to `expected` (`Resource[F,
-    * T]`). Returns `None` when there is no such method or it does not yield a `Resource[F, <:T]`.
+  /** Reflectively inspect `companion.resource[F]` and, if it exists and (after applying `F`) yields a subtype of
+    * `expected` (`Resource[F, <:T]`), return the F-substituted types of its single EXPLICIT value-parameter clause
+    * (empty when it only has implicit / context-bound clauses). Returns `None` when there is no such method, its result
+    * does not conform, or it has more than one explicit value clause.
+    *
+    * Platform specific for the same reason as [[companionResourceCall]]: Hearth's `Method` API drops a value/implicit
+    * clause that follows a type-parameter clause (see `UntypedMethodsScala3.methodExpectations`; upstream
+    * kubuszok/hearth#331), so we read the clause structure by raw reflection.
+    */
+  protected def companionResourceExplicitParamTypes(
+      companion: Expr_??,
+      methodName: String,
+      fType: ??,
+      expected: ??
+  ): Option[List[??]]
+
+  /** Build `T.resource[F](<explicitArgs>)` from `companion` (the companion object of `T`): apply the type argument `F`,
+    * apply the already-resolved `explicitArgs` (in declared order) for the explicit value clause, and let the compiler
+    * resolve any context-bound implicits (`Sync[F]`, ...), ascribing the result to `expected` (`Resource[F, T]`).
+    * Returns `None` when there is no such method or it does not yield a `Resource[F, <:T]`.
     *
     * Platform specific: Hearth's `Method` API cannot supply an implicit/`using` clause that follows a type-parameter
     * clause (it exposes it as an empty parameter list — see `UntypedMethodsScala3.methodExpectations`), so we build the
     * call by raw reflection and rely on the compiler's own implicit search, which is exactly what the user's
     * `def resource[F[_]: Sync]` expects anyway.
     */
-  protected def companionResourceCall(companion: Expr_??, methodName: String, fType: ??, expected: ??): Option[Expr_??]
+  protected def companionResourceCall(
+      companion: Expr_??,
+      methodName: String,
+      fType: ??,
+      expected: ??,
+      explicitArgs: List[Expr_??]
+  ): Option[Expr_??]
 
   /** Construct a value of type `t` via its primary constructor (or a single companion `apply`), resolving each
     * parameter via `resolveType`. Returns a builder producing the (constructed) value, or `None` if missing deps were
@@ -577,14 +631,12 @@ private[dicats] trait ResourceWiringMacrosImpl
     import t.Underlying as P
     val key = Type.fqcn[P]
     if (resolver.planned.contains(key)) return Some((bound: Map[String, Expr_??]) => bound(key))
-    // Kindlings extension over macwire's autocats: prefer a companion `T.resource[F]: Resource[F, T]` factory if one
-    // exists — apply our `F`, summon its context-bound implicits, and fold the whole construction as a Resource node.
-    tryCompanionResource[F](t) match {
-      case Some(resExpr) =>
-        ensureNode(resolver, key, t)(_ => resExpr)
-        recordGraphNode(resolver, key, t, NodeKind.Provided("resource"), Nil)
-        return Some((bound: Map[String, Expr_??]) => bound(key))
-      case None => ()
+    // Kindlings extension over macwire's autocats: prefer a companion `T.resource[F](...): Resource[F, T]` factory if one
+    // exists — apply our `F`, resolve its explicit value params from the graph, summon its context-bound implicits, and
+    // fold the whole construction as a shared Resource node.
+    tryCompanionResource[F](resolver, t, path, missing) match {
+      case Some(builder) => return Some(builder)
+      case None          => ()
     }
     // Cycle guard: a type re-entered while still under construction (its node not yet `planned`) is a dependency
     // cycle. Without this the DFS recurses forever — a compile-time StackOverflow. Mirrors di's `verifyNotCyclic`.
