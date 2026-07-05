@@ -125,7 +125,10 @@ val settings = Seq(
       "-Ywarn-dead-code",
       "-Ywarn-numeric-widen",
       "-Ywarn-unused:locals",
-      "-Ywarn-unused:imports",
+      // "-Ywarn-unused:imports", // with -Ywarn-macros:after below, an import that only feeds a macro (e.g. the
+      // package-object `.modify` DSL in BareImportSpec) is flagged unused because Hearth fully-qualifies references in
+      // the expanded tree (hearth#320, a correctness fix for cross-unit quotes) — same used-but-flagged-unused class
+      // that already made us drop `-Wunused:imports` on Scala 3 (see the Scala 3 options above).
       "-Ywarn-macros:after",
       "-Xsource-features:eta-expand-always", // silence warn that appears since 2.13.17
       "-Ytasty-reader"
