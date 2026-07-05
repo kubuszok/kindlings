@@ -19,7 +19,8 @@ object versions {
   val platforms = List(VirtualAxis.jvm, VirtualAxis.js, VirtualAxis.native)
 
   // Dependencies.
-  val hearth = "0.4.0"
+  // TODO: pin the final 0.4.1 once released (currently the pre-release SNAPSHOT with the #317/#320 fixes).
+  val hearth = "0.4.1-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val avro4s213 = "4.1.2"
