@@ -12,7 +12,7 @@ trait FastShowPrettyUseImplicitWhenAvailableRuleImpl { this: FastShowPrettyMacro
   object FastShowPrettyUseImplicitWhenAvailableRule extends DerivationRule("use implicit when available") {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[FastShowPretty.type].methods.collect {
+      Type.of[FastShowPretty.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

@@ -21,7 +21,7 @@ trait AvroDecoderUseImplicitWhenAvailableRuleImpl {
       * must be added here.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[AvroDecoder.type].methods.collect {
+      Type.of[AvroDecoder.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

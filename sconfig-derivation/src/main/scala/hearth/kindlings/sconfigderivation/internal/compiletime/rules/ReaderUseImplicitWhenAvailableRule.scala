@@ -20,9 +20,9 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
       * helper or one of the built-in instances.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[ConfigReader.type].methods.collect {
+      Type.of[ConfigReader.type].unsortedMethods.collect {
         case method if method.isImplicit && method.name == "derived" => method.asUntyped
-      } ++ Type.of[ConfigCodec.type].methods.collect {
+      } ++ Type.of[ConfigCodec.type].unsortedMethods.collect {
         case method if method.isImplicit && method.name == "derived" => method.asUntyped
       }
 

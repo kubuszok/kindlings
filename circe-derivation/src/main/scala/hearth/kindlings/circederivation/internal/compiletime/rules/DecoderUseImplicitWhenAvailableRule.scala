@@ -14,11 +14,11 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsDecoder.type].methods.collect {
+      Type.of[KindlingsDecoder.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
+      } ++ Type.of[KindlingsCodecAsObject.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[Decoder.type].methods.collect {
+      } ++ Type.of[Decoder.type].unsortedMethods.collect {
         case method if method.name == "derived" || method.name.startsWith("decodeLiteral") =>
           method.asUntyped
       }

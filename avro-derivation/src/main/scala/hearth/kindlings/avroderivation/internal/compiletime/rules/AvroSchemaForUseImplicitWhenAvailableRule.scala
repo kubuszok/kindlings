@@ -18,7 +18,7 @@ trait AvroSchemaForUseImplicitWhenAvailableRuleImpl {
       * excluded.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[AvroSchemaFor.type].methods.collect {
+      Type.of[AvroSchemaFor.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 
