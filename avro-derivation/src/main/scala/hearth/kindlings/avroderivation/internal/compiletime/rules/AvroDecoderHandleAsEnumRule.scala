@@ -7,7 +7,6 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.avroName
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.generic.GenericRecord
 
@@ -100,110 +99,58 @@ trait AvroDecoderHandleAsEnumRuleImpl {
                 }
               }
           } else {
-            // Mixed sealed trait → dispatch based on record schema name
-            // For union types, Hearth returns FQN child names (e.g., "pkg.Parrot"), but Avro schema
-            // getName returns simple names (e.g., "Parrot"). Extract simple names for comparison.
-            implicit val avroNameT: Type[avroName] = SfTypes.AvroName
-
-            def simpleName(fqn: String): String = fqn.lastIndexOf('.') match {
-              case -1 => fqn
-              case i  => fqn.substring(i + 1)
-            }
-
-            // Resolve the effective Avro name for each child: @avroName overrides the Scala class name
-            val childNamesResolved: List[(String, Option[String])] = children.toList.map { case (childName, child) =>
-              import child.Underlying as ChildType
-              val avroNameOverride = getTypeAnnotationStringArg[avroName, ChildType]
-              (simpleName(childName), avroNameOverride)
-            }
-            val knownNames: List[String] = childNamesResolved.map {
-              case (_, Some(overrideName)) => overrideName
-              case (simpleName, None)      => simpleName
-            }
-
+            // Mixed sealed trait → dispatch based on record schema name.
+            //
+            // The record name written by the encoder for each child is derived from the child's own
+            // schema via `computeAvroNameExpr`. For a *generic* case (e.g. `Set[Content]`) that name
+            // embeds the applied type parameters ("Set__Content"); it also honours @avroName /
+            // @avroErasedName / @avroFqnParamNames. We MUST recompute the expected name here with the
+            // exact same logic — a plain simple class name ("Set") never matches "Set__Content".
+            // Note: the schema record name is NOT passed through `transformConstructorNames` (only
+            // enum-of-case-object symbols are), so we don't apply it here either — doing so would
+            // reintroduce a mismatch against the encoder.
             children
               .parTraverse { case (childName, child) =>
                 import child.Underlying as ChildType
-                val simpleChildName = simpleName(childName)
-                val avroNameOverride = getTypeAnnotationStringArg[avroName, ChildType]
+                implicit val childSchemaCtx: SchemaForCtx[ChildType] =
+                  SchemaForCtx.from[ChildType](
+                    dctx.config,
+                    derivedType = dctx.derivedType,
+                    evaluatedConfig = dctx.evaluatedConfig
+                  )
+                val matchNameExpr: Expr[String] = computeAvroNameExpr[ChildType]
                 Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
                   deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.avroValue)).flatMap {
                     decodedExpr =>
-                      dctx.getHelper[ChildType].map {
-                        case Some(helper) =>
-                          val matchName = avroNameOverride.getOrElse(simpleChildName)
-                          (
-                            matchName,
-                            (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                              avroNameOverride match {
-                                case Some(explicitName) =>
-                                  Expr.quote {
-                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                    val recordName = record.getSchema.getName
-                                    if (Expr.splice(Expr(explicitName)) == recordName)
-                                      Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
-                                    else
-                                      Expr.splice(elseExpr)
-                                  }
-                                case None =>
-                                  Expr.quote {
-                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                    val recordName = record.getSchema.getName
-                                    if (
-                                      Expr
-                                        .splice(dctx.config)
-                                        .transformConstructorNames(
-                                          Expr.splice(Expr(simpleChildName))
-                                        ) == recordName
-                                    )
-                                      Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A]
-                                    else
-                                      Expr.splice(elseExpr)
-                                  }
-                              }
-                          )
-                        case None =>
-                          val matchName = avroNameOverride.getOrElse(simpleChildName)
-                          (
-                            matchName,
-                            (valueExpr: Expr[Any], elseExpr: Expr[A]) =>
-                              avroNameOverride match {
-                                case Some(explicitName) =>
-                                  Expr.quote {
-                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                    val recordName = record.getSchema.getName
-                                    if (Expr.splice(Expr(explicitName)) == recordName)
-                                      Expr.splice(decodedExpr).asInstanceOf[A]
-                                    else
-                                      Expr.splice(elseExpr)
-                                  }
-                                case None =>
-                                  Expr.quote {
-                                    val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
-                                    val recordName = record.getSchema.getName
-                                    if (
-                                      Expr
-                                        .splice(dctx.config)
-                                        .transformConstructorNames(
-                                          Expr.splice(Expr(simpleChildName))
-                                        ) == recordName
-                                    )
-                                      Expr.splice(decodedExpr).asInstanceOf[A]
-                                    else
-                                      Expr.splice(elseExpr)
-                                  }
-                              }
-                          )
+                      dctx.getHelper[ChildType].map { helperOpt =>
+                        val dispatch: (Expr[Any], Expr[A]) => Expr[A] = (valueExpr, elseExpr) => {
+                          val thenExpr: Expr[A] = helperOpt match {
+                            case Some(helper) => Expr.quote(Expr.splice(helper(valueExpr, dctx.config)).asInstanceOf[A])
+                            case None         => Expr.quote(Expr.splice(decodedExpr).asInstanceOf[A])
+                          }
+                          Expr.quote {
+                            val record = Expr.splice(valueExpr).asInstanceOf[GenericRecord]
+                            if (Expr.splice(matchNameExpr) == record.getSchema.getName)
+                              Expr.splice(thenExpr)
+                            else
+                              Expr.splice(elseExpr)
+                          }
+                        }
+                        (matchNameExpr, dispatch)
                       }
                   }
                 }
               }
               .map { dispatchers =>
+                val knownNamesExpr: Expr[List[String]] =
+                  dispatchers.toList.map(_._1).foldRight(Expr.quote(List.empty[String])) { (nameExpr, acc) =>
+                    Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
+                  }
                 val errorExpr: Expr[A] = Expr.quote {
                   val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
                   AvroDerivationUtils.failedToMatchSubtype(
                     record.getSchema.getName,
-                    Expr.splice(Expr(knownNames))
+                    Expr.splice(knownNamesExpr)
                   )
                 }
 

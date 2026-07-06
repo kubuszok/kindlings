@@ -328,5 +328,17 @@ case class FieldNsOuterWithOption(@avroNamespace("custom.opt.ns") inner: Option[
 case class FieldNsInnerWithTypeNs(value: Int)
 case class FieldNsOverrideTypeNs(@avroNamespace("field.level.ns") inner: FieldNsInnerWithTypeNs)
 
+// Generic sealed trait with a value case (carrying the type param) + a singleton case.
+// Derived structurally as a field of a record. The value case is generic, so its Avro
+// record name includes the applied type parameter (e.g. "SetUpdate__UpdContent"), and
+// the mixed-union decoder must dispatch on that same parameterized name.
+sealed trait Updatable[+A]
+object Updatable {
+  final case class SetUpdate[A](value: A) extends Updatable[A]
+  case object Keep extends Updatable[Nothing]
+}
+final case class UpdContent(text: String)
+final case class UpdRecord(field: Updatable[UpdContent])
+
 // Unhandled type for compile-time error tests
 class NotAnAvroType
