@@ -444,6 +444,20 @@ final class AvroRoundTripSpec extends MacroSuite {
         }
       }
 
+      test("generic sealed trait field with a value case round-trip") {
+        val encoder: AvroEncoder[UpdRecord] = AvroEncoder.derived[UpdRecord]
+        val decoder: AvroDecoder[UpdRecord] = AvroDecoder.derived[UpdRecord]
+        val values: List[UpdRecord] = List(
+          UpdRecord(Updatable.SetUpdate(UpdContent("hello"))),
+          UpdRecord(Updatable.Keep)
+        )
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)(encoder)
+          val decoded = AvroIO.fromBinary[UpdRecord](bytes)(decoder)
+          decoded ==> original
+        }
+      }
+
       test("@avroScalePrecision on BigDecimal field (issue #110)") {
         val encoder: AvroEncoder[WithPerFieldDecimal] = AvroEncoder.derived[WithPerFieldDecimal]
         val decoder: AvroDecoder[WithPerFieldDecimal] = AvroDecoder.derived[WithPerFieldDecimal]

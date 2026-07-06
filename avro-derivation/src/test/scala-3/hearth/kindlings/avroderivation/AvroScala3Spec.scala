@@ -80,6 +80,28 @@ final class AvroScala3Spec extends MacroSuite {
         decoded ==> original
       }
     }
+
+    group("`derives` directly on a generic enum") {
+      import DerivesOnGenericEnum.*
+
+      test("generic enum instance derives without self-recursion (round-trip)") {
+        val values: List[Updatable3[Content3]] = List(Updatable3.Set3(Content3("hello")), Updatable3.Keep3)
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)
+          val decoded = AvroIO.fromBinary[Updatable3[Content3]](bytes)
+          decoded ==> original
+        }
+      }
+
+      test("generic enum nested in a record derives and round-trips") {
+        val values = List(Record3(Updatable3.Set3(Content3("hi"))), Record3(Updatable3.Keep3))
+        values.foreach { original =>
+          val bytes = AvroIO.toBinary(original)
+          val decoded = AvroIO.fromBinary[Record3](bytes)
+          decoded ==> original
+        }
+      }
+    }
   }
 
   group("literal types") {

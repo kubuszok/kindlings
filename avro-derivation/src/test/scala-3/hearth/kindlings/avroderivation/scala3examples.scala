@@ -42,3 +42,19 @@ case class MealWithNamespacedFruit(fruit: NamespacedFruit)
 // Option[Scala 3 enum] — must flatten or wrap correctly
 case class WithOptionalFruit(fruit: Option[Fruit])
 case class WithOptionalVehicle(vehicle: Option[Vehicle])
+
+// `derives` placed directly on a generic enum (value case carrying the type param + a singleton).
+// The `derives`-generated companion given `derived$AvroEncoder: AvroEncoder[Updatable3[A]]` is-a
+// `AvroSchemaFor[Updatable3[A]]`; deriving the instance must NOT summon that given for its own schema.
+object DerivesOnGenericEnum {
+  given AvroConfig = AvroConfig.default
+
+  final case class Content3(text: String) derives AvroEncoder, AvroDecoder
+
+  enum Updatable3[+A] derives AvroEncoder, AvroDecoder {
+    case Set3(value: A)
+    case Keep3
+  }
+
+  final case class Record3(field: Updatable3[Content3]) derives AvroEncoder, AvroDecoder
+}
