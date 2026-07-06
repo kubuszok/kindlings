@@ -13,9 +13,9 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
   object EncoderUseImplicitWhenAvailableRule extends EncoderDerivationRule("use implicit when available") {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsYamlEncoder.type].methods.collect {
+      Type.of[KindlingsYamlEncoder.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsYamlCodec.type].methods.collect {
+      } ++ Type.of[KindlingsYamlCodec.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

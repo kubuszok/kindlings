@@ -17,11 +17,11 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
     // For circe's own companions, only ignore specific auto-derivation methods (not built-in
     // instances like encodeInt, encodeString, etc.).
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsEncoder.type].methods.collect {
+      Type.of[KindlingsEncoder.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsCodecAsObject.type].methods.collect {
+      } ++ Type.of[KindlingsCodecAsObject.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[Encoder.type].methods.collect {
+      } ++ Type.of[Encoder.type].unsortedMethods.collect {
         case method if method.name == "derived" || method.name.startsWith("encodeLiteral") =>
           method.asUntyped
       }

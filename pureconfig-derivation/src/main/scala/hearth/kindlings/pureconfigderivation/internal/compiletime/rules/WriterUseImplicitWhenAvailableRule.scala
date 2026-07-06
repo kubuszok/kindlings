@@ -18,9 +18,9 @@ trait WriterUseImplicitWhenAvailableRuleImpl {
       * are filtered.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsConfigWriter.type].methods.collect {
+      Type.of[KindlingsConfigWriter.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsConfigConvert.type].methods.collect {
+      } ++ Type.of[KindlingsConfigConvert.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

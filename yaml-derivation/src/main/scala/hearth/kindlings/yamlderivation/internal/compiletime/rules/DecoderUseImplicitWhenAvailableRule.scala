@@ -14,9 +14,9 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
   object DecoderUseImplicitWhenAvailableRule extends DecoderDerivationRule("use implicit when available") {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsYamlDecoder.type].methods.collect {
+      Type.of[KindlingsYamlDecoder.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsYamlCodec.type].methods.collect {
+      } ++ Type.of[KindlingsYamlCodec.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

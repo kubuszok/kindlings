@@ -50,10 +50,10 @@ trait SchemaMacrosImpl
   // Methods to ignore during implicit search — prevents triggering expensive auto-derivation
 
   protected lazy val ignoredImplicits: Seq[UntypedMethod] = {
-    val ours = Type.of[KindlingsSchema.type].methods.collect {
+    val ours = Type.of[KindlingsSchema.type].unsortedMethods.collect {
       case method if method.name == "derived" => method.asUntyped
     }
-    val tapirSchema = Type.of[Schema.type].methods.collect {
+    val tapirSchema = Type.of[Schema.type].unsortedMethods.collect {
       case method if method.name == "derivedSchema" => method.asUntyped
     }
     ours ++ tapirSchema

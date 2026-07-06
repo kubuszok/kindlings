@@ -15,9 +15,9 @@ trait SchemaUseImplicitWhenAvailableRuleImpl {
   object SchemaUseImplicitWhenAvailableRule extends SchemaDerivationRule("use implicit when available") {
 
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsSchema.type].methods.collect {
+      Type.of[KindlingsSchema.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[Schema.type].methods.collect {
+      } ++ Type.of[Schema.type].unsortedMethods.collect {
         // For tapir's own Schema companion, only ignore the auto-derivation method,
         // not built-in schemas for primitive types (schemaForString, schemaForInt, etc.).
         case method if method.name == "derivedSchema" => method.asUntyped

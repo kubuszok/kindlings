@@ -28,9 +28,9 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
       * annotations / config knobs.
       */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[KindlingsConfigReader.type].methods.collect {
+      Type.of[KindlingsConfigReader.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
-      } ++ Type.of[KindlingsConfigConvert.type].methods.collect {
+      } ++ Type.of[KindlingsConfigConvert.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       }
 

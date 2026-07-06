@@ -15,9 +15,9 @@ trait WriterUseImplicitWhenAvailableRuleImpl {
 
     /** See [[ReaderUseImplicitWhenAvailableRule.ignoredImplicits]] for the rationale. */
     lazy val ignoredImplicits: Seq[UntypedMethod] =
-      Type.of[ConfigWriter.type].methods.collect {
+      Type.of[ConfigWriter.type].unsortedMethods.collect {
         case method if method.name == "derived" => method.asUntyped
-      } ++ Type.of[ConfigCodec.type].methods.collect {
+      } ++ Type.of[ConfigCodec.type].unsortedMethods.collect {
         case method if method.name == "derived" => method.asUntyped
       }
 

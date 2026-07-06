@@ -1040,9 +1040,9 @@ trait CodecMacrosImpl
   // Shared ignored implicits for summonExprIgnoring — prevents infinite macro expansion
   // when summoning finds library auto-derivation methods (e.g., KindlingsJsonCodec.derived).
   private[compiletime] lazy val codecIgnoredImplicits: Seq[UntypedMethod] =
-    Type.of[KindlingsJsonValueCodec.type].methods.collect {
+    Type.of[KindlingsJsonValueCodec.type].unsortedMethods.collect {
       case method if method.isImplicit => method.asUntyped
-    } ++ Type.of[KindlingsJsonCodec.type].methods.collect {
+    } ++ Type.of[KindlingsJsonCodec.type].unsortedMethods.collect {
       case method if method.isImplicit => method.asUntyped
     }
 

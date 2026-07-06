@@ -18,10 +18,12 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
   override def extend(ctx: MacroCommons & StdExtensions): Unit = {
     import ctx.*
 
-    val ListType = Type.Ctor1.of[List]
-    val BuilderType = Type.Ctor2.of[scala.collection.mutable.Builder]
-    val OrderCtor = Type.Ctor1.of[cats.kernel.Order]
-    val Tuple2Ctor = Type.Ctor2.of[Tuple2]
+    // Lazy so the type-constructor introspection is only paid when a provider actually matches (via the mkNE*
+    // helpers below), not on every macro expansion that loads this extension. See the Hearth provider-laziness sweep.
+    lazy val ListType = Type.Ctor1.of[List]
+    lazy val BuilderType = Type.Ctor2.of[scala.collection.mutable.Builder]
+    lazy val OrderCtor = Type.Ctor1.of[cats.kernel.Order]
+    lazy val Tuple2Ctor = Type.Ctor2.of[Tuple2]
 
     // --- Helper methods with regular type parameters (safe for cross-quotes on Scala 2) ---
 
