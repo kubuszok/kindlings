@@ -59,13 +59,15 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[Vector[Byte]])
         Some(Expr.quote(AvroDerivationUtils.wrapByteSeq(Expr.splice(value).asInstanceOf[Vector[Byte]]): Any))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote {
-          val bd = Expr.splice(value).asInstanceOf[BigDecimal]
-          (Expr.splice(ectx.config).decimalConfig match {
-            case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
-            case None     => bd.toString
-          }): Any
-        })
+        Some(
+          Expr.quote {
+            val bd = Expr.splice(value).asInstanceOf[BigDecimal]
+            (Expr.splice(ectx.config).decimalConfig match {
+              case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
+              case None     => bd.toString
+            }): Any
+          }
+        )
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.encodeUUID(Expr.splice(value).asInstanceOf[java.util.UUID]): Any))
       else if (tpe =:= Type.of[java.time.Instant])

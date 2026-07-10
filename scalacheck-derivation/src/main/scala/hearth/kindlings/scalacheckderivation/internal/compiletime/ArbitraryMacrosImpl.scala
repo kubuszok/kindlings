@@ -66,14 +66,16 @@ trait ArbitraryMacrosImpl
             else {
               // For types handled without a cached helper (options, collections),
               // build a direct Gen[A] that we can use in the Arbitrary body
-              Some(runSafe {
-                val freshCtx = ArbitraryCtx.from[A](derivedType = selfType)
-                for {
-                  _ <- ensureStandardExtensionsLoaded()
-                  result <- deriveArbitraryRecursively[A](using freshCtx)
-                  freshCache <- freshCtx.cache.get
-                } yield freshCache.toValDefs.use(_ => result)
-              })
+              Some(
+                runSafe {
+                  val freshCtx = ArbitraryCtx.from[A](derivedType = selfType)
+                  for {
+                    _ <- ensureStandardExtensionsLoaded()
+                    result <- deriveArbitraryRecursively[A](using freshCtx)
+                    freshCache <- freshCtx.cache.get
+                  } yield freshCache.toValDefs.use(_ => result)
+                }
+              )
             }
 
           // Step 4: Wrap cached defs around the Arbitrary instance

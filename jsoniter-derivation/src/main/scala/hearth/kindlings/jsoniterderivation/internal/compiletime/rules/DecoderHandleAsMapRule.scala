@@ -829,15 +829,17 @@ trait DecoderHandleAsMapRuleImpl {
                                 LambdaBuilder
                                   .of1[JsonReader]("reader")
                                   .traverse { readerExpr =>
-                                    MIO.pure(Expr.quote {
-                                      val keyStr = Expr.splice(readerExpr).readKeyAsString()
-                                      Expr
-                                        .splice(lookupMapExpr)
-                                        .getOrElse(
-                                          keyStr,
-                                          Expr.splice(readerExpr).decodeError("unknown enum key: " + keyStr): K
-                                        )
-                                    })
+                                    MIO.pure(
+                                      Expr.quote {
+                                        val keyStr = Expr.splice(readerExpr).readKeyAsString()
+                                        Expr
+                                          .splice(lookupMapExpr)
+                                          .getOrElse(
+                                            keyStr,
+                                            Expr.splice(readerExpr).decodeError("unknown enum key: " + keyStr): K
+                                          )
+                                      }
+                                    )
                                   }
                                   .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
                               }

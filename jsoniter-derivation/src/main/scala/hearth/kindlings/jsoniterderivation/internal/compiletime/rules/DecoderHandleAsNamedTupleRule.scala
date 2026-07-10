@@ -54,10 +54,12 @@ trait DecoderHandleAsNamedTupleRuleImpl {
             onValues = _ => Map.empty
           ) match {
             case Right(constructExpr) =>
-              MIO.pure(Expr.quote {
-                JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
-                Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
-              })
+              MIO.pure(
+                Expr.quote {
+                  JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
+                  Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
+                }
+              )
             case Left(error) =>
               val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
               Log.error(err.message) >> MIO.fail(err)

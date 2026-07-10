@@ -37,15 +37,24 @@ trait DiffBuiltInRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions 
         Type[A] <:< DiffTypes.DoubleType || Type[A] <:< DiffTypes.CharType ||
         Type[A] <:< DiffTypes.BigDecimalType || Type[A] <:< DiffTypes.BigIntType
       ) {
-        Rule.matched(Expr.quote {
-          val l = Expr.splice(dctx.left)
-          val r = Expr.splice(dctx.right)
-          if (l == r)
-            DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), l.toString)
-          else
-            DiffResult
-              .ValueChanged(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), l.toString, r.toString)
-        })
+        Rule.matched(
+          Expr.quote {
+            val l = Expr.splice(dctx.left)
+            val r = Expr.splice(dctx.right)
+            if (l == r)
+              DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), l.toString)
+            else
+              DiffResult
+                .ValueChanged(
+                  Expr.splice(pn),
+                  Expr.splice(fn),
+                  Expr.splice(sn),
+                  Expr.splice(sn),
+                  l.toString,
+                  r.toString
+                )
+          }
+        )
       } else {
         Rule.yielded(s"${Type[A].prettyPrint} is not a built-in type")
       }

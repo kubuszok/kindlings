@@ -43,16 +43,18 @@ trait EncoderHandleAsMapRuleImpl {
           .map { builder =>
             val lambda = builder.build[scala.xml.Elem]
             val iterableExpr = isMap.asIterable(ectx.value)
-            Rule.matched(Expr.quote {
-              val entries = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]]
-              val children = XmlDerivationUtils.encodeMappedPairs[Value](
-                entries,
-                "entry",
-                "key",
-                (v: Value, n: String) => Expr.splice(lambda).apply(v, n)
-              )
-              XmlDerivationUtils.makeElem(Expr.splice(ectx.elementName), Nil, children)
-            })
+            Rule.matched(
+              Expr.quote {
+                val entries = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]]
+                val children = XmlDerivationUtils.encodeMappedPairs[Value](
+                  entries,
+                  "entry",
+                  "key",
+                  (v: Value, n: String) => Expr.splice(lambda).apply(v, n)
+                )
+                XmlDerivationUtils.makeElem(Expr.splice(ectx.elementName), Nil, children)
+              }
+            )
           }
       }
     }

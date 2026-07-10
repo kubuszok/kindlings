@@ -31,13 +31,15 @@ trait DecoderHandleAsOptionRuleImpl {
               }
               .map { builder =>
                 val lambda = builder.build[Either[XmlDecodingError, Inner]]
-                Rule.matched(Expr.quote {
-                  val elem = Expr.splice(dctx.elem)
-                  if (elem.child.isEmpty && elem.attributes.isEmpty && elem.text.trim.isEmpty)
-                    Right(None.asInstanceOf[A])
-                  else
-                    Expr.splice(lambda).apply(elem).map(v => Some(v).asInstanceOf[A])
-                })
+                Rule.matched(
+                  Expr.quote {
+                    val elem = Expr.splice(dctx.elem)
+                    if (elem.child.isEmpty && elem.attributes.isEmpty && elem.text.trim.isEmpty)
+                      Right(None.asInstanceOf[A])
+                    else
+                      Expr.splice(lambda).apply(elem).map(v => Some(v).asInstanceOf[A])
+                  }
+                )
               }
 
           case _ =>

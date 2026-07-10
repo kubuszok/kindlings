@@ -398,13 +398,15 @@ trait SchemaForMacrosImpl
             Type[AvroSchemaFor[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
               case Right(schemaForExpr) =>
                 val fallback = Expr(Type.plainPrint[tpe.Underlying])
-                Some(Expr.quote {
-                  val s = Expr.splice(schemaForExpr).schema
-                  val t = s.getType
-                  if (t == Schema.Type.RECORD || t == Schema.Type.ENUM || t == Schema.Type.FIXED)
-                    s.getFullName
-                  else Expr.splice(fallback)
-                })
+                Some(
+                  Expr.quote {
+                    val s = Expr.splice(schemaForExpr).schema
+                    val t = s.getType
+                    if (t == Schema.Type.RECORD || t == Schema.Type.ENUM || t == Schema.Type.FIXED)
+                      s.getFullName
+                    else Expr.splice(fallback)
+                  }
+                )
               case Left(_) => None
             }
           }

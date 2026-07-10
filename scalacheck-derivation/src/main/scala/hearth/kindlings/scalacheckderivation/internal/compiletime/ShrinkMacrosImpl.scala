@@ -63,14 +63,16 @@ trait ShrinkMacrosImpl
           val directShrinkOpt: Option[Expr[Shrink[A]]] =
             if (helperOpt.isDefined) None
             else {
-              Some(runSafe {
-                val freshCtx = ShrinkCtx.from[A](derivedType = selfType)
-                for {
-                  _ <- ensureStandardExtensionsLoaded()
-                  result <- deriveShrinkRecursively[A](using freshCtx)
-                  freshCache <- freshCtx.cache.get
-                } yield freshCache.toValDefs.use(_ => result)
-              })
+              Some(
+                runSafe {
+                  val freshCtx = ShrinkCtx.from[A](derivedType = selfType)
+                  for {
+                    _ <- ensureStandardExtensionsLoaded()
+                    result <- deriveShrinkRecursively[A](using freshCtx)
+                    freshCache <- freshCtx.cache.get
+                  } yield freshCache.toValDefs.use(_ => result)
+                }
+              )
             }
 
           // Step 4: Wrap cached defs around the Shrink instance

@@ -50,10 +50,12 @@ trait AvroEncoderHandleAsEnumRuleImpl {
                 }
                 .map(_._1)
                 .getOrElse(Type[EnumCase].shortName)
-              MIO.pure(Expr.quote {
-                val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
-                AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), name): Any
-              })
+              MIO.pure(
+                Expr.quote {
+                  val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
+                  AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), name): Any
+                }
+              )
             }
             .flatMap {
               case Some(result) => MIO.pure(result)
