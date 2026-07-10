@@ -837,9 +837,9 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
   }
 
   protected object TraverseTypes {
-    val Any: Type[Any] = Type.of[Any]
-    val Int: Type[Int] = Type.of[Int]
-    val String: Type[String] = Type.of[String]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     def EvalAny: Type[cats.Eval[Any]] = Type.of[cats.Eval[Any]]
     def ListAny: Type[List[Any]] = Type.of[List[Any]]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =

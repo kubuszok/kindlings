@@ -503,25 +503,25 @@ trait CodecMacrosImpl
     def UBJsonValueCodec: Type.Ctor1[UBJsonValueCodec] = Type.Ctor1.of[UBJsonValueCodec]
     val CodecLogDerivation: Type[hearth.kindlings.ubjsonderivation.UBJsonValueCodec.LogDerivation] =
       Type.of[hearth.kindlings.ubjsonderivation.UBJsonValueCodec.LogDerivation]
-    val UBJsonConfig: Type[UBJsonConfig] = Type.of[UBJsonConfig]
-    val UBJsonReader: Type[UBJsonReader] = Type.of[UBJsonReader]
-    val UBJsonWriter: Type[UBJsonWriter] = Type.of[UBJsonWriter]
-    val String: Type[String] = Type.of[String]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val FieldName: Type[fieldNameAnn] = Type.of[fieldNameAnn]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Stringified: Type[stringified] = Type.of[stringified]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Float: Type[Float] = Type.of[Float]
-    val Short: Type[Short] = Type.of[Short]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
-    val BigInt: Type[BigInt] = Type.of[BigInt]
+    val UBJsonConfig: Type.Lazy[UBJsonConfig] = Type.Lazy(Type.of[UBJsonConfig])
+    val UBJsonReader: Type.Lazy[UBJsonReader] = Type.Lazy(Type.of[UBJsonReader])
+    val UBJsonWriter: Type.Lazy[UBJsonWriter] = Type.Lazy(Type.of[UBJsonWriter])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val FieldName: Type.Lazy[fieldNameAnn] = Type.Lazy(Type.of[fieldNameAnn])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val Stringified: Type.Lazy[stringified] = Type.Lazy(Type.of[stringified])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
   }
 }

@@ -97,7 +97,7 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
   }
 
   protected object EmptyKTypes {
-    val Any: Type[Any] = Type.of[Any]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     def Empty: Type.Ctor1[alleycats.Empty] = Type.Ctor1.of[alleycats.Empty]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]

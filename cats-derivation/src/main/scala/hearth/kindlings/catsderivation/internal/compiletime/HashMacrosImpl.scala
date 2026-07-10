@@ -233,7 +233,7 @@ trait HashMacrosImpl
 
   protected object HashTypes {
     def Hash: Type.Ctor1[cats.kernel.Hash] = Type.Ctor1.of[cats.kernel.Hash]
-    val Int: Type[Int] = Type.of[Int]
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
   }
 }
 

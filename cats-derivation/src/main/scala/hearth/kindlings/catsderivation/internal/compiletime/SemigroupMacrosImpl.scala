@@ -126,13 +126,13 @@ trait SemigroupMacrosImpl
 
   protected object SemigroupTypes {
     def Semigroup: Type.Ctor1[cats.kernel.Semigroup] = Type.Ctor1.of[cats.kernel.Semigroup]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Short: Type[Short] = Type.of[Short]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Float: Type[Float] = Type.of[Float]
-    val Double: Type[Double] = Type.of[Double]
-    val String: Type[String] = Type.of[String]
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }

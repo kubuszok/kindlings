@@ -156,7 +156,7 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
   }
 
   protected object MonoidKTypes {
-    val Any: Type[Any] = Type.of[Any]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     def Monoid: Type.Ctor1[cats.kernel.Monoid] = Type.Ctor1.of[cats.kernel.Monoid]
     def Semigroup: Type.Ctor1[cats.kernel.Semigroup] = Type.Ctor1.of[cats.kernel.Semigroup]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =

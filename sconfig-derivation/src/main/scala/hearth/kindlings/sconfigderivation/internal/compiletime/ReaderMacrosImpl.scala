@@ -278,25 +278,26 @@ trait ReaderMacrosImpl
     def ConfigReader: Type.Ctor1[ConfigReader] = Type.Ctor1.of[ConfigReader]
     val ReaderLogDerivation: Type[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation] =
       Type.of[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation]
-    val ConfigValue: Type[ConfigValue] = Type.of[ConfigValue]
-    val ConfigDecodingError: Type[ConfigDecodingError] = Type.of[ConfigDecodingError]
-    val SConfig: Type[SConfig] = Type.of[SConfig]
-    val String: Type[String] = Type.of[String]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val EitherErrorAny: Type[Either[ConfigDecodingError, Any]] = Type.of[Either[ConfigDecodingError, Any]]
+    val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
+    val ConfigDecodingError: Type.Lazy[ConfigDecodingError] = Type.Lazy(Type.of[ConfigDecodingError])
+    val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val EitherErrorAny: Type.Lazy[Either[ConfigDecodingError, Any]] =
+      Type.Lazy(Type.of[Either[ConfigDecodingError, Any]])
     val ListEitherErrorAny: Type[List[Either[ConfigDecodingError, Any]]] =
       Type.of[List[Either[ConfigDecodingError, Any]]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val SetString: Type[Set[String]] = Type.of[Set[String]]
-    val OptionString: Type[Option[String]] = Type.of[Option[String]]
-    val StringToString: Type[String => String] = Type.of[String => String]
-    val ConfigKey: Type[configKey] = Type.of[configKey]
-    val TransientField: Type[transientField] = Type.of[transientField]
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val SetString: Type.Lazy[Set[String]] = Type.Lazy(Type.of[Set[String]])
+    val OptionString: Type.Lazy[Option[String]] = Type.Lazy(Type.of[Option[String]])
+    val StringToString: Type.Lazy[String => String] = Type.Lazy(Type.of[String => String])
+    val ConfigKey: Type.Lazy[configKey] = Type.Lazy(Type.of[configKey])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
 
     def ReaderResult[A: Type]: Type[Either[ConfigDecodingError, A]] =
       Type.of[Either[ConfigDecodingError, A]]

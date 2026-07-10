@@ -144,7 +144,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                       (fName, decodedExpr)
                     }
                   case (_, Some((_, scale))) =>
-                    val bigDecimalType: Type[BigDecimal] = Type.of[BigDecimal]
+                    val bigDecimalType: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
                     MIO.pure {
                       implicit val BigDecimalT: Type[BigDecimal] = bigDecimalType
                       val decodedExpr: Expr_?? = Expr.quote {

@@ -319,12 +319,12 @@ trait EncoderMacrosImpl
     def KindlingsYamlEncoder: Type.Ctor1[KindlingsYamlEncoder] = Type.Ctor1.of[KindlingsYamlEncoder]
     val EncoderLogDerivation: Type[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation] =
       Type.of[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation]
-    val Node: Type[Node] = Type.of[Node]
-    val YamlConfig: Type[YamlConfig] = Type.of[YamlConfig]
-    val String: Type[String] = Type.of[String]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Int: Type[Int] = Type.of[Int]
-    val Product: Type[Product] = Type.of[Product]
+    val Node: Type.Lazy[Node] = Type.Lazy(Type.of[Node])
+    val YamlConfig: Type.Lazy[YamlConfig] = Type.Lazy(Type.of[YamlConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
   }
 }

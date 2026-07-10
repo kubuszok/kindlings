@@ -428,15 +428,15 @@ trait EncoderMacrosImpl
     def AvroEncoder: Type.Ctor1[AvroEncoder] = Type.Ctor1.of[AvroEncoder]
     val EncoderLogDerivation: Type[hearth.kindlings.avroderivation.AvroEncoder.LogDerivation] =
       Type.of[hearth.kindlings.avroderivation.AvroEncoder.LogDerivation]
-    val Schema: Type[Schema] = Type.of[Schema]
-    val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
-    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
-    val String: Type[String] = Type.of[String]
-    val Any: Type[Any] = Type.of[Any]
-    val Int: Type[Int] = Type.of[Int]
-    val Product: Type[Product] = Type.of[Product]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
+    val Schema: Type.Lazy[Schema] = Type.Lazy(Type.of[Schema])
+    val AvroConfig: Type.Lazy[AvroConfig] = Type.Lazy(Type.of[AvroConfig])
+    val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val AvroFixed: Type.Lazy[avroFixed] = Type.Lazy(Type.of[avroFixed])
   }
 }

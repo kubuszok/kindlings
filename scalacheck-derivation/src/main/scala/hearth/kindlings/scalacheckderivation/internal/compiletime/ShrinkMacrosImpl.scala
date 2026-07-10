@@ -164,9 +164,9 @@ trait ShrinkMacrosImpl
 
   protected object ShrinkTypes {
     def Shrink: Type.Ctor1[org.scalacheck.Shrink] = Type.Ctor1.of[org.scalacheck.Shrink]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val LogDerivation: Type[hearth.kindlings.scalacheckderivation.LogDerivation] =
       Type.of[hearth.kindlings.scalacheckderivation.LogDerivation]
   }

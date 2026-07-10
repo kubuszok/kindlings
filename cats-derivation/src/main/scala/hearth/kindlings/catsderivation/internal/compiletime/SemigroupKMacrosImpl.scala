@@ -114,7 +114,7 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   }
 
   protected object SemigroupKTypes {
-    val Any: Type[Any] = Type.of[Any]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     def Semigroup: Type.Ctor1[cats.kernel.Semigroup] = Type.Ctor1.of[cats.kernel.Semigroup]
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]

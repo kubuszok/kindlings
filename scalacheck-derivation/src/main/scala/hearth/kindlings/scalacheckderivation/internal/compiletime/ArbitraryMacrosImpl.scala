@@ -173,10 +173,10 @@ trait ArbitraryMacrosImpl
   protected object ArbitraryTypes {
     def Arbitrary: Type.Ctor1[org.scalacheck.Arbitrary] = Type.Ctor1.of[org.scalacheck.Arbitrary]
     def Gen: Type.Ctor1[org.scalacheck.Gen] = Type.Ctor1.of[org.scalacheck.Gen]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ListAny: Type[List[Any]] = Type.of[List[Any]]
-    val ListGenAny: Type[List[org.scalacheck.Gen[Any]]] = Type.of[List[org.scalacheck.Gen[Any]]]
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ListAny: Type.Lazy[List[Any]] = Type.Lazy(Type.of[List[Any]])
+    val ListGenAny: Type.Lazy[List[org.scalacheck.Gen[Any]]] = Type.Lazy(Type.of[List[org.scalacheck.Gen[Any]]])
     val LogDerivation: Type[hearth.kindlings.scalacheckderivation.LogDerivation] =
       Type.of[hearth.kindlings.scalacheckderivation.LogDerivation]
   }

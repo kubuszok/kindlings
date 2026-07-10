@@ -675,13 +675,13 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   }
 
   protected object BitraverseTypes {
-    val Any: Type[Any] = Type.of[Any]
-    val Int: Type[Int] = Type.of[Int]
-    val String: Type[String] = Type.of[String]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val ListAny: Type[List[Any]] = Type.of[List[Any]]
-    val ListBoolean: Type[List[Boolean]] = Type.of[List[Boolean]]
-    val EvalAny: Type[cats.Eval[Any]] = Type.of[cats.Eval[Any]]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val ListAny: Type.Lazy[List[Any]] = Type.Lazy(Type.of[List[Any]])
+    val ListBoolean: Type.Lazy[List[Boolean]] = Type.Lazy(Type.of[List[Boolean]])
+    val EvalAny: Type.Lazy[cats.Eval[Any]] = Type.Lazy(Type.of[cats.Eval[Any]])
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }

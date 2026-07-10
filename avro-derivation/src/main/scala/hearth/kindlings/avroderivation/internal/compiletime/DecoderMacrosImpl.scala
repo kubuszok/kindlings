@@ -484,21 +484,21 @@ trait DecoderMacrosImpl
     def AvroDecoder: Type.Ctor1[AvroDecoder] = Type.Ctor1.of[AvroDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.avroderivation.AvroDecoder.LogDerivation] =
       Type.of[hearth.kindlings.avroderivation.AvroDecoder.LogDerivation]
-    val Schema: Type[Schema] = Type.of[Schema]
-    val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
-    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
-    val String: Type[String] = Type.of[String]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val ArrayByte: Type[Array[Byte]] = Type.of[Array[Byte]]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
-    val AvroAlias: Type[avroAlias] = Type.of[avroAlias]
-    val ListString: Type[List[String]] = Type.of[List[String]]
+    val Schema: Type.Lazy[Schema] = Type.Lazy(Type.of[Schema])
+    val AvroConfig: Type.Lazy[AvroConfig] = Type.Lazy(Type.of[AvroConfig])
+    val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val ArrayByte: Type.Lazy[Array[Byte]] = Type.Lazy(Type.of[Array[Byte]])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val AvroFixed: Type.Lazy[avroFixed] = Type.Lazy(Type.of[avroFixed])
+    val AvroAlias: Type.Lazy[avroAlias] = Type.Lazy(Type.of[avroAlias])
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
   }
 }

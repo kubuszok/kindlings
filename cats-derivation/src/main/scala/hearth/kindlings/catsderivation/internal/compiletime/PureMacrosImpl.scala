@@ -143,9 +143,9 @@ trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSuppo
   }
 
   protected object PureTypes {
-    val Any: Type[Any] = Type.of[Any]
-    val Int: Type[Int] = Type.of[Int]
-    val String: Type[String] = Type.of[String]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }

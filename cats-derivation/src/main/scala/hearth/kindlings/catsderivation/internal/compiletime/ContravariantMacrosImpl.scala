@@ -212,8 +212,8 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationE
     }
 
   protected object ContravariantTypes {
-    val Int: Type[Int] = Type.of[Int]
-    val String: Type[String] = Type.of[String]
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val LogDerivation: Type[hearth.kindlings.catsderivation.LogDerivation] =
       Type.of[hearth.kindlings.catsderivation.LogDerivation]
   }
