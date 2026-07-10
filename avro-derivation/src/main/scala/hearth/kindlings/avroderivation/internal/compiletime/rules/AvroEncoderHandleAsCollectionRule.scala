@@ -39,15 +39,17 @@ trait AvroEncoderHandleAsCollectionRuleImpl {
         ectx.getHelper[Item].map { helperOpt =>
           val helper = helperOpt.get
           val iterableExpr = isCollection.asIterable(ectx.value)
-          Rule.matched(Expr.quote {
-            val list = new java.util.ArrayList[Any]()
-            val iter = Expr.splice(iterableExpr).iterator
-            while (iter.hasNext) {
-              val item: Item = iter.next()
-              val _ = list.add(Expr.splice(helper(Expr.quote(item), ectx.config)))
+          Rule.matched(
+            Expr.quote {
+              val list = new java.util.ArrayList[Any]()
+              val iter = Expr.splice(iterableExpr).iterator
+              while (iter.hasNext) {
+                val item: Item = iter.next()
+                val _ = list.add(Expr.splice(helper(Expr.quote(item), ectx.config)))
+              }
+              list: Any
             }
-            list: Any
-          })
+          )
         }
       }
     }

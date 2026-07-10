@@ -65,16 +65,18 @@ trait DecoderHandleAsEnumRuleImpl {
 
       NonEmptyList.fromList(childrenList) match {
         case None =>
-          MIO.pure(Expr.quote {
-            val err = DecodingFailure(
-              s"Enum ${Expr.splice(Expr(Type[A].prettyPrint))} has no subtypes",
-              Expr.splice(dctx.cursor).history
-            )
-            (if (Expr.splice(dctx.failFast))
-               Left(err): Either[DecodingFailure, A]
-             else
-               Validated.invalidNel(err): ValidatedNel[DecodingFailure, A]): Any
-          })
+          MIO.pure(
+            Expr.quote {
+              val err = DecodingFailure(
+                s"Enum ${Expr.splice(Expr(Type[A].prettyPrint))} has no subtypes",
+                Expr.splice(dctx.cursor).history
+              )
+              (if (Expr.splice(dctx.failFast))
+                 Left(err): Either[DecodingFailure, A]
+               else
+                 Validated.invalidNel(err): ValidatedNel[DecodingFailure, A]): Any
+            }
+          )
 
         case Some(children) =>
           val knownNames: List[String] = children.toList.map(_._1)

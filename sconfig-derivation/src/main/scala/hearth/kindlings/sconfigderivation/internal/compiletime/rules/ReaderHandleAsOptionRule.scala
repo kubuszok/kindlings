@@ -26,13 +26,15 @@ trait ReaderHandleAsOptionRuleImpl {
 
             for {
               innerResult <- deriveReaderRecursively[Inner](using rctx.nest[Inner](rctx.value))
-            } yield Rule.matched(Expr.quote {
-              val v = Expr.splice(rctx.value)
-              if (v == null || v.valueType == ConfigValueType.NULL)
-                Right(None.asInstanceOf[A]): Either[ConfigDecodingError, A]
-              else
-                Expr.splice(innerResult).map((inner: Inner) => Some(inner).asInstanceOf[A])
-            })
+            } yield Rule.matched(
+              Expr.quote {
+                val v = Expr.splice(rctx.value)
+                if (v == null || v.valueType == ConfigValueType.NULL)
+                  Right(None.asInstanceOf[A]): Either[ConfigDecodingError, A]
+                else
+                  Expr.splice(innerResult).map((inner: Inner) => Some(inner).asInstanceOf[A])
+              }
+            )
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not an Option"))

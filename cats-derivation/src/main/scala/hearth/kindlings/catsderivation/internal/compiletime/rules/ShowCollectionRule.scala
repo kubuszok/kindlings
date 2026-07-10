@@ -37,10 +37,12 @@ trait ShowCollectionRuleImpl {
         }
         .map { builder =>
           val lambda = builder.build[String]
-          Rule.matched(Expr.quote {
-            val items = Expr.splice(iterableExpr).map(item => Expr.splice(lambda).apply(item))
-            Expr.splice(Expr(name)) + "(" + items.mkString(", ") + ")"
-          })
+          Rule.matched(
+            Expr.quote {
+              val items = Expr.splice(iterableExpr).map(item => Expr.splice(lambda).apply(item))
+              Expr.splice(Expr(name)) + "(" + items.mkString(", ") + ")"
+            }
+          )
         }
     }
   }

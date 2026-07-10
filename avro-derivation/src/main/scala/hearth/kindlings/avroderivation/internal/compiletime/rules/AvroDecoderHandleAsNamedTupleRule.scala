@@ -53,10 +53,12 @@ trait AvroDecoderHandleAsNamedTupleRuleImpl {
             onValues = _ => Map.empty
           ) match {
             case Right(constructExpr) =>
-              MIO.pure(Expr.quote {
-                val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
-                Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
-              })
+              MIO.pure(
+                Expr.quote {
+                  val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
+                  Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
+                }
+              )
             case Left(error) =>
               val err =
                 DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))

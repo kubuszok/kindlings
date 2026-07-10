@@ -47,16 +47,18 @@ trait FastShowPrettyHandleAsCollectionRuleImpl { this: FastShowPrettyMacrosImpl 
         }
         .map { builder =>
           val lambda = builder.build[StringBuilder]
-          Rule.matched(Expr.quote {
-            val _ = FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
-            val _ = FastShowPrettyUtils.fillCollection(
-              Expr.splice(ctx.sb),
-              Expr.splice(iterableExpr),
-              Expr.splice(ctx.config).indentString,
-              Expr.splice(ctx.level)
-            )(Expr.splice(lambda))
-            FastShowPrettyUtils.closeCollection(Expr.splice(ctx.sb))
-          })
+          Rule.matched(
+            Expr.quote {
+              val _ = FastShowPrettyUtils.openCollection(Expr.splice(ctx.sb), Expr.splice(name))
+              val _ = FastShowPrettyUtils.fillCollection(
+                Expr.splice(ctx.sb),
+                Expr.splice(iterableExpr),
+                Expr.splice(ctx.config).indentString,
+                Expr.splice(ctx.level)
+              )(Expr.splice(lambda))
+              FastShowPrettyUtils.closeCollection(Expr.splice(ctx.sb))
+            }
+          )
         }
     }
 

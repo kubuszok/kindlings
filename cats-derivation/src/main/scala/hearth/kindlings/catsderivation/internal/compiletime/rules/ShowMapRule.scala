@@ -44,10 +44,12 @@ trait ShowMapRuleImpl {
         }
         .map { builder =>
           val lambda = builder.build[String]
-          Rule.matched(Expr.quote {
-            val items = Expr.splice(iterableExpr).map(pair => Expr.splice(lambda).apply(pair))
-            Expr.splice(Expr(name)) + "(" + items.mkString(", ") + ")"
-          })
+          Rule.matched(
+            Expr.quote {
+              val items = Expr.splice(iterableExpr).map(pair => Expr.splice(lambda).apply(pair))
+              Expr.splice(Expr(name)) + "(" + items.mkString(", ") + ")"
+            }
+          )
         }
     }
   }

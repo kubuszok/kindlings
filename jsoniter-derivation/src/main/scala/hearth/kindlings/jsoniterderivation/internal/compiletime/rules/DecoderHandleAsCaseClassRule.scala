@@ -330,11 +330,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     onValues = _ => fieldMap
                   ) match {
                     case Right(constructExpr) =>
-                      MIO.pure(Expr.quote {
-                        Expr.splice(requireCheckAll)
-                        Expr.splice(transientInitAll)
-                        Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
-                      })
+                      MIO.pure(
+                        Expr.quote {
+                          Expr.splice(requireCheckAll)
+                          Expr.splice(transientInitAll)
+                          Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
+                        }
+                      )
                     case Left(error) =>
                       val err =
                         CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
@@ -601,19 +603,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
             })
             .flatMap {
               case Some(expr) =>
-                MIO.pure(Expr.quote {
-                  val reader = Expr.splice(dctx.reader)
-                  if (!reader.isNextToken('}'.toByte)) {
-                    if (reader.isCurrentToken(','.toByte)) {
-                      reader.rollbackToken()
-                      while (reader.isNextToken(','.toByte)) {
-                        val _ = reader.readKeyAsString()
-                        reader.skip()
+                MIO.pure(
+                  Expr.quote {
+                    val reader = Expr.splice(dctx.reader)
+                    if (!reader.isNextToken('}'.toByte)) {
+                      if (reader.isCurrentToken(','.toByte)) {
+                        reader.rollbackToken()
+                        while (reader.isNextToken(','.toByte)) {
+                          val _ = reader.readKeyAsString()
+                          reader.skip()
+                        }
                       }
                     }
+                    Expr.splice(expr)
                   }
-                  Expr.splice(expr)
-                })
+                )
               case None =>
                 val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
                 Log.error(err.message) >> MIO.fail(err)
@@ -672,11 +676,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     onValues = _ => fieldMap
                   ) match {
                     case Right(constructExpr) =>
-                      MIO.pure(Expr.quote {
-                        Expr.splice(requireCheckAll0)
-                        Expr.splice(transientInitAll)
-                        Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
-                      })
+                      MIO.pure(
+                        Expr.quote {
+                          Expr.splice(requireCheckAll0)
+                          Expr.splice(transientInitAll)
+                          Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
+                        }
+                      )
                     case Left(error) =>
                       val err =
                         CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))

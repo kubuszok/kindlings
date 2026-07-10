@@ -48,16 +48,18 @@ trait DecoderHandleAsBuiltInRuleImpl {
                 .asInstanceOf[A]
             })
           else if (Type[A] =:= Type.of[BigInt])
-            Some(Expr.quote {
-              val bd = Expr.splice(reader).readBigDecimal()
-              UBJsonDerivationUtils
-                .validateBigInt(
-                  Expr.splice(reader),
-                  bd.toBigInt,
-                  Expr.splice(dctx.config).bigDecimalDigitsLimit
-                )
-                .asInstanceOf[A]
-            })
+            Some(
+              Expr.quote {
+                val bd = Expr.splice(reader).readBigDecimal()
+                UBJsonDerivationUtils
+                  .validateBigInt(
+                    Expr.splice(reader),
+                    bd.toBigInt,
+                    Expr.splice(dctx.config).bigDecimalDigitsLimit
+                  )
+                  .asInstanceOf[A]
+              }
+            )
           else
             None
 

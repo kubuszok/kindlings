@@ -55,14 +55,16 @@ trait CogenMacrosImpl
           val directCogenOpt: Option[Expr[Cogen[A]]] =
             if (helperOpt.isDefined) None
             else {
-              Some(runSafe {
-                val freshCtx = CogenCtx.from[A](derivedType = selfType)
-                for {
-                  _ <- ensureStandardExtensionsLoaded()
-                  result <- deriveCogenRecursively[A](using freshCtx)
-                  freshCache <- freshCtx.cache.get
-                } yield freshCache.toValDefs.use(_ => result)
-              })
+              Some(
+                runSafe {
+                  val freshCtx = CogenCtx.from[A](derivedType = selfType)
+                  for {
+                    _ <- ensureStandardExtensionsLoaded()
+                    result <- deriveCogenRecursively[A](using freshCtx)
+                    freshCache <- freshCtx.cache.get
+                  } yield freshCache.toValDefs.use(_ => result)
+                }
+              )
             }
 
           cache.toValDefs.use { _ =>

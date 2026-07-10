@@ -40,15 +40,17 @@ trait AvroEncoderHandleAsMapRuleImpl {
           ectx.getHelper[Value].map { helperOpt =>
             val helper = helperOpt.get
             val iterableExpr = isMap.asIterable(ectx.value)
-            Rule.matched(Expr.quote {
-              val map = new java.util.HashMap[String, Any]()
-              val iter = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]].iterator
-              while (iter.hasNext) {
-                val entry = iter.next()
-                val _ = map.put(entry._1, Expr.splice(helper(Expr.quote(entry._2), ectx.config)))
+            Rule.matched(
+              Expr.quote {
+                val map = new java.util.HashMap[String, Any]()
+                val iter = Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]].iterator
+                while (iter.hasNext) {
+                  val entry = iter.next()
+                  val _ = map.put(entry._1, Expr.splice(helper(Expr.quote(entry._2), ectx.config)))
+                }
+                map: Any
               }
-              map: Any
-            })
+            )
           }
         }
       }

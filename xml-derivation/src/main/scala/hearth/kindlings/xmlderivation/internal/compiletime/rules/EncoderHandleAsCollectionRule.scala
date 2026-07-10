@@ -35,15 +35,17 @@ trait EncoderHandleAsCollectionRuleImpl {
                   .map { builder =>
                     val lambda = builder.build[scala.xml.Elem]
                     val iterableExpr = isCollection.value.asIterable(ectx.value)
-                    Rule.matched(Expr.quote {
-                      val items = Expr.splice(iterableExpr)
-                      val children = XmlDerivationUtils.encodeIterable[Item](
-                        items,
-                        "item",
-                        (i: Item, n: String) => Expr.splice(lambda).apply(i, n)
-                      )
-                      XmlDerivationUtils.makeElem(Expr.splice(ectx.elementName), Nil, children)
-                    })
+                    Rule.matched(
+                      Expr.quote {
+                        val items = Expr.splice(iterableExpr)
+                        val children = XmlDerivationUtils.encodeIterable[Item](
+                          items,
+                          "item",
+                          (i: Item, n: String) => Expr.splice(lambda).apply(i, n)
+                        )
+                        XmlDerivationUtils.makeElem(Expr.splice(ectx.elementName), Nil, children)
+                      }
+                    )
                   }
             }
 
