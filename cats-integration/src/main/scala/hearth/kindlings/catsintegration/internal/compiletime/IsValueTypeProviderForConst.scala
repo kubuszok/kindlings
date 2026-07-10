@@ -24,6 +24,11 @@ final class IsValueTypeProviderForConst extends StandardMacroExtension { loader 
         Type.Ctor2.fromUntyped[cats.data.Const](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): Const is class-headed, so a class-headed scrutinee can only
+      // match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(ConstCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsValueType[A]] =
         ConstCtor.unapply(tpe) match {
@@ -56,7 +61,7 @@ final class IsValueTypeProviderForConst extends StandardMacroExtension { loader 
               )
             )
 
-          case None => skipped(s"${tpe.prettyPrint} is not a Const type")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a Const type")
         }
     })
   }

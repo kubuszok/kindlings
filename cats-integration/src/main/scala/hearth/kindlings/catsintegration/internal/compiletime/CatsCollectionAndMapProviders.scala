@@ -329,11 +329,16 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
         Type.Ctor1.fromUntyped[cats.data.NonEmptyList](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): NonEmptyList is class-headed, so a
+      // class-headed scrutinee can only match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(NELCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         NELCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNEL(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyList")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptyList")
         }
     })
 
@@ -346,11 +351,16 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
         Type.Ctor1.fromUntyped[cats.data.NonEmptyVector](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): NonEmptyVector is class-headed, so a
+      // class-headed scrutinee can only match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(NEVCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         NEVCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNEV(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyVector")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptyVector")
         }
     })
 
@@ -363,15 +373,23 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
         Type.Ctor1.fromUntyped[cats.data.NonEmptySeq](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): NonEmptySeq is class-headed, so a
+      // class-headed scrutinee can only match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(NESeqCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         NESeqCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNESeq(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptySeq")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptySeq")
         }
     })
 
     // --- NonEmptyLazyList ---
+    // NOTE: no `mightMatch` gate here nor on NonEmptyChain/NonEmptyMap/NonEmptySet below - these are cats NEWTYPES
+    // (dealiasing to abstract types, not classes), so the base-classes check used for the class-headed providers
+    // above would falsely reject them. They keep the default always-attempt behavior.
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyLazyList"
 
@@ -384,7 +402,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         NELLCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNELL(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyLazyList")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptyLazyList")
         }
     })
 
@@ -401,7 +419,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         NECCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkNEC(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a NonEmptyChain")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptyChain")
         }
     })
 
@@ -414,11 +432,16 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
         Type.Ctor1.fromUntyped[cats.data.Chain](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): Chain is class-headed, so a
+      // class-headed scrutinee can only match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(ChainCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
         ChainCtor.unapply(tpe) match {
           case Some(elem) => ProviderResult.Matched(mkChain(tpe, elem.Underlying))
-          case None       => skipped(s"${tpe.prettyPrint} is not a Chain")
+          case None       => skippedLazily(s"${tpe.prettyPrint} is not a Chain")
         }
     })
 
@@ -442,14 +465,14 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
             val orderK = Expr.summonImplicit[cats.kernel.Order[K]].toOption match {
               case Some(o) => o
               case None    =>
-                return skipped(
+                return skippedLazily(
                   s"${tpe.prettyPrint} is a NonEmptyMap but Order[${keyType.Underlying.prettyPrint}] not found"
                 )
             }
 
             ProviderResult.Matched(mkNEM(tpe, keyType.Underlying, valueType.Underlying, orderK))
 
-          case None => skipped(s"${tpe.prettyPrint} is not a NonEmptyMap")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptyMap")
         }
     })
 
@@ -472,14 +495,14 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
             val orderElem = Expr.summonImplicit[cats.kernel.Order[Elem]].toOption match {
               case Some(o) => o
               case None    =>
-                return skipped(
+                return skippedLazily(
                   s"${tpe.prettyPrint} is a NonEmptySet but Order[${elem.Underlying.prettyPrint}] not found"
                 )
             }
 
             ProviderResult.Matched(mkNES(tpe, elem.Underlying, orderElem))
 
-          case None => skipped(s"${tpe.prettyPrint} is not a NonEmptySet")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a NonEmptySet")
         }
     })
   }
