@@ -44,7 +44,7 @@ final class IsValueTypeProviderForRefined extends StandardMacroExtension { loade
             // aggregated skip reason instead of an exception crashing the compiler.
             Expr.summonImplicit(using validateType).toOption match {
               case None =>
-                skipped(
+                skippedLazily(
                   s"${tpe.prettyPrint} is a Refined type, but no Validate instance was found for Refined[${Type[Inner].prettyPrint}, ${Type[Pred].prettyPrint}] — cannot generate validation"
                 )
 
@@ -86,7 +86,7 @@ final class IsValueTypeProviderForRefined extends StandardMacroExtension { loade
                 )
             }
 
-          case None => skipped(s"${tpe.prettyPrint} is not a Refined type")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a Refined type")
         }
     })
   }

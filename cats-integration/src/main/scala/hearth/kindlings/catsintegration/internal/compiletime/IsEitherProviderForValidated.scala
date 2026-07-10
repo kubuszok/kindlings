@@ -26,6 +26,11 @@ final class IsEitherProviderForValidated extends StandardMacroExtension { loader
         Type.Ctor2.fromUntyped[cats.data.Validated](impl.asUntyped)
       }
 
+      // Cheap sound negative gate (hearth#347 pattern): Validated is class-headed, so a class-headed scrutinee can
+      // only match when the constructor appears among its base classes.
+      override def mightMatch[A](tpe: Type[A]): Boolean =
+        tpe.asUntyped.baseClasses.exists(_.sameTypeConstructorAs(ValidatedCtor.asUntyped))
+
       @scala.annotation.nowarn("msg=is never used")
       private def mkIsEither[A, E0, A0](
           tpe: Type[A],
@@ -90,7 +95,7 @@ final class IsEitherProviderForValidated extends StandardMacroExtension { loader
         ValidatedCtor.unapply(tpe) match {
           case Some((errType, valType)) =>
             ProviderResult.Matched(mkIsEither(tpe, errType.Underlying, valType.Underlying))
-          case None => skipped(s"${tpe.prettyPrint} is not a Validated type")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a Validated type")
         }
     })
   }

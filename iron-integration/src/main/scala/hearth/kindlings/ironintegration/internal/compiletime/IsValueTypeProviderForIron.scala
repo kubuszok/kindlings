@@ -43,7 +43,7 @@ final class IsValueTypeProviderForIron extends StandardMacroExtension { loader =
             // skip reason instead of an exception crashing the compiler.
             Expr.summonImplicit(using runtimeConstraintType).toOption match {
               case None =>
-                skipped(
+                skippedLazily(
                   s"${tpe.prettyPrint} is an Iron type, but no RuntimeConstraint instance was found for IronType[${Type[Inner].prettyPrint}, ${Type[Constr].prettyPrint}] — cannot generate validation"
                 )
 
@@ -77,7 +77,7 @@ final class IsValueTypeProviderForIron extends StandardMacroExtension { loader =
                 )
             }
 
-          case None => skipped(s"${tpe.prettyPrint} is not an Iron type")
+          case None => skippedLazily(s"${tpe.prettyPrint} is not an Iron type")
         }
     })
   }
