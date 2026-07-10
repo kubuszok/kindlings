@@ -67,58 +67,59 @@ trait CodecMacrosImpl
       Type.Ctor1.of[KindlingsJsonValueCodec]
     val CodecLogDerivation: Type[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation] =
       Type.of[hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.LogDerivation]
-    val JsoniterConfig: Type[JsoniterConfig] = Type.of[JsoniterConfig]
-    val JsonReader: Type[JsonReader] = Type.of[JsonReader]
-    val JsonWriter: Type[JsonWriter] = Type.of[JsonWriter]
-    val String: Type[String] = Type.of[String]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val JsonReaderException: Type[JsonReaderException] = Type.of[JsonReaderException]
+    val JsoniterConfig: Type.Lazy[JsoniterConfig] = Type.Lazy(Type.of[JsoniterConfig])
+    val JsonReader: Type.Lazy[JsonReader] = Type.Lazy(Type.of[JsonReader])
+    val JsonWriter: Type.Lazy[JsonWriter] = Type.Lazy(Type.of[JsonWriter])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val JsonReaderException: Type.Lazy[JsonReaderException] = Type.Lazy(Type.of[JsonReaderException])
     def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
       Type.of[Either[JsonReaderException, A]]
-    val FieldName: Type[annotations.fieldName] = Type.of[annotations.fieldName]
-    val TransientField: Type[annotations.transientField] = Type.of[annotations.transientField]
-    val Stringified: Type[annotations.stringified] = Type.of[annotations.stringified]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Float: Type[Float] = Type.of[Float]
-    val Short: Type[Short] = Type.of[Short]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
-    val BigInt: Type[BigInt] = Type.of[BigInt]
-    val Product: Type[Product] = Type.of[Product]
-    val Instant: Type[java.time.Instant] = Type.of[java.time.Instant]
-    val LocalDate: Type[java.time.LocalDate] = Type.of[java.time.LocalDate]
-    val LocalTime: Type[java.time.LocalTime] = Type.of[java.time.LocalTime]
-    val LocalDateTime: Type[java.time.LocalDateTime] = Type.of[java.time.LocalDateTime]
-    val OffsetDateTime: Type[java.time.OffsetDateTime] = Type.of[java.time.OffsetDateTime]
-    val ZonedDateTime: Type[java.time.ZonedDateTime] = Type.of[java.time.ZonedDateTime]
-    val Duration: Type[java.time.Duration] = Type.of[java.time.Duration]
-    val MonthDay: Type[java.time.MonthDay] = Type.of[java.time.MonthDay]
-    val OffsetTime: Type[java.time.OffsetTime] = Type.of[java.time.OffsetTime]
-    val Period: Type[java.time.Period] = Type.of[java.time.Period]
-    val Year: Type[java.time.Year] = Type.of[java.time.Year]
-    val YearMonth: Type[java.time.YearMonth] = Type.of[java.time.YearMonth]
-    val ZoneId: Type[java.time.ZoneId] = Type.of[java.time.ZoneId]
-    val ZoneOffset: Type[java.time.ZoneOffset] = Type.of[java.time.ZoneOffset]
-    val UUID: Type[java.util.UUID] = Type.of[java.util.UUID]
+    val FieldName: Type.Lazy[annotations.fieldName] = Type.Lazy(Type.of[annotations.fieldName])
+    val TransientField: Type.Lazy[annotations.transientField] = Type.Lazy(Type.of[annotations.transientField])
+    val Stringified: Type.Lazy[annotations.stringified] = Type.Lazy(Type.of[annotations.stringified])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
+    val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
+    val Instant: Type.Lazy[java.time.Instant] = Type.Lazy(Type.of[java.time.Instant])
+    val LocalDate: Type.Lazy[java.time.LocalDate] = Type.Lazy(Type.of[java.time.LocalDate])
+    val LocalTime: Type.Lazy[java.time.LocalTime] = Type.Lazy(Type.of[java.time.LocalTime])
+    val LocalDateTime: Type.Lazy[java.time.LocalDateTime] = Type.Lazy(Type.of[java.time.LocalDateTime])
+    val OffsetDateTime: Type.Lazy[java.time.OffsetDateTime] = Type.Lazy(Type.of[java.time.OffsetDateTime])
+    val ZonedDateTime: Type.Lazy[java.time.ZonedDateTime] = Type.Lazy(Type.of[java.time.ZonedDateTime])
+    val Duration: Type.Lazy[java.time.Duration] = Type.Lazy(Type.of[java.time.Duration])
+    val MonthDay: Type.Lazy[java.time.MonthDay] = Type.Lazy(Type.of[java.time.MonthDay])
+    val OffsetTime: Type.Lazy[java.time.OffsetTime] = Type.Lazy(Type.of[java.time.OffsetTime])
+    val Period: Type.Lazy[java.time.Period] = Type.Lazy(Type.of[java.time.Period])
+    val Year: Type.Lazy[java.time.Year] = Type.Lazy(Type.of[java.time.Year])
+    val YearMonth: Type.Lazy[java.time.YearMonth] = Type.Lazy(Type.of[java.time.YearMonth])
+    val ZoneId: Type.Lazy[java.time.ZoneId] = Type.Lazy(Type.of[java.time.ZoneId])
+    val ZoneOffset: Type.Lazy[java.time.ZoneOffset] = Type.Lazy(Type.of[java.time.ZoneOffset])
+    val UUID: Type.Lazy[java.util.UUID] = Type.Lazy(Type.of[java.util.UUID])
     // Java boxed primitives
-    val JavaByte: Type[java.lang.Byte] = Type.of[java.lang.Byte]
-    val JavaShort: Type[java.lang.Short] = Type.of[java.lang.Short]
-    val JavaInteger: Type[java.lang.Integer] = Type.of[java.lang.Integer]
-    val JavaLong: Type[java.lang.Long] = Type.of[java.lang.Long]
-    val JavaFloat: Type[java.lang.Float] = Type.of[java.lang.Float]
-    val JavaDouble: Type[java.lang.Double] = Type.of[java.lang.Double]
-    val JavaBoolean: Type[java.lang.Boolean] = Type.of[java.lang.Boolean]
-    val JavaCharacter: Type[java.lang.Character] = Type.of[java.lang.Character]
+    val JavaByte: Type.Lazy[java.lang.Byte] = Type.Lazy(Type.of[java.lang.Byte])
+    val JavaShort: Type.Lazy[java.lang.Short] = Type.Lazy(Type.of[java.lang.Short])
+    val JavaInteger: Type.Lazy[java.lang.Integer] = Type.Lazy(Type.of[java.lang.Integer])
+    val JavaLong: Type.Lazy[java.lang.Long] = Type.Lazy(Type.of[java.lang.Long])
+    val JavaFloat: Type.Lazy[java.lang.Float] = Type.Lazy(Type.of[java.lang.Float])
+    val JavaDouble: Type.Lazy[java.lang.Double] = Type.Lazy(Type.of[java.lang.Double])
+    val JavaBoolean: Type.Lazy[java.lang.Boolean] = Type.Lazy(Type.of[java.lang.Boolean])
+    val JavaCharacter: Type.Lazy[java.lang.Character] = Type.Lazy(Type.of[java.lang.Character])
     // BitSet types
-    val ImmutableBitSet: Type[scala.collection.immutable.BitSet] = Type.of[scala.collection.immutable.BitSet]
-    val MutableBitSet: Type[scala.collection.mutable.BitSet] = Type.of[scala.collection.mutable.BitSet]
-    val CollectionBitSet: Type[scala.collection.BitSet] = Type.of[scala.collection.BitSet]
+    val ImmutableBitSet: Type.Lazy[scala.collection.immutable.BitSet] =
+      Type.Lazy(Type.of[scala.collection.immutable.BitSet])
+    val MutableBitSet: Type.Lazy[scala.collection.mutable.BitSet] = Type.Lazy(Type.of[scala.collection.mutable.BitSet])
+    val CollectionBitSet: Type.Lazy[scala.collection.BitSet] = Type.Lazy(Type.of[scala.collection.BitSet])
   }
 
   // Entrypoints

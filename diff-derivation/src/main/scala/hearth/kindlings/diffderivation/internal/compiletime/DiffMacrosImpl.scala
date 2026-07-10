@@ -33,18 +33,18 @@ trait DiffMacrosImpl
   protected object DiffTypes {
     def DiffCtor: Type.Ctor1[Diff] = Type.Ctor1.of[Diff]
     def Diff[A: Type]: Type[Diff[A]] = DiffCtor.apply[A]
-    val DiffResultType: Type[DiffResult] = Type.of[DiffResult]
-    val StringType: Type[String] = Type.of[String]
-    val BooleanType: Type[Boolean] = Type.of[Boolean]
-    val IntType: Type[Int] = Type.of[Int]
-    val ByteType: Type[Byte] = Type.of[Byte]
-    val ShortType: Type[Short] = Type.of[Short]
-    val LongType: Type[Long] = Type.of[Long]
-    val FloatType: Type[Float] = Type.of[Float]
-    val DoubleType: Type[Double] = Type.of[Double]
-    val CharType: Type[Char] = Type.of[Char]
-    val BigDecimalType: Type[BigDecimal] = Type.of[BigDecimal]
-    val BigIntType: Type[BigInt] = Type.of[BigInt]
+    val DiffResultType: Type.Lazy[DiffResult] = Type.Lazy(Type.of[DiffResult])
+    val StringType: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val BooleanType: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val IntType: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val ByteType: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val ShortType: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val LongType: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val FloatType: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val DoubleType: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val CharType: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
+    val BigDecimalType: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigIntType: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
   }
 
   // ── Diff derivation (two values → DiffResult) ────────────

@@ -328,7 +328,7 @@ trait InvariantKMacrosImpl
   // --- Types ---
 
   protected object InvariantKTypes {
-    val Any: Type[Any] = Type.of[Any]
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val LogDerivation: Type[hearth.kindlings.catstaglessderivation.LogDerivation] =
       Type.of[hearth.kindlings.catstaglessderivation.LogDerivation]
   }

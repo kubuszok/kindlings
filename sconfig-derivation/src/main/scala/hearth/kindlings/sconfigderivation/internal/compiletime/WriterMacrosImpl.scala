@@ -272,15 +272,15 @@ trait WriterMacrosImpl
     def ConfigWriter: Type.Ctor1[ConfigWriter] = Type.Ctor1.of[ConfigWriter]
     val WriterLogDerivation: Type[hearth.kindlings.sconfigderivation.ConfigWriter.LogDerivation] =
       Type.of[hearth.kindlings.sconfigderivation.ConfigWriter.LogDerivation]
-    val ConfigValue: Type[ConfigValue] = Type.of[ConfigValue]
-    val SConfig: Type[SConfig] = Type.of[SConfig]
-    val String: Type[String] = Type.of[String]
-    val StringToString: Type[String => String] = Type.of[String => String]
-    val OptionString: Type[Option[String]] = Type.of[Option[String]]
-    val ConfigKey: Type[configKey] = Type.of[configKey]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Int: Type[Int] = Type.of[Int]
-    val Product: Type[Product] = Type.of[Product]
+    val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
+    val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val StringToString: Type.Lazy[String => String] = Type.Lazy(Type.of[String => String])
+    val OptionString: Type.Lazy[Option[String]] = Type.Lazy(Type.of[Option[String]])
+    val ConfigKey: Type.Lazy[configKey] = Type.Lazy(Type.of[configKey])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
 
     def productHintType[A: Type]: Type[ProductHint[A]] =
       Type.of[ProductHint[A]]

@@ -476,27 +476,27 @@ trait DecoderMacrosImpl
     def KindlingsDecoder: Type.Ctor1[KindlingsDecoder] = Type.Ctor1.of[KindlingsDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsDecoder.LogDerivation]
-    val Json: Type[Json] = Type.of[Json]
-    val HCursor: Type[HCursor] = Type.of[HCursor]
-    val DecodingFailure: Type[DecodingFailure] = Type.of[DecodingFailure]
-    val Configuration: Type[Configuration] = Type.of[Configuration]
-    val String: Type[String] = Type.of[String]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val Any: Type[Any] = Type.of[Any]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val EitherDFAny: Type[Either[DecodingFailure, Any]] = Type.of[Either[DecodingFailure, Any]]
-    val EitherDFUnit: Type[Either[DecodingFailure, Unit]] = Type.of[Either[DecodingFailure, Unit]]
+    val Json: Type.Lazy[Json] = Type.Lazy(Type.of[Json])
+    val HCursor: Type.Lazy[HCursor] = Type.Lazy(Type.of[HCursor])
+    val DecodingFailure: Type.Lazy[DecodingFailure] = Type.Lazy(Type.of[DecodingFailure])
+    val Configuration: Type.Lazy[Configuration] = Type.Lazy(Type.of[Configuration])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val EitherDFAny: Type.Lazy[Either[DecodingFailure, Any]] = Type.Lazy(Type.of[Either[DecodingFailure, Any]])
+    val EitherDFUnit: Type.Lazy[Either[DecodingFailure, Unit]] = Type.Lazy(Type.of[Either[DecodingFailure, Unit]])
     val ListEitherDFAny: Type[List[Either[DecodingFailure, Any]]] =
       Type.of[List[Either[DecodingFailure, Any]]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val SetString: Type[Set[String]] = Type.of[Set[String]]
-    val StringHCursorTuple: Type[(String, HCursor)] = Type.of[(String, HCursor)]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val SetString: Type.Lazy[Set[String]] = Type.Lazy(Type.of[Set[String]])
+    val StringHCursorTuple: Type.Lazy[(String, HCursor)] = Type.Lazy(Type.of[(String, HCursor)])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
 
     def DecoderResult[A: Type]: Type[Either[DecodingFailure, A]] =
       Type.of[Either[DecodingFailure, A]]

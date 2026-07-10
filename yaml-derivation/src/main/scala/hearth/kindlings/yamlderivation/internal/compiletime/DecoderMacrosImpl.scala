@@ -373,23 +373,23 @@ trait DecoderMacrosImpl
     def KindlingsYamlDecoder: Type.Ctor1[KindlingsYamlDecoder] = Type.Ctor1.of[KindlingsYamlDecoder]
     val DecoderLogDerivation: Type[hearth.kindlings.yamlderivation.KindlingsYamlDecoder.LogDerivation] =
       Type.of[hearth.kindlings.yamlderivation.KindlingsYamlDecoder.LogDerivation]
-    val Node: Type[Node] = Type.of[Node]
-    val ConstructError: Type[ConstructError] = Type.of[ConstructError]
-    val YamlConfig: Type[YamlConfig] = Type.of[YamlConfig]
-    val String: Type[String] = Type.of[String]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Double: Type[Double] = Type.of[Double]
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val Any: Type[Any] = Type.of[Any]
-    val ArrayAny: Type[Array[Any]] = Type.of[Array[Any]]
-    val EitherCEAny: Type[Either[ConstructError, Any]] = Type.of[Either[ConstructError, Any]]
+    val Node: Type.Lazy[Node] = Type.Lazy(Type.of[Node])
+    val ConstructError: Type.Lazy[ConstructError] = Type.Lazy(Type.of[ConstructError])
+    val YamlConfig: Type.Lazy[YamlConfig] = Type.Lazy(Type.of[YamlConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
+    val EitherCEAny: Type.Lazy[Either[ConstructError, Any]] = Type.Lazy(Type.of[Either[ConstructError, Any]])
     val ListEitherCEAny: Type[List[Either[ConstructError, Any]]] =
       Type.of[List[Either[ConstructError, Any]]]
-    val ListString: Type[List[String]] = Type.of[List[String]]
-    val StringNodeTuple: Type[(String, Node)] = Type.of[(String, Node)]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
+    val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val StringNodeTuple: Type.Lazy[(String, Node)] = Type.Lazy(Type.of[(String, Node)])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
 
     def DecoderResult[A: Type]: Type[Either[ConstructError, A]] =
       Type.of[Either[ConstructError, A]]

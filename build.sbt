@@ -75,6 +75,7 @@ val settings = Seq(
       "-feature",
       "-no-indent",
       "-language:postfixOps", // "for >>"
+      "-language:implicitConversions", // hearth Type.Lazy[A] => Type[A] unwrapping at use-sites
       "-Wconf:msg=Unreachable case:s", // suppress fake (?) errors in internal.compiletime
       "-Wconf:msg=Missing symbol position:s", // suppress warning https://github.com/scala/scala3/issues/21672
       "-Werror",
@@ -99,6 +100,7 @@ val settings = Seq(
       "-explaintypes",
       "-feature",
       "-language:higherKinds",
+      "-language:implicitConversions", // hearth Type.Lazy[A] => Type[A] unwrapping at use-sites
       "-Wconf:cat=scala3-migration:s", // silence mainly issues with -Xsource:3 and private case class constructors
       "-Wconf:cat=deprecation&origin=hearth.*:s", // we want to be able to deprecate APIs and test them while they're deprecated
       "-Wconf:msg=The outer reference in this type test cannot be checked at run time:s", // suppress fake(?) errors in internal.compiletime (adding origin breaks this suppression)

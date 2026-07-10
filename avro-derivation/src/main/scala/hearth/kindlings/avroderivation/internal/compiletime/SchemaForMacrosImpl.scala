@@ -421,25 +421,25 @@ trait SchemaForMacrosImpl
     def AvroSchemaFor: Type.Ctor1[AvroSchemaFor] = Type.Ctor1.of[AvroSchemaFor]
     val SchemaForLogDerivation: Type[hearth.kindlings.avroderivation.AvroSchemaFor.LogDerivation] =
       Type.of[hearth.kindlings.avroderivation.AvroSchemaFor.LogDerivation]
-    val Schema: Type[Schema] = Type.of[Schema]
-    val AvroConfig: Type[AvroConfig] = Type.of[AvroConfig]
-    val DecimalConfig: Type[DecimalConfig] = Type.of[DecimalConfig]
-    val String: Type[String] = Type.of[String]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val AvroDoc: Type[avroDoc] = Type.of[avroDoc]
-    val AvroNamespace: Type[avroNamespace] = Type.of[avroNamespace]
-    val AvroDefault: Type[avroDefault] = Type.of[avroDefault]
-    val AvroFixed: Type[avroFixed] = Type.of[avroFixed]
-    val AvroError: Type[avroError] = Type.of[avroError]
-    val AvroProp: Type[avroProp] = Type.of[avroProp]
-    val AvroAlias: Type[avroAlias] = Type.of[avroAlias]
-    val AvroSortPriority: Type[avroSortPriority] = Type.of[avroSortPriority]
-    val AvroNoDefault: Type[avroNoDefault] = Type.of[avroNoDefault]
-    val AvroEnumDefault: Type[avroEnumDefault] = Type.of[avroEnumDefault]
-    val AvroErasedName: Type[avroErasedName] = Type.of[avroErasedName]
-    val AvroFqnParamNames: Type[avroFqnParamNames] = Type.of[avroFqnParamNames]
-    val AvroName: Type[avroName] = Type.of[avroName]
-    val AvroScalePrecision: Type[avroScalePrecision] = Type.of[avroScalePrecision]
+    val Schema: Type.Lazy[Schema] = Type.Lazy(Type.of[Schema])
+    val AvroConfig: Type.Lazy[AvroConfig] = Type.Lazy(Type.of[AvroConfig])
+    val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val AvroDoc: Type.Lazy[avroDoc] = Type.Lazy(Type.of[avroDoc])
+    val AvroNamespace: Type.Lazy[avroNamespace] = Type.Lazy(Type.of[avroNamespace])
+    val AvroDefault: Type.Lazy[avroDefault] = Type.Lazy(Type.of[avroDefault])
+    val AvroFixed: Type.Lazy[avroFixed] = Type.Lazy(Type.of[avroFixed])
+    val AvroError: Type.Lazy[avroError] = Type.Lazy(Type.of[avroError])
+    val AvroProp: Type.Lazy[avroProp] = Type.Lazy(Type.of[avroProp])
+    val AvroAlias: Type.Lazy[avroAlias] = Type.Lazy(Type.of[avroAlias])
+    val AvroSortPriority: Type.Lazy[avroSortPriority] = Type.Lazy(Type.of[avroSortPriority])
+    val AvroNoDefault: Type.Lazy[avroNoDefault] = Type.Lazy(Type.of[avroNoDefault])
+    val AvroEnumDefault: Type.Lazy[avroEnumDefault] = Type.Lazy(Type.of[avroEnumDefault])
+    val AvroErasedName: Type.Lazy[avroErasedName] = Type.Lazy(Type.of[avroErasedName])
+    val AvroFqnParamNames: Type.Lazy[avroFqnParamNames] = Type.Lazy(Type.of[avroFqnParamNames])
+    val AvroName: Type.Lazy[avroName] = Type.Lazy(Type.of[avroName])
+    val AvroScalePrecision: Type.Lazy[avroScalePrecision] = Type.Lazy(Type.of[avroScalePrecision])
   }
 }

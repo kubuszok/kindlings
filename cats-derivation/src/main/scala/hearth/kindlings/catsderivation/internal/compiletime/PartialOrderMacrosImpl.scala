@@ -32,6 +32,6 @@ trait PartialOrderMacrosImpl extends OrderMacrosImpl { this: MacroCommons & StdE
 
   protected object PartialOrderTypes {
     def PartialOrder: Type.Ctor1[cats.kernel.PartialOrder] = Type.Ctor1.of[cats.kernel.PartialOrder]
-    val Double: Type[Double] = Type.of[Double]
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
   }
 }

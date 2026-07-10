@@ -348,13 +348,13 @@ trait EncoderMacrosImpl
     def KindlingsEncoderAsObject: Type.Ctor1[KindlingsEncoderAsObject] = Type.Ctor1.of[KindlingsEncoderAsObject]
     val EncoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation]
-    val Json: Type[Json] = Type.of[Json]
-    val JsonObject: Type[JsonObject] = Type.of[JsonObject]
-    val Configuration: Type[Configuration] = Type.of[Configuration]
-    val String: Type[String] = Type.of[String]
-    val FieldName: Type[fieldName] = Type.of[fieldName]
-    val TransientField: Type[transientField] = Type.of[transientField]
-    val Int: Type[Int] = Type.of[Int]
-    val Product: Type[Product] = Type.of[Product]
+    val Json: Type.Lazy[Json] = Type.Lazy(Type.of[Json])
+    val JsonObject: Type.Lazy[JsonObject] = Type.Lazy(Type.of[JsonObject])
+    val Configuration: Type.Lazy[Configuration] = Type.Lazy(Type.of[Configuration])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
+    val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
   }
 }

@@ -147,10 +147,10 @@ trait CogenMacrosImpl
 
   protected object CogenTypes {
     def Cogen: Type.Ctor1[org.scalacheck.Cogen] = Type.Ctor1.of[org.scalacheck.Cogen]
-    val Seed: Type[org.scalacheck.rng.Seed] = Type.of[org.scalacheck.rng.Seed]
-    val Unit: Type[Unit] = Type.of[Unit]
-    val Any: Type[Any] = Type.of[Any]
-    val Long: Type[Long] = Type.of[Long]
+    val Seed: Type.Lazy[org.scalacheck.rng.Seed] = Type.Lazy(Type.of[org.scalacheck.rng.Seed])
+    val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val LogDerivation: Type[hearth.kindlings.scalacheckderivation.LogDerivation] =
       Type.of[hearth.kindlings.scalacheckderivation.LogDerivation]
   }

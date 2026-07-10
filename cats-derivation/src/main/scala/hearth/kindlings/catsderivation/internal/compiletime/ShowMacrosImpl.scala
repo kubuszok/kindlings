@@ -147,17 +147,17 @@ trait ShowMacrosImpl
 
   protected object ShowTypes {
     def Show: Type.Ctor1[cats.Show] = Type.Ctor1.of[cats.Show]
-    val LogDerivation: Type[LogDerivation] = Type.of[LogDerivation]
+    val LogDerivation: Type.Lazy[LogDerivation] = Type.Lazy(Type.of[LogDerivation])
     // StrictDerivation type managed by StrictDerivationSupport trait
-    val Boolean: Type[Boolean] = Type.of[Boolean]
-    val Byte: Type[Byte] = Type.of[Byte]
-    val Short: Type[Short] = Type.of[Short]
-    val Int: Type[Int] = Type.of[Int]
-    val Long: Type[Long] = Type.of[Long]
-    val Float: Type[Float] = Type.of[Float]
-    val Double: Type[Double] = Type.of[Double]
-    val Char: Type[Char] = Type.of[Char]
-    val String: Type[String] = Type.of[String]
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
+    val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val SensitiveData: Type[hearth.kindlings.catsderivation.annotations.sensitiveData] =
       Type.of[hearth.kindlings.catsderivation.annotations.sensitiveData]
   }
