@@ -37,6 +37,11 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
       Existential[IsCollectionOf[A, *], E](new IsCollectionOf[A, E] {
         override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
           Expr.quote(Expr.splice(value).asInstanceOf[cats.data.NonEmptyList[E]].toList)
+        // NO sizeHintForBuilder override here (keeps the default `None`), and likewise for NonEmptySeq (arbitrary,
+        // possibly LinearSeq tail), NonEmptyChain / Chain (Chain#length folds the structure) and NonEmptyLazyList
+        // below: for all of them the element count is O(n) - and for NonEmptyLazyList reading the length would even
+        // FORCE the (possibly infinite) lazy list. A hint must be O(1), so these must not provide one - only the
+        // O(1)-sized NonEmptyVector / NonEmptyMap / NonEmptySet do. See the hearth `sizeHintForBuilder` contract.
         override type CtorResult = List[E]
         implicit override val CtorResult: Type[CtorResult] = listEType
         override def factory: Expr[scala.collection.Factory[E, CtorResult]] = Expr.quote {
@@ -70,6 +75,10 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
       Existential[IsCollectionOf[A, *], E](new IsCollectionOf[A, E] {
         override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
           Expr.quote(Expr.splice(value).asInstanceOf[cats.data.NonEmptyVector[E]].toVector)
+        // O(1): NonEmptyVector is Vector-backed, so `.length` does not traverse - safe to pre-size the target builder.
+        override def sizeHintForBuilder(value: Expr[A]): Option[Expr[Int]] = Some(Expr.quote {
+          Expr.splice(value).asInstanceOf[cats.data.NonEmptyVector[E]].length
+        })
         override type CtorResult = List[E]
         implicit override val CtorResult: Type[CtorResult] = listEType
         override def factory: Expr[scala.collection.Factory[E, CtorResult]] = Expr.quote {
@@ -241,6 +250,10 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
               .nonEmptyMapToIterable(Expr.splice(value))
               .asInstanceOf[Iterable[(K0, V0)]]
           }
+        // O(1): NonEmptyMap wraps an immutable SortedMap (TreeMap), whose `.size` reads the tree's stored node count.
+        override def sizeHintForBuilder(value: Expr[A]): Option[Expr[Int]] = Some(Expr.quote {
+          hearth.kindlings.catsintegration.internal.runtime.CatsConversions.nonEmptyMapSize(Expr.splice(value))
+        })
         override type CtorResult = List[(K0, V0)]
         implicit override val CtorResult: Type[CtorResult] = listPairType
         override def factory: Expr[scala.collection.Factory[(K0, V0), CtorResult]] = Expr.quote {
@@ -294,6 +307,10 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
             hearth.kindlings.catsintegration.internal.runtime.CatsConversions
               .nonEmptySetToIterable[E0](Expr.splice(value))
           )
+        // O(1): NonEmptySet wraps an immutable SortedSet (TreeSet), whose `.size` reads the tree's stored node count.
+        override def sizeHintForBuilder(value: Expr[A]): Option[Expr[Int]] = Some(Expr.quote {
+          hearth.kindlings.catsintegration.internal.runtime.CatsConversions.nonEmptySetSize(Expr.splice(value))
+        })
         override type CtorResult = List[E0]
         implicit override val CtorResult: Type[CtorResult] = listElemType
         override def factory: Expr[scala.collection.Factory[E0, CtorResult]] = Expr.quote {
