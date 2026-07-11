@@ -479,7 +479,9 @@ trait DiffMacrosImpl
     Type
       .of[Diff.type]
       .asUntyped
-      .methods
+      // Only used as an "ignore these" membership set, so the position-resolving sort of `.methods` is wasted here -
+      // `unsortedMethods` gives the same members without paying for it.
+      .unsortedMethods
       .collect { case method if method.name == "derived" => method }
       .toSeq
 

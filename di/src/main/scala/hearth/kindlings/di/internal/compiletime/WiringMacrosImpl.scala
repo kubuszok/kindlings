@@ -124,7 +124,7 @@ private[di] trait WiringMacrosImpl
   def wiredInModule(instance: Expr[Any]): Expr[Wired] = {
     val typed = preciseExpr(instance)
     import typed.Underlying as T
-    val members = membersAsValues(typed, Class[T].methods).filter { c =>
+    val members = membersAsValues(typed, Class[T].unsortedMethods).filter { c =>
       import c.value.Underlying as M
       Type[M] <:< Type.of[AnyRef]
     }
@@ -203,7 +203,7 @@ private[di] trait WiringMacrosImpl
     */
   private def expandIfModule(candidate: Candidate): List[Candidate] = {
     import candidate.value.Underlying as T
-    if (isModuleType[T]) membersAsValues(candidate.value, Class[T].methods) else Nil
+    if (isModuleType[T]) membersAsValues(candidate.value, Class[T].unsortedMethods) else Nil
   }
 
   /** A value counts as a module when its type — or any of its base classes, mirroring macwire's
@@ -231,17 +231,24 @@ private[di] trait WiringMacrosImpl
     */
   private def membersAsValues(self: Expr_??, members: List[Method]): List[Candidate] = {
     import self.value as selfExpr
-    members.collect {
+    // Candidate order is user-observable (it drives resolution/ambiguity), so the deterministic sort must be kept -
+    // but callers pass the UNSORTED member list and we sort only the (few) members that survive the eligibility
+    // filter. `Method.sort` on the filtered subset yields the same order as `members(sorted).collect(...)` would,
+    // without sorting every member (filter-first: the sort key is per-method).
+    val eligible = Method.sort(members.collect {
       case m: Method.OnInstance
           if m.isNullary && m.knownReturning.isDefined && m.isAvailable(AtCallSite) &&
             !ObjectMemberNames.contains(m.name) =>
-        m.apply(selfExpr.asInstanceOf[Expr[m.Instance]]) match {
-          case r: Method.Result[?] =>
-            import r.Returned
-            r.build().toOption.map(e => Candidate(m.name, e.as_??))
-          case _ => None
-        }
-    }.flatten
+        m
+    })
+    eligible.flatMap { m =>
+      m.apply(selfExpr.asInstanceOf[Expr[m.Instance]]) match {
+        case r: Method.Result[?] =>
+          import r.Returned
+          r.build().toOption.map(e => Candidate(m.name, e.as_??))
+        case _ => None
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -789,7 +796,7 @@ private[di] trait WiringMacrosImpl
     */
   private def expandMembersOf(instance: Expr_??): List[Expr_??] = {
     import instance.Underlying as T
-    membersAsValues(instance, Class[T].methods).collect {
+    membersAsValues(instance, Class[T].unsortedMethods).collect {
       case c if !isSyntheticMember(c.name) => c.value
     }
   }
