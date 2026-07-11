@@ -22,6 +22,14 @@ object CatsConversions {
   def nonEmptyMapToIterable(a: Any): Iterable[(Any, Any)] =
     a.asInstanceOf[cats.data.NonEmptyMap[Any, Any]].toSortedMap.toList
 
+  /** O(1) element count for a `NonEmptyMap` - the underlying immutable `SortedMap` (a `TreeMap`) keeps its size in the
+    * red-black tree's root node, so `.size` does not traverse. Used for builder pre-allocation via
+    * `sizeHintForBuilder`. A runtime helper (rather than an inline `.toSortedMap.size` in a quote) so the cats newtype
+    * alias never appears in a cross-quote body - see the type note at the top of this object.
+    */
+  def nonEmptyMapSize(a: Any): Int =
+    a.asInstanceOf[cats.data.NonEmptyMap[Any, Any]].toSortedMap.size
+
   def buildNonEmptyMap(pairs: List[(Any, Any)], ordering: Ordering[Any]): Either[String, Any] =
     pairs match {
       case head :: tail =>
@@ -42,6 +50,12 @@ object CatsConversions {
 
   def nonEmptySetToIterable[A](a: Any): Iterable[A] =
     a.asInstanceOf[cats.data.NonEmptySet[A]].toSortedSet.toList
+
+  /** O(1) element count for a `NonEmptySet` - the underlying immutable `SortedSet` (a `TreeSet`) keeps its size in the
+    * red-black tree's root node, so `.size` does not traverse. See [[nonEmptyMapSize]].
+    */
+  def nonEmptySetSize(a: Any): Int =
+    a.asInstanceOf[cats.data.NonEmptySet[Any]].toSortedSet.size
 
   def buildNonEmptySet(list: List[Any], ordering: Ordering[Any]): Either[String, Any] =
     list match {
