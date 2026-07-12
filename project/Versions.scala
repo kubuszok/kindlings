@@ -20,7 +20,7 @@ object versions {
 
   // Dependencies.
   // TODO: pin the final 0.4.1 once released (currently the pre-release SNAPSHOT with the #317/#320 fixes).
-  val hearth = "0.4.0-54-gcad79ee-SNAPSHOT"
+  val hearth = "0.4.0-60-g888a55f-SNAPSHOT"
   val kindProjector = "0.13.4"
   val avro = "1.12.1"
   val avro4s213 = "4.1.2"
