@@ -1,6 +1,8 @@
 import commandmatrix.extra.*
 import kubuszok.sbt._
 import kubuszok.sbt.KubuszokPlugin.autoImport._
+import com.typesafe.tools.mima.core.*
+import com.typesafe.tools.mima.core.ProblemFilters.*
 
 // Versions: see `project/Versions.scala` (the `versions` object lives in the meta-build so that its
 // members resolve under sbt 2.0 / Scala 3 — see the comment there).
@@ -56,6 +58,43 @@ val nativeEvictionWarn = List(
   MatrixAction
     .ForPlatform(VirtualAxis.native)
     .Configure(_.settings(evictionErrorLevel := Level.Warn))
+)
+
+// Binary-compatibility check against the last release (0.3.0 was already Hearth-based, so it is an
+// apples-to-apples baseline), so a version we are preparing cannot break users. Kindlings' public surface is
+// macro providers/traits users mix into their bundles, so the same nested-vs-top-level rule as Hearth applies
+// (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
+// scope may be filtered here, each with a justification.
+val mimaPreviousVersion = "0.3.0"
+
+val mimaSettings = Seq(
+  // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
+  // baseline. MiMa is scoped to JVM (some published modules are JVM-only, so per-module JS/Native baselines are
+  // uneven); binary compatibility is derived from the same sources, so JVM catches API-level breaks.
+  mimaPreviousArtifacts := {
+    // `.?` because `settings` is also applied to the non-matrix `root` project, where `virtualAxes`/`projectType`
+    // are undefined; those default to "not published / not JVM" and get no baseline.
+    val isPublished = projectType.?.value.contains(ProjectType.ScalaLibrary)
+    val isJvm = virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm))
+    // `kindlings-macro-commons` was promoted to the published set AFTER 0.3.0, so it has no baseline yet.
+    val isNewSincePrevious = moduleName.value == "kindlings-macro-commons"
+    if (isPublished && isJvm && !isNewSincePrevious)
+      Set((organization.value % moduleName.value % mimaPreviousVersion).cross(crossVersion.value))
+    else Set.empty[ModuleID]
+  },
+  mimaFailOnNoPrevious :=
+    projectType.?.value.contains(ProjectType.ScalaLibrary) &&
+      virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)) &&
+      moduleName.value != "kindlings-macro-commons",
+  mimaBinaryIssueFilters ++= Seq(
+    // Everything under a `*.compiletime.*` package - the per-module `<module>.internal.compiletime.*` macro
+    // implementations and the shared `hearth.kindlings.derivation.compiletime.*` (e.g. the `DerivationPolicy`
+    // trait) - is macro-implementation detail, never part of the published API. Every difference vs 0.3.0 lands
+    // there (chiefly the synthetic `derivationPolicyChecked` field accessor added to the internal `DerivationPolicy`
+    // trait, which is implemented only by kindlings' own `*MacrosImpl` classes, plus internal helper objects), so
+    // none of it is user-observable. Users call the public derivation entry points, not `*.compiletime.*`.
+    ProblemFilters.exclude[Problem]("hearth.kindlings.*compiletime*")
+  )
 )
 
 val settings = Seq(
@@ -136,7 +175,7 @@ val settings = Seq(
       "-Ytasty-reader"
     )
   )
-)
+) ++ mimaSettings
 
 val dependencies = Seq(
   libraryDependencies ++= Seq(
@@ -214,7 +253,17 @@ lazy val aliases = new Aliases(
   ),
   testOnly = Seq(integrationTests, derivationPolicyTests),
   compileOnly = Seq(benchmarks)
-)
+) {
+  // Run MiMa as part of CI on JVM only (some published modules are JVM-only; MiMa is scoped to JVM accordingly).
+  override def ci(platform: String, scalaBinary: String): String = {
+    val base = super.ci(platform, scalaBinary)
+    if (platform != "JVM") base
+    else {
+      val reports = projectIds(published, platform, scalaBinary).map(id => s"$id/mimaReportBinaryIssues")
+      if (reports.nonEmpty) s"$base ; ${reports.mkString(" ; ")}" else base
+    }
+  }
+}
 
 // On sbt 2.0 sbt-welcome is gone, so the `ci-*` / `test-*` command aliases it used to register
 // (from `aliases.usefulTasks(...)`) are wired explicitly here. The CI workflow invokes
