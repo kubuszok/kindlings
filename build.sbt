@@ -60,12 +60,12 @@ val nativeEvictionWarn = List(
     .Configure(_.settings(evictionErrorLevel := Level.Warn))
 )
 
-// Binary-compatibility check against the last release (0.3.0 was already Hearth-based, so it is an
+// Binary-compatibility check against the last release (every version is Hearth-based, so it is an
 // apples-to-apples baseline), so a version we are preparing cannot break users. Kindlings' public surface is
 // macro providers/traits users mix into their bundles, so the same nested-vs-top-level rule as Hearth applies
 // (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
-// scope may be filtered here, each with a justification.
-val mimaPreviousVersion = "0.3.0"
+// scope may be filtered here, each with a justification. Bump this on every release.
+val mimaPreviousVersion = "0.3.1"
 
 val mimaSettings = Seq(
   // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
@@ -76,16 +76,15 @@ val mimaSettings = Seq(
     // are undefined; those default to "not published / not JVM" and get no baseline.
     val isPublished = projectType.?.value.contains(ProjectType.ScalaLibrary)
     val isJvm = virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm))
-    // `kindlings-macro-commons` was promoted to the published set AFTER 0.3.0, so it has no baseline yet.
-    val isNewSincePrevious = moduleName.value == "kindlings-macro-commons"
-    if (isPublished && isJvm && !isNewSincePrevious)
+    // `kindlings-macro-commons` was promoted to the published set AFTER 0.3.0, but it shipped in 0.3.1, so from
+    // the 0.3.1 baseline on it has a baseline like every other published module.
+    if (isPublished && isJvm)
       Set((organization.value % moduleName.value % mimaPreviousVersion).cross(crossVersion.value))
     else Set.empty[ModuleID]
   },
   mimaFailOnNoPrevious :=
     projectType.?.value.contains(ProjectType.ScalaLibrary) &&
-      virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)) &&
-      moduleName.value != "kindlings-macro-commons",
+      virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)),
   mimaBinaryIssueFilters ++= Seq(
     // Everything under a `*.compiletime.*` package - the per-module `<module>.internal.compiletime.*` macro
     // implementations and the shared `hearth.kindlings.derivation.compiletime.*` (e.g. the `DerivationPolicy`
