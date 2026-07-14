@@ -31,7 +31,7 @@ object versions {
   val kittens = "3.5.0"
   val pureconfig = "0.17.10"
   val quicklens = "1.9.15"
-  val tapir = "1.13.27"
+  val tapir = "1.13.28"
   val refined = "0.11.4"
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.0"
