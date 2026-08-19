@@ -21,7 +21,7 @@ object versions {
   // Dependencies.
   val hearth = "0.4.1"
   val kindProjector = "0.13.4"
-  val avro = "1.12.1"
+  val avro = "1.12.2"
   val avro4s213 = "4.1.2"
   val avro4s3 = "5.0.15"
   val cats = "2.13.0"
