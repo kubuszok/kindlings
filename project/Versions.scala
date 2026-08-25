@@ -34,7 +34,7 @@ object versions {
   val tapir = "1.13.31"
   val refined = "0.11.4"
   val sttpApispec = "0.11.10"
-  val catsEffect = "3.7.0"
+  val catsEffect = "3.7.1"
   val tagging = "2.3.5"
   val scalacheck = "1.19.0"
   val scalaJavaTime = "2.7.0"
