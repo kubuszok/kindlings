@@ -36,7 +36,7 @@ object versions {
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.1"
   val tagging = "2.3.5"
-  val scalacheck = "1.19.0"
+  val scalacheck = "1.20.0"
   val scalaJavaTime = "2.7.0"
   val scalaSaxParser = "0.1.1"
   val scalaYaml = "0.3.3"
