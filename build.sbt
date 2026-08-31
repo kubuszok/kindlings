@@ -65,7 +65,7 @@ val nativeEvictionWarn = List(
 // macro providers/traits users mix into their bundles, so the same nested-vs-top-level rule as Hearth applies
 // (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
 // scope may be filtered here, each with a justification. Bump this on every release.
-val mimaPreviousVersion = "0.3.1"
+val mimaPreviousVersion = "0.3.2"
 
 val mimaSettings = Seq(
   // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
