@@ -218,6 +218,63 @@ object YamlDerivationUtils {
       case None => Right(default)
     }
 
+  // --- Built-in type helpers ---
+
+  def scalarNode(value: String): Node = ScalarNode(value)
+
+  def getScalarValue(node: Node): Either[ConstructError, String] =
+    node match {
+      case ScalarNode(value, _) => Right(value)
+      case other => Left(ConstructError.from(s"Expected scalar node but got ${other.getClass.getSimpleName}", other))
+    }
+
+  @scala.annotation.nowarn("msg=unused explicit parameter")
+  def parseString(raw: String, node: Node): Either[ConstructError, String] =
+    Right(raw)
+
+  def parseBoolean(raw: String, node: Node): Either[ConstructError, Boolean] =
+    raw.toLowerCase match {
+      case "true"  => Right(true)
+      case "false" => Right(false)
+      case _       => Left(ConstructError.from(s"Cannot parse '$raw' as Boolean", node))
+    }
+
+  def parseInt(raw: String, node: Node): Either[ConstructError, Int] =
+    try Right(raw.toInt)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Int", node)) }
+
+  def parseLong(raw: String, node: Node): Either[ConstructError, Long] =
+    try Right(raw.toLong)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Long", node)) }
+
+  def parseDouble(raw: String, node: Node): Either[ConstructError, Double] =
+    try Right(raw.toDouble)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Double", node)) }
+
+  def parseFloat(raw: String, node: Node): Either[ConstructError, Float] =
+    try Right(raw.toFloat)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Float", node)) }
+
+  def parseShort(raw: String, node: Node): Either[ConstructError, Short] =
+    try Right(raw.toShort)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Short", node)) }
+
+  def parseByte(raw: String, node: Node): Either[ConstructError, Byte] =
+    try Right(raw.toByte)
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as Byte", node)) }
+
+  def parseChar(raw: String, node: Node): Either[ConstructError, Char] =
+    if (raw.length == 1) Right(raw.charAt(0))
+    else Left(ConstructError.from(s"Cannot parse '$raw' as Char (expected single character)", node))
+
+  def parseBigDecimal(raw: String, node: Node): Either[ConstructError, BigDecimal] =
+    try Right(BigDecimal(raw))
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as BigDecimal", node)) }
+
+  def parseBigInt(raw: String, node: Node): Either[ConstructError, BigInt] =
+    try Right(BigInt(raw))
+    catch { case _: NumberFormatException => Left(ConstructError.from(s"Cannot parse '$raw' as BigInt", node)) }
+
   def isNullNode(node: Node): Boolean = node.tag == Tag.nullTag
 
   def nodeToYaml(node: Node): String = {

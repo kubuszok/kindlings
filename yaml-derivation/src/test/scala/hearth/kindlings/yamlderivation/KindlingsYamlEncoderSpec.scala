@@ -487,6 +487,65 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
     }
 
+    group("built-in types via derived") {
+
+      test("String") {
+        val encoder = KindlingsYamlEncoder.derived[String]
+        encoder.asNode("hello") ==> scalarNode("hello")
+      }
+
+      test("Int") {
+        val encoder = KindlingsYamlEncoder.derived[Int]
+        encoder.asNode(42) ==> scalarNode("42")
+      }
+
+      test("Long") {
+        val encoder = KindlingsYamlEncoder.derived[Long]
+        encoder.asNode(42L) ==> scalarNode("42")
+      }
+
+      test("Double") {
+        val encoder = KindlingsYamlEncoder.derived[Double]
+        encoder.asNode(3.14) ==> scalarNode(doubleStr(3.14))
+      }
+
+      test("Boolean") {
+        val encoder = KindlingsYamlEncoder.derived[Boolean]
+        encoder.asNode(true) ==> scalarNode("true")
+        encoder.asNode(false) ==> scalarNode("false")
+      }
+
+      test("Float") {
+        val encoder = KindlingsYamlEncoder.derived[Float]
+        encoder.asNode(1.5f) ==> scalarNode(1.5f.toString)
+      }
+
+      test("Short") {
+        val encoder = KindlingsYamlEncoder.derived[Short]
+        encoder.asNode(42.toShort) ==> scalarNode("42")
+      }
+
+      test("Byte") {
+        val encoder = KindlingsYamlEncoder.derived[Byte]
+        encoder.asNode(7.toByte) ==> scalarNode("7")
+      }
+
+      test("Char") {
+        val encoder = KindlingsYamlEncoder.derived[Char]
+        encoder.asNode('x') ==> scalarNode("x")
+      }
+
+      test("BigDecimal") {
+        val encoder = KindlingsYamlEncoder.derived[BigDecimal]
+        encoder.asNode(BigDecimal("3.14")) ==> scalarNode("3.14")
+      }
+
+      test("BigInt") {
+        val encoder = KindlingsYamlEncoder.derived[BigInt]
+        encoder.asNode(BigInt("12345678901234567890")) ==> scalarNode("12345678901234567890")
+      }
+    }
+
     group("custom implicit priority") {
 
       test("user-provided YamlEncoder is used over derivation") {

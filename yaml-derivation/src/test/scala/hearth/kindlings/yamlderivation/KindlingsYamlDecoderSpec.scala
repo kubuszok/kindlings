@@ -261,6 +261,77 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
     }
 
+    group("built-in types via derived") {
+
+      test("String") {
+        val decoder = KindlingsYamlDecoder.derived[String]
+        decoder.construct(scalarNode("hello"))() ==> Right("hello")
+      }
+
+      test("Int") {
+        val decoder = KindlingsYamlDecoder.derived[Int]
+        decoder.construct(scalarNode("42"))() ==> Right(42)
+      }
+
+      test("Long") {
+        val decoder = KindlingsYamlDecoder.derived[Long]
+        decoder.construct(scalarNode("42"))() ==> Right(42L)
+      }
+
+      test("Double") {
+        val decoder = KindlingsYamlDecoder.derived[Double]
+        decoder.construct(scalarNode("3.14"))() ==> Right(3.14)
+      }
+
+      test("Boolean") {
+        val decoder = KindlingsYamlDecoder.derived[Boolean]
+        decoder.construct(scalarNode("true"))() ==> Right(true)
+        decoder.construct(scalarNode("false"))() ==> Right(false)
+      }
+
+      test("Float") {
+        val decoder = KindlingsYamlDecoder.derived[Float]
+        decoder.construct(scalarNode("1.5"))() ==> Right(1.5f)
+      }
+
+      test("Short") {
+        val decoder = KindlingsYamlDecoder.derived[Short]
+        decoder.construct(scalarNode("42"))() ==> Right(42.toShort)
+      }
+
+      test("Byte") {
+        val decoder = KindlingsYamlDecoder.derived[Byte]
+        decoder.construct(scalarNode("7"))() ==> Right(7.toByte)
+      }
+
+      test("Char") {
+        val decoder = KindlingsYamlDecoder.derived[Char]
+        decoder.construct(scalarNode("x"))() ==> Right('x')
+      }
+
+      test("BigDecimal") {
+        val decoder = KindlingsYamlDecoder.derived[BigDecimal]
+        decoder.construct(scalarNode("3.14"))() ==> Right(BigDecimal("3.14"))
+      }
+
+      test("BigInt") {
+        val decoder = KindlingsYamlDecoder.derived[BigInt]
+        decoder.construct(scalarNode("12345678901234567890"))() ==> Right(BigInt("12345678901234567890"))
+      }
+
+      test("Int decode error") {
+        val decoder = KindlingsYamlDecoder.derived[Int]
+        val Left(error) = decoder.construct(scalarNode("not-a-number"))(): @unchecked
+        assert(error.getMessage.contains("Cannot parse"))
+      }
+
+      test("non-scalar node fails for built-in type") {
+        val decoder = KindlingsYamlDecoder.derived[Int]
+        val Left(error) = decoder.construct(mappingOf())(): @unchecked
+        assert(error.getMessage.contains("Expected scalar node"))
+      }
+    }
+
     group("custom implicit priority") {
 
       test("user-provided implicit YamlDecoder works with derived") {
