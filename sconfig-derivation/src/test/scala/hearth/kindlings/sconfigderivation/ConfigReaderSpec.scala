@@ -306,6 +306,52 @@ final class ConfigReaderSpec extends MacroSuite {
       }
     }
 
+    group("built-in type fields via derivation") {
+
+      test("case class with all built-in types round-trips") {
+        val r = ConfigReader.derived[AllBuiltIns]
+        val w = ConfigWriter.derived[AllBuiltIns]
+        val expected = AllBuiltIns(
+          s = "hello",
+          b = true,
+          i = 42,
+          l = 123456789L,
+          d = 3.14,
+          f = 2.71f,
+          sh = 7.toShort,
+          by = 3.toByte,
+          c = 'x',
+          bd = BigDecimal("99.99"),
+          bi = BigInt(12345)
+        )
+        val written = w.to(expected)
+        val read = r.from(written)
+        assert(read.isRight, s"Expected Right but got $read")
+        val Right(actual) = read: @unchecked
+        assert(actual.s == expected.s)
+        assert(actual.b == expected.b)
+        assert(actual.i == expected.i)
+        assert(actual.l == expected.l)
+        assert(actual.d == expected.d)
+        assert(math.abs(actual.f - expected.f) < 0.001f)
+        assert(actual.sh == expected.sh)
+        assert(actual.by == expected.by)
+        assert(actual.c == expected.c)
+        assert(actual.bd == expected.bd)
+        assert(actual.bi == expected.bi)
+      }
+
+      test("derived reader reads String field from config") {
+        val r = ConfigReader.derived[SimplePerson]
+        r.from(value("{ name = Alice, age = 30 }")) ==> Right(SimplePerson("Alice", 30))
+      }
+
+      test("derived reader reads Boolean field from config") {
+        val r = ConfigReader.derived[WithDefaults]
+        r.from(value("{ name = Bob, age = 25, active = false }")) ==> Right(WithDefaults("Bob", 25, false))
+      }
+    }
+
     group("annotation x type shape") {
 
       test("@configKey on a sealed trait subtype field (reader)") {

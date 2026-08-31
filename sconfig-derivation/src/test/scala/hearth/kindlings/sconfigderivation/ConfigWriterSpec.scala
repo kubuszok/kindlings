@@ -164,6 +164,37 @@ final class ConfigWriterSpec extends MacroSuite {
       }
     }
 
+    group("built-in type fields via derivation") {
+
+      test("case class with all built-in types writes correctly") {
+        val w = ConfigWriter.derived[AllBuiltIns]
+        val rendered = renderConcise(
+          w.to(
+            AllBuiltIns(
+              s = "hello",
+              b = true,
+              i = 42,
+              l = 123456789L,
+              d = 3.14,
+              f = 2.71f,
+              sh = 7.toShort,
+              by = 3.toByte,
+              c = 'x',
+              bd = BigDecimal("99.99"),
+              bi = BigInt(12345)
+            )
+          )
+        )
+        assert(rendered.contains("\"s\":\"hello\""))
+        assert(rendered.contains("\"b\":true"))
+        assert(rendered.contains("\"i\":42"))
+        assert(rendered.contains("\"d\":3.14"))
+        assert(rendered.contains("\"c\":\"x\""))
+        assert(rendered.contains("\"bd\":\"99.99\""))
+        assert(rendered.contains("\"bi\":\"12345\""))
+      }
+    }
+
     group("annotation x type shape") {
 
       test("@configKey on a sealed trait subtype field (writer)") {

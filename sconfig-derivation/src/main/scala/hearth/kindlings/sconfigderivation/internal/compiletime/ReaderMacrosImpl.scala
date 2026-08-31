@@ -14,6 +14,7 @@ trait ReaderMacrosImpl
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
+    with rules.ReaderHandleAsBuiltInRuleImpl
     with rules.ReaderHandleAsValueTypeRuleImpl
     with rules.ReaderHandleAsOptionRuleImpl
     with rules.ReaderHandleAsMapRuleImpl
@@ -247,6 +248,7 @@ trait ReaderMacrosImpl
         Rules(
           ReaderUseImplicitWhenAvailableRule,
           ReaderDerivationPolicyRule,
+          ReaderHandleAsBuiltInRule,
           ReaderHandleAsValueTypeRule,
           ReaderHandleAsOptionRule,
           // ReaderHandleAsMapRule is merged into ReaderHandleAsCollectionRule: a map is an `IsCollection` whose
@@ -282,10 +284,16 @@ trait ReaderMacrosImpl
     val ConfigDecodingError: Type.Lazy[ConfigDecodingError] = Type.Lazy(Type.of[ConfigDecodingError])
     val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
-    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
+    val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val EitherErrorAny: Type.Lazy[Either[ConfigDecodingError, Any]] =
