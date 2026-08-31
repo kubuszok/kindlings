@@ -38,14 +38,24 @@ trait EqEnumRuleImpl {
         .matchOn[MIO, Boolean](x) { matchedX =>
           import matchedX.{value as caseX, Underlying as EnumCase}
           Log.namedScope(s"Deriving Eq for enum case ${EnumCase.prettyPrint}") {
-            val caseY = Expr.quote(Expr.splice(y).asInstanceOf[EnumCase])
-            val isInstance = Expr.quote {
-              Expr.splice(y).isInstanceOf[EnumCase]
-            }
-            deriveEqRecursively[EnumCase](using eqctx.nest(caseX, caseY)).map { eqResult =>
-              Expr.quote {
-                Expr.splice(isInstance) && Expr.splice(eqResult)
-              }
+            SingletonValue.unapply(Type[EnumCase]) match {
+              case Some(sv) =>
+                // Singleton (parameterless enum case / case object): use reference equality
+                // to avoid unchecked type test warning on erased singleton types in Scala 3.
+                val singletonExpr = sv.singletonExpr
+                MIO.pure(Expr.quote {
+                  Expr.splice(y).asInstanceOf[AnyRef] eq Expr.splice(singletonExpr).asInstanceOf[AnyRef]
+                })
+              case None =>
+                val caseY = Expr.quote(Expr.splice(y).asInstanceOf[EnumCase])
+                val isInstance = Expr.quote {
+                  Expr.splice(y).isInstanceOf[EnumCase]
+                }
+                deriveEqRecursively[EnumCase](using eqctx.nest(caseX, caseY)).map { eqResult =>
+                  Expr.quote {
+                    Expr.splice(isInstance) && Expr.splice(eqResult)
+                  }
+                }
             }
           }
         }

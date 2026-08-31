@@ -46,43 +46,88 @@ trait DiffEnumRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
           val caseName = Expr(Type.shortName[EnumCase])
 
           Log.namedScope(s"Deriving Diff for enum case ${EnumCase.prettyPrint}") {
-            val isInstance = Expr.quote(Expr.splice(right).isInstanceOf[EnumCase])
-
-            deriveSnapshotRecursively[EnumCase](using
-              SnapshotCtx[EnumCase](Type[EnumCase], caseLeft, dctx.cache, dctx.derivedType)
-            ).flatMap { leftSnapshotExpr =>
-              val caseRight = Expr.quote(Expr.splice(right).asInstanceOf[EnumCase])
-              deriveDiffRecursively[EnumCase](using dctx.nest(caseLeft, caseRight)).map { diffResult =>
-                Expr.quote {
-                  if (Expr.splice(isInstance)) {
-                    DiffResult.Variant(
-                      Expr.splice(pn),
-                      Expr.splice(fn),
-                      Expr.splice(sn),
-                      Expr.splice(sn),
-                      Expr.splice(caseName),
-                      Expr.splice(diffResult)
-                    )
-                  } else {
-                    DiffResult.TypeMismatch(
-                      Expr.splice(pn),
-                      Expr.splice(fn),
-                      Expr.splice(sn),
-                      Expr.splice(sn),
-                      Expr.splice(caseName),
-                      Expr.splice(leftSnapshotExpr),
-                      Expr.splice(right).getClass.getSimpleName.stripSuffix("$"),
-                      DiffResult.Identical(
+            SingletonValue.unapply(Type[EnumCase]) match {
+              case Some(sv) =>
+                // Singleton (parameterless enum case / case object): use reference equality
+                // to avoid unchecked type test warning on erased singleton types in Scala 3.
+                val singletonExpr = sv.singletonExpr
+                deriveSnapshotRecursively[EnumCase](using
+                  SnapshotCtx[EnumCase](Type[EnumCase], caseLeft, dctx.cache, dctx.derivedType)
+                ).map { leftSnapshotExpr =>
+                  Expr.quote {
+                    if (Expr.splice(right).asInstanceOf[AnyRef] eq Expr.splice(singletonExpr).asInstanceOf[AnyRef]) {
+                      DiffResult.Variant(
                         Expr.splice(pn),
                         Expr.splice(fn),
                         Expr.splice(sn),
                         Expr.splice(sn),
-                        Expr.splice(right).toString
+                        Expr.splice(caseName),
+                        DiffResult.Identical(
+                          Expr.splice(pn),
+                          Expr.splice(fn),
+                          Expr.splice(sn),
+                          Expr.splice(sn),
+                          Expr.splice(singletonExpr).toString
+                        )
                       )
-                    )
+                    } else {
+                      DiffResult.TypeMismatch(
+                        Expr.splice(pn),
+                        Expr.splice(fn),
+                        Expr.splice(sn),
+                        Expr.splice(sn),
+                        Expr.splice(caseName),
+                        Expr.splice(leftSnapshotExpr),
+                        Expr.splice(right).getClass.getSimpleName.stripSuffix("$"),
+                        DiffResult.Identical(
+                          Expr.splice(pn),
+                          Expr.splice(fn),
+                          Expr.splice(sn),
+                          Expr.splice(sn),
+                          Expr.splice(right).toString
+                        )
+                      )
+                    }
                   }
                 }
-              }
+              case None =>
+                val isInstance = Expr.quote(Expr.splice(right).isInstanceOf[EnumCase])
+                deriveSnapshotRecursively[EnumCase](using
+                  SnapshotCtx[EnumCase](Type[EnumCase], caseLeft, dctx.cache, dctx.derivedType)
+                ).flatMap { leftSnapshotExpr =>
+                  val caseRight = Expr.quote(Expr.splice(right).asInstanceOf[EnumCase])
+                  deriveDiffRecursively[EnumCase](using dctx.nest(caseLeft, caseRight)).map { diffResult =>
+                    Expr.quote {
+                      if (Expr.splice(isInstance)) {
+                        DiffResult.Variant(
+                          Expr.splice(pn),
+                          Expr.splice(fn),
+                          Expr.splice(sn),
+                          Expr.splice(sn),
+                          Expr.splice(caseName),
+                          Expr.splice(diffResult)
+                        )
+                      } else {
+                        DiffResult.TypeMismatch(
+                          Expr.splice(pn),
+                          Expr.splice(fn),
+                          Expr.splice(sn),
+                          Expr.splice(sn),
+                          Expr.splice(caseName),
+                          Expr.splice(leftSnapshotExpr),
+                          Expr.splice(right).getClass.getSimpleName.stripSuffix("$"),
+                          DiffResult.Identical(
+                            Expr.splice(pn),
+                            Expr.splice(fn),
+                            Expr.splice(sn),
+                            Expr.splice(sn),
+                            Expr.splice(right).toString
+                          )
+                        )
+                      }
+                    }
+                  }
+                }
             }
           }
         }

@@ -55,13 +55,25 @@ trait OrderEnumRuleImpl {
               import matchedX.{value as caseX, Underlying as EnumCase}
               val currentOrdinal = childOrdinal
               childOrdinal += 1
-              val caseY = Expr.quote(Expr.splice(y).asInstanceOf[EnumCase])
-              val isInstance = Expr.quote(Expr.splice(y).isInstanceOf[EnumCase])
-              deriveOrderRecursively[EnumCase](using octx.nest(caseX, caseY)).map { innerCmp =>
-                Expr.quote {
-                  if (Expr.splice(isInstance)) Expr.splice(innerCmp)
-                  else java.lang.Integer.compare(Expr.splice(Expr(currentOrdinal)), Expr.splice(ordinalOfY))
-                }
+              SingletonValue.unapply(Type[EnumCase]) match {
+                case Some(sv) =>
+                  // Singleton (parameterless enum case / case object): use reference equality
+                  // to avoid unchecked type test warning on erased singleton types in Scala 3.
+                  // Two equal singletons always compare as 0.
+                  val singletonExpr = sv.singletonExpr
+                  MIO.pure(Expr.quote {
+                    if (Expr.splice(y).asInstanceOf[AnyRef] eq Expr.splice(singletonExpr).asInstanceOf[AnyRef]) 0
+                    else java.lang.Integer.compare(Expr.splice(Expr(currentOrdinal)), Expr.splice(ordinalOfY))
+                  })
+                case None =>
+                  val caseY = Expr.quote(Expr.splice(y).asInstanceOf[EnumCase])
+                  val isInstance = Expr.quote(Expr.splice(y).isInstanceOf[EnumCase])
+                  deriveOrderRecursively[EnumCase](using octx.nest(caseX, caseY)).map { innerCmp =>
+                    Expr.quote {
+                      if (Expr.splice(isInstance)) Expr.splice(innerCmp)
+                      else java.lang.Integer.compare(Expr.splice(Expr(currentOrdinal)), Expr.splice(ordinalOfY))
+                    }
+                  }
               }
             }
             .flatMap {
