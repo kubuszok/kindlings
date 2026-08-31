@@ -330,6 +330,58 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val decoded = readFromString[Animal](json)(codec)
         decoded ==> value
       }
+
+      test("case-object-only sealed trait wrapper-mode round-trip (#196)") {
+        val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
+        List[CardinalDirection](North, South, East, West).foreach { dir =>
+          val json = writeToString[CardinalDirection](dir)(codec)
+          val decoded = readFromString[CardinalDirection](json)(codec)
+          decoded ==> dir
+        }
+      }
+
+      test("case-object-only sealed trait wrapper-mode produces correct JSON (#196)") {
+        val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
+        val json = writeToString[CardinalDirection](North)(codec)
+        json ==> """{"North":{}}"""
+      }
+
+      test("mixed enum wrapper-mode case object round-trip (#196)") {
+        val codec = KindlingsJsonValueCodec.derived[MixedEnum]
+        val pending: MixedEnum = Pending
+        val json = writeToString(pending)(codec)
+        json ==> """{"Pending":{}}"""
+        val decoded = readFromString[MixedEnum](json)(codec)
+        decoded ==> pending
+      }
+
+      test("mixed enum wrapper-mode case class round-trip") {
+        val codec = KindlingsJsonValueCodec.derived[MixedEnum]
+        val inProgress: MixedEnum = InProgress(75)
+        val json = writeToString(inProgress)(codec)
+        val decoded = readFromString[MixedEnum](json)(codec)
+        decoded ==> inProgress
+      }
+
+      test("mixed enum wrapper-mode all cases round-trip (#196)") {
+        val codec = KindlingsJsonValueCodec.derived[MixedEnum]
+        val cases: List[MixedEnum] = List(Pending, Done, InProgress(50))
+        cases.foreach { c =>
+          val json = writeToString(c)(codec)
+          val decoded = readFromString[MixedEnum](json)(codec)
+          decoded ==> c
+        }
+      }
+
+      test("case-object-only sealed trait discriminator-mode round-trip") {
+        implicit val config: JsoniterConfig = JsoniterConfig(discriminatorFieldName = Some("type"))
+        val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
+        List[CardinalDirection](North, South, East, West).foreach { dir =>
+          val json = writeToString[CardinalDirection](dir)(codec)
+          val decoded = readFromString[CardinalDirection](json)(codec)
+          decoded ==> dir
+        }
+      }
     }
 
     group("string enum encoding (enumAsStrings)") {

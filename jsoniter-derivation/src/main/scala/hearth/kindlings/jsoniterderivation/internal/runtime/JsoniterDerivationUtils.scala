@@ -177,6 +177,24 @@ object JsoniterDerivationUtils {
     if (!in.isNextToken('}'.toByte)) in.decodeError("expected '}'")
   }
 
+  /** Skip remaining fields and consume closing } of an already-opened inline object (e.g., after the discriminator
+    * field was consumed). For singletons in discriminator mode, there are no expected fields — any remaining fields are
+    * skipped.
+    */
+  @scala.annotation.nowarn("msg=unused value|discarded non-Unit")
+  def skipInlineObjectRemainder(in: JsonReader): Unit =
+    if (in.isNextToken(','.toByte)) {
+      in.readKeyAsString()
+      in.skip()
+      while (in.isNextToken(','.toByte)) {
+        in.readKeyAsString()
+        in.skip()
+      }
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
+    } else {
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}'")
+    }
+
   def readObject[A](
       in: JsonReader,
       fieldCount: Int,
