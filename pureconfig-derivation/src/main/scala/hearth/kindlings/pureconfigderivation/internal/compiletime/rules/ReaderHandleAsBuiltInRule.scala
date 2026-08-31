@@ -33,56 +33,56 @@ trait ReaderHandleAsBuiltInRuleImpl {
           implicit val ResultT: Type[Either[ConfigReaderFailures, String]] = RTypes.ReaderResult[String]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asString }
+              .quote(Expr.splice(cursor).asString)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Boolean]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Boolean]] = RTypes.ReaderResult[Boolean]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asBoolean }
+              .quote(Expr.splice(cursor).asBoolean)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Int]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Int]] = RTypes.ReaderResult[Int]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asInt }
+              .quote(Expr.splice(cursor).asInt)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Long]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Long]] = RTypes.ReaderResult[Long]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asLong }
+              .quote(Expr.splice(cursor).asLong)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Double]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Double]] = RTypes.ReaderResult[Double]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asDouble }
+              .quote(Expr.splice(cursor).asDouble)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Float]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Float]] = RTypes.ReaderResult[Float]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asFloat }
+              .quote(Expr.splice(cursor).asFloat)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Short]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Short]] = RTypes.ReaderResult[Short]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asShort }
+              .quote(Expr.splice(cursor).asShort)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else if (Type[A] <:< Type[Byte]) {
           implicit val ResultT: Type[Either[ConfigReaderFailures, Byte]] = RTypes.ReaderResult[Byte]
           Rule.matched(
             Expr
-              .quote { Expr.splice(cursor).asByte }
+              .quote(Expr.splice(cursor).asByte)
               .asInstanceOf[Expr[Either[ConfigReaderFailures, A]]]
           )
         } else Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in primitive type")
