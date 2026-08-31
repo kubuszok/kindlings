@@ -211,6 +211,18 @@ Named tuple testing must include single-element tuples (`(field: Int)`).
 The macro-generated code must not produce warnings at the expansion site. Users should
 never need `@nowarn` annotations.
 
+**`@nowarn` on the macro source does NOT help.** A `@nowarn("msg=is unchecked")` on the
+Hearth/Kindlings source method suppresses warnings *in that file*, not at the user's macro
+expansion site. If the generated code contains `isInstanceOf[ErasedType]`, the warning
+appears at the user's call site and breaks builds under `-Werror`.
+
+**Common pitfall — `isInstanceOf` on parameterless Scala 3 enum vals.** Case objects have
+their own JVM class, so `isInstanceOf[CaseObject]` works. Parameterless enum vals (e.g.,
+`case A` in `enum E { case A, B }`) have a singleton type erased to the parent type at
+runtime — `isInstanceOf[E.A]` emits "the type test for E.A cannot be checked at runtime".
+Use `SingletonValue.unapply(Type[EnumCase])` + reference equality (`eq`) instead. See the
+enum rules skill for the pattern.
+
 Run `sbt --client "yourModule/clean ; yourModule3/clean ; test-jvm-2_13 ; test-jvm-3"` and
 verify zero warnings from macro-expanded code.
 
@@ -247,16 +259,31 @@ Do NOT use `++2.13.18` or `++3.8.2` to switch versions.
 - [ ] Maps (Map[String, V], empty map)
 - [ ] Sealed traits / enums -- wrapper-style and discriminator-style
 - [ ] Sealed traits with case object singletons
+- [ ] **Parameterless Scala 3 enum vals** -- tested separately from case objects (different
+  JVM semantics: case objects have their own JVM class, parameterless enum vals are erased
+  to the parent type at runtime). See § REQ-12 and the enum rules skill.
 - [ ] Tuples (Tuple2, Tuple3)
 - [ ] Recursive data structures
 - [ ] Opaque types (Scala 3 only)
 - [ ] Named tuples (Scala 3 only)
 - [ ] Scala 3 enums (parameterless + parameterized)
+- [ ] **Scala 3 `derives` clause** -- on both non-generic AND generic case classes (e.g.,
+  `case class Box[A](value: A) derives MyTypeClass`). The `derives` keyword synthesizes a
+  `given` with `using MyTypeClass[A]`, which triggers auto-derivation for type parameters.
+  This interacts differently with the rule chain than an explicit `given` definition —
+  built-in type rules (REQ-4) must handle String, Int, etc. before the collection rule can
+  misidentify them (e.g., `String` as `Iterable[Char]`). Tests must go in `scala-3/`.
+- [ ] **Serde round-trip** (encoder/decoder modules only): encode→decode for **every
+  encoding mode** × {case class, case object, parameterless enum val, mixed enum}. An
+  encode-only test does NOT verify the decoder consumes the same wire format the encoder
+  produces. Test at minimum: default wrapper mode, discriminator mode, string-enum mode.
 - [ ] All configuration options with all name transform variants
 - [ ] Custom implicit priority (user-provided instances override derivation)
 - [ ] Compile-time error messages for unsupported types
 - [ ] Error messages enriched with diagnostics
 - [ ] Behavior parity with original library (if reimplementing)
+- [ ] **Scala 3 tests compile with `-Werror`** -- catches macro-expanded warnings that
+  `@nowarn` on the macro source method does NOT suppress (see § REQ-12)
 
 ## Error types
 

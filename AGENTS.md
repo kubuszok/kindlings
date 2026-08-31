@@ -71,6 +71,15 @@ The most load-bearing entries to keep in mind for any macro work:
 - **`IsValueType` intercepts single-element named tuples (Scala 3)** — guard every
   `HandleAsValueTypeRule` with `if (Type[A].isNamedTuple)` before the `IsValueType`
   match. See pitfalls skill and `docs/contributing/kindlings-new-module/requirements.md` § REQ-5.
+- **`isInstanceOf` on parameterless Scala 3 enum vals** — erased at runtime, emits
+  "unchecked type test" warning at the macro expansion site (not suppressible by
+  `@nowarn` on the source). Use `SingletonValue.unapply` + reference equality (`eq`)
+  for two-value comparisons (Eq, Order, Diff rules). See enum rules skill and REQ-12.
+- **`derives` on generic types forces auto-derivation of type parameters** — Scala 3
+  synthesizes `using KindlingsXxx[A]` for each type parameter, which triggers
+  `KindlingsXxx.derived[A]` for concrete types like `String`. Without a built-in type
+  rule (REQ-4), `String` falls through to the collection rule as `Iterable[Char]`.
+  Every serde module **must** have `HandleAsBuiltInTypeRule` before the collection rule.
 
 ## Standard extensions, `LambdaBuilder`, and def-caching rules
 
