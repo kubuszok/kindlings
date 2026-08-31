@@ -134,6 +134,20 @@ final class JsoniterScala3Spec extends MacroSuite {
       assert(json.contains("\"_type\""))
       readFromString[JsoniterVehicle](json)(codec) ==> car
     }
+
+    test("simple enum (case objects) wrapper-mode round-trip (#196)") {
+      val codec = KindlingsJsonValueCodec.derived[Color]
+      for c <- Color.values do {
+        val json = writeToString(c: Color)(codec)
+        readFromString[Color](json)(codec) ==> c
+      }
+    }
+
+    test("simple enum wrapper-mode produces correct JSON (#196)") {
+      val codec = KindlingsJsonValueCodec.derived[Color]
+      val json = writeToString(Color.Red: Color)(codec)
+      json ==> """{"Red":{}}"""
+    }
   }
 
   group("companion object given derivation") {

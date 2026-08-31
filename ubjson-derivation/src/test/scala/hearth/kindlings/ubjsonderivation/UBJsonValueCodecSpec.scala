@@ -162,6 +162,29 @@ final class UBJsonValueCodecSpec extends MacroSuite {
         val inProgress: MixedEnum = InProgress(50)
         roundTrip(inProgress)(codec) ==> inProgress
       }
+
+      test("case-object-only sealed trait wrapper-mode all values round-trip (#196)") {
+        val codec = UBJsonValueCodec.derived[CardinalDirection]
+        List[CardinalDirection](North, South, East, West).foreach { dir =>
+          roundTrip(dir)(codec) ==> dir
+        }
+      }
+
+      test("mixed enum wrapper-mode all cases round-trip (#196)") {
+        val codec = UBJsonValueCodec.derived[MixedEnum]
+        val cases: List[MixedEnum] = List(Pending, Done, InProgress(50))
+        cases.foreach { c =>
+          roundTrip(c)(codec) ==> c
+        }
+      }
+
+      test("case-object-only sealed trait discriminator-mode round-trip") {
+        implicit val config: UBJsonConfig = UBJsonConfig().withDiscriminator("type")
+        val codec = UBJsonValueCodec.derived[CardinalDirection]
+        List[CardinalDirection](North, South, East, West).foreach { dir =>
+          roundTrip(dir)(codec) ==> dir
+        }
+      }
     }
 
     group("generic types") {

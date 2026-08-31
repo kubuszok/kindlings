@@ -279,7 +279,7 @@ trait DecoderHandleAsEnumRuleImpl {
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
               Log.info(s"Using singleton for $childName") >>
-                MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+                MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
                   Expr.quote {
                     if (
                       JsoniterDerivationUtils.mapEnumName(
@@ -288,9 +288,11 @@ trait DecoderHandleAsEnumRuleImpl {
                         Expr.splice(Expr(Type[A].isJavaEnum))
                       ) == Expr
                         .splice(typeNameExpr)
-                    )
+                    ) {
+                      // Consume the inner empty object {} written by EncoderHandleAsSingletonRule
+                      JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
                       Expr.splice(singleton).asInstanceOf[A]
-                    else
+                    } else
                       Expr.splice(elseExpr)
                   }
                 }
@@ -368,8 +370,32 @@ trait DecoderHandleAsEnumRuleImpl {
             }
 
         case None =>
-          // Not a case class (e.g., case object) — fall back to wrapper-style decoder
-          deriveChildDecoder[A, ChildType](childName)
+          // Not a case class — check if singleton for inline (discriminator) mode
+          Expr.singletonOf[ChildType] match {
+            case Some(singleton) =>
+              // Singleton in discriminator mode: the discriminator field has been read by readWithDiscriminator.
+              // Consume remaining fields (if any) and the closing } of the outer object.
+              Log.info(s"Using singleton for inline child $childName") >>
+                MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
+                  Expr.quote {
+                    if (
+                      JsoniterDerivationUtils.mapEnumName(
+                        Expr.splice(dctx.config),
+                        Expr.splice(Expr(childName)),
+                        Expr.splice(Expr(Type[A].isJavaEnum))
+                      ) == Expr
+                        .splice(typeNameExpr)
+                    ) {
+                      JsoniterDerivationUtils.skipInlineObjectRemainder(Expr.splice(readerExpr))
+                      Expr.splice(singleton).asInstanceOf[A]
+                    } else
+                      Expr.splice(elseExpr)
+                  }
+                }
+            case None =>
+              // Non-singleton, non-case-class: fall back to wrapper-style decoder
+              deriveChildDecoder[A, ChildType](childName)
+          }
       }
     }
 
