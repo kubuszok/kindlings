@@ -19,6 +19,7 @@ trait WriterMacrosImpl
     with PureconfigDerivationPolicy
     with rules.WriterUseCachedDefWhenAvailableRuleImpl
     with rules.WriterUseImplicitWhenAvailableRuleImpl
+    with rules.WriterHandleAsBuiltInRuleImpl
     with rules.WriterHandleAsValueTypeRuleImpl
     with rules.WriterHandleAsOptionRuleImpl
     with rules.WriterHandleAsMapRuleImpl
@@ -256,6 +257,7 @@ trait WriterMacrosImpl
         Rules(
           WriterUseImplicitWhenAvailableRule,
           WriterDerivationPolicyRule,
+          WriterHandleAsBuiltInRule,
           WriterHandleAsValueTypeRule,
           WriterHandleAsOptionRule,
           // WriterHandleAsMapRule is merged into WriterHandleAsCollectionRule: a map is an `IsCollection` whose
@@ -296,6 +298,12 @@ trait WriterMacrosImpl
     val ConfigKey: Type.Lazy[configKey] = Type.Lazy(Type.of[configKey])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
 
     def kindlingsProductHintType[A: Type]: Type[KindlingsProductHint[A]] =

@@ -23,6 +23,58 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
         val r = KindlingsConfigReader.derived[WithDefaults]
         r.from(cursor("{ name = Alice, age = 30, active = true }")) ==> Right(WithDefaults("Alice", 30, true))
       }
+
+      test("Long field") {
+        val r = KindlingsConfigReader.derived[WithLong]
+        r.from(cursor("{ value = 9876543210 }")) ==> Right(WithLong(9876543210L))
+      }
+
+      test("Double field") {
+        val r = KindlingsConfigReader.derived[WithDouble]
+        r.from(cursor("{ value = 3.14 }")) ==> Right(WithDouble(3.14))
+      }
+
+      test("Float field") {
+        val r = KindlingsConfigReader.derived[WithFloat]
+        val result = r.from(cursor("{ value = 2.5 }"))
+        assert(result.isRight)
+        assert(result.toOption.get.value == 2.5f)
+      }
+
+      test("Short field") {
+        val r = KindlingsConfigReader.derived[WithShort]
+        r.from(cursor("{ value = 123 }")) ==> Right(WithShort(123.toShort))
+      }
+
+      test("Byte field") {
+        val r = KindlingsConfigReader.derived[WithByte]
+        r.from(cursor("{ value = 42 }")) ==> Right(WithByte(42.toByte))
+      }
+
+      test("Boolean field") {
+        val r = KindlingsConfigReader.derived[WithBoolean]
+        r.from(cursor("{ value = true }")) ==> Right(WithBoolean(true))
+        r.from(cursor("{ value = false }")) ==> Right(WithBoolean(false))
+      }
+
+      test("all built-in primitive types in one case class") {
+        val r = KindlingsConfigReader.derived[AllBuiltInPrimitives]
+        val result = r.from(
+          cursor(
+            """{ s = hello, b = true, i = 42, l = 9876543210, d = 3.14, f = 2.5, sh = 123, by = 7 }"""
+          )
+        )
+        assert(result.isRight)
+        val v = result.toOption.get
+        v.s ==> "hello"
+        v.b ==> true
+        v.i ==> 42
+        v.l ==> 9876543210L
+        v.d ==> 3.14
+        assert(v.f == 2.5f)
+        v.sh ==> 123.toShort
+        v.by ==> 7.toByte
+      }
     }
 
     group("case classes") {
