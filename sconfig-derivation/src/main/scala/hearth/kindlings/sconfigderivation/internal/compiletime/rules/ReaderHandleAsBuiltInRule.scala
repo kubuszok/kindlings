@@ -33,7 +33,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
         implicit val EitherT: Type[Either[ConfigDecodingError, A]] = RTypes.ReaderResult[A]
         val value = rctx.value
 
-        if (Type[A] <:< Type[String]) {
+        if (Type[A] =:= Type[String]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, String]] = RTypes.ReaderResult[String]
           Rule.matched(
             Expr
@@ -42,7 +42,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Boolean]) {
+        } else if (Type[A] =:= Type[Boolean]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Boolean]] = RTypes.ReaderResult[Boolean]
           Rule.matched(
             Expr
@@ -51,7 +51,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Int]) {
+        } else if (Type[A] =:= Type[Int]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Int]] = RTypes.ReaderResult[Int]
           Rule.matched(
             Expr
@@ -60,7 +60,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Long]) {
+        } else if (Type[A] =:= Type[Long]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Long]] = RTypes.ReaderResult[Long]
           Rule.matched(
             Expr
@@ -69,7 +69,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Double]) {
+        } else if (Type[A] =:= Type[Double]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Double]] = RTypes.ReaderResult[Double]
           Rule.matched(
             Expr
@@ -78,7 +78,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Float]) {
+        } else if (Type[A] =:= Type[Float]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Float]] = RTypes.ReaderResult[Float]
           Rule.matched(
             Expr
@@ -87,7 +87,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Short]) {
+        } else if (Type[A] =:= Type[Short]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Short]] = RTypes.ReaderResult[Short]
           Rule.matched(
             Expr
@@ -96,7 +96,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Byte]) {
+        } else if (Type[A] =:= Type[Byte]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Byte]] = RTypes.ReaderResult[Byte]
           Rule.matched(
             Expr
@@ -105,7 +105,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[Char]) {
+        } else if (Type[A] =:= Type[Char]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, Char]] = RTypes.ReaderResult[Char]
           Rule.matched(
             Expr
@@ -114,7 +114,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[BigDecimal]) {
+        } else if (Type[A] =:= Type[BigDecimal]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, BigDecimal]] = RTypes.ReaderResult[BigDecimal]
           Rule.matched(
             Expr
@@ -123,7 +123,7 @@ trait ReaderHandleAsBuiltInRuleImpl {
               }
               .asInstanceOf[Expr[Either[ConfigDecodingError, A]]]
           )
-        } else if (Type[A] <:< Type[BigInt]) {
+        } else if (Type[A] =:= Type[BigInt]) {
           implicit val ResultT: Type[Either[ConfigDecodingError, BigInt]] = RTypes.ReaderResult[BigInt]
           Rule.matched(
             Expr
