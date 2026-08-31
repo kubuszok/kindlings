@@ -70,3 +70,21 @@ case class AnnotatedRect(
 sealed trait TransientShape
 case class TransientCircle(radius: Double, @transientField memo: String = "") extends TransientShape
 case class TransientRect(width: Double, height: Double, @transientField memo: String = "") extends TransientShape
+
+// --- Built-in type coverage ---
+// Case classes containing all supported built-in primitive types, used to verify that
+// the built-in rule handles each type correctly during derivation.
+
+case class AllBuiltIns(
+    s: String,
+    b: Boolean,
+    i: Int,
+    l: Long,
+    d: Double,
+    f: Float,
+    sh: Short,
+    by: Byte,
+    c: Char,
+    bd: BigDecimal,
+    bi: BigInt
+)
