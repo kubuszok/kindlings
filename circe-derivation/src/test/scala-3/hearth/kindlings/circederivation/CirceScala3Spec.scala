@@ -294,6 +294,44 @@ final class CirceScala3Spec extends MacroSuite {
     }
   }
 
+  group("derives with built-in type parameters (issue #206)") {
+
+    test("Envelope[String] encodes String as string, not char array") {
+      val encoder = summon[KindlingsEncoder[Envelope[String]]]
+      encoder(Envelope("abc")) ==> Json.obj("elem" -> Json.fromString("abc"))
+    }
+
+    test("Envelope[Int] encodes Int as number") {
+      val encoder = summon[KindlingsEncoder[Envelope[Int]]]
+      encoder(Envelope(42)) ==> Json.obj("elem" -> Json.fromInt(42))
+    }
+
+    test("Envelope[Boolean] encodes Boolean as boolean") {
+      val encoder = summon[KindlingsEncoder[Envelope[Boolean]]]
+      encoder(Envelope(true)) ==> Json.obj("elem" -> Json.True)
+    }
+
+    test("Envelope[String] decodes String correctly") {
+      val decoder = summon[KindlingsDecoder[Envelope[String]]]
+      val json = Json.obj("elem" -> Json.fromString("abc"))
+      decoder.decodeJson(json) ==> Right(Envelope("abc"))
+    }
+
+    test("Envelope[Int] decodes Int correctly") {
+      val decoder = summon[KindlingsDecoder[Envelope[Int]]]
+      val json = Json.obj("elem" -> Json.fromInt(42))
+      decoder.decodeJson(json) ==> Right(Envelope(42))
+    }
+
+    test("Envelope[Double] round-trips correctly") {
+      val encoder = summon[KindlingsEncoder[Envelope[Double]]]
+      val decoder = summon[KindlingsDecoder[Envelope[Double]]]
+      val original = Envelope(3.14)
+      val json = encoder(original)
+      decoder.decodeJson(json) ==> Right(original)
+    }
+  }
+
   group("auto-derivation isolation") {
 
     group("encoder uses kindlings derivation, not circe auto-derivation") {

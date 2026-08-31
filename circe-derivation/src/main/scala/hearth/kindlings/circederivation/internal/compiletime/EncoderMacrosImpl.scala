@@ -14,6 +14,7 @@ trait EncoderMacrosImpl
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
+    with rules.EncoderHandleAsBuiltInTypeRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
     with rules.EncoderHandleAsOptionRuleImpl
     with rules.EncoderHandleAsMapRuleImpl
@@ -311,6 +312,7 @@ trait EncoderMacrosImpl
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderDerivationPolicyRule,
+          EncoderHandleAsBuiltInTypeRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
           // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),

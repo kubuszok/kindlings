@@ -812,6 +812,49 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("built-in types via direct derivation (issue #206)") {
+
+      test("KindlingsDecoder.derived[String] decodes string correctly") {
+        val decoder: KindlingsDecoder[String] = KindlingsDecoder.derived[String]
+        decoder.decodeJson(Json.fromString("abc")) ==> Right("abc")
+      }
+
+      test("KindlingsDecoder.derived[Int] decodes number correctly") {
+        val decoder: KindlingsDecoder[Int] = KindlingsDecoder.derived[Int]
+        decoder.decodeJson(Json.fromInt(42)) ==> Right(42)
+      }
+
+      test("KindlingsDecoder.derived[Long] decodes number correctly") {
+        val decoder: KindlingsDecoder[Long] = KindlingsDecoder.derived[Long]
+        decoder.decodeJson(Json.fromLong(42L)) ==> Right(42L)
+      }
+
+      test("KindlingsDecoder.derived[Double] decodes number correctly") {
+        val decoder: KindlingsDecoder[Double] = KindlingsDecoder.derived[Double]
+        decoder.decodeJson(Json.fromDoubleOrNull(3.14)) ==> Right(3.14)
+      }
+
+      test("KindlingsDecoder.derived[Boolean] decodes boolean correctly") {
+        val decoder: KindlingsDecoder[Boolean] = KindlingsDecoder.derived[Boolean]
+        decoder.decodeJson(Json.True) ==> Right(true)
+      }
+
+      test("KindlingsDecoder.derived[BigDecimal] decodes correctly") {
+        val decoder: KindlingsDecoder[BigDecimal] = KindlingsDecoder.derived[BigDecimal]
+        decoder.decodeJson(Json.fromBigDecimal(BigDecimal("123.45"))) ==> Right(BigDecimal("123.45"))
+      }
+
+      test("KindlingsDecoder.derived[BigInt] decodes correctly") {
+        val decoder: KindlingsDecoder[BigInt] = KindlingsDecoder.derived[BigInt]
+        decoder.decodeJson(Json.fromBigInt(BigInt("12345"))) ==> Right(BigInt("12345"))
+      }
+
+      test("Box[String] decodes String field correctly") {
+        val json = Json.obj("value" -> Json.fromString("hello"))
+        KindlingsDecoder.decode[Box[String]](json) ==> Right(Box("hello"))
+      }
+    }
+
     group("compile-time errors") {
 
       test("decode with unhandled type produces error message") {
