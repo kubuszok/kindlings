@@ -17,6 +17,7 @@ trait DecoderMacrosImpl
     with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
+    with rules.DecoderHandleAsBuiltInRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
     with rules.DecoderHandleAsValueTypeRuleImpl
     with rules.DecoderHandleAsOptionRuleImpl
@@ -316,6 +317,7 @@ trait DecoderMacrosImpl
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
           DecoderDerivationPolicyRule,
+          DecoderHandleAsBuiltInRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
           // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
@@ -380,7 +382,13 @@ trait DecoderMacrosImpl
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
     val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
+    val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val EitherCEAny: Type.Lazy[Either[ConstructError, Any]] = Type.Lazy(Type.of[Either[ConstructError, Any]])

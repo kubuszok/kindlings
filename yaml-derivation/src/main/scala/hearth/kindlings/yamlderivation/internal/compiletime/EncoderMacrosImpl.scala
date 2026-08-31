@@ -14,6 +14,7 @@ trait EncoderMacrosImpl
     with YamlDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
+    with rules.EncoderHandleAsBuiltInRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
     with rules.EncoderHandleAsValueTypeRuleImpl
     with rules.EncoderHandleAsOptionRuleImpl
@@ -284,6 +285,7 @@ trait EncoderMacrosImpl
           EncoderHandleAsLiteralTypeRule,
           EncoderUseImplicitWhenAvailableRule,
           EncoderDerivationPolicyRule,
+          EncoderHandleAsBuiltInRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
           // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
@@ -325,6 +327,15 @@ trait EncoderMacrosImpl
     val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
+    val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
+    val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
+    val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
+    val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
   }
 }
