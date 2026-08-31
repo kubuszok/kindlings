@@ -19,6 +19,7 @@ trait DecoderMacrosImpl
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
+    with rules.DecoderHandleAsBuiltInTypeRuleImpl
     with rules.DecoderHandleAsValueTypeRuleImpl
     with rules.DecoderHandleAsOptionRuleImpl
     with rules.DecoderHandleAsMapRuleImpl
@@ -163,6 +164,7 @@ trait DecoderMacrosImpl
                       }
                     case None =>
                       Expr.quote {
+                        val _ = cfg // suppress unused when the derived type is a built-in (#206)
                         hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
                           .decoderInstance[A] { (c: HCursor) =>
                             val _ = c
@@ -411,6 +413,7 @@ trait DecoderMacrosImpl
           DecoderHandleAsLiteralTypeRule,
           DecoderUseImplicitWhenAvailableRule,
           DecoderDerivationPolicyRule,
+          DecoderHandleAsBuiltInTypeRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
           // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),

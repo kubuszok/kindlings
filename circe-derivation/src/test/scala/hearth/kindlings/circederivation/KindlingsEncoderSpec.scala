@@ -607,6 +607,68 @@ final class KindlingsEncoderSpec extends MacroSuite {
       }
     }
 
+    group("built-in types via direct derivation (issue #206)") {
+
+      test("KindlingsEncoder.derived[String] produces string, not array of chars") {
+        val encoder: KindlingsEncoder[String] = KindlingsEncoder.derived[String]
+        encoder("abc") ==> Json.fromString("abc")
+      }
+
+      test("KindlingsEncoder.derived[Int] produces number") {
+        val encoder: KindlingsEncoder[Int] = KindlingsEncoder.derived[Int]
+        encoder(42) ==> Json.fromInt(42)
+      }
+
+      test("KindlingsEncoder.derived[Long] produces number") {
+        val encoder: KindlingsEncoder[Long] = KindlingsEncoder.derived[Long]
+        encoder(42L) ==> Json.fromLong(42L)
+      }
+
+      test("KindlingsEncoder.derived[Double] produces number") {
+        val encoder: KindlingsEncoder[Double] = KindlingsEncoder.derived[Double]
+        encoder(3.14) ==> Json.fromDoubleOrNull(3.14)
+      }
+
+      test("KindlingsEncoder.derived[Float] produces number") {
+        val encoder: KindlingsEncoder[Float] = KindlingsEncoder.derived[Float]
+        encoder(1.5f) ==> Json.fromFloatOrNull(1.5f)
+      }
+
+      test("KindlingsEncoder.derived[Boolean] produces boolean") {
+        val encoder: KindlingsEncoder[Boolean] = KindlingsEncoder.derived[Boolean]
+        encoder(true) ==> Json.True
+      }
+
+      test("KindlingsEncoder.derived[Short] produces number") {
+        val encoder: KindlingsEncoder[Short] = KindlingsEncoder.derived[Short]
+        encoder(7.toShort) ==> Json.fromInt(7)
+      }
+
+      test("KindlingsEncoder.derived[Byte] produces number") {
+        val encoder: KindlingsEncoder[Byte] = KindlingsEncoder.derived[Byte]
+        encoder(3.toByte) ==> Json.fromInt(3)
+      }
+
+      test("KindlingsEncoder.derived[Char] produces single-char string") {
+        val encoder: KindlingsEncoder[Char] = KindlingsEncoder.derived[Char]
+        encoder('x') ==> Json.fromString("x")
+      }
+
+      test("KindlingsEncoder.derived[BigDecimal] produces number") {
+        val encoder: KindlingsEncoder[BigDecimal] = KindlingsEncoder.derived[BigDecimal]
+        encoder(BigDecimal("123.45")) ==> Json.fromBigDecimal(BigDecimal("123.45"))
+      }
+
+      test("KindlingsEncoder.derived[BigInt] produces number") {
+        val encoder: KindlingsEncoder[BigInt] = KindlingsEncoder.derived[BigInt]
+        encoder(BigInt("12345")) ==> Json.fromBigInt(BigInt("12345"))
+      }
+
+      test("Box[String] encodes String field correctly (not as char array)") {
+        KindlingsEncoder.encode(Box("hello")) ==> Json.obj("value" -> Json.fromString("hello"))
+      }
+    }
+
     group("compile-time errors") {
 
       test("encode with unhandled type produces error message") {

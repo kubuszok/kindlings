@@ -30,3 +30,6 @@ type StringOrInt = String | Int
 case class Parrot(name: String, vocabulary: Int)
 case class Hamster(name: String, wheelSize: Double)
 type ParrotOrHamster = Parrot | Hamster
+
+// Issue #206: generic case class with `derives` should use built-in codecs for type parameters
+case class Envelope[A](elem: A) derives KindlingsEncoder, KindlingsDecoder
