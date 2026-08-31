@@ -116,6 +116,7 @@ val settings = Seq(
       "-language:implicitConversions", // hearth Type.Lazy[A] => Type[A] unwrapping at use-sites
       "-Wconf:msg=Unreachable case:s", // suppress fake (?) errors in internal.compiletime
       "-Wconf:msg=Missing symbol position:s", // suppress warning https://github.com/scala/scala3/issues/21672
+      "-Wconf:msg=Skipping coverage instrumentation:s", // Scala 3.9+ warns about large method bodies; not actionable for macro-generated code
       "-Werror",
       "-Wnonunit-statement",
       // "-Wunused:imports", // import x.Underlying as X is marked as unused even though it is! probably one of https://github.com/scala/scala3/issues/: #18564, #19252, #19657, #19912
