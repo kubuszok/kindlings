@@ -36,9 +36,8 @@ final class CatsScala3Spec extends MacroSuite {
       for {
         a <- cases
         b <- cases
-      } {
-        eqDirection.eqv(a, b) ==> (a == b)
       }
+        eqDirection.eqv(a, b) ==> (a == b)
     }
   }
 
@@ -61,7 +60,7 @@ final class CatsScala3Spec extends MacroSuite {
         b <- cases
       } {
         val cmp = orderDirection.compare(a, b)
-        if (a == b) assertEquals(cmp, 0)
+        if a == b then assertEquals(cmp, 0)
         else assert(cmp != 0, s"expected non-zero for $a vs $b")
       }
     }
