@@ -26,6 +26,63 @@ final class KindlingsConfigWriterSpec extends MacroSuite {
       }
     }
 
+    group("built-in primitive types") {
+
+      test("Long field") {
+        val w = KindlingsConfigWriter.derived[WithLong]
+        val rendered = renderConcise(w.to(WithLong(9876543210L)))
+        assert(rendered.contains("9876543210"))
+      }
+
+      test("Double field") {
+        val w = KindlingsConfigWriter.derived[WithDouble]
+        val rendered = renderConcise(w.to(WithDouble(3.14)))
+        assert(rendered.contains("3.14"))
+      }
+
+      test("Float field") {
+        val w = KindlingsConfigWriter.derived[WithFloat]
+        val rendered = renderConcise(w.to(WithFloat(2.5f)))
+        assert(rendered.contains("2.5"))
+      }
+
+      test("Short field") {
+        val w = KindlingsConfigWriter.derived[WithShort]
+        val rendered = renderConcise(w.to(WithShort(123.toShort)))
+        assert(rendered.contains("123"))
+      }
+
+      test("Byte field") {
+        val w = KindlingsConfigWriter.derived[WithByte]
+        val rendered = renderConcise(w.to(WithByte(42.toByte)))
+        assert(rendered.contains("42"))
+      }
+
+      test("Boolean field") {
+        val w = KindlingsConfigWriter.derived[WithBoolean]
+        val rendered = renderConcise(w.to(WithBoolean(true)))
+        assert(rendered.contains("true"))
+      }
+
+      test("all built-in primitive types round-trip") {
+        val r = KindlingsConfigReader.derived[AllBuiltInPrimitives]
+        val w = KindlingsConfigWriter.derived[AllBuiltInPrimitives]
+        val original = AllBuiltInPrimitives("hello", true, 42, 9876543210L, 3.14, 2.5f, 123.toShort, 7.toByte)
+        val written = w.to(original)
+        val result = r.from(pureconfig.ConfigCursor(written, Nil))
+        assert(result.isRight)
+        val v = result.toOption.get
+        v.s ==> original.s
+        v.b ==> original.b
+        v.i ==> original.i
+        v.l ==> original.l
+        v.d ==> original.d
+        assert(v.f == original.f)
+        v.sh ==> original.sh
+        v.by ==> original.by
+      }
+    }
+
     group("collections") {
 
       test("List field") {

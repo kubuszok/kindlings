@@ -137,3 +137,25 @@ case class AnnotatedRect(
 sealed trait TransientShape
 case class TransientCircle(radius: Double, @transientField memo: String = "") extends TransientShape
 case class TransientRect(width: Double, height: Double, @transientField memo: String = "") extends TransientShape
+
+// --- Built-in primitive types ---
+// Case classes exercising every built-in primitive type supported by the ReaderHandleAsBuiltInRule
+// and WriterHandleAsBuiltInRule.
+
+case class AllBuiltInPrimitives(
+    s: String,
+    b: Boolean,
+    i: Int,
+    l: Long,
+    d: Double,
+    f: Float,
+    sh: Short,
+    by: Byte
+)
+
+case class WithLong(value: Long)
+case class WithDouble(value: Double)
+case class WithFloat(value: Float)
+case class WithShort(value: Short)
+case class WithByte(value: Byte)
+case class WithBoolean(value: Boolean)

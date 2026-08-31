@@ -22,6 +22,7 @@ trait ReaderMacrosImpl
     with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
+    with rules.ReaderHandleAsBuiltInRuleImpl
     with rules.ReaderHandleAsValueTypeRuleImpl
     with rules.ReaderHandleAsOptionRuleImpl
     with rules.ReaderHandleAsMapRuleImpl
@@ -264,6 +265,7 @@ trait ReaderMacrosImpl
         Rules(
           ReaderUseImplicitWhenAvailableRule,
           ReaderDerivationPolicyRule,
+          ReaderHandleAsBuiltInRule,
           ReaderHandleAsValueTypeRule,
           ReaderHandleAsOptionRule,
           // ReaderHandleAsMapRule is merged into ReaderHandleAsCollectionRule: a map is an `IsCollection` whose
@@ -306,6 +308,9 @@ trait ReaderMacrosImpl
     val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
     val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Float: Type.Lazy[Float] = Type.Lazy(Type.of[Float])
+    val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
+    val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val EitherFailuresAny: Type.Lazy[Either[ConfigReaderFailures, Any]] =
