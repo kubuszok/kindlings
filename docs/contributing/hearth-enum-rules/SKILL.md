@@ -151,6 +151,56 @@ self = new JsonValueCodec[MyEnum] {
 The `var self` forward reference allows the codec instance to reference itself before it
 is fully constructed. This is safe because the codec is never called during construction.
 
+## Parameterless enum vals vs case objects (JVM semantics)
+
+When generating code that operates on **two values** of a matched enum case (Eq, Order, Diff
+— any rule that compares `x` and `y`), the `isInstanceOf[EnumCase]` check on the second
+value is **unsafe for parameterless Scala 3 enum vals**.
+
+**Why:** Case objects have their own JVM class, so `isInstanceOf[CaseObject.type]` compiles
+to a concrete `instanceof` check. Parameterless enum vals (e.g., `case A` in `enum E { case
+A, B }`) have a singleton type that is **erased to the parent type** at runtime — the JVM
+cannot check `isInstanceOf[E.A]`, and the compiler emits:
+
+> "the type test for E.A cannot be checked at runtime because it refers to an abstract type
+> member or type parameter"
+
+This warning appears **at the user's macro expansion site**, not in the Hearth/Kindlings
+source. A `@nowarn("msg=is unchecked")` on the source method does NOT suppress it. Builds
+with `-Werror` fail.
+
+**Fix pattern:** Check `SingletonValue.unapply(Type[EnumCase])` inside `matchOn`. If it
+returns `Some(sv)`, use reference equality against the singleton instance instead of
+`isInstanceOf`:
+
+```scala
+enumm.matchOn[MIO, Boolean](x) { matchedX =>
+  import matchedX.{value as caseX, Underlying as EnumCase}
+  SingletonValue.unapply(Type[EnumCase]) match {
+    case Some(sv) =>
+      // Singleton: reference equality, no type test needed
+      val singletonExpr = sv.singletonExpr
+      MIO.pure(Expr.quote {
+        Expr.splice(y).asInstanceOf[AnyRef] eq Expr.splice(singletonExpr).asInstanceOf[AnyRef]
+      })
+    case None =>
+      // Case class: isInstanceOf is safe (has its own JVM class)
+      val isInstance = Expr.quote { Expr.splice(y).isInstanceOf[EnumCase] }
+      val caseY = Expr.quote(Expr.splice(y).asInstanceOf[EnumCase])
+      deriveRecursively[EnumCase](using ctx.nest(caseX, caseY)).map { result =>
+        Expr.quote { Expr.splice(isInstance) && Expr.splice(result) }
+      }
+  }
+}
+```
+
+**Single-dispatch rules are not affected.** Rules that only dispatch on one value (Show,
+Hash, FastShowPretty, all serde encoders/decoders) use `matchOn` with no `isInstanceOf` on a
+second value — they are safe regardless of enum case kind.
+
+**Reference implementations:** `EqEnumRule.scala`, `OrderEnumRule.scala`,
+`DiffEnumRule.scala` (all patched in issue #184).
+
 ## Enum derivation for HKT type classes
 
 For polymorphic type classes (kind `* -> *`), enum derivation follows the same
