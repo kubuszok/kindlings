@@ -33,7 +33,7 @@ final class DiffScala3Spec extends MacroSuite {
 
     test("all cases identical with themselves") {
       val cases = List(Season.Spring, Season.Summer, Season.Autumn, Season.Winter)
-      for (c <- cases) {
+      for c <- cases do {
         val result = diffSeason.diff(c, c)
         assert(result.isIdentical, s"expected identical for $c, got $result")
       }
