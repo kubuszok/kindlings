@@ -24,28 +24,28 @@ trait WriterHandleAsBuiltInRuleImpl {
 
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]] =
       Log.info(s"Attempting to use built-in support for ${Type[A].prettyPrint}") >> MIO {
-        if (Type[A] <:< Type[String]) Rule.matched(Expr.quote {
+        if (Type[A] =:= Type[String]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(Expr.splice(wctx.value.upcast[String]))
         })
-        else if (Type[A] <:< Type[Boolean]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Boolean]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Boolean.valueOf(Expr.splice(wctx.value.upcast[Boolean])))
         })
-        else if (Type[A] <:< Type[Int]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Int]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Integer.valueOf(Expr.splice(wctx.value.upcast[Int])))
         })
-        else if (Type[A] <:< Type[Long]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Long]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Long.valueOf(Expr.splice(wctx.value.upcast[Long])))
         })
-        else if (Type[A] <:< Type[Double]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Double]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Double.valueOf(Expr.splice(wctx.value.upcast[Double])))
         })
-        else if (Type[A] <:< Type[Float]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Float]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Float.valueOf(Expr.splice(wctx.value.upcast[Float])))
         })
-        else if (Type[A] <:< Type[Short]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Short]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Short.valueOf(Expr.splice(wctx.value.upcast[Short])))
         })
-        else if (Type[A] <:< Type[Byte]) Rule.matched(Expr.quote {
+        else if (Type[A] =:= Type[Byte]) Rule.matched(Expr.quote {
           ConfigValueFactory.fromAnyRef(java.lang.Byte.valueOf(Expr.splice(wctx.value.upcast[Byte])))
         })
         else Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in primitive type")
