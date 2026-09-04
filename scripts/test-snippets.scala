@@ -46,7 +46,7 @@ class KindlingsExtendedRunner(runner: Runner)(
     mkDocsCfg: MkDocsConfig
 ) extends Runner {
 
-  private val defaultScalaVersion = "2.13.18"
+  private val defaultScalaVersion = "3.9.0"
   private val snapshotRepo = "https://central.sonatype.com/repository/maven-snapshots"
 
   private val replacePatterns = (mkDocsCfg.extra + (raw"kindlings_version\(\)" -> kindlingsVersion)).map {
