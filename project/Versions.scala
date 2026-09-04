@@ -12,7 +12,7 @@ import sbt.VirtualAxis
 object versions {
   // Versions we are publishing for.
   val scala213 = "2.13.18"
-  val scala3 = "3.8.4"
+  val scala3 = "3.9.0"
 
   // Which versions should be cross-compiled for publishing.
   val scalas = List(scala213, scala3)
