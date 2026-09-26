@@ -65,7 +65,7 @@ val nativeEvictionWarn = List(
 // macro providers/traits users mix into their bundles, so the same nested-vs-top-level rule as Hearth applies
 // (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
 // scope may be filtered here, each with a justification. Bump this on every release.
-val mimaPreviousVersion = "0.3.1"
+val mimaPreviousVersion = "0.3.2"
 
 val mimaSettings = Seq(
   // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
@@ -116,6 +116,7 @@ val settings = Seq(
       "-language:implicitConversions", // hearth Type.Lazy[A] => Type[A] unwrapping at use-sites
       "-Wconf:msg=Unreachable case:s", // suppress fake (?) errors in internal.compiletime
       "-Wconf:msg=Missing symbol position:s", // suppress warning https://github.com/scala/scala3/issues/21672
+      "-Wconf:msg=Skipping coverage instrumentation:s", // Scala 3.9+ warns about large method bodies; not actionable for macro-generated code
       "-Werror",
       "-Wnonunit-statement",
       // "-Wunused:imports", // import x.Underlying as X is marked as unused even though it is! probably one of https://github.com/scala/scala3/issues/: #18564, #19252, #19657, #19912
