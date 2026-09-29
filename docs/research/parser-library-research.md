@@ -645,18 +645,31 @@ chunks, and compute line and column lazily by scanning back to `\n` (as fastpars
 
 ### 5.8 BNF / yacc-style front end ("yacc embedded in macros")
 
-The requested user-facing shape:
+The user-facing shape, after two rounds of syntax probes (details below):
 
 ```scala
-val postalAddress = nonTerminal[PostalAddress]
-val houseNumber   = terminal("[0-9]+").map(_.toInt)
+val parser = grammar {
+  // phantom declarations: exist only to type-check the wiring; the macro erases them
+  val postalAddress = nonTerminal[PostalAddress]
+  val name          = nonTerminal[String]
+  val personal      = terminal("[A-Z][a-z]+")
+  val zip           = terminal("[0-9]{5}").map(_.toInt)
+  val EOL           = terminal("\n").map(_ => ())
 
-grammar(postalAddress) {
-  postalAddress ::= (name, streetAddress, zip) ==> { (n, s, z) => PostalAddress(n, s, z) }
-  name ::= (personal, lastName, optSuffix, EOL) ==> { (p, l, s, _) => ... } |
-           (personal, name) ==> { (p, n) => ... }
+  // productions: `all(...)` is one sequence, `||` separates alternatives
+  postalAddress ::= all(name, zip) { (n, z) => PostalAddress(n, z) }
+  name ::= (
+       all(personal, "-", personal, EOL) { (a, _, b, _) => a + b }
+    || all(personal, name)              { (p, n) => p + n }
+    || all(personal)                    { p => p }
+  )
+
+  postalAddress // start symbol = block result
 }
 ```
+
+The first draft used bare tuples, `(a, b, c) { … } | (d, e) { … }`, with symbols declared outside the
+block. Probe round 1 below shows why that was replaced.
 
 **Why this is the strongest position.**
 - The Scala ecosystem has combinator libraries (Parsley, fastparse, cats-parse) and one old,
@@ -682,6 +695,27 @@ grammar(postalAddress) {
 | 5 | Terminal regex visible in the *type* without a macro, across separate compilation | ✓ `def terminal[Re <: String with Singleton](re: Re): Terminal[Re, String]` infers `Terminal["[0-9]{5}", String]`; `.map` keeps `Re`; a mismatch is rejected from another compilation run | ✓ same (use `&` instead of `with`) | Terminals need **no macro** and are a free carrier (§5.6). `"…".r` must **not** be used, because `Regex` loses the literal. |
 | 6 | Non-terminals declared outside the block | ✓ | ✓ | `val name = nonTerminal[String]` has no body. The grammar macro keys on the `val`'s symbol, takes its name for traces, and recursion and forward references are free. This removes the "ascription erases the carrier" problem of §5.6 for BNF grammars. |
 
+**Probe round 2: the `all(…) { … } || all(…) { … }` form with in-block declarations** (both compilers):
+
+| # | Question | 2.13.18 | 3.8.3 | Consequence |
+|---|---|---|---|---|
+| 7 | Overloaded `all` per arity, action in a second parameter list: `def all[A, B, R](a: Sym[A], b: Sym[B])(f: (A, B) => R): Alt[R]` | ✓ | ✓ | Overload resolution happens on the first list (arity), then lambda parameter types are inferred. A builder variant (`all(a, b)` returns `All2[A, B]` with `apply`) behaves identically and leaves room for modifiers such as `.prec(times)` before the action. |
+| 8 | Wrong action result type | "found Int, required String", pointing at the expression | "Found: (z : Int) Required: String" | Clean on both, unlike juxtaposed tuples (#3) |
+| 9 | Wrong action arity | "missing parameter type … required: (String, Int) => String" | "Wrong number of parameters, expected: 2" | Clean on both |
+| 10 | Leading `\|\|` on a new line | ✗ (statement ends at the newline) | ✓ | Same as #4. |
+| 11 | Leading `\|\|` **inside parentheses**, `name ::= ( … \|\| … )`, or varargs `oneOf(all(…), all(…))` | ✓ | ✓ | Newlines inside parentheses don't end statements, so the parenthesised layout is the documented cross-compiling style. |
+| 12 | `nonTerminal`/`terminal` declared as **local `val`s inside the `grammar { … }` block**, self-recursive productions, block result as start symbol | ✓ (no unused warnings with `-Wunused:locals`) | ✓ (none with `-Wunused:all`) | The macro sees every declaration, the regex literal and the `.map` lambda **in the tree**. No type carrier is needed for in-block symbols (§5.6 carriers matter only for symbols shared across grammars), and the phantom values are erased from the output. |
+| 13 | Productions using a symbol declared *later* in the block | ✗ "forward reference … extends over definition" | ✗ same | Rule: **declarations first, then productions**. The compiler enforces it with a clear message, so the macro needs no extra check. |
+
+**Notes on in-block phantoms**
+- The phantom constructors (`nonTerminal`, `terminal`, `all`, `::=`, `||`) can be `@compileTimeOnly`
+  for in-block use, which guarantees none survives into runtime code.
+- Symbols shared *between* grammars (declared outside, §5.6) need non-`compileTimeOnly` variants.
+  Those keep their regex in the type via the `Singleton` bound (#5).
+- #5 needs `String with Singleton`, because 2.13 has no `&` even with `-Xsource:3`. In shared sources
+  Scala 3 then emits a deprecation warning, so that signature belongs in version-specific sources.
+- Unit-valued symbols (`"-"`, `EOL`) remain positional `_` parameters.
+
 Probe sources are not committed. The findings are summarised here, and spike 6 in §7 re-creates them
 properly as tests.
 
@@ -702,9 +736,11 @@ properly as tests.
 
 **What the macro does.** This is a non-derivation module following the `di`/`mock`/`optics` recipe.
 1. **Walk the typed block** (`DestructuredExpr`):
-   - collect `::=` statements, alternatives, precedence declarations and actions;
-   - resolve each symbol reference to a non-terminal (by symbol) or a terminal (regex from the literal
-     type argument, or a string literal inline);
+   - collect the local phantom declarations, the `::=` statements, `all`/`||` alternatives, precedence
+     declarations and actions;
+   - resolve each symbol reference to a non-terminal (by local symbol) or a terminal (regex literal and
+     `.map` lambda read from its in-block declaration, a string literal inline, or, for shared
+     external terminals, the literal type argument);
    - read opaque or combinator-built rules through their §5.6 carriers.
 2. **Build the lexer:**
    - parse the regexes itself, using a restricted, DFA-compatible syntax; back-references and
@@ -766,7 +802,10 @@ applies:
    - IELR(1) vs LALR(1) as the default;
    - whether an LL(1)/combinator front end ships in v1 or later;
    - effect mode (a) staged vs (b) interleaved, or both, selected per grammar;
-   - one statement per alternative (`|=`) vs trailing `|` as the documented cross-compiling style.
+   - curried `all(…)(f)` vs builder `all(…)` + `apply(f)`; the builder leaves room for per-alternative
+     modifiers (`prec`, labels);
+   - the multi-line alternative style. Probes favour a parenthesised `( … || … )` with leading `||`,
+     which works on both compilers; `oneOf(…)` is an alternative.
 2. **Composition model.** Accept the literal-type carrier (§5.6) as the composition mechanism? It
    implies these user-visible rules:
    - rules must not be type-ascribed (use `rule.fix` or a `grammar { … }` block for recursion);
