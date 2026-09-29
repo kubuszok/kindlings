@@ -648,21 +648,24 @@ chunks, and compute line and column lazily by scanning back to `\n` (as fastpars
 The user-facing shape, after two rounds of syntax probes (details below):
 
 ```scala
-val parser = grammar {
-  // phantom declarations: exist only to type-check the wiring; the macro erases them
+// the single surface, identical on 2.13 and 3 (decided 2026-09-29)
+val parser = grammar[PostalAddress, IO] { g => import g._
+  // phantom declarations: exist only to type-check the wiring; the macro erases them (and `g`)
   val postalAddress = nonTerminal[PostalAddress]
   val name          = nonTerminal[String]
+  val optSuffix     = nonTerminal[String]
   val personal      = terminal("[A-Z][a-z]+")
   val zip           = terminal("[0-9]{5}").map(_.toInt)
   val EOL           = terminal("\n").map(_ => ())
 
-  // productions: `all(...)` is one sequence, `||` separates alternatives
-  postalAddress ::= all(name, zip) { (n, z) => PostalAddress(n, z) }
+  // `all(...)` is one sequence, `||` separates alternatives.
+  // `{ ... }` must return F[A] (checked by the compiler); `.pure { ... }` is the pure fast path.
+  postalAddress ::= all(name, zip) { (n, z) => IO(PostalAddress(n, z)) }
   name ::= (
-       all(personal, "-", personal, EOL) { (a, _, b, _) => a + b }
-    || all(personal, name)              { (p, n) => p + n }
-    || all(personal)                    { p => p }
+       all(personal, "-", personal, optSuffix, EOL).pure { (a, _, b, s, _) => a + b + s }
+    || all(personal, name).pure                         { (p, n) => p + n }
   )
+  optSuffix ::= "Sr." || "Jr." || ""   // literals are singleton values; "" is the empty alternative
 
   postalAddress // start symbol = block result
 }
@@ -862,13 +865,11 @@ there were probed (round 5, both compilers):
 | **D2: context function (Scala 3 only)** | Exactly `grammar[Addr, IO] { … }`. The body is `GDsl { type F[x] = IO[x] } ?=> NonTerminal[Addr]`, and a top-level `all(…)(using d: GDsl): All2[d.F, …]`. | n/a | ✓ | Same checks and the same mixed-alternative support. The error reads "Required: contextual$1.F[Addr]", which is accurate but prints the context parameter's path. That's worth polishing, e.g. via a named `given` or type aliasing. |
 | **D3: evidence on `::=`, macro checks `F`** | Exactly `grammar[Addr, IO] { … }` on both. `::=[X](alts: Alt[X])(implicit ev: Produces[X, A])` with instances `Produces[A, A]` (pure) and `Produces[G[A], A]` (effectful). | ✓ | ✓ | Simple cases work, including a custom `@implicitNotFound` message. **But:** (1) the typer accepts *any* `G[A]`, so a wrong effect (`Other[Addr]`) is caught only by the macro; (2) **mixing pure and effectful alternatives fails**, because `\|\|` merges them into `Object` (2.13) or `IO[Nil.type] \| List[Int]` (3) before `::=` sees them; (3) making `Produces` contravariant to fix (2) makes `Produces[A, A]` vs `Produces[G[A], A]` ambiguous. **Rejected.** |
 
-**Recommendation**
-- **Scala 3:** D2, which is exactly the requested `grammar[Result, F] { … }` with compiler-enforced
-  `F[A]`.
-- **Scala 2.13, and code that must cross-compile:** D1. The `g =>` parameter is another phantom that
-  the macro erases.
-- The Scala 3 `grammar` can accept both forms, so cross-built user code writes D1 and Scala-3-only code
-  writes D2.
+**Decision (2026-09-29): D1 is the single surface on both 2.13 and 3.**
+- The same user code compiles on both compilers, with compiler-enforced `F[A]`.
+- The `g =>` parameter is another phantom that the macro erases.
+- D2 is not planned. It could only ever be a Scala-3-only convenience, and one syntax everywhere is
+  preferred.
 - Actions default to effectful (`F[R]`, as requested). `.pure { … }` marks the pure fast path
   explicitly. This works because the builder variant of `all` has room for a second method.
 - For `F = Id`, both forms coincide, and the macro treats every action as pure.
@@ -907,8 +908,8 @@ there were probed (round 5, both compilers):
    - effect mode (a) staged vs (b) interleaved, or both, selected per grammar;
    - the builder `all(…)` + `apply(f)` / `.pure(f)` is now effectively required by effect typing
      (round 5); it also leaves room for per-alternative modifiers (`prec`, labels);
-   - D1 (`g => import g._`, cross-compiling) plus D2 (context function, Scala 3) as the effect-typing
-     surface;
+   - ~~effect-typing surface~~ *decided:* D1, `grammar[Result, F] { g => import g._; … }`, the same
+     syntax on 2.13 and 3;
    - the multi-line alternative style. Probes favour a parenthesised `( … || … )` with leading `||`,
      which works on both compilers; `oneOf(…)` is an alternative.
 2. **Composition model.** Accept the literal-type carrier (§5.6) as the composition mechanism? It
