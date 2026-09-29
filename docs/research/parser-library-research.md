@@ -963,13 +963,136 @@ About 3–4 s per 300 productions on a cold JVM, which is modest. Warm sbt serve
 faster (not measured). LR construction and code generation in the macro come on top; spike 6 must
 measure those.
 
+
+### 5.10 Executing `F`: tail-call elimination vs a `ParserRuntime[F]`
+
+**Answer to "tail-rec elimination in the macro or a `Runtime[F]`?": neither alone.**
+
+**Recursion never reaches `F` or the JVM stack.** The LR `while (true) (state: @switch) match { … }`
+loop over an `Array` state stack is the **defunctionalised form of recursive-ascent parsing**:
+- the state stack is the return-continuation stack;
+- the value stack holds those continuations' free variables.
+
+References [not re-checked]: Reynolds 1972; Danvy & Nielsen, *Defunctionalization at Work*, 2001;
+Pennello 1986; Roberts 1988; Sperber & Thiemann, TOPLAS 2000.
+
+Tail-call elimination would not help anyway:
+- scalac only removes *self* tail calls;
+- generated per-non-terminal code is *mutually* recursive, with depth equal to the input's nesting;
+- trampolining it just moves continuations onto the heap. That is exactly what fs2-data's JSON
+  tokenizer does with `Pull` for nesting.
+
+**What is left for `F`: driving a resumable machine.** The macro generates a mutable machine:
+
+```scala
+final class Machine /* generated per grammar */ {
+  var states: Array[Int]; var values: Array[AnyRef]; var sp: Int      // (+ primitive value stacks, §5.8)
+  var buf: Array[Byte]; var pos: Int; var lim: Int; var eof: Boolean   // per InputStrategy, §5.7
+  var pending: AnyRef                    // the F[R] of an effectful action awaiting its result
+  def feed(chunk: Array[Byte], off: Int, len: Int): Unit
+  def endOfInput(): Unit
+  def resume(v: AnyRef): Unit            // push the effect's result, take the goto
+  def run(budget: Int): Int              // Signal: NeedInput | Done | Error | Effect | Yield; allocation-free
+}
+```
+
+`run` executes shifts and reductions until one of these happens:
+- it needs input;
+- it finishes or fails;
+- it has used up `budget` steps (returns `Yield`);
+- it hits an **effectful** reduction: the action is called, its `F[R]` is stored in `pending`, and it
+  returns `Effect`.
+
+Pure reductions (`.pure { … }`) are inlined and never leave the loop.
+
+**Codegen specialisation on the statically known `F`.** This is kyo-compat's "lower at the call site,
+no type class dispatch" idea. kyo-compat does it with Scala 3 `inline`; here it is done by the macro,
+so it works on 2.13 too.
+
+| `F` | Generated code | `F` operations per parse |
+|---|---|---|
+| `Id`, or a direct-style marker (Ox / Loom / Gears) | Effectful actions are called inline like pure ones; refills are inline `is.read(buf)` | **0** |
+| Either-like (`Either[E, *]`, `Try`, …) | `action(…) match { case Left(e) => fail(e); case Right(v) => push(v) }` inline | **0** |
+| Suspending (`IO`, `ZIO`, `Future`, Kyo `<`, generic `Sync`/`Async`) | Signals, driven by a `ParserRuntime[F]` | 1 per `budget` pure steps, plus 2–3 per effectful reduction, plus 1 per refill |
+
+**`ParserRuntime[F]`** is the only place a suspending `F` appears:
+
+```scala
+trait ParserRuntime[F[_]] {
+  def delay[A](a: => A): F[A]                           // one pure segment: m.run(budget)
+  def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]       // must be stack safe (all targets below are)
+  def pure[A](a: A): F[A]
+  def raise[A](e: Throwable): F[A]
+  def cede: F[Unit]                                     // IO.cede / ZIO.yieldNow / unit
+  def readBlocking(is: java.io.InputStream, buf: Array[Byte]): F[Int]   // JVM/Native only
+  def budget: Int                                       // pure steps per segment
+  // optional fast path: def loop(m: Machine): F[Result] (ZIO.whileLoop, Kyo Loop)
+}
+```
+
+The default driver is written once:
+- `delay(m.run(budget))`, then:
+  - `Effect`: `flatMap(pending)(v => { m.resume(v); again })`;
+  - `Yield`: `cede` and again;
+  - `NeedInput`: `readBlocking` and again.
+- The machine itself is allocated **inside** `delay`, so every run gets a fresh one and the parser
+  value stays referentially transparent. jawn-fs2 allocates its `AsyncParser` at pipe construction,
+  outside `F`, which shares mutable state if the stream is re-run.
+
+**Why not `IOLocal` + recursive `IO`** (evidence from cats-effect 3.7.1 source):
+- **`IOLocal` is slow for this.** It is an immutable `Map` stored in the fiber, so every `get`/`set`
+  costs an extra `IO` stage plus a map operation, and its copy-to-child semantics aren't needed. A
+  mutable machine created inside `delay` is already confined to one fiber. The sequential driver orders
+  the stages, even across thread hops. `FiberRef` in ZIO is the same story.
+- **Per-reduction `flatMap` would dominate.** CE's own tuning doc puts a `flatMap` at about 10 ns.
+  Third-party benchmarks measure about 8–13 ns and about 96 B per bind for CE and ZIO. A shift or reduce
+  in the array loop should cost a few ns [to measure]. One `IO` stage per reduction would cost several
+  times the parse itself.
+- **One huge `delay` is unfair.** CE auto-yields every 1024 stages (cancellation checks every 512), but
+  never *inside* a `delay`. Its guidance: work longer than about 10 µs is "expensive", so split it and
+  `cede`. Hence `budget`, with a target of roughly 10–50 µs per segment, i.e. a few thousand steps (to
+  tune). ZIO auto-yields every 10,240 ops; Kyo preempts on time slices.
+
+**Instances**
+
+| Instance | Scala | Notes |
+|---|---|---|
+| `Id` / direct style | 2.13 + 3 | Inline codegen, `budget = ∞`. For Ox, document `computeIntensive` for huge inputs, which moves CPU-bound work off the virtual-thread carriers. |
+| `Either` / `Try` | 2.13 + 3 | Inline codegen |
+| cats-effect generic `Sync[F]` / `Async[F]` | 2.13 + 3, JVM/JS/Native | `blocking` for reads, **not** `interruptible`: `FileInputStream` ignores interrupts (CE FAQ). `cede` needs `Async`/`GenSpawn`; with plain `Sync` it is `unit`. |
+| cats-effect `IO`, specialised | 2.13 + 3 | `IO.cede`, `IO.blocking`. After `blocking`, the following pure stage usually stays on the same thread until the next yield (CE thread-model doc), so refill and parse don't ping-pong between pools. |
+| ZIO, native | 2.13 + 3 | `loop` via **`ZIO.whileLoop`**, a run-loop-level while node documented as the performance constructor. Plus `yieldNow` and `attemptBlocking`. `interop-cats` only as a fallback. |
+| Kyo | 3 only | `Sync.defer` + `kyo.kernel.Loop` (up to 4 loop values without tuple allocation) |
+| `Future` | 2.13 + 3 | Lazy wrapper (`() => Future`), `cede` via the execution context |
+| fs2 | 2.13 + 3 | Not through `ParserRuntime`. A `Pipe[F, Byte, A]` via `Pull.uncons`: per chunk, `feed` + `run`, with effectful reductions via the runtime. This is fs2-data's and jawn-fs2's shape, but with an explicit LR stack instead of `Pull`-nested continuations. |
+
+- **Scala.js:** single-threaded, with no blocking reads. The only input APIs are in-memory and the
+  push `step(chunk)`. `budget` + yield matters more there, because a long synchronous parse freezes
+  the event loop.
+- **Scala Native 0.5:** multithreaded, so `blocking` is meaningful.
+- **Ox and Kyo instances live in Scala-3-only modules.** Ox is also JVM-21-only.
+
+**Benchmarks that decide the parameters (spike 7)**
+1. Effect density: 0 %, 1 %, 10 % and 100 % effectful reductions, on CE `IO` and ZIO. This measures
+   the batching win and the cost per effect.
+2. `budget` sweep (256 / 1k / 4k / 16k / ∞): throughput versus the latency of a concurrent "ping"
+   fiber, plus the CE starvation checker.
+3. Parser state held in a captured mutable machine vs `IOLocal`/`FiberRef` vs `Ref`.
+4. Driver shape: recursive `flatMap` vs `tailRecM` vs `ZIO.whileLoop` vs Kyo `Loop`.
+5. Refill: `blocking` read sizes (8 / 64 / 256 KiB) vs `delay`; the fs2 pipe vs `InputStream` +
+   `blocking`.
+6. Baselines: `Id` codegen vs fs2-data JSON and jawn `AsyncParser` on the same input.
+
 ## 6. Decisions needed before prototyping
 
 1. **Grammar class.** *Resolved (2026-09-29):* a yacc-style BNF front end with LR(1) (IELR/LALR) as the
    core (§5.8). Still open:
    - IELR(1) vs LALR(1) as the default;
    - whether an LL(1)/combinator front end ships in v1 or later;
-   - effect mode (a) staged vs (b) interleaved, or both, selected per grammar;
+   - effect mode: *resolved in §5.10* in favour of interleaved execution through a resumable machine
+     plus `ParserRuntime[F]`, with codegen specialisation for `Id`/direct-style and Either-like `F`.
+     The staged "build one `F[Program]`" mode needs no special support: it is just actions whose
+     `F` is lazy (e.g. `Eval`, or a free structure);
    - the builder `all(…)` + `apply(f)` / `.pure(f)` is now effectively required by effect typing
      (round 5); it also leaves room for per-alternative modifiers (`prec`, labels);
    - ~~effect-typing surface~~ *decided:* D1, `grammar[Result, F] { g => import g._; … }`, the same
@@ -1032,6 +1155,10 @@ measure those.
    - prototype dead-value elimination: unused lambda parameters not synthesised, and dead
      non-terminals compiled recognise-only. Measure allocation on a JSON grammar that ignores most
      values.
+7. **Runtime spike (§5.10):**
+   - hand-write the `Machine` for the JSON grammar with 0 / 1 / 10 / 100 % effectful reductions;
+   - run the six benchmarks listed in §5.10 on JVM, JS and Native;
+   - fix the default `budget` per runtime and choose the driver shape per instance.
 
 ## 8. Glossary of the less common terms
 
