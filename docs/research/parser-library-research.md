@@ -1,6 +1,6 @@
 # Parser library for Kindlings: prior-art research
 
-Status: **RESEARCH** (2026-09-29; revised the same day for composition (R6) and the input memory model (R7)). No implementation yet. This document compares the existing Scala
+Status: **RESEARCH** (2026-09-29; revised the same day for composition (R6), the input memory model (R7) and the yacc-style BNF front end (§5.8)). No implementation yet. This document compares the existing Scala
 parsing libraries and the relevant non-Scala prior art against the requirements below, and proposes a
 direction plus the decisions that need to be made before a prototype.
 
@@ -45,7 +45,17 @@ are marked **[unverified]**.
   - Menhir/Bison-style *conflict explanations and counterexamples* for diagnostics.
 
   A Hearth macro can play the role that MetaOCaml / Typed Template Haskell / LMS play in those papers.
-- **Recommended shape:**
+- **Revised direction (see §5.8): "yacc embedded in macros".**
+  - The primary front end is a BNF DSL inside `grammar(start) { … }`:
+    `nonTerminal ::= (sym, sym, …) ==> { action }`.
+  - A macro turns it into an **LR(1) automaton (IELR/LALR)**. The automaton is inlined as a `while`
+    loop with an explicit stack, with semantic actions spliced into the reduce cases, pure or in a user
+    `F[_]`.
+  - No Scala library does this today. The prototypes of the syntax type-check on 2.13.18 and 3.8.3
+    (§5.8).
+  - The recommendation below is kept for history. LL(1) and combinators remain a secondary front end
+    and back end.
+- **Original recommended shape (superseded as the primary path):**
   - **Core:** LL(1) with Pratt/precedence operators, plus a layout scanner and stateful escape
     hatches.
   - **Back end:** generated `while` loops over `Array[Int]` stacks, exposed as a push-style `step`
@@ -633,12 +643,130 @@ The cost is one copy of the generated code per (grammar, strategy) pair actually
 chunks, and compute line and column lazily by scanning back to `\n` (as fastparse's lazy
 `lineNumberLookup` does) only for errors and traces.
 
+### 5.8 BNF / yacc-style front end ("yacc embedded in macros")
+
+The requested user-facing shape:
+
+```scala
+val postalAddress = nonTerminal[PostalAddress]
+val houseNumber   = terminal("[0-9]+").map(_.toInt)
+
+grammar(postalAddress) {
+  postalAddress ::= (name, streetAddress, zip) ==> { (n, s, z) => PostalAddress(n, s, z) }
+  name ::= (personal, lastName, optSuffix, EOL) ==> { (p, l, s, _) => ... } |
+           (personal, name) ==> { (p, n) => ... }
+}
+```
+
+**Why this is the strongest position.**
+- The Scala ecosystem has combinator libraries (Parsley, fastparse, cats-parse) and one old,
+  external-file LALR tool (ScalaBison, which drives bison). To my knowledge, nothing embeds a yacc
+  grammar in Scala source and compiles it at `scalac` time into an inlined, effect-polymorphic parser.
+  [unverified that no such library exists.]
+- Outside Scala, the closest relatives generate code *from a separate grammar file*: Menhir (`.mly`),
+  LALRPOP (`.lalrpop` plus a build script), Happy, and grmtools (`.y`).
+- A Hearth macro gives the same power in-source, cross-compiled 2.13/3, with IDE navigation from every
+  symbol to its definition.
+- BNF with productions is also the most analysable form. Nonterminals are explicit, every alternative
+  has a source position, and actions fire at reductions. That is exactly LR's model and the setting
+  where shift/reduce and reduce/reduce diagnostics (R4) exist.
+
+**Syntax probes.** Plain marker types, no macro, compiled with scalac 2.13.18 and 3.8.3.
+
+| # | Question | 2.13.18 | 3.8.3 | Consequence |
+|---|---|---|---|---|
+| 1 | Does `::=` bind looser than `\|`? | ✓ | ✓ | `::=` ends in `=`, so it has assignment-operator (lowest) precedence and is left-associative. `a ::= b \| c` is `a ::= (b \| c)`. |
+| 2 | `(a, b, c) { (x, y, z) => … }` with lambda parameter types inferred from the symbols | ✓ via an `implicit class` on `(Sym[A], Sym[B], Sym[C])` with `apply` | ✓ same mechanism | Works, but see #3 |
+| 3 | Error quality for a wrong action type or arity with juxtaposition `(…) { … }` | Good ("found Int, required String") | **Misleading**: Scala 3 tuples already have `apply(n: Int)`, so the error reports "missing parameter type … expected Int" | Use an explicit connector such as **`==>`**, which gives clean errors on both. Allow juxtaposition optionally at most. The grammar macro can't repair this, because the block is typed before the macro runs. |
+| 4 | Alternatives with a **leading** `\|` on a new line | **✗** `not found: value \|`, even with `-Xsource:3` | ✓ | Cross-compiled grammars put `\|` at the **end** of the line, or use one statement per alternative (e.g. `name \|= (…) ==> {…}`, which is also an assignment operator) |
+| 5 | Terminal regex visible in the *type* without a macro, across separate compilation | ✓ `def terminal[Re <: String with Singleton](re: Re): Terminal[Re, String]` infers `Terminal["[0-9]{5}", String]`; `.map` keeps `Re`; a mismatch is rejected from another compilation run | ✓ same (use `&` instead of `with`) | Terminals need **no macro** and are a free carrier (§5.6). `"…".r` must **not** be used, because `Regex` loses the literal. |
+| 6 | Non-terminals declared outside the block | ✓ | ✓ | `val name = nonTerminal[String]` has no body. The grammar macro keys on the `val`'s symbol, takes its name for traces, and recursion and forward references are free. This removes the "ascription erases the carrier" problem of §5.6 for BNF grammars. |
+
+Probe sources are not committed. The findings are summarised here, and spike 6 in §7 re-creates them
+properly as tests.
+
+**Remaining syntax decisions**
+- **Unit-valued symbols** (`EOL`, `"+"`) appear as lambda parameters, which users write as `_`. That
+  mirrors Menhir's `$1 … $3` and LALRPOP's `<a:Expr> "+" <b:Term>`.
+  - Dropping them automatically would need type-level tuple filtering *before* the lambda is typed.
+    Scala 3 match types can do that, but Scala 2 would need an overload per arity × mask.
+  - Recommendation: keep `_` in v1.
+- **Start symbol:** write `grammar(postalAddress)` rather than `grammar[PostalAddress]`, which is
+  ambiguous when two non-terminals share a type.
+- **Precedence and associativity declarations** (yacc `%left`/`%right`/`%nonassoc`, `%prec`) go inside
+  the block as statements, e.g. `left(plus, minus); left(times, div)` and `(…) ==> {…} prec times`.
+- **EBNF sugar** (`opt(x)`, `rep(x)`, `rep1(x)`, `sepBy(x, comma)`) desugars into generated helper
+  non-terminals, as in Menhir's standard library (`list(X)`, `separated_list(sep, X)`). It is built
+  left-recursive, so the LR stack stays flat on long lists.
+- **Arity:** 2.13 needs generated overloads up to 22. Scala 3 can use a single generic-tuple signature.
+
+**What the macro does.** This is a non-derivation module following the `di`/`mock`/`optics` recipe.
+1. **Walk the typed block** (`DestructuredExpr`):
+   - collect `::=` statements, alternatives, precedence declarations and actions;
+   - resolve each symbol reference to a non-terminal (by symbol) or a terminal (regex from the literal
+     type argument, or a string literal inline);
+   - read opaque or combinator-built rules through their §5.6 carriers.
+2. **Build the lexer:**
+   - parse the regexes itself, using a restricted, DFA-compatible syntax; back-references and
+     look-around are rejected at compile time with the terminal's position;
+   - build one Unicode-aware DFA over bytes or chars (per `InputStrategy`, §5.7);
+   - use **context-aware scanning** (Copper): in each LR state, only terminals valid there are
+     candidates. That resolves keyword/identifier clashes, which also matters when composing grammars.
+3. **Build the LR(1) automaton:** IELR(1), or LALR(1) as a fast option. Report conflicts Menhir-style:
+   the conflict token, the two items, and each production's `file:line` (the `::=` call site). Optional
+   Bison-style counterexamples are time-boxed by `DerivationTimeout`. Also report unreachable and
+   unproductive non-terminals and unused precedence declarations.
+4. **Generate code:**
+   - a direct-coded or table-driven state machine in a `while` loop, with `Array[Int]` state stack and
+     value stacks (split into primitive and reference stacks to avoid boxing `Int`/`Long`/`Double`
+     results);
+   - no JVM recursion, so it is stack safe;
+   - tables encoded as string literals when big, to respect the 64 KB method limit;
+   - **action lambdas beta-reduced and spliced into their reduce case**, so there is no `Function`
+     allocation per reduction.
+5. **Push interface:** the same machine is exposed as `step(chunk)` returning `NeedInput | Done | Error`.
+   This gives exact REPL incompleteness via LR's viable-prefix property, with `InputStream`/`String`
+   drivers on top.
+6. **Debugging:**
+   - a static `RuleMeta` table (non-terminal, alternative index, `file:line`);
+   - traces of shift, reduce and goto events when tracing is compiled in (§5.4);
+   - error messages listing expected terminals by their `val` names;
+   - optionally a Menhir `--list-errors`-style coverage report of error states that have no custom
+     message.
+
+**Effects in actions** (R1, now concrete). Each action's static type tells the macro which case
+applies:
+
+| Action returns | Generated reduce code |
+|---|---|
+| `B` (pure) | Inline, in the tight loop. No `F` involved. |
+| `F[B]` with `ParserEffect[F]` | Two options, to be decided in the spike: **(a) staged:** the value stack holds `F[B]` values combined with `map2`, so the whole parse yields one `F[Program]` and no effects run during parsing; **(b) interleaved:** the machine suspends at that reduction, the driver `flatMap`s/`tailRecM`s in `F`, and it resumes. |
+
+- Option (a) fits "build an `F[Program]`". Option (b) fits compilers that update symbol tables or
+  REPLs that evaluate as they go.
+- In both options, pure productions never touch `F`. That is the "inlined parser with effects" that no
+  combinator library can offer, because they cannot see which actions are pure.
+
+**LR-specific trade-offs to accept**
+- Actions run only at reductions. Mid-rule actions are desugared into ε-non-terminals, as yacc does,
+  and can introduce conflicts that the diagnostics will explain.
+- Error messages are state-based. Mitigations: expected-terminal lists built from `val` names, Menhir
+  `.messages`-style custom messages keyed by example inputs, and CPCT+ repair for recovery.
+- Indentation-sensitive languages work through the layout scanner (§4.2), which feeds INDENT/DEDENT
+  terminals. The expected-set hook maps naturally onto LR states.
+- Markdown stays an escape hatch (§4.3). The block phase can be a hand-written driver that calls
+  small LR sub-grammars for inline content.
+- Combinator-style rules (§5.6) can still appear as symbols in productions. They are compiled as
+  sub-parsers, or inlined when they are regular (token-like).
+
 ## 6. Decisions needed before prototyping
 
-1. **Grammar class.** Is "LL(1) + precedence + layout, with LR(1) later" acceptable? Or must the first
-   version accept arbitrary PEG with backtracking, like fastparse and parboiled2? PEG costs streaming
-   guarantees and diagnostic precision. If "shift/reduce" diagnostics are wanted literally, the LR
-   back end moves from "later" to "required".
+1. **Grammar class.** *Resolved (2026-09-29):* a yacc-style BNF front end with LR(1) (IELR/LALR) as the
+   core (§5.8). Still open:
+   - IELR(1) vs LALR(1) as the default;
+   - whether an LL(1)/combinator front end ships in v1 or later;
+   - effect mode (a) staged vs (b) interleaved, or both, selected per grammar;
+   - one statement per alternative (`|=`) vs trailing `|` as the documented cross-compiling style.
 2. **Composition model.** Accept the literal-type carrier (§5.6) as the composition mechanism? It
    implies these user-visible rules:
    - rules must not be type-ascribed (use `rule.fix` or a `grammar { … }` block for recursion);
@@ -685,6 +813,13 @@ chunks, and compute line and column lazily by scanning back to `\n` (as fastpars
    - confirm that the `String` strategy allocates nothing but results;
    - compare "specialised per strategy" against "one `CharSequence` loop" to quantify the
      megamorphic cost.
+6. **BNF macro spike (§5.8):**
+   - a Hearth macro that walks a `grammar(start) { … }` block on 2.13 and 3;
+   - build LALR(1) for a JSON grammar and an expression grammar with `left`/`right` precedence;
+   - emit the `while`-loop parser with spliced actions;
+   - show a shift/reduce conflict report pointing at the two `::=` sites;
+   - include the syntax probes from §5.8 as compile tests (positive, and negative with expected
+     error text).
 
 ## 8. Glossary of the less common terms
 
