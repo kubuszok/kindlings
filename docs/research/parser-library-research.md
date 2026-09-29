@@ -1013,7 +1013,46 @@ so it works on 2.13 too.
 |---|---|---|
 | `Id`, or a direct-style marker (Ox / Loom / Gears) | Effectful actions are called inline like pure ones; refills are inline `is.read(buf)` | **0** |
 | Either-like (`Either[E, *]`, `Try`, …) | `action(…) match { case Left(e) => fail(e); case Right(v) => push(v) }` inline | **0** |
-| Suspending (`IO`, `ZIO`, `Future`, Kyo `<`, generic `Sync`/`Async`) | Signals, driven by a `ParserRuntime[F]` | 1 per `budget` pure steps, plus 2–3 per effectful reduction, plus 1 per refill |
+| Suspending (`IO`, `ZIO`, `Future`, Kyo `<`, generic `Sync`/`Async`) | Signals, driven by a `ParserRuntime[F]` | **1 bind per effectful action (irreducible)**, plus 1 per `budget` slice, plus 1 per refill |
+
+**The irreducible cost, and what can be avoided.** This refines the table above.
+
+- **Floor: one bind per effectful action.** An action returning `F[R]` whose `R` is consumed by a later
+  action forces one `flatMap`/`map2` on that value. Effects that print, write or emit must run, and
+  run in order.
+  - With a concrete `F` known to the macro (`grammar[R, IO]`), the bind is a direct `IO#flatMap`.
+  - With an abstract `F[_]: Sync` (tagless-final code), it is a `Sync[F].flatMap` dictionary call. The
+    macro can't specialise that away, but it costs the same bind count.
+- **What we avoid:**
+  1. **Binds for pure actions:** `.pure { … }` never touches `F`.
+  2. **Binds per token or shift:** the lexer and shifts are always pure.
+  3. **`IOLocal`/`Ref` stages** for parser state.
+  4. **Extra resume stages.** The driver doesn't need `flatMap(pending)(v => delay { resume; run })`.
+     It runs the machine's next pure segment **directly inside the continuation of that one bind**:
+     `flatMap(pending)(v => { m.resume(v); m.run(budget) match { … } })`.
+     - That is safe for cats-effect and ZIO: the continuation runs only when the runtime evaluates it,
+       and non-fatal exceptions thrown there are captured as errors.
+     - So an effectful action costs exactly **one** bind. The only other stages are one per `budget`
+       slice (`cede`) and one per blocking refill.
+- **Sync points instead of suspension (optimisation, not a bind reduction).** In LR, actions never
+  influence parse decisions. So the machine doesn't have to *stop* at an effectful reduction.
+  - It can push the unevaluated `F[R]` onto the value stack. The parent reduction then combines its
+    children's `F`s (`flatMap`/`map2`, the same bind count) and the parser keeps going.
+  - The accumulated `F` is only *run* at a **sync point**:
+    - the end of a user-marked non-terminal, e.g. a REPL `statement` or a streamed JSON array element;
+    - the end of the `budget` slice;
+    - the end of input.
+  - This removes machine suspend/resume round-trips. Memory is bounded by the work between sync
+    points, which is why sync points are needed for 4 GB streams and REPLs. Without any, this becomes
+    the "build one `F[Program]`" staged mode.
+- **Multi-shot `F` breaks the mutable machine.** The resumable machine is mutable, so it assumes `F`
+  calls each `flatMap` continuation **at most once**. That holds for `IO`, `ZIO`, `Future`, `Eval`,
+  `Id`, `Either`, `Option` and `Try`.
+  - For multi-shot monads (`List`, `LogicT`-style backtracking, `fs2.Stream` used as a monad), a
+    continuation re-entered twice would corrupt shared state.
+  - Such `F`s need a persistent or copy-on-resume stack (Menhir's checkpoints are persistent for this
+    reason), or must be rejected.
+  - The macro can reject known multi-shot `F`s. `ParserRuntime` instances declare `singleShot = true`.
 
 **`ParserRuntime[F]`** is the only place a suspending `F` appears:
 
@@ -1032,7 +1071,8 @@ trait ParserRuntime[F[_]] {
 
 The default driver is written once:
 - `delay(m.run(budget))`, then:
-  - `Effect`: `flatMap(pending)(v => { m.resume(v); again })`;
+  - `Effect`: `flatMap(pending)(v => { m.resume(v); <next segment inline> })`, i.e. one bind with
+    no extra `delay` stage;
   - `Yield`: `cede` and again;
   - `NeedInput`: `readBlocking` and again.
 - The machine itself is allocated **inside** `delay`, so every run gets a fresh one and the parser
