@@ -211,6 +211,49 @@ object ParsleyJson {
   def parse(input: String): J = json.parse(input).get
 }
 
+/** jawn (the hand-written parser behind circe-parser) building the same [[ParserModel.J]] AST through a custom facade:
+  * the like-for-like reference for the grammar-based parsers.
+  */
+object JawnJson {
+  import ParserModel.*
+  import org.typelevel.jawn.{Facade, FContext}
+
+  private object facade extends Facade.NoIndexFacade[J] {
+    def jnull: J = JNull
+    def jfalse: J = JBool(false)
+    def jtrue: J = JBool(true)
+    def jnum(s: CharSequence, decIndex: Int, expIndex: Int): J = JNum(s.toString.toDouble)
+    def jstring(s: CharSequence): J = JStr(s.toString)
+
+    def singleContext(): FContext[J] = new FContext.NoIndexFContext[J] {
+      private var value: J = null
+      def add(s: CharSequence): Unit = value = jstring(s)
+      def add(v: J): Unit = value = v
+      def finish(): J = value
+      def isObj: Boolean = false
+    }
+    def arrayContext(): FContext[J] = new FContext.NoIndexFContext[J] {
+      private val items = List.newBuilder[J]
+      def add(s: CharSequence): Unit = items += jstring(s)
+      def add(v: J): Unit = items += v
+      def finish(): J = JArr(items.result())
+      def isObj: Boolean = false
+    }
+    def objectContext(): FContext[J] = new FContext.NoIndexFContext[J] {
+      private val fields = List.newBuilder[(String, J)]
+      private var key: String = null
+      def add(s: CharSequence): Unit =
+        if (key == null) key = s.toString
+        else { fields += key -> jstring(s); key = null }
+      def add(v: J): Unit = { fields += key -> v; key = null }
+      def finish(): J = JObj(fields.result())
+      def isObj: Boolean = true
+    }
+  }
+
+  def parse(input: String): J = org.typelevel.jawn.Parser.parseUnsafe(input)(facade)
+}
+
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.Throughput))
 @OutputTimeUnit(TimeUnit.SECONDS)
@@ -225,7 +268,8 @@ class ParserJsonBenchmark {
       "fastparse" -> FastparseJson.parse(input),
       "parboiled2" -> Parboiled2Json.parse(input),
       "cats-parse" -> CatsParseJson.parse(input),
-      "parsley" -> ParsleyJson.parse(input)
+      "parsley" -> ParsleyJson.parse(input),
+      "jawn" -> JawnJson.parse(input)
     )
     results.foreach { case (name, result) =>
       if (result != expected) throw new IllegalStateException(s"$name produced a different AST")
@@ -239,5 +283,6 @@ class ParserJsonBenchmark {
   @Benchmark def parboiled2: J = Parboiled2Json.parse(input)
   @Benchmark def catsParse: J = CatsParseJson.parse(input)
   @Benchmark def parsley: J = ParsleyJson.parse(input)
+  @Benchmark def jawn: J = JawnJson.parse(input)
   @Benchmark def circeJawn: io.circe.Json = io.circe.parser.parse(input).fold(throw _, identity)
 }

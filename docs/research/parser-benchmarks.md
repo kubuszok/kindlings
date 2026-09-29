@@ -13,6 +13,7 @@ ops/s, higher is better:
 | Parser | Scala 2.13 | Scala 3 |
 |---|---|---|
 | circe / jawn (hand-written JSON parser, reference) | 248 ± 17 | 280 ± 20 |
+| jawn with a facade building the same AST (added later, separate run: see below) | 247 ± 31 | 250 ± 37 |
 | **kindlings-parser, generated** (`Grammar.grammar`) | **92 ± 5** | **112 ± 5** |
 | kindlings-parser, generated, input from a `Reader` (8 KB buffer) | 97 ± 8 | 98 ± 11 |
 | kindlings-parser, interpreted (`Grammar.interpreted`) | 78 ± 5 | 98 ± 4 |
@@ -20,6 +21,10 @@ ops/s, higher is better:
 | fastparse (inline macros) | 86 ± 7 | 88 ± 6 |
 | cats-parse | 44 ± 4 | 40 ± 3 |
 | Parsley 4 | 17 ± 1 | 16 ± 2 |
+
+The jawn-with-facade row comes from a later session, in which kindlings-parser generated measured 84 ± 6 (2.13) and
+94 ± 19 (3): the machine was slower that day, so compare it with that run's kindlings numbers (a ~2.6-2.9x gap), not with
+the table above. [parser-vs-jawn.md](parser-vs-jawn.md) analyses where that gap comes from.
 
 ## Reading the results
 
@@ -45,9 +50,14 @@ ops/s, higher is better:
 
 ## Next candidates, by expected gain
 
-1. **Generate the lexer as code per grammar** (a `switch` per DFA state), instead of interpreting the transition tables.
-2. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack.
-3. **`sepBy`/`rep` without `ListBuffer` + `toList`**: build the `List` directly (prepend + one reverse), or pass the
-   builder to user code that accepts a `Seq`.
+See [parser-vs-jawn.md](parser-vs-jawn.md) § 4 for the measurements behind this order.
+
+1. **Generate the LR driver per grammar**: static reduction cases, default reductions, unit-chain folding (the LR
+   machinery is ~34% of the time).
+2. **Generate the lexer as code per grammar**: a first-char `switch`, inlined scanning loops, whitespace skipped
+   inline (~39% of the time, ~4x jawn's scanning).
+3. **Cheaper token text**: slices of a capture group, and lexer facts such as "no escapes" (~11%).
+4. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
+   already feed the target collection's own builder: see `.as[C]`.)
 4. **Per-runtime generated drivers** (§5.11 of the research doc). These need an effect-heavy benchmark first (e.g.
    JSON with an `IO` action per element); the benchmark above is pure.
