@@ -64,6 +64,10 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
 - Effect handling stays in the engines (a `match` for eager effects, one fused `flatMap` for `Sync`). Per-runtime
   generated drivers wait for the benchmarks.
 
+**Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
+than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x
+slower than hand-written jawn.
+
 ## 0. Requirements (as stated) and how they are read here
 
 | # | Requirement | What it implies technically |
