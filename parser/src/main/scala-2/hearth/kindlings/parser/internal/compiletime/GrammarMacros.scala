@@ -40,8 +40,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
           $engine,
           new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
             ${codegen.reduce}
-            ${codegen.hasStringLexer}
-            ${codegen.lexString}
+            ${codegen.hasStringDriver}
+            ${codegen.runString}
             protected def factories(): _root_.scala.Array[_root_.scala.Any] =
               _root_.scala.Array[_root_.scala.Any](..$factories)
           }
@@ -93,7 +93,9 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
     private val m = fresh("m")
     private val vs = fresh("values")
+    private val sts = fresh("states")
     private val top = fresh("top")
+    private val gotoTable = fresh("goto")
 
     /** The value of a right-hand side position whose raw stack value is `raw`. */
     private def value(rhs: CodegenPlan.RhsPlan, raw: Tree): Tree = rhs match {
@@ -106,7 +108,6 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
     private def reduceCase(r: CodegenPlan.Reduce): Tree = {
       def raw(i: Int): Tree = q"$vs($top + ${i - r.len + 1})"
-      val newTop = q"$top - ${r.len}"
       val result: Tree = r.body match {
         case CodegenPlan.ReduceBody.User(action, rhs, _) =>
           val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
@@ -131,47 +132,140 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
               applyFn(code.add, anyAnyToAny, List(raw(0), value(element, raw(i))))
           }
       }
-      val v = fresh("value")
+      val (v, t) = (fresh("value"), fresh("t"))
       val finish = r.body match {
-        case CodegenPlan.ReduceBody.User(_, _, true) => q"$m.suspend($newTop, ${r.lhs}, $v); true"
+        case CodegenPlan.ReduceBody.User(_, _, true) => q"$m.suspendEffect(${r.lhs}, $v); -1 - $t"
         case _                                       =>
-          r.goto match {
-            case Some(state) => q"$m.reducedTo($newTop, $state, $v); false"
-            case None        => q"$m.reduced($newTop, ${r.lhs}, $v); false"
+          val state = r.goto match {
+            case Some(target) => q"$target"
+            case None         => q"$gotoTable($sts($t) * ${out.nonTerminalCount} + ${r.lhs})"
           }
+          q"$sts($t + 1) = $state; $vs($t + 1) = $v; $t + 1"
       }
-      cq"${r.p} => { val $v: _root_.scala.Any = $result; $finish }"
+      cq"${r.p} => { val $v: _root_.scala.Any = $result; val $t = $top - ${r.len}; $finish }"
     }
 
     def reduce: Tree = {
       val p = fresh("p")
-      q"""def reduce($p: _root_.scala.Int, $m: $MachineType): _root_.scala.Boolean = {
-            val $vs = $m.stackValues
-            val $top = $m.stackTop
-            $p match {
-              case ..${out.reduces.toList.map(reduceCase)}
-              case _ => throw new _root_.java.lang.IllegalStateException("no reduction for production " + $p)
-            }
+      q"""def reduce(
+            $p: _root_.scala.Int,
+            $sts: _root_.scala.Array[_root_.scala.Int],
+            $vs: _root_.scala.Array[_root_.scala.Any],
+            $top: _root_.scala.Int,
+            $gotoTable: _root_.scala.Array[_root_.scala.Int],
+            $m: $MachineType
+          ): _root_.scala.Int = $p match {
+            case ..${out.reduces.toList.map(reduceCase)}
+            case _ => throw new _root_.java.lang.IllegalStateException("no reduction for production " + $p)
           }"""
     }
 
     // --- lexer ---------------------------------------------------------------------------------------------------
 
-    def hasStringLexer: Tree = q"def hasStringLexer: _root_.scala.Boolean = ${out.lexer.isDefined}"
+    def hasStringDriver: Tree = q"def hasStringDriver: _root_.scala.Boolean = ${out.lexer.isDefined}"
 
-    def lexString: Tree = {
-      val (lm, text, from) = (fresh("m"), fresh("text"), fresh("from"))
+    def runString: Tree = {
+      val (dm, budget) = (fresh("m"), fresh("budget"))
       val body = out.lexer match {
-        case None        => q"throw new _root_.java.lang.UnsupportedOperationException(${"no generated lexer"})"
-        case Some(lexer) => lexerBody(lexer, lm, text, from)
+        case None        => q"throw new _root_.java.lang.UnsupportedOperationException(${"no generated driver"})"
+        case Some(lexer) => driverBody(lexer, dm, budget)
       }
-      q"""def lexString($lm: $MachineType, $text: _root_.java.lang.String, $from: _root_.scala.Int): _root_.scala.Int =
-            $body"""
+      q"""def runString($dm: $MachineType, $budget: _root_.scala.Int): _root_.scala.Int = $body"""
     }
 
-    private def lexerBody(lexer: CodegenPlan.Lexer, lm: TermName, text: TermName, from: TermName): Tree = {
-      val (len, p, result, i, acc, accEnd, state) =
-        (fresh("len"), fresh("p"), fresh("result"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
+    /** The parse loop of `Machine.run` over locals, with the lexer inlined (see [[lexerBody]]). */
+    private def driverBody(lexer: CodegenPlan.Lexer, dm: TermName, budget: TermName): Tree = {
+      val Machine = q"_root_.hearth.kindlings.parser.internal.runtime.Machine"
+      val (text, len, action, goto, literals) =
+        (fresh("text"), fresh("len"), fresh("action"), fresh("goto"), fresh("literals"))
+      val (states, values, sp, la, tStart, tEnd, pos) =
+        (fresh("states"), fresh("values"), fresh("sp"), fresh("la"), fresh("tStart"), fresh("tEnd"), fresh("pos"))
+      val (steps, status, message, act, literal, r, e) =
+        (fresh("steps"), fresh("status"), fresh("message"), fresh("act"), fresh("literal"), fresh("r"), fresh("e"))
+      val restore = q"$dm.restore($states, $values, $sp, $la, $tStart, $tEnd, $pos)"
+      val grow = q"""{
+            $restore
+            $dm.grow()
+            $states = $dm.stackStates
+            $values = $dm.stackValues
+          }"""
+      val lex = lexerBody(
+        lexer,
+        text,
+        len,
+        pos,
+        onToken = (token, start, end) => q"$la = $token; $tStart = $start; $tEnd = $end; $pos = $end",
+        onError = start => q"$tStart = $start; $status = $Machine.LexFailure"
+      )
+      q"""{
+            val $text = $dm.stringText
+            val $len = $text.length
+            val $action = $dm.actionTableArray
+            val $goto = $dm.gotoTableArray
+            val $literals = $dm.literalTable
+            var $states = $dm.stackStates
+            var $values = $dm.stackValues
+            var $sp = $dm.stackTop
+            var $la = $dm.lookaheadToken
+            var $tStart = $dm.tokenStartIndex
+            var $tEnd = $dm.tokenEndIndex
+            var $pos = $dm.positionIndex
+            var $steps = 0
+            var $status = -1
+            var $message: _root_.java.lang.String = null
+            try {
+              while ($status == -1) {
+                if ($la < 0) $lex
+                if ($status == -1) {
+                  if ($steps >= $budget) $status = $Machine.Yield
+                  else {
+                    $steps += 1
+                    val $act = $action($states($sp) * ${out.tokenCount} + $la)
+                    if ($act > 0) {
+                      val $literal = $literals($la)
+                      $sp += 1
+                      if ($sp == $states.length) $grow
+                      $states($sp) = $act - 1
+                      $values($sp) = if ($literal != null) $literal else $text.substring($tStart, $tEnd)
+                      $la = -1
+                    } else if ($act < 0) {
+                      if ($act == -1) $status = $Machine.Accept
+                      else {
+                        if ($sp + 1 >= $states.length) $grow
+                        val $r = reduce(-$act - 1, $states, $values, $sp, $goto, $dm)
+                        if ($r >= 0) $sp = $r
+                        else {
+                          $sp = -$r - 1
+                          $status = $Machine.Effect
+                        }
+                      }
+                    } else $status = $Machine.Unexpected
+                  }
+                }
+              }
+            } catch {
+              case $e: _root_.hearth.kindlings.parser.internal.runtime.RejectedValue =>
+                $status = $Machine.Rejected
+                $message = $e.getMessage
+            }
+            $restore
+            $dm.finish($status, $message)
+          }"""
+    }
+
+    /** The generated lexer as a block: skips skipped tokens from `pos`, then calls `onToken(id, start, end)` (id 0 at
+      * the end of the input) or `onError(start)`.
+      */
+    private def lexerBody(
+        lexer: CodegenPlan.Lexer,
+        text: TermName,
+        len: TermName,
+        pos: TermName,
+        onToken: (Tree, Tree, Tree) => Tree,
+        onError: Tree => Tree
+    ): Tree = {
+      val (p, scanning, i, acc, accEnd, state) =
+        (fresh("p"), fresh("scanning"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
 
       def inRanges(ch: Tree, ranges: List[(Int, Int)]): Tree =
         ranges
@@ -192,9 +286,9 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         case CodegenPlan.LexNode.SelfLoop(ranges) =>
           val d = fresh("d")
           q"while ($i < $len && { val $d = $text.charAt($i); ${member(q"$d", ranges)} }) $i += 1"
-        case CodegenPlan.LexNode.Accept(token)              => q"$acc = $token; $accEnd = $i"
-        case CodegenPlan.LexNode.Goto(target)               => q"$state = $target"
-        case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
+        case CodegenPlan.LexNode.Accept(token)                     => q"$acc = $token; $accEnd = $i"
+        case CodegenPlan.LexNode.Goto(target)                      => q"$state = $target"
+        case CodegenPlan.LexNode.Dispatch(cases, otherwise, dense) =>
           val ch = fresh("c")
           val asciiCases = cases.flatMap { case (ranges, next) =>
             val chars = ranges.flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }
@@ -213,10 +307,15 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
           val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
             q"if (${inRanges(q"$ch", ranges)}) { $i += 1; ${emit(next)} } else $elseBranch"
           }
+          val covered = cases.flatMap(_._1).flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }.toSet
+          val rest = (0 to 127).filterNot(covered).toList
+          val denseCase =
+            if (!dense || rest.isEmpty) Nil
+            else List(cq"${Alternative(rest.map(c => Literal(Constant(c.toChar))))} => ${emit(otherwise)}")
           q"""if ($i < $len) {
                 val $ch: _root_.scala.Char = $text.charAt($i)
                 $ch match {
-                  case ..$asciiCases
+                  case ..${asciiCases ++ denseCase}
                   case _ => $fallback
                 }
               } else ${emit(otherwise)}"""
@@ -224,13 +323,12 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
       val stateCases = lexer.states.toList.map { case (s, node) => cq"$s => ${emit(node)}" }
       q"""{
-            val $len = $text.length
-            var $p = $from
-            var $result = -2
-            while ($result == -2) {
+            var $p = $pos
+            var $scanning = true
+            while ($scanning) {
               if ($p >= $len) {
-                $lm.token(0, $p, $p)
-                $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Done
+                ${onToken(q"0", q"$p", q"$p")}
+                $scanning = false
               } else {
                 var $i = $p
                 var $acc = -1
@@ -241,16 +339,15 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
                   case _ => $state = -1
                 }
                 if ($acc < 0) {
-                  $lm.lexError($p)
-                  $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Error
+                  ${onError(q"$p")}
+                  $scanning = false
                 } else if ($acc >= ${lexer.skipFrom}) $p = $accEnd
                 else {
-                  $lm.token($acc, $p, $accEnd)
-                  $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Done
+                  ${onToken(q"$acc", q"$p", q"$accEnd")}
+                  $scanning = false
                 }
               }
             }
-            $result
           }"""
     }
   }

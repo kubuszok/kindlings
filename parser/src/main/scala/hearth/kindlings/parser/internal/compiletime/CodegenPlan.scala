@@ -80,9 +80,14 @@ private[parser] object CodegenPlan {
     final case class Goto(state: Int) extends LexNode
 
     /** `if (i < len) { val c = text.charAt(i); if (c in ranges_k) { i += 1; node_k } ... else otherwise } else
-      * otherwise`
+      * otherwise`, as a `match` on `c`.
+      *
+      * @param dense
+      *   also list every other ASCII char (going to `otherwise`), so that the `match` compiles to a `tableswitch` (a
+      *   jump table) instead of a `lookupswitch` (a binary search); used for the start state, which runs once per token
       */
-    final case class Dispatch(cases: List[(List[(Int, Int)], LexNode)], otherwise: LexNode) extends LexNode
+    final case class Dispatch(cases: List[(List[(Int, Int)], LexNode)], otherwise: LexNode, dense: Boolean = false)
+        extends LexNode
   }
 
   /** The UTF-16 code units not in `ranges` (sorted, disjoint). */
@@ -98,10 +103,11 @@ private[parser] object CodegenPlan {
   }
 
   /** Beyond these sizes the lexer stays table-driven: the JVM does not JIT-compile methods over 8000 bytes of bytecode
-    * (`-XX:-DontCompileHugeMethods`), which would make the generated lexer much slower than the tables.
+    * (`-XX:-DontCompileHugeMethods`), which would make the generated driver (the parse loop with the lexer inlined)
+    * much slower than the tables.
     */
   val MaxLexerStates: Int = 256
-  val MaxLexerCost: Int = 6000
+  val MaxLexerCost: Int = 5000
 
   /** The generated lexer for `dfa` or `None` when it would be too large (see [[MaxLexerCost]]). */
   def lexer(dfa: LexerBuilder.Dfa, skipFrom: Int): Option[Lexer] = {
@@ -150,6 +156,24 @@ private[parser] object CodegenPlan {
       pending.foreach(j => result(j) = code(j, Set(j)))
       pending = joins.toList.filterNot(result.contains)
     }
-    if (cost > MaxLexerCost) None else Some(Lexer(result.toVector, skipFrom))
+    // join states are numbered 0, 1, 2, ... (the start state first) so that the `state` match is a `tableswitch`
+    val index = result.keys.zipWithIndex.toMap
+    def renumber(node: LexNode): LexNode = node match {
+      case LexNode.Block(nodes)                      => LexNode.Block(nodes.map(renumber))
+      case LexNode.Goto(t) if t >= 0                 => LexNode.Goto(index(t))
+      case LexNode.Dispatch(cases, otherwise, dense) =>
+        LexNode.Dispatch(cases.map { case (r, n) => r -> renumber(n) }, renumber(otherwise), dense)
+      case other => other
+    }
+    def densify(node: LexNode): LexNode = node match {
+      case LexNode.Block(nodes) => LexNode.Block(nodes.map(densify))
+      case d: LexNode.Dispatch  => d.copy(dense = true)
+      case other                => other
+    }
+    cost += 520 // the start state's dense dispatch
+    val compiled = result.toVector.map { case (s, node) =>
+      index(s) -> (if (s == 0) densify(renumber(node)) else renumber(node))
+    }
+    if (cost > MaxLexerCost) None else Some(Lexer(compiled, skipFrom))
   }
 }
