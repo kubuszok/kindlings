@@ -4,6 +4,8 @@ package internal.compiletime
 import scala.collection.mutable
 import scala.quoted.*
 
+import hearth.kindlings.parser.internal.runtime.Machine
+
 import GrammarIR.{Statement as IRStatement, Term as IRTerm, *}
 
 /** Scala 3 bridge: reads the grammar block from the typed tree into a [[GrammarIR.Grammar]], compiles it with
@@ -40,10 +42,14 @@ private[parser] object GrammarMacros {
         ${ Expr(out.tables) },
         $engine,
         new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
-          def action(p: Int, values: Array[Any], base: Int): Any =
-            ${ Codegen.actions(out, colls, 'p, 'values, 'base, 'collectionFactories) }
-          def convert(id: Int, raw: String): Any = ${ Codegen.converters(out, 'id, 'raw) }
-          def collect(id: Int, builder: Any): Any = ${ Codegen.collects(colls, 'id, 'builder) }
+          def reduce(p: Int, m: _root_.hearth.kindlings.parser.internal.runtime.Machine): Boolean = {
+            val values = m.stackValues
+            val top = m.stackTop
+            ${ Codegen.reduce(out, colls, 'p, 'm, 'values, 'top, 'collectionFactories) }
+          }
+          def hasStringLexer: Boolean = ${ Expr(out.lexer.isDefined) }
+          def lexString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String, from: Int): Int =
+            ${ Codegen.lexString(out, 'm, 'text, 'from) }
           protected def factories(): Array[Any] = ${ Codegen.factories(colls) }
         }
       )
@@ -89,71 +95,192 @@ private[parser] object GrammarMacros {
     */
   private object Codegen {
 
-    def actions(
+    def reduce(
         out: GrammarCompiler.Output,
         colls: Vector[Collections],
         p: Expr[Int],
+        m: Expr[Machine],
         values: Expr[Array[Any]],
-        base: Expr[Int],
+        top: Expr[Int],
         factories: Expr[Array[Any]]
-    )(using q: Quotes): Expr[Any] = {
+    )(using q: Quotes): Expr[Boolean] = {
       import q.reflect.*
-      def value(rhs: GrammarCompiler.RhsPlan, i: Int): Term = {
-        val raw = '{ $values($base + ${ Expr(i) }) }
-        rhs match {
-          case GrammarCompiler.NtPlan(None)       => raw.asTerm
-          case GrammarCompiler.NtPlan(Some(id))   => applyFn(colls(id).result, List(raw.asTerm))
-          case GrammarCompiler.TermPlan(None)     => raw.asTerm
-          case GrammarCompiler.TermPlan(Some(id)) =>
-            convert(out.converters(id), '{ $raw.asInstanceOf[String] }.asTerm)
-        }
+      def value(rhs: CodegenPlan.RhsPlan, raw: Expr[Any]): Term = rhs match {
+        case CodegenPlan.NtPlan(None)       => raw.asTerm
+        case CodegenPlan.NtPlan(Some(id))   => applyFn(colls(id).result, List(raw.asTerm))
+        case CodegenPlan.TermPlan(None)     => raw.asTerm
+        case CodegenPlan.TermPlan(Some(id)) =>
+          convert(out.converters(id), '{ $raw.asInstanceOf[String] }.asTerm)
       }
-      val cases = out.prods.toList.map { plan =>
-        val args = plan.rhs.toList.zipWithIndex.map { case (rhs, i) =>
-          val tpe = plan.action.paramTypes(i).asInstanceOf[TypeRepr]
-          if !plan.action.used(i) then cast('{ null }.asTerm, tpe)
-          else cast(value(rhs, i), tpe)
+      val cases = out.reduces.toList.map { r =>
+        def raw(i: Int): Expr[Any] = '{ $values($top + ${ Expr(i - r.len + 1) }) }
+        val newTop = '{ $top - ${ Expr(r.len) } }
+        val result: Term = r.body match {
+          case CodegenPlan.ReduceBody.User(action, rhs, _) =>
+            val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
+              val tpe = action.paramTypes(i).asInstanceOf[TypeRepr]
+              if !action.used(i) then cast('{ null }.asTerm, tpe)
+              else cast(value(plan, raw(i)), tpe)
+            }
+            applyFn(action.tree, args)
+          case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, raw(0))
+          case CodegenPlan.ReduceBody.Const(text)       => Literal(StringConstant(text))
+          case CodegenPlan.ReduceBody.OptNone           => '{ None }.asTerm
+          case CodegenPlan.ReduceBody.OptSome(rhs)      => '{ Some(${ value(rhs, raw(0)).asExprOf[Any] }) }.asTerm
+          case CodegenPlan.ReduceBody.Collect(id, step) =>
+            val code = colls(id)
+            def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(id) }) }.asTerm))
+            step match {
+              case CodegenPlan.CollectionStep.Empty        => newBuilder
+              case CodegenPlan.CollectionStep.One(element) =>
+                applyFn(code.add, List(newBuilder, value(element, raw(0))))
+              case CodegenPlan.CollectionStep.Append(i, element) =>
+                applyFn(code.add, List(raw(0).asTerm, value(element, raw(i))))
+            }
         }
-        CaseDef(Literal(IntConstant(plan.p)), None, applyFn(plan.action.tree, args))
-      }
-      val collectionCases = out.collectionPlans.toList.map { plan =>
-        val code = colls(plan.collection)
-        def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(plan.collection) }) }.asTerm))
-        val body = plan.step match {
-          case GrammarCompiler.CollectionStep.Empty        => newBuilder
-          case GrammarCompiler.CollectionStep.One(element) => applyFn(code.add, List(newBuilder, value(element, 0)))
-          case GrammarCompiler.CollectionStep.Append(i, element) =>
-            applyFn(code.add, List('{ $values($base) }.asTerm, value(element, i)))
+        val v = result.asExprOf[Any]
+        val body: Expr[Boolean] = r.body match {
+          case CodegenPlan.ReduceBody.User(_, _, true) =>
+            '{ val value: Any = $v; $m.suspend($newTop, ${ Expr(r.lhs) }, value); true }
+          case _ =>
+            r.goto match {
+              case Some(state) => '{ val value: Any = $v; $m.reducedTo($newTop, ${ Expr(state) }, value); false }
+              case None        => '{ val value: Any = $v; $m.reduced($newTop, ${ Expr(r.lhs) }, value); false }
+            }
         }
-        CaseDef(Literal(IntConstant(plan.p)), None, body)
+        CaseDef(Literal(IntConstant(r.p)), None, body.asTerm)
       }
       val fallback =
-        CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no action for production " + $p) }.asTerm)
-      Match(p.asTerm, cases ++ collectionCases :+ fallback).asExprOf[Any]
+        CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no reduction for production " + $p) }.asTerm)
+      Match(p.asTerm, cases :+ fallback).asExprOf[Boolean]
     }
 
-    def collects(colls: Vector[Collections], id: Expr[Int], builder: Expr[Any])(using q: Quotes): Expr[Any] = {
-      import q.reflect.*
-      val cases = colls.toList.zipWithIndex.map { case (code, i) =>
-        CaseDef(Literal(IntConstant(i)), None, applyFn(code.result, List(builder.asTerm)))
+    def lexString(out: GrammarCompiler.Output, m: Expr[Machine], text: Expr[String], from: Expr[Int])(using
+        q: Quotes
+    ): Expr[Int] = out.lexer match {
+      case None        => '{ throw new UnsupportedOperationException("no generated lexer") }
+      case Some(lexer) =>
+        '{
+          val len = $text.length
+          var p = $from
+          var result = -2
+          while result == -2 do if p >= len then {
+            $m.token(0, p, p)
+            result = Machine.Done
+          } else {
+            var i = p
+            var acc = -1
+            var accEnd = p
+            var state = 0
+            while state >= 0 do ${
+              new LexerEmitter(
+                text,
+                'len,
+                'i,
+                x => '{ i = $x },
+                x => '{ acc = $x; accEnd = i },
+                x => '{ state = $x }
+              ).states(lexer, 'state)
+            }
+            if acc < 0 then {
+              $m.lexError(p)
+              result = Machine.Error
+            } else if acc >= ${ Expr(lexer.skipFrom) } then p = accEnd
+            else {
+              $m.token(acc, p, accEnd)
+              result = Machine.Done
+            }
+          }
+          result
+        }
+    }
+
+    private object LexerEmitter {
+
+      /** Assigns a lexer variable; takes the `Quotes` of the splice it is used in. */
+      type Setter = Expr[Int] => Quotes ?=> Expr[Unit]
+    }
+
+    /** Emits the code of [[CodegenPlan.LexNode]]s over the lexer's local variables (see `lexString`). */
+    final private class LexerEmitter(
+        text: Expr[String],
+        len: Expr[Int],
+        i: Expr[Int],
+        setI: LexerEmitter.Setter,
+        accept: LexerEmitter.Setter,
+        goto: LexerEmitter.Setter
+    ) {
+
+      def states(lexer: CodegenPlan.Lexer, state: Expr[Int])(using q: Quotes): Expr[Unit] = {
+        import q.reflect.*
+        val cases = lexer.states.toList.map { case (s, node) =>
+          CaseDef(Literal(IntConstant(s)), None, emit(node).asTerm)
+        }
+        val fallback = CaseDef(Wildcard(), None, goto(Expr(-1)).asTerm)
+        Match(state.asTerm, cases :+ fallback).asExprOf[Unit]
       }
-      val fallback = CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no collection " + $id) }.asTerm)
-      Match(id.asTerm, cases :+ fallback).asExprOf[Any]
+
+      private def inRanges(ch: Expr[Char], ranges: List[(Int, Int)])(using Quotes): Expr[Boolean] =
+        ranges
+          .map { case (lo, hi) =>
+            if lo == hi then '{ $ch == ${ Expr(lo.toChar) } }
+            else '{ $ch >= ${ Expr(lo.toChar) } && $ch <= ${ Expr(hi.toChar) } }
+          }
+          .reduceLeftOption((a, b) => '{ $a || $b })
+          .getOrElse('{ false })
+
+      /** Membership test using the set or its complement, whichever has fewer ranges. */
+      private def member(ch: Expr[Char], ranges: List[(Int, Int)])(using Quotes): Expr[Boolean] = {
+        val complement = CodegenPlan.complement(ranges)
+        if complement.size < ranges.size then '{ ! ${ inRanges(ch, complement) } } else inRanges(ch, ranges)
+      }
+
+      private def advance(next: Expr[Unit])(using Quotes): Expr[Unit] = '{ ${ setI('{ $i + 1 }) }; $next }
+
+      def emit(node: CodegenPlan.LexNode)(using q: Quotes): Expr[Unit] = {
+        import q.reflect.*
+        node match {
+          case CodegenPlan.LexNode.Block(nodes) =>
+            nodes.map(emit).reduceLeft((a, b) => '{ $a; $b })
+          case CodegenPlan.LexNode.SelfLoop(ranges) =>
+            '{ while $i < $len && { val d = $text.charAt($i); ${ member('d, ranges) } } do ${ setI('{ $i + 1 }) } }
+          case CodegenPlan.LexNode.Accept(token)              => accept(Expr(token))
+          case CodegenPlan.LexNode.Goto(target)               => goto(Expr(target))
+          case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
+            def dispatch(ch: Expr[Char])(using q2: Quotes): Expr[Unit] = {
+              import q2.reflect.*
+              val asciiCases = cases.flatMap { case (ranges, next) =>
+                val chars = ranges.flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }
+                if chars.isEmpty then Nil
+                else {
+                  val literals = chars.map(c => Literal(CharConstant(c.toChar)))
+                  val pattern = if literals.size == 1 then literals.head else Alternatives(literals)
+                  List(CaseDef(pattern, None, advance(emit(next)).asTerm))
+                }
+              }
+              val nonAscii = cases.flatMap { case (ranges, next) =>
+                val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
+                if high.isEmpty then Nil else List(high -> next)
+              }
+              val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
+                '{ if ${ inRanges(ch, ranges) } then ${ advance(emit(next)) } else $elseBranch }
+              }
+              Match(ch.asTerm, asciiCases :+ CaseDef(Wildcard(), None, fallback.asTerm)).asExprOf[Unit]
+            }
+            '{
+              if $i < $len then {
+                val c = $text.charAt($i)
+                ${ dispatch('c) }
+              } else ${ emit(otherwise) }
+            }
+        }
+      }
     }
 
     def factories(colls: Vector[Collections])(using q: Quotes): Expr[Array[Any]] = {
       import q.reflect.*
       val exprs = colls.map(code => code.factory.asInstanceOf[Term].changeOwner(Symbol.spliceOwner).asExprOf[Any])
       '{ Array[Any](${ Varargs(exprs) }*) }
-    }
-
-    def converters(out: GrammarCompiler.Output, id: Expr[Int], raw: Expr[String])(using q: Quotes): Expr[Any] = {
-      import q.reflect.*
-      val cases = out.converters.toList.zipWithIndex.map { case (chain, i) =>
-        CaseDef(Literal(IntConstant(i)), None, convert(chain, raw.asTerm))
-      }
-      val fallback = CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no converter " + $id) }.asTerm)
-      Match(id.asTerm, cases :+ fallback).asExprOf[Any]
     }
 
     private def cast(using q: Quotes)(term: q.reflect.Term, tpe: q.reflect.TypeRepr): q.reflect.Term = {

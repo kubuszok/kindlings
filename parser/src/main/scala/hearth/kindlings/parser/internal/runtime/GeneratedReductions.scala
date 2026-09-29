@@ -1,21 +1,24 @@
 package hearth.kindlings.parser
 package internal.runtime
 
-/** Implemented by code the `Grammar.grammar` macro generates for each grammar: the grammar's actions and terminal
-  * conversions, inlined into `switch`es. Not meant to be implemented by hand.
+/** Implemented by the code the `Grammar.grammar` macro generates for each grammar: the reduction of every production
+  * (actions, terminal conversions and collection building inlined, stack effects compiled in) and a lexer for `String`
+  * inputs. Not meant to be implemented by hand.
   */
 abstract class GeneratedReductions {
 
-  /** The value of user production `p` (for effectful actions: the action's `F[R]`); its right-hand side values are
-    * `values(base)`, `values(base + 1)`, ... (terminals as matched text, non-terminals as their values).
+  /** Reduces production `p` on `m`'s stack (see `Machine.stackValues`, `Machine.reduced`); `true` if an effectful
+    * action suspended the machine (`Machine.suspend`).
     */
-  def action(p: Int, values: Array[Any], base: Int): Any
+  def reduce(p: Int, m: Machine): Boolean
 
-  /** Applies terminal converter `id` (a chain of `.map` functions) to the matched text. */
-  def convert(id: Int, raw: String): Any
+  /** Whether [[lexString]] is generated (large lexers stay table-driven). */
+  def hasStringLexer: Boolean
 
-  /** Turns the mutable builder of repetition collection `id` into the collection. */
-  def collect(id: Int, builder: Any): Any
+  /** Lexes the next non-skipped token of `text` from `from` into `m` (`Machine.token` / `Machine.lexError`); returns
+    * `Machine.Done` or `Machine.Error`.
+    */
+  def lexString(m: Machine, text: String, from: Int): Int
 
   /** The `Factory` of each repetition collection, by collection id. */
   protected def factories(): Array[Any]

@@ -27,7 +27,18 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     case s: StringInput => s.text
     case _              => null
   }
+
+  /** Generated reductions (`Grammar.grammar`), `null` for interpreted grammars. */
+  private val reductions: GeneratedReductions = grammar match {
+    case g: GeneratedGrammar => g.reductions
+    case _                   => null
+  }
+
+  /** The generated `String` lexer, when the input is a `String` and the grammar has one. */
+  private val stringLexer: GeneratedReductions =
+    if (text != null && reductions != null && reductions.hasStringLexer) reductions else null
   private val tokenCount = tables.tokenCount
+  private val actionTable = tables.action
   private val nonTerminalCount = tables.nonTerminalCount
 
   private var states = new Array[Int](64)
@@ -86,10 +97,15 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         val lexed = lex()
         if (lexed != Machine.Done) return lexed
       }
-      val act = tables.action(states(sp) * tokenCount + lookahead)
+      val act = actionTable(states(sp) * tokenCount + lookahead)
       if (act > 0) {
         val literal = literals(lookahead)
-        push(act - 1, if (literal != null) literal else input.slice(tokenStart, tokenEnd))
+        push(
+          act - 1,
+          if (literal != null) literal
+          else if (text != null) text.substring(tokenStart.toInt, tokenEnd.toInt)
+          else input.slice(tokenStart, tokenEnd)
+        )
         lookahead = -1
         if (text == null) input.release(pos)
       } else if (act < 0) {
@@ -99,7 +115,9 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
           return Machine.Done
         }
         try
-          if (reduce(p)) return Machine.Effect
+          if (reductions != null) {
+            if (reductions.reduce(p, this)) return Machine.Effect
+          } else if (reduce(p)) return Machine.Effect
         catch {
           case r: RejectedValue =>
             _error = rejected(r.getMessage)
@@ -112,6 +130,51 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       steps += 1
     }
     Machine.Yield
+  }
+
+  // --- used by generated code (`GeneratedReductions`), not part of the driving API ---------------------------------
+
+  /** The value stack; the value of the top is at [[stackTop]]. Values above the top may be stale. */
+  def stackValues: Array[Any] = values
+
+  /** The index of the top of the stack. */
+  def stackTop: Int = sp
+
+  /** Completes a reduction: the stack is cut back to `top` and `value` is pushed in the goto state of `lhs`. */
+  def reduced(top: Int, lhs: Int, value: Any): Unit = {
+    sp = top
+    push(tables.goto(states(top) * nonTerminalCount + lhs), value)
+  }
+
+  /** Completes a reduction whose goto state is always `state`. */
+  def reducedTo(top: Int, state: Int, value: Any): Unit = {
+    sp = top
+    push(state, value)
+  }
+
+  /** Completes the reduction of an effectful action: the machine stops with `effect` ([[Machine.Effect]]) and
+    * [[resume]] pushes its result in the goto state of `lhs`.
+    */
+  def suspend(top: Int, lhs: Int, effect: Any): Unit = {
+    sp = top
+    _pendingEffect = effect
+    pendingLhs = lhs
+  }
+
+  /** The lexer found token `id` at `[start, end)`. */
+  def token(id: Int, start: Int, end: Int): Unit = {
+    lookahead = id
+    tokenStart = start.toLong
+    tokenEnd = end.toLong
+    pos = end.toLong
+  }
+
+  /** No token matches at `start`. */
+  def lexError(start: Int): Unit = {
+    pos = start.toLong
+    tokenStart = start.toLong
+    tokenEnd = start.toLong + 1
+    _error = syntaxError("Unexpected character")
   }
 
   private def push(state: Int, value: Any): Unit = {
@@ -159,7 +222,10 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     * error, [[Machine.NeedInput]] if the input buffer ran out in the middle of a token (lexing restarts from the token
     * start after a refill).
     */
-  private def lex(): Int = if (text != null) lexString() else lexInput()
+  private def lex(): Int =
+    if (stringLexer != null) stringLexer.lexString(this, text, pos.toInt)
+    else if (text != null) lexString()
+    else lexInput()
 
   /** [[lex]] specialised for `String` inputs: direct `charAt`, no `Input` calls. */
   private def lexString(): Int = {

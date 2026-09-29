@@ -97,6 +97,52 @@ Expected outcome: items 1 + 2 alone remove most of the ~6.4 ms of machinery over
 parse would be within ~1.3-1.5x of jawn, the remaining gap being the generality of LALR (a state stack, the lookahead
 token) and the per-token value stack.
 
+## 5. Implemented: generated reductions and a generated lexer
+
+Items 1 and 2 are implemented (`CodegenPlan` builds compiler-independent plans, the per-Scala-version bridges emit
+them):
+
+- **Generated reductions.** Every production, built-ins included (pass, constants, `opt`, collection building), gets a
+  `case` in a generated `reduce(p, machine)`. The length, left-hand side and action are compiled in. When the left-hand
+  side's goto column has a single target (true of most productions), the target state is a constant (`reducedTo`), and
+  popped slots are no longer nulled. The per-production tables (`prodLen`/`prodLhs`/`prodKind`) and the
+  `userAction` → `action` double dispatch are gone from the generated path. On Scala 2, action and converter lambdas
+  are now inlined too (arguments bound to fresh vals, unused parameters dropped) instead of called through
+  `FunctionN.apply`, matching Scala 3's `betaReduce`.
+- **Generated `String` lexer.** The DFA becomes code. States with a single predecessor are inlined into it, so only
+  the start state and join states are `case`s of a `state` loop. The start state is a `match` on the first char (a
+  `tableswitch`, like jawn's value dispatch). Self-loops (string bodies, digits, whitespace) are `while` loops with the
+  membership test inlined, using the set or its complement (`c != '"' && c != '\'`). Accepting is a constant, and a
+  state without transitions (`{`, a closing quote) finishes the token without reading another char. Skipped tokens
+  loop back without leaving the method, and positions are `Int`s. DFAs over 256 states or ~6000 bytes of estimated
+  bytecode keep the table lexer, because HotSpot does not JIT-compile methods over 8000 bytes. `Reader`/push inputs
+  keep the table lexer as well, and `LexerSpec` checks that both lexers agree, including on errors and on 500
+  generated inputs.
+
+Results (2 forks × 6 iterations, same session for all rows):
+
+| Parser | Scala 2.13 ops/s | Scala 3 ops/s |
+|---|---|---|
+| jawn + `J` facade | 235 ± 19 | 269 ± 20 |
+| **kindlings-parser, generated** | **119 ± 11** (was 84 ± 6) | **138 ± 7** (was 94 ± 19) |
+| kindlings-parser, generated, `Reader` input (table lexer) | 97 ± 7 | 102 ± 8 |
+| kindlings-parser, interpreted | 70 ± 7 | 94 ± 12 |
+
+That is +42% / +46%, and the gap to jawn went from ~2.8x to ~2x. A lexer-only measurement before the change (a
+temporary token-counting benchmark) put table lexing at 3.9 ms per parse, as long as jawn's whole parse. JFR after
+the change: the generated lexer is ~30% of the time (~2 ms, down from ~4), the LR loop (`Machine.run`, `push`,
+`reduce`) ~38%, and token text plus value building (the grammar's second `substring`, `unescape`'s rescan, `toDouble`,
+list builders) ~25%.
+
+What remains, in order:
+
+1. **Fuse the driver loop into the generated code.** `Machine.run` calls the lexer, `reduce` and `push` separately, so
+   the stack pointer, the stacks and the lookahead go through fields on every step. Caching the action table in a
+   field changed nothing (138 → 140), so what remains is this call and field traffic, not the table read. A generated
+   `run` would keep them in locals across shifts and reductions (writing them back only when the machine stops for
+   an effect, input or the budget), with the lexer inlined into the loop.
+2. **Cheaper token text** (item 3 above): ~1-1.5 ms per parse in this benchmark.
+
 ## 5. How to reproduce
 
 ```bash

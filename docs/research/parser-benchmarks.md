@@ -48,16 +48,18 @@ the table above. [parser-vs-jawn.md](parser-vs-jawn.md) analyses where that gap 
 3. Runs of chars that keep the DFA in the same state (string bodies, whitespace, digits) are scanned in one tight loop.
 4. Generated actions and `.map` chains are inlined into a `switch`, and unused values are not converted.
 
+5. Generated reductions (static length/lhs/action, constant gotos) and a generated `String` lexer (the DFA as code,
+   first-char `switch`, inlined self-loop scans): +42% (2.13) / +46% (3) on generated grammars in a same-session
+   run, 84 → 119 and 94 → 138 ops/s, jawn at 235 / 269. See [parser-vs-jawn.md](parser-vs-jawn.md) § 5.
+
 ## Next candidates, by expected gain
 
 See [parser-vs-jawn.md](parser-vs-jawn.md) § 4 for the measurements behind this order.
 
-1. **Generate the LR driver per grammar**: static reduction cases, default reductions, unit-chain folding (the LR
-   machinery is ~34% of the time).
-2. **Generate the lexer as code per grammar**: a first-char `switch`, inlined scanning loops, whitespace skipped
-   inline (~39% of the time, ~4x jawn's scanning).
-3. **Cheaper token text**: slices of a capture group, and lexer facts such as "no escapes" (~11%).
-4. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
+1. **Fuse the driver loop into the generated code** (the stacks, stack pointer and lookahead in locals, the lexer
+   inlined; ~38% of the time is now the LR loop).
+2. **Cheaper token text**: slices of a capture group, and lexer facts such as "no escapes" (~11%).
+3. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
    already feed the target collection's own builder: see `.as[C]`.)
 4. **Per-runtime generated drivers** (§5.11 of the research doc). These need an effect-heavy benchmark first (e.g.
    JSON with an `IO` action per element); the benchmark above is pure.

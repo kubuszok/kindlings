@@ -21,6 +21,9 @@ final class Parser[F[_], R] private[parser] (grammar: CompiledGrammar, engine: P
   def parse(reader: java.io.Reader, bufferSize: Int = Parser.DefaultBufferSize): F[R] =
     engine.run[R](() => new Machine(grammar, new ReaderInput(reader, bufferSize)))
 
+  /** The compiled grammar (for tests). */
+  private[parser] def compiled: CompiledGrammar = grammar
+
   /** Parses a UTF-8 encoded `stream` (see the `Reader` overload). The stream is not closed. */
   def parse(stream: java.io.InputStream): F[R] =
     parse(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8), Parser.DefaultBufferSize)

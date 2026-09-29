@@ -33,89 +33,226 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
     val targs = typeArgs(c.macroApplication)
     val collections = collectionCodes(out, targs(1).tpe)
     val tables = out.tables.map(chunk => Literal(Constant(chunk)))
-    val p = TermName(c.freshName("p"))
-    val builder = TermName(c.freshName("builder"))
-    val values = TermName(c.freshName("values"))
-    val base = TermName(c.freshName("base"))
-    val id = TermName(c.freshName("id"))
-    val raw = TermName(c.freshName("raw"))
-
-    /** A function tree applied to arguments: untypechecked so that it is re-typed (with fresh owners) where it is
-      * spliced, with an ascription providing the parameter types that type inference cannot recover.
-      */
-    def applyFn(fn: Any, fnType: Type, args: List[Tree]): Tree =
-      q"(${c.untypecheck(fn.asInstanceOf[Tree])}: ${TypeTree(fnType)}).apply(..$args)"
-    def convert(chain: List[Any], rawValue: Tree): Tree =
-      chain.foldLeft(rawValue) { (acc, fn) =>
-        val tree = fn.asInstanceOf[Tree]
-        applyFn(tree, tree.tpe.widen, List(acc))
-      }
-
-    val anyToAny = typeOf[Any => Any]
-    val anyAnyToAny = typeOf[(Any, Any) => Any]
-    def collect(id: Int, rawValue: Tree): Tree = applyFn(collections(id).result, anyToAny, List(rawValue))
-    def value(rhs: GrammarCompiler.RhsPlan, i: Int): Tree = {
-      val rawValue = q"$values($base + $i)"
-      rhs match {
-        case GrammarCompiler.NtPlan(None)       => rawValue
-        case GrammarCompiler.NtPlan(Some(id))   => collect(id, rawValue)
-        case GrammarCompiler.TermPlan(None)     => rawValue
-        case GrammarCompiler.TermPlan(Some(id)) =>
-          convert(out.converters(id), q"$rawValue.asInstanceOf[_root_.java.lang.String]")
-      }
-    }
-
-    val actionCases = out.prods.toList.map { plan =>
-      val args = plan.rhs.toList.zipWithIndex.map { case (rhs, i) =>
-        val tpe = TypeTree(plan.action.paramTypes(i).asInstanceOf[Type])
-        if (!plan.action.used(i)) q"null.asInstanceOf[$tpe]"
-        else q"${value(rhs, i)}.asInstanceOf[$tpe]"
-      }
-      val fn = plan.action.tree.asInstanceOf[Tree]
-      cq"${plan.p} => ${applyFn(fn, fn.tpe.widen, args)}"
-    }
-    val collectionCases = out.collectionPlans.toList.map { plan =>
-      val code = collections(plan.collection)
-      def newBuilder = applyFn(code.newBuilder, anyToAny, List(q"collectionFactories(${plan.collection})"))
-      val body = plan.step match {
-        case GrammarCompiler.CollectionStep.Empty        => newBuilder
-        case GrammarCompiler.CollectionStep.One(element) =>
-          applyFn(code.add, anyAnyToAny, List(newBuilder, value(element, 0)))
-        case GrammarCompiler.CollectionStep.Append(i, element) =>
-          applyFn(code.add, anyAnyToAny, List(q"$values($base)", value(element, i)))
-      }
-      cq"${plan.p} => $body"
-    }
-    val converterCases = out.converters.toList.zipWithIndex.map { case (chain, i) =>
-      cq"$i => ${convert(chain, q"$raw")}"
-    }
-    val collectCases = collections.toList.zipWithIndex.map { case (_, i) => cq"$i => ${collect(i, q"$builder")}" }
     val factories = collections.toList.map(code => c.untypecheck(code.factory))
-
+    val codegen = new Codegen(out, collections)
     q"""_root_.hearth.kindlings.parser.internal.runtime.Builder.generated[..${targs.reverse}](
           _root_.scala.List(..$tables),
           $engine,
           new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
-            def action($p: _root_.scala.Int, $values: _root_.scala.Array[_root_.scala.Any], $base: _root_.scala.Int): _root_.scala.Any =
-              ($p: @_root_.scala.annotation.switch) match {
-                case ..$actionCases
-                case ..$collectionCases
-                case _ => throw new _root_.java.lang.IllegalStateException("no action for production " + $p)
-              }
-            def convert($id: _root_.scala.Int, $raw: _root_.java.lang.String): _root_.scala.Any =
-              ($id: @_root_.scala.annotation.switch) match {
-                case ..$converterCases
-                case _ => throw new _root_.java.lang.IllegalStateException("no converter " + $id)
-              }
-            def collect($id: _root_.scala.Int, $builder: _root_.scala.Any): _root_.scala.Any =
-              ($id: @_root_.scala.annotation.switch) match {
-                case ..$collectCases
-                case _ => throw new _root_.java.lang.IllegalStateException("no collection " + $id)
-              }
+            ${codegen.reduce}
+            ${codegen.hasStringLexer}
+            ${codegen.lexString}
             protected def factories(): _root_.scala.Array[_root_.scala.Any] =
               _root_.scala.Array[_root_.scala.Any](..$factories)
           }
         )"""
+  }
+
+  /** The members of the generated `GeneratedReductions` (see [[CodegenPlan]]). */
+  final private class Codegen(out: GrammarCompiler.Output, collections: Vector[Collections]) {
+
+    private def fresh(name: String): TermName = TermName(c.freshName(name))
+    private val MachineType = tq"_root_.hearth.kindlings.parser.internal.runtime.Machine"
+    private val anyToAny = typeOf[Any => Any]
+    private val anyAnyToAny = typeOf[(Any, Any) => Any]
+
+    /** `fn(args)` with `fn` inlined when it is a function literal (arguments are bound to fresh vals first, so they
+      * cannot see the lambda's parameter names), otherwise a call of its `apply`. The trees are untypechecked so that
+      * they are re-typed (with fresh owners) where they are spliced.
+      */
+    private def applyFn(fn: Any, fnType: Type, args: List[Tree]): Tree = {
+      val tree = fn.asInstanceOf[Tree]
+      val paramTypes = fnType.dealias.typeArgs.init
+      tree match {
+        case Function(params, body) if params.size == args.size && paramTypes.size == args.size =>
+          // unused parameters are not bound (their arguments are stack reads or placeholders, free of effects); the
+          // typed tree tells which are used, the untypechecked one is spliced (its references are plain names)
+          val usedParams = params.map(param => body.exists(_.symbol == param.symbol))
+          c.untypecheck(tree) match {
+            case Function(untypedParams, untypedBody) =>
+              val used = untypedParams.zip(args).zip(paramTypes).zip(usedParams).collect {
+                case (((param, arg), tpe), true) => (param, arg, tpe, fresh("arg"))
+              }
+              val bindArgs = used.map { case (_, arg, tpe, name) => q"val $name: ${TypeTree(tpe)} = $arg" }
+              val bindParams = used.map { case (param, _, tpe, name) =>
+                q"val ${param.name}: ${TypeTree(tpe)} = $name"
+              }
+              q"{ ..$bindArgs; ..$bindParams; $untypedBody }"
+            case untyped => q"($untyped: ${TypeTree(fnType)}).apply(..$args)"
+          }
+        case _ => q"(${c.untypecheck(tree)}: ${TypeTree(fnType)}).apply(..$args)"
+      }
+    }
+    private def convert(chain: List[Any], raw: Tree): Tree =
+      chain.foldLeft(raw) { (acc, fn) =>
+        val tree = fn.asInstanceOf[Tree]
+        applyFn(tree, tree.tpe.widen, List(acc))
+      }
+
+    // --- reductions ----------------------------------------------------------------------------------------------
+
+    private val m = fresh("m")
+    private val vs = fresh("values")
+    private val top = fresh("top")
+
+    /** The value of a right-hand side position whose raw stack value is `raw`. */
+    private def value(rhs: CodegenPlan.RhsPlan, raw: Tree): Tree = rhs match {
+      case CodegenPlan.NtPlan(None)       => raw
+      case CodegenPlan.NtPlan(Some(id))   => applyFn(collections(id).result, anyToAny, List(raw))
+      case CodegenPlan.TermPlan(None)     => raw
+      case CodegenPlan.TermPlan(Some(id)) =>
+        convert(out.converters(id), q"$raw.asInstanceOf[_root_.java.lang.String]")
+    }
+
+    private def reduceCase(r: CodegenPlan.Reduce): Tree = {
+      def raw(i: Int): Tree = q"$vs($top + ${i - r.len + 1})"
+      val newTop = q"$top - ${r.len}"
+      val result: Tree = r.body match {
+        case CodegenPlan.ReduceBody.User(action, rhs, _) =>
+          val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
+            val tpe = TypeTree(action.paramTypes(i).asInstanceOf[Type])
+            if (!action.used(i)) q"null.asInstanceOf[$tpe]"
+            else q"${value(plan, raw(i))}.asInstanceOf[$tpe]"
+          }
+          val fn = action.tree.asInstanceOf[Tree]
+          applyFn(fn, fn.tpe.widen, args)
+        case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, raw(0))
+        case CodegenPlan.ReduceBody.Const(text)       => Literal(Constant(text))
+        case CodegenPlan.ReduceBody.OptNone           => q"_root_.scala.None"
+        case CodegenPlan.ReduceBody.OptSome(rhs)      => q"_root_.scala.Some(${value(rhs, raw(0))})"
+        case CodegenPlan.ReduceBody.Collect(id, step) =>
+          val code = collections(id)
+          def newBuilder = applyFn(code.newBuilder, anyToAny, List(q"collectionFactories($id)"))
+          step match {
+            case CodegenPlan.CollectionStep.Empty        => newBuilder
+            case CodegenPlan.CollectionStep.One(element) =>
+              applyFn(code.add, anyAnyToAny, List(newBuilder, value(element, raw(0))))
+            case CodegenPlan.CollectionStep.Append(i, element) =>
+              applyFn(code.add, anyAnyToAny, List(raw(0), value(element, raw(i))))
+          }
+      }
+      val v = fresh("value")
+      val finish = r.body match {
+        case CodegenPlan.ReduceBody.User(_, _, true) => q"$m.suspend($newTop, ${r.lhs}, $v); true"
+        case _                                       =>
+          r.goto match {
+            case Some(state) => q"$m.reducedTo($newTop, $state, $v); false"
+            case None        => q"$m.reduced($newTop, ${r.lhs}, $v); false"
+          }
+      }
+      cq"${r.p} => { val $v: _root_.scala.Any = $result; $finish }"
+    }
+
+    def reduce: Tree = {
+      val p = fresh("p")
+      q"""def reduce($p: _root_.scala.Int, $m: $MachineType): _root_.scala.Boolean = {
+            val $vs = $m.stackValues
+            val $top = $m.stackTop
+            $p match {
+              case ..${out.reduces.toList.map(reduceCase)}
+              case _ => throw new _root_.java.lang.IllegalStateException("no reduction for production " + $p)
+            }
+          }"""
+    }
+
+    // --- lexer ---------------------------------------------------------------------------------------------------
+
+    def hasStringLexer: Tree = q"def hasStringLexer: _root_.scala.Boolean = ${out.lexer.isDefined}"
+
+    def lexString: Tree = {
+      val (lm, text, from) = (fresh("m"), fresh("text"), fresh("from"))
+      val body = out.lexer match {
+        case None        => q"throw new _root_.java.lang.UnsupportedOperationException(${"no generated lexer"})"
+        case Some(lexer) => lexerBody(lexer, lm, text, from)
+      }
+      q"""def lexString($lm: $MachineType, $text: _root_.java.lang.String, $from: _root_.scala.Int): _root_.scala.Int =
+            $body"""
+    }
+
+    private def lexerBody(lexer: CodegenPlan.Lexer, lm: TermName, text: TermName, from: TermName): Tree = {
+      val (len, p, result, i, acc, accEnd, state) =
+        (fresh("len"), fresh("p"), fresh("result"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
+
+      def inRanges(ch: Tree, ranges: List[(Int, Int)]): Tree =
+        ranges
+          .map { case (lo, hi) =>
+            if (lo == hi) q"$ch == $lo" else q"$ch >= $lo && $ch <= $hi"
+          }
+          .reduceLeftOption((a, b) => q"$a || $b")
+          .getOrElse(q"false")
+
+      /** Membership test using the set or its complement, whichever has fewer ranges. */
+      def member(ch: Tree, ranges: List[(Int, Int)]): Tree = {
+        val complement = CodegenPlan.complement(ranges)
+        if (complement.size < ranges.size) q"!(${inRanges(ch, complement)})" else inRanges(ch, ranges)
+      }
+
+      def emit(node: CodegenPlan.LexNode): Tree = node match {
+        case CodegenPlan.LexNode.Block(nodes)     => q"{ ..${nodes.map(emit)} }"
+        case CodegenPlan.LexNode.SelfLoop(ranges) =>
+          val d = fresh("d")
+          q"while ($i < $len && { val $d = $text.charAt($i); ${member(q"$d", ranges)} }) $i += 1"
+        case CodegenPlan.LexNode.Accept(token)              => q"$acc = $token; $accEnd = $i"
+        case CodegenPlan.LexNode.Goto(target)               => q"$state = $target"
+        case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
+          val ch = fresh("c")
+          val asciiCases = cases.flatMap { case (ranges, next) =>
+            val chars = ranges.flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }
+            if (chars.isEmpty) Nil
+            else {
+              val pattern =
+                if (chars.size == 1) Literal(Constant(chars.head.toChar))
+                else Alternative(chars.map(ch => Literal(Constant(ch.toChar))))
+              List(cq"$pattern => { $i += 1; ${emit(next)} }")
+            }
+          }
+          val nonAscii = cases.flatMap { case (ranges, next) =>
+            val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
+            if (high.isEmpty) Nil else List(high -> next)
+          }
+          val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
+            q"if (${inRanges(q"$ch", ranges)}) { $i += 1; ${emit(next)} } else $elseBranch"
+          }
+          q"""if ($i < $len) {
+                val $ch: _root_.scala.Char = $text.charAt($i)
+                $ch match {
+                  case ..$asciiCases
+                  case _ => $fallback
+                }
+              } else ${emit(otherwise)}"""
+      }
+
+      val stateCases = lexer.states.toList.map { case (s, node) => cq"$s => ${emit(node)}" }
+      q"""{
+            val $len = $text.length
+            var $p = $from
+            var $result = -2
+            while ($result == -2) {
+              if ($p >= $len) {
+                $lm.token(0, $p, $p)
+                $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Done
+              } else {
+                var $i = $p
+                var $acc = -1
+                var $accEnd = $p
+                var $state = 0
+                while ($state >= 0) $state match {
+                  case ..$stateCases
+                  case _ => $state = -1
+                }
+                if ($acc < 0) {
+                  $lm.lexError($p)
+                  $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Error
+                } else if ($acc >= ${lexer.skipFrom}) $p = $accEnd
+                else {
+                  $lm.token($acc, $p, $accEnd)
+                  $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Done
+                }
+              }
+            }
+            $result
+          }"""
+    }
   }
 
   /** The code of each repetition collection (see [[CollectionCodegen]]), as untypechecked trees. */

@@ -80,6 +80,14 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   error channel. The macro accepts them only when `ErrorChannel[F]` is found (built-ins except `Id`, cats-effect via
   its package import); `import ErrorChannel.throwing._` is the explicit opt-in to throwing in `Id`.
 
+**Generated driver pieces (after the jawn analysis, [parser-vs-jawn.md](parser-vs-jawn.md))**
+- `CodegenPlan` (shared, compiler-independent) plans the generated `reduce(p, machine)` (every production, built-ins
+  included, constant gotos where a goto column has one target) and the generated `String` lexer (DFA as code: join
+  states as `case`s of a `state` loop, single-predecessor states inlined, first-char `match`, self-loops as `while`
+  loops, static accepts). The bridges emit them, Scala 3 through quotes plus a few reflect `Match`es, Scala 2 through
+  quasiquotes. Large DFAs and non-`String` inputs keep the table lexer. Tables version 5 drops the now-unused
+  `rhsStart`/`rhsConv`. JSON: +42% / +46%, ~2x from jawn (was ~2.8x).
+
 **Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
 than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x
 slower than hand-written jawn.

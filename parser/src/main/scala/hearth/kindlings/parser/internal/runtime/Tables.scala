@@ -10,9 +10,8 @@ package internal.runtime
   * augmented start production, whose reduction accepts). `goto(state * nonTerminalCount + nt)` is the target state.
   *
   * Productions: `prodKind(p)` is one of the `CompiledGrammar.Act*` codes, `prodArg(p)` its argument (the index into
-  * `constants` of an `ActConst`, the element index of an `ActListAppend`). The values of production `p`'s right-hand
-  * side positions `rhsStart(p) until rhsStart(p + 1)` are converted according to `rhsConv`: [[Tables.Raw]] (as is),
-  * [[Tables.Listify]] (a list builder to convert to a `List`), otherwise the id of a terminal converter.
+  * `constants` of an `ActConst`, the element index of an `ActListAppend`); they drive interpreted grammars, generated
+  * ones have the code of each reduction generated instead.
   *
   * `literals(token)` is the text of literal tokens (whose value is that constant, so it is not copied from the input)
   * and `null` for regex tokens.
@@ -34,8 +33,6 @@ final private[parser] class Tables(
     val prodLen: Array[Int],
     val prodKind: Array[Int],
     val prodArg: Array[Int],
-    val rhsStart: Array[Int],
-    val rhsConv: Array[Int],
     val constants: Array[String],
     val literals: Array[String]
 ) {
@@ -99,7 +96,7 @@ final private[parser] class Tables(
     List(lexAccept, transStart, transLo, transHi, transTarget).foreach(w.ints)
     w.int(stateCount)
     w.int(nonTerminalCount)
-    List(action, goto, prodLhs, prodLen, prodKind, prodArg, rhsStart, rhsConv).foreach(w.ints)
+    List(action, goto, prodLhs, prodLen, prodKind, prodArg).foreach(w.ints)
     w.int(constants.length)
     constants.foreach(w.string)
     w.int(literals.length)
@@ -109,10 +106,7 @@ final private[parser] class Tables(
 }
 private[parser] object Tables {
 
-  val Version: Int = 4
-
-  final val Raw = -1
-  final val Listify = -2
+  val Version: Int = 5
 
   def decode(text: String): Tables = {
     val r = new TableCodec.Reader(text)
@@ -139,8 +133,6 @@ private[parser] object Tables {
       prodLen = r.ints(),
       prodKind = r.ints(),
       prodArg = r.ints(),
-      rhsStart = r.ints(),
-      rhsConv = r.ints(),
       constants = Array.fill(r.int())(r.string()),
       literals = Array.fill(r.int())(if (r.int() < 0) null else r.string())
     )

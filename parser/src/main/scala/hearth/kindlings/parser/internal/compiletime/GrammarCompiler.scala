@@ -3,6 +3,7 @@ package internal.compiletime
 
 import hearth.kindlings.parser.internal.runtime.{Flatten, Tables}
 import GrammarIR.*
+import CodegenPlan.{CollectionStep, NtPlan, ReduceBody, RhsPlan, TermPlan}
 
 import scala.collection.mutable
 
@@ -11,49 +12,28 @@ import scala.collection.mutable
   */
 private[parser] object GrammarCompiler {
 
-  /** How to generate the code of user production `p` (a table index): its action and how to obtain each value. */
-  final case class ProdPlan(p: Int, action: Action, rhs: Vector[RhsPlan])
-
-  /** How to obtain a right-hand side value: non-terminals as is or, for repetitions, as their collection `id`
-    * (converting the builder), terminals as the matched text or through converter `id`.
-    */
-  sealed trait RhsPlan
-  final case class NtPlan(collection: Option[Int]) extends RhsPlan
-  final case class TermPlan(converter: Option[Int]) extends RhsPlan
-
-  /** How to generate the code of built-in repetition production `p` (a table index), which feeds the builder of
-    * `collection`: a new builder, a new builder with one element, or the builder at position 0 plus one element.
-    */
-  final case class CollectionPlan(p: Int, collection: Int, step: CollectionStep)
-
-  sealed trait CollectionStep
-  object CollectionStep {
-    case object Empty extends CollectionStep
-    final case class One(element: RhsPlan) extends CollectionStep
-    final case class Append(index: Int, element: RhsPlan) extends CollectionStep
-  }
-
   /** @param converters
     *   by converter id: the `.map` functions to apply to the matched text, in order
     * @param collections
     *   by collection id: the collection of a repetition
-    * @param collectionPlans
-    *   the built-in repetition productions (only when compiling for generated code)
+    * @param reduces
+    *   the code of every production's reduction (only when compiling for generated code)
+    * @param lexer
+    *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
     */
   final case class Output(
       tables: List[String],
       fingerprint: String,
       warnings: List[Diagnostic],
       summary: String,
-      prods: Vector[ProdPlan],
       converters: Vector[List[Any]],
       collections: Vector[Collection],
-      collectionPlans: Vector[CollectionPlan]
+      reduces: Vector[CodegenPlan.Reduce],
+      lexer: Option[CodegenPlan.Lexer]
   )
 
   /** @param generated
-    *   whether the tables are used by generated code (`Grammar.grammar`), whose repetitions are built by generated code
-    *   (as user productions) instead of the interpreter's built-in `List` actions
+    *   whether the grammar is run by generated code (`Grammar.grammar`, see [[CodegenPlan]]) rather than interpreted
     */
   def compile(g: Grammar, generated: Boolean): Either[List[Diagnostic], Output] = {
     val errors = mutable.ListBuffer.empty[Diagnostic]
@@ -297,49 +277,47 @@ private[parser] object GrammarCompiler {
     val prodKind = new Array[Int](lhs.length)
     val prodArg = new Array[Int](lhs.length)
     prodKind(0) = -1
-    val rhsStart = new Array[Int](lhs.length + 1)
-    val rhsConv = mutable.ArrayBuilder.make[Int]
-    rhsStart(1) = 0
-    val plans = Vector.newBuilder[ProdPlan]
-    val collectionPlans = Vector.newBuilder[CollectionPlan]
-    def listAction(p: Int, prod: Flatten.Prod[Term, Alternative], kind: Int, step: CollectionStep): Unit =
-      if (generated) {
-        prodKind(p) = ActPure
-        collectionPlans += CollectionPlan(p, ntCollection(prod.lhs), step)
-      } else prodKind(p) = kind
+    val reduces = Vector.newBuilder[CodegenPlan.Reduce]
+
+    /** The goto target of `nt` when it is the same from every state (then generated code needs no goto lookup). */
+    def constantGoto(nt: Int): Option[Int] = {
+      val targets = (0 until lalr.stateCount).map(s => lalr.goto(s * nts + nt)).filter(_ >= 0).distinct
+      if (targets.size == 1) Some(targets.head) else None
+    }
     prods.zipWithIndex.foreach { case (prod, index) =>
       val p = index + 1
-      val rhsPlans = prod.rhs.map {
-        case Flatten.RNt(id, listify) =>
-          if (listify) {
-            val c = ntCollection(id)
-            rhsConv += Tables.Listify - c
-            NtPlan(Some(c))
-          } else {
-            rhsConv += Tables.Raw
-            NtPlan(None)
-          }
-        case Flatten.RTerm(term) =>
-          val conv = converterOf(term)
-          rhsConv += conv.getOrElse(Tables.Raw)
-          TermPlan(conv)
+      val rhsPlans: Vector[RhsPlan] = prod.rhs.map {
+        case Flatten.RNt(id, listify) => NtPlan(if (listify) Some(ntCollection(id)) else None)
+        case Flatten.RTerm(term)      => TermPlan(converterOf(term))
       }
-      rhsStart(p + 1) = rhsStart(p) + prod.rhs.size
-      prod.action match {
+      val body: ReduceBody = prod.action match {
         case Flatten.AUser(alt) =>
           prodKind(p) = if (alt.kind == Kind.Effectful) ActEffect else ActPure
-          alt.action.foreach(a => plans += ProdPlan(p, a, rhsPlans))
-        case Flatten.APass         => prodKind(p) = ActPass
+          val action = alt.action.getOrElse(throw new IllegalStateException(s"no action for production $p"))
+          ReduceBody.User(action, rhsPlans, alt.kind == Kind.Effectful)
+        case Flatten.APass =>
+          prodKind(p) = ActPass
+          ReduceBody.Pass(rhsPlans(0))
         case Flatten.AConst(value) =>
           prodKind(p) = ActConst; prodArg(p) = constants.getOrElseUpdate(value, constants.size)
-        case Flatten.AOptNone           => prodKind(p) = ActOptNone
-        case Flatten.AOptSome           => prodKind(p) = ActOptSome
-        case Flatten.AListEmpty         => listAction(p, prod, ActListEmpty, CollectionStep.Empty)
-        case Flatten.AListOne           => listAction(p, prod, ActListOne, CollectionStep.One(rhsPlans(0)))
+          ReduceBody.Const(value)
+        case Flatten.AOptNone =>
+          prodKind(p) = ActOptNone
+          ReduceBody.OptNone
+        case Flatten.AOptSome =>
+          prodKind(p) = ActOptSome
+          ReduceBody.OptSome(rhsPlans(0))
+        case Flatten.AListEmpty =>
+          prodKind(p) = ActListEmpty
+          ReduceBody.Collect(ntCollection(prod.lhs), CollectionStep.Empty)
+        case Flatten.AListOne =>
+          prodKind(p) = ActListOne
+          ReduceBody.Collect(ntCollection(prod.lhs), CollectionStep.One(rhsPlans(0)))
         case Flatten.AListAppend(index) =>
-          listAction(p, prod, ActListAppend, CollectionStep.Append(index, rhsPlans(index)))
-          prodArg(p) = index
+          prodKind(p) = ActListAppend; prodArg(p) = index
+          ReduceBody.Collect(ntCollection(prod.lhs), CollectionStep.Append(index, rhsPlans(index)))
       }
+      if (generated) reduces += CodegenPlan.Reduce(p, prod.rhs.size, prod.lhs, constantGoto(prod.lhs), body)
     }
     val tables = new Tables(
       tokenCount = tokenCount,
@@ -358,8 +336,6 @@ private[parser] object GrammarCompiler {
       prodLen = rhs.map(_.length),
       prodKind = prodKind,
       prodArg = prodArg,
-      rhsStart = rhsStart,
-      rhsConv = rhsConv.result(),
       constants = constants.keys.toArray,
       literals = Array.tabulate(tokenCount) { t =>
         if (t >= 1 && t <= tokens.size) tokens(t - 1).pattern match {
@@ -378,10 +354,10 @@ private[parser] object GrammarCompiler {
         fingerprint,
         warnings.toList,
         summary,
-        plans.result(),
         converterIds.keys.toVector.map(_.converters),
         collections.result(),
-        collectionPlans.result()
+        reduces.result(),
+        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None
       )
     )
   }
