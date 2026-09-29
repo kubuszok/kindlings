@@ -849,8 +849,32 @@ properly as tests.
    - optionally a Menhir `--list-errors`-style coverage report of error states that have no custom
      message.
 
-**Effects in actions** (R1, now concrete). Each action's static type tells the macro which case
-applies:
+**Effect typing: `grammar[Result, F] { … }`**
+
+`F` is declared once, at the grammar. Every action's result is then **checked by the compiler** to be
+`F[A]`, where `A` is the type of the non-terminal on the left of `::=`. For this to work, `F` must be
+known *while* each action lambda is typed, so that the expected type is `F[R]`. Three ways to get it
+there were probed (round 5, both compilers):
+
+| Design | Surface | 2.13.18 | 3.8.3 | Findings |
+|---|---|---|---|---|
+| **D1: explicit DSL parameter** | `grammar[Addr, IO] { g => import g._; … }`. `g: Dsl[IO]` provides `nonTerminal`, `terminal` and `all`. `all(…) { … }` requires `IO[R]`; `all(…).pure { … }` takes a plain `R`. | ✓ | ✓ | Forgetting `IO`: "found Addr, required IO[Addr]". Wrong inner type: "found String, required Addr". Both point at the action body. Mixed pure and effectful alternatives in one production, and `IO(Nil)` for a `List[Int]` non-terminal, type-check. The cost is the `g => import g._` line. |
+| **D2: context function (Scala 3 only)** | Exactly `grammar[Addr, IO] { … }`. The body is `GDsl { type F[x] = IO[x] } ?=> NonTerminal[Addr]`, and a top-level `all(…)(using d: GDsl): All2[d.F, …]`. | n/a | ✓ | Same checks and the same mixed-alternative support. The error reads "Required: contextual$1.F[Addr]", which is accurate but prints the context parameter's path. That's worth polishing, e.g. via a named `given` or type aliasing. |
+| **D3: evidence on `::=`, macro checks `F`** | Exactly `grammar[Addr, IO] { … }` on both. `::=[X](alts: Alt[X])(implicit ev: Produces[X, A])` with instances `Produces[A, A]` (pure) and `Produces[G[A], A]` (effectful). | ✓ | ✓ | Simple cases work, including a custom `@implicitNotFound` message. **But:** (1) the typer accepts *any* `G[A]`, so a wrong effect (`Other[Addr]`) is caught only by the macro; (2) **mixing pure and effectful alternatives fails**, because `\|\|` merges them into `Object` (2.13) or `IO[Nil.type] \| List[Int]` (3) before `::=` sees them; (3) making `Produces` contravariant to fix (2) makes `Produces[A, A]` vs `Produces[G[A], A]` ambiguous. **Rejected.** |
+
+**Recommendation**
+- **Scala 3:** D2, which is exactly the requested `grammar[Result, F] { … }` with compiler-enforced
+  `F[A]`.
+- **Scala 2.13, and code that must cross-compile:** D1. The `g =>` parameter is another phantom that
+  the macro erases.
+- The Scala 3 `grammar` can accept both forms, so cross-built user code writes D1 and Scala-3-only code
+  writes D2.
+- Actions default to effectful (`F[R]`, as requested). `.pure { … }` marks the pure fast path
+  explicitly. This works because the builder variant of `all` has room for a second method.
+- For `F = Id`, both forms coincide, and the macro treats every action as pure.
+
+**Effects in actions** (R1, now concrete). With `grammar[Result, F]`, the form of each alternative
+(`{ … }` vs `.pure { … }`) tells the macro which case applies:
 
 | Action returns | Generated reduce code |
 |---|---|
@@ -881,8 +905,10 @@ applies:
    - IELR(1) vs LALR(1) as the default;
    - whether an LL(1)/combinator front end ships in v1 or later;
    - effect mode (a) staged vs (b) interleaved, or both, selected per grammar;
-   - curried `all(…)(f)` vs builder `all(…)` + `apply(f)`; the builder leaves room for per-alternative
-     modifiers (`prec`, labels);
+   - the builder `all(…)` + `apply(f)` / `.pure(f)` is now effectively required by effect typing
+     (round 5); it also leaves room for per-alternative modifiers (`prec`, labels);
+   - D1 (`g => import g._`, cross-compiling) plus D2 (context function, Scala 3) as the effect-typing
+     surface;
    - the multi-line alternative style. Probes favour a parenthesised `( … || … )` with leading `||`,
      which works on both compilers; `oneOf(…)` is an alternative.
 2. **Composition model.** Accept the literal-type carrier (§5.6) as the composition mechanism? It
