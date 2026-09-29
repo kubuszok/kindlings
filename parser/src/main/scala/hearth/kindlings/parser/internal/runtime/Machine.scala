@@ -91,7 +91,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         val literal = literals(lookahead)
         push(act - 1, if (literal != null) literal else input.slice(tokenStart, tokenEnd))
         lookahead = -1
-        input.release(pos)
+        if (text == null) input.release(pos)
       } else if (act < 0) {
         val p = -act - 1
         if (p == 0) {
@@ -160,6 +160,8 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     val ascii = tables.ascii
     val accept = tables.lexAccept
     val skip = tables.skip
+    val selfLoop = tables.selfLoop
+    val hasSelfLoop = tables.hasSelfLoop
     val length = text.length
     var p = pos.toInt
     while (true) {
@@ -179,6 +181,14 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         state = if (c < 128) ascii(state * 128 + c) else tables.lexStep(state, c)
         if (state >= 0) {
           i += 1
+          if (hasSelfLoop(state)) {
+            val row = state * 128
+            var continue = true
+            while (continue && i < length) {
+              val d = text.charAt(i)
+              if (d < 128 && selfLoop(row + d)) i += 1 else continue = false
+            }
+          }
           val a = accept(state)
           if (a >= 0) { accepted = a; acceptedEnd = i }
         }

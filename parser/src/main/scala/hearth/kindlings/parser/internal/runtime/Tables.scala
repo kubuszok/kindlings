@@ -58,6 +58,24 @@ final private[parser] class Tables(
     table
   }
 
+  /** `selfLoop(state * 128 + c)`: the ASCII char `c` keeps the DFA in `state` (lets the lexer scan runs of such chars -
+    * string bodies, whitespace, digits - without per-char transitions and accept checks).
+    */
+  val selfLoop: Array[Boolean] = {
+    val table = new Array[Boolean](ascii.length)
+    var i = 0
+    while (i < ascii.length) {
+      table(i) = ascii(i) == i / 128
+      i += 1
+    }
+    table
+  }
+
+  /** Whether `state` has any ASCII self-loop. */
+  val hasSelfLoop: Array[Boolean] = Array.tabulate(lexAccept.length) { s =>
+    (0 until 128).exists(c => selfLoop(s * 128 + c))
+  }
+
   def lexStep(state: Int, c: Char): Int =
     if (c < 128) ascii(state * 128 + c)
     else {
