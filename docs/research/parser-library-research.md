@@ -966,6 +966,9 @@ measure those.
 
 ### 5.10 Executing `F`: tail-call elimination vs a `ParserRuntime[F]`
 
+> **See §5.11:** the engine is generated per runtime by compile-time providers. The runtime
+> `ParserRuntime[F]` described here is the fallback provider; the analysis of costs and binds still holds.
+
 **Answer to "tail-rec elimination in the macro or a `Runtime[F]`?": neither alone.**
 
 **Recursion never reaches `F` or the JVM stack.** The LR `while (true) (state: @switch) match { … }`
@@ -1123,6 +1126,106 @@ The default driver is written once:
    `blocking`.
 6. Baselines: `Id` codegen vs fs2-data JSON and jawn `AsyncParser` on the same input.
 
+
+### 5.11 `grammar[Result, F]` generates the whole engine in `F`: per-runtime codegen providers
+
+**Correction to the framing of §5.10.** `grammar[Result, F]` does not produce a pure parser that is
+then wrapped in `F`. It defines `F[Result]` **and the entire engine for the intermediate steps**, all
+generated for `F`:
+- entering the parse;
+- the pure segments;
+- how each effectful action's `F[R]` is continued;
+- yield points;
+- input acquisition (reads and refills);
+- error raising;
+- sync points.
+
+The optimisation strategy is therefore chosen **at compile time, per runtime**. A runtime type class
+consulted by a generic driver is only the fallback.
+
+**Extension point.** A `ParserEngineProvider` is a Hearth `StandardMacroExtension`, discovered from the
+classpath the same way `cats-integration` registers `IsEither`/collection providers (e.g.
+`IsEitherProviderForValidated`) and loaded once per expansion (`ensureStandardExtensionsLoaded()`).
+The core module knows nothing about cats-effect or ZIO. Adding
+`kindlings-parser-cats-effect` or `kindlings-parser-zio` to the classpath adds their engines.
+
+Compile-time interface (sketch; every hook returns Hearth `Expr`s the macro splices):
+
+```scala
+trait ParserEngineProvider {
+  def mightMatch[F[_]](F: Type.Ctor1[F]): Boolean     // cheap gate (hearth#347 pattern)
+  def entry[R](body: Expr[F[R]]): Expr[F[R]]          // IO.defer / ZIO.suspendSucceed / identity
+  def continueWith[A, R](fa: Expr[F[A]])(k: Expr[A] => Expr[F[R]]): Expr[F[R]]
+                                                      // IO#flatMap / ZIO#flatMap / Either match / direct call
+  def succeed[R](r: Expr[R]): Expr[F[R]]
+  def fail[R](e: Expr[ParseError]): Expr[F[R]]
+  def yieldThen[R](k: Expr[F[R]]): Option[Expr[F[R]]] // IO.cede *> k / ZIO.yieldNow *> k / None (Id)
+  def blockingRead(read: Expr[Int]): Option[Expr[F[Int]]] // IO.blocking / ZIO.attemptBlocking / None = direct
+  def loopShape: LoopShape                            // RecursiveBind | RuntimeWhileLoop (ZIO.whileLoop) | KyoLoop | Inline
+  def singleShot: Boolean; def defaultBudget: Int; def eager: Boolean
+}
+```
+
+**What specialisation buys over the generic driver.** With a concrete provider, the macro doesn't need
+the `Signal`/`pending: AnyRef` round-trip of §5.10. It generates the loop *inside* the engine, and each
+**effectful production gets its own inlined continuation**:
+
+```scala
+// sketch of what the IO provider makes the macro emit for one effectful production
+IO.defer {
+  val m = new Machine(...)
+  def go(): IO[Result] = {
+    while (true) (m.state: @switch) match {
+      // ... pure shifts/reductions inline ...
+      case 42 =>                                    // reduce: addr ::= all(name, zip) { (n, z) => IO(Addr(n, z)) }
+        val z = m.popInt(); val n = m.popRef[String]()
+        return IO(Addr(n, z)).flatMap { r => m.pushRef(r); m.goto(7); go() }   // the one irreducible bind
+      case BudgetExhausted => return IO.cede *> go()
+      case NeedInput       => return IO.blocking(m.refill()).flatMap(_ => go())
+    }
+  }
+  go()
+}
+```
+
+- Every bind is a monomorphic `IO#flatMap`: no dictionary, no boxing through `pending`, no cast.
+- Recursion through `flatMap` is stack safe because `IO` is.
+- The action body is beta-reduced in place. Pure productions stay in the `while`.
+
+**Providers planned**
+
+| Provider | Matches | Engine shape |
+|---|---|---|
+| `IdEngine` (core) | `Id`, plus direct-style markers (Ox, Loom, Gears) | One `while` loop, effectful actions called inline, direct reads. Zero `F` operations. |
+| `EagerErrorEngine` (core) | `Either[E, *]`, `Try`, `Option`, `Validated`-like via `IsEither` | Inline `match`, early return on error. Zero binds. |
+| `CatsEffectIOEngine` (cats-effect module) | concrete `cats.effect.IO` | The sketch above: `IO.defer`, `IO#flatMap`, `IO.cede` per budget, `IO.blocking` (not `interruptible`). |
+| `CatsEffectGenericEngine` (cats-effect module) | abstract `F[_]` with a summonable `Async[F]` / `Sync[F]` | The same shape through `F.flatMap` / `F.cede` / `F.blocking` dictionary calls. Needed for tagless-final code: the bind count is the same, the dispatch is not. |
+| `ZioEngine` (zio module) | `ZIO[R, E, *]` (via aliases like `Task`/`RIO`/`IO`) | `ZIO.suspendSucceed`, `ZIO.whileLoop` as the loop node, `ZIO.yieldNow`, `ZIO.attemptBlocking`. The error channel `E` maps parse errors via a user function. |
+| `KyoEngine` (Scala 3 module) | `A < S` | `Sync.defer`, `kyo.kernel.Loop`, `Async` at effects |
+| `FutureEngine` (core) | `scala.concurrent.Future` | Kept lazy as `() => Future`; binds via `flatMap` on the implicit `ExecutionContext` |
+| `RuntimeInstanceEngine` (core fallback) | any `F` with a user-provided `ParserRuntime[F]` value (§5.10) | The generic signal-based driver |
+
+Selection:
+1. Concrete type providers are tried first (`IO`, `ZIO`, `Kyo`, `Id`, `Either`…).
+2. Then type-class providers, by summoning `Async`/`Sync`.
+3. Then the runtime-instance fallback.
+4. With no provider, a compile error lists the providers found on the classpath and the modules that
+   would add one.
+
+The chosen provider appears in the derivation log (`LogDerivation`-style), so users can see which engine
+their grammar got.
+
+**Consequences**
+- The runtime `ParserRuntime[F]` of §5.10 is demoted to the fallback. The primary mechanism is
+  compile-time providers.
+- Benchmarks (spike 7) are per provider. Each provider owns its `defaultBudget`, loop shape and sync-point
+  strategy (e.g. `*>`-accumulation for IO, `ZIO.whileLoop` batching for ZIO, none for `Id`).
+- Parser *reuse*: `grammar[Result, F]` is typically assigned to a `val`. The engine value is immutable,
+  and each `parse(input): F[Result]` allocates its machine inside `entry`, so it is referentially
+  transparent and safe to run concurrently.
+- Providers must declare `singleShot = true` (§5.10). The macro refuses to pair the mutable machine with
+  a multi-shot `F`.
+
 ## 6. Decisions needed before prototyping
 
 1. **Grammar class.** *Resolved (2026-09-29):* a yacc-style BNF front end with LR(1) (IELR/LALR) as the
@@ -1195,7 +1298,9 @@ The default driver is written once:
    - prototype dead-value elimination: unused lambda parameters not synthesised, and dead
      non-terminals compiled recognise-only. Measure allocation on a JSON grammar that ignores most
      values.
-7. **Runtime spike (§5.10):**
+7. **Runtime spike (§5.10, §5.11):**
+   - implement `IdEngine` and `CatsEffectIOEngine` as `ParserEngineProvider`s and compare their generated
+     code against the generic signal-based driver;
    - hand-write the `Machine` for the JSON grammar with 0 / 1 / 10 / 100 % effectful reductions;
    - run the six benchmarks listed in §5.10 on JVM, JS and Native;
    - fix the default `budget` per runtime and choose the driver shape per instance.
