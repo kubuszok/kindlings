@@ -1,6 +1,6 @@
 # Parser library for Kindlings: prior-art research
 
-Status: **RESEARCH** (2026-09-29). No implementation yet. This document compares the existing Scala
+Status: **RESEARCH** (2026-09-29; revised the same day for composition (R6) and the input memory model (R7)). No implementation yet. This document compares the existing Scala
 parsing libraries and the relevant non-Scala prior art against the requirements below, and proposes a
 direction plus the decisions that need to be made before a prototype.
 
@@ -23,6 +23,8 @@ are marked **[unverified]**.
 | R3 | Both compilers and REPLs; input from `String` and `InputStream`. | A push/resumable parser (feed chunk → `NeedInput` / `Done` / `Error`). Exact "incomplete input" detection. Error recovery is desirable. |
 | R4 | Built-in debugging: runtime tracing, plus compile-time detection of unintended loops, ambiguities and shift/reduce conflicts. | The **whole grammar must be visible to a macro as data**. Nullable/FIRST/FOLLOW analysis, left-recursion and nullable-loop checks, LL or LR conflict reporting with counterexamples, and PEG-shadowing checks. The tracer is compiled in only when requested. |
 | R5 | Easy to write algol-like, indentation-based, Markdown/markup and data-language grammars. | Precedence/Pratt support, a lexer layer, a layout (INDENT/DEDENT) scanner hook, and line-oriented/stateful escape hatches for CommonMark-class languages. |
+| R6 | Parsers can be **combined** (separate vals, files, libraries, parametrised rules) **without losing** compile-time and runtime debugging; possibly via phantom types. | Every rule must carry a machine-readable summary of itself that survives separate *and* incremental compilation, plus source metadata. Global checks re-run where the grammar is closed. See §5.6. |
+| R7 | No re-allocation of input: results reference consumed input as **views/ranges**; for streams the parsed prefix must become GC-able; `String`s may use a different strategy; a per-input "visitor" controls memory behaviour. | A strategy type class per input kind with `Long` spans, mark/commit/low-water-mark eviction, and an explicit span-validity contract. The macro specialises the parser per strategy. See §5.7. |
 
 ## 1. TL;DR
 
@@ -57,6 +59,23 @@ are marked **[unverified]**.
   see the body of another `val`/`def`, and Scala 3 can only with `-Yretain-trees`. Global analysis
   therefore needs the grammar either passed to a single macro call, or serialised per rule into
   something a later macro can read. See §5.1.
+- **Combining parsers while keeping diagnostics (R6) is feasible with a phantom *literal type*.**
+  - Each `rule { … }` macro gives its `val` an inferred type such as
+    `Rule[A] { type Meta = "<hash:local IR + summary + source position>" }`.
+  - Literal types survive separate compilation on 2.13 and 3, and Zinc hashes them into the API, so
+    changing a rule recompiles its dependents.
+  - Nullability goes into the type proper (`Rule0`/`Rule`, cats-parse style). FIRST/FOLLOW sets should
+    *not* be computed by implicits or match types; the macro computes them and stores them in the
+    string.
+  - Local checks run at each rule definition. Global checks re-run in a final `compile`/link macro.
+    See §5.6.
+- **Input without re-allocation (R7) is a solved problem in pieces, not in any one parser library.**
+  - jsoniter-scala's buffer compaction to a mark, generalised to "the lowest of all live marks", gives
+    bounded-memory streams.
+  - Spans are `(Long, Long)` ranges, never host substrings. `String.substring` copies on HotSpot but
+    *shares* on Scala Native and V8, so it can silently pin a whole input.
+  - A per-input `InputStrategy` type class (the "visitor") decides span validity and materialisation.
+    The macro specialises the generated code per strategy. See §5.7.
 
 ## 2. Existing Scala libraries
 
@@ -296,18 +315,21 @@ That is why fastparse and parboiled2 are per-rule and analyse nothing globally. 
     `optics` DSL does.
   - Downside: no cross-file grammar modularity.
 - **B. Per-rule macros that emit a serialised IR, plus a final `compile` macro.**
-  - Each `rule { … }` expands to a value whose *type or annotation* carries a serialised grammar IR,
-    e.g. a string literal in an annotation or a singleton literal type.
+  - Each `rule { … }` expands to a value whose *type* carries a serialised grammar IR in a string
+    literal type.
   - `Grammar.compile(rootRule)` collects and links the IR of every rule it reaches, including rules
     from other compilation units or libraries.
   - This allows reusable grammar libraries, such as a standard `Json` or `Expr` module.
-  - Needs a Hearth spike: reading annotations and literal types of referenced symbols
-    cross-platform [unverified].
+  - §5.6 covers which carriers work and why: literal types do; annotations, companions and
+    `Symbol.tree` don't.
 - **C. Grammar as an ADT value, analysed at run time** (the Parsley model).
   - Portable, but loses compile-time diagnostics (R4). Rejected as the primary path, but useful as a
     test oracle and REPL-time fallback.
 
-**Recommendation:** start with **A**, and design the IR so that B can be added later for modularity.
+**Recommendation (revised after R6):** make **B** the primary mechanism, using the literal-type
+carrier from §5.6. Keep **A** as a `grammar { … }` block for mutually recursive rules, which need to be
+tied in one expansion anyway. Both produce the same carrier, so a block's rules compose with
+standalone ones.
 
 ### 5.2 The effect `F[_]` and its type class (R1)
 
@@ -395,14 +417,233 @@ time-boxed.
 | Markdown/CommonMark | Block driver, delimiter stack, sub-parsers on spans | Escape hatch; reference app |
 | Wiki/INI-style markups | Layout scanner + core | ✓ |
 
+### 5.6 Composing parsers without losing diagnostics (R6)
+
+**Why phantom types, and which kind**
+
+A `val json = rule { … }` def macro controls exactly one thing about its `val` that survives separate
+compilation: the **inferred type**. The carriers compare as follows:
+
+| Carrier | Survives separate compilation (2.13 / 3) | Zinc invalidates dependents on change | Producible by a def macro | Verdict |
+|---|---|---|---|---|
+| **String-literal type**, e.g. `Rule[A] { type Meta = "…" }` (ConstantType) | ✓ / ✓ (pickled / TASTy) | ✓: Zinc's `ExtractAPI` keeps constant types for vals on both compilers | ✓ (whitebox / `transparent inline`) | **Primary** |
+| Annotation with literal args | ✓ (only `StaticAnnotation` on 2.13) / ✓ | ✓ | ✗: needs a macro annotation; `MacroAnnotation` is still `@experimental` on Scala 3 | Opt-in at most |
+| Generated companion or `final val` constant | ✓ | ✓ | ✗ on Scala 3 (a def macro can't add public definitions) | Only with a source generator |
+| Scala 3 `inline def` body | – / ✓ | ✓ (Zinc hashes inline bodies) | n/a | Scala 3 only; recursive rules loop the inliner |
+| Other vals' bodies via `Symbol.tree` / `-Yretain-trees` | ✗ / fragile | **✗: bodies are not in the API hash, so results go stale under incremental compilation** | – | Reject |
+
+**Type-level FIRST sets: not at real size.**
+- On 2.13 there are no union types, so sets would be HLists resolved by implicit search. Error
+  messages degrade to "could not find implicit `Disjoint[…]`", and compile times explode.
+- On Scala 3, match types get stuck on abstract types inside generic rules.
+- Unicode character classes have thousands of members.
+- Recursive rules need a type-level fixpoint that match types can't express cleanly.
+- Even the dependently typed prior art keeps only small indices in types. Danielsson's *Total Parser
+  Combinators* (ICFP 2010) indexes parsers by the results they return on empty input (i.e.
+  nullability), not by FIRST sets.
+
+**Recommended split:**
+1. **In types (checked by `scalac` directly, for good error messages):**
+   - the result type `A`;
+   - nullability via the class split `Rule0[+A]` / `Rule[+A] <: Rule0[A]`, so `rep`/`sepBy` on a
+     nullable rule is an ordinary type error, as in cats-parse.
+2. **In the literal carrier:** a versioned, compact string containing:
+   - a **Merkle hash**: the local IR plus the hashes of referenced rules, so a change to a leaf
+     changes every ancestor's type and Zinc recompiles the chain;
+   - the **local IR** of this rule only (no transitive closure, to avoid quadratic size), with
+     `Ref(symbolPath, hash)` for other rules, `Param(i)` holes for templates, and `Mu`/`Var` for local
+     recursion;
+   - the precomputed **summary** `{nullable, FIRST, FLAST, productive, hasFreeRefs}`, in
+     Krishnaswami–Yallop style, so leaf rules need not be re-analysed at link time;
+   - **`RuleMeta`**: the rule name (from the enclosing owner, like parboiled2's `rule`) and a
+     *source-root-relative* file, line and column. Relative paths keep API hashes reproducible across
+     machines and CI caches.
+
+**Where analysis runs**
+- **At `rule { … }` (local):**
+  - typing errors;
+  - K&Y separability and disjointness checks on every closed sub-term;
+  - nullable repetition;
+  - left recursion inside the rule and its `Mu` binders;
+  - PEG shadowing inside the rule;
+  - template termination.
+
+  Errors point at the exact sub-expression.
+- **At `Parser.compile(entry)` (global link):**
+  - follow `Ref`s by reading the referenced symbols' types;
+  - verify the stored hashes; a mismatch means a stale classpath, so report it and don't guess;
+  - instantiate templates;
+  - compute FIRST/FOLLOW over the closed grammar;
+  - report cross-module left recursion, LL(1)/LR conflicts, ambiguity search results, keyword and
+    token clashes, and opaque-node warnings.
+
+  This step is unavoidable: FOLLOW sets are global, so two individually LL(1) modules can conflict
+  once linked.
+- The link expansion must **mention every rule symbol it read** (in the generated metadata table). That
+  gives Zinc a recorded dependency on symbols reached only through `Ref`s inside strings. Merkle
+  hashes are the second safety net.
+
+**Recursion and ascriptions**
+- A recursive `lazy val` needs a type ascription, and an ascription erases the carrier. Offer instead:
+  - `rule.fix("expr") { self => … }`, an explicit μ like cats-parse's `recursive`;
+  - a `grammar { … }` block for mutually recursive rules (option A);
+  - templates parameterised by the missing rule.
+- An ascribed rule degrades to an opaque reference, with a warning that tells the user how to fix it.
+
+**Parametrised rules** (`sepBy(p, sep)`, `between`, `precedence(atom)(ops…)`)
+- **Templates:** a user `def sepBy[A](p: Rule[A], …) = rule { … }` stores a template IR with `Param`
+  holes in its result type. Each use site substitutes the arguments' carriers and analyses *that
+  instantiation*. This is Menhir's approach: parameterised nonterminals expanded at compile time, with
+  a termination check on growing arguments. It is also the Parsley-Haskell/asp approach, where
+  combinator functions run at staging time.
+- **Built-in templates** (`precedence`, `chain`, `layout`) are IR nodes. Their conflicts are reported
+  in operator and level terms.
+- **Opaque rules** (data-dependent parsing, hand-written scanners) have a declared or unknown summary
+  (FIRST = any). The link step warns and names them, and users can declare `first`/`nullable` to
+  restore the checks.
+
+**Modular grammars** (reusing and extending a `Json` or `Expr` module)
+- **Rats!** (Grimm, PLDI 2006): grammar modules can be parameterised by other modules and can add,
+  remove or override **labelled alternatives**. The lesson: give alternatives stable labels (their
+  `RuleMeta` name) so downstream modules can extend them deterministically.
+- **Copper/Silver** (Schwerdfeger & Van Wyk, PLDI 2009): each extension is checked against the host
+  alone, which guarantees that all passing extensions compose conflict-free. It achieves this by
+  restricting extensions to start with a unique *marking terminal*. The LL analogue is
+  `host.extend(alt)`, which requires `alt`'s FIRST set to be disjoint from the host's alternatives and
+  checks this at the extension's definition. The full link-time check still runs.
+- **Menhir** (`%public`, `%inline`) and **ANTLR** `import` both analyse only the joined grammar. That
+  confirms the link macro as the place for the global analysis.
+
+**Runtime debugging survives composition**
+- The link macro emits one static `Array[RuleMeta]`. Generated states and instructions carry only
+  `Int` ids, so debug metadata costs nothing on the hot path.
+- Traces and errors print `rule @ file:line`, plus the template instantiation chain ("in `sepBy`
+  instantiated at Foo.scala:12, defined at Combinators.scala:40"). This holds even when rules come
+  from other libraries. It generalises parboiled2's `RuleTrace.Named` and Parsley's `@debuggable`
+  name registry, without needing macro annotations.
+
+**To verify before committing** (spike 1 in §7):
+- the maximum literal-type length on 2.13 and 3, including JS and Native;
+- that `transparent inline` refinement types stay as the inferred type of public vals;
+- that a leaf-rule edit recompiles the link site through the Merkle chain on both compilers;
+- how the carrier prints in type-mismatch errors (keep it in a `type Meta` member, not a visible type
+  argument).
+
+### 5.7 Input, views and memory (R7)
+
+**Facts that shape the design**
+- `String.substring` **copies** on HotSpot. It has done so since 7u6, precisely to stop small
+  substrings pinning huge parents.
+- It **shares** the backing store on Scala Native (its `String` still has `offset`/`count`) and on V8
+  for results of 13 chars or more (`SlicedString`).
+- So "use `substring` as a view" is wrong in both directions. It costs O(n) on the JVM and can leak on
+  JS/Native.
+- **Spans must therefore be the library's own `(start: Long, end: Long)` over a strategy-owned store**,
+  and materialisation must be an explicit, strategy-controlled step.
+- A generic `CharSequence.charAt` in the hot loop becomes megamorphic (itable dispatch, no inlining)
+  once three or more input classes reach it. Macro specialisation per input type removes this.
+
+**Prior art for "the parsed prefix becomes GC-able"**
+
+| System | Mechanism | Lesson |
+|---|---|---|
+| jsoniter-scala `JsonReader.loadMore` | One `Array[Byte]`. On refill, compact to `min(mark, pos)`. `Long totalRead` for positions. Bounded by `maxBufSize`. | **Low-water-mark eviction with one mark**. Generalise to many. |
+| fastparse `UberBuffer` + `dropBuffer` | Ring buffer, dropped only after a cut, and never while a capture or lookahead is open | Cuts are what advance the mark. The grammar (or the macro, for LL(1)-disjoint choices) must supply them. |
+| Jackson `getTextCharacters`, SAX, Go `Scanner.Bytes`, simdjson `string_view` | Zero-copy view valid **until the next step** | Ideal for event/visitor consumers; wrong for ASTs that outlive the step |
+| Jackson `NonBlockingJsonParser`, jawn `AsyncParser`, attoparsec `Partial` | `feedInput(chunk)` returns `NOT_AVAILABLE`/`Partial`. Partial tokens are saved internally, so the caller's chunk is released. | Push API; with an explicit parser stack the continuation is just the stack plus the state |
+| Netty `ByteBuf`, Rust `bytes`, Okio `Segment` | Refcounted or shared slices. Okio copies spans under 1 KiB instead of sharing, so tiny spans don't pin 8 KiB segments. | Pinning granularity is the chunk. Use a copy-small, share-large heuristic. |
+| fs2 `Chunk` slices, V8 `SlicedString`, attoparsec `ByteString` | GC-based sharing | Safe but pins unpredictably. attoparsec retains the whole input until `Done`: the failure mode to avoid. |
+| JDK 22 FFM `MemorySegment` via `FileChannel.map(…, Arena)` | `Long` offsets, zero-copy `asSlice`, deterministic unmap on `arena.close()` | The mmap strategy (older JDKs need windows of 2 GB `MappedByteBuffer`s) |
+
+**Span-validity contracts.** The strategy declares one, and the macro reads it at compile time:
+1. **Forever:** in-memory `String`/`Array`, and mmap while its arena is open. Spans can go straight
+   into results.
+2. **Until committed:** chunked streams. A span is valid while `start >= lowWaterMark`. Before the
+   mark that protects a span is released, the generated code either materialises it (copy on capture)
+   or hands it to the user callback for immediate use.
+3. **Until the next step:** event mode. The zero-copy callback style, like Jackson and SAX.
+
+**Low-water-mark eviction with an explicit stack**
+- Backtrack points and open captures are LIFO. They mirror the parser's own explicit stack, so the
+  low-water mark is simply the bottom-most live mark: O(1), no heap.
+- Cuts, and in LL(1) mode every committed prediction, advance it.
+- User-held spans are the only non-LIFO pins. Don't track them; make them materialise at the contract
+  boundary. That keeps memory bounded and avoids the attoparsec retention failure.
+
+**Sketch of the strategy ("visitor") type class**
+
+This is a strawman for the spike, not an API proposal.
+
+```scala
+trait InputStrategy[I] {
+  type Unit                 // Byte or Char: selects the byte- or char-level automaton at compile time
+  type State                // mutable buffer/cursor state, allocated once per parse
+  def open(input: I): State
+
+  // hot path: must be final/inlinable; the macro may instead splice codegen snippets (see below)
+  def ensure(s: State, pos: Long, n: Int): Boolean   // make [pos, pos+n) addressable; false = EOF
+  def unitAt(s: State, pos: Long): Int
+
+  // memory control
+  def mark(s: State, pos: Long): Int                 // LIFO, mirrors the parser's backtrack stack
+  def release(s: State, mark: Int): Unit
+  def commit(s: State, pos: Long): Unit              // cut: nothing before pos is revisited
+  def lowWaterMark(s: State): Long
+
+  // spans
+  def validity: SpanValidity                         // Forever | UntilCommitted | UntilNextStep (compile-time constant)
+  def materialize(s: State, start: Long, end: Long): String
+  def regionEquals(s: State, start: Long, end: Long, lit: String): Boolean  // allocation-free keyword match
+  def lineColumn(s: State, offset: Long): (Long, Int) // lazy; error path only
+}
+```
+
+**Three reference strategies**
+- **`String` / `CharSequence` in memory:**
+  - `Int` cursor (the macro emits `Int` when the strategy's max length fits), `charAt` monomorphic.
+  - Marks are no-ops, validity is **Forever**, spans are zero-copy.
+  - `materialize` is `substring`, only on demand.
+  - Optionally a `StringView extends CharSequence` for users who want a view object.
+- **Chunked `InputStream` / `Reader` / pushed chunks:**
+  - The jsoniter scheme generalised to a mark stack: one growable array, `base: Long`, and compaction
+    to the low-water mark on refill.
+  - Alternatively a segment ring that drops whole segments, which avoids a memmove for long marked
+    regions.
+  - Validity is **UntilCommitted**. There is a configurable max window with a clear "token too long"
+    error.
+  - UTF-8 multi-byte sequences crossing a refill need up to 3 bytes of carry.
+  - A `feed(chunk)` push variant for Scala.js, fs2 and REPLs.
+- **Memory-mapped file:**
+  - JDK 22+ `MemorySegment` with `Long` offsets; older JDKs use overlapping `MappedByteBuffer`
+    windows; Native uses `mmap` `Ptr[Byte]`; JS falls back to chunked.
+  - Validity is **Forever** within the arena scope. The OS page cache, not the GC heap, holds the data.
+
+**How the macro uses it.** The instance is resolved statically at the `compile`/`parse` site, so the
+generated parser:
+- is emitted against the concrete strategy: monomorphic calls, or better, the strategy supplies Hearth
+  `Expr` snippets for `load`, `ensure` and `refill`, so the loop contains raw `buf(i)`;
+- keeps the slow refill path in a separate non-inlined method, as jsoniter's `loadMoreOrError` does;
+- inserts `materialize` before `release` only when `validity != Forever`;
+- drops mark bookkeeping entirely for `Forever` strategies;
+- picks the byte or char automaton from `Unit`.
+
+The cost is one copy of the generated code per (grammar, strategy) pair actually used.
+
+**Line and column.** Track neither on the hot path. Keep a per-chunk `linesBefore: Long` for evicted
+chunks, and compute line and column lazily by scanning back to `\n` (as fastparse's lazy
+`lineNumberLookup` does) only for errors and traces.
+
 ## 6. Decisions needed before prototyping
 
 1. **Grammar class.** Is "LL(1) + precedence + layout, with LR(1) later" acceptable? Or must the first
    version accept arbitrary PEG with backtracking, like fastparse and parboiled2? PEG costs streaming
    guarantees and diagnostic precision. If "shift/reduce" diagnostics are wanted literally, the LR
    back end moves from "later" to "required".
-2. **Grammar visibility.** Option A (one macro call, no cross-file modularity) first? Or is grammar
-   modularity across files and libraries a day-one requirement (option B)?
+2. **Composition model.** Accept the literal-type carrier (§5.6) as the composition mechanism? It
+   implies these user-visible rules:
+   - rules must not be type-ascribed (use `rule.fix` or a `grammar { … }` block for recursion);
+   - nullability shows up as `Rule0` vs `Rule`;
+   - a final `Parser.compile(entry)` is where global errors appear.
 3. **Semantic of `Something[F]`.** Applicative-only actions (static, analysable, fast), or should
    actions be able to influence parsing, e.g. a C typedef table that changes tokenisation? The latter
    needs a controlled parser→lexer feedback channel, not monadic `flatMap`.
@@ -412,12 +653,21 @@ time-boxed.
    Bytes are what 4 GB `InputStream` inputs are; chars are what REPLs have.
 6. **Scope of v1 recovery.** Is REPL "incomplete input" plus good error messages enough, or is IDE-grade
    error recovery required?
+7. **Span contract for streams.** For stream input, should captured text be materialised at commit
+   (copy-on-capture: bounded memory, simple), or should large spans pin their chunk (Okio-style
+   share-large: fewer copies, less predictable memory)? And should the event mode's "valid until next
+   step" views be exposed to users at all?
+8. **Minimum JDK for the mmap strategy.** JDK 22+ `MemorySegment` only, or also the
+   `MappedByteBuffer`-window fallback?
 
 ## 7. Proposed next steps (still research/spikes)
 
-1. **Hearth spike (macro visibility):**
+1. **Hearth spike (carrier and visibility):**
    - parse a small multi-rule grammar block (option A) with `DestructuredExpr` on 2.13 and 3;
-   - check whether option B's "IR in annotation/literal type" can be read back cross-platform.
+   - have a `rule { … }` macro infer `Rule[A] { type Meta = "…" }` and read it back from another
+     module/jar on both compilers;
+   - measure the maximum literal length;
+   - confirm Zinc recompiles the link site after a leaf edit.
 2. **Analysis spike:** implement nullable/FIRST/FOLLOW plus asp-style typing on a pure IR (no macros).
    Test it on JSON, an expression language, and a Python-ish layout grammar, and look at what the
    diagnostics look like.
@@ -428,6 +678,13 @@ time-boxed.
    any macro work.
 4. **Effect spike:** sketch `Something[F]` as an applicative-plus-errors type class. Measure `Id`
    specialisation vs dictionary passing vs a free-applicative interpretation.
+5. **Input spike:**
+   - implement the three strategies from §5.7 by hand;
+   - run the same hand-written JSON recogniser over each;
+   - check with a heap profiler that a 4 GB stream stays within the max window;
+   - confirm that the `String` strategy allocates nothing but results;
+   - compare "specialised per strategy" against "one `CharSequence` loop" to quantify the
+     megamorphic cost.
 
 ## 8. Glossary of the less common terms
 
@@ -438,6 +695,10 @@ time-boxed.
 - **Counterexample (unifying):** one input with two parse trees, which proves ambiguity.
 - **Cut:** a commit point after which no backtracking is possible, so the input before it can be
   discarded.
+- **Low-water mark:** the lowest input offset any live mark, backtrack point or open capture can still
+  return to. Everything below it can be evicted.
+- **Carrier:** the part of a rule's static type that encodes its serialised IR and summary for later
+  macros.
 
 ## 9. Sources
 
@@ -508,5 +769,25 @@ time-boxed.
   - tree-sitter external scanners.
     https://tree-sitter.github.io/tree-sitter/creating-parsers/4-external-scanners.html
   - Lezer. https://lezer.codemirror.net/docs/guide/
+- Composition:
+  - Grimm, *Better Extensibility through Modular Syntax* (Rats!), PLDI 2006.
+    https://dl.acm.org/doi/10.1145/1133255.1133987
+  - Schwerdfeger & Van Wyk, *Verifiable Composition of Deterministic Grammars*, PLDI 2009.
+    https://dl.acm.org/doi/10.1145/1543135.1542499
+  - Danielsson, *Total Parser Combinators*, ICFP 2010 [not re-checked].
+- Zinc API extraction (constant types, annotations, inline bodies):
+  - https://github.com/sbt/zinc/blob/develop/internal/compiler-bridge/src/main/scala/xsbt/ExtractAPI.scala
+  - https://github.com/scala/scala3/blob/main/compiler/src/dotty/tools/dotc/sbt/ExtractAPI.scala
+- Input buffers:
+  - jsoniter-scala `JsonReader.scala` (`loadMore`, marks):
+    https://github.com/plokhotnyuk/jsoniter-scala
+  - jawn `AsyncParser`: https://github.com/typelevel/jawn
+  - Jackson core (`NonBlockingJsonParser`, `TextBuffer`): https://github.com/FasterXML/jackson-core
+  - Okio `Segment`: https://github.com/square/okio
+  - fs2 `Chunk`: https://github.com/typelevel/fs2
+  - Scala Native `String` (shared `substring`): https://github.com/scala-native/scala-native
+  - V8 `SlicedString` retention: https://github.com/nodejs/node/issues/31891
+  - JDK 7u6 `substring` change:
+    https://nextmovesoftware.com/blog/2013/07/05/java-6-vs-java-7-when-implementation-matters/
 - High-throughput JSON: Langdale & Lemire, *Parsing Gigabytes of JSON per Second*, VLDB J. 2019.
   https://arxiv.org/abs/1902.08318
