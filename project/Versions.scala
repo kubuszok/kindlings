@@ -38,6 +38,11 @@ object versions {
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.1"
   val fs2 = "3.14.0"
+  // parser benchmark baselines
+  val fastparse = "3.1.1"
+  val parboiled2 = "2.5.1"
+  val catsParse = "1.1.0"
+  val parsley = "4.6.2"
   val tagging = "2.3.5"
   val scalacheck = "1.20.0"
   val scalaJavaTime = "2.7.0"

@@ -13,6 +13,9 @@ package internal.runtime
   * `constants` of an `ActConst`, the element index of an `ActListAppend`). The values of production `p`'s right-hand
   * side positions `rhsStart(p) until rhsStart(p + 1)` are converted according to `rhsConv`: [[Tables.Raw]] (as is),
   * [[Tables.Listify]] (a list builder to convert to a `List`), otherwise the id of a terminal converter.
+  *
+  * `literals(token)` is the text of literal tokens (whose value is that constant, so it is not copied from the input)
+  * and `null` for regex tokens.
   */
 final private[parser] class Tables(
     val tokenCount: Int,
@@ -33,7 +36,8 @@ final private[parser] class Tables(
     val prodArg: Array[Int],
     val rhsStart: Array[Int],
     val rhsConv: Array[Int],
-    val constants: Array[String]
+    val constants: Array[String],
+    val literals: Array[String]
 ) {
 
   /** `ascii(state * 128 + c)`: transition target on ASCII chars, `-1` if none. */
@@ -80,12 +84,14 @@ final private[parser] class Tables(
     List(action, goto, prodLhs, prodLen, prodKind, prodArg, rhsStart, rhsConv).foreach(w.ints)
     w.int(constants.length)
     constants.foreach(w.string)
+    w.int(literals.length)
+    literals.foreach(l => if (l == null) w.int(-1) else { w.int(0); w.string(l) })
     w
   }
 }
 private[parser] object Tables {
 
-  val Version: Int = 2
+  val Version: Int = 3
 
   final val Raw = -1
   final val Listify = -2
@@ -117,7 +123,8 @@ private[parser] object Tables {
       prodArg = r.ints(),
       rhsStart = r.ints(),
       rhsConv = r.ints(),
-      constants = Array.fill(r.int())(r.string())
+      constants = Array.fill(r.int())(r.string()),
+      literals = Array.fill(r.int())(if (r.int() < 0) null else r.string())
     )
   }
 }

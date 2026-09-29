@@ -22,6 +22,11 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   import CompiledGrammar.*
 
   private val tables = grammar.tables
+  private val literals = tables.literals
+  private val text: String = input match {
+    case s: StringInput => s.text
+    case _              => null
+  }
   private val tokenCount = tables.tokenCount
   private val nonTerminalCount = tables.nonTerminalCount
 
@@ -83,7 +88,8 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       }
       val act = tables.action(states(sp) * tokenCount + lookahead)
       if (act > 0) {
-        push(act - 1, input.slice(tokenStart, tokenEnd))
+        val literal = literals(lookahead)
+        push(act - 1, if (literal != null) literal else input.slice(tokenStart, tokenEnd))
         lookahead = -1
         input.release(pos)
       } else if (act < 0) {
@@ -147,7 +153,56 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     * error, [[Machine.NeedInput]] if the input buffer ran out in the middle of a token (lexing restarts from the token
     * start after a refill).
     */
-  private def lex(): Int = {
+  private def lex(): Int = if (text != null) lexString() else lexInput()
+
+  /** [[lex]] specialised for `String` inputs: direct `charAt`, no `Input` calls. */
+  private def lexString(): Int = {
+    val ascii = tables.ascii
+    val accept = tables.lexAccept
+    val skip = tables.skip
+    val length = text.length
+    var p = pos.toInt
+    while (true) {
+      if (p >= length) {
+        lookahead = 0
+        tokenStart = p.toLong
+        tokenEnd = p.toLong
+        pos = p.toLong
+        return Machine.Done
+      }
+      var state = 0
+      var i = p
+      var accepted = -1
+      var acceptedEnd = p
+      while (state >= 0 && i < length) {
+        val c = text.charAt(i)
+        state = if (c < 128) ascii(state * 128 + c) else tables.lexStep(state, c)
+        if (state >= 0) {
+          i += 1
+          val a = accept(state)
+          if (a >= 0) { accepted = a; acceptedEnd = i }
+        }
+      }
+      if (accepted < 0) {
+        pos = p.toLong
+        tokenStart = p.toLong
+        tokenEnd = p.toLong + 1
+        _error = syntaxError("Unexpected character")
+        return Machine.Error
+      }
+      if (skip(accepted)) p = acceptedEnd
+      else {
+        lookahead = accepted
+        tokenStart = p.toLong
+        tokenEnd = acceptedEnd.toLong
+        pos = acceptedEnd.toLong
+        return Machine.Done
+      }
+    }
+    Machine.Error
+  }
+
+  private def lexInput(): Int = {
     while (true) {
       input.ensure(pos) match {
         case Input.End =>

@@ -303,7 +303,14 @@ private[parser] object GrammarCompiler {
       prodArg = prodArg,
       rhsStart = rhsStart,
       rhsConv = rhsConv.result(),
-      constants = constants.keys.toArray
+      constants = constants.keys.toArray,
+      literals = Array.tabulate(tokenCount) { t =>
+        if (t >= 1 && t <= tokens.size) tokens(t - 1).pattern match {
+          case LiteralPattern(text) => text
+          case _                    => null
+        }
+        else null
+      }
     )
     val summary =
       s"${tokenCount - 1} terminals, ${nts - 1} non-terminals (${flat.nonTerminals - g.nonTerminals.size} helpers), " +

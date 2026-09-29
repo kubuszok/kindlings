@@ -43,6 +43,9 @@ Example: `fastShowPretty` (2.13 JVM), `fastShowPretty3` (3 JVM), `fastShowPretty
  - **Always clean after macro changes** — incremental compilation does NOT re-expand macros.
  - Clean specific module: `sbt --client "module/clean ; module3/clean ; test-jvm-2_13 ; test-jvm-3"`
  - Nuclear option: `sbt --client clean` then `sbt --client "test-jvm-2_13 ; test-jvm-3"`
+ - **sbt 2 build cache**: `clean` restores compiler outputs from the content-addressed disk cache (`~/.cache/sbt`), so
+   test classes compiled from *stale macro expansions* can come back after a macro change. If tests still behave like
+   the old macro after `clean`, stop the server (`sbt --client shutdown`), delete `~/.cache/sbt` and rebuild.
 
 ## Cross-Quotes and Macro-Agnostic APIs
 

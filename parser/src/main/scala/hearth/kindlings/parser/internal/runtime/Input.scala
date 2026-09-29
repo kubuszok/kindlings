@@ -33,7 +33,7 @@ private[parser] object Input {
 }
 
 /** A `String` input: chars are read in place (no copy of the input) and never released. */
-final private[parser] class StringInput(text: String) extends Input {
+final private[parser] class StringInput(val text: String) extends Input {
 
   private val length = text.length.toLong
 

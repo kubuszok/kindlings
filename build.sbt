@@ -1133,7 +1133,8 @@ lazy val benchmarks = projectMatrix
     sconfigDerivation,
     tapirSchemaDerivation,
     optics,
-    tapirOpenapiJsoniter
+    tapirOpenapiJsoniter,
+    parser
   )
   .settings(noPublishSettings *)
   .settings(settings *)
@@ -1154,6 +1155,11 @@ lazy val benchmarks = projectMatrix
       // tapir-openapi-jsoniter baseline: sttp-apispec's circe codecs (which the module avoids depending on)
       "com.softwaremill.sttp.apispec" %% "openapi-circe" % versions.sttpApispec,
       "org.typelevel" %% "kittens" % versions.kittens,
+      // parser baselines
+      "com.lihaoyi" %% "fastparse" % versions.fastparse,
+      "org.parboiled" %% "parboiled" % versions.parboiled2,
+      "org.typelevel" %% "cats-parse" % versions.catsParse,
+      "com.github.j-mie6" %% "parsley" % versions.parsley,
       "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3") versions.avro4s3
                                                 else versions.avro4s213)
     ),
