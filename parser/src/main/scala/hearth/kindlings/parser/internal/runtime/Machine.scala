@@ -98,7 +98,13 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
           _result = values(sp)
           return Machine.Done
         }
-        if (reduce(p)) return Machine.Effect
+        try
+          if (reduce(p)) return Machine.Effect
+        catch {
+          case r: RejectedValue =>
+            _error = rejected(r.getMessage)
+            return Machine.Error
+        }
       } else {
         _error = syntaxError("Unexpected token")
         return Machine.Error
@@ -258,6 +264,15 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       }
     }
     Machine.Error
+  }
+
+  /** A value rejected by a reduction (see [[RejectedValue]]), reported at the current token. */
+  private def rejected(detail: String): ParseError = {
+    val found =
+      if (lookahead == 0 || input.ensure(tokenStart) != Input.Available) "end of input"
+      else Machine.quote(input.slice(tokenStart, math.max(tokenEnd, tokenStart + 1)))
+    val (line, column) = input.lineColumn(tokenStart)
+    new ParseError(tokenStart, line, column, Nil, found, detail, endOfInput = false)
   }
 
   private def syntaxError(detail: String): ParseError = {

@@ -30,8 +30,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
   def grammarImpl[R, F[_]](body: c.Tree)(engine: c.Tree): c.Tree = {
     val out = compile(new Extractor(allowAs = true).grammar(body), generated = true)
-    val collections = collectionCodes(out)
     val targs = typeArgs(c.macroApplication)
+    val collections = collectionCodes(out, targs(1).tpe)
     val tables = out.tables.map(chunk => Literal(Constant(chunk)))
     val p = TermName(c.freshName("p"))
     val builder = TermName(c.freshName("builder"))
@@ -119,13 +119,24 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
   }
 
   /** The code of each repetition collection (see [[CollectionCodegen]]), as untypechecked trees. */
-  private def collectionCodes(out: GrammarCompiler.Output): Vector[Collections] = {
+  private def collectionCodes(out: GrammarCompiler.Output, effect: Type): Vector[Collections] = {
     val helper = new CollectionHelper(c)
+    lazy val hasErrorChannel = c.inferImplicitValue(
+      appliedType(typeOf[ErrorChannel[Option]].typeConstructor, List(effect)),
+      silent = true
+    ) != EmptyTree
     val codes = out.collections.map { coll =>
       helper.collectionCode(
         coll.tpe.asInstanceOf[helper.UntypedType],
         coll.element.asInstanceOf[helper.UntypedType]
       ) match {
+        case Right(code) if code.rejectable && !hasErrorChannel =>
+          val shown = coll.tpe.asInstanceOf[Type].toString
+          val msg =
+            "`.as[" + shown + "]`: " + shown + " has a smart constructor that can reject the repeated values, which needs an effect whose error channel reports it (Option, Try, Either[E, *], Future, a cats-effect F, ...) instead of " + effect + " (no ErrorChannel[" + effect + "]). " +
+              "To throw the rejection as a ParseError instead, opt in with `import hearth.kindlings.parser.ErrorChannel.throwing._`."
+          c.error(coll.pos.underlying.asInstanceOf[Position], msg)
+          Left(msg)
         case Right(code) =>
           def tree(t: Any): Tree = c.untypecheck(t.asInstanceOf[Tree])
           Right(Collections(tree(code.factory), tree(code.newBuilder), tree(code.add), tree(code.result)))

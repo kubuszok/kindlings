@@ -36,8 +36,36 @@ final class CollectionsSpec extends MacroSuite {
     }
 
     test("are collected into collections provided by classpath extensions (cats)") {
-      nonEmpty.parse("1 2 3") ==> NonEmptyList.of(1, 2, 3)
+      nonEmpty.parse("1 2 3") ==> Right(NonEmptyList.of(1, 2, 3))
       chains.parse("1 2") ==> Chain(1, 2)
+    }
+
+    test("rejected by a smart constructor are reported through the error channel") {
+      val error = nonEmpty.parse("").swap.getOrElse(fail("expected a Left"))
+      assert(error.getMessage.startsWith("Invalid cats.data.NonEmptyList[scala.Int]"), error.getMessage)
+      assert(nonEmptyTry.parse("").isFailure)
+      nonEmptyTry.parse("1").get ==> NonEmptyList.of(1)
+    }
+
+    test("rejected by a smart constructor are thrown only with the explicit opt-in") {
+      nonEmptyThrowing.parse("4") ==> NonEmptyList.of(4)
+      val error = intercept[ParseError](nonEmptyThrowing.parse(""))
+      assert(error.getMessage.startsWith("Invalid cats.data.NonEmptyList[scala.Int]"), error.getMessage)
+    }
+
+    test("with smart constructors are rejected in effects without an error channel") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        import cats.data.NonEmptyList
+        Grammar.grammar[NonEmptyList[String], Id] { g =>
+          import g.*
+          val s = nonTerminal[NonEmptyList[String]]
+          s ::= all(rep("x").as[NonEmptyList[String]]).pure(l => l)
+          s
+        }
+        """
+      ).check("has a smart constructor that can reject the repeated values")
     }
 
     test("pass the collection through groups and optional symbols") {
@@ -184,13 +212,34 @@ object CollectionsSpec {
     s
   }
 
-  val nonEmpty: Parser[Id, NonEmptyList[Int]] = Grammar.grammar[NonEmptyList[Int], Id] { g =>
+  type Result[A] = Either[ParseError, A]
+
+  val nonEmpty: Parser[Result, NonEmptyList[Int]] = Grammar.grammar[NonEmptyList[Int], Result] { g =>
     import g.*
     val s = nonTerminal[NonEmptyList[Int]]
     val num = terminal("[0-9]+").map(_.toInt)
     skip(" +")
-    s ::= all(rep1(num).as[NonEmptyList[Int]]).pure(l => l)
+    s ::= all(rep(num).as[NonEmptyList[Int]]).pure(l => l)
     s
+  }
+
+  val nonEmptyTry: Parser[scala.util.Try, NonEmptyList[Int]] = Grammar.grammar[NonEmptyList[Int], scala.util.Try] { g =>
+    import g.*
+    val s = nonTerminal[NonEmptyList[Int]]
+    val num = terminal("[0-9]+").map(_.toInt)
+    s ::= all(rep(num).as[NonEmptyList[Int]]).pure(l => l)
+    s
+  }
+
+  val nonEmptyThrowing: Parser[Id, NonEmptyList[Int]] = {
+    import ErrorChannel.throwing.*
+    Grammar.grammar[NonEmptyList[Int], Id] { g =>
+      import g.*
+      val s = nonTerminal[NonEmptyList[Int]]
+      val num = terminal("[0-9]+").map(_.toInt)
+      s ::= all(rep(num).as[NonEmptyList[Int]]).pure(l => l)
+      s
+    }
   }
 
   val chains: Parser[Id, Chain[Int]] = Grammar.grammar[Chain[Int], Id] { g =>

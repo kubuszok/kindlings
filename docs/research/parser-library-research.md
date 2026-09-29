@@ -75,6 +75,10 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   `result()` (plus smart-constructor unwrapping) wherever the repetition is used. The factories are evaluated once per
   parser. Collection ids are encoded in `rhsConv` as `Listify - id` (tables version 4). `Grammar.interpreted` keeps
   `ListBuffer`s and rejects `.as`.
+- Smart-constructor collections (`CtorLikeOf` other than `PlainValue`) throw `RejectedValue` from the generated
+  `result`, which `Machine.run` turns into a `ParseError` (`Machine.Error`), so every engine reports it through its
+  error channel. The macro accepts them only when `ErrorChannel[F]` is found (built-ins except `Id`, cats-effect via
+  its package import); `import ErrorChannel.throwing._` is the explicit opt-in to throwing in `Id`.
 
 **Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
 than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x

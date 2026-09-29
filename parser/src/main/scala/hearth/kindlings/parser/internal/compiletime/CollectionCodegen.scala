@@ -25,8 +25,10 @@ private[parser] trait CollectionCodegen { this: MacroCommons & StdExtensions =>
     *   `(builder: Any, element: Any) => Any`: appends the element, returns the builder
     * @param result
     *   `(builder: Any) => Any`: the collection
+    * @param rejectable
+    *   whether the collection's smart constructor can reject the values (`result` then throws `RejectedValue`)
     */
-  final case class CollectionCode(factory: Any, newBuilder: Any, add: Any, result: Any)
+  final case class CollectionCode(factory: Any, newBuilder: Any, add: Any, result: Any, rejectable: Boolean)
 
   private var standardExtensionsLoaded: Boolean = false
   private def ensureStdExtensionsLoaded(): Unit =
@@ -78,7 +80,11 @@ private[parser] trait CollectionCodegen { this: MacroCommons & StdExtensions =>
       val builder = b.asInstanceOf[scala.collection.mutable.Builder[Item, CtorResult]]
       (Expr.splice(fromCtorResult[C, Item, CtorResult](c.build, Expr.quote(builder))): Any)
     }
-    CollectionCode(factoryAny.asUntyped, newBuilder.asUntyped, add.asUntyped, result.asUntyped)
+    val rejectable = c.build match {
+      case _: CtorLikeOf.PlainValue[?, ?] => false
+      case _                              => true
+    }
+    CollectionCode(factoryAny.asUntyped, newBuilder.asUntyped, add.asUntyped, result.asUntyped, rejectable)
   }
 
   /** The collection built by `build` (handling the five `CtorLikeOf` shapes: smart constructors yield `Either`s). */
@@ -96,13 +102,15 @@ private[parser] trait CollectionCodegen { this: MacroCommons & StdExtensions =>
     }
   }
 
-  private def unwrap[C: Type](built: Expr[Either[Any, C]]): Expr[C] = Expr.quote {
-    Expr.splice(built) match {
-      case Right(value) => value
-      case Left(error)  =>
-        throw new IllegalArgumentException(
-          "the collection's smart constructor rejected the repeated values: " + String.valueOf(error)
-        )
+  /** A rejection becomes a `RejectedValue`, which the machine reports as a `ParseError` in the engine's `F`. */
+  private def unwrap[C: Type](built: Expr[Either[Any, C]]): Expr[C] = {
+    val name = Expr(Type.plainPrint[C].replace("_root_.", ""))
+    Expr.quote {
+      Expr.splice(built) match {
+        case Right(value) => value
+        case Left(error)  =>
+          throw hearth.kindlings.parser.internal.runtime.RejectedValue(Expr.splice(name), error)
+      }
     }
   }
 }

@@ -34,7 +34,7 @@ private[parser] object GrammarMacros {
       engine: Expr[ParserEngine[F]]
   )(using q: Quotes): Expr[Parser[F, R]] = {
     val out = compile(new Extractor(allowAs = true)(using q).grammar(body), generated = true)
-    val colls = collectionCodes(out)
+    val colls = collectionCodes[F](out)
     '{
       _root_.hearth.kindlings.parser.internal.runtime.Builder.generated[F, R](
         ${ Expr(out.tables) },
@@ -53,14 +53,26 @@ private[parser] object GrammarMacros {
   /** The code of a repetition collection (see [[CollectionCodegen]]), as compiler trees. */
   final private case class Collections(factory: Any, newBuilder: Any, add: Any, result: Any)
 
-  private def collectionCodes(out: GrammarCompiler.Output)(using q: Quotes): Vector[Collections] = {
+  private def collectionCodes[F[_]: Type](out: GrammarCompiler.Output)(using q: Quotes): Vector[Collections] = {
     import q.reflect.*
     val helper = new CollectionHelper(q)
+    lazy val hasErrorChannel = Implicits.search(TypeRepr.of[ErrorChannel[F]]) match {
+      case _: ImplicitSearchSuccess => true
+      case _                        => false
+    }
+    val effect = TypeRepr.of[F].show
     val codes = out.collections.map { coll =>
       helper.collectionCode(
         coll.tpe.asInstanceOf[helper.UntypedType],
         coll.element.asInstanceOf[helper.UntypedType]
       ) match {
+        case Right(code) if code.rejectable && !hasErrorChannel =>
+          val shown = coll.tpe.asInstanceOf[TypeRepr].show
+          val msg =
+            "`.as[" + shown + "]`: " + shown + " has a smart constructor that can reject the repeated values, which needs an effect whose error channel reports it (Option, Try, Either[E, *], Future, a cats-effect F, ...) instead of " + effect + " (no ErrorChannel[" + effect + "]). " +
+              "To throw the rejection as a ParseError instead, opt in with `import hearth.kindlings.parser.ErrorChannel.throwing._`."
+          report.error(msg, coll.pos.underlying.asInstanceOf[Position])
+          Left(msg)
         case Right(code) => Right(Collections(code.factory, code.newBuilder, code.add, code.result))
         case Left(msg)   =>
           report.error(msg, coll.pos.underlying.asInstanceOf[Position])

@@ -123,9 +123,19 @@ println(numbers.parse("[1, 2, 3]"))
 The macro checks that the collection is supported and that the repeated values fit its element type (maps are
 rejected). The generated code creates the collection's own `Builder` when the repetition starts, appends each value as
 it is parsed and calls `result()` once, so no intermediate `List` is built. The builder's `Factory` is evaluated once
-per parser. A collection with a smart constructor (`NonEmptyList`) throws an `IllegalArgumentException` if it rejects
-the values, e.g. when an empty `rep` is collected into a `NonEmptyList` (use `rep1`). `.as[C]` requires
-`Grammar.grammar`: `Grammar.interpreted` always builds `List`s.
+per parser. `.as[C]` requires `Grammar.grammar`: `Grammar.interpreted` always builds `List`s.
+
+A collection with a smart constructor (cats `NonEmptyList`) can reject the values, e.g. an empty `rep`. The rejection is
+reported as a `ParseError` ("Invalid cats.data.NonEmptyList[scala.Int]: ...") through the effect's error channel, so
+such collections compile only in an `F` that has an `ErrorChannel[F]`: `Option`, `Try`, `Either[E, *]` (with a
+`ParseErrorLift[E]`), `Future`, and cats-effect `F`s with `import hearth.kindlings.parser.catseffect._`. In `Id` they
+are a compile error, unless you explicitly opt into throwing the rejection as a `ParseError`:
+
+```scala
+import hearth.kindlings.parser.ErrorChannel.throwing._
+```
+
+Prefer `rep1`/`sepBy1` for non-empty collections: the grammar then guarantees at least one value.
 
 ### Writing alternatives on several lines
 
