@@ -727,8 +727,64 @@ What the macro does with inline terminals:
   can accept it.
 - Diagnostics name inline terminals by their text: `expected "(" or "origin"`, or
   `/[a-z]+/ at Grammar.scala:31`.
-- String literals default to `Unit` because they are punctuation or keywords. A literal whose text is
-  wanted can be written `"true".r` or given a `.as(value)` combinator.
+- Superseded by round 4: string literals are **singleton values** by default (their value is the
+  literal itself), not `Unit`.
+
+**Probe round 4: literals as singleton values** (both compilers).
+
+The motivating rule is `<opt-suffix-part> ::= "Sr." | "Jr." | ""`. The probes use
+`implicit def litSym[S <: String with Singleton](s: S): Sym[S]` and
+`litAlt[S <: String with Singleton](s: S): Alt[S]`, with a covariant `Alt[+A]` whose method is
+`||[B >: A]`.
+
+| # | Question | 2.13.18 | 3.8.3 | Consequence |
+|---|---|---|---|---|
+| 16 | `optSuffix ::= "Sr." \|\| "Jr." \|\| ""` for `nonTerminal[String]`: bare literals as whole alternatives, `""` as ε | ✓ | ✓ | BNF-literal style works with no `all`/action |
+| 17 | The same into `nonTerminal["Sr." \| "Jr."]` | n/a (no unions) | ✓ | Scala 3 keeps precise literal unions when the non-terminal asks for them |
+| 18 | `n ::= "Sr." \|\| "Jr."` for `nonTerminal[Int]` | "found String("Jr."), required Alt[Int]" | "Found: Alt[String] Required: Alt[Int]" | Clean errors |
+| 19 | A bare regex as a whole alternative, `first ::= "[A-Z][a-z]+".r` | ✓ only with its own `Regex => Alt[String]` conversion | same | Implicit conversions don't chain, so every "symbol as a whole alternative" form needs a direct conversion |
+| 20 | Inside `all("Sr.") { s => … }`, is `s` typed `"Sr."`? | ✗, widened to `String` | ✗, widened to `String` | Type inference widens the singleton when instantiating `all`'s type parameter. This only affects the *static* type; the macro still knows the value is the constant `"Sr."`. |
+
+**Value synthesis and dead-value elimination** (macro design; not yet prototyped)
+
+1. **Literal values are free.**
+   - A matched literal's value is the literal constant. The generated reduce code pushes or substitutes
+     the constant (a constant-pool `String` on the JVM). It never reads the value back from the input
+     or allocates.
+   - For `"Sr." || "Jr." || ""`, each alternative's reduce case yields its own constant.
+2. **Unused parameters are not synthesised.**
+   - For every action lambda, the macro checks which parameters are `_` or never referenced in the
+     body.
+   - For those it emits no span materialisation (§5.7), does not run the terminal's `.map`, and pushes
+     nothing onto the value stack.
+   - The lambda is rewritten to bind only the live parameters, then beta-reduced into the reduce case.
+     For example, `all(first, " ", optSuffix) { (f, _, s) => Name(f, s) }` never materialises `" "`.
+3. **Liveness propagates through non-terminals (whole-grammar fixpoint).**
+   - A non-terminal's value is *live* iff it is the start symbol, or some production binds it to a
+     parameter that is live.
+   - A dead non-terminal's productions compile **without actions and without materialising their
+     terminals**, i.e. recognise-only, and this propagates to everything below them.
+   - The "recognise mode" of §4.4 then falls out per subtree instead of being a global switch. For
+     example, a JSON grammar whose action ignores some fields' values skips building those subtrees
+     entirely, which is the cheap path for 4 GB inputs.
+4. **Constant folding.** A live parameter whose symbol can only produce constants (a literal, or a
+   non-terminal whose alternatives are all literals) is passed as the matched constant. That is an
+   `Int` alternative index plus a constant table, with no value-stack traffic for strings.
+
+**Semantics this assumes**
+- Pure actions and `.map` functions may be skipped, so they must be side-effect free. That is the
+  same contract as lazy evaluation.
+- Actions returning `F[B]` (§5.8 effects) are **never** dropped, because their effect is observable.
+- An explicit escape hatch (e.g. `all(…).always { … }`) forces evaluation for rare impure pure-typed
+  actions.
+- Diagnostics can report the analysis in debug builds ("non-terminal `comment` value is never used:
+  compiled as recognise-only"). That also helps catch actions that accidentally discard values.
+
+**Implementation notes to verify in the spike**
+- Hearth's lambda destructuring (`DestructuredExpr.extractLambda` or equivalent) and a traversal to
+  find parameter references.
+- Moving the lambda body into generated code requires owner fixing on Scala 3 (`changeOwner`). Check
+  what Hearth's `Expr` splicing already does before relying on it.
 
 **Notes on in-block phantoms**
 - The phantom constructors (`nonTerminal`, `terminal`, `all`, `::=`, `||`) can be `@compileTimeOnly`
@@ -881,7 +937,10 @@ applies:
    - emit the `while`-loop parser with spliced actions;
    - show a shift/reduce conflict report pointing at the two `::=` sites;
    - include the syntax probes from §5.8 as compile tests (positive, and negative with expected
-     error text).
+     error text);
+   - prototype dead-value elimination: unused lambda parameters not synthesised, and dead
+     non-terminals compiled recognise-only. Measure allocation on a JSON grammar that ignores most
+     values.
 
 ## 8. Glossary of the less common terms
 
