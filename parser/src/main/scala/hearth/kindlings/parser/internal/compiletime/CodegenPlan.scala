@@ -150,6 +150,17 @@ private[parser] object CodegenPlan {
       pending.foreach(j => result(j) = code(j, Set(j)))
       pending = joins.toList.filterNot(result.contains)
     }
-    if (cost > MaxLexerCost) None else Some(Lexer(result.toVector, skipFrom))
+    // join states are numbered 0, 1, 2, ... (the start state first) so that the `state` match is a `tableswitch` (a
+    // jump table) rather than a `lookupswitch` (a binary search)
+    val index = result.keys.zipWithIndex.toMap
+    def renumber(node: LexNode): LexNode = node match {
+      case LexNode.Block(nodes)               => LexNode.Block(nodes.map(renumber))
+      case LexNode.Goto(t) if t >= 0          => LexNode.Goto(index(t))
+      case LexNode.Dispatch(cases, otherwise) =>
+        LexNode.Dispatch(cases.map { case (r, n) => r -> renumber(n) }, renumber(otherwise))
+      case other => other
+    }
+    val compiled = result.toVector.map { case (s, node) => index(s) -> renumber(node) }
+    if (cost > MaxLexerCost) None else Some(Lexer(compiled, skipFrom))
   }
 }

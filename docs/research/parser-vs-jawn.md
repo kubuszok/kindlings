@@ -134,14 +134,33 @@ the change: the generated lexer is ~30% of the time (~2 ms, down from ~4), the L
 `reduce`) ~38%, and token text plus value building (the grammar's second `substring`, `unescape`'s rescan, `toDouble`,
 list builders) ~25%.
 
-What remains, in order:
+### Tried and reverted: a fused driver loop
 
-1. **Fuse the driver loop into the generated code.** `Machine.run` calls the lexer, `reduce` and `push` separately, so
-   the stack pointer, the stacks and the lookahead go through fields on every step. Caching the action table in a
-   field changed nothing (138 → 140), so what remains is this call and field traffic, not the table read. A generated
-   `run` would keep them in locals across shifts and reductions (writing them back only when the machine stops for
-   an effect, input or the budget), with the lexer inlined into the loop.
-2. **Cheaper token text** (item 3 above): ~1-1.5 ms per parse in this benchmark.
+Commit "experiment: fused generated String driver ..." (reverted by the next commit, kept in history) generated
+`runString(machine, budget)`: the whole parse loop over locals (stacks, stack pointer, lookahead, token positions) with
+the lexer inlined, writing the state back only when the machine stops (done, error, effect, budget), and a
+`reduce(p, states, values, top, goto, m)` working on the arrays directly. It passed every test, but:
+
+| Same session | Scala 2.13 ops/s | Scala 3 ops/s |
+|---|---|---|
+| generated reductions + generated lexer (kept) | 119 ± 11 | 138 ± 7 |
+| + fused driver loop | 119.5 ± 7 | 137.7 ± 14 |
+| + fused loop + first-char `match` widened to all ASCII (a `tableswitch`) | 100 ± 12 | 133 ± 10 (jawn 242, was 268) |
+
+So once reductions and lexing are generated, **the loop is no longer bound by field traffic or dispatch**. Caching
+the action table in a field did nothing either (138 → 140). JFR by bytecode index (every generated instruction maps
+to one source line, so `jfr print --json` frames' `bytecodeIndex` against `javap -c` of the generated class) spreads
+the loop's samples over the action-table read, the lexer's per-token entry and the string-body loop, with no single
+hot spot. Bigger generated methods only add risk: 2.13 got slower with the widened dispatch. The one change kept from
+the experiment is numbering the lexer's join states densely, so the per-token `state` match is a `tableswitch`.
+
+What remains is the data, not the control:
+
+1. **Cheaper token text** (item 3 above). Token copies (`String.<init>`, `copyOfRange`, `substring`) are ~12% of the
+   samples, the grammar's `unescape` rescan (`indexOf`) ~7%. A terminal that yields a slice of its match (e.g. the
+   string without its quotes), and a lexer that reports whether it saw an escape, would remove one copy and the
+   rescan: ~1 ms of the ~7 ms per parse.
+2. **Value building** (`toDouble`, list builders, tuples) is the same work jawn's facade does and stays.
 
 ## 5. How to reproduce
 

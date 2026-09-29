@@ -56,10 +56,11 @@ the table above. [parser-vs-jawn.md](parser-vs-jawn.md) analyses where that gap 
 
 See [parser-vs-jawn.md](parser-vs-jawn.md) § 4 for the measurements behind this order.
 
-1. **Fuse the driver loop into the generated code** (the stacks, stack pointer and lookahead in locals, the lexer
-   inlined; ~38% of the time is now the LR loop).
-2. **Cheaper token text**: slices of a capture group, and lexer facts such as "no escapes" (~11%).
-3. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
+A fused driver loop (stacks and lookahead in locals, the lexer inlined into the loop) was tried and gave nothing: see
+[parser-vs-jawn.md](parser-vs-jawn.md) § 5.
+
+1. **Cheaper token text**: slices of a capture group, and lexer facts such as "no escapes" (~11%).
+2. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
    already feed the target collection's own builder: see `.as[C]`.)
 4. **Per-runtime generated drivers** (§5.11 of the research doc). These need an effect-heavy benchmark first (e.g.
    JSON with an `IO` action per element); the benchmark above is pure.
