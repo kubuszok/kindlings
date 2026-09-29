@@ -40,8 +40,17 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   Actions are therefore called through `FunctionN` values, not spliced into reduce cases (§5.8, step 4).
 - The engine is table-driven. There are no direct-coded states yet, no per-runtime codegen providers (§5.11); engines
   are run-time `ParserEngine[F]` instances.
-- Input is `String` only; `InputStrategy`/streams (§5.7), dead-value elimination (§5.8, round 4), tracing (§5.4),
-  error recovery, helper methods in grammar blocks, and cross-grammar composition (§5.6) are not implemented yet.
+- Dead-value elimination (§5.8, round 4), tracing (§5.4), error recovery, helper methods in grammar blocks, push-style
+  inputs, and cross-grammar composition (§5.6) are not implemented yet.
+
+**Milestone 2 (same day)**
+- Inputs: `String` read in place, `Reader`/`InputStream` read in chunks with already-parsed text discarded on refill
+  (§5.7's "until committed" strategy: token values are copied on shift), `Long` positions.
+- The machine never performs I/O: `NeedInput` makes the engine refill, and `run(budget)` returns `Yield`.
+- Engines receive a machine factory, so lazy effects parse afresh on every run.
+- `ParseError.endOfInput` for REPL incomplete-input detection.
+- `kindlings-parser-cats-effect`: an `Async`/`Sync` engine (one fused `flatMap` per effectful action, `cede` every
+  budget, `blocking` reads).
 
 ## 0. Requirements (as stated) and how they are read here
 

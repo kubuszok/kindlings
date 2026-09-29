@@ -15,8 +15,8 @@ It works on Scala 2.13 and Scala 3, on the JVM, Scala.js and Scala Native.
 
 !!! warning "Early stage"
 
-    This module is new. The grammar syntax is settled, but engines, input sources (currently `String` only) and
-    code generation will evolve. See `docs/research/parser-library-research.md` in the repository for the design.
+    This module is new. The grammar syntax is settled, but engines, input sources and code generation will
+    evolve. See `docs/research/parser-library-research.md` in the repository for the design.
 
 ## Installation
 
@@ -134,7 +134,42 @@ val numbers: Parser[Result, List[Int]] = Grammar.grammar[List[Int], Result] { g 
 }
 ```
 
-Other runtimes (cats-effect, ZIO, ...) plug in by providing a `ParserEngine[F]` from their own modules.
+Other runtimes plug in by providing a `ParserEngine[F]` from their own modules.
+
+### Cats Effect
+
+!!! example "sbt"
+
+    ```scala
+    libraryDependencies += "com.kubuszok" %%% "kindlings-parser-cats-effect" % "{{ kindlings_version() }}"
+    ```
+
+`import hearth.kindlings.parser.catseffect._` provides an engine for every `Async[F]` (or `Sync[F]`):
+
+```scala
+import cats.effect.IO
+import hearth.kindlings.parser._
+import hearth.kindlings.parser.catseffect._
+
+val parser: Parser[IO, Int] = Grammar.grammar[Int, IO] { g =>
+  import g._
+  val sum = nonTerminal[Int]
+  val num = terminal("[0-9]+").map(_.toInt)
+  skip(" +")
+  sum ::= (
+    all(num)(n => IO.println(n).as(n)) ||
+      all(sum, num)((s, n) => IO.println(n).as(s + n))
+  )
+  sum
+}
+```
+
+- pure actions, lexing and all shifts/reductions run inside one `delay` segment; each effectful action costs exactly
+  one `flatMap`, whose continuation runs the next pure segment;
+- every `budget` steps (default `CatsEffectEngine.DefaultBudget`) the engine `cede`s so long parses do not starve other
+  fibers; pick another budget with `CatsEffectEngine.async[IO](budget = ...)`;
+- `Reader`/`InputStream` inputs are read with `Sync.blocking`;
+- the machine is allocated when the `F[R]` runs: running the same `parser.parse(input)` value twice parses twice.
 
 ## Compile-time diagnostics
 
@@ -153,6 +188,15 @@ Other checks: non-terminals without productions, non-terminals that cannot deriv
 non-terminals (warning), terminals matching the empty string, invalid or unsupported regular expressions (anchors,
 back-references, look-arounds and lazy quantifiers cannot be compiled into a lexer DFA), non-literal patterns.
 
+## Inputs
+
+- `parser.parse(input: String)` reads the string in place;
+- `parser.parse(reader: java.io.Reader, bufferSize = ...)` and `parser.parse(stream: java.io.InputStream)` (UTF-8)
+  read the input in chunks: text that has been parsed is discarded as parsing progresses, so memory stays bounded by
+  the buffer and the longest token, whatever the input size. Positions are `Long`s.
+
+Readers are never closed by the parser.
+
 ## Syntax errors
 
 `ParseError` carries the offset, line and column, what was found and which tokens were expected:
@@ -161,8 +205,11 @@ back-references, look-arounds and lazy quantifiers cannot be compiled into a lex
 Unexpected token at 1:5: found "*", expected one of: "(", num
 ```
 
+`ParseError.endOfInput` is `true` when the input ended while the parser still expected more: the input is a valid
+prefix. A REPL can use it to ask for another line instead of reporting an error.
+
 ## Current limitations
 
-- Input is a `String` (streams and chunked input are planned).
+- Push-style (non-blocking, chunk-fed) inputs are planned; `Reader`/`InputStream` inputs are pull-based.
 - The grammar block must be static: no conditionals or loops around declarations and productions, no helper methods.
 - Terminal patterns must be literals (they are compiled at compile time).

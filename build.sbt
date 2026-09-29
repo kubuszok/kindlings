@@ -261,7 +261,8 @@ lazy val aliases = new Aliases(
     mock,
     tapirOpenapiJsoniter,
     optics,
-    parser
+    parser,
+    parserCatsEffect
   ),
   testOnly = Seq(integrationTests, derivationPolicyTests),
   compileOnly = Seq(benchmarks)
@@ -342,6 +343,7 @@ lazy val root = project
   .aggregate(mock.projectRefs *)
   .aggregate(optics.projectRefs *)
   .aggregate(parser.projectRefs *)
+  .aggregate(parserCatsEffect.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(derivationPolicyTests.projectRefs *)
@@ -443,6 +445,31 @@ lazy val parser = projectMatrix
   .settings(dependencies *)
   .settings(publishSettings *)
   .settings(
+    // New module: there is no previously released artifact to check binary compatibility against yet.
+    mimaPreviousArtifacts := Set.empty,
+    mimaFailOnNoPrevious := false
+  )
+
+// Cats Effect runtime for `kindlings-parser`: a `ParserEngine[F]` for any `Async[F]`/`Sync[F]` that fuses each
+// effectful action's bind with the next parsing segment, cedes every `budget` steps and reads input with `blocking`.
+lazy val parserCatsEffect = projectMatrix
+  .in(file("parser-cats-effect"))
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
+  .dependsOn(parser)
+  .settings(
+    moduleName := "kindlings-parser-cats-effect",
+    name := "kindlings-parser-cats-effect",
+    description := "Cats Effect engine for kindlings-parser grammars"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-effect" % versions.catsEffect
+    ),
     // New module: there is no previously released artifact to check binary compatibility against yet.
     mimaPreviousArtifacts := Set.empty,
     mimaFailOnNoPrevious := false
