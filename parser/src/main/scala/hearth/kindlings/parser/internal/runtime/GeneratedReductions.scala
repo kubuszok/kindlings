@@ -2,22 +2,23 @@ package hearth.kindlings.parser
 package internal.runtime
 
 /** Implemented by the code the `Grammar.grammar` macro generates for each grammar: the reduction of every production
-  * (actions, terminal conversions and collection building inlined, stack effects compiled in) and, for `String` inputs,
-  * the whole parse loop with the lexer inlined. Not meant to be implemented by hand.
+  * (actions, terminal conversions and collection building inlined, stack effects compiled in) and a lexer for `String`
+  * inputs. Not meant to be implemented by hand.
   */
 abstract class GeneratedReductions {
 
-  /** Reduces production `p`: computes its value from `values` (whose top is at `top`), pops its right-hand side and
-    * pushes the value with its goto state (`states(top)` and `values(top + 1)` must exist). Returns the new top, or
-    * `-1 - newTop` when an effectful action suspended the machine (`Machine.suspendEffect`).
+  /** Reduces production `p` on `m`'s stack (see `Machine.stackValues`, `Machine.reduced`); `true` if an effectful
+    * action suspended the machine (`Machine.suspend`).
     */
-  def reduce(p: Int, states: Array[Int], values: Array[Any], top: Int, goto: Array[Int], m: Machine): Int
+  def reduce(p: Int, m: Machine): Boolean
 
-  /** Whether [[runString]] is generated (grammars with large lexers use the table-driven machine). */
-  def hasStringDriver: Boolean
+  /** Whether [[lexString]] is generated (large lexers stay table-driven). */
+  def hasStringLexer: Boolean
 
-  /** `Machine.run` for `String` inputs: the parse loop over locals, with the lexer inlined. */
-  def runString(m: Machine, budget: Int): Int
+  /** Lexes the next non-skipped token of `text` from `from` into `m` (`Machine.token` / `Machine.lexError`); returns
+    * `Machine.Done` or `Machine.Error`.
+    */
+  def lexString(m: Machine, text: String, from: Int): Int
 
   /** The `Factory` of each repetition collection, by collection id. */
   protected def factories(): Array[Any]

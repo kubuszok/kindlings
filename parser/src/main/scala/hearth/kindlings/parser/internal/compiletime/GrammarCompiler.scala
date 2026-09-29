@@ -20,10 +20,6 @@ private[parser] object GrammarCompiler {
     *   the code of every production's reduction (only when compiling for generated code)
     * @param lexer
     *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
-    * @param tokenCount
-    *   the width of the action table
-    * @param nonTerminalCount
-    *   the width of the goto table
     */
   final case class Output(
       tables: List[String],
@@ -33,9 +29,7 @@ private[parser] object GrammarCompiler {
       converters: Vector[List[Any]],
       collections: Vector[Collection],
       reduces: Vector[CodegenPlan.Reduce],
-      lexer: Option[CodegenPlan.Lexer],
-      tokenCount: Int,
-      nonTerminalCount: Int
+      lexer: Option[CodegenPlan.Lexer]
   )
 
   /** @param generated
@@ -363,9 +357,7 @@ private[parser] object GrammarCompiler {
         converterIds.keys.toVector.map(_.converters),
         collections.result(),
         reduces.result(),
-        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None,
-        tokenCount,
-        nts
+        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None
       )
     )
   }

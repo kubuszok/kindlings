@@ -4,7 +4,7 @@ package internal.compiletime
 import scala.collection.mutable
 import scala.quoted.*
 
-import hearth.kindlings.parser.internal.runtime.{Machine, RejectedValue}
+import hearth.kindlings.parser.internal.runtime.Machine
 
 import GrammarIR.{Statement as IRStatement, Term as IRTerm, *}
 
@@ -42,17 +42,14 @@ private[parser] object GrammarMacros {
         ${ Expr(out.tables) },
         $engine,
         new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
-          def reduce(
-              p: Int,
-              states: Array[Int],
-              values: Array[Any],
-              top: Int,
-              goto: Array[Int],
-              m: _root_.hearth.kindlings.parser.internal.runtime.Machine
-          ): Int = ${ Codegen.reduce(out, colls, 'p, 'states, 'values, 'top, 'goto, 'm, 'collectionFactories) }
-          def hasStringDriver: Boolean = ${ Expr(out.lexer.isDefined) }
-          def runString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, budget: Int): Int =
-            ${ Codegen.runString(out, 'm, 'budget) }
+          def reduce(p: Int, m: _root_.hearth.kindlings.parser.internal.runtime.Machine): Boolean = {
+            val values = m.stackValues
+            val top = m.stackTop
+            ${ Codegen.reduce(out, colls, 'p, 'm, 'values, 'top, 'collectionFactories) }
+          }
+          def hasStringLexer: Boolean = ${ Expr(out.lexer.isDefined) }
+          def lexString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String, from: Int): Int =
+            ${ Codegen.lexString(out, 'm, 'text, 'from) }
           protected def factories(): Array[Any] = ${ Codegen.factories(colls) }
         }
       )
@@ -102,13 +99,11 @@ private[parser] object GrammarMacros {
         out: GrammarCompiler.Output,
         colls: Vector[Collections],
         p: Expr[Int],
-        states: Expr[Array[Int]],
+        m: Expr[Machine],
         values: Expr[Array[Any]],
         top: Expr[Int],
-        goto: Expr[Array[Int]],
-        m: Expr[Machine],
         factories: Expr[Array[Any]]
-    )(using q: Quotes): Expr[Int] = {
+    )(using q: Quotes): Expr[Boolean] = {
       import q.reflect.*
       def value(rhs: CodegenPlan.RhsPlan, raw: Expr[Any]): Term = rhs match {
         case CodegenPlan.NtPlan(None)       => raw.asTerm
@@ -119,6 +114,7 @@ private[parser] object GrammarMacros {
       }
       val cases = out.reduces.toList.map { r =>
         def raw(i: Int): Expr[Any] = '{ $values($top + ${ Expr(i - r.len + 1) }) }
+        val newTop = '{ $top - ${ Expr(r.len) } }
         val result: Term = r.body match {
           case CodegenPlan.ReduceBody.User(action, rhs, _) =>
             val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
@@ -143,144 +139,59 @@ private[parser] object GrammarMacros {
             }
         }
         val v = result.asExprOf[Any]
-        val len = Expr(r.len)
-        val lhs = Expr(r.lhs)
-        val body: Expr[Int] = r.body match {
+        val body: Expr[Boolean] = r.body match {
           case CodegenPlan.ReduceBody.User(_, _, true) =>
-            '{ val value: Any = $v; val t = $top - $len; $m.suspendEffect($lhs, value); -1 - t }
+            '{ val value: Any = $v; $m.suspend($newTop, ${ Expr(r.lhs) }, value); true }
           case _ =>
             r.goto match {
-              case Some(state) =>
-                '{
-                  val value: Any = $v
-                  val t = $top - $len
-                  $states(t + 1) = ${ Expr(state) }
-                  $values(t + 1) = value
-                  t + 1
-                }
-              case None =>
-                '{
-                  val value: Any = $v
-                  val t = $top - $len
-                  $states(t + 1) = $goto($states(t) * ${ Expr(out.nonTerminalCount) } + $lhs)
-                  $values(t + 1) = value
-                  t + 1
-                }
+              case Some(state) => '{ val value: Any = $v; $m.reducedTo($newTop, ${ Expr(state) }, value); false }
+              case None        => '{ val value: Any = $v; $m.reduced($newTop, ${ Expr(r.lhs) }, value); false }
             }
         }
         CaseDef(Literal(IntConstant(r.p)), None, body.asTerm)
       }
       val fallback =
         CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no reduction for production " + $p) }.asTerm)
-      Match(p.asTerm, cases :+ fallback).asExprOf[Int]
+      Match(p.asTerm, cases :+ fallback).asExprOf[Boolean]
     }
 
-    def runString(out: GrammarCompiler.Output, m: Expr[Machine], budget: Expr[Int])(using
+    def lexString(out: GrammarCompiler.Output, m: Expr[Machine], text: Expr[String], from: Expr[Int])(using
         q: Quotes
     ): Expr[Int] = out.lexer match {
-      case None        => '{ throw new UnsupportedOperationException("no generated driver") }
+      case None        => '{ throw new UnsupportedOperationException("no generated lexer") }
       case Some(lexer) =>
-        val tokenCount = Expr(out.tokenCount)
-        val skipFrom = Expr(lexer.skipFrom)
         '{
-          val text = $m.stringText
-          val len = text.length
-          val action = $m.actionTableArray
-          val goto = $m.gotoTableArray
-          val literals = $m.literalTable
-          val self = $m.generatedReductions
-          var states = $m.stackStates
-          var values = $m.stackValues
-          var sp = $m.stackTop
-          var la = $m.lookaheadToken
-          var tStart = $m.tokenStartIndex
-          var tEnd = $m.tokenEndIndex
-          var pos = $m.positionIndex
-          var steps = 0
-          var status = -1
-          var message: String = null
-          try
-            while status == -1 do {
-              if la < 0 then {
-                // the lexer: skips skipped tokens from `pos`, then sets the lookahead (0 at the end of the input)
-                var p = pos
-                var scanning = true
-                while scanning do if p >= len then {
-                  la = 0
-                  tStart = p
-                  tEnd = p
-                  pos = p
-                  scanning = false
-                } else {
-                  var i = p
-                  var acc = -1
-                  var accEnd = p
-                  var state = 0
-                  while state >= 0 do ${
-                    new LexerEmitter(
-                      'text,
-                      'len,
-                      'i,
-                      x => '{ i = $x },
-                      x => '{ acc = $x; accEnd = i },
-                      x => '{ state = $x }
-                    ).states(lexer, 'state)
-                  }
-                  if acc < 0 then {
-                    tStart = p
-                    status = Machine.LexFailure
-                    scanning = false
-                  } else if acc >= $skipFrom then p = accEnd
-                  else {
-                    la = acc
-                    tStart = p
-                    tEnd = accEnd
-                    pos = accEnd
-                    scanning = false
-                  }
-                }
-              }
-              if status == -1 then if steps >= $budget then status = Machine.Yield
-              else {
-                steps += 1
-                val act = action(states(sp) * $tokenCount + la)
-                if act > 0 then {
-                  val literal = literals(la)
-                  sp += 1
-                  if sp == states.length then {
-                    $m.restore(states, values, sp, la, tStart, tEnd, pos)
-                    $m.grow()
-                    states = $m.stackStates
-                    values = $m.stackValues
-                  }
-                  states(sp) = act - 1
-                  values(sp) = if literal != null then literal else text.substring(tStart, tEnd)
-                  la = -1
-                } else if act < 0 then if act == -1 then status = Machine.Accept
-                else {
-                  if sp + 1 >= states.length then {
-                    $m.restore(states, values, sp, la, tStart, tEnd, pos)
-                    $m.grow()
-                    states = $m.stackStates
-                    values = $m.stackValues
-                  }
-                  val r = self.reduce(-act - 1, states, values, sp, goto, $m)
-                  if r >= 0 then sp = r
-                  else {
-                    sp = -r - 1
-                    status = Machine.Effect
-                  }
-                }
-                else status = Machine.Unexpected
-              }
+          val len = $text.length
+          var p = $from
+          var result = -2
+          while result == -2 do if p >= len then {
+            $m.token(0, p, p)
+            result = Machine.Done
+          } else {
+            var i = p
+            var acc = -1
+            var accEnd = p
+            var state = 0
+            while state >= 0 do ${
+              new LexerEmitter(
+                text,
+                'len,
+                'i,
+                x => '{ i = $x },
+                x => '{ acc = $x; accEnd = i },
+                x => '{ state = $x }
+              ).states(lexer, 'state)
             }
-          catch {
-            case e: RejectedValue =>
-              status = Machine.Rejected
-              message = e.getMessage
+            if acc < 0 then {
+              $m.lexError(p)
+              result = Machine.Error
+            } else if acc >= ${ Expr(lexer.skipFrom) } then p = accEnd
+            else {
+              $m.token(acc, p, accEnd)
+              result = Machine.Done
+            }
           }
-          $m.restore(states, values, sp, la, tStart, tEnd, pos)
-          $m.finish(status, message)
+          result
         }
     }
 
@@ -333,9 +244,9 @@ private[parser] object GrammarMacros {
             nodes.map(emit).reduceLeft((a, b) => '{ $a; $b })
           case CodegenPlan.LexNode.SelfLoop(ranges) =>
             '{ while $i < $len && { val d = $text.charAt($i); ${ member('d, ranges) } } do ${ setI('{ $i + 1 }) } }
-          case CodegenPlan.LexNode.Accept(token)                     => accept(Expr(token))
-          case CodegenPlan.LexNode.Goto(target)                      => goto(Expr(target))
-          case CodegenPlan.LexNode.Dispatch(cases, otherwise, dense) =>
+          case CodegenPlan.LexNode.Accept(token)              => accept(Expr(token))
+          case CodegenPlan.LexNode.Goto(target)               => goto(Expr(target))
+          case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
             def dispatch(ch: Expr[Char])(using q2: Quotes): Expr[Unit] = {
               import q2.reflect.*
               val asciiCases = cases.flatMap { case (ranges, next) =>
@@ -354,15 +265,7 @@ private[parser] object GrammarMacros {
               val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
                 '{ if ${ inRanges(ch, ranges) } then ${ advance(emit(next)) } else $elseBranch }
               }
-              val covered = cases.flatMap(_._1).flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }.toSet
-              val rest = (0 to 127).filterNot(covered).toList
-              val denseCase =
-                if !dense || rest.isEmpty then Nil
-                else
-                  List(
-                    CaseDef(Alternatives(rest.map(c => Literal(CharConstant(c.toChar)))), None, emit(otherwise).asTerm)
-                  )
-              Match(ch.asTerm, (asciiCases ++ denseCase) :+ CaseDef(Wildcard(), None, fallback.asTerm)).asExprOf[Unit]
+              Match(ch.asTerm, asciiCases :+ CaseDef(Wildcard(), None, fallback.asTerm)).asExprOf[Unit]
             }
             '{
               if $i < $len then {

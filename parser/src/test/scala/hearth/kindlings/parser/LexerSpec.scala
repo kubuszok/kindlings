@@ -15,8 +15,8 @@ final class LexerSpec extends MacroSuite {
 
   group("the generated String lexer") {
 
-    test("is generated for small lexers (with the parse loop)") {
-      tokens.compiled.asInstanceOf[GeneratedGrammar].reductions.hasStringDriver ==> true
+    test("is generated for small lexers") {
+      tokens.compiled.asInstanceOf[GeneratedGrammar].reductions.hasStringLexer ==> true
     }
 
     test("tokenizes like the table lexer") {
@@ -65,7 +65,7 @@ final class LexerSpec extends MacroSuite {
     }
 
     test("stays table-driven for large lexers") {
-      large.compiled.asInstanceOf[GeneratedGrammar].reductions.hasStringDriver ==> false
+      large.compiled.asInstanceOf[GeneratedGrammar].reductions.hasStringLexer ==> false
       large.parse("kemubcrdls gzhmxzhgqp") ==> Right(2)
     }
 
