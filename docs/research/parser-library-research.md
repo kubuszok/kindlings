@@ -707,6 +707,29 @@ block. Probe round 1 below shows why that was replaced.
 | 12 | `nonTerminal`/`terminal` declared as **local `val`s inside the `grammar { … }` block**, self-recursive productions, block result as start symbol | ✓ (no unused warnings with `-Wunused:locals`) | ✓ (none with `-Wunused:all`) | The macro sees every declaration, the regex literal and the `.map` lambda **in the tree**. No type carrier is needed for in-block symbols (§5.6 carriers matter only for symbols shared across grammars), and the phantom values are erased from the output. |
 | 13 | Productions using a symbol declared *later* in the block | ✗ "forward reference … extends over definition" | ✗ same | Rule: **declarations first, then productions**. The compiler enforces it with a clear message, so the macro needs no extra check. |
 
+**Probe round 3: inline literals and regexes** (both compilers):
+
+| # | Question | 2.13.18 | 3.8.3 | Consequence |
+|---|---|---|---|---|
+| 14 | Inline string literals and `"…".r` regexes as `all(…)` arguments, via implicit conversions `String => Sym[Unit]` and `Regex => Terminal[…, String]`, including `"-?[0-9]+".r.map(_.toInt)`, mixed with non-terminals, arities up to 6 | ✓ | ✓ | For example `all("(", "-?[0-9]+".r.map(_.toInt), ",", …, ")", label) { (_, x, _, y, _, l) => … }`. Lambda parameter types come out as `Unit`/`Int`/`String` as expected. |
+| 15 | Wrong action type with an inline regex (`all("[0-9]+".r) { s => s }` for an `Int` non-terminal) | "found String, required Int" | "Found: (s : String) Required: Int" | Clean on both |
+
+What the macro does with inline terminals:
+- It matches the conversion calls in the typed tree (`litSym("(")`, `reSym(augmentString("…").r)`,
+  optionally followed by `.map(f)`) and extracts the literal.
+- A **non-literal** argument (`val s = …; all(s.r)`) type-checks, but the macro rejects it with a
+  positioned error: "terminal patterns must be literals".
+- The `Regex` object is never built at runtime. The pattern is parsed by the macro into its
+  DFA-compatible subset (§5.8 step 2).
+- Identical literals or patterns used in several places become **one** lexer token.
+- On equal-length matches, string literals take priority over regexes, the usual lex/ANTLR rule, so
+  `"origin"` beats `[a-z]+`. Context-aware scanning means a keyword only competes where the LR state
+  can accept it.
+- Diagnostics name inline terminals by their text: `expected "(" or "origin"`, or
+  `/[a-z]+/ at Grammar.scala:31`.
+- String literals default to `Unit` because they are punctuation or keywords. A literal whose text is
+  wanted can be written `"true".r` or given a `.as(value)` combinator.
+
 **Notes on in-block phantoms**
 - The phantom constructors (`nonTerminal`, `terminal`, `all`, `::=`, `||`) can be `@compileTimeOnly`
   for in-block use, which guarantees none survives into runtime code.
