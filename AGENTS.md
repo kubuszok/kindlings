@@ -45,7 +45,8 @@ Example: `fastShowPretty` (2.13 JVM), `fastShowPretty3` (3 JVM), `fastShowPretty
  - Nuclear option: `sbt --client clean` then `sbt --client "test-jvm-2_13 ; test-jvm-3"`
  - **sbt 2 build cache**: `clean` restores compiler outputs from the content-addressed disk cache (`~/.cache/sbt`), so
    test classes compiled from *stale macro expansions* can come back after a macro change. If tests still behave like
-   the old macro after `clean`, stop the server (`sbt --client shutdown`), delete `~/.cache/sbt` and rebuild.
+   the old macro after `clean`, run `sbt --client cleanFull` (a build-level command, not per project: it clears sbt's
+   local caches while keeping the warm server) and rebuild.
 
 ## Cross-Quotes and Macro-Agnostic APIs
 
