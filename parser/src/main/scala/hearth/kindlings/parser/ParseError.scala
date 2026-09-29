@@ -6,14 +6,18 @@ package hearth.kindlings.parser
   *   display names of the tokens that would have been accepted at this point (sorted)
   * @param found
   *   display name (or text) of what was found instead
+  * @param endOfInput
+  *   the input ended while the parser still expected more: the input is a valid *prefix* of the language. A REPL can
+  *   use it to ask for another line instead of reporting an error.
   */
 final class ParseError(
-    val offset: Int,
+    val offset: Long,
     val line: Int,
     val column: Int,
     val expected: List[String],
     val found: String,
-    val detail: String
+    val detail: String,
+    val endOfInput: Boolean
 ) extends Exception(ParseError.render(line, column, expected, found, detail)) {
 
   override def toString: String = s"ParseError($getMessage)"

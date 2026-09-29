@@ -3,30 +3,36 @@ package internal.runtime
 
 import scala.collection.mutable.ListBuffer
 
-/** A resumable, table-driven LR parser over a `String`.
+/** A resumable, table-driven LR parser.
   *
   * The parse stack lives in arrays on the heap, so nesting depth is limited only by memory, never by the JVM thread
-  * stack. [[run]] shifts and reduces until the input is accepted ([[Machine.Done]]), a syntax error is found
-  * ([[Machine.Error]]) or an effectful action returns its `F[R]` ([[Machine.Effect]]): the engine then obtains the
-  * action's result in `F` and continues with [[resume]]. Pure actions run inline.
+  * stack. [[run]] shifts and reduces until one of:
+  *   - [[Machine.Done]]: the input is accepted ([[result]]),
+  *   - [[Machine.Error]]: a syntax error ([[error]]),
+  *   - [[Machine.Effect]]: an effectful action returned its `F[R]` ([[pendingEffect]]); the engine obtains the result
+  *     in `F` and continues with [[resume]],
+  *   - [[Machine.NeedInput]]: the input buffer is exhausted; the engine calls [[refill]] (which may block) and runs
+  *     again,
+  *   - [[Machine.Yield]]: the step budget is exhausted; the engine may yield to other tasks and runs again.
+  *
+  * Pure actions, lexing, shifts and reductions run inline. A machine is used by one parse only.
   */
-final class Machine private[parser] (grammar: CompiledGrammar, input: String) {
+final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
 
   import CompiledGrammar.*
 
   private val tables = grammar.tables
   private val tokenCount = tables.tokenCount
   private val nonTerminalCount = tables.nonTerminalCount
-  private val length = input.length
 
   private var states = new Array[Int](64)
   private var values = new Array[Any](64)
   private var sp = 0 // index of the top of the stack
 
-  private var pos = 0
+  private var pos = 0L
   private var lookahead = -1 // -1: not lexed yet
-  private var tokenStart = 0
-  private var tokenEnd = 0
+  private var tokenStart = 0L
+  private var tokenEnd = 0L
 
   private var pendingLhs = -1
   private var _pendingEffect: Any = null
@@ -50,14 +56,24 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: String) {
     push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
   }
 
-  /** Runs until the input is accepted, a syntax error occurs, or an effectful action has to be sequenced. */
-  def run(): Int = {
-    while (true) {
-      if (lookahead < 0 && !lex()) return Machine.Error
+  /** Reads more input after [[Machine.NeedInput]] (may block). */
+  def refill(): Unit = input.refill()
+
+  /** Runs until the input is accepted, a syntax error occurs, an effectful action has to be sequenced, more input is
+    * needed, or `budget` shifts and reductions were made.
+    */
+  def run(budget: Int = Int.MaxValue): Int = {
+    var steps = 0
+    while (steps < budget) {
+      if (lookahead < 0) {
+        val lexed = lex()
+        if (lexed != Machine.Done) return lexed
+      }
       val act = tables.action(states(sp) * tokenCount + lookahead)
       if (act > 0) {
-        push(act - 1, input.substring(tokenStart, tokenEnd))
+        push(act - 1, input.slice(tokenStart, tokenEnd))
         lookahead = -1
+        input.release(pos)
       } else if (act < 0) {
         val p = -act - 1
         if (p == 0) {
@@ -69,8 +85,9 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: String) {
         _error = syntaxError("Unexpected token")
         return Machine.Error
       }
+      steps += 1
     }
-    Machine.Error
+    Machine.Yield
   }
 
   private def push(state: Int, value: Any): Unit = {
@@ -122,43 +139,56 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: String) {
     }
   }
 
-  /** Reads the next non-skipped token into `lookahead`; returns `false` on a lexical error. */
-  private def lex(): Boolean = {
+  /** Reads the next non-skipped token into `lookahead`: [[Machine.Done]] on success, [[Machine.Error]] on a lexical
+    * error, [[Machine.NeedInput]] if the input buffer ran out in the middle of a token (lexing restarts from the token
+    * start after a refill).
+    */
+  private def lex(): Int = {
     while (true) {
-      if (pos >= length) {
-        lookahead = 0
-        tokenStart = pos
-        tokenEnd = pos
-        return true
+      input.ensure(pos) match {
+        case Input.End =>
+          lookahead = 0
+          tokenStart = pos
+          tokenEnd = pos
+          return Machine.Done
+        case Input.NeedMore => return Machine.NeedInput
+        case _              => ()
       }
       var state = 0
       var i = pos
       var accepted = -1
       var acceptedEnd = pos
-      while (state >= 0 && i < length) {
-        state = tables.lexStep(state, input.charAt(i))
-        if (state >= 0) {
-          i += 1
-          val a = tables.lexAccept(state)
-          if (a >= 0) { accepted = a; acceptedEnd = i }
+      var scanning = true
+      while (scanning && state >= 0)
+        input.ensure(i) match {
+          case Input.Available =>
+            state = tables.lexStep(state, input.charAt(i))
+            if (state >= 0) {
+              i += 1
+              val a = tables.lexAccept(state)
+              if (a >= 0) { accepted = a; acceptedEnd = i }
+            }
+          case Input.NeedMore => return Machine.NeedInput
+          case _              => scanning = false
         }
-      }
       if (accepted < 0) {
         tokenStart = pos
         tokenEnd = pos + 1
         _error = syntaxError("Unexpected character")
-        return false
+        return Machine.Error
       }
-      if (tables.skip(accepted)) pos = acceptedEnd
-      else {
+      if (tables.skip(accepted)) {
+        pos = acceptedEnd
+        input.release(pos)
+      } else {
         lookahead = accepted
         tokenStart = pos
         tokenEnd = acceptedEnd
         pos = acceptedEnd
-        return true
+        return Machine.Done
       }
     }
-    false
+    Machine.Error
   }
 
   private def syntaxError(detail: String): ParseError = {
@@ -170,22 +200,18 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: String) {
       .map(tables.tokenNames(_))
       .sorted
       .toList
+    val atEnd = lookahead == 0 && detail == "Unexpected token"
     val found =
-      if (tokenStart >= length) "end of input"
+      if (atEnd || input.ensure(tokenStart) != Input.Available) "end of input"
       else {
-        val text = Machine.quote(input.substring(tokenStart, math.min(tokenEnd, length)))
+        val end = if (input.ensure(tokenEnd - 1) == Input.Available) tokenEnd else tokenStart + 1
+        val text = Machine.quote(input.slice(tokenStart, end))
         if (lookahead > 0 && detail == "Unexpected token" && tables.tokenNames(lookahead) != text)
           s"${tables.tokenNames(lookahead)} $text"
         else text
       }
-    var line = 1
-    var lineStart = 0
-    var i = 0
-    while (i < tokenStart && i < length) {
-      if (input.charAt(i) == '\n') { line += 1; lineStart = i + 1 }
-      i += 1
-    }
-    new ParseError(tokenStart, line, tokenStart - lineStart + 1, expected, found, detail)
+    val (line, column) = input.lineColumn(tokenStart)
+    new ParseError(tokenStart, line, column, expected, found, detail, atEnd)
   }
 }
 object Machine {
@@ -193,6 +219,8 @@ object Machine {
   final val Done = 0
   final val Error = 1
   final val Effect = 2
+  final val NeedInput = 3
+  final val Yield = 4
 
   private[parser] def quote(text: String): String = {
     val sb = new StringBuilder("\"")
