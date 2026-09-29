@@ -1,11 +1,16 @@
 package hearth.kindlings.parser
 package internal.runtime
 
-/** Run-time half of `Grammar.grammar`: evaluates the grammar block once to collect the action functions, checks that
-  * the evaluated grammar has the structure the macro compiled, and decodes the compile-time tables.
-  */
+/** Run-time half of the `Grammar` macros. */
 object Builder {
 
+  /** `Grammar.grammar`: the tables and the macro-generated actions. */
+  def generated[F[_], R](tables: List[String], engine: ParserEngine[F], reductions: GeneratedReductions): Parser[F, R] =
+    new Parser[F, R](new GeneratedGrammar(Tables.decode(tables.mkString), reductions), engine)
+
+  /** `Grammar.interpreted`: evaluates the grammar block once to collect the action functions, checks that the evaluated
+    * grammar has the structure the macro compiled, and decodes the compile-time tables.
+    */
   def build[F[_], R](
       tables: List[String],
       fingerprint: String,
@@ -24,7 +29,7 @@ object Builder {
           "(grammar blocks must be static: no conditionals, loops or values computed at run time around " +
           s"declarations and productions).\n  compiled:  $fingerprint\n  evaluated: $actual"
       )
-    new Parser[F, R](new CompiledGrammar(Tables.decode(tables.mkString), flat), engine)
+    new Parser[F, R](new InterpretedGrammar(Tables.decode(tables.mkString), flat), engine)
   }
 
   private type FSym = Flatten.FSym[String => Any, Alt.Action]

@@ -54,6 +54,16 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
 - Push input (`Parser.pushMachine`: `feed`/`endOfInput`) and `kindlings-parser-fs2`: `pipe`/`bytePipe` (`Pull`-based,
   one `Pull.eval` per effectful action, fresh machine per stream run, bounded buffers).
 
+**Milestone 3: generated actions**
+- `Grammar.grammar` now generates a `GeneratedReductions` class per grammar. Each user production's action body is
+  inlined (Scala 3: `changeOwner` + `betaReduce`; Scala 2: `untypecheck` + a function-type ascription) and applied to
+  typed stack values. `.map` chains are inlined too. Unused parameters are neither read nor converted (dead-value
+  elimination, §5.8 round 4). The grammar block is no longer evaluated at run time.
+- Built-in actions (pass/const/opt/list) and converter codes come from the tables. `Grammar.interpreted` keeps the
+  closure-based path as a fallback and benchmark baseline.
+- Effect handling stays in the engines (a `match` for eager effects, one fused `flatMap` for `Sync`). Per-runtime
+  generated drivers wait for the benchmarks.
+
 ## 0. Requirements (as stated) and how they are read here
 
 | # | Requirement | What it implies technically |

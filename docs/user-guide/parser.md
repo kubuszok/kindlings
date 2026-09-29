@@ -6,7 +6,8 @@ Write a grammar in BNF-like syntax directly in Scala, with typed semantic action
 - grammar problems (shift/reduce and reduce/reduce conflicts, non-terminals without productions, terminals matching the
   empty string, unsupported regex features, ...) are **compile errors pointing at the offending production**;
 - the lexer (a DFA built from all terminals) and the LR tables are computed during compilation and embedded in the
-  generated code;
+  generated code, together with the code of your actions and `.map` conversions, inlined into one `switch` (values that
+  an action ignores, e.g. `_` parameters, are never converted);
 - parsing runs on an explicit, heap-allocated stack: **nesting depth is not limited by the JVM thread stack**;
 - semantic actions can be pure or return the effect `F` of your choice (`Id`, `Option`, `Try`, `Either[E, *]`,
   `Future`, or any runtime providing a `ParserEngine[F]`).
@@ -233,6 +234,14 @@ Unexpected token at 1:5: found "*", expected one of: "(", num
 
 `ParseError.endOfInput` is `true` when the input ended while the parser still expected more: the input is a valid
 prefix. A REPL can use it to ask for another line instead of reporting an error.
+
+## Generated vs interpreted actions
+
+`Grammar.grammar` generates the code of the actions. `Grammar.interpreted` (same syntax) instead evaluates the grammar
+block once at run time and calls the actions as function values: it is slower and exists as a fallback and as a
+benchmark baseline. Because generated actions are moved out of the grammar block, they may use anything in scope
+except the grammar's own symbols (non-terminals, terminals and the DSL): that is reported as a compile error. `.map`
+functions and pure actions may be skipped when their value is unused, so they should be free of side effects.
 
 ## Current limitations
 

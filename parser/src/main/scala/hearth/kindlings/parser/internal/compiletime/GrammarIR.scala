@@ -23,7 +23,11 @@ private[parser] object GrammarIR {
 
   sealed trait Sym
   final case class NtRef(id: Int) extends Sym
-  final case class Term(pattern: Pattern, name: Option[String], pos: Pos) extends Sym
+
+  /** @param converters
+    *   the `.map` functions applied to the matched text, in order (compiler trees, used by code generation)
+    */
+  final case class Term(pattern: Pattern, name: Option[String], pos: Pos, converters: List[Any] = Nil) extends Sym
   final case class Group(alts: List[Alternative]) extends Sym
   final case class Opt(sym: Sym) extends Sym
   final case class Rep(sym: Sym, atLeastOne: Boolean) extends Sym
@@ -37,7 +41,20 @@ private[parser] object GrammarIR {
     case object Empty extends Kind
   }
 
-  final case class Alternative(syms: List[Sym], kind: Kind, prec: Option[Sym], pos: Pos)
+  /** A user action (compiler trees, used by code generation).
+    *
+    * @param tree
+    *   the action function
+    * @param paramTypes
+    *   the types of the action's parameters (one per symbol)
+    * @param resultType
+    *   the action's result type (`F[R]` for effectful actions)
+    * @param used
+    *   whether each parameter is referenced by the action's body (unused values are not converted)
+    */
+  final case class Action(tree: Any, paramTypes: List[Any], resultType: Any, used: List[Boolean])
+
+  final case class Alternative(syms: List[Sym], kind: Kind, prec: Option[Sym], pos: Pos, action: Option[Action] = None)
 
   sealed trait Assoc
   object Assoc {

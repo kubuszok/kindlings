@@ -8,6 +8,11 @@ package internal.runtime
   * `transLo/transHi/transTarget` in `transStart(s) until transStart(s + 1)`. LR: `action(state * tokenCount + token)`
   * is `0` (error), `n > 0` (shift to state `n - 1`) or `n < 0` (reduce production `-n - 1`; production 0 is the
   * augmented start production, whose reduction accepts). `goto(state * nonTerminalCount + nt)` is the target state.
+  *
+  * Productions: `prodKind(p)` is one of the `CompiledGrammar.Act*` codes, `prodArg(p)` its argument (the index into
+  * `constants` of an `ActConst`, the element index of an `ActListAppend`). The values of production `p`'s right-hand
+  * side positions `rhsStart(p) until rhsStart(p + 1)` are converted according to `rhsConv`: [[Tables.Raw]] (as is),
+  * [[Tables.Listify]] (a list builder to convert to a `List`), otherwise the id of a terminal converter.
   */
 final private[parser] class Tables(
     val tokenCount: Int,
@@ -23,7 +28,12 @@ final private[parser] class Tables(
     val action: Array[Int],
     val goto: Array[Int],
     val prodLhs: Array[Int],
-    val prodLen: Array[Int]
+    val prodLen: Array[Int],
+    val prodKind: Array[Int],
+    val prodArg: Array[Int],
+    val rhsStart: Array[Int],
+    val rhsConv: Array[Int],
+    val constants: Array[String]
 ) {
 
   /** `ascii(state * 128 + c)`: transition target on ASCII chars, `-1` if none. */
@@ -67,13 +77,18 @@ final private[parser] class Tables(
     List(lexAccept, transStart, transLo, transHi, transTarget).foreach(w.ints)
     w.int(stateCount)
     w.int(nonTerminalCount)
-    List(action, goto, prodLhs, prodLen).foreach(w.ints)
+    List(action, goto, prodLhs, prodLen, prodKind, prodArg, rhsStart, rhsConv).foreach(w.ints)
+    w.int(constants.length)
+    constants.foreach(w.string)
     w
   }
 }
 private[parser] object Tables {
 
-  val Version: Int = 1
+  val Version: Int = 2
+
+  final val Raw = -1
+  final val Listify = -2
 
   def decode(text: String): Tables = {
     val r = new TableCodec.Reader(text)
@@ -97,7 +112,12 @@ private[parser] object Tables {
       action = r.ints(),
       goto = r.ints(),
       prodLhs = r.ints(),
-      prodLen = r.ints()
+      prodLen = r.ints(),
+      prodKind = r.ints(),
+      prodArg = r.ints(),
+      rhsStart = r.ints(),
+      rhsConv = r.ints(),
+      constants = Array.fill(r.int())(r.string())
     )
   }
 }

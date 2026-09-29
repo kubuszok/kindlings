@@ -11,7 +11,24 @@ import scala.collection.mutable
   */
 private[parser] object GrammarCompiler {
 
-  final case class Output(tables: List[String], fingerprint: String, warnings: List[Diagnostic], summary: String)
+  /** How to generate the code of user production `p` (a table index): its action and how to obtain each value. */
+  final case class ProdPlan(p: Int, action: Action, rhs: Vector[RhsPlan])
+
+  sealed trait RhsPlan
+  final case class NtPlan(listify: Boolean) extends RhsPlan
+  final case class TermPlan(converter: Option[Int]) extends RhsPlan
+
+  /** @param converters
+    *   by converter id: the `.map` functions to apply to the matched text, in order
+    */
+  final case class Output(
+      tables: List[String],
+      fingerprint: String,
+      warnings: List[Diagnostic],
+      summary: String,
+      prods: Vector[ProdPlan],
+      converters: Vector[List[Any]]
+  )
 
   def compile(g: Grammar): Either[List[Diagnostic], Output] = {
     val errors = mutable.ListBuffer.empty[Diagnostic]
@@ -229,6 +246,44 @@ private[parser] object GrammarCompiler {
       case Left(msg) => return Left(List(Diagnostic(g.rootPos, msg)))
       case Right(d)  => d
     }
+    import hearth.kindlings.parser.internal.runtime.CompiledGrammar.*
+    val converterIds = mutable.LinkedHashMap.empty[Term, Int]
+    def converterOf(t: Term): Option[Int] =
+      if (t.converters.isEmpty) None else Some(converterIds.getOrElseUpdate(t, converterIds.size))
+    val constants = mutable.LinkedHashMap.empty[String, Int]
+    val prodKind = new Array[Int](lhs.length)
+    val prodArg = new Array[Int](lhs.length)
+    prodKind(0) = -1
+    val rhsStart = new Array[Int](lhs.length + 1)
+    val rhsConv = mutable.ArrayBuilder.make[Int]
+    rhsStart(1) = 0
+    val plans = Vector.newBuilder[ProdPlan]
+    prods.zipWithIndex.foreach { case (prod, index) =>
+      val p = index + 1
+      val rhsPlans = prod.rhs.map {
+        case Flatten.RNt(_, listify) =>
+          rhsConv += (if (listify) Tables.Listify else Tables.Raw)
+          NtPlan(listify)
+        case Flatten.RTerm(term) =>
+          val conv = converterOf(term)
+          rhsConv += conv.getOrElse(Tables.Raw)
+          TermPlan(conv)
+      }
+      rhsStart(p + 1) = rhsStart(p) + prod.rhs.size
+      prod.action match {
+        case Flatten.AUser(alt) =>
+          prodKind(p) = if (alt.kind == Kind.Effectful) ActEffect else ActPure
+          alt.action.foreach(a => plans += ProdPlan(p, a, rhsPlans))
+        case Flatten.APass         => prodKind(p) = ActPass
+        case Flatten.AConst(value) =>
+          prodKind(p) = ActConst; prodArg(p) = constants.getOrElseUpdate(value, constants.size)
+        case Flatten.AOptNone           => prodKind(p) = ActOptNone
+        case Flatten.AOptSome           => prodKind(p) = ActOptSome
+        case Flatten.AListEmpty         => prodKind(p) = ActListEmpty
+        case Flatten.AListOne           => prodKind(p) = ActListOne
+        case Flatten.AListAppend(index) => prodKind(p) = ActListAppend; prodArg(p) = index
+      }
+    }
     val tables = new Tables(
       tokenCount = tokenCount,
       tokenNames = tokenNames,
@@ -243,11 +298,25 @@ private[parser] object GrammarCompiler {
       action = lalr.action,
       goto = lalr.goto,
       prodLhs = lhs,
-      prodLen = rhs.map(_.length)
+      prodLen = rhs.map(_.length),
+      prodKind = prodKind,
+      prodArg = prodArg,
+      rhsStart = rhsStart,
+      rhsConv = rhsConv.result(),
+      constants = constants.keys.toArray
     )
     val summary =
       s"${tokenCount - 1} terminals, ${nts - 1} non-terminals (${flat.nonTerminals - g.nonTerminals.size} helpers), " +
         s"${prods.size} productions, ${lalr.stateCount} LALR(1) states, ${dfa.accept.length} lexer states"
-    Right(Output(tables.encode.chunks, fingerprint, warnings.toList, summary))
+    Right(
+      Output(
+        tables.encode.chunks,
+        fingerprint,
+        warnings.toList,
+        summary,
+        plans.result(),
+        converterIds.keys.toVector.map(_.converters)
+      )
+    )
   }
 }

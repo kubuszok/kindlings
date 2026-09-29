@@ -116,38 +116,30 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   private def reduce(p: Int): Boolean = {
     val len = tables.prodLen(p)
     val lhs = tables.prodLhs(p)
-    val converters = grammar.converters(p)
-    val args = new Array[Any](len)
     val base = sp - len + 1
-    var i = 0
-    while (i < len) {
-      val raw = values(base + i)
-      args(i) = converters(i) match {
-        case null    => raw
-        case Listify => listify(raw)
-        case convert => convert.asInstanceOf[String => Any](raw.asInstanceOf[String])
-      }
-      values(base + i) = null
-      i += 1
+    val kind = tables.prodKind(p)
+    val value: Any = (kind: @scala.annotation.switch) match {
+      case ActPure | ActEffect => grammar.userAction(p, values, base)
+      case ActPass             => grammar.argument(p, 0, values(base))
+      case ActConst            => tables.constants(tables.prodArg(p))
+      case ActOptNone          => None
+      case ActOptSome          => Some(grammar.argument(p, 0, values(base)))
+      case ActListEmpty        => ListBuffer.empty[Any]
+      case ActListOne          => ListBuffer[Any](grammar.argument(p, 0, values(base)))
+      case _                   =>
+        val index = tables.prodArg(p)
+        values(base).asInstanceOf[ListBuffer[Any]] += grammar.argument(p, index, values(base + index))
     }
+    var i = base
+    while (i <= sp) { values(i) = null; i += 1 }
     sp -= len
-    (grammar.actionKind(p): @scala.annotation.switch) match {
-      case ActPure   => push(tables.goto(states(sp) * nonTerminalCount + lhs), grammar.actionFn(p)(args)); false
-      case ActEffect =>
-        _pendingEffect = grammar.actionFn(p)(args)
-        pendingLhs = lhs
-        true
-      case ActPass      => push(tables.goto(states(sp) * nonTerminalCount + lhs), args(0)); false
-      case ActConst     => push(tables.goto(states(sp) * nonTerminalCount + lhs), grammar.actionArg(p)); false
-      case ActOptNone   => push(tables.goto(states(sp) * nonTerminalCount + lhs), None); false
-      case ActOptSome   => push(tables.goto(states(sp) * nonTerminalCount + lhs), Some(args(0))); false
-      case ActListEmpty => push(tables.goto(states(sp) * nonTerminalCount + lhs), ListBuffer.empty[Any]); false
-      case ActListOne   => push(tables.goto(states(sp) * nonTerminalCount + lhs), ListBuffer[Any](args(0))); false
-      case _            =>
-        val buffer = args(0).asInstanceOf[ListBuffer[Any]]
-        buffer += args(grammar.actionArg(p).asInstanceOf[Int])
-        push(tables.goto(states(sp) * nonTerminalCount + lhs), buffer)
-        false
+    if (kind == ActEffect) {
+      _pendingEffect = value
+      pendingLhs = lhs
+      true
+    } else {
+      push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
+      false
     }
   }
 

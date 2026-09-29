@@ -16,24 +16,90 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
   import c.universe.*
 
+  def interpretedImpl[R, F[_]](body: c.Tree)(engine: c.Tree): c.Tree = {
+    val out = compile(new Extractor().grammar(body))
+    val targs = typeArgs(c.macroApplication)
+    val tables = out.tables.map(chunk => Literal(Constant(chunk)))
+    q"""_root_.hearth.kindlings.parser.internal.runtime.Builder.build[..${targs.reverse}](
+          _root_.scala.List(..$tables),
+          ${out.fingerprint},
+          $body,
+          $engine
+        )"""
+  }
+
   def grammarImpl[R, F[_]](body: c.Tree)(engine: c.Tree): c.Tree = {
-    val grammar = new Extractor().grammar(body)
+    val out = compile(new Extractor().grammar(body))
+    val targs = typeArgs(c.macroApplication)
+    val tables = out.tables.map(chunk => Literal(Constant(chunk)))
+    val p = TermName(c.freshName("p"))
+    val values = TermName(c.freshName("values"))
+    val base = TermName(c.freshName("base"))
+    val id = TermName(c.freshName("id"))
+    val raw = TermName(c.freshName("raw"))
+
+    /** A function tree applied to arguments: untypechecked so that it is re-typed (with fresh owners) where it is
+      * spliced, with an ascription providing the parameter types that type inference cannot recover.
+      */
+    def applyFn(fn: Any, fnType: Type, args: List[Tree]): Tree =
+      q"(${c.untypecheck(fn.asInstanceOf[Tree])}: ${TypeTree(fnType)}).apply(..$args)"
+    def convert(chain: List[Any], rawValue: Tree): Tree =
+      chain.foldLeft(rawValue) { (acc, fn) =>
+        val tree = fn.asInstanceOf[Tree]
+        applyFn(tree, tree.tpe.widen, List(acc))
+      }
+
+    val actionCases = out.prods.toList.map { plan =>
+      val args = plan.rhs.toList.zipWithIndex.map { case (rhs, i) =>
+        val tpe = TypeTree(plan.action.paramTypes(i).asInstanceOf[Type])
+        if (!plan.action.used(i)) q"null.asInstanceOf[$tpe]"
+        else {
+          val rawValue = q"$values($base + $i)"
+          val value = rhs match {
+            case GrammarCompiler.NtPlan(false) => rawValue
+            case GrammarCompiler.NtPlan(true)  =>
+              q"_root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions.listify($rawValue)"
+            case GrammarCompiler.TermPlan(None)     => rawValue
+            case GrammarCompiler.TermPlan(Some(id)) =>
+              convert(out.converters(id), q"$rawValue.asInstanceOf[_root_.java.lang.String]")
+          }
+          q"$value.asInstanceOf[$tpe]"
+        }
+      }
+      val fn = plan.action.tree.asInstanceOf[Tree]
+      cq"${plan.p} => ${applyFn(fn, fn.tpe.widen, args)}"
+    }
+    val converterCases = out.converters.toList.zipWithIndex.map { case (chain, i) =>
+      cq"$i => ${convert(chain, q"$raw")}"
+    }
+
+    q"""_root_.hearth.kindlings.parser.internal.runtime.Builder.generated[..${targs.reverse}](
+          _root_.scala.List(..$tables),
+          $engine,
+          new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
+            def action($p: _root_.scala.Int, $values: _root_.scala.Array[_root_.scala.Any], $base: _root_.scala.Int): _root_.scala.Any =
+              ($p: @_root_.scala.annotation.switch) match {
+                case ..$actionCases
+                case _ => throw new _root_.java.lang.IllegalStateException("no action for production " + $p)
+              }
+            def convert($id: _root_.scala.Int, $raw: _root_.java.lang.String): _root_.scala.Any =
+              ($id: @_root_.scala.annotation.switch) match {
+                case ..$converterCases
+                case _ => throw new _root_.java.lang.IllegalStateException("no converter " + $id)
+              }
+          }
+        )"""
+  }
+
+  private def compile(grammar: Grammar): GrammarCompiler.Output =
     GrammarCompiler.compile(grammar) match {
       case Left(errors) =>
         errors.foreach(d => c.error(d.pos.underlying.asInstanceOf[Position], d.message))
         c.abort(c.enclosingPosition, s"the grammar has ${errors.size} error(s)")
       case Right(out) =>
         out.warnings.foreach(d => c.warning(d.pos.underlying.asInstanceOf[Position], d.message))
-        val targs = typeArgs(c.macroApplication)
-        val tables = out.tables.map(chunk => Literal(Constant(chunk)))
-        q"""_root_.hearth.kindlings.parser.internal.runtime.Builder.build[..${targs.reverse}](
-              _root_.scala.List(..$tables),
-              ${out.fingerprint},
-              $body,
-              $engine
-            )"""
+        out
     }
-  }
 
   private def typeArgs(tree: Tree): List[Tree] = tree match {
     case TypeApply(_, targs) => targs
@@ -55,7 +121,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
     private def fail(tree: Tree, message: String): Nothing = c.abort(tree.pos, message)
 
     def grammar(body: Tree): Grammar = strip(body) match {
-      case Function(List(_), rhs) =>
+      case Function(List(param), rhs) =>
+        dslParam = param.symbol
         val (stats, result) = strip(rhs) match {
           case Block(ss, expr) => (ss, expr)
           case expr            => (Nil, expr)
@@ -136,6 +203,35 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         )
     }
 
+    /** The grammar's own symbols (the DSL parameter, declared non-terminals and terminals) do not exist at run time in
+      * generated code, so actions and conversions must not refer to them.
+      */
+    private var dslParam: Symbol = NoSymbol
+
+    private def checkNoGrammarRefs(fn: Tree): Unit =
+      fn.foreach {
+        case id: Ident
+            if id.symbol != NoSymbol && (id.symbol == dslParam || nonTerminals.contains(id.symbol) || terminals
+              .contains(id.symbol)) =>
+          fail(
+            id,
+            "grammar symbols (and the grammar DSL) can only be used in productions, not inside actions or `.map` functions"
+          )
+        case _ => ()
+      }
+
+    private def action(fn: Tree): Action = {
+      checkNoGrammarRefs(fn)
+      val f = strip(fn)
+      val types = f.tpe.widen.dealias.typeArgs
+      val paramTypes = types.init
+      val used = f match {
+        case Function(params, rhs) => params.map(p => rhs.exists(_.symbol == p.symbol))
+        case _                     => paramTypes.map(_ => true)
+      }
+      Action(f, paramTypes, types.last, used)
+    }
+
     private def stringLiteral(tree: Tree): String = strip(tree) match {
       case Literal(Constant(s: String)) => s
       case other => fail(other, "expected a string literal (patterns are compiled at compile time)")
@@ -154,10 +250,10 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
     }
 
     private def alternatives(tree: Tree): List[IRAlternative] = strip(tree) match {
-      case DslCall("||", left, List(right))                     => alternatives(left) ++ alternatives(right)
-      case DslCall(kind @ ("apply" | "pure"), builder, List(_)) =>
+      case DslCall("||", left, List(right))                      => alternatives(left) ++ alternatives(right)
+      case DslCall(kind @ ("apply" | "pure"), builder, List(fn)) =>
         val (syms, prec) = sequence(builder)
-        List(IRAlternative(syms, if (kind == "pure") Kind.Pure else Kind.Effectful, prec, pos(tree)))
+        List(IRAlternative(syms, if (kind == "pure") Kind.Pure else Kind.Effectful, prec, pos(tree), Some(action(fn))))
       case DslCall("litAlt", _, List(arg)) =>
         stringLiteral(arg) match {
           case ""   => List(IRAlternative(Nil, Kind.Empty, None, pos(tree)))
@@ -187,12 +283,13 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       case id: Ident if nonTerminals.contains(id.symbol) => NtRef(nonTerminals(id.symbol)._1)
       case id: Ident if terminals.contains(id.symbol)    =>
         terminals(id.symbol)
-      case DslCall("litSym", _, List(arg))   => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(tree))
-      case DslCall("reSym", _, List(arg))    => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(tree))
-      case DslCall("terminal", _, List(arg)) => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(tree))
-      case DslCall("map", terminal, List(_)) =>
+      case DslCall("litSym", _, List(arg))    => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(tree))
+      case DslCall("reSym", _, List(arg))     => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(tree))
+      case DslCall("terminal", _, List(arg))  => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(tree))
+      case DslCall("map", terminal, List(fn)) =>
+        checkNoGrammarRefs(fn)
         sym(terminal, name) match {
-          case t: IRTerm => t
+          case t: IRTerm => t.copy(converters = t.converters :+ strip(fn))
           case _         => fail(tree, "`.map` is only available on terminals")
         }
       case DslCall("group", _, List(alts))    => Group(alternatives(alts))
