@@ -260,7 +260,8 @@ lazy val aliases = new Aliases(
     diCats,
     mock,
     tapirOpenapiJsoniter,
-    optics
+    optics,
+    parser
   ),
   testOnly = Seq(integrationTests, derivationPolicyTests),
   compileOnly = Seq(benchmarks)
@@ -340,6 +341,7 @@ lazy val root = project
   .aggregate(diCats.projectRefs *)
   .aggregate(mock.projectRefs *)
   .aggregate(optics.projectRefs *)
+  .aggregate(parser.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(derivationPolicyTests.projectRefs *)
@@ -422,6 +424,29 @@ lazy val optics = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
+
+// Yacc-style BNF grammars embedded in Scala: `grammar[Result, F] { g => ... }` is compiled by a macro into LALR(1)
+// tables and a lexer DFA (with compile-time conflict diagnostics); the engine runs the tables with a resumable,
+// stack-safe LR machine. Built-in engines for Scala's own effects (Id, Option, Try, Either, Future) live here; other
+// runtimes plug in via a `ParserEngine[F]` instance from their own modules.
+lazy val parser = projectMatrix
+  .in(file("parser"))
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
+  .settings(
+    moduleName := "kindlings-parser",
+    name := "kindlings-parser",
+    description := "Yacc-style BNF grammars compiled at compile time into LALR(1) parsers, using Hearth"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    // New module: there is no previously released artifact to check binary compatibility against yet.
+    mimaPreviousArtifacts := Set.empty,
+    mimaFailOnNoPrevious := false
+  )
 
 lazy val mock = projectMatrix
   .in(file("mock"))

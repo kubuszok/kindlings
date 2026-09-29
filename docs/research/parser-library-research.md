@@ -14,6 +14,35 @@ How the facts were gathered:
 Nothing was benchmarked or run. The stack-safety claims come from reading the code. Unverified claims
 are marked **[unverified]**.
 
+## Implementation status (milestone 1, 2026-09-29)
+
+The `parser` module (`kindlings-parser`) implements the yacc-style front end of §5.8 on Scala 2.13 and 3, JVM, Scala.js
+and Scala Native (all tests green on all six). User guide: `docs/user-guide/parser.md`.
+
+**Implemented**
+- The `grammar[Result, F] { g => import g._; ... }` DSL with in-block `nonTerminal`/`terminal` declarations,
+  `all(...) { ... }` (effectful) and `.pure { ... }`, `||`, inline literals (singleton values, `""` as the empty
+  alternative) and inline `"...".r` regexes, `.map` on terminals, inline groups, `opt`/`rep`/`rep1`/`sepBy`/`sepBy1`,
+  `left`/`right`/`nonassoc` + `.prec`, `skip`.
+- A macro that extracts the grammar (raw compiler trees per Scala version, see
+  `docs/research/hearth-gap-destructured-local-vals.md`), then shared, compiler-independent analysis:
+  - a regex subset parser and a lexer DFA with longest match and literal-over-regex priority;
+  - LALR(1) tables with yacc-style precedence;
+  - diagnostics reported at the offending production: shift/reduce and reduce/reduce conflicts with the LR state,
+    non-terminals without productions, unproductive and unreachable non-terminals, empty-matching and unsupported
+    patterns, non-literal patterns.
+- A resumable, table-driven LR machine on heap arrays (100k-deep nesting is tested) and engines for `Id`, `Option`,
+  `Try`, `Either[E, *]` (with `ParseErrorLift`) and `Future`. Other runtimes plug in with an implicit `ParserEngine[F]`.
+
+**Deliberately simplified in milestone 1, compared with the design above**
+- The macro emits the encoded tables plus the user's own lambda. At run time, the block is evaluated once against a
+  recording `Dsl` to collect the action functions, with a structural fingerprint check against the compiled grammar.
+  Actions are therefore called through `FunctionN` values, not spliced into reduce cases (§5.8, step 4).
+- The engine is table-driven. There are no direct-coded states yet, no per-runtime codegen providers (§5.11); engines
+  are run-time `ParserEngine[F]` instances.
+- Input is `String` only; `InputStrategy`/streams (§5.7), dead-value elimination (§5.8, round 4), tracing (§5.4),
+  error recovery, helper methods in grammar blocks, and cross-grammar composition (§5.6) are not implemented yet.
+
 ## 0. Requirements (as stated) and how they are read here
 
 | # | Requirement | What it implies technically |

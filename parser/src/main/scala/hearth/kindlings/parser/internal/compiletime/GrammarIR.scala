@@ -1,0 +1,64 @@
+package hearth.kindlings.parser
+package internal.compiletime
+
+/** The compile-time view of a grammar block, extracted from the typed tree by the per-compiler `GrammarMacros` and
+  * compiled by [[GrammarCompiler]]. Free of any compiler API: positions carry the compiler's position object opaquely.
+  */
+private[parser] object GrammarIR {
+
+  /** A source position; `underlying` is the compiler's own position, used to report diagnostics. */
+  final case class Pos(file: String, line: Int, column: Int)(val underlying: Any) {
+    def show: String = s"$file:$line:$column"
+  }
+
+  sealed trait Pattern {
+    def display: String
+  }
+  final case class LiteralPattern(text: String) extends Pattern {
+    def display: String = internal.runtime.Machine.quote(text)
+  }
+  final case class RegexPattern(regex: String) extends Pattern {
+    def display: String = s"/$regex/"
+  }
+
+  sealed trait Sym
+  final case class NtRef(id: Int) extends Sym
+  final case class Term(pattern: Pattern, name: Option[String], pos: Pos) extends Sym
+  final case class Group(alts: List[Alternative]) extends Sym
+  final case class Opt(sym: Sym) extends Sym
+  final case class Rep(sym: Sym, atLeastOne: Boolean) extends Sym
+  final case class SepBy(sym: Sym, sep: Sym, atLeastOne: Boolean) extends Sym
+
+  sealed trait Kind
+  object Kind {
+    case object Pure extends Kind
+    case object Effectful extends Kind
+    case object Pass extends Kind
+    case object Empty extends Kind
+  }
+
+  final case class Alternative(syms: List[Sym], kind: Kind, prec: Option[Sym], pos: Pos)
+
+  sealed trait Assoc
+  object Assoc {
+    case object Left extends Assoc
+    case object Right extends Assoc
+    case object NonAssoc extends Assoc
+  }
+
+  sealed trait Statement
+  final case class Production(lhs: Int, alts: List[Alternative], pos: Pos) extends Statement
+  final case class Precedence(assoc: Assoc, operators: List[Sym], pos: Pos) extends Statement
+  final case class Skip(regex: String, pos: Pos) extends Statement
+
+  final case class NonTerminalDecl(name: String, pos: Pos)
+
+  final case class Grammar(
+      nonTerminals: Vector[NonTerminalDecl],
+      statements: Vector[Statement],
+      root: Int,
+      rootPos: Pos
+  )
+
+  final case class Diagnostic(pos: Pos, message: String)
+}
