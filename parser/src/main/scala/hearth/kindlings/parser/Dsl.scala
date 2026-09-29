@@ -13,7 +13,8 @@ import scala.util.matching.Regex
   *   - `all(s1, ..., sN) { (v1, ..., vN) => F[R] }` is an alternative with an effectful action; `all(...).pure { ... }`
   *     one with a pure action. Alternatives are combined with `||`.
   *   - `opt(s)`, `rep(s)`, `rep1(s)`, `sepBy(s, sep)`, `sepBy1(s, sep)` and inline groups (`"+" || "-"` used as a
-  *     symbol) are expanded into helper non-terminals.
+  *     symbol) are expanded into helper non-terminals; repetitions produce a `List` or, with `.as[C]`, any collection
+  *     supported by Hearth's `IsCollection` (see [[Repetition]]).
   *   - `left(...)`, `right(...)`, `nonassoc(...)` declare operator precedence (later declarations bind tighter), like
   *     yacc's `%left`/`%right`/`%nonassoc`; `all(...).prec(op)` overrides a production's precedence (`%prec`).
   *   - `skip("regex")` declares text to skip between tokens (whitespace, comments).
@@ -51,16 +52,16 @@ final class Dsl[F[_]] private[parser] () extends DslSequences[F] with DslLiteral
   def opt[A](sym: Sym[A]): Sym[Option[A]] = new OptSym(sym)
 
   /** Zero or more `sym`s. */
-  def rep[A](sym: Sym[A]): Sym[List[A]] = new RepSym(sym, atLeastOne = false)
+  def rep[A](sym: Sym[A]): Repetition[A] = new RepSym(sym, atLeastOne = false)
 
   /** One or more `sym`s. */
-  def rep1[A](sym: Sym[A]): Sym[List[A]] = new RepSym(sym, atLeastOne = true)
+  def rep1[A](sym: Sym[A]): Repetition[A] = new RepSym(sym, atLeastOne = true)
 
   /** Zero or more `sym`s separated by `sep`. */
-  def sepBy[A](sym: Sym[A], sep: Sym[Any]): Sym[List[A]] = new SepBySym(sym, sep, atLeastOne = false)
+  def sepBy[A](sym: Sym[A], sep: Sym[Any]): Repetition[A] = new SepBySym(sym, sep, atLeastOne = false)
 
   /** One or more `sym`s separated by `sep`. */
-  def sepBy1[A](sym: Sym[A], sep: Sym[Any]): Sym[List[A]] = new SepBySym(sym, sep, atLeastOne = true)
+  def sepBy1[A](sym: Sym[A], sep: Sym[Any]): Repetition[A] = new SepBySym(sym, sep, atLeastOne = true)
 
   /** An inline regex is a terminal whose value is the matched text. */
   @nowarn("msg=unused")

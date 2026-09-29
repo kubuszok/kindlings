@@ -438,6 +438,9 @@ lazy val parser = projectMatrix
   .someVariations(versions.scalas, versions.platforms)(
     (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
   )
+  // cats-integration is a TEST dependency only: its `IsCollection` providers are loaded from the classpath, so
+  // repetitions can be collected with `.as[NonEmptyList[A]]` purely because the provider jar is present.
+  .dependsOn(catsIntegration % Test)
   .settings(
     moduleName := "kindlings-parser",
     name := "kindlings-parser",

@@ -87,12 +87,45 @@ Declarations come first, productions after them (the compiler enforces that orde
 | `"+" \|\| "-"` used as a symbol | an inline group (an anonymous helper non-terminal) |
 | `opt(s)`, `rep(s)`, `rep1(s)` | `Option[A]`, `List[A]` (zero or more), `List[A]` (one or more) |
 | `sepBy(s, sep)`, `sepBy1(s, sep)` | `List[A]` of `s` separated by `sep` |
+| `rep(s).as[C]` (also `rep1`, `sepBy`, `sepBy1`) | the repetition collected into `C` instead of a `List` (see below) |
 | `left(...)`, `right(...)`, `nonassoc(...)` | operator precedence levels, lowest first (yacc's `%left`, ...) |
 | `all(...).prec(op)` | the production takes `op`'s precedence (yacc's `%prec`) |
 | `skip("[ \\t\\n]+")` | text skipped between tokens (whitespace, comments) |
 
 Lexing uses the longest match; when a literal and a regex match the same text (a keyword and an identifier), the literal
 wins.
+
+### Choosing the collection of a repetition
+
+Repetitions produce a `List` by default. `.as[C]` collects them into any collection that Hearth's `IsCollection`
+standard extension supports: Scala collections (`Vector`, `Set`, `ArrayBuffer`, ...), arrays, Java collections (JVM
+only), and collections from providers on the classpath, e.g. cats `NonEmptyList`, `NonEmptyVector` or `Chain` with
+`kindlings-cats-integration`:
+
+```scala
+//> using dep com.kubuszok::kindlings-parser:{{ kindlings_version() }}
+import hearth.kindlings.parser._
+import scala.collection.immutable.ArraySeq
+
+val numbers: Parser[Id, ArraySeq[Int]] = Grammar.grammar[ArraySeq[Int], Id] { g =>
+  import g._
+  val list = nonTerminal[ArraySeq[Int]]
+  val num = terminal("[0-9]+").map(_.toInt)
+  skip(" +")
+  list ::= all("[", sepBy(num, ",").as[ArraySeq[Int]], "]").pure((_, ns, _) => ns)
+  list
+}
+println(numbers.parse("[1, 2, 3]"))
+// expected output:
+// ArraySeq(1, 2, 3)
+```
+
+The macro checks that the collection is supported and that the repeated values fit its element type (maps are
+rejected). The generated code creates the collection's own `Builder` when the repetition starts, appends each value as
+it is parsed and calls `result()` once, so no intermediate `List` is built. The builder's `Factory` is evaluated once
+per parser. A collection with a smart constructor (`NonEmptyList`) throws an `IllegalArgumentException` if it rejects
+the values, e.g. when an empty `rep` is collected into a `NonEmptyList` (use `rep1`). `.as[C]` requires
+`Grammar.grammar`: `Grammar.interpreted` always builds `List`s.
 
 ### Writing alternatives on several lines
 

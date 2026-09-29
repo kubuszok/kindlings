@@ -2,7 +2,7 @@ package hearth.kindlings.parser
 package internal.runtime
 
 /** Implemented by code the `Grammar.grammar` macro generates for each grammar: the grammar's actions and terminal
-  * conversions, inlined into two `switch`es. Not meant to be implemented by hand.
+  * conversions, inlined into `switch`es. Not meant to be implemented by hand.
   */
 abstract class GeneratedReductions {
 
@@ -13,9 +13,13 @@ abstract class GeneratedReductions {
 
   /** Applies terminal converter `id` (a chain of `.map` functions) to the matched text. */
   def convert(id: Int, raw: String): Any
-}
-object GeneratedReductions {
 
-  /** Converts a `rep`/`sepBy` list builder into the `List` passed to actions. */
-  def listify(value: Any): List[Any] = CompiledGrammar.listify(value)
+  /** Turns the mutable builder of repetition collection `id` into the collection. */
+  def collect(id: Int, builder: Any): Any
+
+  /** The `Factory` of each repetition collection, by collection id. */
+  protected def factories(): Array[Any]
+
+  /** [[factories]], evaluated once. */
+  final protected val collectionFactories: Array[Any] = factories()
 }

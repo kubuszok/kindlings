@@ -14,12 +14,31 @@ private[parser] object GrammarCompiler {
   /** How to generate the code of user production `p` (a table index): its action and how to obtain each value. */
   final case class ProdPlan(p: Int, action: Action, rhs: Vector[RhsPlan])
 
+  /** How to obtain a right-hand side value: non-terminals as is or, for repetitions, as their collection `id`
+    * (converting the builder), terminals as the matched text or through converter `id`.
+    */
   sealed trait RhsPlan
-  final case class NtPlan(listify: Boolean) extends RhsPlan
+  final case class NtPlan(collection: Option[Int]) extends RhsPlan
   final case class TermPlan(converter: Option[Int]) extends RhsPlan
+
+  /** How to generate the code of built-in repetition production `p` (a table index), which feeds the builder of
+    * `collection`: a new builder, a new builder with one element, or the builder at position 0 plus one element.
+    */
+  final case class CollectionPlan(p: Int, collection: Int, step: CollectionStep)
+
+  sealed trait CollectionStep
+  object CollectionStep {
+    case object Empty extends CollectionStep
+    final case class One(element: RhsPlan) extends CollectionStep
+    final case class Append(index: Int, element: RhsPlan) extends CollectionStep
+  }
 
   /** @param converters
     *   by converter id: the `.map` functions to apply to the matched text, in order
+    * @param collections
+    *   by collection id: the collection of a repetition
+    * @param collectionPlans
+    *   the built-in repetition productions (only when compiling for generated code)
     */
   final case class Output(
       tables: List[String],
@@ -27,10 +46,16 @@ private[parser] object GrammarCompiler {
       warnings: List[Diagnostic],
       summary: String,
       prods: Vector[ProdPlan],
-      converters: Vector[List[Any]]
+      converters: Vector[List[Any]],
+      collections: Vector[Collection],
+      collectionPlans: Vector[CollectionPlan]
   )
 
-  def compile(g: Grammar): Either[List[Diagnostic], Output] = {
+  /** @param generated
+    *   whether the tables are used by generated code (`Grammar.grammar`), whose repetitions are built by generated code
+    *   (as user productions) instead of the interpreter's built-in `List` actions
+    */
+  def compile(g: Grammar, generated: Boolean): Either[List[Diagnostic], Output] = {
     val errors = mutable.ListBuffer.empty[Diagnostic]
     val warnings = mutable.ListBuffer.empty[Diagnostic]
     def err(pos: Pos, msg: String): Unit = errors += Diagnostic(pos, msg)
@@ -48,12 +73,12 @@ private[parser] object GrammarCompiler {
         if (tok.name.isEmpty) tok.name = t.name
     }
     def walkSym(s: Sym): Unit = s match {
-      case t: Term            => register(t)
-      case Group(alts)        => alts.foreach(walkAlt)
-      case Opt(sym)           => walkSym(sym)
-      case Rep(sym, _)        => walkSym(sym)
-      case SepBy(sym, sep, _) => walkSym(sym); walkSym(sep)
-      case NtRef(_)           => ()
+      case t: Term               => register(t)
+      case Group(alts)           => alts.foreach(walkAlt)
+      case Opt(sym)              => walkSym(sym)
+      case Rep(sym, _, _)        => walkSym(sym)
+      case SepBy(sym, sep, _, _) => walkSym(sym); walkSym(sep)
+      case NtRef(_)              => ()
     }
     def walkAlt(a: Alternative): Unit = { a.syms.foreach(walkSym); a.prec.foreach(walkSym) }
     g.statements.foreach {
@@ -111,13 +136,24 @@ private[parser] object GrammarCompiler {
     }
 
     // --- productions ---------------------------------------------------------------------------------------------
+    val collections = Vector.newBuilder[Collection]
+    var collectionCount = 0
+    def collection(c: Collection): Int = {
+      collections += c
+      collectionCount += 1
+      collectionCount - 1
+    }
     def toF(s: Sym): Flatten.FSym[Term, Alternative] = s match {
-      case NtRef(id)            => Flatten.FNt(id)
-      case t: Term              => Flatten.FTerm(t)
-      case Group(alts)          => Flatten.FGroup(alts.map(toFAlt))
-      case Opt(sym)             => Flatten.FOpt(toF(sym))
-      case Rep(sym, one)        => Flatten.FRep(toF(sym), one)
-      case SepBy(sym, sep, one) => Flatten.FSepBy(toF(sym), toF(sep), one)
+      case NtRef(id)           => Flatten.FNt(id)
+      case t: Term             => Flatten.FTerm(t)
+      case Group(alts)         => Flatten.FGroup(alts.map(toFAlt))
+      case Opt(sym)            => Flatten.FOpt(toF(sym))
+      case Rep(sym, one, coll) =>
+        val c = collection(coll)
+        Flatten.FRep(toF(sym), one, c)
+      case SepBy(sym, sep, one, coll) =>
+        val c = collection(coll)
+        Flatten.FSepBy(toF(sym), toF(sep), one, c)
     }
     def toFAlt(a: Alternative): Flatten.FAlt[Term, Alternative] = Flatten.FAlt(
       a.syms.map(toF),
@@ -134,12 +170,19 @@ private[parser] object GrammarCompiler {
     }
 
     def symName(s: Flatten.FSym[Term, Alternative]): String = s match {
-      case Flatten.FNt(id)               => ntName(id)
-      case Flatten.FTerm(t)              => t.name.getOrElse(t.pattern.display)
-      case Flatten.FGroup(alts)          => alts.map(a => a.syms.map(symName).mkString(" ")).mkString("(", " | ", ")")
-      case Flatten.FOpt(sym)             => s"opt(${symName(sym)})"
-      case Flatten.FRep(sym, one)        => s"${if (one) "rep1" else "rep"}(${symName(sym)})"
-      case Flatten.FSepBy(sym, sep, one) => s"${if (one) "sepBy1" else "sepBy"}(${symName(sym)}, ${symName(sep)})"
+      case Flatten.FNt(id)           => ntName(id)
+      case Flatten.FTerm(t)          => t.name.getOrElse(t.pattern.display)
+      case Flatten.FGroup(alts)      => alts.map(a => a.syms.map(symName).mkString(" ")).mkString("(", " | ", ")")
+      case Flatten.FOpt(sym)         => s"opt(${symName(sym)})"
+      case Flatten.FRep(sym, one, _) => s"${if (one) "rep1" else "rep"}(${symName(sym)})"
+      case Flatten.FSepBy(sym, sep, one, _) => s"${if (one) "sepBy1" else "sepBy"}(${symName(sym)}, ${symName(sep)})"
+    }
+
+    /** The collection of each repetition helper non-terminal. */
+    def ntCollection(id: Int): Int = flat.origins(id - g.nonTerminals.size) match {
+      case Flatten.FRep(_, _, c)      => c
+      case Flatten.FSepBy(_, _, _, c) => c
+      case other                      => throw new IllegalStateException(s"not a repetition: $other")
     }
     lazy val ntNames: Vector[String] = g.nonTerminals.map(_.name) ++ flat.origins.map(symName)
     def ntName(id: Int): String = if (id < g.nonTerminals.size) g.nonTerminals(id).name else ntNames(id)
@@ -258,12 +301,24 @@ private[parser] object GrammarCompiler {
     val rhsConv = mutable.ArrayBuilder.make[Int]
     rhsStart(1) = 0
     val plans = Vector.newBuilder[ProdPlan]
+    val collectionPlans = Vector.newBuilder[CollectionPlan]
+    def listAction(p: Int, prod: Flatten.Prod[Term, Alternative], kind: Int, step: CollectionStep): Unit =
+      if (generated) {
+        prodKind(p) = ActPure
+        collectionPlans += CollectionPlan(p, ntCollection(prod.lhs), step)
+      } else prodKind(p) = kind
     prods.zipWithIndex.foreach { case (prod, index) =>
       val p = index + 1
       val rhsPlans = prod.rhs.map {
-        case Flatten.RNt(_, listify) =>
-          rhsConv += (if (listify) Tables.Listify else Tables.Raw)
-          NtPlan(listify)
+        case Flatten.RNt(id, listify) =>
+          if (listify) {
+            val c = ntCollection(id)
+            rhsConv += Tables.Listify - c
+            NtPlan(Some(c))
+          } else {
+            rhsConv += Tables.Raw
+            NtPlan(None)
+          }
         case Flatten.RTerm(term) =>
           val conv = converterOf(term)
           rhsConv += conv.getOrElse(Tables.Raw)
@@ -279,9 +334,11 @@ private[parser] object GrammarCompiler {
           prodKind(p) = ActConst; prodArg(p) = constants.getOrElseUpdate(value, constants.size)
         case Flatten.AOptNone           => prodKind(p) = ActOptNone
         case Flatten.AOptSome           => prodKind(p) = ActOptSome
-        case Flatten.AListEmpty         => prodKind(p) = ActListEmpty
-        case Flatten.AListOne           => prodKind(p) = ActListOne
-        case Flatten.AListAppend(index) => prodKind(p) = ActListAppend; prodArg(p) = index
+        case Flatten.AListEmpty         => listAction(p, prod, ActListEmpty, CollectionStep.Empty)
+        case Flatten.AListOne           => listAction(p, prod, ActListOne, CollectionStep.One(rhsPlans(0)))
+        case Flatten.AListAppend(index) =>
+          listAction(p, prod, ActListAppend, CollectionStep.Append(index, rhsPlans(index)))
+          prodArg(p) = index
       }
     }
     val tables = new Tables(
@@ -322,7 +379,9 @@ private[parser] object GrammarCompiler {
         warnings.toList,
         summary,
         plans.result(),
-        converterIds.keys.toVector.map(_.converters)
+        converterIds.keys.toVector.map(_.converters),
+        collections.result(),
+        collectionPlans.result()
       )
     )
   }

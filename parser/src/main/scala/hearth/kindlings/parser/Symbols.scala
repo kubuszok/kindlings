@@ -37,9 +37,24 @@ object Terminal {
 
 final private[parser] class GroupSym[A](val alt: Alt[A]) extends Sym[A]
 final private[parser] class OptSym[A](val sym: Sym[A]) extends Sym[Option[A]]
-final private[parser] class RepSym[A](val sym: Sym[A], val atLeastOne: Boolean) extends Sym[List[A]]
+
+/** A repetition (`rep`, `rep1`, `sepBy`, `sepBy1`) of `A`s, collected into a `List[A]` by default.
+  *
+  * `.as[C]` collects into any collection `C` supported by Hearth's `IsCollection` standard extension - the Scala and
+  * Java collections, arrays, and whatever providers are on the classpath (e.g. cats `NonEmptyList` / `Chain` with
+  * `kindlings-cats-integration`). The macro checks that `C` is supported and that `A` fits its elements, and generates
+  * code that appends each element to `C`'s own mutable builder (no intermediate `List`).
+  */
+sealed abstract class Repetition[A] extends Sym[List[A]] {
+
+  /** Collect the repeated values into `C` instead of a `List` (only with `Grammar.grammar`, not `Grammar.interpreted`).
+    */
+  def as[C]: Sym[C] = this.asInstanceOf[Sym[C]]
+}
+
+final private[parser] class RepSym[A](val sym: Sym[A], val atLeastOne: Boolean) extends Repetition[A]
 final private[parser] class SepBySym[A](val sym: Sym[A], val sep: Sym[Any], val atLeastOne: Boolean)
-    extends Sym[List[A]]
+    extends Repetition[A]
 
 /** One or more alternatives (productions) producing `A`, combined with `||`. */
 final class Alt[+A] private[parser] (private[parser] val alternatives: List[Alt.Single]) {

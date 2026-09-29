@@ -30,8 +30,17 @@ private[parser] object GrammarIR {
   final case class Term(pattern: Pattern, name: Option[String], pos: Pos, converters: List[Any] = Nil) extends Sym
   final case class Group(alts: List[Alternative]) extends Sym
   final case class Opt(sym: Sym) extends Sym
-  final case class Rep(sym: Sym, atLeastOne: Boolean) extends Sym
-  final case class SepBy(sym: Sym, sep: Sym, atLeastOne: Boolean) extends Sym
+  final case class Rep(sym: Sym, atLeastOne: Boolean, collection: Collection) extends Sym
+  final case class SepBy(sym: Sym, sep: Sym, atLeastOne: Boolean, collection: Collection) extends Sym
+
+  /** The collection a repetition's values are collected into (compiler types, used by code generation).
+    *
+    * @param tpe
+    *   the collection type (`List[A]` unless chosen with `.as[C]`)
+    * @param element
+    *   the type of the repeated values
+    */
+  final case class Collection(tpe: Any, element: Any, pos: Pos)
 
   sealed trait Kind
   object Kind {

@@ -109,7 +109,7 @@ final private[parser] class Tables(
 }
 private[parser] object Tables {
 
-  val Version: Int = 3
+  val Version: Int = 4
 
   final val Raw = -1
   final val Listify = -2

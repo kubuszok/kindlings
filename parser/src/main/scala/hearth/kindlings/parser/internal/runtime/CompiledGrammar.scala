@@ -40,7 +40,7 @@ final private[parser] class GeneratedGrammar(tables: Tables, generated: Generate
   def argument(p: Int, i: Int, raw: Any): Any = {
     val code = tables.rhsConv(tables.rhsStart(p) + i)
     if (code == Tables.Raw) raw
-    else if (code == Tables.Listify) CompiledGrammar.listify(raw)
+    else if (code <= Tables.Listify) generated.collect(Tables.Listify - code, raw)
     else generated.convert(code, raw.asInstanceOf[String])
   }
 }

@@ -21,8 +21,13 @@ private[parser] object Flatten {
   final case class FTerm[+T](payload: T) extends FSym[T, Nothing]
   final case class FGroup[+T, +A](alts: List[FAlt[T, A]]) extends FSym[T, A]
   final case class FOpt[+T, +A](sym: FSym[T, A]) extends FSym[T, A]
-  final case class FRep[+T, +A](sym: FSym[T, A], atLeastOne: Boolean) extends FSym[T, A]
-  final case class FSepBy[+T, +A](sym: FSym[T, A], sep: FSym[T, A], atLeastOne: Boolean) extends FSym[T, A]
+
+  /** @param collection
+    *   id of the collection the repetition is collected into (0: `List`)
+    */
+  final case class FRep[+T, +A](sym: FSym[T, A], atLeastOne: Boolean, collection: Int = 0) extends FSym[T, A]
+  final case class FSepBy[+T, +A](sym: FSym[T, A], sep: FSym[T, A], atLeastOne: Boolean, collection: Int = 0)
+      extends FSym[T, A]
 
   final case class FAlt[+T, +A](syms: List[FSym[T, A]], action: FAction[A])
 
@@ -92,18 +97,18 @@ private[parser] object Flatten {
           val r = ref(sym)
           prods += Prod(id, Vector.empty, AOptNone)
           prods += Prod(id, Vector(r), AOptSome)
-        case FRep(sym, atLeastOne) =>
+        case FRep(sym, atLeastOne, _) =>
           val r = ref(sym)
           if (atLeastOne) prods += Prod(id, Vector(r), AListOne)
           else prods += Prod(id, Vector.empty, AListEmpty)
           prods += Prod(id, Vector(RNt(id, listify = false), r), AListAppend(1))
-        case FSepBy(sym, sep, true) =>
+        case FSepBy(sym, sep, true, _) =>
           val r = ref(sym)
           val s = ref(sep)
           prods += Prod(id, Vector(r), AListOne)
           prods += Prod(id, Vector(RNt(id, listify = false), s, r), AListAppend(2))
-        case FSepBy(sym, sep, false) =>
-          val inner = helper(FSepBy(sym, sep, atLeastOne = true))
+        case FSepBy(sym, sep, false, collection) =>
+          val inner = helper(FSepBy(sym, sep, atLeastOne = true, collection))
           prods += Prod(id, Vector.empty, AListEmpty)
           prods += Prod(id, Vector(RNt(inner, listify = false)), APass)
         case _ => ()

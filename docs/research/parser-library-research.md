@@ -64,6 +64,18 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
 - Effect handling stays in the engines (a `match` for eager effects, one fused `flatMap` for `Sync`). Per-runtime
   generated drivers wait for the benchmarks.
 
+**Repetition collections**
+- `rep`/`rep1`/`sepBy`/`sepBy1` return `Repetition[A]` (a `Sym[List[A]]`); `.as[C]` picks another collection. The macro
+  resolves `C` through Hearth's `IsCollection` (`CollectionCodegen`, shared by both Scala versions through a small
+  `CollectionHelper` bundle): standard collections, arrays, Java collections (JVM only) and classpath providers (cats
+  `NonEmptyList`/`Chain` with `kindlings-cats-integration`). It rejects maps, unsupported types and element types that
+  do not fit.
+- In generated mode, the helper productions of repetitions become generated user productions that feed `C`'s own
+  `Builder`: `factory.newBuilder` on the first production, `builder.addOne(element)` on each further one, and
+  `result()` (plus smart-constructor unwrapping) wherever the repetition is used. The factories are evaluated once per
+  parser. Collection ids are encoded in `rhsConv` as `Listify - id` (tables version 4). `Grammar.interpreted` keeps
+  `ListBuffer`s and rejects `.as`.
+
 **Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
 than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x
 slower than hand-written jawn.

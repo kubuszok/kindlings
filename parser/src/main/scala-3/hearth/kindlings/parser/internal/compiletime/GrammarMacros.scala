@@ -18,7 +18,7 @@ private[parser] object GrammarMacros {
       body: Expr[Dsl[F] => NonTerminal[R]],
       engine: Expr[ParserEngine[F]]
   )(using q: Quotes): Expr[Parser[F, R]] = {
-    val out = compile(new Extractor(using q).grammar(body))
+    val out = compile(new Extractor(allowAs = false)(using q).grammar(body), generated = false)
     '{
       _root_.hearth.kindlings.parser.internal.runtime.Builder.build[F, R](
         ${ Expr(out.tables) },
@@ -33,17 +33,43 @@ private[parser] object GrammarMacros {
       body: Expr[Dsl[F] => NonTerminal[R]],
       engine: Expr[ParserEngine[F]]
   )(using q: Quotes): Expr[Parser[F, R]] = {
-    val out = compile(new Extractor(using q).grammar(body))
+    val out = compile(new Extractor(allowAs = true)(using q).grammar(body), generated = true)
+    val colls = collectionCodes(out)
     '{
       _root_.hearth.kindlings.parser.internal.runtime.Builder.generated[F, R](
         ${ Expr(out.tables) },
         $engine,
         new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
-          def action(p: Int, values: Array[Any], base: Int): Any = ${ Codegen.actions(out, 'p, 'values, 'base) }
+          def action(p: Int, values: Array[Any], base: Int): Any =
+            ${ Codegen.actions(out, colls, 'p, 'values, 'base, 'collectionFactories) }
           def convert(id: Int, raw: String): Any = ${ Codegen.converters(out, 'id, 'raw) }
+          def collect(id: Int, builder: Any): Any = ${ Codegen.collects(colls, 'id, 'builder) }
+          protected def factories(): Array[Any] = ${ Codegen.factories(colls) }
         }
       )
     }
+  }
+
+  /** The code of a repetition collection (see [[CollectionCodegen]]), as compiler trees. */
+  final private case class Collections(factory: Any, newBuilder: Any, add: Any, result: Any)
+
+  private def collectionCodes(out: GrammarCompiler.Output)(using q: Quotes): Vector[Collections] = {
+    import q.reflect.*
+    val helper = new CollectionHelper(q)
+    val codes = out.collections.map { coll =>
+      helper.collectionCode(
+        coll.tpe.asInstanceOf[helper.UntypedType],
+        coll.element.asInstanceOf[helper.UntypedType]
+      ) match {
+        case Right(code) => Right(Collections(code.factory, code.newBuilder, code.add, code.result))
+        case Left(msg)   =>
+          report.error(msg, coll.pos.underlying.asInstanceOf[Position])
+          Left(msg)
+      }
+    }
+    val failed = codes.count(_.isLeft)
+    if failed > 0 then report.errorAndAbort(s"the grammar has $failed error(s)")
+    codes.collect { case Right(code) => code }
   }
 
   /** Code generation inside the splices of `grammarImpl`: every function uses the `Quotes` of its splice, whose
@@ -51,32 +77,62 @@ private[parser] object GrammarMacros {
     */
   private object Codegen {
 
-    def actions(out: GrammarCompiler.Output, p: Expr[Int], values: Expr[Array[Any]], base: Expr[Int])(using
-        q: Quotes
-    ): Expr[Any] = {
+    def actions(
+        out: GrammarCompiler.Output,
+        colls: Vector[Collections],
+        p: Expr[Int],
+        values: Expr[Array[Any]],
+        base: Expr[Int],
+        factories: Expr[Array[Any]]
+    )(using q: Quotes): Expr[Any] = {
       import q.reflect.*
+      def value(rhs: GrammarCompiler.RhsPlan, i: Int): Term = {
+        val raw = '{ $values($base + ${ Expr(i) }) }
+        rhs match {
+          case GrammarCompiler.NtPlan(None)       => raw.asTerm
+          case GrammarCompiler.NtPlan(Some(id))   => applyFn(colls(id).result, List(raw.asTerm))
+          case GrammarCompiler.TermPlan(None)     => raw.asTerm
+          case GrammarCompiler.TermPlan(Some(id)) =>
+            convert(out.converters(id), '{ $raw.asInstanceOf[String] }.asTerm)
+        }
+      }
       val cases = out.prods.toList.map { plan =>
         val args = plan.rhs.toList.zipWithIndex.map { case (rhs, i) =>
           val tpe = plan.action.paramTypes(i).asInstanceOf[TypeRepr]
           if !plan.action.used(i) then cast('{ null }.asTerm, tpe)
-          else {
-            val raw = '{ $values($base + ${ Expr(i) }) }
-            val value = rhs match {
-              case GrammarCompiler.NtPlan(false) => raw.asTerm
-              case GrammarCompiler.NtPlan(true)  =>
-                '{ _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions.listify($raw) }.asTerm
-              case GrammarCompiler.TermPlan(None)     => raw.asTerm
-              case GrammarCompiler.TermPlan(Some(id)) =>
-                convert(out.converters(id), '{ $raw.asInstanceOf[String] }.asTerm)
-            }
-            cast(value, tpe)
-          }
+          else cast(value(rhs, i), tpe)
         }
         CaseDef(Literal(IntConstant(plan.p)), None, applyFn(plan.action.tree, args))
       }
+      val collectionCases = out.collectionPlans.toList.map { plan =>
+        val code = colls(plan.collection)
+        def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(plan.collection) }) }.asTerm))
+        val body = plan.step match {
+          case GrammarCompiler.CollectionStep.Empty        => newBuilder
+          case GrammarCompiler.CollectionStep.One(element) => applyFn(code.add, List(newBuilder, value(element, 0)))
+          case GrammarCompiler.CollectionStep.Append(i, element) =>
+            applyFn(code.add, List('{ $values($base) }.asTerm, value(element, i)))
+        }
+        CaseDef(Literal(IntConstant(plan.p)), None, body)
+      }
       val fallback =
         CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no action for production " + $p) }.asTerm)
-      Match(p.asTerm, cases :+ fallback).asExprOf[Any]
+      Match(p.asTerm, cases ++ collectionCases :+ fallback).asExprOf[Any]
+    }
+
+    def collects(colls: Vector[Collections], id: Expr[Int], builder: Expr[Any])(using q: Quotes): Expr[Any] = {
+      import q.reflect.*
+      val cases = colls.toList.zipWithIndex.map { case (code, i) =>
+        CaseDef(Literal(IntConstant(i)), None, applyFn(code.result, List(builder.asTerm)))
+      }
+      val fallback = CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no collection " + $id) }.asTerm)
+      Match(id.asTerm, cases :+ fallback).asExprOf[Any]
+    }
+
+    def factories(colls: Vector[Collections])(using q: Quotes): Expr[Array[Any]] = {
+      import q.reflect.*
+      val exprs = colls.map(code => code.factory.asInstanceOf[Term].changeOwner(Symbol.spliceOwner).asExprOf[Any])
+      '{ Array[Any](${ Varargs(exprs) }*) }
     }
 
     def converters(out: GrammarCompiler.Output, id: Expr[Int], raw: Expr[String])(using q: Quotes): Expr[Any] = {
@@ -104,9 +160,9 @@ private[parser] object GrammarMacros {
       chain.foldLeft(raw)((acc, fn) => applyFn(fn, List(acc)))
   }
 
-  private def compile(grammar: Grammar)(using q: Quotes): GrammarCompiler.Output = {
+  private def compile(grammar: Grammar, generated: Boolean)(using q: Quotes): GrammarCompiler.Output = {
     import q.reflect.*
-    GrammarCompiler.compile(grammar) match {
+    GrammarCompiler.compile(grammar, generated) match {
       case Left(errors) =>
         errors.foreach(d => report.error(d.message, d.pos.underlying.asInstanceOf[Position]))
         report.errorAndAbort(s"the grammar has ${errors.size} error(s)")
@@ -116,7 +172,10 @@ private[parser] object GrammarMacros {
     }
   }
 
-  final private class Extractor(using val q: Quotes) {
+  /** @param allowAs
+    *   whether repetitions may choose their collection with `.as[C]` (generated code only)
+    */
+  final private class Extractor(allowAs: Boolean)(using val q: Quotes) {
     import q.reflect.*
 
     private val nonTerminals = mutable.LinkedHashMap.empty[Symbol, (Int, NonTerminalDecl)]
@@ -269,6 +328,18 @@ private[parser] object GrammarMacros {
       Action(f, paramTypes, types.last, used)
     }
 
+    /** The type argument of `tree`'s type seen as `base[_]`. */
+    private def typeArg(tree: q.reflect.Term, base: Symbol): TypeRepr = tree.tpe.widen.baseType(base) match {
+      case AppliedType(_, List(arg)) => arg
+      case other                     => fail(tree, s"unexpected type of a grammar symbol: ${other.show}")
+    }
+
+    /** The default collection of a repetition: a `List` of its elements. */
+    private def listOf(tree: q.reflect.Term): Collection = {
+      val element = typeArg(tree, TypeRepr.of[Repetition[Any]].typeSymbol)
+      Collection(TypeRepr.of[List].appliedTo(element), element, pos(tree))
+    }
+
     private def stringLiteral(tree: q.reflect.Term): String = strip(tree) match {
       case Literal(StringConstant(s)) => s
       case other => fail(other, "expected a string literal (patterns are compiled at compile time)")
@@ -331,11 +402,22 @@ private[parser] object GrammarMacros {
         }
       case DslCall("group", _, List(alts))    => Group(alternatives(alts))
       case DslCall("opt", _, List(s))         => Opt(sym(s, None))
-      case DslCall("rep", _, List(s))         => Rep(sym(s, None), atLeastOne = false)
-      case DslCall("rep1", _, List(s))        => Rep(sym(s, None), atLeastOne = true)
-      case DslCall("sepBy", _, List(s, sep))  => SepBy(sym(s, None), sym(sep, None), atLeastOne = false)
-      case DslCall("sepBy1", _, List(s, sep)) => SepBy(sym(s, None), sym(sep, None), atLeastOne = true)
-      case other                              =>
+      case DslCall("rep", _, List(s))         => Rep(sym(s, None), atLeastOne = false, listOf(tree))
+      case DslCall("rep1", _, List(s))        => Rep(sym(s, None), atLeastOne = true, listOf(tree))
+      case DslCall("sepBy", _, List(s, sep))  => SepBy(sym(s, None), sym(sep, None), atLeastOne = false, listOf(tree))
+      case DslCall("sepBy1", _, List(s, sep)) => SepBy(sym(s, None), sym(sep, None), atLeastOne = true, listOf(tree))
+      case DslCall("as", inner, Nil)          =>
+        if !allowAs then fail(
+          tree,
+          "`.as[C]` is only supported by `Grammar.grammar` (`Grammar.interpreted` collects repetitions into Lists)"
+        )
+        val target = typeArg(tree, TypeRepr.of[hearth.kindlings.parser.Sym[Any]].typeSymbol)
+        sym(inner, name) match {
+          case r: Rep   => r.copy(collection = r.collection.copy(tpe = target, pos = pos(tree)))
+          case s: SepBy => s.copy(collection = s.collection.copy(tpe = target, pos = pos(tree)))
+          case _        => fail(tree, "`.as[C]` is only available on repetitions (rep, rep1, sepBy, sepBy1)")
+        }
+      case other =>
         fail(
           other,
           "expected a grammar symbol declared in this grammar block, a string literal, an inline \"...\".r regex, or opt/rep/rep1/sepBy/sepBy1(...)"
