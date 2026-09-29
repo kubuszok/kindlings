@@ -114,3 +114,72 @@ final private[parser] class ReaderInput(reader: java.io.Reader, initialBufferSiz
     (line, (pos - lineStart + 1).toInt)
   }
 }
+
+/** A chunk-fed input for push-based drivers (streams, REPLs): [[feed]] appends text, [[endOfInput]] marks the end.
+  * [[refill]] cannot read anything by itself: when the machine answers `NeedInput`, the driver must feed more (or end
+  * the input). Released text is discarded when new chunks arrive, so memory stays bounded as with [[ReaderInput]].
+  */
+final private[parser] class PushInput(initialBufferSize: Int) extends Input {
+
+  private var buffer = new Array[Char](math.max(initialBufferSize, 16))
+  private var start = 0L
+  private var limit = 0
+  private var ended = false
+  private var released = 0L
+  private var discardedLines = 0
+  private var lastLineStart = 0L
+
+  def ensure(pos: Long): Int =
+    if (pos - start < limit) Input.Available
+    else if (ended) Input.End
+    else Input.NeedMore
+
+  def charAt(pos: Long): Char = buffer((pos - start).toInt)
+
+  def slice(from: Long, until: Long): String = new String(buffer, (from - start).toInt, (until - from).toInt)
+
+  def release(pos: Long): Unit = if (pos > released) released = pos
+
+  def refill(): Unit = ()
+
+  def feed(chars: String): Unit = {
+    if (ended) throw new IllegalStateException("input already ended")
+    compact()
+    val needed = limit + chars.length
+    if (needed > buffer.length) {
+      var size = buffer.length
+      while (size < needed) size *= 2
+      buffer = java.util.Arrays.copyOf(buffer, size)
+    }
+    chars.getChars(0, chars.length, buffer, limit)
+    limit += chars.length
+  }
+
+  def endOfInput(): Unit = ended = true
+
+  private def compact(): Unit = {
+    val drop = (released - start).toInt
+    if (drop > 0) {
+      var i = 0
+      while (i < drop) {
+        if (buffer(i) == '\n') { discardedLines += 1; lastLineStart = start + i + 1 }
+        i += 1
+      }
+      System.arraycopy(buffer, drop, buffer, 0, limit - drop)
+      limit -= drop
+      start += drop
+    }
+  }
+
+  def lineColumn(pos: Long): (Int, Int) = {
+    var line = discardedLines + 1
+    var lineStart = lastLineStart
+    var p = start
+    val until = math.min(pos, start + limit)
+    while (p < until) {
+      if (buffer((p - start).toInt) == '\n') { line += 1; lineStart = p + 1 }
+      p += 1
+    }
+    (line, (pos - lineStart + 1).toInt)
+  }
+}

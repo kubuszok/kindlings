@@ -56,8 +56,20 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
   }
 
-  /** Reads more input after [[Machine.NeedInput]] (may block). */
+  /** Reads more input after [[Machine.NeedInput]] (may block). For push machines this does nothing: use [[feed]]. */
   def refill(): Unit = input.refill()
+
+  /** Push machines (see `Parser.pushMachine`): appends a chunk of input. */
+  def feed(chunk: String): Unit = input match {
+    case push: PushInput => push.feed(chunk)
+    case _               => throw new UnsupportedOperationException("feed is only available on push machines")
+  }
+
+  /** Push machines (see `Parser.pushMachine`): no more input will be fed. */
+  def endOfInput(): Unit = input match {
+    case push: PushInput => push.endOfInput()
+    case _               => throw new UnsupportedOperationException("endOfInput is only available on push machines")
+  }
 
   /** Runs until the input is accepted, a syntax error occurs, an effectful action has to be sequenced, more input is
     * needed, or `budget` shifts and reductions were made.

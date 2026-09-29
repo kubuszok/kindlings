@@ -197,6 +197,32 @@ back-references, look-arounds and lazy quantifiers cannot be compiled into a lex
 
 Readers are never closed by the parser.
 
+### fs2 streams
+
+!!! example "sbt"
+
+    ```scala
+    libraryDependencies += "com.kubuszok" %%% "kindlings-parser-fs2" % "{{ kindlings_version() }}"
+    ```
+
+`import hearth.kindlings.parser.streams._` adds pipes that parse a whole stream as one input:
+
+```scala
+import hearth.kindlings.parser.streams._
+
+bytes.through(parser.bytePipe).compile.lastOrError    // Parser[IO, R]: effectful actions run in IO
+chunks.through(parser.pipe).compile.lastOrError       // Stream[IO, String]
+chunks.through(pureParser.pipeIn[IO])                 // Parser[Id, R] in any stream effect
+```
+
+Chunks are fed to the parser as it needs them and already-parsed text is discarded, so streams of any size are parsed
+with bounded memory (plus whatever your actions build). Multi-byte UTF-8 characters split across chunks are handled.
+
+### Push API (integrations and REPLs)
+
+`parser.pushMachine()` returns a low-level machine fed with `machine.feed(chunk)` / `machine.endOfInput()` and driven
+with `machine.run(budget)`; see its scaladoc for the protocol. The fs2 pipes and the engines are built on it.
+
 ## Syntax errors
 
 `ParseError` carries the offset, line and column, what was found and which tokens were expected:
@@ -210,6 +236,5 @@ prefix. A REPL can use it to ask for another line instead of reporting an error.
 
 ## Current limitations
 
-- Push-style (non-blocking, chunk-fed) inputs are planned; `Reader`/`InputStream` inputs are pull-based.
 - The grammar block must be static: no conditionals or loops around declarations and productions, no helper methods.
 - Terminal patterns must be literals (they are compiled at compile time).

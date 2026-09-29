@@ -37,6 +37,7 @@ object versions {
   val refined = "0.11.4"
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.1"
+  val fs2 = "3.14.0"
   val tagging = "2.3.5"
   val scalacheck = "1.20.0"
   val scalaJavaTime = "2.7.0"

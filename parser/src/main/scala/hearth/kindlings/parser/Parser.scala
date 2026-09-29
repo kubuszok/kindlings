@@ -1,6 +1,6 @@
 package hearth.kindlings.parser
 
-import hearth.kindlings.parser.internal.runtime.{CompiledGrammar, Machine, ReaderInput, StringInput}
+import hearth.kindlings.parser.internal.runtime.{CompiledGrammar, Machine, PushInput, ReaderInput, StringInput}
 
 /** A parser compiled from a `Grammar.grammar[R, F] { ... }` definition.
   *
@@ -24,6 +24,21 @@ final class Parser[F[_], R] private[parser] (grammar: CompiledGrammar, engine: P
   /** Parses a UTF-8 encoded `stream` (see the `Reader` overload). The stream is not closed. */
   def parse(stream: java.io.InputStream): F[R] =
     parse(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8), Parser.DefaultBufferSize)
+
+  /** Low-level API for integrations (stream pipes, REPLs, custom engines): a fresh machine whose input is pushed with
+    * `machine.feed(chunk)` / `machine.endOfInput()`.
+    *
+    * Drive it with `machine.run(budget)`:
+    *   - `Machine.NeedInput`: feed another chunk or end the input,
+    *   - `Machine.Effect`: run `machine.pendingEffect` (an `F[Any]` produced by an effectful action) and continue with
+    *     `machine.resume(result)`,
+    *   - `Machine.Yield`: the step budget was spent; run again,
+    *   - `Machine.Done` / `Machine.Error`: `machine.result` / `machine.error`.
+    *
+    * A machine is mutable and belongs to one parse.
+    */
+  def pushMachine(initialBufferSize: Int = Parser.DefaultBufferSize): Machine =
+    new Machine(grammar, new PushInput(initialBufferSize))
 
   /** Display names of the terminals of this grammar, by token id (id 0 is end of input). */
   def terminalNames: List[String] = grammar.tables.tokenNames.toList

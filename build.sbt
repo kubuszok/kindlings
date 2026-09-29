@@ -262,7 +262,8 @@ lazy val aliases = new Aliases(
     tapirOpenapiJsoniter,
     optics,
     parser,
-    parserCatsEffect
+    parserCatsEffect,
+    parserFs2
   ),
   testOnly = Seq(integrationTests, derivationPolicyTests),
   compileOnly = Seq(benchmarks)
@@ -344,6 +345,7 @@ lazy val root = project
   .aggregate(optics.projectRefs *)
   .aggregate(parser.projectRefs *)
   .aggregate(parserCatsEffect.projectRefs *)
+  .aggregate(parserFs2.projectRefs *)
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(derivationPolicyTests.projectRefs *)
@@ -469,6 +471,32 @@ lazy val parserCatsEffect = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % versions.catsEffect
+    ),
+    // New module: there is no previously released artifact to check binary compatibility against yet.
+    mimaPreviousArtifacts := Set.empty,
+    mimaFailOnNoPrevious := false
+  )
+
+// fs2 integration for `kindlings-parser`: `Pipe`s feeding stream chunks into a push machine (bounded memory), with
+// effectful actions evaluated in the stream's effect.
+lazy val parserFs2 = projectMatrix
+  .in(file("parser-fs2"))
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
+  .dependsOn(parser)
+  .dependsOn(parserCatsEffect % Test)
+  .settings(
+    moduleName := "kindlings-parser-fs2",
+    name := "kindlings-parser-fs2",
+    description := "fs2 stream pipes for kindlings-parser grammars"
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(
+    libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-core" % versions.fs2
     ),
     // New module: there is no previously released artifact to check binary compatibility against yet.
     mimaPreviousArtifacts := Set.empty,

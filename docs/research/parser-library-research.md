@@ -51,6 +51,8 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
 - `ParseError.endOfInput` for REPL incomplete-input detection.
 - `kindlings-parser-cats-effect`: an `Async`/`Sync` engine (one fused `flatMap` per effectful action, `cede` every
   budget, `blocking` reads).
+- Push input (`Parser.pushMachine`: `feed`/`endOfInput`) and `kindlings-parser-fs2`: `pipe`/`bytePipe` (`Pull`-based,
+  one `Pull.eval` per effectful action, fresh machine per stream run, bounded buffers).
 
 ## 0. Requirements (as stated) and how they are read here
 
