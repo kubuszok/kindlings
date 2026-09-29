@@ -899,6 +899,70 @@ there were probed (round 5, both compilers):
 - Combinator-style rules (§5.6) can still appear as symbols in productions. They are compiled as
   sub-parsers, or inlined when they are regular (token-like).
 
+
+### 5.9 DSL limitations and workarounds (probe round 6)
+
+This round uses a stub DSL with `all` arities 1–22 (`T1…T22`), the D1 surface, and `-feature
+-deprecation -Xlint` on 2.13. It was compiled with scalac 2.13.18 and 3.8.3.
+
+**Works on both compilers.** Everything in this snippet type-checks unchanged:
+
+```scala
+grammar[Expr, IO] { g => import g._
+  val expr = nonTerminal[Expr]; val num = terminal("[0-9]+").map(_.toInt); val ident = terminal("[a-z]+")
+  left("+", "-"); left("*", "/"); right("^")                                  // yacc %left / %right
+  expr ::= (
+       all(expr, "+" || "-", expr).pure { (l, op, r) => Bin(op, l, r) }       // inline grouping = anonymous sub-production
+    || all("-", expr).prec("^").pure { (_, e) => Neg(e) }                     // %prec
+    || all(ident, "(", sepBy(expr, ","), ")").pure { (f, _, as, _) => Call(f, as) }  // EBNF helper
+    || all(num).pure(Num.apply)                                               // method reference instead of a lambda
+    || all(opt("+"), num).pure { (_, n) => Num(n) }
+  )
+  def parens[A](x: Sym[A]): Sym[A] = all("(", x, ")").pure { (_, a, _) => a } // local generic helper = template
+  expr ::= all(parens(expr)).pure(e => e)
+  expr
+}
+```
+
+**Limitations found, with workarounds**
+
+| # | Limitation | Where | Workaround / library response |
+|---|---|---|---|
+| L1 | At most **22 symbols** per `all(…)`. With 23, 2.13 dumps all 22 overload signatures. | Both (the Function22 limit on 2.13; the stub stops at 22 on 3) | A varargs fallback overload `all(syms: Sym[Any]*): TooLong` whose methods are `@compileTimeOnly`. The 2.13 error then shrinks to "functions may not have more than 22 parameters, but 23 given". Scala 3 still says "Missing parameter type", so document the limit. Users split long sequences with `group(…)` or helper non-terminals, which the macro inlines, so there is no runtime cost. |
+| L2 | A leading `\|\|` on a new line | 2.13 | Parenthesised alternatives `( … \|\| … )` (round 2) |
+| L3 | Juxtaposed tuple actions give misleading errors | 3 | `all(…)` builders (round 2) |
+| L4 | Singleton literal types widen inside `all` (`s: String`, not `"Sr."`) | Both | Static type only; the macro still constant-folds (round 4) |
+| L5 | Pure and effectful alternatives can't share a `::=`-level evidence check | Both | `{ … }` vs `.pure { … }` on the builder (round 5) |
+| L6 | `Singleton` bound syntax: `&` doesn't exist on 2.13, and `with` is deprecated on 3 | Both | Version-specific source for the few signatures that need it (shared terminals only) |
+| L7 | Declarations must precede the productions that use them | Both | Enforced by the compiler's forward-reference check (round 2) |
+| L8 | `import g._` wildcard-imports DSL names (`all`, `opt`, `rep`, `left`, …) into the block and can shadow user names | Both | Keep the DSL vocabulary small and distinctive. Users can write `g.all(…)` or rename on import. Scala's shadowing rules make any clash a compile error, not silent misbehaviour. |
+| L9 | Implicit conversions from `String`/`Regex` are in scope for the whole block, including action bodies | Both | Harmless in practice: conversions only fire when a `Sym`/`Alt` is expected. The macro additionally rejects DSL values that leak into actions (L10). |
+
+**Accepted by the typer but must be rejected by the macro, with positioned errors:**
+
+| # | Code | Why | Macro error |
+|---|---|---|---|
+| L10 | An action that references a phantom (`{ x => n0.toString }`, or capturing `expr` in a closure) | Phantoms don't exist at runtime | "grammar symbols can only be used in productions, not inside actions" |
+| L11 | A non-literal pattern: `terminal(pattern)`, `all(s.r)` | The lexer is built at compile time | "terminal patterns must be literals" (shared external terminals: §5.6) |
+| L12 | Control flow around productions: `if (…) n ::= …`, loops, productions inside actions or lambdas | The grammar must be static | "productions must be top-level statements of the grammar block" |
+| L13 | A local helper `def` that is recursive or depends on runtime values | Templates are expanded at compile time (Menhir-style) | "grammar helper `parens` must be non-recursive and take only symbols"; the termination check from §5.6 |
+| L14 | An opaque action value (`val f = …; all(a).pure(f)`) | Works, but the macro can't see which parameters are used | Allowed. Dead-value elimination (round 4) is skipped for that alternative, and a debug-build note says so. |
+| L15 | Unsupported regex features (backreferences, look-around) | The lexer is a DFA | "regex feature X is not supported in terminals" |
+| L16 | A non-terminal declared but never defined, or defined but unreachable | Grammar hygiene | Error or warning with the declaration's position |
+
+**Compile-time cost of type-checking the DSL.** These are cold, one-shot JVM runs of a generated
+grammar mixing arities 1–6, literals and lambdas, *before* any macro work:
+
+| Grammar | 2.13.18 | 3.8.3 |
+|---|---|---|
+| Stub DSL only (baseline) | 3.2 s | 4.3 s |
+| 100 productions (~200 alternatives) | 5.3 s | 5.7 s |
+| 300 productions (~600 alternatives, 1,500 lines) | 7.1 s | 7.3 s |
+
+About 3–4 s per 300 productions on a cold JVM, which is modest. Warm sbt servers should be much
+faster (not measured). LR construction and code generation in the macro come on top; spike 6 must
+measure those.
+
 ## 6. Decisions needed before prototyping
 
 1. **Grammar class.** *Resolved (2026-09-29):* a yacc-style BNF front end with LR(1) (IELR/LALR) as the
