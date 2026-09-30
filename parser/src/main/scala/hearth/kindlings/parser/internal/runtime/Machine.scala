@@ -187,13 +187,13 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     */
   def reduced(top: Int, lhs: Int, value: Any): Unit = {
     sp = top
-    push(if (llMode) 0 else tables.goto(states(top) * nonTerminalCount + lhs), value)
+    if (llMode) pushValue(value) else push(tables.goto(states(top) * nonTerminalCount + lhs), value)
   }
 
   /** Completes a reduction whose goto state is always `state`. */
   def reducedTo(top: Int, state: Int, value: Any): Unit = {
     sp = top
-    push(state, value)
+    if (llMode) pushValue(value) else push(state, value)
   }
 
   /** Completes the reduction of an effectful action: the machine stops with `effect` ([[Machine.Effect]]) and
@@ -236,8 +236,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   /** Pushes the value of the next token (already read) and consumes it. */
   def shiftToken(): Unit = {
     val literal = literals(lookahead)
-    push(
-      0,
+    pushValue(
       if (literal != null) literal
       else if (sliced(lookahead)) reductions.slice(lookahead, text, tokenStart.toInt, tokenEnd.toInt)
       else text.substring(tokenStart.toInt, tokenEnd.toInt)
@@ -259,7 +258,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       tokenStart = p.toLong
       pos = p.toLong + 1
       tokenEnd = pos
-      push(0, literals(token))
+      pushValue(literals(token))
       true
     } else false
   }
@@ -304,15 +303,25 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     _error = syntaxError("Unexpected character")
   }
 
+  /** LL mode: pushes a value (the LR state stack is not used). */
+  private def pushValue(value: Any): Unit = {
+    sp += 1
+    if (sp == values.length) grow()
+    values(sp) = value
+  }
+
   private def push(state: Int, value: Any): Unit = {
     sp += 1
-    if (sp == states.length) {
-      states = java.util.Arrays.copyOf(states, states.length * 2)
-      values = java.util.Arrays.copyOf(values.asInstanceOf[Array[AnyRef]], values.length * 2).asInstanceOf[Array[Any]]
-      prims = java.util.Arrays.copyOf(prims, prims.length * 2)
-    }
+    if (sp == states.length) grow()
     states(sp) = state
     values(sp) = value
+  }
+
+  /** Doubles the stacks. */
+  private def grow(): Unit = {
+    states = java.util.Arrays.copyOf(states, states.length * 2)
+    values = java.util.Arrays.copyOf(values.asInstanceOf[Array[AnyRef]], values.length * 2).asInstanceOf[Array[Any]]
+    prims = java.util.Arrays.copyOf(prims, prims.length * 2)
   }
 
   /** Reduces production `p`; returns `true` if an effectful action stopped the machine. */

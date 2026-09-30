@@ -113,75 +113,101 @@ private[parser] object LLProgram {
       }
     }
 
+    // which non-terminals can be inlined: used at one place, not recursive (the self-reference of a loop helper,
+    // `H ::= H x`, is the loop, not a call)
+    def callees(nt: Int): Seq[Int] = prodsOf(nt).flatMap { p =>
+      prod(p).rhs.zipWithIndex.collect { case (Flatten.RNt(id, _), i) if !(i == 0 && id == nt) => id }
+    }
+    val callSites = Array.fill(ntCount)(0)
+    callSites(root) += 1
+    (0 until ntCount).foreach(nt => callees(nt).foreach(id => callSites(id) += 1))
+    val recursive = (0 until ntCount).map { nt =>
+      val seen = mutable.Set.empty[Int]
+      val queue = mutable.Queue.from(callees(nt))
+      var found = false
+      while (queue.nonEmpty && !found) {
+        val next = queue.dequeue()
+        if (next == nt) found = true
+        else if (seen.add(next)) queue ++= callees(next)
+      }
+      found
+    }
+    def inlined(nt: Int): Boolean = callSites(nt) == 1 && !recursive(nt)
+
     // the program
+    var ok = true
     val ops = mutable.ArrayBuffer.empty[Op]
     def add(op: Op): Int = { ops += op; ops.size - 1 }
     val returnState = add(Return)
     val entries = mutable.Map.empty[Int, Int]
     val pending = mutable.Queue.empty[Int]
+
+    /** The entry of the shared (called) code of `nt`, which ends with `Return`. */
     def entry(nt: Int): Int = entries.getOrElseUpdate(nt, { pending.enqueue(nt); add(Return) }) // placeholder
-    /** The states parsing `rhs` and then going to `next`. */
+    /** The states parsing `rhs` and then going to `next`; single-use non-terminals are inlined. */
     def seq(rhs: Seq[Rhs], next: Int): Int = rhs.foldRight(next) {
-      case (Flatten.RTerm(term), n) => add(Expect(tokenOf(term), n))
-      case (Flatten.RNt(id, _), n)  => add(Call(id, entry(id), n))
+      case (Flatten.RTerm(term), n)               => add(Expect(tokenOf(term), n))
+      case (Flatten.RNt(id, _), n) if inlined(id) => code(id, n)
+      case (Flatten.RNt(id, _), n)                => add(Call(id, entry(id), n))
     }
 
-    /** Continue the loop of `nt` on the tokens that start another element, end it on the tokens that can follow it,
-      * fail on anything else (reporting both, like the LALR parser in that situation).
+    /** Continue the loop of `nt` on the tokens that start another element, end it (going to `exit`) on the tokens that
+      * can follow it, fail on anything else (reporting both, like the LALR parser in that situation).
       */
-    def loopDecision(continueOn: Set[Int], continueAt: Int, nt: Int): Op =
+    def loopDecision(continueOn: Set[Int], continueAt: Int, nt: Int, exit: Int): Op =
       Predict(
-        List(continueOn.toList.sorted -> continueAt, (follow(nt) -- continueOn).toList.sorted -> returnState),
+        List(continueOn.toList.sorted -> continueAt, (follow(nt) -- continueOn).toList.sorted -> exit),
         None,
         (continueOn ++ follow(nt)).toList.sorted
       )
-    val start = add(Accept) // placeholder, replaced below
-    val accept = add(Accept)
-    ops(start) = Call(root, entry(root), accept)
 
-    var ok = true
+    /** The code of `nt`, going to `k` when it is parsed (`returnState` for shared code); returns its first state. */
+    def code(nt: Int, k: Int): Int = origin(nt) match {
+      case Some(Flatten.FRep(_, atLeastOne, _)) =>
+        // H ::= (empty | x) and H ::= H x
+        val (base, append) = prodsOf(nt).partition(p => !prod(p).rhs.headOption.contains(Flatten.RNt(nt, false)))
+        val element = prod(append.head).rhs.drop(1)
+        val loop = add(Return) // placeholder
+        ops(loop) = loopDecision(seqFirst(element), seq(element, add(Reduce(append.head, loop))), nt, k)
+        val reduceBase = add(Reduce(base.head, loop))
+        if (atLeastOne) seq(prod(base.head).rhs, reduceBase) else reduceBase
+      case Some(Flatten.FSepBy(_, _, true, _)) =>
+        // H ::= x and H ::= H sep x
+        val (base, append) = prodsOf(nt).partition(p => !prod(p).rhs.headOption.contains(Flatten.RNt(nt, false)))
+        val sepAndElement = prod(append.head).rhs.drop(1)
+        val loop = add(Return) // placeholder
+        ops(loop) =
+          loopDecision(seqFirst(sepAndElement.take(1)), seq(sepAndElement, add(Reduce(append.head, loop))), nt, k)
+        seq(prod(base.head).rhs, add(Reduce(base.head, loop)))
+      case _ =>
+        // a choice between the productions by the next token
+        val predicts = prodsOf(nt).map { p =>
+          val rhs = prod(p).rhs
+          p -> (seqFirst(rhs) ++ (if (seqNullable(rhs)) follow(nt) else Set.empty))
+        }
+        val all = predicts.flatMap(_._2)
+        if (
+          all.size != all.distinct.size || predicts.exists { case (p, _) =>
+            prod(p).rhs.headOption.contains(Flatten.RNt(nt, false))
+          }
+        ) ok = false
+        if (predicts.size == 1) seq(prod(predicts.head._1).rhs, add(Reduce(predicts.head._1, k)))
+        else
+          add(
+            Predict(
+              predicts.toList.map { case (p, tokens) => tokens.toList.sorted -> seq(prod(p).rhs, add(Reduce(p, k))) },
+              None,
+              all.distinct.sorted.toList
+            )
+          )
+    }
+
+    val accept = add(Accept)
+    val start = seq(Vector(Flatten.RNt(root, false)), accept)
     while (pending.nonEmpty && ok) {
       val nt = pending.dequeue()
-      val code: Op = origin(nt) match {
-        case Some(Flatten.FRep(_, atLeastOne, _)) =>
-          // H ::= (empty | x) and H ::= H x
-          val (base, append) = prodsOf(nt).partition(p => !prod(p).rhs.headOption.contains(Flatten.RNt(nt, false)))
-          val element = prod(append.head).rhs.drop(1)
-          val loop = add(Return) // placeholder
-          ops(loop) = loopDecision(seqFirst(element), seq(element, add(Reduce(append.head, loop))), nt)
-          val reduceBase = add(Reduce(base.head, loop))
-          if (atLeastOne) Call(-1, seq(prod(base.head).rhs, reduceBase), -1) else Reduce(base.head, loop)
-        case Some(Flatten.FSepBy(_, _, true, _)) =>
-          // H ::= x and H ::= H sep x
-          val (base, append) = prodsOf(nt).partition(p => !prod(p).rhs.headOption.contains(Flatten.RNt(nt, false)))
-          val sepAndElement = prod(append.head).rhs.drop(1)
-          val loop = add(Return) // placeholder
-          ops(loop) =
-            loopDecision(seqFirst(sepAndElement.take(1)), seq(sepAndElement, add(Reduce(append.head, loop))), nt)
-          Call(-1, seq(prod(base.head).rhs, add(Reduce(base.head, loop))), -1)
-        case _ =>
-          // a choice between the productions by the next token
-          val predicts = prodsOf(nt).map { p =>
-            val rhs = prod(p).rhs
-            p -> (seqFirst(rhs) ++ (if (seqNullable(rhs)) follow(nt) else Set.empty))
-          }
-          val all = predicts.flatMap(_._2)
-          if (
-            all.size != all.distinct.size || predicts.exists { case (p, _) =>
-              prod(p).rhs.headOption.contains(Flatten.RNt(nt, false))
-            }
-          )
-            ok = false
-          Predict(
-            predicts.toList.map { case (p, tokens) =>
-              tokens.toList.sorted -> seq(prod(p).rhs, add(Reduce(p, returnState)))
-            },
-            None,
-            all.distinct.sorted.toList
-          )
-      }
-      // the entry placeholder jumps to the code (a `Call(-1, state, -1)` marks "go to state")
-      ops(entries(nt)) = code
+      // the entry placeholder jumps to the shared code (a `Call(-1, state, -1)` marks "go to state")
+      ops(entries(nt)) = Call(-1, code(nt, returnState), -1)
     }
     if (!ok) None
     else {

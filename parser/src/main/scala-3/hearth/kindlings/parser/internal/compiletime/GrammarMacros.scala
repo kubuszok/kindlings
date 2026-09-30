@@ -243,6 +243,7 @@ private[parser] object GrammarMacros {
       case None          => '{ throw new UnsupportedOperationException("no LL(1) program") }
       case Some(program) =>
         '{
+          val reductions = $m.generatedReductions
           var state = $m.llResumeState
           var steps = 0
           var status = -1
@@ -251,7 +252,16 @@ private[parser] object GrammarMacros {
             else {
               steps += 1
               ${
-                new LLEmitter(out, program, m, 'state, x => '{ state = $x }, x => '{ status = $x }, 'status).states
+                new LLEmitter(
+                  out,
+                  program,
+                  m,
+                  'reductions,
+                  'state,
+                  x => '{ state = $x },
+                  x => '{ status = $x },
+                  'status
+                ).states
               }
             }
           catch {
@@ -268,6 +278,7 @@ private[parser] object GrammarMacros {
         out: GrammarCompiler.Output,
         program: LLProgram.Program,
         m: Expr[Machine],
+        reductions: Expr[hearth.kindlings.parser.internal.runtime.GeneratedReductions],
         state: Expr[Int],
         setState: LexerEmitter.Setter,
         setStatus: LexerEmitter.Setter,
@@ -316,7 +327,7 @@ private[parser] object GrammarMacros {
           case LLProgram.Reduce(p, next)      =>
             '{
               ${ setState(Expr(next)) }
-              if $m.generatedReductions.reduce(${ Expr(p) }, $m) then ${ setStatus('{ Machine.Effect }) }
+              if $reductions.reduce(${ Expr(p) }, $m) then ${ setStatus('{ Machine.Effect }) }
             }
           case LLProgram.Return                       => setState('{ $m.popFrame() })
           case LLProgram.Predict(choices, default, _) =>
