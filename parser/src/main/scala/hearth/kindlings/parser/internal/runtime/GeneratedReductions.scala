@@ -21,6 +21,14 @@ abstract class GeneratedReductions {
   /** Runs the LL(1) program on `m` (see `Machine`'s LL API) for at most `budget` steps; returns a `Machine` signal. */
   def runLL(m: Machine, budget: Int): Int
 
+  /** Whether [[descend]] is generated: the grammar is LL(1) (see `DescentPlan`). */
+  def hasDescent: Boolean
+
+  /** Parses all of `text` by recursive descent (see `Machine`'s descent API) and returns the value; throws
+    * [[DescentBail]] when it cannot (the machine then parses the input itself).
+    */
+  def descend(m: Machine, text: String): Any
+
   /** Whether [[lexString]] is generated (large lexers stay table-driven). */
   def hasStringLexer: Boolean
 

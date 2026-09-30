@@ -45,6 +45,17 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   private var frames = new Array[Int](64)
   private var fp = -1
 
+  /** Whether the generated recursive-descent parser is tried first (`String` inputs of LL(1) grammars, until the first
+    * `run`).
+    */
+  private var descentPending: Boolean = text != null && reductions != null && reductions.hasDescent
+
+  /** Whether the result came from the recursive-descent parser (for tests). */
+  private[parser] var descended: Boolean = false
+
+  /** Parses with the machine only (for tests comparing both parsers). */
+  private[parser] def skipDescent(): Unit = descentPending = false
+
   private val simpleSkip = tables.simpleSkip
   private val tokenCount = tables.tokenCount
   private val actionTable = tables.action
@@ -108,6 +119,23 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     * needed, or `budget` shifts and reductions (LL mode: program steps) were made.
     */
   def run(budget: Int = Int.MaxValue): Int = {
+    if (descentPending && budget == Int.MaxValue) {
+      descentPending = false
+      try {
+        _result = reductions.descend(this, text)
+        descended = true
+        return Machine.Done
+      } catch {
+        // syntax errors, rejected values and deep nesting are left to the machine
+        case DescentBail | _: RejectedValue | _: StackOverflowError =>
+          pos = 0L
+          lookahead = -1
+          tokenStart = 0L
+          tokenEnd = 0L
+          _error = null
+      }
+    }
+    descentPending = false
     if (llMode) return reductions.runLL(this, budget)
     var steps = 0
     while (steps < budget) {
@@ -213,6 +241,106 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     pos = end.toLong
   }
 
+  // --- used by the generated recursive-descent parser (`GeneratedReductions.descend`) -----------------------------
+
+  private var cursor = 0
+  private var lexedAt = -1
+  private var depth = 0
+
+  /** Where the recursive-descent parser is in the text. */
+  def descentPos: Int = cursor
+
+  /** Moves the recursive-descent parser to `p`. */
+  def descentMoveTo(p: Int): Unit = cursor = p
+
+  /** Skips simple skipped text (whitespace) and returns the next char, `-1` at the end of the text. */
+  def descentPeek(): Int = {
+    val t = text
+    val length = t.length
+    var p = cursor
+    while (p < length && { val d = t.charAt(p); d < 128 && simpleSkip(d.toInt) }) p += 1
+    cursor = p
+    if (p < length) t.charAt(p).toInt else -1
+  }
+
+  /** Lexes the token at the cursor (once per position) and returns its id. The cursor moves to the token's start (past
+    * skipped text such as comments).
+    */
+  def descentLex(): Int = {
+    if (lexedAt != cursor) {
+      if (reductions.lexString(this, text, cursor) != Machine.Done) throw DescentBail
+      cursor = tokenStart.toInt
+      lexedAt = cursor
+    }
+    lookahead
+  }
+
+  /** Skips simple skipped text (whitespace) and returns the cursor: where a token scanner starts. */
+  def descentScanStart(): Int = {
+    val _ = descentPeek()
+    cursor
+  }
+
+  /** A generated token scanner read the token at `[start, end)` ([[tokenStartIndex]], [[tokenEndIndex]]). */
+  def descentTokenAt(start: Int, end: Int): Unit = {
+    tokenStart = start.toLong
+    tokenEnd = end.toLong
+    cursor = end
+  }
+
+  /** Consumes the `n`-char literal a decision found at the cursor. */
+  def descentSkip(n: Int): Unit = cursor += n
+
+  /** Reads the literal `token` = `word` whose first char a decision found at the cursor. */
+  def descentRest(word: String, token: Int): Unit =
+    if (restMatches(word)) cursor += word.length else descentToken(token)
+
+  /** Whether the text at the cursor continues with `word` after its first char (short words: a plain loop is faster
+    * than `startsWith`).
+    */
+  private def restMatches(word: String): Boolean = {
+    val t = text
+    val n = word.length
+    val at = cursor
+    if (at + n > t.length) false
+    else {
+      var i = 1
+      while (i < n && t.charAt(at + i) == word.charAt(i)) i += 1
+      i == n
+    }
+  }
+
+  /** Reads token `token` with the lexer ([[tokenStartIndex]], [[tokenEndIndex]]); gives up on another token. */
+  def descentToken(token: Int): Unit = {
+    if (descentLex() != token) throw DescentBail
+    cursor = tokenEnd.toInt
+  }
+
+  /** Reads the one-char literal `token` = `c` (no other token starts with `c`). */
+  def descentChar(c: Char, token: Int): Unit =
+    if (descentPeek() == c) cursor += 1 else descentToken(token)
+
+  /** Reads the literal `token` = `word` (no other token starts with its first char). */
+  def descentWord(word: String, token: Int): Unit =
+    if (descentPeek() == word.charAt(0) && restMatches(word)) cursor += word.length
+    else descentToken(token)
+
+  /** The whole text must have been read. */
+  def descentEnd(): Unit =
+    if (descentPeek() >= 0 && descentLex() != 0) throw DescentBail
+
+  /** Enters a recursive non-terminal; gives up beyond [[Machine.MaxDescentDepth]] (the machine has no depth limit). */
+  def descentEnter(): Unit = {
+    depth += 1
+    if (depth > Machine.MaxDescentDepth) throw DescentBail
+  }
+
+  /** Leaves a recursive non-terminal. */
+  def descentExit(): Unit = depth -= 1
+
+  /** Gives up: the machine parses the input instead. */
+  def descentFail(): Nothing = throw DescentBail
+
   // --- used by the generated LL(1) program (`GeneratedReductions.runLL`) ------------------------------------------
 
   /** The generated code of the grammar (the LL program calls its `reduce`). */
@@ -226,6 +354,12 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
 
   /** The next token, or `-1` if it was not read yet. */
   def lookaheadToken: Int = lookahead
+
+  /** Where the last token read starts. */
+  def tokenStartIndex: Int = tokenStart.toInt
+
+  /** Where the last token read ends (and lexing continues). */
+  def tokenEndIndex: Int = tokenEnd.toInt
 
   /** Reads the next token (in LL state `state`, for error messages): `Machine.Done` or `Machine.Error`. */
   def readToken(state: Int): Int = {
@@ -508,6 +642,11 @@ object Machine {
   final val Effect = 2
   final val NeedInput = 3
   final val Yield = 4
+
+  /** The nesting of recursive non-terminals up to which the generated recursive-descent parser runs on the JVM stack;
+    * deeper inputs are parsed by the machine.
+    */
+  final val MaxDescentDepth = 1000
 
   private[parser] def quote(text: String): String = {
     val sb = new StringBuilder("\"")

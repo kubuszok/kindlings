@@ -52,6 +52,9 @@ private[parser] object GrammarMacros {
           def hasLL: Boolean = ${ Expr(out.ll.isDefined) }
           def runLL(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, budget: Int): Int =
             ${ Codegen.runLL(out, 'm, 'budget) }
+          def hasDescent: Boolean = ${ Expr(out.descent.isDefined) }
+          def descend(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String): Any =
+            ${ Codegen.descend(out, colls, 'm, 'text, 'collectionFactories) }
           def hasStringLexer: Boolean = ${ Expr(out.lexer.isDefined) }
           def lexString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String, from: Int): Int =
             ${ Codegen.lexString(out, 'm, 'text, 'from) }
@@ -143,36 +146,11 @@ private[parser] object GrammarMacros {
         // read through the getter: a local val would be unused in grammars without primitive values
         def bits(i: Int): Expr[Long] = '{ $m.stackPrims($top + ${ Expr(i - r.len + 1) }) }
         def value(rhs: CodegenPlan.RhsPlan, i: Int): Term = rhs match {
-          case CodegenPlan.NtPlan(None, 0)     => raw(i).asTerm
-          case CodegenPlan.NtPlan(None, prim)  => decode(prim, bits(i))
-          case CodegenPlan.NtPlan(Some(id), _) => applyFn(colls(id).result, List(raw(i).asTerm))
-          case CodegenPlan.TermPlan(None)      => raw(i).asTerm
-          case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw(i).asTerm)
+          case CodegenPlan.NtPlan(None, prim) if prim != Boxed => decode(prim, bits(i))
+          case _                                               => rhsValue(out, colls, rhs, raw(i).asTerm)
         }
         val newTop = '{ $top - ${ Expr(r.len) } }
-        val result: Term = r.body match {
-          case CodegenPlan.ReduceBody.User(action, rhs, _) =>
-            val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
-              val tpe = action.paramTypes(i).asInstanceOf[TypeRepr]
-              if !action.used(i) then cast('{ null }.asTerm, tpe)
-              else cast(value(plan, i), tpe)
-            }
-            applyFn(action.tree, args)
-          case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, 0)
-          case CodegenPlan.ReduceBody.Const(text)       => Literal(StringConstant(text))
-          case CodegenPlan.ReduceBody.OptNone           => '{ None }.asTerm
-          case CodegenPlan.ReduceBody.OptSome(rhs)      => '{ Some(${ value(rhs, 0).asExprOf[Any] }) }.asTerm
-          case CodegenPlan.ReduceBody.Collect(id, step) =>
-            val code = colls(id)
-            def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(id) }) }.asTerm))
-            step match {
-              case CodegenPlan.CollectionStep.Empty        => newBuilder
-              case CodegenPlan.CollectionStep.One(element) =>
-                applyFn(code.add, List(newBuilder, value(element, 0)))
-              case CodegenPlan.CollectionStep.Append(i, element) =>
-                applyFn(code.add, List(raw(0).asTerm, value(element, i)))
-            }
-        }
+        val result: Term = bodyTerm(colls, factories, r.body, value, raw(0).asTerm)
         val v = result.asExprOf[Any]
         val body: Expr[Boolean] = r.body match {
           case CodegenPlan.ReduceBody.User(_, _, true) =>
@@ -195,6 +173,261 @@ private[parser] object GrammarMacros {
       val fallback =
         CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no reduction for production " + $p) }.asTerm)
       Match(p.asTerm, cases :+ fallback).asExprOf[Boolean]
+    }
+
+    /** The value of a right-hand side symbol from its `raw` value (as on the value stack). */
+    private def rhsValue(using
+        q: Quotes
+    )(
+        out: GrammarCompiler.Output,
+        colls: Vector[Collections],
+        rhs: CodegenPlan.RhsPlan,
+        raw: q.reflect.Term
+    ): q.reflect.Term = rhs match {
+      case CodegenPlan.NtPlan(Some(id), _) => applyFn(colls(id).result, List(raw))
+      case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw)
+      case _                               => raw
+    }
+
+    /** The value of a reduction's `body`; `value(plan, i)` gives right-hand side position `i`'s value, `builder` the
+      * builder a collection step appends to.
+      */
+    private def bodyTerm(using
+        q: Quotes
+    )(
+        colls: Vector[Collections],
+        factories: Expr[Array[Any]],
+        body: CodegenPlan.ReduceBody,
+        value: (CodegenPlan.RhsPlan, Int) => q.reflect.Term,
+        builder: => q.reflect.Term
+    ): q.reflect.Term = {
+      import q.reflect.*
+      body match {
+        case CodegenPlan.ReduceBody.User(action, rhs, _) =>
+          val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
+            val tpe = action.paramTypes(i).asInstanceOf[TypeRepr]
+            if !action.used(i) then cast('{ null }.asTerm, tpe)
+            else cast(value(plan, i), tpe)
+          }
+          applyFn(action.tree, args)
+        case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, 0)
+        case CodegenPlan.ReduceBody.Const(text)       => Literal(StringConstant(text))
+        case CodegenPlan.ReduceBody.OptNone           => '{ None }.asTerm
+        case CodegenPlan.ReduceBody.OptSome(rhs)      => '{ Some(${ value(rhs, 0).asExprOf[Any] }) }.asTerm
+        case CodegenPlan.ReduceBody.Collect(id, step) =>
+          val code = colls(id)
+          def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(id) }) }.asTerm))
+          step match {
+            case CodegenPlan.CollectionStep.Empty        => newBuilder
+            case CodegenPlan.CollectionStep.One(element) =>
+              applyFn(code.add, List(newBuilder, value(element, 0)))
+            case CodegenPlan.CollectionStep.Append(i, element) =>
+              applyFn(code.add, List(builder, value(element, i)))
+          }
+      }
+    }
+
+    def descend(
+        out: GrammarCompiler.Output,
+        colls: Vector[Collections],
+        m: Expr[Machine],
+        text: Expr[String],
+        factories: Expr[Array[Any]]
+    )(using q: Quotes): Expr[Any] = out.descent match {
+      case None          => '{ throw new UnsupportedOperationException("no recursive-descent parser") }
+      case Some(program) =>
+        import q.reflect.*
+        val emitter = new DescentEmitter(out, colls, m, text, factories)
+        val owner = Symbol.spliceOwner
+        val methods = program.methods.map { case (nt, _) =>
+          nt -> Symbol.newMethod(owner, s"nt$nt", MethodType(Nil)(_ => Nil, _ => TypeRepr.of[Any]))
+        }.toMap
+        emitter.methods = methods
+        val scanners = program.scanners.map { case (t, _) =>
+          t -> Symbol.newMethod(
+            owner,
+            s"scan$t",
+            MethodType(List("from"))(_ => List(TypeRepr.of[Int]), _ => TypeRepr.of[Int])
+          )
+        }.toMap
+        emitter.scanners = scanners
+        val scanDefs = program.scanners.toList.map { case (t, lexer) =>
+          val sym = scanners(t)
+          DefDef(
+            sym,
+            {
+              case List(List(from: Term)) =>
+                given Quotes = sym.asQuotes
+                Some(scanBody(lexer, text, from.asExprOf[Int]).asTerm.changeOwner(sym))
+              case _ => None
+            }
+          )
+        }
+        val defs = program.methods.toList.map { case (nt, cd) =>
+          val sym = methods(nt)
+          DefDef(
+            sym,
+            _ => {
+              given Quotes = sym.asQuotes
+              val body = emitter.code(cd).asExprOf[Any]
+              Some(
+                (if program.recursive(nt) then '{ $m.descentEnter(); val v: Any = $body; $m.descentExit(); v }
+                 else body).asTerm.changeOwner(sym)
+              )
+            }
+          )
+        }
+        val root = emitter.item(program.root, None).asExprOf[Any]
+        Block(scanDefs ++ defs, '{ val result: Any = $root; $m.descentEnd(); result }.asTerm).asExprOf[Any]
+    }
+
+    /** The body of a token scanner (see `DescentPlan.Read.Scan`): the end of the token at `from`, `-1` if none. */
+    private def scanBody(lexer: CodegenPlan.Lexer, text: Expr[String], from: Expr[Int])(using Quotes): Expr[Int] =
+      '{
+        val len = $text.length
+        var i = $from
+        var acc = -1
+        var accEnd = $from
+        var state = 0
+        while state >= 0 do ${
+          new LexerEmitter(
+            text,
+            'len,
+            'i,
+            x => '{ i = $x },
+            x => '{ acc = $x; accEnd = i },
+            x => '{ state = $x }
+          ).states(lexer, 'state)
+        }
+        if acc < 0 then -1 else accEnd
+      }
+
+    /** Emits the code of a [[DescentPlan.Program]] (see `descend`); every method takes the `Quotes` of the method it
+      * emits into.
+      */
+    final private class DescentEmitter(
+        out: GrammarCompiler.Output,
+        colls: Vector[Collections],
+        m: Expr[Machine],
+        text: Expr[String],
+        factories: Expr[Array[Any]]
+    ) {
+      var methods: Map[Int, Any] = Map.empty
+      var scanners: Map[Int, Any] = Map.empty
+      private val bodies = out.reduces.map(r => r.p -> r).toMap
+      private val slicers = out.slicers.toMap
+
+      private def consume(tok: DescentPlan.Tok)(using Quotes): Expr[Unit] = tok.read match {
+        case DescentPlan.Read.OneChar(ch)       => '{ $m.descentChar(${ Expr(ch) }, ${ Expr(tok.token) }) }
+        case DescentPlan.Read.Word(word)        => '{ $m.descentWord(${ Expr(word) }, ${ Expr(tok.token) }) }
+        case DescentPlan.Read.Lexed             => '{ $m.descentToken(${ Expr(tok.token) }) }
+        case DescentPlan.Read.Decided           => '{ $m.descentSkip(1) }
+        case DescentPlan.Read.DecidedWord(word) => '{ $m.descentRest(${ Expr(word) }, ${ Expr(tok.token) }) }
+        case DescentPlan.Read.Scan              =>
+          def call(start: Expr[Int])(using q2: Quotes): Expr[Int] = {
+            import q2.reflect.*
+            Apply(Ref(scanners(tok.token).asInstanceOf[Symbol]), List(start.asTerm)).asExprOf[Int]
+          }
+          '{
+            val start = $m.descentScanStart()
+            val end = ${ call('start) }
+            if end >= 0 then $m.descentTokenAt(start, end) else $m.descentToken(${ Expr(tok.token) })
+          }
+      }
+
+      /** The token's value, as the machine shifts it. */
+      private def tokenValue(using q: Quotes)(tok: DescentPlan.Tok): q.reflect.Term = {
+        import q.reflect.*
+        if tok.sliced then {
+          val call =
+            applyFn(slicers(tok.token), List(text.asTerm, '{ $m.tokenStartIndex }.asTerm, '{ $m.tokenEndIndex }.asTerm))
+          Block(List(consume(tok).asTerm), call)
+        } else
+          tok.literal match {
+            case Some(lit) => Block(List(consume(tok).asTerm), Literal(StringConstant(lit)))
+            case None      => '{ ${ consume(tok) }; $text.substring($m.tokenStartIndex, $m.tokenEndIndex) }.asTerm
+          }
+      }
+
+      def item(using q: Quotes)(it: DescentPlan.Item, acc: Option[q.reflect.Term]): q.reflect.Term = {
+        import q.reflect.*
+        it match {
+          case tok: DescentPlan.Tok      => tokenValue(tok)
+          case DescentPlan.Call(nt)      => Apply(Ref(methods(nt).asInstanceOf[Symbol]), Nil)
+          case DescentPlan.Inline(_, cd) => code(cd)
+          case DescentPlan.Acc           => acc.get
+        }
+      }
+
+      private def production(using q: Quotes)(prod: DescentPlan.Prod, acc: Option[q.reflect.Term]): q.reflect.Term = {
+        import q.reflect.*
+        val r = bodies(prod.p)
+        val locals = mutable.Map.empty[Int, Term]
+        val stats = prod.items.zipWithIndex.zip(prod.used).flatMap {
+          case ((DescentPlan.Acc, _), _)          => Nil
+          case ((tok: DescentPlan.Tok, _), false) => List(consume(tok).asTerm)
+          case ((it, _), false)                   => List(item(it, acc))
+          case ((it, i), true)                    =>
+            val rhs = item(it, acc)
+            val sym = Symbol.newVal(Symbol.spliceOwner, s"a$i", rhs.tpe.widen, Flags.EmptyFlags, Symbol.noSymbol)
+            locals(i) = Ref(sym)
+            List(ValDef(sym, Some(rhs.changeOwner(sym))))
+        }
+        def local(i: Int): Term = prod.items(i) match {
+          case DescentPlan.Acc => acc.get
+          case _               => locals(i)
+        }
+        val result =
+          bodyTerm(colls, factories, r.body, (plan, i) => rhsValue(out, colls, plan, local(i)), local(0))
+        Block(stats.toList, Typed(result, Inferred(TypeRepr.of[Any])))
+      }
+
+      private def decision(using q: Quotes)(d: DescentPlan.Decision): q.reflect.Term = {
+        import q.reflect.*
+        val fallback: Term = if d.failByDefault then '{ $m.descentFail() }.asTerm else Literal(IntConstant(-1))
+        def result(k: Int): Term = if k < 0 then fallback else Literal(IntConstant(k))
+        def ints(xs: List[Int]): Tree =
+          if xs.size == 1 then Literal(IntConstant(xs.head)) else Alternatives(xs.map(x => Literal(IntConstant(x))))
+        val tokenCases = d.tokens.map { case (ts, k) => CaseDef(ints(ts), None, result(k)) }
+        val byToken = Match('{ $m.descentLex() }.asTerm, tokenCases :+ CaseDef(Wildcard(), None, fallback))
+        val c = Symbol.newVal(Symbol.spliceOwner, "c", TypeRepr.of[Int], Flags.EmptyFlags, Symbol.noSymbol)
+        val charCases = d.chars.map { case (cs, k) => CaseDef(ints(cs), None, result(k)) }
+        Block(
+          List(ValDef(c, Some('{ $m.descentPeek() }.asTerm))),
+          Match(
+            Ref(c),
+            charCases ++ List(
+              CaseDef(Literal(IntConstant(-1)), None, result(d.eof)),
+              CaseDef(Wildcard(), None, byToken)
+            )
+          )
+        )
+      }
+
+      def code(using q: Quotes)(cd: DescentPlan.Code): q.reflect.Term = {
+        import q.reflect.*
+        cd match {
+          case DescentPlan.Single(prod)       => production(prod, None)
+          case DescentPlan.Choose(dec, prods) =>
+            val cases = prods.toList.zipWithIndex.map { case (prod, k) =>
+              CaseDef(Literal(IntConstant(k)), None, production(prod, None))
+            }
+            Typed(
+              Match(decision(dec), cases :+ CaseDef(Wildcard(), None, '{ $m.descentFail() }.asTerm)),
+              Inferred(TypeRepr.of[Any])
+            )
+          case DescentPlan.Loop(base, dec, append) =>
+            val acc = Symbol.newVal(Symbol.spliceOwner, "acc", TypeRepr.of[Any], Flags.Mutable, Symbol.noSymbol)
+            val cond = '{ ${ decision(dec).asExprOf[Int] } == 0 }.asTerm
+            Block(
+              List(
+                ValDef(acc, Some(production(base, None).changeOwner(acc))),
+                While(cond, Assign(Ref(acc), production(append, Some(Ref(acc)))))
+              ),
+              Ref(acc)
+            )
+        }
+      }
     }
 
     def lexString(out: GrammarCompiler.Output, m: Expr[Machine], text: Expr[String], from: Expr[Int])(using

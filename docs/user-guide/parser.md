@@ -243,15 +243,36 @@ val parser: Parser[IO, Int] = Grammar.grammar[Int, IO] { g =>
 - `Reader`/`InputStream` inputs are read with `Sync.blocking`;
 - the machine is allocated when the `F[R]` runs: running the same `parser.parse(input)` value twice parses twice.
 
-## Two parsers: LL(1) and LALR(1)
+## How a grammar is parsed
 
 Every grammar is compiled into LALR(1) tables, which handle left recursion, operator precedence and most programming
-language grammars; this is the default parser. With `enable(RequireLL1)`, a grammar that is **LL(1)** (it can be parsed
-top down by looking at the next token only, which is true of most data formats: JSON, configuration files, protocols)
-gets a generated top-down parser for `String` inputs instead, and a grammar that is not fails to compile with an
-explanation. Both parsers give the same values. The LL(1) parser's error messages list only the tokens valid in the
-current context (the LALR(1) parser can also list tokens valid in other contexts); on the JSON benchmark it is currently
-~14% slower than the LALR(1) parser. `Reader`/`InputStream` and push inputs always use the LALR(1) tables.
+language grammars. The **LALR(1) machine** that runs them keeps its stack on the heap (any nesting depth), can stop
+and resume (effectful actions, streamed and pushed input, step budgets) and reports syntax errors.
+
+When a grammar is **LL(1)** - it can be parsed top down by looking at the next token only, which is true of most data
+formats: JSON, configuration files, protocols - it also gets a generated **recursive-descent parser**, detected
+automatically. It is the fast path for `String` inputs: every rule is a method that returns its value (no value or
+state stack, repetitions fill their collection in place), choices are made on the next character where only one token
+can start with it, punctuation and keywords are compared with the input instead of being lexed, and every other token
+with a unique first character has a scanner of its own. On the JSON benchmark it is ~1.8x faster than the LALR(1)
+machine and within ~10-20% of jawn, the hand-written parser behind circe (see
+[the benchmarks](../research/parser-vs-jawn.md)).
+
+The recursive-descent parser does not report errors itself: on a syntax error, a value rejected by a collection, or
+nesting deeper than 1000 levels, it gives up and the machine parses the input again, reporting the error with its
+usual messages (or parsing the deep input on the heap). Both parsers run the same actions in the same order and give
+the same values, but on those inputs the actions that ran before the problem run a second time: keep actions free of
+side effects. The fast path is used when:
+
+- the grammar is LL(1) and has no effectful actions and no precedence declarations (`left`/`right`/`nonassoc` settle
+  choices only for the LALR(1) parser), and `RequireLALR` is not enabled;
+- the input is a `String` (`Reader`/`InputStream`/push inputs use the machine);
+- the engine runs the parse to completion (`Id`, `Option`, `Try`, `Either`, `Future`); the Cats Effect and fs2 engines
+  run the machine with a step budget so that long parses yield to other fibers.
+
+With `enable(RequireLL1)`, a grammar that is not LL(1) fails to compile with an explanation, and the machine that the
+recursive-descent parser falls back to is a generated top-down one: its error messages list only the tokens valid in
+the current context (the LALR(1) machine can also list tokens valid in other contexts).
 
 ### Grammar flags
 
@@ -267,8 +288,8 @@ Grammar.grammar[Json, Id] { g =>
 
 | Flag | Effect |
 |---|---|
-| `RequireLL1` | the grammar must be LL(1) - otherwise compilation fails with an explanation of every problem (like `@tailrec` for tail calls) - and `String` inputs are parsed top down |
-| `RequireLALR` | use the LALR(1) parser (the default; states it explicitly) |
+| `RequireLL1` | the grammar must be LL(1) - otherwise compilation fails with an explanation of every problem (like `@tailrec` for tail calls) - and errors on `String` inputs are reported by a top-down machine |
+| `RequireLALR` | use only the LALR(1) machine, without the recursive-descent fast path of LL(1) grammars |
 | `ThrowingInRuntime` | allow collections whose smart constructor can reject values in effects without an error channel (`Id`); the rejection is thrown as a `ParseError` |
 
 `disable(flag)` states that a flag is off (flags are off by default); setting a flag both ways, or requiring both parsers,
@@ -370,8 +391,9 @@ prefix. A REPL can use it to ask for another line instead of reporting an error.
 
 ## Generated vs interpreted actions
 
-`Grammar.grammar` generates the code of the actions, of every reduction (with its stack effects compiled in) and, for
-`String` inputs, of the lexer (the token automaton becomes code, unless it is very large). Values of non-terminals
+`Grammar.grammar` generates the code of the actions, of every reduction (with its stack effects compiled in), of the
+recursive-descent parser of LL(1) grammars and, for `String` inputs, of the lexer (the token automaton becomes code,
+unless it is very large). Values of non-terminals
 declared with a primitive type (`nonTerminal[Int]`, `nonTerminal[Double]`, ...) are kept unboxed between reductions. `Grammar.interpreted` (same syntax) instead evaluates the grammar
 block once at run time and calls the actions as function values: it is slower and exists as a fallback and as a
 benchmark baseline. Because generated actions are moved out of the grammar block, they may use anything in scope

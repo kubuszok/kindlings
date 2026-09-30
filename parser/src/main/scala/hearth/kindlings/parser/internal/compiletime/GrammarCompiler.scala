@@ -28,6 +28,8 @@ private[parser] object GrammarCompiler {
     *   literal tokens of one ASCII char that no longer token can start with (parsed without the lexer)
     * @param slicers
     *   the `.mapSlice` functions, by token id (only when compiling for generated code)
+    * @param descent
+    *   the recursive-descent fast path, for generated code of LL(1) grammars (see [[DescentPlan]])
     */
   final case class Output(
       tables: List[String],
@@ -41,7 +43,8 @@ private[parser] object GrammarCompiler {
       slicers: Vector[(Int, Any)],
       flags: Set[String],
       ll: Option[LLProgram.Program],
-      singleCharTokens: Map[Int, Char]
+      singleCharTokens: Map[Int, Char],
+      descent: Option[DescentPlan.Program]
   )
 
   /** @param generated
@@ -406,6 +409,64 @@ private[parser] object GrammarCompiler {
           } =>
         (i + 1) -> text.charAt(0)
     }.toMap
+    val generatedLexer = if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None
+    // the token each ASCII char starts, when no other token (skipped ones included) can start with it
+    val uniqueStart: Map[Int, Int] = {
+      def targetOf(state: Int, c: Int): Int =
+        (dfa.transStart(state) until dfa.transStart(state + 1))
+          .collectFirst { case t if dfa.lo(t) <= c && c <= dfa.hi(t) => dfa.target(t) }
+          .getOrElse(-1)
+      (0 until 128).flatMap { c =>
+        val s = targetOf(0, c)
+        if (s < 0) None
+        else {
+          val seen = mutable.BitSet(s)
+          val queue = mutable.Queue(s)
+          val accepted = mutable.Set.empty[Int]
+          while (queue.nonEmpty) {
+            val state = queue.dequeue()
+            if (dfa.accept(state) >= 0) accepted += dfa.accept(state)
+            (dfa.transStart(state) until dfa.transStart(state + 1)).foreach { t =>
+              if (seen.add(dfa.target(t))) queue.enqueue(dfa.target(t))
+            }
+          }
+          if (accepted.size == 1 && accepted.head <= tokens.size) Some(c -> accepted.head) else None
+        }
+      }.toMap
+    }
+    // the recursive-descent fast path: LL(1) grammars without effectful actions or precedence declarations (which
+    // only settle LALR choices), parsed with the generated lexer, unless the LALR parser is required
+    val descent: Option[DescentPlan.Program] =
+      if (
+        generated && generatedLexer.isDefined && ll1.isLL1 && !flags("RequireLALR") &&
+        !g.statements.exists(_.isInstanceOf[Precedence]) &&
+        !reduces
+          .result()
+          .exists(_.body match {
+            case ReduceBody.User(_, _, effectful) => effectful
+            case _                                => false
+          })
+      )
+        DescentPlan.build(
+          new FlatAnalysis(g.root, flat.nonTerminals, prods, t => tokenId(t.pattern)),
+          g.root,
+          flat.origins,
+          g.nonTerminals.size,
+          t => tokenId(t.pattern),
+          reduces.result().map(r => r.p -> r.body).toMap,
+          t => t >= 1 && t <= tokens.size && slicerOf.get(tokens(t - 1).pattern).exists(_.isDefined),
+          uniqueStart,
+          // regex tokens get a scanner of their own (literals are compared with the input)
+          uniqueStart
+            .groupBy(_._2)
+            .collect {
+              case (t, starts) if tokens(t - 1).pattern.isInstanceOf[RegexPattern] =>
+                CodegenPlan.scanner(dfa, starts.keySet).map(t -> _)
+            }
+            .flatten
+            .toMap
+        )
+      else None
     val tables = new Tables(
       tokenCount = tokenCount,
       tokenNames = tokenNames,
@@ -451,12 +512,13 @@ private[parser] object GrammarCompiler {
         converterIds.keys.toVector.map(_.converters),
         collections.result(),
         reduces.result(),
-        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None,
+        generatedLexer,
         if (generated) slicerOf.toVector.collect { case (pattern, Some(fn)) => tokenId(pattern) -> fn }.sortBy(_._1)
         else Vector.empty,
         flags,
         llProgram,
-        singleCharTokens
+        singleCharTokens,
+        descent
       )
     )
   }

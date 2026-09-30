@@ -70,6 +70,10 @@ final class LexerSpec extends MacroSuite {
       trailing.parse("a xb") ==> trailing.parse(new java.io.StringReader("a xb"), 16)
       trailingLL.parse("[a xb]") ==> Right(List("a", "b"))
       viaString("a   b\n\n  c") ==> Right(List("id:a", "id:b", "id:c"))
+      // `[ \n]+` is skipped inline (its DFA has two states: after the first char and after more)
+      val json = LL1Spec.jsonDefault.compiled.tables
+      (json.simpleSkip(' '), json.simpleSkip('\n'), json.simpleSkip('x')) ==> ((true, true, false))
+      trailing.compiled.tables.simpleSkip(' ') ==> false
     }
 
     test("stays table-driven for large lexers") {

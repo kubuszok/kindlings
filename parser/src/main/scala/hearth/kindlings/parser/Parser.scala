@@ -21,6 +21,14 @@ final class Parser[F[_], R] private[parser] (grammar: CompiledGrammar, engine: P
   def parse(reader: java.io.Reader, bufferSize: Int = Parser.DefaultBufferSize): F[R] =
     engine.run[R](() => new Machine(grammar, new ReaderInput(reader, bufferSize)))
 
+  /** [[parse]] without the recursive-descent fast path of LL(1) grammars (for tests comparing both parsers). */
+  private[parser] def parseByMachine(input: String): F[R] =
+    engine.run[R] { () =>
+      val m = new Machine(grammar, new StringInput(input))
+      m.skipDescent()
+      m
+    }
+
   /** The compiled grammar (for tests). */
   private[parser] def compiled: CompiledGrammar = grammar
 

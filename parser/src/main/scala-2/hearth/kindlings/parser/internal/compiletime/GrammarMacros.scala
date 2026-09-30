@@ -43,6 +43,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
             ${codegen.slice}
             ${codegen.hasLL}
             ${codegen.runLL}
+            ${codegen.hasDescent}
+            ${codegen.descend}
             ${codegen.hasStringLexer}
             ${codegen.lexString}
             protected def factories(): _root_.scala.Array[_root_.scala.Any] =
@@ -137,20 +139,15 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       }
     }
 
-    private def reduceCase(r: CodegenPlan.Reduce): Tree = {
-      def raw(i: Int): Tree = { readsValues = true; q"$vs($top + ${i - r.len + 1})" }
-      def bits(i: Int): Tree = { readsPrims = true; q"$ps($top + ${i - r.len + 1})" }
-
-      /** The value of right-hand side position `i`. */
-      def value(rhs: CodegenPlan.RhsPlan, i: Int): Tree = rhs match {
-        case CodegenPlan.NtPlan(None, 0)     => raw(i)
-        case CodegenPlan.NtPlan(None, prim)  => decode(prim, bits(i))
-        case CodegenPlan.NtPlan(Some(id), _) => applyFn(collections(id).result, anyToAny, List(raw(i)))
-        case CodegenPlan.TermPlan(None)      => raw(i)
-        case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw(i))
-      }
-      val newTop = q"$top - ${r.len}"
-      val result: Tree = r.body match {
+    /** The value of a reduction's `body`; `value(plan, i)` gives right-hand side position `i`'s value, `builder` the
+      * builder a collection step appends to.
+      */
+    private def bodyTree(
+        body: CodegenPlan.ReduceBody,
+        value: (CodegenPlan.RhsPlan, Int) => Tree,
+        builder: => Tree
+    ): Tree =
+      body match {
         case CodegenPlan.ReduceBody.User(action, rhs, _) =>
           val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
             val tpe = TypeTree(action.paramTypes(i).asInstanceOf[Type])
@@ -171,9 +168,28 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
             case CodegenPlan.CollectionStep.One(element) =>
               applyFn(code.add, anyAnyToAny, List(newBuilder, value(element, 0)))
             case CodegenPlan.CollectionStep.Append(i, element) =>
-              applyFn(code.add, anyAnyToAny, List(raw(0), value(element, i)))
+              applyFn(code.add, anyAnyToAny, List(builder, value(element, i)))
           }
       }
+
+    /** The value of a right-hand side symbol from its `raw` value (as on the value stack). */
+    private def rhsValue(rhs: CodegenPlan.RhsPlan, raw: Tree): Tree = rhs match {
+      case CodegenPlan.NtPlan(Some(id), _) => applyFn(collections(id).result, anyToAny, List(raw))
+      case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw)
+      case _                               => raw
+    }
+
+    private def reduceCase(r: CodegenPlan.Reduce): Tree = {
+      def raw(i: Int): Tree = { readsValues = true; q"$vs($top + ${i - r.len + 1})" }
+      def bits(i: Int): Tree = { readsPrims = true; q"$ps($top + ${i - r.len + 1})" }
+
+      /** The value of right-hand side position `i`. */
+      def value(rhs: CodegenPlan.RhsPlan, i: Int): Tree = rhs match {
+        case CodegenPlan.NtPlan(None, prim) if prim != 0 => decode(prim, bits(i))
+        case _                                           => rhsValue(rhs, raw(i))
+      }
+      val newTop = q"$top - ${r.len}"
+      val result: Tree = bodyTree(r.body, value, raw(0))
       val v = fresh("value")
       r.body match {
         case CodegenPlan.ReduceBody.User(_, _, true) =>
@@ -228,6 +244,148 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
             case ..$cases
             case _ => throw new _root_.java.lang.IllegalStateException("no slice conversion for token " + $token)
           }"""
+    }
+
+    // --- the recursive-descent parser ---------------------------------------------------------------------------
+
+    def hasDescent: Tree = q"def hasDescent: _root_.scala.Boolean = ${out.descent.isDefined}"
+
+    def descend: Tree = {
+      val (dm, text) = (fresh("m"), fresh("text"))
+      val body = out.descent match {
+        case None => q"throw new _root_.java.lang.UnsupportedOperationException(${"no recursive-descent parser"})"
+        case Some(program) => new DescentEmitter(program, dm, text).body
+      }
+      q"""def descend($dm: $MachineType, $text: _root_.java.lang.String): _root_.scala.Any = $body"""
+    }
+
+    /** Emits the methods of a [[DescentPlan.Program]] as local `def`s of `descend`. */
+    final private class DescentEmitter(program: DescentPlan.Program, m: TermName, text: TermName) {
+      private val bodies = out.reduces.map(r => r.p -> r).toMap
+      private val slicers = out.slicers.toMap
+      private val methods = program.methods.map { case (nt, _) => nt -> fresh(s"nt$nt") }.toMap
+      private val scanners = program.scanners.map { case (t, _) => t -> fresh(s"scan$t") }.toMap
+
+      private def consume(tok: DescentPlan.Tok): Tree = tok.read match {
+        case DescentPlan.Read.OneChar(ch)       => q"$m.descentChar($ch, ${tok.token})"
+        case DescentPlan.Read.Word(word)        => q"$m.descentWord($word, ${tok.token})"
+        case DescentPlan.Read.Lexed             => q"$m.descentToken(${tok.token})"
+        case DescentPlan.Read.Decided           => q"$m.descentSkip(1)"
+        case DescentPlan.Read.DecidedWord(word) => q"$m.descentRest($word, ${tok.token})"
+        case DescentPlan.Read.Scan              =>
+          val (start, end) = (fresh("start"), fresh("end"))
+          q"""{
+                val $start = $m.descentScanStart()
+                val $end = ${scanners(tok.token)}($start)
+                if ($end >= 0) $m.descentTokenAt($start, $end) else $m.descentToken(${tok.token})
+              }"""
+      }
+
+      /** The token's value, as the machine shifts it. */
+      private def tokenValue(tok: DescentPlan.Tok): Tree =
+        if (tok.sliced) {
+          val fn = slicers(tok.token).asInstanceOf[Tree]
+          q"""{
+                ${consume(tok)}
+                ${applyFn(fn, fn.tpe.widen, List(q"$text", q"$m.tokenStartIndex", q"$m.tokenEndIndex"))}
+              }"""
+        } else
+          tok.literal match {
+            case Some(lit) => q"{ ${consume(tok)}; $lit }"
+            case None      => q"{ ${consume(tok)}; $text.substring($m.tokenStartIndex, $m.tokenEndIndex) }"
+          }
+
+      /** `def scan(from: Int): Int`: the end of the token at `from`, `-1` if it does not start there. */
+      private def scanner(t: Int, lexer: CodegenPlan.Lexer): Tree = {
+        val (from, len, i, acc, accEnd, state) =
+          (fresh("from"), fresh("len"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
+        q"""def ${scanners(t)}($from: _root_.scala.Int): _root_.scala.Int = {
+              val $len = $text.length
+              var $i = $from
+              var $acc = -1
+              var $accEnd = $from
+              var $state = 0
+              ${dfaLoop(lexer, text, len, i, acc, accEnd, state)}
+              if ($acc < 0) -1 else $accEnd
+            }"""
+      }
+
+      private def item(it: DescentPlan.Item, acc: Option[TermName]): Tree = it match {
+        case tok: DescentPlan.Tok      => tokenValue(tok)
+        case DescentPlan.Call(nt)      => q"${methods(nt)}()"
+        case DescentPlan.Inline(_, cd) => code(cd)
+        case DescentPlan.Acc           => q"${acc.get}"
+      }
+
+      private def production(prod: DescentPlan.Prod, acc: Option[TermName]): Tree = {
+        val r = bodies(prod.p)
+        val names = prod.items.map(_ => fresh("a"))
+        val stats = prod.items.zip(names).zip(prod.used).flatMap {
+          case ((DescentPlan.Acc, _), _)          => Nil
+          case ((tok: DescentPlan.Tok, _), false) => List(consume(tok))
+          case ((it, _), false)                   => List(item(it, acc))
+          case ((it, name), true)                 => List(q"val $name = ${item(it, acc)}")
+        }
+        def local(i: Int): Tree = prod.items(i) match {
+          case DescentPlan.Acc => q"${acc.get}"
+          case _               => q"${names(i)}"
+        }
+        val result = bodyTree(r.body, (plan, i) => rhsValue(plan, local(i)), local(0))
+        q"{ ..$stats; ($result: _root_.scala.Any) }"
+      }
+
+      private def decision(d: DescentPlan.Decision): Tree = {
+        val fallback = if (d.failByDefault) q"$m.descentFail()" else q"-1"
+        def result(k: Int): Tree = if (k < 0) fallback else Literal(Constant(k))
+        def ints(xs: List[Int]): Tree =
+          if (xs.size == 1) Literal(Constant(xs.head)) else Alternative(xs.map(x => Literal(Constant(x))))
+        val c = fresh("c")
+        val tokenCases = d.tokens.map { case (ts, k) => cq"${ints(ts)} => ${result(k)}" }
+        val byToken = q"$m.descentLex() match { case ..$tokenCases; case _ => $fallback }"
+        val charCases = d.chars.map { case (cs, k) => cq"${ints(cs)} => ${result(k)}" }
+        q"""{
+              val $c: _root_.scala.Int = $m.descentPeek()
+              $c match {
+                case ..$charCases
+                case -1 => ${result(d.eof)}
+                case _ => $byToken
+              }
+            }"""
+      }
+
+      private def code(cd: DescentPlan.Code): Tree = cd match {
+        case DescentPlan.Single(prod)       => production(prod, None)
+        case DescentPlan.Choose(dec, prods) =>
+          val cases = prods.toList.zipWithIndex.map { case (prod, k) => cq"$k => ${production(prod, None)}" }
+          q"(${decision(dec)} match { case ..$cases; case _ => $m.descentFail() }): _root_.scala.Any"
+        case DescentPlan.Loop(base, dec, append) =>
+          val acc = fresh("acc")
+          q"""{
+                var $acc: _root_.scala.Any = ${production(base, None)}
+                while (${decision(dec)} == 0) $acc = ${production(append, Some(acc))}
+                $acc
+              }"""
+      }
+
+      def body: Tree = {
+        val defs = program.methods.toList.map { case (nt, cd) =>
+          val v = fresh("v")
+          val impl =
+            if (program.recursive(nt))
+              q"{ $m.descentEnter(); val $v: _root_.scala.Any = ${code(cd)}; $m.descentExit(); $v }"
+            else code(cd)
+          q"def ${methods(nt)}(): _root_.scala.Any = $impl"
+        }
+        val scanDefs = program.scanners.toList.map { case (t, lexer) => scanner(t, lexer) }
+        val result = fresh("result")
+        q"""{
+              ..$scanDefs
+              ..$defs
+              val $result: _root_.scala.Any = ${item(program.root, None)}
+              $m.descentEnd()
+              $result
+            }"""
+      }
     }
 
     // --- the LL(1) program --------------------------------------------------------------------------------------------
@@ -319,24 +477,32 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
             $body"""
     }
 
-    private def lexerBody(lexer: CodegenPlan.Lexer, lm: TermName, text: TermName, from: TermName): Tree = {
-      val (len, p, result, i, acc, accEnd, state) =
-        (fresh("len"), fresh("p"), fresh("result"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
+    private def inRanges(ch: Tree, ranges: List[(Int, Int)]): Tree =
+      ranges
+        .map { case (lo, hi) =>
+          if (lo == hi) q"$ch == $lo" else q"$ch >= $lo && $ch <= $hi"
+        }
+        .reduceLeftOption((a, b) => q"$a || $b")
+        .getOrElse(q"false")
 
-      def inRanges(ch: Tree, ranges: List[(Int, Int)]): Tree =
-        ranges
-          .map { case (lo, hi) =>
-            if (lo == hi) q"$ch == $lo" else q"$ch >= $lo && $ch <= $hi"
-          }
-          .reduceLeftOption((a, b) => q"$a || $b")
-          .getOrElse(q"false")
+    /** Membership test using the set or its complement, whichever has fewer ranges. */
+    private def member(ch: Tree, ranges: List[(Int, Int)]): Tree = {
+      val complement = CodegenPlan.complement(ranges)
+      if (complement.size < ranges.size) q"!(${inRanges(ch, complement)})" else inRanges(ch, ranges)
+    }
 
-      /** Membership test using the set or its complement, whichever has fewer ranges. */
-      def member(ch: Tree, ranges: List[(Int, Int)]): Tree = {
-        val complement = CodegenPlan.complement(ranges)
-        if (complement.size < ranges.size) q"!(${inRanges(ch, complement)})" else inRanges(ch, ranges)
-      }
-
+    /** `while (state >= 0) state match { ... }`: runs the DFA of `lexer` over `text` from `i`, recording the last
+      * accepted token and its end in `acc` / `accEnd`.
+      */
+    private def dfaLoop(
+        lexer: CodegenPlan.Lexer,
+        text: TermName,
+        len: TermName,
+        i: TermName,
+        acc: TermName,
+        accEnd: TermName,
+        state: TermName
+    ): Tree = {
       def emit(node: CodegenPlan.LexNode): Tree = node match {
         case CodegenPlan.LexNode.Block(nodes)     => q"{ ..${nodes.map(emit)} }"
         case CodegenPlan.LexNode.SelfLoop(ranges) =>
@@ -371,8 +537,16 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
                 }
               } else ${emit(otherwise)}"""
       }
-
       val stateCases = lexer.states.toList.map { case (s, node) => cq"$s => ${emit(node)}" }
+      q"""while ($state >= 0) $state match {
+            case ..$stateCases
+            case _ => $state = -1
+          }"""
+    }
+
+    private def lexerBody(lexer: CodegenPlan.Lexer, lm: TermName, text: TermName, from: TermName): Tree = {
+      val (len, p, result, i, acc, accEnd, state) =
+        (fresh("len"), fresh("p"), fresh("result"), fresh("i"), fresh("acc"), fresh("accEnd"), fresh("state"))
       // runs of chars that are always skipped text (whitespace) are skipped without the DFA
       val skipRuns =
         if (lexer.simpleSkip.isEmpty) Nil
@@ -394,10 +568,7 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
                 var $acc = -1
                 var $accEnd = $p
                 var $state = 0
-                while ($state >= 0) $state match {
-                  case ..$stateCases
-                  case _ => $state = -1
-                }
+                ${dfaLoop(lexer, text, len, i, acc, accEnd, state)}
                 if ($acc < 0) {
                   $lm.lexError($p)
                   $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Error

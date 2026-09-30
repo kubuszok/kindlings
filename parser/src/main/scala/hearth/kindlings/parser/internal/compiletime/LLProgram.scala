@@ -59,80 +59,13 @@ private[parser] object LLProgram {
       tokenOf: Term => Int
   ): Option[Program] = {
     type Rhs = Flatten.Rhs[Term]
-    val prodsOf: Vector[Vector[Int]] = { // production table indices (p = index + 1) by non-terminal
-      val by = Array.fill(ntCount)(Vector.newBuilder[Int])
-      prods.zipWithIndex.foreach { case (prod, i) => by(prod.lhs) += i + 1 }
-      by.toVector.map(_.result())
-    }
-    def prod(p: Int): Flatten.Prod[Term, Alternative] = prods(p - 1)
     def origin(nt: Int): Option[Flatten.FSym[Term, Alternative]] =
       if (nt < userNonTerminals) None else Some(origins(nt - userNonTerminals))
 
-    // nullable / first / follow of the flattened grammar
-    val nullable = Array.fill(ntCount)(false)
-    val first = Array.fill(ntCount)(Set.empty[Int])
-    def symFirst(r: Rhs): Set[Int] = r match {
-      case Flatten.RNt(id, _)  => first(id)
-      case Flatten.RTerm(term) => Set(tokenOf(term))
-    }
-    def symNullable(r: Rhs): Boolean = r match {
-      case Flatten.RNt(id, _) => nullable(id)
-      case _                  => false
-    }
-    def seqFirst(rhs: Seq[Rhs]): Set[Int] =
-      rhs
-        .foldRight((Set.empty[Int], true)) { case (r, (acc, restNullable)) =>
-          (if (symNullable(r)) symFirst(r) ++ acc else symFirst(r), symNullable(r) && restNullable)
-        }
-        ._1
-    def seqNullable(rhs: Seq[Rhs]): Boolean = rhs.forall(symNullable)
-    var changed = true
-    while (changed) {
-      changed = false
-      prods.foreach { prod =>
-        if (!nullable(prod.lhs) && seqNullable(prod.rhs)) { nullable(prod.lhs) = true; changed = true }
-        val f = seqFirst(prod.rhs)
-        if (!f.subsetOf(first(prod.lhs))) { first(prod.lhs) = first(prod.lhs) ++ f; changed = true }
-      }
-    }
-    val follow = Array.fill(ntCount)(Set.empty[Int])
-    follow(root) = Set(0)
-    changed = true
-    while (changed) {
-      changed = false
-      prods.foreach { prod =>
-        prod.rhs.indices.foreach { i =>
-          prod.rhs(i) match {
-            case Flatten.RNt(id, _) =>
-              val rest = prod.rhs.drop(i + 1)
-              val f = seqFirst(rest) ++ (if (seqNullable(rest)) follow(prod.lhs) else Set.empty)
-              if (!f.subsetOf(follow(id))) { follow(id) = follow(id) ++ f; changed = true }
-            case _ => ()
-          }
-        }
-      }
-    }
+    val analysis = new FlatAnalysis(root, ntCount, prods, tokenOf)
+    import analysis.{follow, seqFirst, seqNullable}
 
-    // which non-terminals can be inlined: used at one place, not recursive (the self-reference of a loop helper,
-    // `H ::= H x`, is the loop, not a call)
-    def callees(nt: Int): Seq[Int] = prodsOf(nt).flatMap { p =>
-      prod(p).rhs.zipWithIndex.collect { case (Flatten.RNt(id, _), i) if !(i == 0 && id == nt) => id }
-    }
-    val callSites = Array.fill(ntCount)(0)
-    callSites(root) += 1
-    (0 until ntCount).foreach(nt => callees(nt).foreach(id => callSites(id) += 1))
-    val recursive = (0 until ntCount).map { nt =>
-      val seen = mutable.Set.empty[Int]
-      val queue = mutable.Queue.from(callees(nt))
-      var found = false
-      while (queue.nonEmpty && !found) {
-        val next = queue.dequeue()
-        if (next == nt) found = true
-        else if (seen.add(next)) queue ++= callees(next)
-      }
-      found
-    }
-    def inlined(nt: Int): Boolean = callSites(nt) == 1 && !recursive(nt)
+    import analysis.{inlined, prod, prodsOf}
 
     // the program
     var ok = true

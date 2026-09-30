@@ -111,6 +111,43 @@ private[parser] object CodegenPlan {
   val MaxLexerStates: Int = 256
   val MaxLexerCost: Int = 6000
 
+  /** A scanner of the one token that the chars `chars` start (no other token can start with them): the part of the
+    * lexer reached from the start state on those chars, as a [[Lexer]] whose start state has only those transitions.
+    * Every accepting state it reaches accepts that token, so its longest match is the lexer's. `None` when too large.
+    */
+  def scanner(dfa: LexerBuilder.Dfa, chars: Set[Int]): Option[Lexer] = {
+    def transitions(s: Int): List[(Int, Int, Int)] =
+      (dfa.transStart(s) until dfa.transStart(s + 1)).toList.map(t => (dfa.lo(t), dfa.hi(t), dfa.target(t)))
+    def targetOf(c: Int): Int = transitions(0).collectFirst { case (lo, hi, t) if lo <= c && c <= hi => t }.get
+    // the new start state (0) is a copy of the old one with only the transitions on `chars`; the others keep their
+    // transitions (the old start state too, if the DFA re-enters it) and are renumbered from 1 in order of discovery
+    val startRanges = chars.toList.sorted
+      .foldLeft(List.empty[(Int, Int, Int)]) {
+        case ((lo, hi, t) :: rest, c) if c == hi + 1 && targetOf(c) == t => (lo, c, t) :: rest
+        case (acc, c)                                                    => (c, c, targetOf(c)) :: acc
+      }
+      .reverse
+    val index = mutable.LinkedHashMap.empty[Int, Int]
+    val queue = mutable.Queue.empty[Int]
+    def visit(s: Int): Int = index.getOrElseUpdate(s, { queue.enqueue(s); index.size + 1 })
+    startRanges.foreach { case (_, _, t) => visit(t) }
+    while (queue.nonEmpty) transitions(queue.dequeue()).foreach { case (_, _, t) => visit(t) }
+    val states = Vector((dfa.accept(0), startRanges)) ++ index.keys.toVector.map(s => (dfa.accept(s), transitions(s)))
+    val renumbered = states.map { case (acc, ts) => (acc, ts.map { case (lo, hi, t) => (lo, hi, index(t)) }) }
+    val transStart = renumbered.scanLeft(0)(_ + _._2.size).toArray
+    val all = renumbered.flatMap(_._2)
+    lexer(
+      LexerBuilder.Dfa(
+        renumbered.map(_._1).toArray,
+        transStart,
+        all.map(_._1).toArray,
+        all.map(_._2).toArray,
+        all.map(_._3).toArray
+      ),
+      skipFrom = Int.MaxValue
+    )
+  }
+
   /** The generated lexer for `dfa` or `None` when it would be too large (see [[MaxLexerCost]]). */
   def lexer(dfa: LexerBuilder.Dfa, skipFrom: Int): Option[Lexer] = {
     val states = dfa.accept.length
