@@ -231,15 +231,13 @@ object CollectionsSpec {
     s
   }
 
-  val nonEmptyThrowing: Parser[Id, NonEmptyList[Int]] = {
-    import ErrorChannel.throwing.*
-    Grammar.grammar[NonEmptyList[Int], Id] { g =>
-      import g.*
-      val s = nonTerminal[NonEmptyList[Int]]
-      val num = terminal("[0-9]+").map(_.toInt)
-      s ::= all(rep(num).as[NonEmptyList[Int]]).pure(l => l)
-      s
-    }
+  val nonEmptyThrowing: Parser[Id, NonEmptyList[Int]] = Grammar.grammar[NonEmptyList[Int], Id] { g =>
+    import g.*
+    enable(ThrowingInRuntime)
+    val s = nonTerminal[NonEmptyList[Int]]
+    val num = terminal("[0-9]+").map(_.toInt)
+    s ::= all(rep(num).as[NonEmptyList[Int]]).pure(l => l)
+    s
   }
 
   val chains: Parser[Id, Chain[Int]] = Grammar.grammar[Chain[Int], Id] { g =>

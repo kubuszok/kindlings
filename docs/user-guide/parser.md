@@ -153,10 +153,14 @@ A collection with a smart constructor (cats `NonEmptyList`) can reject the value
 reported as a `ParseError` ("Invalid cats.data.NonEmptyList[scala.Int]: ...") through the effect's error channel, so
 such collections compile only in an `F` that has an `ErrorChannel[F]`: `Option`, `Try`, `Either[E, *]` (with a
 `ParseErrorLift[E]`), `Future`, and cats-effect `F`s with `import hearth.kindlings.parser.catseffect._`. In `Id` they
-are a compile error, unless you explicitly opt into throwing the rejection as a `ParseError`:
+are a compile error, unless you explicitly opt into throwing the rejection as a `ParseError` with a grammar flag:
 
 ```scala
-import hearth.kindlings.parser.ErrorChannel.throwing._
+Grammar.grammar[NonEmptyList[Int], Id] { g =>
+  import g._
+  enable(ThrowingInRuntime)
+  // ...
+}
 ```
 
 Prefer `rep1`/`sepBy1` for non-empty collections: the grammar then guarantees at least one value.

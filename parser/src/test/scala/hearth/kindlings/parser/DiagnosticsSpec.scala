@@ -4,7 +4,7 @@ import hearth.MacroSuite
 
 final class DiagnosticsSpec extends MacroSuite {
 
-  group("compile-time grammar diagnostics") {
+  group("malformed grammars get helpful compile errors") {
 
     test("shift/reduce conflicts are reported with the production and the LR state") {
       compileErrors(
@@ -111,6 +111,173 @@ final class DiagnosticsSpec extends MacroSuite {
         }
         """
       ).check("expected a string literal")
+    }
+
+    test("flags that are both enabled and disabled are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          enable(RequireLALR)
+          disable(RequireLALR)
+          val s = nonTerminal[String]
+          s ::= "x"
+          s
+        }
+        """
+      ).check("`RequireLALR` is both enabled and disabled")
+    }
+
+    test("contradicting parser requirements are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          enable(RequireLL1)
+          enable(RequireLALR)
+          val s = nonTerminal[String]
+          s ::= "x"
+          s
+        }
+        """
+      ).check("`RequireLL1` and `RequireLALR` ask for different parsers")
+    }
+
+    test("flags must be written in the grammar block") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        val flag: GrammarFlag = GrammarFlag.RequireLALR
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          enable(flag)
+          val s = nonTerminal[String]
+          s ::= "x"
+          s
+        }
+        """
+      ).check("`enable` expects one of the grammar flags: ThrowingInRuntime, RequireLL1, RequireLALR")
+    }
+
+    test("non-terminals that cannot derive any finite input are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          val loop = nonTerminal[String]
+          loop ::= all("(", loop, ")").pure((_, l, _) => l)
+          s ::= "x" || loop
+          s
+        }
+        """
+      ).check("non-terminal `loop` cannot derive any finite input")
+    }
+
+    test("skipped patterns used as terminals are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          skip(" +")
+          s ::= terminal(" +")
+          s
+        }
+        """
+      ).check("skipped pattern / +/ is also used as a terminal")
+    }
+
+    test("the empty literal inside a sequence is reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          s ::= all("x", "").pure((x, _) => x)
+          s
+        }
+        """
+      ).check("the empty literal \"\" is only allowed as a whole alternative")
+    }
+
+    test("malformed regexes are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          s ::= terminal("(ab")
+          s
+        }
+        """
+      ).check("invalid terminal pattern")
+    }
+
+    test("statements other than declarations and productions are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          val t = terminal("y")
+          s ::= t
+          t.map(_.length)
+          s
+        }
+        """
+      ).check("grammar blocks may only contain declarations")
+    }
+
+    test("helper methods are reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          def twice(x: Alt[String]) = x
+          s ::= "x"
+          s
+        }
+        """
+      ).check("helper methods are not supported in grammar blocks")
+    }
+
+    test("a grammar block must end with its start symbol") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          s ::= "x"
+          if (true) s else s
+        }
+        """
+      ).check("the grammar block must end with the start non-terminal")
+    }
+
+    test("precedence of non-terminals is reported") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        Grammar.grammar[String, Id] { g =>
+          import g.*
+          val s = nonTerminal[String]
+          left(s)
+          s ::= "x"
+          s
+        }
+        """
+      ).check("precedence declarations accept only terminals")
     }
   }
 }

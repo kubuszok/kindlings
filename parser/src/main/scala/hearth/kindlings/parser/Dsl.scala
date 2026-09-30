@@ -18,6 +18,8 @@ import scala.util.matching.Regex
   *   - `left(...)`, `right(...)`, `nonassoc(...)` declare operator precedence (later declarations bind tighter), like
   *     yacc's `%left`/`%right`/`%nonassoc`; `all(...).prec(op)` overrides a production's precedence (`%prec`).
   *   - `skip("regex")` declares text to skip between tokens (whitespace, comments).
+  *   - `enable(flag)` / `disable(flag)` set compile-time options ([[GrammarFlag]]): `ThrowingInRuntime`, `RequireLL1`,
+  *     `RequireLALR`.
   *
   * All declarations must come before the productions that use them.
   */
@@ -31,6 +33,23 @@ final class Dsl[F[_]] private[parser] () extends DslSequences[F] with DslLiteral
   /** A terminal matching the regular expression `pattern` (a DFA-compatible subset of Java regex syntax). */
   @nowarn("msg=unused")
   def terminal(pattern: String): Terminal[String] = new Terminal[String](Terminal.identity)
+
+  /** Turns on a compile-time option of this grammar (see [[GrammarFlag]]), e.g. `enable(RequireLL1)`. */
+  @nowarn("msg=unused")
+  def enable(flag: GrammarFlag): Unit = ()
+
+  /** Turns off a compile-time option of this grammar (see [[GrammarFlag]]); flags are off unless enabled. */
+  @nowarn("msg=unused")
+  def disable(flag: GrammarFlag): Unit = ()
+
+  /** See [[GrammarFlag.ThrowingInRuntime]]. */
+  val ThrowingInRuntime: GrammarFlag = GrammarFlag.ThrowingInRuntime
+
+  /** See [[GrammarFlag.RequireLL1]]. */
+  val RequireLL1: GrammarFlag = GrammarFlag.RequireLL1
+
+  /** See [[GrammarFlag.RequireLALR]]. */
+  val RequireLALR: GrammarFlag = GrammarFlag.RequireLALR
 
   /** Text matching `pattern` is skipped between tokens. */
   @nowarn("msg=unused")

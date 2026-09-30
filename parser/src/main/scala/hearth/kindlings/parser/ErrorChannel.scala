@@ -11,10 +11,10 @@ import scala.util.Try
   * through the error channel instead of being thrown from `Id` code.
   *
   * Throwing the rejection instead (as a [[ParseError]], like the `Id` engine throws syntax errors) is an explicit
-  * opt-in: `import hearth.kindlings.parser.ErrorChannel.throwing._`.
+  * opt-in: `enable(ThrowingInRuntime)` in the grammar block (see [[GrammarFlag.ThrowingInRuntime]]).
   */
 @scala.annotation.implicitNotFound(
-  "${F} has no error channel for rejected values: use an effect such as Option, Try, Either[E, *] (with a ParseErrorLift[E]), Future or a cats-effect F, or opt into throwing them with `import hearth.kindlings.parser.ErrorChannel.throwing._`"
+  "${F} has no error channel for rejected values: use an effect such as Option, Try, Either[E, *] (with a ParseErrorLift[E]), Future or a cats-effect F, or opt into throwing them with `enable(ThrowingInRuntime)` in the grammar block"
 )
 trait ErrorChannel[F[_]]
 object ErrorChannel {
@@ -31,11 +31,4 @@ object ErrorChannel {
 
   /** For integrations whose engines report failures in `F` (e.g. cats-effect). */
   def assumed[F[_]]: ErrorChannel[F] = instance[F]
-
-  /** Explicit opt-in (`import hearth.kindlings.parser.ErrorChannel.throwing._`): accepts rejectable values in any `F`,
-    * including `Id`, whose engine then throws the rejection as a [[ParseError]].
-    */
-  object throwing {
-    implicit def throwingErrorChannel[F[_]]: ErrorChannel[F] = instance[F]
-  }
 }

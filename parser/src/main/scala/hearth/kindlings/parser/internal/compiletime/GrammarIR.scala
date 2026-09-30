@@ -85,6 +85,9 @@ private[parser] object GrammarIR {
   final case class Precedence(assoc: Assoc, operators: List[Sym], pos: Pos) extends Statement
   final case class Skip(regex: String, pos: Pos) extends Statement
 
+  /** `enable(flag)` / `disable(flag)`; `flag` is a `GrammarFlag` name. */
+  final case class FlagSetting(flag: String, enabled: Boolean, pos: Pos) extends Statement
+
   /** @param prim
     *   the `internal.runtime.Prims` kind of the declared value type (`Boxed` unless it is a primitive type)
     */

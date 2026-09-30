@@ -20,6 +20,8 @@ private[parser] object GrammarCompiler {
     *   the code of every production's reduction (only when compiling for generated code)
     * @param lexer
     *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
+    * @param flags
+    *   the enabled `GrammarFlag`s, by name
     * @param slicers
     *   the `.mapSlice` functions, by token id (only when compiling for generated code)
     */
@@ -32,7 +34,8 @@ private[parser] object GrammarCompiler {
       collections: Vector[Collection],
       reduces: Vector[CodegenPlan.Reduce],
       lexer: Option[CodegenPlan.Lexer],
-      slicers: Vector[(Int, Any)]
+      slicers: Vector[(Int, Any)],
+      flags: Set[String]
   )
 
   /** @param generated
@@ -86,7 +89,23 @@ private[parser] object GrammarCompiler {
       case Production(_, alts, _) => alts.foreach(walkAlt)
       case Precedence(_, ops, _)  => ops.foreach(walkSym)
       case Skip(_, _)             => ()
+      case FlagSetting(_, _, _)   => ()
     }
+    // --- flags -------------------------------------------------------------------------------------------------------
+    val flags: Set[String] = {
+      val enabled = mutable.Set.empty[String]
+      g.statements.collect { case f: FlagSetting => f }.groupBy(_.flag).foreach { case (flag, settings) =>
+        if (settings.exists(_.enabled) && settings.exists(!_.enabled))
+          err(settings.last.pos, s"`$flag` is both enabled and disabled in this grammar")
+        else if (settings.head.enabled) enabled += flag
+      }
+      enabled.toSet
+    }
+    if (flags("RequireLL1") && flags("RequireLALR"))
+      err(
+        g.statements.collect { case f @ FlagSetting("RequireLALR", _, _) => f.pos }.head,
+        "`RequireLL1` and `RequireLALR` ask for different parsers: enable only one of them"
+      )
     val skips = g.statements.collect { case Skip(re, pos) => re -> pos }.distinctBy(_._1)
     skips.foreach { case (re, pos) =>
       if (regexes.contains(re)) err(pos, s"skipped pattern /$re/ is also used as a terminal")
@@ -391,7 +410,8 @@ private[parser] object GrammarCompiler {
         reduces.result(),
         if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None,
         if (generated) slicerOf.toVector.collect { case (pattern, Some(fn)) => tokenId(pattern) -> fn }.sortBy(_._1)
-        else Vector.empty
+        else Vector.empty,
+        flags
       )
     )
   }

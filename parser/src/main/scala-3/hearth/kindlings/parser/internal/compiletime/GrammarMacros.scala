@@ -74,11 +74,11 @@ private[parser] object GrammarMacros {
         coll.tpe.asInstanceOf[helper.UntypedType],
         coll.element.asInstanceOf[helper.UntypedType]
       ) match {
-        case Right(code) if code.rejectable && !hasErrorChannel =>
+        case Right(code) if code.rejectable && !out.flags("ThrowingInRuntime") && !hasErrorChannel =>
           val shown = coll.tpe.asInstanceOf[TypeRepr].show
           val msg =
             "`.as[" + shown + "]`: " + shown + " has a smart constructor that can reject the repeated values, which needs an effect whose error channel reports it (Option, Try, Either[E, *], Future, a cats-effect F, ...) instead of " + effect + " (no ErrorChannel[" + effect + "]). " +
-              "To throw the rejection as a ParseError instead, opt in with `import hearth.kindlings.parser.ErrorChannel.throwing._`."
+              "To throw the rejection as a ParseError instead, opt in with `enable(ThrowingInRuntime)` in the grammar block."
           report.error(msg, coll.pos.underlying.asInstanceOf[Position])
           Left(msg)
         case Right(code) => Right(Collections(code.factory, code.newBuilder, code.add, code.result))
@@ -486,6 +486,14 @@ private[parser] object GrammarMacros {
         statements += Precedence(a, ops.map(sym(_, None)), pos(stat))
       case DslCall("skip", _, List(arg)) =>
         statements += Skip(stringLiteral(arg), pos(stat))
+      case DslCall(kind @ ("enable" | "disable"), _, List(arg)) =>
+        val known = hearth.kindlings.parser.GrammarFlag.all.map(_.name)
+        val name = strip(arg) match {
+          case t @ (_: Ident | _: Select) => t.symbol.name.stripSuffix("$")
+          case _                          => ""
+        }
+        if !known.contains(name) then fail(arg, s"`$kind` expects one of the grammar flags: ${known.mkString(", ")}")
+        statements += FlagSetting(name, kind == "enable", pos(stat))
       case _: DefDef =>
         fail(stat, "helper methods are not supported in grammar blocks yet")
       case other =>

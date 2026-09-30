@@ -338,11 +338,11 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         coll.tpe.asInstanceOf[helper.UntypedType],
         coll.element.asInstanceOf[helper.UntypedType]
       ) match {
-        case Right(code) if code.rejectable && !hasErrorChannel =>
+        case Right(code) if code.rejectable && !out.flags("ThrowingInRuntime") && !hasErrorChannel =>
           val shown = coll.tpe.asInstanceOf[Type].toString
           val msg =
             "`.as[" + shown + "]`: " + shown + " has a smart constructor that can reject the repeated values, which needs an effect whose error channel reports it (Option, Try, Either[E, *], Future, a cats-effect F, ...) instead of " + effect + " (no ErrorChannel[" + effect + "]). " +
-              "To throw the rejection as a ParseError instead, opt in with `import hearth.kindlings.parser.ErrorChannel.throwing._`."
+              "To throw the rejection as a ParseError instead, opt in with `enable(ThrowingInRuntime)` in the grammar block."
           c.error(coll.pos.underlying.asInstanceOf[Position], msg)
           Left(msg)
         case Right(code) =>
@@ -467,6 +467,15 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         statements += Precedence(a, ops.map(sym(_, None)), pos(stat))
       case DslCall("skip", _, List(arg)) =>
         statements += Skip(stringLiteral(arg), pos(stat))
+      case DslCall(kind @ ("enable" | "disable"), _, List(arg)) =>
+        val known = hearth.kindlings.parser.GrammarFlag.all.map(_.name)
+        val name = strip(arg) match {
+          case t: RefTree if t.symbol != null => t.symbol.name.decodedName.toString.stripSuffix("$")
+          case _                              => ""
+        }
+        if (!known.contains(name))
+          fail(arg, s"`$kind` expects one of the grammar flags: ${known.mkString(", ")}")
+        statements += FlagSetting(name, kind == "enable", pos(stat))
       case _: DefDef =>
         fail(stat, "helper methods are not supported in grammar blocks yet")
       case other =>
