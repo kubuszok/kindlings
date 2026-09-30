@@ -26,6 +26,35 @@ final class Terminal[+A] private[parser] (private[parser] val convert: String =>
 
   /** Converts the matched text. The function runs when the enclosing production is reduced. */
   def map[B](f: A => B): Terminal[B] = new Terminal[B](convert.andThen(f.asInstanceOf[Any => Any]))
+
+  /** Converts the matched text without copying it first: `f(input, start, end)` gets a text containing the token and
+    * the token's bounds in it (`input.substring(start, end)` is the token). With a `String` input, `input` is the whole
+    * input, so dropping delimiters or checking for escapes costs a single copy.
+    *
+    * `f` runs when the token is read (also when its value ends up unused), must be the first conversion of a
+    * `terminal(...)` (`.map` may follow), and the terminal's pattern may not be used by another terminal. `f` must only
+    * read `input` within `[start, end)`: the text beyond the token can be the whole rest of the input (e.g. use
+    * [[Slices.indexOf]], not `String.indexOf`, to look for a char).
+    */
+  def mapSlice[B](f: (String, Int, Int) => B): Terminal[B] =
+    new Terminal[B](convert.andThen { value =>
+      val token = value.asInstanceOf[String]
+      f(token, 0, token.length)
+    })
+}
+
+/** Helpers for [[Terminal.mapSlice]] functions, which must stay within the token's bounds. */
+object Slices {
+
+  /** The index of the first `ch` in `input` within `[start, end)`, or `-1`. */
+  def indexOf(input: String, ch: Char, start: Int, end: Int): Int = {
+    var i = start
+    while (i < end) {
+      if (input.charAt(i) == ch) return i
+      i += 1
+    }
+    -1
+  }
 }
 object Terminal {
 

@@ -13,6 +13,9 @@ package internal.runtime
   * `constants` of an `ActConst`, the element index of an `ActListAppend`); they drive interpreted grammars, generated
   * ones have the code of each reduction generated instead.
   *
+  * `sliced(token)`: the token's value is computed at shift time by the generated `GeneratedReductions.slice` (terminals
+  * with `mapSlice` in generated grammars).
+  *
   * `literals(token)` is the text of literal tokens (whose value is that constant, so it is not copied from the input)
   * and `null` for regex tokens.
   */
@@ -34,7 +37,8 @@ final private[parser] class Tables(
     val prodKind: Array[Int],
     val prodArg: Array[Int],
     val constants: Array[String],
-    val literals: Array[String]
+    val literals: Array[String],
+    val sliced: Array[Boolean]
 ) {
 
   /** `ascii(state * 128 + c)`: transition target on ASCII chars, `-1` if none. */
@@ -101,12 +105,13 @@ final private[parser] class Tables(
     constants.foreach(w.string)
     w.int(literals.length)
     literals.foreach(l => if (l == null) w.int(-1) else { w.int(0); w.string(l) })
+    w.ints(sliced.map(b => if (b) 1 else 0))
     w
   }
 }
 private[parser] object Tables {
 
-  val Version: Int = 5
+  val Version: Int = 6
 
   def decode(text: String): Tables = {
     val r = new TableCodec.Reader(text)
@@ -134,7 +139,8 @@ private[parser] object Tables {
       prodKind = r.ints(),
       prodArg = r.ints(),
       constants = Array.fill(r.int())(r.string()),
-      literals = Array.fill(r.int())(if (r.int() < 0) null else r.string())
+      literals = Array.fill(r.int())(if (r.int() < 0) null else r.string()),
+      sliced = r.ints().map(_ != 0)
     )
   }
 }

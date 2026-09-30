@@ -34,6 +34,13 @@ object ParserModel {
   }
 
   def unescape(s: String): String = if (s.indexOf('\\') < 0) s else StringContext.processEscapes(s)
+
+  /** A JSON string token (`input.substring(start, end)`, with its quotes) as its value, copied once. */
+  def jsonString(input: String, start: Int, end: Int): String = {
+    val body = input.substring(start + 1, end - 1)
+    if (hearth.kindlings.parser.Slices.indexOf(input, '\\', start + 1, end - 1) < 0) body
+    else StringContext.processEscapes(body)
+  }
 }
 
 object KindlingsParsers {
@@ -44,7 +51,7 @@ object KindlingsParsers {
     import g.*
     val value = nonTerminal[J]
     val member = nonTerminal[(String, J)]
-    val string = terminal("\"([^\"\\\\]|\\\\.)*\"").map(s => unescape(s.substring(1, s.length - 1)))
+    val string = terminal("\"([^\"\\\\]|\\\\.)*\"").mapSlice(jsonString)
     val number = terminal("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?").map(_.toDouble)
     skip("[ \\t\\r\\n]+")
     value ::= (
@@ -64,7 +71,7 @@ object KindlingsParsers {
     import g.*
     val value = nonTerminal[J]
     val member = nonTerminal[(String, J)]
-    val string = terminal("\"([^\"\\\\]|\\\\.)*\"").map(s => unescape(s.substring(1, s.length - 1)))
+    val string = terminal("\"([^\"\\\\]|\\\\.)*\"").mapSlice(jsonString)
     val number = terminal("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?").map(_.toDouble)
     skip("[ \\t\\r\\n]+")
     value ::= (

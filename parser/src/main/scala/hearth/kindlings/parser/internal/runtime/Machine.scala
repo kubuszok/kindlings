@@ -23,6 +23,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
 
   private val tables = grammar.tables
   private val literals = tables.literals
+  private val sliced = tables.sliced
   private val text: String = input match {
     case s: StringInput => s.text
     case _              => null
@@ -103,7 +104,13 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         push(
           act - 1,
           if (literal != null) literal
-          else if (text != null) text.substring(tokenStart.toInt, tokenEnd.toInt)
+          else if (sliced(lookahead)) {
+            if (text != null) reductions.slice(lookahead, text, tokenStart.toInt, tokenEnd.toInt)
+            else {
+              val token = input.slice(tokenStart, tokenEnd)
+              reductions.slice(lookahead, token, 0, token.length)
+            }
+          } else if (text != null) text.substring(tokenStart.toInt, tokenEnd.toInt)
           else input.slice(tokenStart, tokenEnd)
         )
         lookahead = -1

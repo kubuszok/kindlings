@@ -40,6 +40,7 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
           $engine,
           new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
             ${codegen.reduce}
+            ${codegen.slice}
             ${codegen.hasStringLexer}
             ${codegen.lexString}
             protected def factories(): _root_.scala.Array[_root_.scala.Any] =
@@ -83,10 +84,15 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         case _ => q"(${c.untypecheck(tree)}: ${TypeTree(fnType)}).apply(..$args)"
       }
     }
+
+    /** Applies the `.map` chain, casting the value to each function's parameter type (the raw value is the matched
+      * text, or the `.mapSlice` result).
+      */
     private def convert(chain: List[Any], raw: Tree): Tree =
       chain.foldLeft(raw) { (acc, fn) =>
         val tree = fn.asInstanceOf[Tree]
-        applyFn(tree, tree.tpe.widen, List(acc))
+        val fnType = tree.tpe.widen
+        applyFn(tree, fnType, List(q"$acc.asInstanceOf[${TypeTree(fnType.dealias.typeArgs.head)}]"))
       }
 
     // --- reductions ----------------------------------------------------------------------------------------------
@@ -101,7 +107,7 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       case CodegenPlan.NtPlan(Some(id))   => applyFn(collections(id).result, anyToAny, List(raw))
       case CodegenPlan.TermPlan(None)     => raw
       case CodegenPlan.TermPlan(Some(id)) =>
-        convert(out.converters(id), q"$raw.asInstanceOf[_root_.java.lang.String]")
+        convert(out.converters(id), raw)
     }
 
     private def reduceCase(r: CodegenPlan.Reduce): Tree = {
@@ -156,6 +162,23 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
     }
 
     // --- lexer ---------------------------------------------------------------------------------------------------
+
+    def slice: Tree = {
+      val (token, input, start, end) = (fresh("token"), fresh("input"), fresh("start"), fresh("end"))
+      val cases = out.slicers.toList.map { case (id, fn) =>
+        val tree = fn.asInstanceOf[Tree]
+        cq"$id => ${applyFn(tree, tree.tpe.widen, List(q"$input", q"$start", q"$end"))}"
+      }
+      q"""def slice(
+            $token: _root_.scala.Int,
+            $input: _root_.java.lang.String,
+            $start: _root_.scala.Int,
+            $end: _root_.scala.Int
+          ): _root_.scala.Any = $token match {
+            case ..$cases
+            case _ => throw new _root_.java.lang.IllegalStateException("no slice conversion for token " + $token)
+          }"""
+    }
 
     def hasStringLexer: Tree = q"def hasStringLexer: _root_.scala.Boolean = ${out.lexer.isDefined}"
 
@@ -496,9 +519,18 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       case id: Ident if nonTerminals.contains(id.symbol) => NtRef(nonTerminals(id.symbol)._1)
       case id: Ident if terminals.contains(id.symbol)    =>
         terminals(id.symbol)
-      case DslCall("litSym", _, List(arg))    => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(tree))
-      case DslCall("reSym", _, List(arg))     => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(tree))
-      case DslCall("terminal", _, List(arg))  => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(tree))
+      case DslCall("litSym", _, List(arg))         => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(tree))
+      case DslCall("reSym", _, List(arg))          => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(tree))
+      case DslCall("terminal", _, List(arg))       => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(tree))
+      case DslCall("mapSlice", terminal, List(fn)) =>
+        checkNoGrammarRefs(fn)
+        sym(terminal, name) match {
+          case t: IRTerm if t.converters.isEmpty && t.slicer.isEmpty && t.pattern.isInstanceOf[RegexPattern] =>
+            t.copy(slicer = Some(strip(fn)))
+          case _: IRTerm =>
+            fail(tree, "`.mapSlice` must be the first conversion of a `terminal(...)` (before any `.map`)")
+          case _ => fail(tree, "`.mapSlice` is only available on terminals")
+        }
       case DslCall("map", terminal, List(fn)) =>
         checkNoGrammarRefs(fn)
         sym(terminal, name) match {

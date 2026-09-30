@@ -12,6 +12,9 @@ abstract class GeneratedReductions {
     */
   def reduce(p: Int, m: Machine): Boolean
 
+  /** Converts token `token` (one of the terminals with `mapSlice`) matched at `[start, end)` of `input`. */
+  def slice(token: Int, input: String, start: Int, end: Int): Any
+
   /** Whether [[lexString]] is generated (large lexers stay table-driven). */
   def hasStringLexer: Boolean
 

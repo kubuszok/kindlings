@@ -20,6 +20,8 @@ private[parser] object GrammarCompiler {
     *   the code of every production's reduction (only when compiling for generated code)
     * @param lexer
     *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
+    * @param slicers
+    *   the `.mapSlice` functions, by token id (only when compiling for generated code)
     */
   final case class Output(
       tables: List[String],
@@ -29,7 +31,8 @@ private[parser] object GrammarCompiler {
       converters: Vector[List[Any]],
       collections: Vector[Collection],
       reduces: Vector[CodegenPlan.Reduce],
-      lexer: Option[CodegenPlan.Lexer]
+      lexer: Option[CodegenPlan.Lexer],
+      slicers: Vector[(Int, Any)]
   )
 
   /** @param generated
@@ -44,7 +47,25 @@ private[parser] object GrammarCompiler {
     final case class Token(pattern: Pattern, var name: Option[String], pos: Pos)
     val literals = mutable.LinkedHashMap.empty[String, Token]
     val regexes = mutable.LinkedHashMap.empty[String, Token]
-    def register(t: Term): Unit = t.pattern match {
+    // `.mapSlice` converts at shift time, per token: every terminal with the pattern must share it (be the same val)
+    val slicerOf = mutable.LinkedHashMap.empty[Pattern, Option[Any]]
+    def registerSlicer(t: Term): Unit = slicerOf.get(t.pattern) match {
+      case None           => slicerOf(t.pattern) = t.slicer
+      case Some(existing) =>
+        val same = (existing, t.slicer) match {
+          case (Some(a), Some(b)) => a.asInstanceOf[AnyRef] eq b.asInstanceOf[AnyRef]
+          case (None, None)       => true
+          case _                  => false
+        }
+        if (!same)
+          err(
+            t.pos,
+            s"the pattern ${t.pattern.display} is used by a terminal with `mapSlice` and by another terminal: " +
+              "`mapSlice` converts the token when it is read, so its pattern must belong to one terminal declaration"
+          )
+    }
+    def register(t: Term): Unit = { registerSlicer(t); registerPattern(t) }
+    def registerPattern(t: Term): Unit = t.pattern match {
       case LiteralPattern(text) =>
         val tok = literals.getOrElseUpdate(text, Token(t.pattern, None, t.pos))
         if (tok.name.isEmpty) tok.name = t.name
@@ -337,6 +358,9 @@ private[parser] object GrammarCompiler {
       prodKind = prodKind,
       prodArg = prodArg,
       constants = constants.keys.toArray,
+      sliced = Array.tabulate(tokenCount) { t =>
+        generated && t >= 1 && t <= tokens.size && slicerOf.get(tokens(t - 1).pattern).exists(_.isDefined)
+      },
       literals = Array.tabulate(tokenCount) { t =>
         if (t >= 1 && t <= tokens.size) tokens(t - 1).pattern match {
           case LiteralPattern(text) => text
@@ -357,7 +381,9 @@ private[parser] object GrammarCompiler {
         converterIds.keys.toVector.map(_.converters),
         collections.result(),
         reduces.result(),
-        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None
+        if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None,
+        if (generated) slicerOf.toVector.collect { case (pattern, Some(fn)) => tokenId(pattern) -> fn }.sortBy(_._1)
+        else Vector.empty
       )
     )
   }

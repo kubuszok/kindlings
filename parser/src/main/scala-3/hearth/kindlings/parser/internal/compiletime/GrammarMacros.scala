@@ -47,6 +47,8 @@ private[parser] object GrammarMacros {
             val top = m.stackTop
             ${ Codegen.reduce(out, colls, 'p, 'm, 'values, 'top, 'collectionFactories) }
           }
+          def slice(token: Int, input: String, start: Int, end: Int): Any =
+            ${ Codegen.slice(out, 'token, 'input, 'start, 'end) }
           def hasStringLexer: Boolean = ${ Expr(out.lexer.isDefined) }
           def lexString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String, from: Int): Int =
             ${ Codegen.lexString(out, 'm, 'text, 'from) }
@@ -110,7 +112,7 @@ private[parser] object GrammarMacros {
         case CodegenPlan.NtPlan(Some(id))   => applyFn(colls(id).result, List(raw.asTerm))
         case CodegenPlan.TermPlan(None)     => raw.asTerm
         case CodegenPlan.TermPlan(Some(id)) =>
-          convert(out.converters(id), '{ $raw.asInstanceOf[String] }.asTerm)
+          convert(out.converters(id), raw.asTerm)
       }
       val cases = out.reduces.toList.map { r =>
         def raw(i: Int): Expr[Any] = '{ $values($top + ${ Expr(i - r.len + 1) }) }
@@ -295,8 +297,35 @@ private[parser] object GrammarMacros {
       Term.betaReduce(call).getOrElse(call)
     }
 
-    private def convert(using q: Quotes)(chain: List[Any], raw: q.reflect.Term): q.reflect.Term =
-      chain.foldLeft(raw)((acc, fn) => applyFn(fn, List(acc)))
+    /** Applies the `.map` chain, casting the value to each function's parameter type (the raw value is the matched
+      * text, or the `.mapSlice` result).
+      */
+    private def convert(using q: Quotes)(chain: List[Any], raw: q.reflect.Term): q.reflect.Term = {
+      import q.reflect.*
+      chain.foldLeft(raw) { (acc, fn) =>
+        val paramType = fn.asInstanceOf[Term].tpe.widen.dealias match {
+          case AppliedType(_, List(param, _)) => param
+          case _                              => TypeRepr.of[Any]
+        }
+        applyFn(fn, List(cast(acc, paramType)))
+      }
+    }
+
+    def slice(out: GrammarCompiler.Output, token: Expr[Int], input: Expr[String], start: Expr[Int], end: Expr[Int])(
+        using q: Quotes
+    ): Expr[Any] = {
+      import q.reflect.*
+      val cases = out.slicers.toList.map { case (id, fn) =>
+        CaseDef(Literal(IntConstant(id)), None, applyFn(fn, List(input.asTerm, start.asTerm, end.asTerm)))
+      }
+      val fallback =
+        CaseDef(
+          Wildcard(),
+          None,
+          '{ throw new IllegalStateException("no slice conversion for token " + $token) }.asTerm
+        )
+      Match(token.asTerm, cases :+ fallback).asExprOf[Any]
+    }
   }
 
   private def compile(grammar: Grammar, generated: Boolean)(using q: Quotes): GrammarCompiler.Output = {
@@ -533,7 +562,16 @@ private[parser] object GrammarMacros {
       case DslCall("litSym", _, List(arg))               => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(tree))
       case DslCall("reSym", _, List(arg))                => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(tree))
       case DslCall("terminal", _, List(arg))             => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(tree))
-      case DslCall("map", terminal, List(fn))            =>
+      case DslCall("mapSlice", terminal, List(fn))       =>
+        checkNoGrammarRefs(fn)
+        sym(terminal, name) match {
+          case t: IRTerm if t.converters.isEmpty && t.slicer.isEmpty && t.pattern.isInstanceOf[RegexPattern] =>
+            t.copy(slicer = Some(strip(fn)))
+          case _: IRTerm =>
+            fail(tree, "`.mapSlice` must be the first conversion of a `terminal(...)` (before any `.map`)")
+          case _ => fail(tree, "`.mapSlice` is only available on terminals")
+        }
+      case DslCall("map", terminal, List(fn)) =>
         checkNoGrammarRefs(fn)
         sym(terminal, name) match {
           case t: IRTerm => t.copy(converters = t.converters :+ strip(fn))

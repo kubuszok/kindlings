@@ -26,8 +26,16 @@ private[parser] object GrammarIR {
 
   /** @param converters
     *   the `.map` functions applied to the matched text, in order (compiler trees, used by code generation)
+    * @param slicer
+    *   the `.mapSlice` function (a compiler tree), applied when the token is shifted, before `converters`
     */
-  final case class Term(pattern: Pattern, name: Option[String], pos: Pos, converters: List[Any] = Nil) extends Sym
+  final case class Term(
+      pattern: Pattern,
+      name: Option[String],
+      pos: Pos,
+      converters: List[Any] = Nil,
+      slicer: Option[Any] = None
+  ) extends Sym
   final case class Group(alts: List[Alternative]) extends Sym
   final case class Opt(sym: Sym) extends Sym
   final case class Rep(sym: Sym, atLeastOne: Boolean, collection: Collection) extends Sym

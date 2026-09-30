@@ -156,13 +156,32 @@ the experiment is numbering the lexer's join states densely, so the per-token `s
 
 What remains is the data, not the control:
 
-1. **Cheaper token text** (item 3 above). Token copies (`String.<init>`, `copyOfRange`, `substring`) are ~12% of the
-   samples, the grammar's `unescape` rescan (`indexOf`) ~7%. A terminal that yields a slice of its match (e.g. the
-   string without its quotes), and a lexer that reports whether it saw an escape, would remove one copy and the
-   rescan: ~1 ms of the ~7 ms per parse.
+1. **Cheaper token text** (item 3 above): done with `Terminal.mapSlice`, see below.
 2. **Value building** (`toDouble`, list builders, tuples) is the same work jawn's facade does and stays.
 
-## 5. How to reproduce
+### Implemented: `mapSlice` (item 3)
+
+`terminal(re).mapSlice((input, start, end) => B)` converts a token from the input and its bounds, without the token
+copy. The generated grammar calls it at shift time through a generated `slice(token, input, start, end)` switch (the
+tables mark such tokens in `sliced`; version 6). A `String` input passes the whole input, other inputs pass the token's
+own copy with bounds `(0, length)`, and interpreted grammars apply it to the token text. A pattern with `mapSlice` must
+belong to one terminal declaration, because the conversion is per token, not per use. After `mapSlice`, `.map` chains
+cast the value to each function's own parameter type. The JSON benchmark's string terminal now copies the string once
+(without the quotes) and looks for `\` within the token (`Slices.indexOf`, not `String.indexOf`, which would scan to the
+end of the input).
+
+Same-session A/B, 3 forks × 6 iterations (the machine was slower that day: jawn 176 / 209):
+
+| Scala | `.map(s => unescape(s.substring(1, s.length - 1)))` | `.mapSlice(jsonString)` |
+|---|---|---|
+| 2.13 | 71.4 ± 4.1 ops/s | 77.5 ± 4.2 ops/s (+8.5%) |
+| 3 | 76.0 ± 3.3 ops/s | 89.7 ± 5.6 ops/s (+18%) |
+
+That is the ~1 ms per parse the profile pointed at. Relative to jawn, generated grammars are now at 0.44x (2.13) and
+0.43x (3) in that session. What is left is value building (`toDouble`, lists, tuples, the AST), which jawn's facade does
+too, and the general costs of an LR machine (a state per shift, a reduction per production).
+
+## 6. How to reproduce
 
 ```bash
 sbt --client 'benchmarks/Jmh/run -f 2 -wi 4 -i 6 -r 2 -w 2 .*ParserJsonBenchmark.(jawn|kindlingsGenerated)$'
