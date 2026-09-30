@@ -34,6 +34,12 @@ case class WithCollections(tags: List[String], counts: Vector[Int])
 
 case class WithMap(metadata: Map[String, String])
 
+// Map keys which are value types wrapping a String
+final case class StringKey(value: String) extends AnyVal
+case class WithStringKeyMap(counts: Map[StringKey, Int])
+// Map keys which are value types NOT wrapping a String
+case class WithWrappedIdKeyMap(counts: Map[WrappedId, Int])
+
 case class RecursiveTree(value: Int, children: List[RecursiveTree])
 
 // Value class

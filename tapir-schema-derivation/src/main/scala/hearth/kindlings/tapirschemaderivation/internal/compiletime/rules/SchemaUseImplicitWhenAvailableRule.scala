@@ -18,22 +18,16 @@ trait SchemaUseImplicitWhenAvailableRuleImpl {
       Type.of[KindlingsSchema.type].unsortedMethods.collect {
         case method if method.isImplicit => method.asUntyped
       } ++ Type.of[Schema.type].unsortedMethods.collect {
-        // For tapir's own Schema companion, only ignore the auto-derivation method,
+        // For tapir's own Schema companion, only ignore the auto-derivation method and the built-in
+        // Schema[Map[String, V]] (so that our map rule can apply JSON config like mapsAreArrays),
         // not built-in schemas for primitive types (schemaForString, schemaForInt, etc.).
-        case method if method.name == "derivedSchema" => method.asUntyped
+        // User-provided Schema[Map[K, V]] instances are still found by the implicit search.
+        case method if method.name == "derivedSchema" || method.name == "schemaForMap" => method.asUntyped
       }
 
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Expr[Schema[A]]]] =
       Log.info(s"Attempting to use implicit Schema for ${Type[A].prettyPrint}") >> {
-        // Skip summoning for Map types — Tapir provides built-in Schema[Map[K,V]] but we need structural derivation
-        val isMapType: Boolean = Type[A] match {
-          case IsMap(_) => true
-          case _        => false
-        }
-        if (isMapType) {
-          Log.info(s"Map type detected, skipping summoning for ${Type[A].prettyPrint}") >>
-            MIO.pure(Rule.yielded(s"Map type ${Type[A].prettyPrint} requires structural derivation"))
-        } else if (sctx.derivedType.exists(_.Underlying =:= Type[A])) {
+        if (sctx.derivedType.exists(_.Underlying =:= Type[A])) {
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is the type being derived, skipping implicit search"))
         } else {
           implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]

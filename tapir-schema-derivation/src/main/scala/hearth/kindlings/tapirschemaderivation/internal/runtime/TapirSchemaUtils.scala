@@ -176,6 +176,18 @@ object TapirSchemaUtils {
       isOptional = true
     )
 
+  /** Wrap a value schema as a Map[K, V], whose keys are converted to Strings with `keyToString` (e.g. unwrapping a
+    * value type/opaque type key).
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def mapSchemaWithKeys[K, V](valueSchema: Schema[V], keyToString: K => String): Schema[Any] =
+    Schema[Any](
+      SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(
+        _.asInstanceOf[Map[K, V]].map { case (k, v) => keyToString(k) -> v }
+      ),
+      isOptional = true
+    )
+
   /** Wrap a value schema as a Map encoded as array of key-value pair objects (for jsoniter mapAsArray). */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def mapAsArraySchema[V](valueSchema: Schema[V]): Schema[Any] = {

@@ -293,6 +293,76 @@ final class KindlingsSchemaSpec extends MacroSuite {
         }
       }
 
+      test("map field with user-provided Schema[Map[String, V]] uses it") {
+        implicit val customMapSchema: Schema[Map[String, String]] =
+          Schema.string[Map[String, String]].description("custom map schema")
+
+        val schema = KindlingsSchema.derived[WithMap].schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithMap] =>
+            val field = p.fields.find(_.name.name == "metadata").get
+            assertEquals(field.schema.description, Some("custom map schema"))
+            assertEquals(field.schema.schemaType: Any, SchemaType.SString[Any](): Any)
+          case other =>
+            fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("map field keyed by a value type wrapping String is derived as SOpenProduct") {
+        val schema = KindlingsSchema.derived[WithStringKeyMap].schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithStringKeyMap] =>
+            val field = p.fields.find(_.name.name == "counts").get
+            (field.schema.schemaType: SchemaType[?]) match {
+              case op0: SchemaType.SOpenProduct[?, ?] =>
+                val op = op0.asInstanceOf[SchemaType.SOpenProduct[Any, Any]]
+                assertEquals(op.valueSchema.schemaType: Any, SchemaType.SInteger[Any](): Any)
+                // keys are unwrapped to Strings (used e.g. by Tapir's validation)
+                assertEquals(
+                  op.mapFieldValues(Map(StringKey("a") -> 1, StringKey("b") -> 2)),
+                  Map[String, Any]("a" -> 1, "b" -> 2)
+                )
+              case other => fail(s"Expected SOpenProduct, got: $other")
+            }
+          case other =>
+            fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("map field keyed by a value type with user-provided Schema[Map[K, V]] uses it") {
+        implicit val customMapSchema: Schema[Map[StringKey, Int]] =
+          Schema.schemaForMap[StringKey, Int](_.value).description("custom map schema")
+
+        val schema = KindlingsSchema.derived[WithStringKeyMap].schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithStringKeyMap] =>
+            val field = p.fields.find(_.name.name == "counts").get
+            assertEquals(field.schema.description, Some("custom map schema"))
+          case other =>
+            fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("map field keyed by a non-String value type with user-provided Schema[Map[K, V]] uses it") {
+        implicit val customMapSchema: Schema[Map[WrappedId, Int]] =
+          Schema.schemaForMap[WrappedId, Int](_.value.toString).description("custom map schema")
+
+        val schema = KindlingsSchema.derived[WithWrappedIdKeyMap].schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithWrappedIdKeyMap] =>
+            val field = p.fields.find(_.name.name == "counts").get
+            assertEquals(field.schema.description, Some("custom map schema"))
+          case other =>
+            fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("map field keyed by a non-String value type without Schema[Map[K, V]] fails to compile") {
+        compileErrors("KindlingsSchema.derived[hearth.kindlings.tapirschemaderivation.WithWrappedIdKeyMap]").check(
+          "Cannot derive tapir Schema for Map with key type"
+        )
+      }
+
       test("recursive type uses SRef") {
         val schema = KindlingsSchema.derived[RecursiveTree].schema
         schema.schemaType match {
