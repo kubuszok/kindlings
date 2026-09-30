@@ -13,8 +13,8 @@ import hearth.std.{ProviderResult, StandardMacroExtension, StdExtensions}
   * Newtype.WithType[B, A], ...)` fallback would resolve at a normal call site but never inside a derivation macro. A
   * value-type provider sidesteps implicit search entirely by matching the type structurally at macro-expansion time.
   *
-  * Registered with priority 1000, so it runs before Hearth's built-in opaque-type provider (priority -1000), which would
-  * otherwise match the neotype's opaque `Type` and wrap it without running `validate`.
+  * Registered with priority 1000, so it runs before Hearth's built-in opaque-type provider (priority -1000), which
+  * would otherwise match the neotype's opaque `Type` and wrap it without running `validate`.
   */
 final class IsValueTypeProviderForNeotype extends StandardMacroExtension { loader =>
 
