@@ -1,12 +1,12 @@
 package hearth.kindlings.parser
 
-/** Number conversions for [[Terminal.mapSlice]]: they read the digits straight from the input, without copying the token
-  * into a `String` and re-validating it (`terminal("[0-9]+").mapSlice(Numbers.int)`). They are methods, so that the
-  * macro inlines them as direct calls (a `Function3` value would box the bounds and the result).
+/** Number conversions for [[Terminal.mapSlice]]: they read the digits straight from the input, without copying the
+  * token into a `String` and re-validating it (`terminal("[0-9]+").mapSlice(Numbers.int)`). They are methods, so that
+  * the macro inlines them as direct calls (a `Function3` value would box the bounds and the result).
   *
-  * They expect the token to be a well-formed number (which the terminal's pattern guarantees) and give the same
-  * results as `toInt` / `toLong` / `toDouble` of the token's text, throwing `NumberFormatException` on overflow or
-  * malformed text.
+  * They expect the token to be a well-formed number (which the terminal's pattern guarantees) and give the same results
+  * as `toInt` / `toLong` / `toDouble` of the token's text, throwing `NumberFormatException` on overflow or malformed
+  * text.
   */
 object Numbers {
 
