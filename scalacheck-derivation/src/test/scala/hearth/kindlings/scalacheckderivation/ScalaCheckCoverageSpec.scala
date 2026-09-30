@@ -277,6 +277,9 @@ final class ScalaCheckCoverageSpec extends munit.FunSuite {
 
   test("Arbitrary/Shrink: a builder exception is a rejected candidate, not a runtime exception") {
     // Neither ScalaCheck nor the structural rule knows immutable.BitSet accepts only non-negative elements
+    // Keep valid indices small: an arbitrary positive Int can allocate hundreds of megabytes in BitSet. This test
+    // exercises rejection of negative elements, not allocation failure (which must not be caught as NonFatal).
+    implicit val boundedInt: Arbitrary[Int] = Arbitrary(Gen.choose(-10, 10))
     final case class WithBitSet(bits: scala.collection.immutable.BitSet)
     samples(Arbitrary.derived[WithBitSet].arbitrary).foreach(v => assert(v.bits.forall(_ >= 0)))
     Shrink.derived[WithBitSet].shrink(WithBitSet(scala.collection.immutable.BitSet(1, 2, 3))).toList
