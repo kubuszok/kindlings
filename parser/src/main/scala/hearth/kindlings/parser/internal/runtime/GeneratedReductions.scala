@@ -15,6 +15,12 @@ abstract class GeneratedReductions {
   /** Converts token `token` (one of the terminals with `mapSlice`) matched at `[start, end)` of `input`. */
   def slice(token: Int, input: String, start: Int, end: Int): Any
 
+  /** Whether [[runLL]] is generated: the grammar is LL(1) and is parsed top down for `String` inputs. */
+  def hasLL: Boolean
+
+  /** Runs the LL(1) program on `m` (see `Machine`'s LL API) for at most `budget` steps; returns a `Machine` signal. */
+  def runLL(m: Machine, budget: Int): Int
+
   /** Whether [[lexString]] is generated (large lexers stay table-driven). */
   def hasStringLexer: Boolean
 

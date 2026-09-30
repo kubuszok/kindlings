@@ -42,8 +42,28 @@ final private[parser] class Tables(
     val ntPrim: Array[Int],
     val constants: Array[String],
     val literals: Array[String],
-    val sliced: Array[Boolean]
+    val sliced: Array[Boolean],
+    val llStart: Int,
+    val llExpectStart: Array[Int],
+    val llExpect: Array[Int]
 ) {
+
+  /** Whether the LL(1) program of the generated code exists (`llStart` is its start state). */
+  def hasLL: Boolean = llStart >= 0
+
+  /** The tokens LL state `s` accepts (for syntax errors). */
+  def llExpected(s: Int): Seq[Int] = llExpect.slice(llExpectStart(s), llExpectStart(s + 1)).toSeq
+
+  /** `simpleSkip(c)`: the ASCII char `c` starts a skipped token made only of such chars, which ends at the first other
+    * char (e.g. `[ \t\r\n]+`), so runs of them can be skipped without the lexer.
+    */
+  lazy val simpleSkip: Array[Boolean] = Array.tabulate(128) { c =>
+    val s = ascii(c) // from the start state
+    s >= 0 && lexAccept(s) >= 0 && skip(lexAccept(s)) && {
+      val targets = (transStart(s) until transStart(s + 1)).map(transTarget(_))
+      targets.forall(_ == s) && (0 until 128).forall(d => ascii(d) != s || ascii(s * 128 + d) == s)
+    }
+  }
 
   /** `ascii(state * 128 + c)`: transition target on ASCII chars, `-1` if none. */
   val ascii: Array[Int] = {
@@ -110,12 +130,15 @@ final private[parser] class Tables(
     w.int(literals.length)
     literals.foreach(l => if (l == null) w.int(-1) else { w.int(0); w.string(l) })
     w.ints(sliced.map(b => if (b) 1 else 0))
+    w.int(llStart)
+    w.ints(llExpectStart)
+    w.ints(llExpect)
     w
   }
 }
 private[parser] object Tables {
 
-  val Version: Int = 7
+  val Version: Int = 8
 
   def decode(text: String): Tables = {
     val r = new TableCodec.Reader(text)
@@ -145,7 +168,10 @@ private[parser] object Tables {
       ntPrim = r.ints(),
       constants = Array.fill(r.int())(r.string()),
       literals = Array.fill(r.int())(if (r.int() < 0) null else r.string()),
-      sliced = r.ints().map(_ != 0)
+      sliced = r.ints().map(_ != 0),
+      llStart = r.int(),
+      llExpectStart = r.ints(),
+      llExpect = r.ints()
     )
   }
 }

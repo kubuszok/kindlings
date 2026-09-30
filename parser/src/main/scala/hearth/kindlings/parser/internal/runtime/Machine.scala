@@ -38,6 +38,14 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   /** The generated `String` lexer, when the input is a `String` and the grammar has one. */
   private val stringLexer: GeneratedReductions =
     if (text != null && reductions != null && reductions.hasStringLexer) reductions else null
+
+  /** Parsing with the generated LL(1) program (`String` inputs of LL(1) grammars) instead of the LALR tables. */
+  private val llMode: Boolean = text != null && reductions != null && reductions.hasLL && tables.hasLL
+  private var llState: Int = tables.llStart
+  private var frames = new Array[Int](64)
+  private var fp = -1
+
+  private val simpleSkip = tables.simpleSkip
   private val tokenCount = tables.tokenCount
   private val actionTable = tables.action
   private val nonTerminalCount = tables.nonTerminalCount
@@ -73,9 +81,10 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     pendingLhs = -1
     _pendingEffect = null
     val kind = ntPrim(lhs)
-    if (kind == Prims.Boxed) push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
+    val state = if (llMode) 0 else tables.goto(states(sp) * nonTerminalCount + lhs)
+    if (kind == Prims.Boxed) push(state, value)
     else {
-      push(tables.goto(states(sp) * nonTerminalCount + lhs), null)
+      push(state, null)
       prims(sp) = Prims.encode(kind, value)
     }
   }
@@ -96,9 +105,10 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   }
 
   /** Runs until the input is accepted, a syntax error occurs, an effectful action has to be sequenced, more input is
-    * needed, or `budget` shifts and reductions were made.
+    * needed, or `budget` shifts and reductions (LL mode: program steps) were made.
     */
   def run(budget: Int = Int.MaxValue): Int = {
+    if (llMode) return reductions.runLL(this, budget)
     var steps = 0
     while (steps < budget) {
       if (lookahead < 0) {
@@ -158,11 +168,10 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   /** The index of the top of the stack. */
   def stackTop: Int = sp
 
-  /** Completes a reduction: the stack is cut back to `top` and `value` is pushed in the goto state of `lhs`. */
   /** Completes a reduction of a non-terminal with a primitive type: its value's `bits` go to the primitive stack. */
   def reducedPrim(top: Int, lhs: Int, bits: Long): Unit = {
     sp = top
-    push(tables.goto(states(top) * nonTerminalCount + lhs), null)
+    push(if (llMode) 0 else tables.goto(states(top) * nonTerminalCount + lhs), null)
     prims(sp) = bits
   }
 
@@ -173,9 +182,12 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     prims(sp) = bits
   }
 
+  /** Completes a reduction: the stack is cut back to `top` and `value` is pushed in the goto state of `lhs` (LL mode:
+    * just pushed).
+    */
   def reduced(top: Int, lhs: Int, value: Any): Unit = {
     sp = top
-    push(tables.goto(states(top) * nonTerminalCount + lhs), value)
+    push(if (llMode) 0 else tables.goto(states(top) * nonTerminalCount + lhs), value)
   }
 
   /** Completes a reduction whose goto state is always `state`. */
@@ -199,6 +211,89 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     tokenStart = start.toLong
     tokenEnd = end.toLong
     pos = end.toLong
+  }
+
+  // --- used by the generated LL(1) program (`GeneratedReductions.runLL`) ------------------------------------------
+
+  /** The generated code of the grammar (the LL program calls its `reduce`). */
+  def generatedReductions: GeneratedReductions = reductions
+
+  /** The LL state to continue at (after an effect or a yield). */
+  def llResumeState: Int = llState
+
+  /** Records the LL state to continue at. */
+  def llSuspendAt(state: Int): Unit = llState = state
+
+  /** The next token, or `-1` if it was not read yet. */
+  def lookaheadToken: Int = lookahead
+
+  /** Reads the next token (in LL state `state`, for error messages): `Machine.Done` or `Machine.Error`. */
+  def readToken(state: Int): Int = {
+    llState = state
+    lex()
+  }
+
+  /** Pushes the value of the next token (already read) and consumes it. */
+  def shiftToken(): Unit = {
+    val literal = literals(lookahead)
+    push(
+      0,
+      if (literal != null) literal
+      else if (sliced(lookahead)) reductions.slice(lookahead, text, tokenStart.toInt, tokenEnd.toInt)
+      else text.substring(tokenStart.toInt, tokenEnd.toInt)
+    )
+    lookahead = -1
+  }
+
+  /** Fast path for a single-char literal token `token` = `c` that no longer token can start with: skips simple skipped
+    * text (whitespace) and, if the next char is `c`, pushes the literal and returns `true`. Otherwise returns `false`,
+    * and the token is read by the lexer.
+    */
+  def expectChar(c: Char, token: Int): Boolean = {
+    val t = text
+    val length = t.length
+    var p = pos.toInt
+    while (p < length && { val d = t.charAt(p); d < 128 && simpleSkip(d.toInt) }) p += 1
+    pos = p.toLong
+    if (p < length && t.charAt(p) == c) {
+      tokenStart = p.toLong
+      pos = p.toLong + 1
+      tokenEnd = pos
+      push(0, literals(token))
+      true
+    } else false
+  }
+
+  def pushFrame(state: Int): Unit = {
+    fp += 1
+    if (fp == frames.length) frames = java.util.Arrays.copyOf(frames, frames.length * 2)
+    frames(fp) = state
+  }
+
+  def popFrame(): Int = {
+    val state = frames(fp)
+    fp -= 1
+    state
+  }
+
+  /** The next token does not fit LL state `state`: records the syntax error, returns `Machine.Error`. */
+  def llUnexpected(state: Int): Int = {
+    llState = state
+    _error = syntaxError("Unexpected token")
+    Machine.Error
+  }
+
+  /** The input was accepted: records the result, returns `Machine.Done`. */
+  def llAccept(): Int = {
+    val kind = ntPrim(nonTerminalCount - 1)
+    _result = if (kind == Prims.Boxed) values(sp) else Prims.decode(kind, prims(sp))
+    Machine.Done
+  }
+
+  /** A value was rejected by a reduction: records the error, returns `Machine.Error`. */
+  def llRejected(message: String): Int = {
+    _error = rejected(message)
+    Machine.Error
   }
 
   /** No token matches at `start`. */
@@ -376,9 +471,9 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
 
   private def syntaxError(detail: String): ParseError = {
     val state = states(sp)
-    val expected = (0 until tokenCount)
+    val expected = (if (llMode) tables.llExpected(llState) else (0 until tokenCount))
       .filter { t =>
-        !tables.skip(t) && tables.action(state * tokenCount + t) != 0
+        !tables.skip(t) && (llMode || tables.action(state * tokenCount + t) != 0)
       }
       .map(tables.tokenNames(_))
       .sorted

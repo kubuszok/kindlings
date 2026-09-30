@@ -67,6 +67,27 @@ object KindlingsParsers {
     value
   }
 
+  val lalr: Parser[Id, J] = Grammar.grammar[J, Id] { g =>
+    import g.*
+    enable(RequireLALR)
+    val value = nonTerminal[J]
+    val member = nonTerminal[(String, J)]
+    val string = terminal("\"([^\"\\\\]|\\\\.)*\"").mapSlice(jsonString)
+    val number = terminal("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?").map(_.toDouble)
+    skip("[ \\t\\r\\n]+")
+    value ::= (
+      all("{", sepBy(member, ","), "}").pure((_, members, _) => JObj(members): J) ||
+        all("[", sepBy(value, ","), "]").pure((_, items, _) => JArr(items): J) ||
+        all(string).pure(s => JStr(s): J) ||
+        all(number).pure(n => JNum(n): J) ||
+        all("true").pure(_ => JBool(true): J) ||
+        all("false").pure(_ => JBool(false): J) ||
+        all("null").pure(_ => JNull: J)
+    )
+    member ::= all(string, ":", value).pure((k, _, v) => k -> v)
+    value
+  }
+
   val fastNumbers: Parser[Id, J] = Grammar.grammar[J, Id] { g =>
     import g.*
     val value = nonTerminal[J]
@@ -291,6 +312,7 @@ class ParserJsonBenchmark {
     val expected = KindlingsParsers.generated.parse(input)
     val results = List(
       "interpreted" -> KindlingsParsers.interpreted.parse(input),
+      "lalr" -> KindlingsParsers.lalr.parse(input),
       "reader" -> KindlingsParsers.generated.parse(new java.io.StringReader(input), 8192),
       "fastparse" -> FastparseJson.parse(input),
       "parboiled2" -> Parboiled2Json.parse(input),
@@ -304,6 +326,7 @@ class ParserJsonBenchmark {
   }
 
   @Benchmark def kindlingsGenerated: J = KindlingsParsers.generated.parse(input)
+  @Benchmark def kindlingsLALR: J = KindlingsParsers.lalr.parse(input)
   @Benchmark def kindlingsFastNumbers: J = KindlingsParsers.fastNumbers.parse(input)
   @Benchmark def kindlingsInterpreted: J = KindlingsParsers.interpreted.parse(input)
   @Benchmark def kindlingsGeneratedReader: J = KindlingsParsers.generated.parse(new java.io.StringReader(input), 8192)

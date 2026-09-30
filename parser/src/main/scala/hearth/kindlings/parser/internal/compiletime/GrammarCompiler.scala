@@ -22,8 +22,10 @@ private[parser] object GrammarCompiler {
     *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
     * @param flags
     *   the enabled `GrammarFlag`s, by name
-    * @param ll1
-    *   whether the grammar is LL(1) (and `RequireLALR` is not enabled): generated code may use the top-down parser
+    * @param ll
+    *   the top-down (LL(1)) program, for generated code of LL(1) grammars (unless `RequireLALR`)
+    * @param singleCharTokens
+    *   literal tokens of one ASCII char that no longer token can start with (parsed without the lexer)
     * @param slicers
     *   the `.mapSlice` functions, by token id (only when compiling for generated code)
     */
@@ -38,7 +40,8 @@ private[parser] object GrammarCompiler {
       lexer: Option[CodegenPlan.Lexer],
       slicers: Vector[(Int, Any)],
       flags: Set[String],
-      ll1: Boolean
+      ll: Option[LLProgram.Program],
+      singleCharTokens: Map[Int, Char]
   )
 
   /** @param generated
@@ -390,6 +393,19 @@ private[parser] object GrammarCompiler {
       if (generated)
         reduces += CodegenPlan.Reduce(p, prod.rhs.size, prod.lhs, constantGoto(prod.lhs), body, primOf(prod.lhs))
     }
+    val llProgram: Option[LLProgram.Program] =
+      if (generated && !flags("RequireLALR") && ll1.isLL1)
+        LLProgram.build(g.root, flat.nonTerminals, prods, flat.origins, g.nonTerminals.size, t => tokenId(t.pattern))
+      else None
+    val singleCharTokens: Map[Int, Char] = tokens.zipWithIndex.collect {
+      case (Token(LiteralPattern(text), _, _), i) if text.length == 1 && text.charAt(0) < 128 && {
+            val s = (dfa.transStart(0) until dfa.transStart(1)).collectFirst {
+              case t if dfa.lo(t) <= text.charAt(0) && text.charAt(0) <= dfa.hi(t) => dfa.target(t)
+            }
+            s.exists(state => dfa.transStart(state) == dfa.transStart(state + 1) && dfa.accept(state) == i + 1)
+          } =>
+        (i + 1) -> text.charAt(0)
+    }.toMap
     val tables = new Tables(
       tokenCount = tokenCount,
       tokenNames = tokenNames,
@@ -409,6 +425,9 @@ private[parser] object GrammarCompiler {
       prodArg = prodArg,
       ntPrim = Array.tabulate(nts)(primOf),
       constants = constants.keys.toArray,
+      llStart = llProgram.fold(-1)(_.start),
+      llExpectStart = llProgram.fold(Array.empty[Int])(p => p.expected.scanLeft(0)(_ + _.size).toArray),
+      llExpect = llProgram.fold(Array.empty[Int])(p => p.expected.flatten.toArray),
       sliced = Array.tabulate(tokenCount) { t =>
         generated && t >= 1 && t <= tokens.size && slicerOf.get(tokens(t - 1).pattern).exists(_.isDefined)
       },
@@ -436,7 +455,8 @@ private[parser] object GrammarCompiler {
         if (generated) slicerOf.toVector.collect { case (pattern, Some(fn)) => tokenId(pattern) -> fn }.sortBy(_._1)
         else Vector.empty,
         flags,
-        !flags("RequireLALR") && ll1.isLL1
+        llProgram,
+        singleCharTokens
       )
     )
   }

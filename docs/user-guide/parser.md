@@ -243,6 +243,70 @@ val parser: Parser[IO, Int] = Grammar.grammar[Int, IO] { g =>
 - `Reader`/`InputStream` inputs are read with `Sync.blocking`;
 - the machine is allocated when the `F[R]` runs: running the same `parser.parse(input)` value twice parses twice.
 
+## Two parsers: LL(1) and LALR(1)
+
+Every grammar is compiled into LALR(1) tables, which handle left recursion, operator precedence and most programming
+language grammars. When the grammar is also **LL(1)** (it can be parsed top down by looking at the next token only,
+which is true of most data formats: JSON, configuration files, protocols), `Grammar.grammar` additionally generates a
+top-down parser for `String` inputs. It checks punctuation by comparing chars, builds repetitions straight into their
+collections and needs no parse tables. Both give the same values; the LL(1) parser's error messages list only the
+tokens valid in the current context. `Reader`/`InputStream` and push inputs use the LALR(1) tables.
+
+The choice is automatic. Grammar flags make it explicit (see below): `enable(RequireLL1)` fails the compilation when the
+grammar is not LL(1), `enable(RequireLALR)` always uses the LALR(1) parser.
+
+### Grammar flags
+
+Compile-time options are set inside the grammar block:
+
+```scala
+Grammar.grammar[Json, Id] { g =>
+  import g._
+  enable(RequireLL1)
+  // declarations and productions
+}
+```
+
+| Flag | Effect |
+|---|---|
+| `RequireLL1` | the grammar must be LL(1): otherwise compilation fails with an explanation of every problem (like `@tailrec` for tail calls) |
+| `RequireLALR` | always use the LALR(1) parser, even for LL(1) grammars |
+| `ThrowingInRuntime` | allow collections whose smart constructor can reject values in effects without an error channel (`Id`); the rejection is thrown as a `ParseError` |
+
+`disable(flag)` states that a flag is off (flags are off by default); setting a flag both ways, or requiring both parsers,
+is a compile error.
+
+### Why a grammar is not LL(1)
+
+With `enable(RequireLL1)`, a grammar that is not LL(1) fails with one error listing every reason, where it happens and
+how to fix it, in plain words. For example:
+
+```scala
+expr ::= all(expr, "+", term).pure((a, _, b) => a + b) || all(term).pure(t => t)
+```
+
+```
+`enable(RequireLL1)`: this grammar is not LL(1), i.e. a top-down parser that looks at one token ahead cannot parse it:
+  1. `expr` can start with itself: `expr ::= expr "+" term` (Calc.scala:12:34). To read `expr`, a top-down parser
+     would first have to read `expr` again, forever, before looking at any input (this is called left recursion).
+     Describe the repetition with `rep`/`sepBy` instead - e.g. `list ::= all(item, rep(all(",", item)))` rather than
+     `list ::= all(list, ",", item)` - or keep LALR (remove `enable(RequireLL1)`), which handles left recursion.
+```
+
+The reasons it reports:
+
+- **a rule that starts with itself**, directly or through other rules (with the path, e.g. `a -> b -> a`): write the
+  repetition with `rep`/`sepBy`;
+- **alternatives that can start with the same token**: move the common beginning out, e.g.
+  `all(x, "a") || all(x, "b")` becomes `all(x, "a" || "b")`;
+- **an empty alternative** (`""`, `opt`, an empty `rep`) whose next token can also start another alternative;
+- **an optional part, a repetition or a list separator** whose next token could also be what comes after it (e.g.
+  `all(rep("x"), "x")`): the parser cannot tell whether it continues;
+- **a repetition of something that can match nothing**.
+
+Precedence declarations (`left`/`right`/`nonassoc`) only settle choices for the LALR(1) parser: an LL(1) grammar spells
+precedence out in its rules (one non-terminal per level, repetitions for the operators).
+
 ## Compile-time diagnostics
 
 Conflicts are reported at the production that causes them, together with the LR state (abridged):

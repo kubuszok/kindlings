@@ -41,6 +41,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
           new _root_.hearth.kindlings.parser.internal.runtime.GeneratedReductions {
             ${codegen.reduce}
             ${codegen.slice}
+            ${codegen.hasLL}
+            ${codegen.runLL}
             ${codegen.hasStringLexer}
             ${codegen.lexString}
             protected def factories(): _root_.scala.Array[_root_.scala.Any] =
@@ -226,6 +228,83 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
             case ..$cases
             case _ => throw new _root_.java.lang.IllegalStateException("no slice conversion for token " + $token)
           }"""
+    }
+
+    // --- the LL(1) program --------------------------------------------------------------------------------------------
+
+    def hasLL: Tree = q"def hasLL: _root_.scala.Boolean = ${out.ll.isDefined}"
+
+    def runLL: Tree = {
+      val (lm, budget, state, steps, status, r, e) =
+        (fresh("m"), fresh("budget"), fresh("state"), fresh("steps"), fresh("status"), fresh("r"), fresh("e"))
+      val Machine = q"_root_.hearth.kindlings.parser.internal.runtime.Machine"
+      val body = out.ll match {
+        case None          => q"throw new _root_.java.lang.UnsupportedOperationException(${"no LL(1) program"})"
+        case Some(program) =>
+          val readIfNeeded =
+            q"if ($lm.lookaheadToken < 0) { val $r = $lm.readToken($state); if ($r != $Machine.Done) $status = $r }"
+          def tokens(ts: List[Int]): Tree =
+            if (ts.size == 1) Literal(Constant(ts.head)) else Alternative(ts.map(t => Literal(Constant(t))))
+          val cases = program.ops.toList.zipWithIndex.map {
+            case (LLProgram.Expect(t, next), i) =>
+              val generic = q"""{
+                  $readIfNeeded
+                  if ($status == -1) {
+                    if ($lm.lookaheadToken == $t) { $lm.shiftToken(); $state = $next }
+                    else $status = $lm.llUnexpected($state)
+                  }
+                }"""
+              out.singleCharTokens.get(t) match {
+                case Some(ch) =>
+                  cq"$i => if ($lm.lookaheadToken < 0 && $lm.expectChar($ch, $t)) $state = $next else $generic"
+                case None => cq"$i => $generic"
+              }
+            case (LLProgram.Call(_, entry, next), i) => cq"$i => { $lm.pushFrame($next); $state = $entry }"
+            case (LLProgram.Reduce(p, next), i)      =>
+              cq"$i => { $state = $next; if (reduce($p, $lm)) $status = $Machine.Effect }"
+            case (LLProgram.Return, i)                       => cq"$i => $state = $lm.popFrame()"
+            case (LLProgram.Predict(choices, default, _), i) =>
+              val choiceCases = choices.map { case (ts, target) => cq"${tokens(ts)} => $state = $target" }
+              val fallback = default.fold(q"$status = $lm.llUnexpected($state)")(d => q"$state = $d")
+              cq"""$i => {
+                  $readIfNeeded
+                  if ($status == -1) $lm.lookaheadToken match {
+                    case ..$choiceCases
+                    case _ => $fallback
+                  }
+                }"""
+            case (LLProgram.Accept, i) =>
+              cq"""$i => {
+                  $readIfNeeded
+                  if ($status == -1) {
+                    if ($lm.lookaheadToken == 0) $status = $lm.llAccept() else $status = $lm.llUnexpected($state)
+                  }
+                }"""
+          }
+          q"""{
+                var $state = $lm.llResumeState
+                var $steps = 0
+                var $status = -1
+                try {
+                  while ($status == -1) {
+                    if ($steps >= $budget) $status = $Machine.Yield
+                    else {
+                      $steps += 1
+                      $state match {
+                        case ..$cases
+                        case _ => throw new _root_.java.lang.IllegalStateException("no LL state " + $state)
+                      }
+                    }
+                  }
+                } catch {
+                  case $e: _root_.hearth.kindlings.parser.internal.runtime.RejectedValue =>
+                    $status = $lm.llRejected($e.getMessage)
+                }
+                $lm.llSuspendAt($state)
+                $status
+              }"""
+      }
+      q"def runLL($lm: $MachineType, $budget: _root_.scala.Int): _root_.scala.Int = $body"
     }
 
     def hasStringLexer: Tree = q"def hasStringLexer: _root_.scala.Boolean = ${out.lexer.isDefined}"

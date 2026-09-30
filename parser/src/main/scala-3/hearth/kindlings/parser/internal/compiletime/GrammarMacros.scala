@@ -4,7 +4,7 @@ package internal.compiletime
 import scala.collection.mutable
 import scala.quoted.*
 
-import hearth.kindlings.parser.internal.runtime.Machine
+import hearth.kindlings.parser.internal.runtime.{Machine, RejectedValue}
 
 import GrammarIR.{Statement as IRStatement, Term as IRTerm, *}
 
@@ -49,6 +49,9 @@ private[parser] object GrammarMacros {
           }
           def slice(token: Int, input: String, start: Int, end: Int): Any =
             ${ Codegen.slice(out, 'token, 'input, 'start, 'end) }
+          def hasLL: Boolean = ${ Expr(out.ll.isDefined) }
+          def runLL(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, budget: Int): Int =
+            ${ Codegen.runLL(out, 'm, 'budget) }
           def hasStringLexer: Boolean = ${ Expr(out.lexer.isDefined) }
           def lexString(m: _root_.hearth.kindlings.parser.internal.runtime.Machine, text: String, from: Int): Int =
             ${ Codegen.lexString(out, 'm, 'text, 'from) }
@@ -232,6 +235,120 @@ private[parser] object GrammarMacros {
           }
           result
         }
+    }
+
+    def runLL(out: GrammarCompiler.Output, m: Expr[Machine], budget: Expr[Int])(using
+        q: Quotes
+    ): Expr[Int] = out.ll match {
+      case None          => '{ throw new UnsupportedOperationException("no LL(1) program") }
+      case Some(program) =>
+        '{
+          var state = $m.llResumeState
+          var steps = 0
+          var status = -1
+          try
+            while status == -1 do if steps >= $budget then status = Machine.Yield
+            else {
+              steps += 1
+              ${
+                new LLEmitter(out, program, m, 'state, x => '{ state = $x }, x => '{ status = $x }, 'status).states
+              }
+            }
+          catch {
+            case e: RejectedValue =>
+              status = $m.llRejected(e.getMessage)
+          }
+          $m.llSuspendAt(state)
+          status
+        }
+    }
+
+    /** Emits the `match` over the states of the LL(1) program (see `runLL`). */
+    final private class LLEmitter(
+        out: GrammarCompiler.Output,
+        program: LLProgram.Program,
+        m: Expr[Machine],
+        state: Expr[Int],
+        setState: LexerEmitter.Setter,
+        setStatus: LexerEmitter.Setter,
+        status: Expr[Int]
+    ) {
+
+      /** `if (la < 0) read the next token` (sets the status on a lexical error). */
+      private def readIfNeeded(using Quotes): Expr[Unit] =
+        '{
+          if $m.lookaheadToken < 0 then {
+            val r = $m.readToken($state)
+            if r != Machine.Done then ${ setStatus('r) }
+          }
+        }
+
+      def states(using q: Quotes): Expr[Unit] = {
+        import q.reflect.*
+        val cases = program.ops.toList.zipWithIndex.map { case (op, i) =>
+          CaseDef(Literal(IntConstant(i)), None, code(op).asTerm)
+        }
+        val fallback = CaseDef(Wildcard(), None, '{ throw new IllegalStateException("no LL state " + $state) }.asTerm)
+        Match(state.asTerm, cases :+ fallback).asExprOf[Unit]
+      }
+
+      private def code(op: LLProgram.Op)(using q: Quotes): Expr[Unit] = {
+        import q.reflect.*
+        op match {
+          case LLProgram.Expect(t, next) =>
+            val token = Expr(t)
+            val generic = '{
+              $readIfNeeded
+              if $status == -1 then if $m.lookaheadToken == $token then {
+                $m.shiftToken()
+                ${ setState(Expr(next)) }
+              } else ${ setStatus('{ $m.llUnexpected($state) }) }
+            }
+            out.singleCharTokens.get(t) match {
+              case Some(ch) =>
+                '{
+                  if $m.lookaheadToken < 0 && $m.expectChar(${ Expr(ch) }, $token) then ${ setState(Expr(next)) }
+                  else $generic
+                }
+              case None => generic
+            }
+          case LLProgram.Call(_, entry, next) => '{ $m.pushFrame(${ Expr(next) }); ${ setState(Expr(entry)) } }
+          case LLProgram.Reduce(p, next)      =>
+            '{
+              ${ setState(Expr(next)) }
+              if $m.generatedReductions.reduce(${ Expr(p) }, $m) then ${ setStatus('{ Machine.Effect }) }
+            }
+          case LLProgram.Return                       => setState('{ $m.popFrame() })
+          case LLProgram.Predict(choices, default, _) =>
+            def dispatch(using q2: Quotes): Expr[Unit] = {
+              import q2.reflect.*
+              val choiceCases = choices.map { case (ts, target) =>
+                val literals = ts.map(t => Literal(IntConstant(t)))
+                CaseDef(
+                  if literals.size == 1 then literals.head else Alternatives(literals),
+                  None,
+                  setState(Expr(target)).asTerm
+                )
+              }
+              val fallback = default match {
+                case Some(d) => setState(Expr(d))
+                case None    => setStatus('{ $m.llUnexpected($state) })
+              }
+              Match('{ $m.lookaheadToken }.asTerm, choiceCases :+ CaseDef(Wildcard(), None, fallback.asTerm))
+                .asExprOf[Unit]
+            }
+            '{
+              $readIfNeeded
+              if $status == -1 then $dispatch
+            }
+          case LLProgram.Accept =>
+            '{
+              $readIfNeeded
+              if $status == -1 then if $m.lookaheadToken == 0 then ${ setStatus('{ $m.llAccept() }) }
+              else ${ setStatus('{ $m.llUnexpected($state) }) }
+            }
+        }
+      }
     }
 
     private object LexerEmitter {
