@@ -8,12 +8,15 @@ import hearth.kindlings.parser.internal.runtime.Machine
   *
   *   - Pure actions, lexing and all shifts/reductions run inside one `Sync.delay` segment of at most `budget` steps.
   *   - An effectful action costs exactly one `flatMap`: the next pure segment runs directly in its continuation.
-  *   - After `budget` steps the engine `cede`s (with `Async`), so long parses do not starve other fibers.
+  *   - After `budget` steps the engine `cede`s (with `Async`). The budget counts shifts/reductions, not work inside a
+  *     single token scan or user action.
   *   - `Reader`/`InputStream` inputs are read with `Sync.blocking`.
   *   - The machine is allocated when the returned `F[R]` runs, so running it twice parses twice.
   */
 final class CatsEffectEngine[F[_]] private (budget: Int, cede: Option[F[Unit]])(implicit F: Sync[F])
     extends ParserEngine[F] {
+
+  require(budget > 0, "parser step budget must be positive")
 
   def run[R](machine: () => Machine): F[R] = F.defer(step[R](machine()))
 

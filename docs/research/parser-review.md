@@ -5,6 +5,24 @@ Reviewed source: `claude/charming-thompson-w26mal` at `5e3cf198`, rebased locall
 
 ## Verdict
 
+### Runtime follow-up
+
+The runtime findings below are fixed by the follow-up to PR #228:
+
+- Buffered lexing retains its DFA state, scan position and last acceptance across refills; maximal-munch rollback
+  and skipped tokens have dedicated chunk-boundary tests.
+- All lexer backends share an error-only incomplete-token check. It follows reachable DFA acceptances and simulates
+  LR reductions without actions (or consults the LL expected set), so an unrelated token prefix is not treated as
+  valid merely because input ended. Incomplete-token errors point at EOF.
+- Machine driving and Cats Effect engine construction reject nonpositive budgets immediately.
+
+Clean full JVM runs now pass **123 parser, 6 Cats Effect and 7 fs2 tests on each Scala version**. `ReviewSpec` has
+eight passing tests, including generated/interpreted/LL and Reader/push diagnostics, skipped prefixes, pending
+reductions and deterministic linear-work assertions. The source/architecture observations below remain review
+feedback; the original failing results are retained here as the audit trail, not the current test status.
+
+### Original review
+
 **Changes requested.** The existing JVM suites pass on both Scala versions, but additional
 review regressions expose three runtime issues. The streaming lexer issue is particularly
 important for the fs2/Reader use cases. The supplied PR description also needs corrections.

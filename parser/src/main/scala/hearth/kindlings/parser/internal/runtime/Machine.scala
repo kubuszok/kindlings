@@ -72,6 +72,13 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   private var tokenStart = 0L
   private var tokenEnd = 0L
 
+  // Retain a buffered token's DFA continuation across refills, including its last accept for maximal-munch rollback.
+  private var lexing = false
+  private var savedLexState = 0
+  private var savedLexPos = 0L
+  private var savedLexAccepted = -1
+  private var savedLexAcceptedEnd = 0L
+
   private var pendingLhs = -1
   private var _pendingEffect: Any = null
   private var _result: Any = null
@@ -119,6 +126,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     * needed, or `budget` shifts and reductions (LL mode: program steps) were made.
     */
   def run(budget: Int = Int.MaxValue): Int = {
+    require(budget > 0, "parser step budget must be positive")
     if (descentPending && budget == Int.MaxValue) {
       descentPending = false
       try {
@@ -438,12 +446,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   }
 
   /** No token matches at `start`. */
-  def lexError(start: Int): Unit = {
-    pos = start.toLong
-    tokenStart = start.toLong
-    tokenEnd = start.toLong + 1
-    _error = syntaxError("Unexpected character")
-  }
+  def lexError(start: Int): Unit = lexicalError(start.toLong)
 
   /** LL mode: pushes a value (the LR state stack is not used). */
   private def pushValue(value: Any): Unit = {
@@ -498,8 +501,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   }
 
   /** Reads the next non-skipped token into `lookahead`: [[Machine.Done]] on success, [[Machine.Error]] on a lexical
-    * error, [[Machine.NeedInput]] if the input buffer ran out in the middle of a token (lexing restarts from the token
-    * start after a refill).
+    * error, [[Machine.NeedInput]] if the input buffer ran out in the middle of a token (lexing resumes after a refill).
     */
   private def lex(): Int =
     if (stringLexer != null) stringLexer.lexString(this, text, pos.toInt)
@@ -545,10 +547,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         }
       }
       if (accepted < 0) {
-        pos = p.toLong
-        tokenStart = p.toLong
-        tokenEnd = p.toLong + 1
-        _error = syntaxError("Unexpected character")
+        lexicalError(p.toLong)
         return Machine.Error
       }
       if (skip(accepted)) p = acceptedEnd
@@ -574,10 +573,10 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         case Input.NeedMore => return Machine.NeedInput
         case _              => ()
       }
-      var state = 0
-      var i = pos
-      var accepted = -1
-      var acceptedEnd = pos
+      var state = if (lexing) savedLexState else 0
+      var i = if (lexing) savedLexPos else pos
+      var accepted = if (lexing) savedLexAccepted else -1
+      var acceptedEnd = if (lexing) savedLexAcceptedEnd else pos
       var scanning = true
       while (scanning && state >= 0)
         input.ensure(i) match {
@@ -588,13 +587,18 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
               val a = tables.lexAccept(state)
               if (a >= 0) { accepted = a; acceptedEnd = i }
             }
-          case Input.NeedMore => return Machine.NeedInput
-          case _              => scanning = false
+          case Input.NeedMore =>
+            lexing = true
+            savedLexState = state
+            savedLexPos = i
+            savedLexAccepted = accepted
+            savedLexAcceptedEnd = acceptedEnd
+            return Machine.NeedInput
+          case _ => scanning = false
         }
+      lexing = false
       if (accepted < 0) {
-        tokenStart = pos
-        tokenEnd = pos + 1
-        _error = syntaxError("Unexpected character")
+        lexicalError(pos)
         return Machine.Error
       }
       if (tables.skip(accepted)) {
@@ -611,6 +615,68 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     Machine.Error
   }
 
+  /** Error-only path shared by generated, table and buffered lexers. Re-scan a rejected lexeme to distinguish a dead
+    * transition from EOF in a viable token prefix. No action or conversion is evaluated by this diagnostic check.
+    */
+  private def lexicalError(start: Long): Unit = {
+    var state = 0
+    var end = start
+    while (state >= 0 && input.ensure(end) == Input.Available) {
+      state = tables.lexStep(state, input.charAt(end))
+      if (state >= 0) end += 1
+    }
+    val incomplete = state >= 0 && end > start && input.ensure(end) == Input.End && canCompleteToken(state)
+    pos = start
+    lookahead = -1
+    tokenStart = if (incomplete) end else start
+    tokenEnd = if (incomplete) end else start + 1
+    _error = syntaxError(if (incomplete) "Incomplete token" else "Unexpected character", incomplete)
+  }
+
+  /** Whether appending input can finish a token usable here (or a skipped token). Checking the LR reductions on a copy
+    * of the state stack avoids mistaking an unrelated incomplete token for a valid parse prefix.
+    */
+  private def canCompleteToken(from: Int): Boolean = {
+    def accepts(token: Int): Boolean =
+      if (llMode) tables.llExpected(llState).contains(token)
+      else {
+        @scala.annotation.tailrec
+        def advance(stack: List[Int]): Boolean = {
+          val action = actionTable(stack.head * tokenCount + token)
+          if (action > 0) true
+          else if (action == 0) false
+          else {
+            val production = -action - 1
+            if (production == 0) token == 0
+            else {
+              val rest = stack.drop(tables.prodLen(production))
+              val next = tables.goto(rest.head * nonTerminalCount + tables.prodLhs(production))
+              advance(next :: rest)
+            }
+          }
+        }
+        advance(states.take(sp + 1).reverse.toList)
+      }
+
+    val viable = (0 until tokenCount).filter(t => !tables.skip(t) && accepts(t)).toSet
+    val seen = scala.collection.mutable.BitSet.empty
+    var pending = List(from)
+    while (pending.nonEmpty) {
+      val state = pending.head
+      pending = pending.tail
+      if (seen.add(state)) {
+        val token = tables.lexAccept(state)
+        if (token >= 0 && (viable(token) || (tables.skip(token) && viable.nonEmpty))) return true
+        var transition = tables.transStart(state)
+        while (transition < tables.transStart(state + 1)) {
+          pending = tables.transTarget(transition) :: pending
+          transition += 1
+        }
+      }
+    }
+    false
+  }
+
   /** A value rejected by a reduction (see [[RejectedValue]]), reported at the current token. */
   private def rejected(detail: String): ParseError = {
     val found =
@@ -620,7 +686,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     new ParseError(tokenStart, line, column, Nil, found, detail, endOfInput = false)
   }
 
-  private def syntaxError(detail: String): ParseError = {
+  private def syntaxError(detail: String, incompleteToken: Boolean = false): ParseError = {
     val state = states(sp)
     val expected = (if (llMode) tables.llExpected(llState) else (0 until tokenCount))
       .filter { t =>
@@ -629,7 +695,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       .map(tables.tokenNames(_))
       .sorted
       .toList
-    val atEnd = lookahead == 0 && detail == "Unexpected token"
+    val atEnd = incompleteToken || (lookahead == 0 && detail == "Unexpected token")
     val found =
       if (atEnd || input.ensure(tokenStart) != Input.Available) "end of input"
       else {

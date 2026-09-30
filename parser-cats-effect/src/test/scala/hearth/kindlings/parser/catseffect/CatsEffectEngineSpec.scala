@@ -13,6 +13,13 @@ final class CatsEffectEngineSpec extends MacroSuite {
 
   group("Cats Effect engine") {
 
+    test("nonpositive budgets fail at engine construction") {
+      List(0, -1).foreach { budget =>
+        val _ = intercept[IllegalArgumentException](CatsEffectEngine.async[IO](budget))
+        val _ = intercept[IllegalArgumentException](CatsEffectEngine.sync[IO](budget))
+      }
+    }
+
     test("effectful actions are sequenced in parse order") {
       (for {
         log <- Ref.of[IO, List[Int]](Nil)
