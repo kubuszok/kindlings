@@ -13,5 +13,6 @@ object Main {
     assert(instance.identity eq instance)
     assert(instance.viaSelf == 42)
     println("AnonymousInstance: fluent this.type and calls via self passed")
+    println(Probe.blockShape { val x = scala.util.Random.nextInt(); x + 1 })
   }
 }

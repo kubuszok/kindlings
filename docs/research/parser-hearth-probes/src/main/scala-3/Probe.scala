@@ -16,6 +16,15 @@ trait SelfReference {
 object Probe {
   inline def aliasMatches[A]: (Boolean, Boolean) = ${ aliasMatchesImpl[A] }
   inline def selfReference: SelfReference = ${ selfReferenceImpl }
+  inline def blockShape(inline body: Any): String = ${ blockShapeImpl('body) }
+
+  private def blockShapeImpl(body: Expr[Any])(using Quotes): Expr[String] = {
+    val ctx = new hearth.MacroCommonsScala3
+    val result =
+      try ctx.DestructuredExpr.parse[Any](body.asInstanceOf[ctx.Expr[Any]]).plainPrint
+      catch { case scala.util.control.NonFatal(error) => s"${error.getClass.getName}: ${error.getMessage}" }
+    Expr(result)
+  }
 
   private def aliasMatchesImpl[A: Type](using q: Quotes): Expr[(Boolean, Boolean)] = {
     import q.reflect.*
