@@ -21,10 +21,16 @@ trait CogenHandleAsCollectionRuleImpl { this: CogenMacrosImpl & MacroCommons & S
           val toIterableFn = collectionToIterableFn[A, ElemType](isCollection.value)
           Log.info(s"Handling ${Type[A].prettyPrint} as Collection") >>
             deriveCogenRecursively[ElemType](using cogenctx.nest[ElemType]).map { elemCogen =>
-              Rule.matched(Expr.quote {
-                hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-                  .cogenCollectionWithIterable(Expr.splice(elemCogen), Expr.splice(toIterableFn))
-              })
+              if (isUnorderedCollection[A])
+                Rule.matched(Expr.quote {
+                  hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+                    .cogenUnorderedCollection(Expr.splice(elemCogen), Expr.splice(toIterableFn))
+                })
+              else
+                Rule.matched(Expr.quote {
+                  hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+                    .cogenCollectionWithIterable(Expr.splice(elemCogen), Expr.splice(toIterableFn))
+                })
             }
         case _ =>
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a Collection"))

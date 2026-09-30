@@ -11,29 +11,110 @@ trait ScalacheckFunctionSupport { this: MacroCommons & StdExtensions =>
 
   // Index = arity.
   private lazy val functionTypes: Vector[??] = Vector(
-      Type.of[Function0[Any]].as_??,
-      Type.of[Function1[Any, Any]].as_??,
-      Type.of[Function2[Any, Any, Any]].as_??,
-      Type.of[Function3[Any, Any, Any, Any]].as_??,
-      Type.of[Function4[Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function5[Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function6[Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function7[Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function20[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function21[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
-      Type.of[Function22[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??
+    Type.of[Function0[Any]].as_??,
+    Type.of[Function1[Any, Any]].as_??,
+    Type.of[Function2[Any, Any, Any]].as_??,
+    Type.of[Function3[Any, Any, Any, Any]].as_??,
+    Type.of[Function4[Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function5[Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function6[Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function7[Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function8[Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function9[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function11[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function12[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function13[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function14[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function15[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function16[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type.of[Function17[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]].as_??,
+    Type
+      .of[Function18[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+      .as_??,
+    Type
+      .of[
+        Function19[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]
+      ]
+      .as_??,
+    Type
+      .of[Function20[
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any
+      ]]
+      .as_??,
+    Type
+      .of[Function21[
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any
+      ]]
+      .as_??,
+    Type
+      .of[Function22[
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any,
+        Any
+      ]]
+      .as_??
   )
 
   /** `Some(arity)` when `A` is a `FunctionN` (0-22) - compared by type constructor, so e.g. a `Map` (which extends

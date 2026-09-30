@@ -106,4 +106,45 @@ class CogenSpec extends munit.FunSuite {
     val s2 = cogen.perturb(baseSeed, 43)
     assert(s1 != s2, "Different ints should produce different seeds")
   }
+
+  test("sealed trait: a case class after a case object is perturbed by its own fields") {
+    // Previously the first case whose Cogen did not throw was used - the case object's identity Cogen accepted every
+    // value, so the case class' fields were ignored.
+    val cogen = Cogen.derived[CogenSpec.Shape]
+    assertNotEquals(cogen.perturb(baseSeed, CogenSpec.Circle(1)), cogen.perturb(baseSeed, CogenSpec.Circle(2)))
+    assertNotEquals(cogen.perturb(baseSeed, CogenSpec.Empty), cogen.perturb(baseSeed, CogenSpec.Circle(1)))
+    assertNotEquals(cogen.perturb(baseSeed, CogenSpec.Circle(1)), cogen.perturb(baseSeed, CogenSpec.Square(1)))
+  }
+
+  test("sealed trait: the Cogen does not depend on hashCode") {
+    // Function fields have identity-based hashCodes; equal-behaving values must still perturb identically.
+    val cogen = Cogen.derived[CogenSpec.Shape]
+    assertEquals(cogen.perturb(baseSeed, CogenSpec.Custom(_ => 1)), cogen.perturb(baseSeed, CogenSpec.Custom(_ => 1)))
+  }
+
+  test("equal sets and maps built in different orders perturb identically") {
+    case class Elem(value: Int)
+    case class Holder(set: Set[Elem], map: Map[Elem, Int])
+    val cogen = Cogen.derived[Holder]
+    val a = Holder(Set(Elem(1), Elem(2), Elem(3)), Map(Elem(1) -> 1, Elem(2) -> 2))
+    val b = Holder(Set(Elem(3), Elem(1), Elem(2)), Map(Elem(2) -> 2, Elem(1) -> 1))
+    assertEquals(a, b)
+    assertEquals(cogen.perturb(baseSeed, a), cogen.perturb(baseSeed, b))
+    assertNotEquals(cogen.perturb(baseSeed, a), cogen.perturb(baseSeed, a.copy(set = Set(Elem(1), Elem(2)))))
+    assertNotEquals(cogen.perturb(baseSeed, a), cogen.perturb(baseSeed, a.copy(map = Map(Elem(1) -> 1, Elem(2) -> 3))))
+  }
+
+  test("ordered collections still perturb in order") {
+    case class Elem(value: Int)
+    val cogen = Cogen.derived[List[Elem]]
+    assertNotEquals(cogen.perturb(baseSeed, List(Elem(1), Elem(2))), cogen.perturb(baseSeed, List(Elem(2), Elem(1))))
+  }
+}
+
+object CogenSpec {
+  sealed trait Shape
+  case object Empty extends Shape
+  final case class Circle(radius: Int) extends Shape
+  final case class Square(side: Int) extends Shape
+  final case class Custom(f: Int => Int) extends Shape
 }

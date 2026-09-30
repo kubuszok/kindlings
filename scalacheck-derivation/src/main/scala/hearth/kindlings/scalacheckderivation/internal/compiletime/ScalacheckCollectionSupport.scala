@@ -1,6 +1,7 @@
 package hearth.kindlings.scalacheckderivation.internal.compiletime
 
 import hearth.MacroCommons
+import hearth.fp.effect.*
 import hearth.std.*
 
 /** Shared by the Arbitrary/Shrink/Cogen collection and map rules (issue kubuszok/kindlings#218).
@@ -71,4 +72,51 @@ trait ScalacheckCollectionSupport { this: MacroCommons & StdExtensions =>
   /** Reason used when `collectionBuildFn` does not recognize the provider's smart constructor. */
   protected def unsupportedCollectionBuild[A: Type](isCollection: IsCollectionOf[A, ?]): String =
     s"The type ${Type[A].prettyPrint} is built with an unsupported smart constructor (${isCollection.build})"
+
+  /** Whether iterating two equal values of `A` may visit elements in different orders - Scala and Java sets and maps
+    * (e.g. `Set(1, 2)` and `Set(2, 1)` are equal, but small immutable sets iterate in insertion order). A `Cogen` for
+    * such a type must combine its elements order-independently, or equal values would perturb differently.
+    */
+  protected def isUnorderedCollection[A: Type]: Boolean = {
+    val unordered = List(
+      Type.of[scala.collection.Set[Any]].asUntyped,
+      Type.of[scala.collection.Map[Any, Any]].asUntyped,
+      Type.of[java.util.Set[Any]].asUntyped,
+      Type.of[java.util.Map[Any, Any]].asUntyped
+    )
+    Type[A].asUntyped.baseClasses.exists(base => unordered.exists(base.sameTypeConstructorAs(_)))
+  }
+
+  /** Emits `(value: A) => Int` returning the index (in `directChildren` order) of the case `value` belongs to, using a
+    * real pattern match (`Enum.matchOn`) - so type classes derived per case can be dispatched to exactly the matching
+    * case, instead of trying each case's instance until one does not throw (which silently picked the wrong case, e.g.
+    * a singleton case's identity instance accepts every value).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def enumOrdinalFn[A: Type](enumData: Enum[A]): MIO[Expr[A => Int]] = {
+    implicit val IntT: Type[Int] = Type.of[Int]
+    implicit val OrdinalFnT: Type[A => Int] = Type.of[A => Int]
+    val cases: List[??] = enumData.directChildren.toList.map { case (_, child) =>
+      import child.Underlying as Child
+      Type[Child].as_??
+    }
+    MIO.scoped { runSafe =>
+      // Keep the pattern-match construction out of the splice itself: on Scala 2 cross-quotes re-emit the splice's
+      // source, which must not contain macro-level lambdas typed with this trait's path-dependent types.
+      def ordinal(value: Expr[A]): Expr[Int] = runSafe(enumOrdinalBody[A](enumData, cases, value))
+      Expr.quote { (value: A) =>
+        Expr.splice(ordinal(Expr.quote(value)))
+      }
+    }
+  }
+
+  private def enumOrdinalBody[A: Type](enumData: Enum[A], cases: List[??], value: Expr[A]): MIO[Expr[Int]] = {
+    implicit val IntT: Type[Int] = Type.of[Int]
+    enumData
+      .matchOn[MIO, Int](value) { matched =>
+        import matched.Underlying as Case
+        MIO.pure(Expr(cases.indexWhere(tpe => tpe.Underlying =:= Type[Case])))
+      }
+      .map(_.getOrElse(Expr(-1)))
+  }
 }

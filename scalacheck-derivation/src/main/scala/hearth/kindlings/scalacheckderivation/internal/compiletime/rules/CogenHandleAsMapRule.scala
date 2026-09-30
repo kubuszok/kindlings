@@ -41,10 +41,16 @@ trait CogenHandleAsMapRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExten
             (p: Pair) => Expr.splice(isMap.value(Expr.quote(p)))
           )
         }
-        Rule.matched(Expr.quote {
-          hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-            .cogenCollectionWithIterable(Expr.splice(pairCogen), Expr.splice(toIterableFn))
-        })
+        if (isUnorderedCollection[A])
+          Rule.matched(Expr.quote {
+            hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+              .cogenUnorderedCollection(Expr.splice(pairCogen), Expr.splice(toIterableFn))
+          })
+        else
+          Rule.matched(Expr.quote {
+            hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+              .cogenCollectionWithIterable(Expr.splice(pairCogen), Expr.splice(toIterableFn))
+          })
       }
     }
   }

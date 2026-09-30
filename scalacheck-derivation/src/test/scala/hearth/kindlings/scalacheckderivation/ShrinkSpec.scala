@@ -186,6 +186,13 @@ class ShrinkSpec extends munit.FunSuite {
     assert(result.exists(_.x != 1.5), "Double should be shrunk by ScalaCheck's shrinkFractional")
   }
 
+  test("sealed trait: a value is shrunk only by its own case's Shrink") {
+    // Previously every case's Shrink was tried, so `B(100)` also yielded same-arity `C`s built from its fields.
+    val result = DeriveShrink.derived[ShrinkSpec.Letter].shrink(ShrinkSpec.B(100)).take(100).toList
+    assert(result.nonEmpty)
+    assert(result.forall(_.isInstanceOf[ShrinkSpec.B]), s"Only B values expected, got: $result")
+  }
+
   test("an explicit Shrink for a nested type still takes precedence, even a no-op one (issue #219)") {
     case class Inner(value: Int)
     case class Outer(inner: Inner, n: Int)
@@ -276,4 +283,11 @@ class ShrinkSpec extends munit.FunSuite {
     val result = shrink.shrink(Tags(Set.empty)).take(5).toList
     assert(result.isEmpty, "Empty set should produce empty shrink stream")
   }
+}
+
+object ShrinkSpec {
+  sealed trait Letter
+  case object A extends Letter
+  final case class B(value: Int) extends Letter
+  final case class C(value: Int) extends Letter
 }

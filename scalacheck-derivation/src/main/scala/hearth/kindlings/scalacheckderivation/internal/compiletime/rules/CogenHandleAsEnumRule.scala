@@ -42,17 +42,19 @@ trait CogenHandleAsEnumRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExte
                 }
               }
             }
-            .map { caseCogens =>
+            .flatMap { caseCogens =>
               // Build a list of Cogen[A] for runtime dispatch
               val cogensListExpr: Expr[List[Cogen[A]]] =
                 caseCogens.toList.foldRight(Expr.quote(List.empty[Cogen[A]])) { (cogenExpr, acc) =>
                   Expr.quote(Expr.splice(cogenExpr) :: Expr.splice(acc))
                 }
 
-              // At runtime, dispatch to the correct Cogen based on the value's actual class
-              Expr.quote {
-                hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-                  .cogenEnum(Expr.splice(cogensListExpr))
+              // Dispatch to the value's case with a real pattern match (see enumOrdinalFn)
+              enumOrdinalFn[A](enumData).map { ordinal =>
+                Expr.quote {
+                  hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+                    .cogenEnumByOrdinal(Expr.splice(cogensListExpr), Expr.splice(ordinal))
+                }
               }
             }
       }

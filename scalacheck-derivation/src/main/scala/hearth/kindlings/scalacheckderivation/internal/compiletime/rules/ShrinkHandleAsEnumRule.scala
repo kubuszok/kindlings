@@ -42,17 +42,19 @@ trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdEx
                 }
               }
             }
-            .map { caseShrinks =>
+            .flatMap { caseShrinks =>
               // Build a list of Shrink[A] for runtime dispatch
               val shrinksListExpr: Expr[List[Shrink[A]]] =
                 caseShrinks.toList.foldRight(Expr.quote(List.empty[Shrink[A]])) { (shrinkExpr, acc) =>
                   Expr.quote(Expr.splice(shrinkExpr) :: Expr.splice(acc))
                 }
 
-              // At runtime, dispatch to the correct Shrink based on the value's actual class
-              Expr.quote {
-                hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
-                  .shrinkEnum(Expr.splice(shrinksListExpr))
+              // Dispatch to the value's case with a real pattern match (see enumOrdinalFn)
+              enumOrdinalFn[A](enumData).map { ordinal =>
+                Expr.quote {
+                  hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
+                    .shrinkEnumByOrdinal(Expr.splice(shrinksListExpr), Expr.splice(ordinal))
+                }
               }
             }
       }

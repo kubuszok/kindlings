@@ -101,10 +101,23 @@ object ShrinkUtils {
       }
     }
 
-  /** Shrinks an enum/sealed trait value by delegating to the Shrink for the actual runtime type. The list of Shrink
-    * instances corresponds to the enum cases in declaration order. We try each one (catching ClassCastException) to
-    * find the right variant.
+  /** Shrinks an enum/sealed trait value with the Shrink of its case, selected by the macro-generated `ordinal` (a real
+    * pattern match). Unlike [[shrinkEnum]] - which tried every case's Shrink - a value is never shrunk by another
+    * case's instance (which could turn e.g. `B(1)` into a same-arity `C(0)`).
     */
+  def shrinkEnumByOrdinal[A](caseShrinks: List[Shrink[A]], ordinal: A => Int): Shrink[A] = {
+    lazy val shrinks = caseShrinks.toArray
+    Shrink { value =>
+      val index = ordinal(value)
+      if (index < 0 || index >= shrinks.length) Stream.empty
+      else shrinks(index).shrink(value)
+    }
+  }
+
+  @deprecated(
+    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
+    "0.3.3"
+  )
   def shrinkEnum[A](caseShrinks: List[Shrink[A]]): Shrink[A] =
     Shrink { value =>
       // Evaluate try/catch eagerly (strict List.map) to avoid try/catch inside lazy
