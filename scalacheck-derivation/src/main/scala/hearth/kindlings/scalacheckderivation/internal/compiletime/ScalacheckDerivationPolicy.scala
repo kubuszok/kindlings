@@ -5,6 +5,9 @@ import hearth.MacroCommons
 // $COVERAGE-OFF$
 trait ScalacheckDerivationPolicy extends hearth.kindlings.derivation.compiletime.DerivationPolicy {
   this: MacroCommons =>
+
+  override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
+
   override protected def derivationOptInImportHint: String =
     "import hearth.kindlings.scalacheckderivation.policy.allowDerivationForScalacheckDerivation"
   override protected def isDerivationOptInMarkerInScope: Boolean = {

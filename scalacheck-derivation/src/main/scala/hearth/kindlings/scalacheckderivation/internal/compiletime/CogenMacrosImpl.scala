@@ -10,6 +10,7 @@ trait CogenMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with ScalacheckDerivationPolicy
     with ScalacheckCollectionSupport
+    with ScalacheckFunctionSupport
     with rules.CogenUseCachedRuleImpl
     with rules.CogenUseImplicitRuleImpl
     with rules.CogenBuiltInRuleImpl
@@ -17,16 +18,13 @@ trait CogenMacrosImpl
     with rules.CogenHandleAsOptionRuleImpl
     with rules.CogenHandleAsMapRuleImpl
     with rules.CogenHandleAsCollectionRuleImpl
+    with rules.CogenHandleAsFunctionRuleImpl
     with rules.CogenHandleAsSingletonRuleImpl
     with rules.CogenHandleAsCaseClassRuleImpl
     with rules.CogenHandleAsEnumRuleImpl
-    with rules.CogenDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
-
-  // $COVERAGE-OFF$
-  override protected def derivationPolicyTypeClassName: String = "Cogen"
-  // $COVERAGE-ON$
-
-  override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
+    with rules.CogenDerivationPolicyRuleImpl {
+  // See ArbitraryMacrosImpl: Arbitrary and Cogen derivation share one macro bundle.
+  this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce & ArbitraryMacrosImpl =>
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveCogen[A: Type]: Expr[Cogen[A]] = {
@@ -128,6 +126,7 @@ trait CogenMacrosImpl
         CogenHandleAsOptionRule,
         CogenHandleAsMapRule,
         CogenHandleAsCollectionRule,
+        CogenHandleAsFunctionRule,
         CogenHandleAsSingletonRule,
         CogenHandleAsCaseClassRule,
         CogenHandleAsEnumRule

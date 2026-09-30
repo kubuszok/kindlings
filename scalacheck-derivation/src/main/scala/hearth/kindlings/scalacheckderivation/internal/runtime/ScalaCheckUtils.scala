@@ -1,6 +1,7 @@
 package hearth.kindlings.scalacheckderivation.internal.runtime
 
-import org.scalacheck.Gen
+import org.scalacheck.{Arbitrary, Cogen, Gen}
+import org.scalacheck.rng.Seed
 
 object ScalaCheckUtils {
 
@@ -31,6 +32,50 @@ object ScalaCheckUtils {
         }
       }
     }
+
+  /** Generates a `FunctionN` like ScalaCheck's `Gen.functionN`: every generated function is pure - it perturbs a
+    * generated seed with its arguments (through their `Cogen`s) and runs `resultGen` with the resulting seed. The
+    * instances are by-name (and memoized) so that recursive types are not evaluated while their generator is built.
+    */
+  def genFunction[F](arity: Int, argCogens: => List[Cogen[Any]], resultGen: => Gen[Any]): Gen[F] = {
+    lazy val cogens = argCogens.toArray
+    lazy val gen = resultGen
+    Gen.parameterized { params =>
+      Arbitrary.arbLong.arbitrary.map { long =>
+        val seed0 = Seed(long)
+        FunctionArity
+          .fromArray(
+            arity,
+            { args =>
+              var seed = seed0
+              var i = 0
+              while (i < args.length) {
+                seed = cogens(i).perturb(seed, args(i))
+                i += 1
+              }
+              gen.pureApply(params, seed)
+            }
+          )
+          .asInstanceOf[F]
+      }
+    }
+  }
+
+  /** Generates a `PartialFunction` like ScalaCheck's `arbPartialFunction`: an `A => Option[B]` function, unlifted. */
+  def genPartialFunction[A, B](argCogen: => Cogen[A], resultGen: => Gen[Option[B]]): Gen[PartialFunction[A, B]] =
+    genFunction[A => Option[B]](1, List(argCogen.asInstanceOf[Cogen[Any]]), resultGen.asInstanceOf[Gen[Any]])
+      .map(Function.unlift(_))
+
+  /** Generates a `Future` like ScalaCheck's `arbFuture`: either successful with a generated value or failed. */
+  def genFuture[T](gen: => Gen[T]): Gen[scala.concurrent.Future[T]] =
+    Gen.oneOf(
+      Gen.lzy(gen).map(scala.concurrent.Future.successful(_)),
+      Arbitrary.arbThrowable.arbitrary.map(scala.concurrent.Future.failed[T](_))
+    )
+
+  /** Generates a `Gen` like ScalaCheck's `arbGen`: mostly constant generators, sometimes a failing one. */
+  def genGen[T](gen: => Gen[T]): Gen[Gen[T]] =
+    Gen.frequency(5 -> Gen.lzy(gen).map(Gen.const(_)), 1 -> Gen.const(Gen.fail[T]))
 
   /** Runs a provider's build step, treating an exception thrown by the collection's own builder (e.g. a negative
     * element for `BitSet`) as a rejected candidate, like a `Left` from a smart constructor.

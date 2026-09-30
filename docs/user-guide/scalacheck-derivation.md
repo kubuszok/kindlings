@@ -81,10 +81,13 @@ No configuration class is needed -- derivation is fully automatic based on the t
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
 - **Everything ScalaCheck supports out of the box** -- primitives, `String`, `BigInt`/`BigDecimal`, `UUID`, `Symbol`,
-  durations, `java.time.*`, throwables, functions, `PartialFunction`, `Future`, `Gen`, ... use ScalaCheck's own
-  instances (whatever the ScalaCheck version on the classpath provides)
+  durations, `java.time.*`, throwables, ... use ScalaCheck's own instances (whatever the ScalaCheck version on the
+  classpath provides)
 - **Collections, maps, `Option`, `Either`, `Try` and tuples** -- derived structurally, so their elements are derived
   too and need no instance in scope (ScalaCheck's own combinators for them would require one)
+- **Functions (`Function0`-`Function22`), `PartialFunction`, `Future` and `Gen`** -- derived too: `Arbitrary` for a
+  function derives the `Cogen`s of its arguments and `Cogen` for a function derives the `Arbitrary`s of its arguments,
+  all within the same macro expansion, so e.g. `MyCaseClass => Int` needs no instance in scope
 - **Custom collections** -- any container with an `IsCollection`/`IsMap` provider on the classpath (e.g. cats
   `NonEmptyList`, `NonEmptyMap`, `Chain` from `kindlings-cats-integration`) is built through the provider's smart
   constructor: `Arbitrary` regenerates a rejected (e.g. empty) candidate with at least one element, and `Shrink` drops

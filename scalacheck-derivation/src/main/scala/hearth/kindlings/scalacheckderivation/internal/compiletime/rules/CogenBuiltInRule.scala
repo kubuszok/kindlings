@@ -32,10 +32,12 @@ trait CogenBuiltInRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExtension
         "cogenStream",
         "cogenLazyList",
         "cogenSeq",
-        "cogenArray"
+        "cogenArray",
+        "cogenFunction0",
+        "cogenPartialFunction"
       )
       Type.of[Cogen.type].unsortedMethods.collect {
-        case method if method.isImplicit && (names(method.name) || method.name.matches("tuple\\d+")) =>
+        case method if method.isImplicit && (names(method.name) || method.name.matches("(tuple|function)\\d+")) =>
           method.asUntyped
       }
     }

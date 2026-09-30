@@ -1,6 +1,6 @@
 package hearth.kindlings.scalacheckderivation.internal.runtime
 
-import org.scalacheck.Cogen
+import org.scalacheck.{Cogen, Gen}
 
 object CogenUtils {
 
@@ -62,6 +62,32 @@ object CogenUtils {
         valueCogen.perturb(keyCogen.perturb(s, k), v)
       }
     }
+
+  /** Cogen for a `FunctionN` like ScalaCheck's `Cogen.functionN`: applies the function to arguments generated from the
+    * seed and perturbs the seed with the result. The instances are by-name (and memoized) so that recursive types are
+    * not evaluated while the Cogen is built.
+    */
+  def cogenFunction[F](arity: Int, argGens: => List[Gen[Any]], resultCogen: => Cogen[Any]): Cogen[F] = {
+    lazy val gens = argGens.toArray
+    lazy val cogen = resultCogen
+    Cogen { (seed0, function) =>
+      var seed = seed0
+      val args = new Array[Any](gens.length)
+      var i = 0
+      while (i < gens.length) {
+        args(i) = gens(i).pureApply(Gen.Parameters.default, seed)
+        seed = seed.next
+        i += 1
+      }
+      cogen.perturb(seed, FunctionArity(arity, function, args))
+    }
+  }
+
+  /** Cogen for a `PartialFunction` like ScalaCheck's `cogenPartialFunction`: the Cogen of its lifted `A => Option[B]`.
+    */
+  def cogenPartialFunction[A, B](argGen: => Gen[A], resultCogen: => Cogen[Option[B]]): Cogen[PartialFunction[A, B]] =
+    cogenFunction[A => Option[B]](1, List(argGen.asInstanceOf[Gen[Any]]), resultCogen.asInstanceOf[Cogen[Any]])
+      .contramap(_.lift)
 
   /** Lazy Cogen — defers evaluation of the underlying Cogen until perturb is called. Breaks infinite recursion for
     * recursive types where Cogen.perturb is strict.

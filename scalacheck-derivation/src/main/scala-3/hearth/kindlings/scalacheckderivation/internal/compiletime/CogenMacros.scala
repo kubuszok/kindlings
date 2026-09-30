@@ -7,7 +7,11 @@ import scala.quoted.*
 final private[scalacheckderivation] class CogenMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       LoadStandardExtensionsOnce,
-      CogenMacrosImpl
+      ArbitraryMacrosImpl,
+      CogenMacrosImpl {
+
+  override protected def derivationPolicyTypeClassName: String = "Cogen"
+}
 
 private[scalacheckderivation] object CogenMacros {
 

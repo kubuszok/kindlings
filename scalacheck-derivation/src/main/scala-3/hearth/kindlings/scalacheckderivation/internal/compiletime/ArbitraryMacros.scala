@@ -7,7 +7,11 @@ import scala.quoted.*
 final private[scalacheckderivation] class ArbitraryMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       LoadStandardExtensionsOnce,
-      ArbitraryMacrosImpl
+      ArbitraryMacrosImpl,
+      CogenMacrosImpl {
+
+  override protected def derivationPolicyTypeClassName: String = "Arbitrary"
+}
 
 private[scalacheckderivation] object ArbitraryMacros {
 

@@ -28,8 +28,6 @@ trait ShrinkMacrosImpl
   override protected def derivationPolicyTypeClassName: String = "Shrink"
   // $COVERAGE-ON$
 
-  override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
-
   // Entrypoint
   @scala.annotation.nowarn("msg=is never used")
   def deriveShrink[A: Type]: Expr[Shrink[A]] = {

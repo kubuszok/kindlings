@@ -11,6 +11,7 @@ trait ArbitraryMacrosImpl
     with ScalacheckDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with ScalacheckCollectionSupport
+    with ScalacheckFunctionSupport
     with rules.ArbitraryUseCachedRuleImpl
     with rules.ArbitraryUseImplicitRuleImpl
     with rules.ArbitraryBuiltInRuleImpl
@@ -18,16 +19,14 @@ trait ArbitraryMacrosImpl
     with rules.ArbitraryHandleAsOptionRuleImpl
     with rules.ArbitraryHandleAsMapRuleImpl
     with rules.ArbitraryHandleAsCollectionRuleImpl
+    with rules.ArbitraryHandleAsFunctionRuleImpl
     with rules.ArbitraryHandleAsSingletonRuleImpl
     with rules.ArbitraryHandleAsCaseClassRuleImpl
     with rules.ArbitraryHandleAsEnumRuleImpl
-    with rules.ArbitraryDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
-
-  // $COVERAGE-OFF$
-  override protected def derivationPolicyTypeClassName: String = "Arbitrary"
-  // $COVERAGE-ON$
-
-  override protected def derivationSettingsNamespace: String = "scalacheckDerivation"
+    with rules.ArbitraryDerivationPolicyRuleImpl {
+  // Arbitrary and Cogen derivation are mixed into the same macro bundle, so that e.g. `Arbitrary[A => B]` can derive the
+  // `Cogen[A]` it needs (and `Cogen[A => B]` the `Arbitrary[A]`) within a single expansion, sharing one `ValDefsCache`.
+  this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce & CogenMacrosImpl =>
 
   // Entrypoint
   @scala.annotation.nowarn("msg=is never used")
@@ -153,6 +152,8 @@ trait ArbitraryMacrosImpl
         ArbitraryHandleAsOptionRule,
         ArbitraryHandleAsMapRule,
         ArbitraryHandleAsCollectionRule,
+        ArbitraryHandleAsFunctionRule,
+        ArbitraryHandleAsFutureOrGenRule,
         ArbitraryHandleAsSingletonRule,
         ArbitraryHandleAsCaseClassRule,
         ArbitraryHandleAsEnumRule

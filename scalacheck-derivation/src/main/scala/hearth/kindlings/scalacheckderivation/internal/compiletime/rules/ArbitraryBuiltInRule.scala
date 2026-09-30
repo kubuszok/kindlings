@@ -19,9 +19,18 @@ trait ArbitraryBuiltInRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & StdE
       * whitelist, so this supports exactly what the used ScalaCheck version supports, on every platform.
       */
     lazy val structurallyReplaced: Seq[UntypedMethod] = {
-      val names = Set("arbContainer", "arbContainer2", "arbOption", "arbEither", "arbTry")
+      val names = Set(
+        "arbContainer",
+        "arbContainer2",
+        "arbOption",
+        "arbEither",
+        "arbTry",
+        "arbPartialFunction",
+        "arbFuture",
+        "arbGen"
+      )
       Type.of[Arbitrary.type].unsortedMethods.collect {
-        case method if method.isImplicit && (names(method.name) || method.name.startsWith("arbTuple")) =>
+        case method if method.isImplicit && (names(method.name) || method.name.matches("arb(Tuple|Function)\\d+")) =>
           method.asUntyped
       }
     }
