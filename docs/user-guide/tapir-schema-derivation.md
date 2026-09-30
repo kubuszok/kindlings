@@ -224,6 +224,23 @@ case class User(
     // Some(SName(Box,List(Person)))
     ```
 
+## Maps, collections and other built-in types
+
+Kindlings derives schemas for `Option`, collections, `Map`s and `Either` itself (consistently with the JSON library's
+configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `Schema.schemaForOption`,
+`schemaForIterable`, `schemaForSet`, `schemaForArray`, `schemaForMap`, `schemaForEither` and
+`derivedEnumerationValue`. The result is the same whether or not the element types have an implicit `Schema`:
+
+- `Set`s are marked with unique items (as Tapir does),
+- `Either` and `scala.Enumeration` values are derived like the sealed hierarchies the JSON libraries encode them as,
+- `Map` keys can be a `String`, or a value type wrapping one: `AnyVal` classes, opaque types, and — with the
+  corresponding integration module — refined, Iron, neotype and scala-newtype types. The keys are unwrapped to
+  `String`s. For any other key type, provide a `Schema[Map[K, V]]`, e.g. with Tapir's `Schema.schemaForMap[K, V](keyToString)`.
+
+Your own implicit `Schema` for any of these types (e.g. `Schema[Map[UserId, Int]]`, `Schema[Option[Int]]`) always
+takes precedence. Tapir's schemas for primitive and other leaf types (`String`, `Int`, `UUID`, `Instant`, ...) are
+used as-is, and `Char` is treated as a `String`.
+
 ## Debugging
 
 Import the debug package to log the derivation process at compile time:
@@ -250,6 +267,8 @@ This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the de
 | Automatic JSON config discovery | No | Yes |
 | Tapir annotation support | Yes | Yes |
 | Value types (`AnyVal`) | Yes | Yes |
+| Map keys wrapping `String` (value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes |
+| `Char` | No | Yes (as `String`) |
 
 ### Benchmarks
 

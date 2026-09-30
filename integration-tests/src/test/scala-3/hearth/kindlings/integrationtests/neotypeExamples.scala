@@ -28,6 +28,8 @@ object NeotypeCustomId extends Newtype[Int] {
 case class NeotypePerson(email: NeotypeEmail, age: NeotypeAge, nickname: NeotypeNickname)
 case class WithNeotypeOption(value: Option[NeotypeAge])
 case class WithNeotypeCustomId(id: NeotypeCustomId)
+case class WithNeotypeKeyMap(values: Map[NeotypeEmail, Int])
+case class WithNeotypeIntKeyMap(values: Map[NeotypeAge, Int])
 
 // Plain surrogate for testing neotype validation rejection via binary codecs
 case class PlainNeotypePerson(email: String, age: Int, nickname: String)

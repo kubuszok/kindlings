@@ -988,6 +988,78 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
   }
 
+  group("built-in types") {
+
+    test("top-level built-in types use tapir's schemas") {
+      assertEquals(KindlingsSchema.derived[Int].schema, Schema.schemaForInt)
+      assertEquals(KindlingsSchema.derived[String].schema, Schema.schemaForString)
+      assertEquals(KindlingsSchema.derived[Boolean].schema, Schema.schemaForBoolean)
+      assertEquals(KindlingsSchema.derived[BigDecimal].schema, Schema.schemaForBigDecimal)
+      assertEquals(KindlingsSchema.derived[java.util.UUID].schema, Schema.schemaForUUID)
+      assertEquals(KindlingsSchema.derived[java.time.Instant].schema, Schema.schemaForInstant)
+      assertEquals(KindlingsSchema.derived[Array[Byte]].schema, Schema.schemaForByteArray)
+    }
+
+    test("Char is a String") {
+      assertEquals(KindlingsSchema.derived[Char].schema.schemaType: Any, SchemaType.SString[Any](): Any)
+      KindlingsSchema.derived[WithChar].schema.schemaType match {
+        case p: SchemaType.SProduct[WithChar] =>
+          assertEquals(p.fields.head.schema.schemaType: Any, SchemaType.SString[Any](): Any)
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+  }
+
+  group("types with tapir's structural implicits") {
+
+    def fieldSchemas[A](schema: Schema[A]): Map[String, Schema[?]] = schema.schemaType match {
+      case p: SchemaType.SProduct[A @unchecked] => p.fields.map(f => f.name.name -> (f.schema: Schema[?])).toMap
+      case other                                => fail(s"Expected SProduct, got: $other")
+    }
+
+    test("Set is marked with unique items, whether or not the element has an implicit Schema") {
+      val fields = fieldSchemas(KindlingsSchema.derived[WithSets].schema)
+      List("primitives", "caseClasses").foreach { name =>
+        assert(fields(name).schemaType.isInstanceOf[SchemaType.SArray[?, ?]], s"$name: ${fields(name).schemaType}")
+        assertEquals(fields(name).attribute(Schema.UniqueItems.Attribute), Some(Schema.UniqueItems(true)))
+      }
+    }
+
+    test("Either is derived the same way, whether or not the sides have an implicit Schema") {
+      // Either is encoded by the JSON libraries as a sealed hierarchy (Left/Right), not as an untagged union
+      val fields = fieldSchemas(KindlingsSchema.derived[WithEithers].schema)
+      List("primitives", "caseClasses").foreach { name =>
+        fields(name).schemaType match {
+          case c: SchemaType.SCoproduct[?] =>
+            assertEquals(c.subtypes.flatMap(_.name).map(_.fullName), List("scala.util.Left", "scala.util.Right"))
+          case other => fail(s"$name: expected SCoproduct, got: $other")
+        }
+      }
+    }
+
+    test("Enumeration#Value is derived as enum, respecting the JSON config") {
+      val fields = fieldSchemas(KindlingsSchema.derived[WithEnumerationValue].schema)
+      fields("color").schemaType match {
+        case c: SchemaType.SCoproduct[?] => assertEquals(c.subtypes.size, 2)
+        case other                       => fail(s"Expected SCoproduct, got: $other")
+      }
+    }
+
+    test("user-provided implicits for these types are used") {
+      implicit val customInt: Schema[Int] = Schema.schemaForInt.description("custom int")
+      implicit val customOption: Schema[Option[Int]] = Schema.schemaForInt.asOption.description("custom option")
+      implicit val customList: Schema[List[Int]] = Schema.schemaForInt.asIterable[List].description("custom list")
+      implicit val customEither: Schema[Either[Int, String]] =
+        Schema.string[Either[Int, String]].description("custom either")
+
+      val fields = fieldSchemas(KindlingsSchema.derived[WithOverridable].schema)
+      assertEquals(fields("int").description, Some("custom int"))
+      assertEquals(fields("option").description, Some("custom option"))
+      assertEquals(fields("list").description, Some("custom list"))
+      assertEquals(fields("either").description, Some("custom either"))
+    }
+  }
+
   group("discriminator child metadata") {
 
     test("discriminator adds field to child schemas") {

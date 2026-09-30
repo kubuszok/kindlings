@@ -168,6 +168,10 @@ object TapirSchemaUtils {
       isOptional = true
     )
 
+  /** Wrap an element schema as a Set (collection with unique items, same as tapir's `Schema.schemaForSet`). */
+  def setSchema[E](elementSchema: Schema[E]): Schema[Any] =
+    collectionSchema[E](elementSchema).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))
+
   /** Wrap a value schema as a Map[String, V]. */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def mapSchema[V](valueSchema: Schema[V]): Schema[Any] =

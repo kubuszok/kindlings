@@ -7,3 +7,5 @@ import io.github.iltotore.iron.constraint.string.*
 
 case class IronPerson(name: String :| Not[Blank], age: Int :| Positive)
 case class WithIronOption(value: Option[Int :| Positive])
+case class WithIronKeyMap(values: Map[String :| Not[Blank], Int])
+case class WithIronIntKeyMap(values: Map[Int :| Positive, Int])

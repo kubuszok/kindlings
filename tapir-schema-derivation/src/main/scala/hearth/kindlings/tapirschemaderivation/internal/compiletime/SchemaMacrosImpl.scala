@@ -16,6 +16,7 @@ trait SchemaMacrosImpl
     with rules.SchemaUseCachedWhenAvailableRuleImpl
     with rules.SchemaUseSelfRefWhenRecursiveRuleImpl
     with rules.SchemaUseImplicitWhenAvailableRuleImpl
+    with rules.SchemaUseBuiltInSupportRuleImpl
     with rules.SchemaHandleAsOptionRuleImpl
     with rules.SchemaHandleAsMapRuleImpl
     with rules.SchemaHandleAsCollectionRuleImpl
@@ -47,17 +48,32 @@ trait SchemaMacrosImpl
     lazy val StringType: Type[String] = Type.of[String]
   }
 
-  // Methods to ignore during implicit search — prevents triggering expensive auto-derivation
+  // Methods to ignore during implicit search — prevents triggering expensive auto-derivation, and makes sure that
+  // types which we derive structurally are handled consistently by our rules
 
-  protected lazy val ignoredImplicits: Seq[UntypedMethod] = {
-    val ours = Type.of[KindlingsSchema.type].unsortedMethods.collect {
-      case method if method.name == "derived" => method.asUntyped
+  protected lazy val ignoredImplicits: Seq[UntypedMethod] =
+    Type.of[KindlingsSchema.type].unsortedMethods.collect {
+      case method if method.isImplicit => method.asUntyped
+    } ++ Type.of[Schema.type].unsortedMethods.collect {
+      case method if ignoredTapirImplicits(method.name) => method.asUntyped
     }
-    val tapirSchema = Type.of[Schema.type].unsortedMethods.collect {
-      case method if method.name == "derivedSchema" => method.asUntyped
-    }
-    ours ++ tapirSchema
-  }
+
+  /** Tapir's own implicits which derive the schema structurally (or delegate to auto-derivation). They are ignored, so
+    * that our rules handle these types the same way whether or not their elements have an implicit Schema, and
+    * consistently with the JSON library config. Built-in schemas for primitive and other leaf types (schemaForString,
+    * schemaForInt, schemaForUUID, etc.) are NOT ignored, and neither are user-provided implicits for e.g. `Map[K, V]`,
+    * `Option[A]` or `List[A]`.
+    */
+  private lazy val ignoredTapirImplicits: Set[String] = Set(
+    "derivedSchema", // tapir's Magnolia auto-derivation
+    "derivedEnumerationValue", // scala.Enumeration#Value - handled by the enum rule (respecting JSON config)
+    "schemaForOption", // handled by the Option rule
+    "schemaForArray", // handled by the collection rule
+    "schemaForIterable", // handled by the collection rule
+    "schemaForSet", // handled by the collection rule
+    "schemaForMap", // handled by the map rule (respecting e.g. mapsAreArrays)
+    "schemaForEither" // Either is encoded by the JSON libraries as a sealed hierarchy, handled by the enum rule
+  )
 
   // Entrypoints
 
@@ -284,6 +300,7 @@ trait SchemaMacrosImpl
       Rules(
         SchemaUseSelfRefWhenRecursiveRule,
         SchemaUseImplicitWhenAvailableRule,
+        SchemaUseBuiltInSupportRule,
         SchemaDerivationPolicyRule,
         SchemaHandleAsOptionRule,
         SchemaHandleAsMapRule,

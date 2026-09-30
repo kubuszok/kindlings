@@ -21,9 +21,15 @@ trait SchemaHandleAsCollectionRuleImpl {
             import isCollection.Underlying as Element
             Log.info(s"Deriving Schema for collection element: ${Type[Element].prettyPrint}") >>
               deriveSchemaRecursively[Element](using sctx.nest[Element]).map { elementSchema =>
-                Rule.matched(Expr.quote {
-                  TapirSchemaUtils.collectionSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
-                })
+                // Same as tapir's schemaForSet: sets are marked as having unique items
+                if (Type[A] <:< Type.of[scala.collection.Set[Element]])
+                  Rule.matched(Expr.quote {
+                    TapirSchemaUtils.setSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
+                  })
+                else
+                  Rule.matched(Expr.quote {
+                    TapirSchemaUtils.collectionSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
+                  })
               }
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection"))

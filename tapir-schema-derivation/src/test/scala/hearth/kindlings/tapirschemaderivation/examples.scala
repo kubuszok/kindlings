@@ -40,6 +40,21 @@ case class WithStringKeyMap(counts: Map[StringKey, Int])
 // Map keys which are value types NOT wrapping a String
 case class WithWrappedIdKeyMap(counts: Map[WrappedId, Int])
 
+// Types for which tapir provides structural implicits (ignored by KindlingsSchema)
+case class WithSets(primitives: Set[Int], caseClasses: Set[SimplePerson])
+case class WithEithers(primitives: Either[Int, String], caseClasses: Either[SimplePerson, Int])
+case class WithChar(c: Char)
+object Color extends Enumeration {
+  val Red, Green = Value
+}
+case class WithEnumerationValue(color: Color.Value)
+case class WithOverridable(
+    int: Int,
+    option: Option[Int],
+    list: List[Int],
+    either: Either[Int, String]
+)
+
 case class RecursiveTree(value: Int, children: List[RecursiveTree])
 
 // Value class

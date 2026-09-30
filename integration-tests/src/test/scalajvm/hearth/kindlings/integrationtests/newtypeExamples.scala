@@ -27,6 +27,8 @@ import newtypeExamples.*
 case class NewtypeUser(id: NewtypeUserId, name: NewtypeUsername, score: NewtypeScore, tags: NewtypeTags[String])
 case class WithNewtypeOption(value: Option[NewtypeUserId])
 case class WithNewtypeCustomId(id: NewtypeCustomId)
+case class WithNewtypeKeyMap(values: Map[NewtypeUsername, Int])
+case class WithNewtypeIntKeyMap(values: Map[NewtypeUserId, Int])
 
 object NewtypeUser {
 
