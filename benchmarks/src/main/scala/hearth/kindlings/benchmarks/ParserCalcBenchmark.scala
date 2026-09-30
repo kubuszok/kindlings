@@ -50,6 +50,24 @@ object KindlingsCalc {
     )
     expr
   }
+
+  val fastNumbers: Parser[Id, Double] = Grammar.grammar[Double, Id] { g =>
+    import g.*
+    val expr = nonTerminal[Double]
+    val num = terminal("[0-9]+(\\.[0-9]+)?").mapSlice(Numbers.double)
+    skip(" +")
+    left("+", "-")
+    left("*", "/")
+    expr ::= (
+      all(expr, "+", expr).pure((a, _, b) => a + b) ||
+        all(expr, "-", expr).pure((a, _, b) => a - b) ||
+        all(expr, "*", expr).pure((a, _, b) => a * b) ||
+        all(expr, "/", expr).pure((a, _, b) => a / b) ||
+        all("(", expr, ")").pure((_, e, _) => e) ||
+        all(num).pure(n => n)
+    )
+    expr
+  }
 }
 
 object FastparseCalc {
@@ -91,5 +109,6 @@ class ParserCalcBenchmark {
   }
 
   @Benchmark def kindlingsGenerated: Double = KindlingsCalc.generated.parse(input)
+  @Benchmark def kindlingsFastNumbers: Double = KindlingsCalc.fastNumbers.parse(input)
   @Benchmark def fastparse: Double = FastparseCalc.parse(input)
 }
