@@ -69,15 +69,17 @@ my-integration/
 ### 2. Add build configuration
 
 ```scala
-// In build.sbt versions:
+// In project/Versions.scala (`object versions`):
 val myLib = "x.y.z"
 
-// Project matrix:
+// In build.sbt - modeled on `ironIntegration` / `refinedIntegration`:
 lazy val myIntegration = projectMatrix
   .in(file("my-integration"))
-  .someVariations(versions.scalas, versions.platforms)((useCrossQuotes ++ only1VersionInIDE) *)
-  .enablePlugins(GitVersioning, GitBranchPrompt)
-  .disablePlugins(WelcomePlugin)
+  // Narrow the axes to what the library is published for, e.g. `List(versions.scala3)` for a Scala 3-only
+  // library or `List(VirtualAxis.jvm)` for a JVM-only one.
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
   .settings(
     moduleName := "kindlings-my-integration",
     name := "kindlings-my-integration",
@@ -86,12 +88,21 @@ lazy val myIntegration = projectMatrix
   )
   .settings(settings *)
   .settings(dependencies *)
-  .settings(versionSchemeSettings *)
   .settings(publishSettings *)
-  .settings(libraryDependencies += "org.example" %%% "my-lib" % versions.myLib)
+  .settings(libraryDependencies += "org.example" %% "my-lib" % versions.myLib)
 ```
 
-Add to: `root` aggregate, `al.prodProjects` (or `al.scala3OnlyProdProjects` for Scala 3-only).
+`%%` is enough on every platform: sbt-projectmatrix resolves the platform suffix.
+
+Then:
+
+- add it to the `root` aggregate (`.aggregate(myIntegration.projectRefs *)`) and to `aliases.published`,
+- add it to `modulesWithoutMimaBaseline` until `mimaPreviousVersion` is bumped to a release that contains it
+  (otherwise MiMa fails resolving a non-existent previous artifact),
+- make `integrationTests` depend on it - directly in `.dependsOn(...)` if it covers every row, otherwise from a
+  `MatrixAction` (see `ironDepForScala3` for Scala 3-only and `jvmOnlyDerivatonsForIntegrationTests` for JVM-only),
+  together with the library dependency itself,
+- run `sbt --client reload` - the running server does not pick up `build.sbt` changes.
 
 ### 3. Implement the provider
 
@@ -99,9 +110,13 @@ Add to: `root` aggregate, `al.prodProjects` (or `al.scala3OnlyProdProjects` for 
 package hearth.kindlings.myintegration.internal.compiletime
 
 import hearth.fp.data.NonEmptyList
-import hearth.std.{MacroCommons, StandardMacroExtension, StdExtensions}
+import hearth.MacroCommons
+import hearth.std.{ProviderResult, StandardMacroExtension, StdExtensions}
 
 final class IsValueTypeProviderForMyType extends StandardMacroExtension { loader =>
+
+  // Run before Hearth's built-in providers (e.g. the opaque-type one has priority -1000).
+  override def priority: Int = 1000
 
   override def extend(ctx: MacroCommons & StdExtensions): Unit = {
     import ctx.*
@@ -119,8 +134,9 @@ final class IsValueTypeProviderForMyType extends StandardMacroExtension { loader
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsValueType[A]] =
         MyTypeCtor.unapply(tpe) match {
-          case Some(types) =>
-            import types.{A => Inner, B => Param}
+          case Some((inner, param)) =>
+            import inner.Underlying as Inner
+            import param.Underlying as Param
             implicit val AT: Type[A] = tpe
 
             val unwrapExpr: Expr[A] => Expr[Inner] = outerExpr => /* extract inner value */
@@ -139,7 +155,8 @@ final class IsValueTypeProviderForMyType extends StandardMacroExtension { loader
               }
             ))
 
-          case None => skipped(s"${tpe.prettyPrint} is not a MyType")
+          // skippedLazily: the reason (and its prettyPrint) is only built if diagnostics are rendered
+          case None => skippedLazily(s"${tpe.prettyPrint} is not a MyType")
         }
     })
   }
@@ -148,19 +165,23 @@ final class IsValueTypeProviderForMyType extends StandardMacroExtension { loader
 
 ### 4. Add tests to `integration-tests`
 
-Add test types to `integration-tests/src/test/scala/` (or `scala-3/` for Scala 3-only types) and create spec files following the pattern in existing refined/iron specs.
+Add test types to `integration-tests/src/test/scala/` (or `scala-3/` for Scala 3-only types, `scalajvm/` /
+`scalajvm-3/` only when the library - or the derivation module under test, e.g. Avro/PureConfig - is JVM-only) and
+create spec files following the pattern in existing refined/iron/neotype specs. Cover: encoding, decoding valid,
+decoding invalid (for validated types), round-trip, and that a user-provided instance (in the wrapper's companion or
+in local scope) wins over the provider.
 
 ### 5. Verify
 
 ```bash
-# Compile the integration module
-sbt --client "myIntegration/clean ; myIntegration3/clean ; myIntegration/compile ; myIntegration3/compile"
+# Compile the integration module (sbt 2 matrix IDs: no suffix = Scala 3, `2_13` suffix = Scala 2.13)
+sbt --client "myIntegration/clean ; myIntegration2_13/clean ; myIntegration/compile ; myIntegration2_13/compile"
 
-# Run existing tests (verify no regressions)
+# Run existing tests (verify no regressions), including integration tests
 sbt --client "test-jvm-2_13 ; test-jvm-3"
 
-# Run integration tests
-sbt --client "integrationTests/test ; integrationTests3/test"
+# MiMa, as CI runs it on JVM
+sbt --client "myIntegration/mimaReportBinaryIssues ; myIntegration2_13/mimaReportBinaryIssues"
 ```
 
 ## Cross-compilation considerations
@@ -265,9 +286,12 @@ at the type's structure with platform reflection:
 
 - [ ] Module directory and `build.sbt` configuration
 - [ ] `macroExtensionTraits` set to `"hearth.std.StandardMacroExtension"`
-- [ ] `IsValueType.Provider` implementation with `unwrap`, `wrap` (EitherStringOrValue), and `ctors`
-- [ ] Added to `root` aggregate and appropriate project lists (`prodProjects` / `scala3OnlyProdProjects`)
-- [ ] Integration tests covering: encoding, decoding valid, decoding invalid, round-trip
+- [ ] `IsValueType.Provider` implementation with `unwrap`, `wrap` (`EitherStringOrValue` when the library validates,
+  `PlainValue` when wrapping can never fail), and `ctors`
+- [ ] User guide page, `mkdocs.yml` nav + `libraries` version, README/index/FAQ tables, `feature-parity.md` rows,
+  Scala CLI install snippet added to the `scripts/test-snippets.scala` ignore list
+- [ ] Added to `root` aggregate, `aliases.published` and `modulesWithoutMimaBaseline`
+- [ ] Integration tests covering: encoding, decoding valid, decoding invalid, round-trip, user-provided instance wins
 - [ ] Tests pass on all target platforms: `sbt --client "test-jvm-2_13 ; test-jvm-3"`
 
 ## Related skills

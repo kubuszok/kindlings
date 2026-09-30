@@ -534,6 +534,8 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 | Value classes / `AnyVal` wrappers | Manual `ConfigReader.fromString` per type | Automatic unwrapping via `IsValueType` (covers `AnyVal`, `extends AnyVal`, refined types via `refined-integration`, opaque types) | Improvement |
 | Refined types (`eu.timepit.refined`) | Separate `pureconfig-refined` module | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected by `IsValueType`) | Improvement |
 | Iron (Scala 3 opaque types with constraints) | Separate `pureconfig-iron` module | Automatic via `kindlings-iron-integration` | Improvement |
+| neotype (Scala 3 `Newtype`/`Subtype`) | Manual `ConfigReader`/`ConfigWriter` per type | Automatic via `kindlings-neotype-integration` (validated with the companion's `make`) | Improvement |
+| scala-newtype (`@newtype`/`@newsubtype`) | Manual (e.g. `deriving` from the underlying instance) per type | Automatic via `kindlings-newtype-integration` (JVM) | Improvement |
 | Scala 3 named tuples | Not supported | Yes | Improvement |
 | Scala 3 union types (`A \| B`) | Limited | Yes | Improvement |
 | Recursive types | Works (Shapeless on Scala 2; Scala 3 native has limitations) | Works without `Lazy` or wrappers on both | Improvement |
@@ -748,6 +750,8 @@ Collection (`List`, `Vector`, `Seq`, `Set`) and `Map[String, A]` readers / write
 | Value classes / `AnyVal` wrappers | Manual unwrap | Automatic via `IsValueType` | |
 | Refined types (Scala 2 + Scala 3) | Manual validation | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected) | |
 | Iron (Scala 3 opaque types with constraints) | Not supported | Automatic via `kindlings-iron-integration` | |
+| neotype (Scala 3 `Newtype`/`Subtype`) | Not supported | Automatic via `kindlings-neotype-integration` (validated with the companion's `make`) | |
+| scala-newtype (`@newtype`/`@newsubtype`) | Not supported | Automatic via `kindlings-newtype-integration` | JVM only |
 | Sealed traits with discriminator | Manual dispatch | Macro `HandleAsEnumRule` (`SConfig.discriminator`) | Default `"type"` |
 | Sealed traits with single-key wrapping | Manual dispatch | Macro `HandleAsEnumRule` (`SConfig.withWrappedSubtypes`) | |
 | Case-object enums → string | Manual | Auto-detected when all subtypes are `case object`s and no discriminator is set | |

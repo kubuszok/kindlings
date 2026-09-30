@@ -55,6 +55,25 @@ final class NewtypeCirceSpec extends MacroSuite {
       }
     }
 
+    group("user-provided instances") {
+
+      test("companion-provided Encoder is used instead of unwrapping") {
+        KindlingsEncoder.encode(WithNewtypeCustomId(NewtypeCustomId(7))) ==> Json.obj("id" -> Json.fromString("id-7"))
+      }
+
+      test("companion-provided Decoder is used instead of wrapping") {
+        KindlingsDecoder.decode[WithNewtypeCustomId](Json.obj("id" -> Json.fromString("id-7"))) ==>
+          Right(WithNewtypeCustomId(NewtypeCustomId(7)))
+      }
+
+      test("implicit in local scope is used instead of unwrapping") {
+        implicit val userIdEncoder: io.circe.Encoder[NewtypeUserId] =
+          io.circe.Encoder.encodeString.contramap(id => s"user-${id.value}")
+        KindlingsEncoder.encode(WithNewtypeOption(Some(NewtypeUserId(1)))) ==>
+          Json.obj("value" -> Json.fromString("user-1"))
+      }
+    }
+
     group("round-trip") {
 
       test("encode then decode preserves value") {

@@ -74,6 +74,25 @@ final class NeotypeCirceSpec extends MacroSuite {
       }
     }
 
+    group("user-provided instances") {
+
+      test("companion-provided Encoder is used instead of unwrapping") {
+        KindlingsEncoder.encode(WithNeotypeCustomId(NeotypeCustomId(7))) ==> Json.obj("id" -> Json.fromString("id-7"))
+      }
+
+      test("companion-provided Decoder is used instead of make") {
+        KindlingsDecoder.decode[WithNeotypeCustomId](Json.obj("id" -> Json.fromString("id-7"))) ==>
+          Right(WithNeotypeCustomId(NeotypeCustomId(7)))
+      }
+
+      test("implicit in local scope is used instead of unwrapping") {
+        implicit val ageEncoder: io.circe.Encoder[NeotypeAge] =
+          io.circe.Encoder.encodeString.contramap(age => s"age-${age: Int}")
+        KindlingsEncoder.encode(WithNeotypeOption(Some(NeotypeAge(1)))) ==>
+          Json.obj("value" -> Json.fromString("age-1"))
+      }
+    }
+
     group("round-trip") {
 
       test("encode then decode preserves value") {

@@ -16,8 +16,18 @@ object NeotypeAge extends Subtype[Int] {
 type NeotypeNickname = NeotypeNickname.Type
 object NeotypeNickname extends Newtype[String]
 
+// Companion-provided instances must win over the IsValueType provider's unwrapping.
+type NeotypeCustomId = NeotypeCustomId.Type
+object NeotypeCustomId extends Newtype[Int] {
+  implicit val encoder: io.circe.Encoder[Type] =
+    io.circe.Encoder.encodeString.contramap(id => s"id-${unwrap(id)}")
+  implicit val decoder: io.circe.Decoder[Type] =
+    io.circe.Decoder.decodeString.emap(s => s.stripPrefix("id-").toIntOption.toRight("bad id").flatMap(make))
+}
+
 case class NeotypePerson(email: NeotypeEmail, age: NeotypeAge, nickname: NeotypeNickname)
 case class WithNeotypeOption(value: Option[NeotypeAge])
+case class WithNeotypeCustomId(id: NeotypeCustomId)
 
 // Plain surrogate for testing neotype validation rejection via binary codecs
 case class PlainNeotypePerson(email: String, age: Int, nickname: String)
