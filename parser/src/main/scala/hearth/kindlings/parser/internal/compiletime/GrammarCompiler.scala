@@ -22,6 +22,8 @@ private[parser] object GrammarCompiler {
     *   the generated `String` lexer (only when compiling for generated code, and when the DFA is small enough)
     * @param flags
     *   the enabled `GrammarFlag`s, by name
+    * @param ll1
+    *   whether the grammar is LL(1) (and `RequireLALR` is not enabled): generated code may use the top-down parser
     * @param slicers
     *   the `.mapSlice` functions, by token id (only when compiling for generated code)
     */
@@ -35,7 +37,8 @@ private[parser] object GrammarCompiler {
       reduces: Vector[CodegenPlan.Reduce],
       lexer: Option[CodegenPlan.Lexer],
       slicers: Vector[(Int, Any)],
-      flags: Set[String]
+      flags: Set[String],
+      ll1: Boolean
   )
 
   /** @param generated
@@ -247,6 +250,27 @@ private[parser] object GrammarCompiler {
     }
     if (errors.nonEmpty) return Left(errors.toList)
 
+    // --- LL(1) -------------------------------------------------------------------------------------------------------
+    val ll1 = new LL1(g, t => tokenId(t.pattern), tokenNames(_))
+    if (flags("RequireLL1") && !ll1.isLL1) {
+      val precedenceNote =
+        if (g.statements.exists(_.isInstanceOf[Precedence]))
+          "\n  Note: precedence declarations (left/right/nonassoc) only settle choices for the LALR parser; an LL(1) " +
+            "grammar has to spell precedence out in its rules (one non-terminal per level, repetitions for the operators)."
+        else ""
+      // one self-contained error (tools often show only the first one), at the first problem
+      val reasons = ll1.problems.zipWithIndex.map { case (d, i) => s"\n  ${i + 1}. ${d.message}" }
+      return Left(
+        List(
+          Diagnostic(
+            ll1.problems.head.pos,
+            s"`enable(RequireLL1)`: this grammar is not LL(1), i.e. a top-down parser that looks at one token ahead " +
+              s"cannot parse it:${reasons.mkString}$precedenceNote"
+          )
+        )
+      )
+    }
+
     // --- LR tables -----------------------------------------------------------------------------------------------
     val nts = flat.nonTerminals + 1 // + augmented start
     val start = flat.nonTerminals
@@ -411,7 +435,8 @@ private[parser] object GrammarCompiler {
         if (generated) CodegenPlan.lexer(dfa, skipFrom = tokens.size + 1) else None,
         if (generated) slicerOf.toVector.collect { case (pattern, Some(fn)) => tokenId(pattern) -> fn }.sortBy(_._1)
         else Vector.empty,
-        flags
+        flags,
+        !flags("RequireLALR") && ll1.isLL1
       )
     )
   }
