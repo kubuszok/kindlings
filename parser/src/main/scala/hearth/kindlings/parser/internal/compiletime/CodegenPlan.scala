@@ -17,14 +17,19 @@ private[parser] object CodegenPlan {
     * (converting the builder), terminals as the matched text or through converter `id`.
     */
   sealed trait RhsPlan
-  final case class NtPlan(collection: Option[Int]) extends RhsPlan
+
+  /** @param prim
+    *   the `Prims` kind of the non-terminal's values (read from the primitive stack unless `Boxed`)
+    */
+  final case class NtPlan(collection: Option[Int], prim: Int = 0) extends RhsPlan
   final case class TermPlan(converter: Option[Int]) extends RhsPlan
 
   /** The code reducing production `p` (a table index) whose right-hand side has `len` symbols: compute the value from
     * the top `len` stack values, pop them and push the value in state `goto` (when every state reached by the
-    * production's left-hand side is that one state) or in the state the goto table gives for `lhs`.
+    * production's left-hand side is that one state) or in the state the goto table gives for `lhs`. Values of a
+    * left-hand side with a primitive type (`lhsPrim`, a `Prims` kind) go to the primitive stack as bits.
     */
-  final case class Reduce(p: Int, len: Int, lhs: Int, goto: Option[Int], body: ReduceBody)
+  final case class Reduce(p: Int, len: Int, lhs: Int, goto: Option[Int], body: ReduceBody, lhsPrim: Int = 0)
 
   sealed trait ReduceBody
   object ReduceBody {

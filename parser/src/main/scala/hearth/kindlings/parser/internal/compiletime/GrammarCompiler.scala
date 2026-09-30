@@ -305,10 +305,16 @@ private[parser] object GrammarCompiler {
       val targets = (0 until lalr.stateCount).map(s => lalr.goto(s * nts + nt)).filter(_ >= 0).distinct
       if (targets.size == 1) Some(targets.head) else None
     }
+
+    /** Generated grammars keep the values of user non-terminals with a primitive type unboxed; helpers stay boxed. */
+    def primOf(nt: Int): Int =
+      if (generated && nt < g.nonTerminals.size) g.nonTerminals(nt).prim
+      else if (generated && nt == start) primOf(g.root)
+      else hearth.kindlings.parser.internal.runtime.Prims.Boxed
     prods.zipWithIndex.foreach { case (prod, index) =>
       val p = index + 1
       val rhsPlans: Vector[RhsPlan] = prod.rhs.map {
-        case Flatten.RNt(id, listify) => NtPlan(if (listify) Some(ntCollection(id)) else None)
+        case Flatten.RNt(id, listify) => NtPlan(if (listify) Some(ntCollection(id)) else None, primOf(id))
         case Flatten.RTerm(term)      => TermPlan(converterOf(term))
       }
       val body: ReduceBody = prod.action match {
@@ -338,7 +344,8 @@ private[parser] object GrammarCompiler {
           prodKind(p) = ActListAppend; prodArg(p) = index
           ReduceBody.Collect(ntCollection(prod.lhs), CollectionStep.Append(index, rhsPlans(index)))
       }
-      if (generated) reduces += CodegenPlan.Reduce(p, prod.rhs.size, prod.lhs, constantGoto(prod.lhs), body)
+      if (generated)
+        reduces += CodegenPlan.Reduce(p, prod.rhs.size, prod.lhs, constantGoto(prod.lhs), body, primOf(prod.lhs))
     }
     val tables = new Tables(
       tokenCount = tokenCount,
@@ -357,6 +364,7 @@ private[parser] object GrammarCompiler {
       prodLen = rhs.map(_.length),
       prodKind = prodKind,
       prodArg = prodArg,
+      ntPrim = Array.tabulate(nts)(primOf),
       constants = constants.keys.toArray,
       sliced = Array.tabulate(tokenCount) { t =>
         generated && t >= 1 && t <= tokens.size && slicerOf.get(tokens(t - 1).pattern).exists(_.isDefined)

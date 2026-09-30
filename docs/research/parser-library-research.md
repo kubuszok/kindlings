@@ -88,6 +88,14 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   quasiquotes. Large DFAs and non-`String` inputs keep the table lexer. Tables version 5 drops the now-unused
   `rhsStart`/`rhsConv`. JSON: +42% / +46%, ~2x from jawn (was ~2.8x).
 
+**Token text and primitive values**
+- `Terminal.mapSlice((input, start, end) => B)`: token conversions from the input and bounds, at shift time
+  (generated `slice` switch, `Tables.sliced`), one copy fewer for delimited tokens (+8.5% / +18% on JSON).
+- Non-terminals with a primitive type keep their values as bits in `Machine.stackPrims` (`Prims` kinds per
+  non-terminal in `Tables.ntPrim`, version 7): generated reductions decode them into the inlined actions and encode
+  results; effect results and the parse result go through `Prims.encode`/`decode`. Allocation -35% on the arithmetic
+  benchmark, throughput unchanged.
+
 **Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
 than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x
 slower than hand-written jawn.

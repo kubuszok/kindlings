@@ -85,7 +85,10 @@ private[parser] object GrammarIR {
   final case class Precedence(assoc: Assoc, operators: List[Sym], pos: Pos) extends Statement
   final case class Skip(regex: String, pos: Pos) extends Statement
 
-  final case class NonTerminalDecl(name: String, pos: Pos)
+  /** @param prim
+    *   the `internal.runtime.Prims` kind of the declared value type (`Boxed` unless it is a primitive type)
+    */
+  final case class NonTerminalDecl(name: String, pos: Pos, prim: Int = 0)
 
   final case class Grammar(
       nonTerminals: Vector[NonTerminalDecl],

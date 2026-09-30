@@ -305,7 +305,8 @@ prefix. A REPL can use it to ask for another line instead of reporting an error.
 ## Generated vs interpreted actions
 
 `Grammar.grammar` generates the code of the actions, of every reduction (with its stack effects compiled in) and, for
-`String` inputs, of the lexer (the token automaton becomes code, unless it is very large). `Grammar.interpreted` (same syntax) instead evaluates the grammar
+`String` inputs, of the lexer (the token automaton becomes code, unless it is very large). Values of non-terminals
+declared with a primitive type (`nonTerminal[Int]`, `nonTerminal[Double]`, ...) are kept unboxed between reductions. `Grammar.interpreted` (same syntax) instead evaluates the grammar
 block once at run time and calls the actions as function values: it is slower and exists as a fallback and as a
 benchmark baseline. Because generated actions are moved out of the grammar block, they may use anything in scope
 except the grammar's own symbols (non-terminals, terminals and the DSL): that is reported as a compile error. `.map`

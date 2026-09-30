@@ -52,6 +52,26 @@ the table above. [parser-vs-jawn.md](parser-vs-jawn.md) analyses where that gap 
    first-char `switch`, inlined self-loop scans): +42% (2.13) / +46% (3) on generated grammars in a same-session
    run, 84 → 119 and 94 → 138 ops/s, jawn at 235 / 269. See [parser-vs-jawn.md](parser-vs-jawn.md) § 5.
 
+6. Unboxed primitive values (`nonTerminal[Double]`, `Int`, ...): generated grammars keep them as bits in a parallel
+   `Long` stack (`Machine.stackPrims`, kinds per non-terminal in `Tables.ntPrim`), decoded straight into the inlined
+   actions. Measured on the arithmetic benchmark below: allocation -35%, throughput unchanged.
+
+## Arithmetic benchmark (primitive values)
+
+`ParserCalcBenchmark` evaluates ~1 MB of arithmetic (`+ - * /`, parentheses) where every reduction yields a `Double`,
+which is what unboxed primitive values target (the JSON benchmark's values are all objects). Same session, 3 forks × 6
+iterations, before and after unboxing:
+
+| | Scala 2.13 ops/s | Scala 3 ops/s | allocation per parse |
+|---|---|---|---|
+| kindlings-parser, generated, boxed values (before) | 37.7 ± 2.0 | 42.6 ± 2.6 | 21.1 MB |
+| kindlings-parser, generated, unboxed primitives | 37.0 ± 2.5 | 44.1 ± 1.8 | 13.8 MB |
+| fastparse (reference) | 16.4 ± 2.2 | 18.5 ± 0.7 | 82-87 MB |
+
+The boxed `Double`s were short-lived TLAB allocations, cheap for the JIT and the young generation, so removing them
+cut a third of the garbage but not the time. The lower allocation rate still helps multi-threaded servers and long
+streams (less GC pressure). What remains allocated is the number tokens' text (`toDouble` needs a `String`).
+
 ## Next candidates, by expected gain
 
 See [parser-vs-jawn.md](parser-vs-jawn.md) § 4 for the measurements behind this order.
@@ -61,7 +81,5 @@ A fused driver loop (stacks and lookahead in locals, the lexer inlined into the 
 +8.5% / +18% on JSON.
 
 1. **Value building**: typed value slots (below) and cheaper AST construction; token text is now copied once.
-2. **Typed value slots** for primitive-valued symbols, to avoid boxing `Double`/`Int` on the value stack. (Repetitions
-   already feed the target collection's own builder: see `.as[C]`.)
-3. **Per-runtime generated drivers** (§5.11 of the research doc). These need an effect-heavy benchmark first (e.g.
+2. **Per-runtime generated drivers** (§5.11 of the research doc). These need an effect-heavy benchmark first (e.g.
    JSON with an `IO` action per element); the benchmark above is pure.

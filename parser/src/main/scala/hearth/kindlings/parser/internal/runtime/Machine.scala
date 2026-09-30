@@ -44,6 +44,8 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
 
   private var states = new Array[Int](64)
   private var values = new Array[Any](64)
+  private var prims = new Array[Long](64)
+  private val ntPrim = tables.ntPrim
   private var sp = 0 // index of the top of the stack
 
   private var pos = 0L
@@ -70,7 +72,12 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     val lhs = pendingLhs
     pendingLhs = -1
     _pendingEffect = null
-    push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
+    val kind = ntPrim(lhs)
+    if (kind == Prims.Boxed) push(tables.goto(states(sp) * nonTerminalCount + lhs), value)
+    else {
+      push(tables.goto(states(sp) * nonTerminalCount + lhs), null)
+      prims(sp) = Prims.encode(kind, value)
+    }
   }
 
   /** Reads more input after [[Machine.NeedInput]] (may block). For push machines this does nothing: use [[feed]]. */
@@ -118,7 +125,8 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
       } else if (act < 0) {
         val p = -act - 1
         if (p == 0) {
-          _result = values(sp)
+          val kind = ntPrim(nonTerminalCount - 1)
+          _result = if (kind == Prims.Boxed) values(sp) else Prims.decode(kind, prims(sp))
           return Machine.Done
         }
         try
@@ -144,10 +152,27 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   /** The value stack; the value of the top is at [[stackTop]]. Values above the top may be stale. */
   def stackValues: Array[Any] = values
 
+  /** The primitive stack: the bits of the values of non-terminals with a primitive type (see [[Prims]]). */
+  def stackPrims: Array[Long] = prims
+
   /** The index of the top of the stack. */
   def stackTop: Int = sp
 
   /** Completes a reduction: the stack is cut back to `top` and `value` is pushed in the goto state of `lhs`. */
+  /** Completes a reduction of a non-terminal with a primitive type: its value's `bits` go to the primitive stack. */
+  def reducedPrim(top: Int, lhs: Int, bits: Long): Unit = {
+    sp = top
+    push(tables.goto(states(top) * nonTerminalCount + lhs), null)
+    prims(sp) = bits
+  }
+
+  /** [[reducedPrim]] whose goto state is always `state`. */
+  def reducedToPrim(top: Int, state: Int, bits: Long): Unit = {
+    sp = top
+    push(state, null)
+    prims(sp) = bits
+  }
+
   def reduced(top: Int, lhs: Int, value: Any): Unit = {
     sp = top
     push(tables.goto(states(top) * nonTerminalCount + lhs), value)
@@ -189,6 +214,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
     if (sp == states.length) {
       states = java.util.Arrays.copyOf(states, states.length * 2)
       values = java.util.Arrays.copyOf(values.asInstanceOf[Array[AnyRef]], values.length * 2).asInstanceOf[Array[Any]]
+      prims = java.util.Arrays.copyOf(prims, prims.length * 2)
     }
     states(sp) = state
     values(sp) = value

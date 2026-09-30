@@ -107,43 +107,80 @@ private[parser] object GrammarMacros {
         factories: Expr[Array[Any]]
     )(using q: Quotes): Expr[Boolean] = {
       import q.reflect.*
-      def value(rhs: CodegenPlan.RhsPlan, raw: Expr[Any]): Term = rhs match {
-        case CodegenPlan.NtPlan(None)       => raw.asTerm
-        case CodegenPlan.NtPlan(Some(id))   => applyFn(colls(id).result, List(raw.asTerm))
-        case CodegenPlan.TermPlan(None)     => raw.asTerm
-        case CodegenPlan.TermPlan(Some(id)) =>
-          convert(out.converters(id), raw.asTerm)
+      import hearth.kindlings.parser.internal.runtime.Prims.*
+
+      /** The primitive value of `kind` whose bits are `bits`. */
+      def decode(kind: Int, bits: Expr[Long]): Term = (kind match {
+        case IntKind     => '{ $bits.toInt }
+        case LongKind    => bits
+        case DoubleKind  => '{ java.lang.Double.longBitsToDouble($bits) }
+        case FloatKind   => '{ java.lang.Float.intBitsToFloat($bits.toInt) }
+        case BooleanKind => '{ $bits != 0L }
+        case CharKind    => '{ $bits.toChar }
+        case ShortKind   => '{ $bits.toShort }
+        case _           => '{ $bits.toByte }
+      }).asTerm
+
+      /** The bits of the primitive value `value` of `kind`. */
+      def encode(kind: Int, value: Term): Expr[Long] = {
+        def as[T: Type]: Expr[T] = cast(value, TypeRepr.of[T]).asExprOf[T]
+        kind match {
+          case IntKind     => val e = as[Int]; '{ $e.toLong }
+          case LongKind    => as[Long]
+          case DoubleKind  => val e = as[Double]; '{ java.lang.Double.doubleToRawLongBits($e) }
+          case FloatKind   => val e = as[Float]; '{ java.lang.Float.floatToRawIntBits($e).toLong }
+          case BooleanKind => val e = as[Boolean]; '{ if $e then 1L else 0L }
+          case CharKind    => val e = as[Char]; '{ $e.toLong }
+          case ShortKind   => val e = as[Short]; '{ $e.toLong }
+          case _           => val e = as[Byte]; '{ $e.toLong }
+        }
       }
       val cases = out.reduces.toList.map { r =>
         def raw(i: Int): Expr[Any] = '{ $values($top + ${ Expr(i - r.len + 1) }) }
+        // read through the getter: a local val would be unused in grammars without primitive values
+        def bits(i: Int): Expr[Long] = '{ $m.stackPrims($top + ${ Expr(i - r.len + 1) }) }
+        def value(rhs: CodegenPlan.RhsPlan, i: Int): Term = rhs match {
+          case CodegenPlan.NtPlan(None, 0)     => raw(i).asTerm
+          case CodegenPlan.NtPlan(None, prim)  => decode(prim, bits(i))
+          case CodegenPlan.NtPlan(Some(id), _) => applyFn(colls(id).result, List(raw(i).asTerm))
+          case CodegenPlan.TermPlan(None)      => raw(i).asTerm
+          case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw(i).asTerm)
+        }
         val newTop = '{ $top - ${ Expr(r.len) } }
         val result: Term = r.body match {
           case CodegenPlan.ReduceBody.User(action, rhs, _) =>
             val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
               val tpe = action.paramTypes(i).asInstanceOf[TypeRepr]
               if !action.used(i) then cast('{ null }.asTerm, tpe)
-              else cast(value(plan, raw(i)), tpe)
+              else cast(value(plan, i), tpe)
             }
             applyFn(action.tree, args)
-          case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, raw(0))
+          case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, 0)
           case CodegenPlan.ReduceBody.Const(text)       => Literal(StringConstant(text))
           case CodegenPlan.ReduceBody.OptNone           => '{ None }.asTerm
-          case CodegenPlan.ReduceBody.OptSome(rhs)      => '{ Some(${ value(rhs, raw(0)).asExprOf[Any] }) }.asTerm
+          case CodegenPlan.ReduceBody.OptSome(rhs)      => '{ Some(${ value(rhs, 0).asExprOf[Any] }) }.asTerm
           case CodegenPlan.ReduceBody.Collect(id, step) =>
             val code = colls(id)
             def newBuilder = applyFn(code.newBuilder, List('{ $factories(${ Expr(id) }) }.asTerm))
             step match {
               case CodegenPlan.CollectionStep.Empty        => newBuilder
               case CodegenPlan.CollectionStep.One(element) =>
-                applyFn(code.add, List(newBuilder, value(element, raw(0))))
+                applyFn(code.add, List(newBuilder, value(element, 0)))
               case CodegenPlan.CollectionStep.Append(i, element) =>
-                applyFn(code.add, List(raw(0).asTerm, value(element, raw(i))))
+                applyFn(code.add, List(raw(0).asTerm, value(element, i)))
             }
         }
         val v = result.asExprOf[Any]
         val body: Expr[Boolean] = r.body match {
           case CodegenPlan.ReduceBody.User(_, _, true) =>
             '{ val value: Any = $v; $m.suspend($newTop, ${ Expr(r.lhs) }, value); true }
+          case _ if r.lhsPrim != Boxed =>
+            // the value stays unboxed: its bits go to the primitive stack
+            val b = encode(r.lhsPrim, result)
+            r.goto match {
+              case Some(state) => '{ val bits = $b; $m.reducedToPrim($newTop, ${ Expr(state) }, bits); false }
+              case None        => '{ val bits = $b; $m.reducedPrim($newTop, ${ Expr(r.lhs) }, bits); false }
+            }
           case _ =>
             r.goto match {
               case Some(state) => '{ val value: Any = $v; $m.reducedTo($newTop, ${ Expr(state) }, value); false }
@@ -419,7 +456,11 @@ private[parser] object GrammarMacros {
       case vd @ ValDef(name, _, Some(rhs)) =>
         strip(rhs) match {
           case DslCall("nonTerminal", _, Nil) =>
-            nonTerminals(vd.symbol) = nonTerminals.size -> NonTerminalDecl(name, pos(vd))
+            val prim = vd.tpt.tpe.baseType(TypeRepr.of[NonTerminal[Any]].typeSymbol) match {
+              case AppliedType(_, List(arg)) => primKind(arg)
+              case _                         => hearth.kindlings.parser.internal.runtime.Prims.Boxed
+            }
+            nonTerminals(vd.symbol) = nonTerminals.size -> NonTerminalDecl(name, pos(vd), prim)
           case other =>
             sym(other, Some(name)) match {
               case t: IRTerm => terminals(vd.symbol) = t
@@ -494,6 +535,21 @@ private[parser] object GrammarMacros {
         case _ => paramTypes.map(_ => true)
       }
       Action(f, paramTypes, types.last, used)
+    }
+
+    /** The `Prims` kind of a non-terminal's value type. */
+    private def primKind(tpe: TypeRepr): Int = {
+      import hearth.kindlings.parser.internal.runtime.Prims.*
+      val t = tpe.dealias
+      if t =:= TypeRepr.of[Int] then IntKind
+      else if t =:= TypeRepr.of[Long] then LongKind
+      else if t =:= TypeRepr.of[Double] then DoubleKind
+      else if t =:= TypeRepr.of[Float] then FloatKind
+      else if t =:= TypeRepr.of[Boolean] then BooleanKind
+      else if t =:= TypeRepr.of[Char] then CharKind
+      else if t =:= TypeRepr.of[Short] then ShortKind
+      else if t =:= TypeRepr.of[Byte] then ByteKind
+      else Boxed
     }
 
     /** The type argument of `tree`'s type seen as `base[_]`. */

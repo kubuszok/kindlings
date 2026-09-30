@@ -99,63 +99,111 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
 
     private val m = fresh("m")
     private val vs = fresh("values")
+    private val ps = fresh("prims")
     private val top = fresh("top")
+    // which stacks the generated cases read (unused local vals would be warnings in the user's code)
+    private var readsValues = false
+    private var readsPrims = false
 
-    /** The value of a right-hand side position whose raw stack value is `raw`. */
-    private def value(rhs: CodegenPlan.RhsPlan, raw: Tree): Tree = rhs match {
-      case CodegenPlan.NtPlan(None)       => raw
-      case CodegenPlan.NtPlan(Some(id))   => applyFn(collections(id).result, anyToAny, List(raw))
-      case CodegenPlan.TermPlan(None)     => raw
-      case CodegenPlan.TermPlan(Some(id)) =>
-        convert(out.converters(id), raw)
+    /** The primitive value of `kind` whose bits are `bits` (see `Prims`). */
+    private def decode(kind: Int, bits: Tree): Tree = {
+      import hearth.kindlings.parser.internal.runtime.Prims.*
+      kind match {
+        case IntKind     => q"$bits.toInt"
+        case LongKind    => bits
+        case DoubleKind  => q"_root_.java.lang.Double.longBitsToDouble($bits)"
+        case FloatKind   => q"_root_.java.lang.Float.intBitsToFloat($bits.toInt)"
+        case BooleanKind => q"$bits != 0L"
+        case CharKind    => q"$bits.toChar"
+        case ShortKind   => q"$bits.toShort"
+        case _           => q"$bits.toByte"
+      }
+    }
+
+    /** The bits of the primitive value `value` of `kind`. */
+    private def encode(kind: Int, value: Tree): Tree = {
+      import hearth.kindlings.parser.internal.runtime.Prims.*
+      kind match {
+        case IntKind     => q"($value.asInstanceOf[_root_.scala.Int]).toLong"
+        case LongKind    => q"$value.asInstanceOf[_root_.scala.Long]"
+        case DoubleKind  => q"_root_.java.lang.Double.doubleToRawLongBits($value.asInstanceOf[_root_.scala.Double])"
+        case FloatKind   => q"_root_.java.lang.Float.floatToRawIntBits($value.asInstanceOf[_root_.scala.Float]).toLong"
+        case BooleanKind => q"if ($value.asInstanceOf[_root_.scala.Boolean]) 1L else 0L"
+        case CharKind    => q"($value.asInstanceOf[_root_.scala.Char]).toLong"
+        case ShortKind   => q"($value.asInstanceOf[_root_.scala.Short]).toLong"
+        case _           => q"($value.asInstanceOf[_root_.scala.Byte]).toLong"
+      }
     }
 
     private def reduceCase(r: CodegenPlan.Reduce): Tree = {
-      def raw(i: Int): Tree = q"$vs($top + ${i - r.len + 1})"
+      def raw(i: Int): Tree = { readsValues = true; q"$vs($top + ${i - r.len + 1})" }
+      def bits(i: Int): Tree = { readsPrims = true; q"$ps($top + ${i - r.len + 1})" }
+
+      /** The value of right-hand side position `i`. */
+      def value(rhs: CodegenPlan.RhsPlan, i: Int): Tree = rhs match {
+        case CodegenPlan.NtPlan(None, 0)     => raw(i)
+        case CodegenPlan.NtPlan(None, prim)  => decode(prim, bits(i))
+        case CodegenPlan.NtPlan(Some(id), _) => applyFn(collections(id).result, anyToAny, List(raw(i)))
+        case CodegenPlan.TermPlan(None)      => raw(i)
+        case CodegenPlan.TermPlan(Some(id))  => convert(out.converters(id), raw(i))
+      }
       val newTop = q"$top - ${r.len}"
       val result: Tree = r.body match {
         case CodegenPlan.ReduceBody.User(action, rhs, _) =>
           val args = rhs.toList.zipWithIndex.map { case (plan, i) =>
             val tpe = TypeTree(action.paramTypes(i).asInstanceOf[Type])
             if (!action.used(i)) q"null.asInstanceOf[$tpe]"
-            else q"${value(plan, raw(i))}.asInstanceOf[$tpe]"
+            else q"${value(plan, i)}.asInstanceOf[$tpe]"
           }
           val fn = action.tree.asInstanceOf[Tree]
           applyFn(fn, fn.tpe.widen, args)
-        case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, raw(0))
+        case CodegenPlan.ReduceBody.Pass(rhs)         => value(rhs, 0)
         case CodegenPlan.ReduceBody.Const(text)       => Literal(Constant(text))
         case CodegenPlan.ReduceBody.OptNone           => q"_root_.scala.None"
-        case CodegenPlan.ReduceBody.OptSome(rhs)      => q"_root_.scala.Some(${value(rhs, raw(0))})"
+        case CodegenPlan.ReduceBody.OptSome(rhs)      => q"_root_.scala.Some(${value(rhs, 0)})"
         case CodegenPlan.ReduceBody.Collect(id, step) =>
           val code = collections(id)
           def newBuilder = applyFn(code.newBuilder, anyToAny, List(q"collectionFactories($id)"))
           step match {
             case CodegenPlan.CollectionStep.Empty        => newBuilder
             case CodegenPlan.CollectionStep.One(element) =>
-              applyFn(code.add, anyAnyToAny, List(newBuilder, value(element, raw(0))))
+              applyFn(code.add, anyAnyToAny, List(newBuilder, value(element, 0)))
             case CodegenPlan.CollectionStep.Append(i, element) =>
-              applyFn(code.add, anyAnyToAny, List(raw(0), value(element, raw(i))))
+              applyFn(code.add, anyAnyToAny, List(raw(0), value(element, i)))
           }
       }
       val v = fresh("value")
-      val finish = r.body match {
-        case CodegenPlan.ReduceBody.User(_, _, true) => q"$m.suspend($newTop, ${r.lhs}, $v); true"
-        case _                                       =>
-          r.goto match {
+      r.body match {
+        case CodegenPlan.ReduceBody.User(_, _, true) =>
+          cq"${r.p} => { val $v: _root_.scala.Any = $result; $m.suspend($newTop, ${r.lhs}, $v); true }"
+        case _ if r.lhsPrim != 0 =>
+          // the value stays unboxed: its bits go to the primitive stack
+          val b = fresh("bits")
+          val finish = r.goto match {
+            case Some(state) => q"$m.reducedToPrim($newTop, $state, $b); false"
+            case None        => q"$m.reducedPrim($newTop, ${r.lhs}, $b); false"
+          }
+          cq"${r.p} => { val $b: _root_.scala.Long = ${encode(r.lhsPrim, result)}; $finish }"
+        case _ =>
+          val finish = r.goto match {
             case Some(state) => q"$m.reducedTo($newTop, $state, $v); false"
             case None        => q"$m.reduced($newTop, ${r.lhs}, $v); false"
           }
+          cq"${r.p} => { val $v: _root_.scala.Any = $result; $finish }"
       }
-      cq"${r.p} => { val $v: _root_.scala.Any = $result; $finish }"
     }
 
     def reduce: Tree = {
       val p = fresh("p")
+      val cases = out.reduces.toList.map(reduceCase)
+      val stacks =
+        (if (readsValues) List(q"val $vs = $m.stackValues") else Nil) ++
+          (if (readsPrims) List(q"val $ps = $m.stackPrims") else Nil)
       q"""def reduce($p: _root_.scala.Int, $m: $MachineType): _root_.scala.Boolean = {
-            val $vs = $m.stackValues
+            ..$stacks
             val $top = $m.stackTop
             $p match {
-              case ..${out.reduces.toList.map(reduceCase)}
+              case ..$cases
               case _ => throw new _root_.java.lang.IllegalStateException("no reduction for production " + $p)
             }
           }"""
@@ -392,7 +440,8 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         val name = vd.name.decodedName.toString.trim
         strip(vd.rhs) match {
           case DslCall("nonTerminal", _, Nil) =>
-            nonTerminals(vd.symbol) = nonTerminals.size -> NonTerminalDecl(name, pos(vd))
+            val prim = primKind(vd.symbol.info.baseType(symbolOf[NonTerminal[?]]).typeArgs.head)
+            nonTerminals(vd.symbol) = nonTerminals.size -> NonTerminalDecl(name, pos(vd), prim)
           case rhs =>
             sym(rhs, Some(name)) match {
               case t: IRTerm => terminals(vd.symbol) = t
@@ -466,6 +515,21 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
     private def listOf(tree: Tree): Collection = {
       val element = typeArg(tree, symbolOf[Repetition[?]])
       Collection(appliedType(typeOf[List[Any]].typeConstructor, element), element, pos(tree))
+    }
+
+    /** The `Prims` kind of a non-terminal's value type. */
+    private def primKind(tpe: Type): Int = {
+      import hearth.kindlings.parser.internal.runtime.Prims.*
+      val t = tpe.dealias
+      if (t =:= definitions.IntTpe) IntKind
+      else if (t =:= definitions.LongTpe) LongKind
+      else if (t =:= definitions.DoubleTpe) DoubleKind
+      else if (t =:= definitions.FloatTpe) FloatKind
+      else if (t =:= definitions.BooleanTpe) BooleanKind
+      else if (t =:= definitions.CharTpe) CharKind
+      else if (t =:= definitions.ShortTpe) ShortKind
+      else if (t =:= definitions.ByteTpe) ByteKind
+      else Boxed
     }
 
     private def stringLiteral(tree: Tree): String = strip(tree) match {

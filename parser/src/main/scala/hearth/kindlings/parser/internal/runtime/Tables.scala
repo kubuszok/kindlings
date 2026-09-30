@@ -13,6 +13,9 @@ package internal.runtime
   * `constants` of an `ActConst`, the element index of an `ActListAppend`); they drive interpreted grammars, generated
   * ones have the code of each reduction generated instead.
   *
+  * `ntPrim(nt)`: the [[Prims]] kind of non-terminal `nt`'s values (generated grammars keep primitive values unboxed in
+  * `Machine.stackPrims`); the last entry is the augmented start symbol's, i.e. the parse result's.
+  *
   * `sliced(token)`: the token's value is computed at shift time by the generated `GeneratedReductions.slice` (terminals
   * with `mapSlice` in generated grammars).
   *
@@ -36,6 +39,7 @@ final private[parser] class Tables(
     val prodLen: Array[Int],
     val prodKind: Array[Int],
     val prodArg: Array[Int],
+    val ntPrim: Array[Int],
     val constants: Array[String],
     val literals: Array[String],
     val sliced: Array[Boolean]
@@ -100,7 +104,7 @@ final private[parser] class Tables(
     List(lexAccept, transStart, transLo, transHi, transTarget).foreach(w.ints)
     w.int(stateCount)
     w.int(nonTerminalCount)
-    List(action, goto, prodLhs, prodLen, prodKind, prodArg).foreach(w.ints)
+    List(action, goto, prodLhs, prodLen, prodKind, prodArg, ntPrim).foreach(w.ints)
     w.int(constants.length)
     constants.foreach(w.string)
     w.int(literals.length)
@@ -111,7 +115,7 @@ final private[parser] class Tables(
 }
 private[parser] object Tables {
 
-  val Version: Int = 6
+  val Version: Int = 7
 
   def decode(text: String): Tables = {
     val r = new TableCodec.Reader(text)
@@ -138,6 +142,7 @@ private[parser] object Tables {
       prodLen = r.ints(),
       prodKind = r.ints(),
       prodArg = r.ints(),
+      ntPrim = r.ints(),
       constants = Array.fill(r.int())(r.string()),
       literals = Array.fill(r.int())(if (r.int() < 0) null else r.string()),
       sliced = r.ints().map(_ != 0)
