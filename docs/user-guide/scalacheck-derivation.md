@@ -88,10 +88,11 @@ No configuration class is needed -- derivation is fully automatic based on the t
 
 !!! note "Shrink and nested types"
 
-    `Shrink` derivation ignores ScalaCheck's catch-all no-op `Shrink.shrinkAny` (and ScalaCheck's generic combinators
-    for collections, `Option`, `Either` and tuples, which would otherwise pass `shrinkAny` to their elements) while
-    searching for implicits, so nested case classes, sealed traits, collections, etc. are shrunk structurally even
-    without a `Shrink` in scope. Any other
+    `Shrink` derivation ignores the implicits ScalaCheck itself provides in `Shrink`'s companion - above all the
+    catch-all no-op `Shrink.shrinkAny` and the generic combinators for collections, `Option`, `Either` and tuples,
+    which would otherwise pass `shrinkAny` to their elements - while searching for implicits, so nested case classes,
+    sealed traits, collections, etc. are shrunk structurally even without a `Shrink` in scope. ScalaCheck's instances
+    for primitives, `String`, durations, etc. are still used for those types. Any other
     `Shrink` in scope still wins - to opt a type out, provide e.g. `implicit val noShrink: Shrink[X] = Shrink.shrinkAny`.
     Types that cannot be derived still fall back to `Shrink.shrinkAny`.
 

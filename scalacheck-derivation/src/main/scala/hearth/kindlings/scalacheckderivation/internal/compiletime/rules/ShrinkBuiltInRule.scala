@@ -26,7 +26,10 @@ trait ShrinkBuiltInRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExtensi
           Type[A] =:= Type.of[String] ||
           Type[A] =:= Type.of[Unit] ||
           Type[A] =:= Type.of[BigInt] ||
-          Type[A] =:= Type.of[BigDecimal]
+          Type[A] =:= Type.of[BigDecimal] ||
+          // `Duration` is a sealed class - without this it would be picked up by the enum rule.
+          Type[A] =:= Type.of[scala.concurrent.duration.Duration] ||
+          Type[A] =:= Type.of[scala.concurrent.duration.FiniteDuration]
 
       if (isBuiltIn) {
         ShrinkTypes.Shrink[A].summonExpr.toEither match {

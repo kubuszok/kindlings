@@ -174,6 +174,18 @@ class ShrinkSpec extends munit.FunSuite {
     )
   }
 
+  test("ScalaCheck's leaf instances are still used for nested fields (issue #219)") {
+    import scala.concurrent.duration.*
+    case class Timed(d: Duration, fd: FiniteDuration, s: String, n: Long, x: Double)
+
+    val result = DeriveShrink.derived[Timed].shrink(Timed(10.seconds, 20.seconds, "abc", 100L, 1.5)).take(500).toList
+    assert(result.exists(_.d != 10.seconds), "Duration should be shrunk by ScalaCheck's shrinkDuration")
+    assert(result.exists(_.fd != 20.seconds), "FiniteDuration should be shrunk by ScalaCheck's shrinkFiniteDuration")
+    assert(result.exists(_.s != "abc"), "String should be shrunk by ScalaCheck's shrinkString")
+    assert(result.exists(_.n != 100L), "Long should be shrunk by ScalaCheck's shrinkIntegral")
+    assert(result.exists(_.x != 1.5), "Double should be shrunk by ScalaCheck's shrinkFractional")
+  }
+
   test("an explicit Shrink for a nested type still takes precedence, even a no-op one (issue #219)") {
     case class Inner(value: Int)
     case class Outer(inner: Inner, n: Int)

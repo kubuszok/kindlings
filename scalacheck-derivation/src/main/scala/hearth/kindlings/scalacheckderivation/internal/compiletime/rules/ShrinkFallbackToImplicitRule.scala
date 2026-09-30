@@ -15,7 +15,7 @@ trait ShrinkFallbackToImplicitRuleImpl { this: ShrinkMacrosImpl & MacroCommons &
     * compiling to the same no-op shrinker as before.
     */
   object ShrinkFallbackToImplicitRule extends ShrinkDerivationRule("fall back to any implicit Shrink") {
-    def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] = {
+    def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] =
       if (shrinkctx.derivedType.exists(_.Underlying =:= Type[A]))
         MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} is the self-type"))
       else
@@ -26,6 +26,5 @@ trait ShrinkFallbackToImplicitRuleImpl { this: ShrinkMacrosImpl & MacroCommons &
           case Left(reason) =>
             MIO.pure(Rule.yielded(s"No implicit Shrink[${Type[A].prettyPrint}]: $reason"))
         }
-    }
   }
 }

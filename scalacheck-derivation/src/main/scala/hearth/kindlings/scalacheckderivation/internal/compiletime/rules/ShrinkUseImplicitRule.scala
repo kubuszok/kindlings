@@ -12,22 +12,22 @@ trait ShrinkUseImplicitRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExt
   @scala.annotation.nowarn
   object ShrinkUseImplicitRule extends ShrinkDerivationRule("use implicit Shrink when available") {
 
-    /** ScalaCheck's universal no-op `Shrink.shrinkAny` (from `ShrinkLowPriority`) matches every type, so summoning
-      * without ignoring it would hide every structural rule for nested types (issue kubuszok/kindlings#219). It is
-      * still used - by [[ShrinkFallbackToImplicitRule]] - for types no structural rule can handle. A user-defined
-      * `implicit val noShrink: Shrink[X] = Shrink.shrinkAny[X]` is a different symbol, so it still wins here.
+    /** Every implicit ScalaCheck puts into `Shrink`'s implicit scope (its companion and `ShrinkLowPriority`) is ignored
+      * here, so only instances the user (or another library) provides take precedence over derivation (issue
+      * kubuszok/kindlings#219):
+      *   - the universal no-op `shrinkAny` matches every type, hiding every structural rule for nested types,
+      *   - the generic combinators (`shrinkContainer`, `shrinkOption`, `shrinkEither`, `shrinkTuple*`, ...) would pass
+      *     `shrinkAny` to their elements (the exclusion only applies to the summoned type itself), e.g.
+      *     `Shrink[Vector[Inner]]` would resolve to `shrinkContainer(shrinkAny[Inner])` and never shrink `Inner`,
+      *   - the leaf instances (`shrinkIntegral`, `shrinkString`, durations, ...) are still used - through
+      *     [[ShrinkBuiltInRule]] or [[ShrinkFallbackToImplicitRule]].
       *
-      * ScalaCheck's generic combinators are ignored too: the exclusion only applies to the summoned type itself, so
-      * e.g. `Shrink[Vector[Inner]]` would otherwise resolve to `shrinkContainer(shrinkAny[Inner])` and never shrink
-      * `Inner`. Each of them has a structural counterpart (collection, map, Option, enum, case class rules) that
-      * recurses through derivation instead. Non-generic built-ins (`shrinkIntegral`, `shrinkString`, ...) are kept.
+      * A user-defined `implicit val noShrink: Shrink[X] = Shrink.shrinkAny[X]` is a different symbol, so it still wins.
       */
-    lazy val ignoredImplicits: Seq[UntypedMethod] = {
-      val genericCombinators = Set("shrinkAny", "shrinkContainer", "shrinkContainer2", "shrinkOption", "shrinkEither")
+    lazy val ignoredImplicits: Seq[UntypedMethod] =
       Type.of[Shrink.type].unsortedMethods.collect {
-        case method if genericCombinators(method.name) || method.name.startsWith("shrinkTuple") => method.asUntyped
+        case method if method.isImplicit => method.asUntyped
       }
-    }
 
     def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Expr[Shrink[A]]]] = {
       implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
