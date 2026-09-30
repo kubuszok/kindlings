@@ -323,13 +323,15 @@ private[parser] object GrammarMacros {
         case DescentPlan.Read.Lexed             => '{ $m.descentToken(${ Expr(tok.token) }) }
         case DescentPlan.Read.Decided           => '{ $m.descentSkip(1) }
         case DescentPlan.Read.DecidedWord(word) => '{ $m.descentRest(${ Expr(word) }, ${ Expr(tok.token) }) }
-        case DescentPlan.Read.Scan              =>
+        case DescentPlan.Read.Scan | DescentPlan.Read.DecidedScan =>
           def call(start: Expr[Int])(using q2: Quotes): Expr[Int] = {
             import q2.reflect.*
             Apply(Ref(scanners(tok.token).asInstanceOf[Symbol]), List(start.asTerm)).asExprOf[Int]
           }
           '{
-            val start = $m.descentScanStart()
+            val start = ${
+              if tok.read == DescentPlan.Read.Scan then '{ $m.descentScanStart() } else '{ $m.descentPos }
+            }
             val end = ${ call('start) }
             if end >= 0 then $m.descentTokenAt(start, end) else $m.descentToken(${ Expr(tok.token) })
           }

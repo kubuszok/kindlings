@@ -14,9 +14,9 @@ import scala.collection.mutable
   * no state stack and no reduction dispatch. Repetitions are loops that fill their collection's builder in place, and
   * non-terminals used at one place are inlined.
   *
-  * Choices are made on characters where possible: when only one token of the grammar (skipped ones included) can
-  * start with the next char, that char decides, and one-char and keyword literals are compared with the input instead
-  * of being lexed. Only other tokens go through the generated lexer.
+  * Choices are made on characters where possible: when only one token of the grammar (skipped ones included) can start
+  * with the next char, that char decides, and one-char and keyword literals are compared with the input instead of
+  * being lexed. Only other tokens go through the generated lexer.
   *
   * The parser does not report errors itself. On anything unexpected (a syntax error, a rejected value, nesting deeper
   * than `Machine.MaxDescentDepth`) it gives up, and the input is parsed again by the LR (or LL) machine, which reports
@@ -42,6 +42,9 @@ private[parser] object DescentPlan {
       * scanner does not start there (e.g. at a comment).
       */
     case object Scan extends Read
+
+    /** A token with a scanner ([[Scan]]) that a decision found at the cursor: scanned from there. */
+    case object DecidedScan extends Read
 
     /** The one-char literal a decision found at the cursor: consumed without looking at it. */
     case object Decided extends Read
@@ -117,11 +120,11 @@ private[parser] object DescentPlan {
 
   /** Which values of the right-hand side the reduction reads. */
   def uses(body: ReduceBody, len: Int): Vector[Boolean] = body match {
-    case ReduceBody.User(action, _, _)                    => action.used.toVector.padTo(len, false)
-    case ReduceBody.Pass(_) | ReduceBody.OptSome(_)       => Vector.tabulate(len)(_ == 0)
-    case ReduceBody.Collect(_, CollectionStep.One(_))     => Vector.tabulate(len)(_ == 0)
+    case ReduceBody.User(action, _, _)                      => action.used.toVector.padTo(len, false)
+    case ReduceBody.Pass(_) | ReduceBody.OptSome(_)         => Vector.tabulate(len)(_ == 0)
+    case ReduceBody.Collect(_, CollectionStep.One(_))       => Vector.tabulate(len)(_ == 0)
     case ReduceBody.Collect(_, CollectionStep.Append(i, _)) => Vector.tabulate(len)(j => j == 0 || j == i)
-    case _                                                => Vector.fill(len)(false)
+    case _                                                  => Vector.fill(len)(false)
   }
 
   /** The program, or `None` when the flattened grammar needs more than one token of lookahead somewhere.
@@ -174,8 +177,8 @@ private[parser] object DescentPlan {
           case Some(text) if text.length == 1 && uniqueStart.get(text.charAt(0).toInt).contains(t) =>
             Read.OneChar(text.charAt(0))
           case Some(text) if text.nonEmpty && uniqueStart.get(text.charAt(0).toInt).contains(t) => Read.Word(text)
-          case _ if scanners.contains(t)                                                         => Read.Scan
-          case _                                                                                 => Read.Lexed
+          case _ if scanners.contains(t)                                                        => Read.Scan
+          case _                                                                                => Read.Lexed
         }
         Tok(t, read, literal, sliced(t))
       case Flatten.RNt(id, _) if inlined(id) => Inline(id, code(id))
@@ -197,6 +200,8 @@ private[parser] object DescentPlan {
             prod.copy(items = prod.items.updated(first, tok.copy(read = Read.Decided)))
           case tok @ Tok(_, Read.Word(text), _, false) =>
             prod.copy(items = prod.items.updated(first, tok.copy(read = Read.DecidedWord(text))))
+          case tok @ Tok(_, Read.Scan, _, _) =>
+            prod.copy(items = prod.items.updated(first, tok.copy(read = Read.DecidedScan)))
           case _ => prod
         }
     }
@@ -220,16 +225,17 @@ private[parser] object DescentPlan {
         val ps = prodsOf(nt)
         if (ps.exists(p => prod(p).rhs.headOption.contains(Flatten.RNt(nt, false)))) ok = false // left recursion
         if (ps.size == 1) Single(plain(ps.head))
-        else Choose(decision(ps.map(p => analysis.predict(nt, p)), failByDefault = true), ps.map(p => decided(plain(p))))
+        else
+          Choose(decision(ps.map(p => analysis.predict(nt, p)), failByDefault = true), ps.map(p => decided(plain(p))))
     }
 
     val methods = mutable.LinkedHashMap.empty[Int, Code]
     val rootItem = item(Flatten.RNt(root, false))
     var pending: List[Int] = Nil
     def calls(i: Item): List[Int] = i match {
-      case Call(nt)            => List(nt)
-      case Inline(_, c)        => codeCalls(c)
-      case _                   => Nil
+      case Call(nt)     => List(nt)
+      case Inline(_, c) => codeCalls(c)
+      case _            => Nil
     }
     def codeCalls(c: Code): List[Int] = c match {
       case Single(p)          => p.items.toList.flatMap(calls)
@@ -252,9 +258,9 @@ private[parser] object DescentPlan {
       case Loop(base, _, app) => base.items ++ app.items
     }
     def scanned(i: Item): Vector[Int] = i match {
-      case Tok(t, Read.Scan, _, _) => Vector(t)
-      case Inline(_, c)            => items(c).flatMap(scanned)
-      case _                       => Vector.empty
+      case Tok(t, Read.Scan | Read.DecidedScan, _, _) => Vector(t)
+      case Inline(_, c)                               => items(c).flatMap(scanned)
+      case _                                          => Vector.empty
     }
     if (!ok) None
     else {

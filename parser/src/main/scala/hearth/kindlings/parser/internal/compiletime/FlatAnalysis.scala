@@ -73,8 +73,8 @@ final private[parser] class FlatAnalysis(
     }
   }
 
-  /** The tokens that select production `p` of `nt`: those that can start it, and those that can follow `nt` when `p` can
-    * be empty.
+  /** The tokens that select production `p` of `nt`: those that can start it, and those that can follow `nt` when `p`
+    * can be empty.
     */
   def predict(nt: Int, p: Int): Set[Int] = {
     val rhs = prod(p).rhs
@@ -102,6 +102,7 @@ final private[parser] class FlatAnalysis(
     }
     found
   }
+
   /** Whether `nt` is inlined at its only use. This terminates: a cycle of non-terminals reachable from the root is
     * entered from outside, so one of its non-terminals has two uses and is not inlined.
     */

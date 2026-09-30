@@ -126,8 +126,9 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
         descended = true
         return Machine.Done
       } catch {
-        // syntax errors, rejected values and deep nesting are left to the machine
-        case DescentBail | _: RejectedValue | _: StackOverflowError =>
+        // syntax errors, rejected values and deep nesting are left to the machine; so are exceptions thrown by
+        // actions, since the machine may report a syntax error before running the action that threw
+        case e: Throwable if e == DescentBail || scala.util.control.NonFatal(e) || e.isInstanceOf[StackOverflowError] =>
           pos = 0L
           lookahead = -1
           tokenStart = 0L
@@ -244,6 +245,7 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   // --- used by the generated recursive-descent parser (`GeneratedReductions.descend`) -----------------------------
 
   private var cursor = 0
+  private val textLength = if (text != null) text.length else 0
   private var lexedAt = -1
   private var depth = 0
 
@@ -256,11 +258,17 @@ final class Machine private[parser] (grammar: CompiledGrammar, input: Input) {
   /** Skips simple skipped text (whitespace) and returns the next char, `-1` at the end of the text. */
   def descentPeek(): Int = {
     val t = text
-    val length = t.length
     var p = cursor
-    while (p < length && { val d = t.charAt(p); d < 128 && simpleSkip(d.toInt) }) p += 1
-    cursor = p
-    if (p < length) t.charAt(p).toInt else -1
+    if (p >= textLength) -1
+    else {
+      var c = t.charAt(p)
+      while (c < 128 && simpleSkip(c.toInt)) {
+        p += 1
+        c = if (p < textLength) t.charAt(p) else 0xffff
+      }
+      cursor = p
+      if (p < textLength) c.toInt else -1
+    }
   }
 
   /** Lexes the token at the cursor (once per position) and returns its id. The cursor moves to the token's start (past

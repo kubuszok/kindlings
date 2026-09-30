@@ -70,14 +70,39 @@ final class DescentSpec extends MacroSuite {
 
     test("gives the same values and errors as the machine on generated inputs") {
       val pieces = Vector(
-        "let", "letter", "x", "$y", "$", "=", "1", "42", "+", "-", "(", ")", ";", ",", "print", "!", "{", "}", "IF",
-        "THEN", "END", "//c\n", " ", "\n", "#"
+        "let",
+        "letter",
+        "x",
+        "$y",
+        "$",
+        "=",
+        "1",
+        "42",
+        "+",
+        "-",
+        "(",
+        ")",
+        ";",
+        ",",
+        "print",
+        "!",
+        "{",
+        "}",
+        "IF",
+        "THEN",
+        "END",
+        "//c\n",
+        " ",
+        "\n",
+        "#"
       )
       val random = new scala.util.Random(7)
       var descended = 0
       (1 to 3000).foreach { _ =>
         val input =
-          Vector.fill(random.nextInt(16))(pieces(random.nextInt(pieces.size))).mkString(if (random.nextBoolean()) " " else "")
+          Vector
+            .fill(random.nextInt(16))(pieces(random.nextInt(pieces.size)))
+            .mkString(if (random.nextBoolean()) " " else "")
         assertEquals(lang.parse(input), lang.parseByMachine(input), input)
         if (descends(lang, input)) descended += 1
       }
@@ -85,7 +110,8 @@ final class DescentSpec extends MacroSuite {
     }
 
     test("gives the same values and errors as the machine on JSON") {
-      val pieces = Vector("{", "}", "[", "]", ",", ":", "\"a\"", "\"b\\\"c\"", "1", "-2.5e3", "true", "false", "null", " ", "x")
+      val pieces =
+        Vector("{", "}", "[", "]", ",", ":", "\"a\"", "\"b\\\"c\"", "1", "-2.5e3", "true", "false", "null", " ", "x")
       val random = new scala.util.Random(3)
       (1 to 3000).foreach { _ =>
         val input = Vector.fill(random.nextInt(12))(pieces(random.nextInt(pieces.size))).mkString
@@ -108,6 +134,15 @@ final class DescentSpec extends MacroSuite {
       assert(!descends(nesting, "(" * depth + "x" + ")" * depth))
     }
 
+    test("leaves exceptions of actions to the machine, which may report a syntax error first") {
+      // the machine reads the next token (and fails on "$") before converting "99999999999"; recursive descent
+      // converts it first
+      ints.parse("1 99999999999 $") ==> ints.parseByMachine("1 99999999999 $")
+      assert(ints.parse("1 99999999999 $").left.exists(_.startsWith("Unexpected character")))
+      val _ = intercept[NumberFormatException](ints.parse("1 99999999999"))
+      ints.parse("1 2") ==> Right(List(1, 2))
+    }
+
     test("leaves rejected values to the machine") {
       hasDescent(CollectionsSpec.nonEmpty) ==> true
       def message(input: String) = CollectionsSpec.nonEmpty.parse(input).left.map(_.getMessage)
@@ -123,9 +158,9 @@ object DescentSpec {
 
   type Result[A] = Either[String, A]
 
-  /** Keywords sharing first chars with identifiers (read by the lexer), keywords and punctuation with unique first chars
-    * (compared with the input), comments (skipped, but not simple whitespace), a literal with `mapSlice`, primitive
-    * non-terminals and repetitions.
+  /** Keywords sharing first chars with identifiers (read by the lexer), keywords and punctuation with unique first
+    * chars (compared with the input), comments (skipped, but not simple whitespace), a literal with `mapSlice`,
+    * primitive non-terminals and repetitions.
     */
   val lang: Parser[Result, String] = Grammar.grammar[String, Result] { g =>
     import g.*
@@ -157,6 +192,14 @@ object DescentSpec {
         all("-", atom).pure((_, a) => -a)
     )
     program
+  }
+
+  val ints: Parser[Result, List[Int]] = Grammar.grammar[List[Int], Result] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all(rep(terminal("[0-9]+").map(_.toInt))).pure(l => l)
+    list
   }
 
   /** LL(1), LALR by default: the fallback for deep nesting is the LALR machine. */

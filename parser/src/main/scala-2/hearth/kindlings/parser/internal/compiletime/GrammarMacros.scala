@@ -267,15 +267,16 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       private val scanners = program.scanners.map { case (t, _) => t -> fresh(s"scan$t") }.toMap
 
       private def consume(tok: DescentPlan.Tok): Tree = tok.read match {
-        case DescentPlan.Read.OneChar(ch)       => q"$m.descentChar($ch, ${tok.token})"
-        case DescentPlan.Read.Word(word)        => q"$m.descentWord($word, ${tok.token})"
-        case DescentPlan.Read.Lexed             => q"$m.descentToken(${tok.token})"
-        case DescentPlan.Read.Decided           => q"$m.descentSkip(1)"
-        case DescentPlan.Read.DecidedWord(word) => q"$m.descentRest($word, ${tok.token})"
-        case DescentPlan.Read.Scan              =>
+        case DescentPlan.Read.OneChar(ch)                         => q"$m.descentChar($ch, ${tok.token})"
+        case DescentPlan.Read.Word(word)                          => q"$m.descentWord($word, ${tok.token})"
+        case DescentPlan.Read.Lexed                               => q"$m.descentToken(${tok.token})"
+        case DescentPlan.Read.Decided                             => q"$m.descentSkip(1)"
+        case DescentPlan.Read.DecidedWord(word)                   => q"$m.descentRest($word, ${tok.token})"
+        case DescentPlan.Read.Scan | DescentPlan.Read.DecidedScan =>
           val (start, end) = (fresh("start"), fresh("end"))
+          val from = if (tok.read == DescentPlan.Read.Scan) q"$m.descentScanStart()" else q"$m.descentPos"
           q"""{
-                val $start = $m.descentScanStart()
+                val $start = $from
                 val $end = ${scanners(tok.token)}($start)
                 if ($end >= 0) $m.descentTokenAt($start, $end) else $m.descentToken(${tok.token})
               }"""
