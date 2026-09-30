@@ -513,7 +513,9 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
         case CodegenPlan.LexNode.Goto(target)               => q"$state = $target"
         case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
           val ch = fresh("c")
-          val asciiCases = cases.flatMap { case (ranges, next) =>
+          // small sets are `switch` cases (their chars above ASCII are tested after it), large classes are range tests
+          // (see `CodegenPlan.switchable`)
+          val asciiCases = cases.filter(c => CodegenPlan.switchable(c._1)).flatMap { case (ranges, next) =>
             val chars = ranges.flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }
             if (chars.isEmpty) Nil
             else {
@@ -523,19 +525,22 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
               List(cq"$pattern => { $i += 1; ${emit(next)} }")
             }
           }
-          val nonAscii = cases.flatMap { case (ranges, next) =>
-            val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
-            if (high.isEmpty) Nil else List(high -> next)
+          val tested = cases.flatMap { case (ranges, next) =>
+            if (!CodegenPlan.switchable(ranges)) List(ranges -> next)
+            else {
+              val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
+              if (high.isEmpty) Nil else List(high -> next)
+            }
           }
-          val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
-            q"if (${inRanges(q"$ch", ranges)}) { $i += 1; ${emit(next)} } else $elseBranch"
+          val fallback = tested.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
+            q"if (${member(q"$ch", ranges)}) { $i += 1; ${emit(next)} } else $elseBranch"
           }
+          val dispatch =
+            if (asciiCases.isEmpty) fallback
+            else q"$ch match { case ..$asciiCases; case _ => $fallback }"
           q"""if ($i < $len) {
                 val $ch: _root_.scala.Char = $text.charAt($i)
-                $ch match {
-                  case ..$asciiCases
-                  case _ => $fallback
-                }
+                $dispatch
               } else ${emit(otherwise)}"""
       }
       val stateCases = lexer.states.toList.map { case (s, node) => cq"$s => ${emit(node)}" }

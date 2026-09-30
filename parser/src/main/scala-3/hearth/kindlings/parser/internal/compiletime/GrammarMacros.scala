@@ -667,7 +667,9 @@ private[parser] object GrammarMacros {
           case CodegenPlan.LexNode.Dispatch(cases, otherwise) =>
             def dispatch(ch: Expr[Char])(using q2: Quotes): Expr[Unit] = {
               import q2.reflect.*
-              val asciiCases = cases.flatMap { case (ranges, next) =>
+              // small sets are `switch` cases (their chars above ASCII are tested after it), large classes are range
+              // tests (see `CodegenPlan.switchable`)
+              val asciiCases = cases.filter(c => CodegenPlan.switchable(c._1)).flatMap { case (ranges, next) =>
                 val chars = ranges.flatMap { case (lo, hi) => (lo to math.min(hi, 127)).toList }
                 if chars.isEmpty then Nil
                 else {
@@ -676,14 +678,18 @@ private[parser] object GrammarMacros {
                   List(CaseDef(pattern, None, advance(emit(next)).asTerm))
                 }
               }
-              val nonAscii = cases.flatMap { case (ranges, next) =>
-                val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
-                if high.isEmpty then Nil else List(high -> next)
+              val tested = cases.flatMap { case (ranges, next) =>
+                if !CodegenPlan.switchable(ranges) then List(ranges -> next)
+                else {
+                  val high = ranges.collect { case (lo, hi) if hi >= 128 => (math.max(lo, 128), hi) }
+                  if high.isEmpty then Nil else List(high -> next)
+                }
               }
-              val fallback = nonAscii.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
-                '{ if ${ inRanges(ch, ranges) } then ${ advance(emit(next)) } else $elseBranch }
+              val fallback = tested.foldRight(emit(otherwise)) { case ((ranges, next), elseBranch) =>
+                '{ if ${ member(ch, ranges) } then ${ advance(emit(next)) } else $elseBranch }
               }
-              Match(ch.asTerm, asciiCases :+ CaseDef(Wildcard(), None, fallback.asTerm)).asExprOf[Unit]
+              if asciiCases.isEmpty then fallback
+              else Match(ch.asTerm, asciiCases :+ CaseDef(Wildcard(), None, fallback.asTerm)).asExprOf[Unit]
             }
             '{
               if $i < $len then {

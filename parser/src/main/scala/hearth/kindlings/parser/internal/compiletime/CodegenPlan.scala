@@ -93,6 +93,14 @@ private[parser] object CodegenPlan {
     final case class Dispatch(cases: List[(List[(Int, Int)], LexNode)], otherwise: LexNode) extends LexNode
   }
 
+  /** Whether a `Dispatch` case is a `switch` case (one per ASCII char) rather than a range test: small sets only, a
+    * large class such as `[^"\\]` would make the method too large for the JIT to inline or compile well.
+    */
+  def switchable(ranges: List[(Int, Int)]): Boolean =
+    ranges.map { case (lo, hi) => math.max(0, math.min(hi, 127) - lo + 1) }.sum <= MaxSwitchChars
+
+  val MaxSwitchChars: Int = 8
+
   /** The UTF-16 code units not in `ranges` (sorted, disjoint). */
   def complement(ranges: List[(Int, Int)]): List[(Int, Int)] = {
     val out = List.newBuilder[(Int, Int)]
@@ -173,7 +181,9 @@ private[parser] object CodegenPlan {
       else {
         val byTarget = out.groupBy(_._3).toList.sortBy(_._1).map { case (t, rs) =>
           val ranges = rs.map(r => (r._1, r._2)).sortBy(_._1)
-          cost += 12 + ranges.map { case (lo, hi) => if (hi < 128) (hi - lo + 1) * 4 else 16 }.sum
+          cost += 12 + (if (switchable(ranges))
+                          ranges.map { case (lo, hi) => if (hi < 128) (hi - lo + 1) * 4 else 16 }.sum
+                        else 12 * ranges.size)
           val next =
             if (joins(t)) LexNode.Goto(t)
             else if (onPath(t)) { joins += t; LexNode.Goto(t) } // a cycle through inlined states
