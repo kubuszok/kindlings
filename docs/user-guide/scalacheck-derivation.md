@@ -80,7 +80,11 @@ No configuration class is needed -- derivation is fully automatic based on the t
 - **Recursive types** -- handled automatically, no `Lazy` wrappers needed
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
-- **Collections and Option** -- standard library instances are used
+- **Everything ScalaCheck supports out of the box** -- primitives, `String`, `BigInt`/`BigDecimal`, `UUID`, `Symbol`,
+  durations, `java.time.*`, throwables, functions, `PartialFunction`, `Future`, `Gen`, ... use ScalaCheck's own
+  instances (whatever the ScalaCheck version on the classpath provides)
+- **Collections, maps, `Option`, `Either`, `Try` and tuples** -- derived structurally, so their elements are derived
+  too and need no instance in scope (ScalaCheck's own combinators for them would require one)
 - **Custom collections** -- any container with an `IsCollection`/`IsMap` provider on the classpath (e.g. cats
   `NonEmptyList`, `NonEmptyMap`, `Chain` from `kindlings-cats-integration`) is built through the provider's smart
   constructor: `Arbitrary` regenerates a rejected (e.g. empty) candidate with at least one element, and `Shrink` drops

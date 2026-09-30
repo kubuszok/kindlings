@@ -9,7 +9,8 @@ object ScalaCheckUtils {
     *
     * `build` may reject a candidate (e.g. an empty list for a non-empty container). Instead of throwing, a rejected
     * candidate is regenerated once with at least one element, and if that is rejected too the generator fails with
-    * ScalaCheck's own `Gen.fail` - no value, which `forAll` counts as discarded, never an exception.
+    * ScalaCheck's own `Gen.fail` - no value, which `forAll` counts as discarded, never an exception. An exception
+    * thrown by the collection's builder itself (e.g. a negative element for `BitSet`) is treated as a rejection too.
     *
     * The size budget is halved for element generation to prevent infinite recursion on types like `List[TreeNode]`.
     * `elemGen` is by-name for the same reason: for a recursive type it is a call to the cached generator being defined.
@@ -18,11 +19,11 @@ object ScalaCheckUtils {
     Gen.sized { n =>
       val size = scala.math.max(n / 2, 0)
       Gen.resize(size, Gen.listOf(elemGen)).flatMap { items =>
-        build(items) match {
+        safeBuild(build, items) match {
           case Right(value) => Gen.const(value)
           case Left(_)      =>
             Gen.resize(size, Gen.nonEmptyListOf(elemGen)).flatMap { nonEmptyItems =>
-              build(nonEmptyItems) match {
+              safeBuild(build, nonEmptyItems) match {
                 case Right(value) => Gen.const(value)
                 case Left(_)      => Gen.fail[A]
               }
@@ -30,6 +31,13 @@ object ScalaCheckUtils {
         }
       }
     }
+
+  /** Runs a provider's build step, treating an exception thrown by the collection's own builder (e.g. a negative
+    * element for `BitSet`) as a rejected candidate, like a `Left` from a smart constructor.
+    */
+  def safeBuild[Item, A](build: List[Item] => Either[Any, A], items: List[Item]): Either[Any, A] =
+    try build(items)
+    catch { case scala.util.control.NonFatal(e) => Left(e) }
 
   /** Combines a list of generators using flatMap chaining.
     *

@@ -29,7 +29,7 @@ object ShrinkUtils {
       else
         // Try removing elements (halving strategy), then try shrinking individual elements
         (removeChunks(elems) #::: shrinkOne(elems, elemShrink)).flatMap { candidate =>
-          build(candidate) match {
+          ScalaCheckUtils.safeBuild(build, candidate) match {
             case Right(shrunk) => Stream(shrunk)
             case Left(_)       => Stream.empty
           }
