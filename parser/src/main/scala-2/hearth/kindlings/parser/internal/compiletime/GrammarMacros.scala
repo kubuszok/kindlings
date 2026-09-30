@@ -373,11 +373,19 @@ final private[parser] class GrammarMacros(val c: blackbox.Context) {
       }
 
       val stateCases = lexer.states.toList.map { case (s, node) => cq"$s => ${emit(node)}" }
+      // runs of chars that are always skipped text (whitespace) are skipped without the DFA
+      val skipRuns =
+        if (lexer.simpleSkip.isEmpty) Nil
+        else {
+          val d = fresh("d")
+          List(q"while ($p < $len && { val $d = $text.charAt($p); ${inRanges(q"$d", lexer.simpleSkip)} }) $p += 1")
+        }
       q"""{
             val $len = $text.length
             var $p = $from
             var $result = -2
             while ($result == -2) {
+              ..$skipRuns
               if ($p >= $len) {
                 $lm.token(0, $p, $p)
                 $result = _root_.hearth.kindlings.parser.internal.runtime.Machine.Done

@@ -64,6 +64,14 @@ final class LexerSpec extends MacroSuite {
       inputs.foreach(input => assertEquals(viaString(input), viaReader(input), input))
     }
 
+    test("skips whitespace runs inline only when they are always skipped text") {
+      // " x*" is skipped: an "x" after a space continues the skipped text, so the space alone may not be skipped inline
+      trailing.parse("a xb") ==> Right(List("a", "b"))
+      trailing.parse("a xb") ==> trailing.parse(new java.io.StringReader("a xb"), 16)
+      trailingLL.parse("[a xb]") ==> Right(List("a", "b"))
+      viaString("a   b\n\n  c") ==> Right(List("id:a", "id:b", "id:c"))
+    }
+
     test("stays table-driven for large lexers") {
       large.compiled.asInstanceOf[GeneratedGrammar].reductions.hasStringLexer ==> false
       large.parse("kemubcrdls gzhmxzhgqp") ==> Right(2)
@@ -80,6 +88,23 @@ final class LexerSpec extends MacroSuite {
   }
 }
 object LexerSpec {
+
+  val trailing: Parser[Result, List[String]] = Grammar.grammar[List[String], Result] { g =>
+    import g.*
+    val words = nonTerminal[List[String]]
+    skip(" x*")
+    words ::= all(rep(terminal("[a-z]+"))).pure(ws => ws)
+    words
+  }
+
+  val trailingLL: Parser[Result, List[String]] = Grammar.grammar[List[String], Result] { g =>
+    import g.*
+    enable(RequireLL1)
+    val words = nonTerminal[List[String]]
+    skip(" x*")
+    words ::= all("[", rep(terminal("[a-z]+")), "]").pure((_, ws, _) => ws)
+    words
+  }
 
   /** 30 words of 10 letters: more DFA states than `CodegenPlan.MaxLexerStates`. */
   val large: Parser[Result, Int] = Grammar.grammar[Int, Result] { g =>

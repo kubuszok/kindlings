@@ -206,31 +206,38 @@ private[parser] object GrammarMacros {
           val len = $text.length
           var p = $from
           var result = -2
-          while result == -2 do if p >= len then {
-            $m.token(0, p, p)
-            result = Machine.Done
-          } else {
-            var i = p
-            var acc = -1
-            var accEnd = p
-            var state = 0
-            while state >= 0 do ${
-              new LexerEmitter(
-                text,
-                'len,
-                'i,
-                x => '{ i = $x },
-                x => '{ acc = $x; accEnd = i },
-                x => '{ state = $x }
-              ).states(lexer, 'state)
+          while result == -2 do {
+            // runs of chars that are always skipped text (whitespace) are skipped without the DFA
+            ${
+              if lexer.simpleSkip.isEmpty then '{ () }
+              else '{ while p < len && ${ charIn('{ $text.charAt(p) }, lexer.simpleSkip) } do p += 1 }
             }
-            if acc < 0 then {
-              $m.lexError(p)
-              result = Machine.Error
-            } else if acc >= ${ Expr(lexer.skipFrom) } then p = accEnd
-            else {
-              $m.token(acc, p, accEnd)
+            if p >= len then {
+              $m.token(0, p, p)
               result = Machine.Done
+            } else {
+              var i = p
+              var acc = -1
+              var accEnd = p
+              var state = 0
+              while state >= 0 do ${
+                new LexerEmitter(
+                  text,
+                  'len,
+                  'i,
+                  x => '{ i = $x },
+                  x => '{ acc = $x; accEnd = i },
+                  x => '{ state = $x }
+                ).states(lexer, 'state)
+              }
+              if acc < 0 then {
+                $m.lexError(p)
+                result = Machine.Error
+              } else if acc >= ${ Expr(lexer.skipFrom) } then p = accEnd
+              else {
+                $m.token(acc, p, accEnd)
+                result = Machine.Done
+              }
             }
           }
           result
@@ -367,6 +374,15 @@ private[parser] object GrammarMacros {
       /** Assigns a lexer variable; takes the `Quotes` of the splice it is used in. */
       type Setter = Expr[Int] => Quotes ?=> Expr[Unit]
     }
+
+    /** Whether `ch` is in the (sorted, disjoint) `ranges`. */
+    private def charIn(ch: Expr[Char], ranges: List[(Int, Int)])(using Quotes): Expr[Boolean] =
+      ranges
+        .map { case (lo, hi) =>
+          if lo == hi then '{ $ch == ${ Expr(lo.toChar) } }
+          else '{ $ch >= ${ Expr(lo.toChar) } && $ch <= ${ Expr(hi.toChar) } }
+        }
+        .reduceLeft((a, b) => '{ $a || $b })
 
     /** Emits the code of [[CodegenPlan.LexNode]]s over the lexer's local variables (see `lexString`). */
     final private class LexerEmitter(

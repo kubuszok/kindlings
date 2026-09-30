@@ -54,16 +54,9 @@ final private[parser] class Tables(
   /** The tokens LL state `s` accepts (for syntax errors). */
   def llExpected(s: Int): Seq[Int] = llExpect.slice(llExpectStart(s), llExpectStart(s + 1)).toSeq
 
-  /** `simpleSkip(c)`: the ASCII char `c` starts a skipped token made only of such chars, which ends at the first other
-    * char (e.g. `[ \t\r\n]+`), so runs of them can be skipped without the lexer.
-    */
-  lazy val simpleSkip: Array[Boolean] = Array.tabulate(128) { c =>
-    val s = ascii(c) // from the start state
-    s >= 0 && lexAccept(s) >= 0 && skip(lexAccept(s)) && {
-      val targets = (transStart(s) until transStart(s + 1)).map(transTarget(_))
-      targets.forall(_ == s) && (0 until 128).forall(d => ascii(d) != s || ascii(s * 128 + d) == s)
-    }
-  }
+  /** `simpleSkip(c)`: runs of the ASCII char `c` are always skipped text (see [[SimpleSkip]]). */
+  lazy val simpleSkip: Array[Boolean] =
+    SimpleSkip.compute(lexAccept, transStart, transLo, transHi, transTarget, t => t < skip.length && skip(t))
 
   /** `ascii(state * 128 + c)`: transition target on ASCII chars, `-1` if none. */
   val ascii: Array[Int] = {

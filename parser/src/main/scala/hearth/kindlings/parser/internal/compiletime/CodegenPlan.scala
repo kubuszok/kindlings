@@ -69,7 +69,10 @@ private[parser] object CodegenPlan {
     * @param states
     *   the code of the start state (first) and of each join state
     */
-  final case class Lexer(states: Vector[(Int, LexNode)], skipFrom: Int)
+  /** @param simpleSkip
+    *   ASCII ranges of chars whose runs are always skipped text (see `SimpleSkip`), skipped before each token
+    */
+  final case class Lexer(states: Vector[(Int, LexNode)], skipFrom: Int, simpleSkip: List[(Int, Int)])
 
   sealed trait LexNode
   object LexNode {
@@ -166,6 +169,15 @@ private[parser] object CodegenPlan {
       case other => other
     }
     val compiled = result.toVector.map { case (s, node) => index(s) -> renumber(node) }
-    if (cost > MaxLexerCost) None else Some(Lexer(compiled, skipFrom))
+    val simple = hearth.kindlings.parser.internal.runtime.SimpleSkip
+      .compute(dfa.accept, dfa.transStart, dfa.lo, dfa.hi, dfa.target, _ >= skipFrom)
+    val simpleRanges = (0 until 128)
+      .filter(simple(_))
+      .foldLeft(List.empty[(Int, Int)]) {
+        case ((lo, hi) :: rest, c) if c == hi + 1 => (lo, c) :: rest
+        case (acc, c)                             => (c, c) :: acc
+      }
+      .reverse
+    if (cost > MaxLexerCost) None else Some(Lexer(compiled, skipFrom, simpleRanges))
   }
 }
