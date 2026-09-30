@@ -93,9 +93,13 @@ trait SchemaMacrosImpl
 
     deriveFromCtxAndAdaptForEntrypoint[A, KindlingsSchema[A]]("KindlingsSchema.derived", derivedType = selfType) {
       fromCtx =>
+        // Only used to name type parameters when the schema itself has no name (primitives, collections, value
+        // types), and such types are known at the call site - so the compile-time name is sufficient.
+        val typeNameExpr: Expr[String] = Expr(Type.plainPrint[A])
         Expr.quote {
           hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaDerivationFactories.instance[A](
-            Expr.splice(fromCtx())
+            Expr.splice(fromCtx()),
+            Expr.splice(typeNameExpr)
           )
         }
     }
@@ -692,7 +696,16 @@ trait SchemaMacrosImpl
   protected def computeSNameExpr[A: Type](derivedType: Option[??]): Expr[SName] = {
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
-    val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
+    val fullNameExpr: Expr[String] = computeFullNameExpr[A](derivedType)
+    Expr.quote(TapirSchemaUtils.parseSName(Expr.splice(fullNameExpr)))
+  }
+
+  /** Fully-qualified type name, with type parameters which are not known at compile time (e.g. `A` in `Box[A]`) named
+    * at runtime, using their implicit `Schema` or `KindlingsSchema`.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def computeFullNameExpr[A: Type](derivedType: Option[??]): Expr[String] =
+    Type[A].runtimePlainPrint { tpe =>
       import tpe.Underlying
       // Guard against self-summoning:
       // 1. SName for type A can never depend on Schema[A] (we're building it)
@@ -708,12 +721,17 @@ trait SchemaMacrosImpl
             Some(Expr.quote {
               Expr.splice(schemaExpr).name.map(_.show).getOrElse(Expr.splice(fallback))
             })
-          case Left(_) => None
+          case Left(_) =>
+            implicit val KindlingsSchemaUnderlying: Type[KindlingsSchema[tpe.Underlying]] =
+              TsTypes.KindlingsSchemaOf[tpe.Underlying]
+            implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+            Type[KindlingsSchema[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toOption.map { ksExpr =>
+              val fallback = Expr(Type.plainPrint[tpe.Underlying])
+              Expr.quote(TapirSchemaUtils.typeNameOf(Expr.splice(ksExpr), Expr.splice(fallback)))
+            }
         }
       }
     }
-    Expr.quote(TapirSchemaUtils.parseSName(Expr.splice(fullNameExpr)))
-  }
 
   // Annotation helpers
 

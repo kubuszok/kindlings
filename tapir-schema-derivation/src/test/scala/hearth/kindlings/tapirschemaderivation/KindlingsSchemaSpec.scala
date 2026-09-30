@@ -1010,6 +1010,24 @@ final class KindlingsSchemaSpec extends MacroSuite {
     }
   }
 
+  group("KindlingsSchema of a type parameter") {
+
+    test("generic instance requiring KindlingsSchema[A] uses the provided instance") {
+      def check[A](schema: Schema[ManualBox[A]], expected: SchemaType[?], typeParam: String): Unit = {
+        assertEquals(schema.name.map(_.typeParameterShortNames), Some(List(typeParam)))
+        schema.schemaType match {
+          case p: SchemaType.SProduct[ManualBox[A] @unchecked] =>
+            assertEquals(p.fields.map(_.name.name), List("value"))
+            assertEquals(p.fields.head.schema.schemaType.getClass: Any, expected.getClass: Any)
+          case other => fail(s"Expected SProduct, got: $other")
+        }
+      }
+      check(implicitly[KindlingsSchema[ManualBox[Int]]].schema, SchemaType.SInteger(), "Int")
+      check(implicitly[KindlingsSchema[ManualBox[String]]].schema, SchemaType.SString(), "String")
+      check(implicitly[KindlingsSchema[ManualBox[SimplePerson]]].schema, SchemaType.SProduct(Nil), "SimplePerson")
+    }
+  }
+
   group("types with tapir's structural implicits") {
 
     def fieldSchemas[A](schema: Schema[A]): Map[String, Schema[?]] = schema.schemaType match {

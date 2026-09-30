@@ -1,5 +1,6 @@
 package hearth.kindlings.tapirschemaderivation.internal.runtime
 
+import hearth.kindlings.tapirschemaderivation.KindlingsSchema
 import sttp.tapir.{FieldName, Schema, SchemaType, Validator}
 import sttp.tapir.Schema.SName
 
@@ -216,6 +217,15 @@ object TapirSchemaUtils {
   /** Conditionally add "string" format to a schema at runtime. */
   def markFieldStringFormat(schema: Schema[Any], stringified: Boolean): Schema[Any] =
     if (stringified) schema.format("string") else schema
+
+  /** Full type name used to name a type parameter, when only a KindlingsSchema of it is available. */
+  def typeNameOf[A](kindlingsSchema: KindlingsSchema[A], fallback: String): String =
+    kindlingsSchema.schema.name.map(_.show).getOrElse {
+      kindlingsSchema match {
+        case named: TapirSchemaDerivationFactories.NamedKindlingsSchema[?] => named.typeName
+        case _                                                             => fallback
+      }
+    }
 
   /** Parse a fully-qualified type name (with type parameters) into an SName.
     *

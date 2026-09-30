@@ -224,6 +224,11 @@ case class User(
     // Some(SName(Box,List(Person)))
     ```
 
+Generic types can also take the schemas of their type parameters as `KindlingsSchema` evidence — e.g. with Scala 3
+`case class Box[A](value: A) derives KindlingsSchema`, or on Scala 2.13 with
+`implicit def boxSchema[A: KindlingsSchema]: KindlingsSchema[Box[A]] = KindlingsSchema.derived[Box[A]]` — and the schema
+name includes the actual type parameter (e.g. `Box[Int]`).
+
 ## Maps, collections and other built-in types
 
 Kindlings derives schemas for `Option`, collections, `Map`s and `Either` itself (consistently with the JSON library's

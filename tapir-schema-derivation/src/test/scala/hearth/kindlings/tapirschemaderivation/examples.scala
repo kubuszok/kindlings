@@ -55,6 +55,13 @@ case class WithOverridable(
     either: Either[Int, String]
 )
 
+// Generic type with a manually provided instance, requiring KindlingsSchema of the type parameter
+case class ManualBox[A](value: A)
+object ManualBox {
+  implicit def kindlingsSchema[A: KindlingsSchema]: KindlingsSchema[ManualBox[A]] =
+    KindlingsSchema.derived[ManualBox[A]]
+}
+
 case class RecursiveTree(value: Int, children: List[RecursiveTree])
 
 // Value class
