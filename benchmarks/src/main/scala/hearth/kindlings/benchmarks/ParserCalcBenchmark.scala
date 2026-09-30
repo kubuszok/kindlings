@@ -70,6 +70,32 @@ object KindlingsCalc {
   }
 }
 
+/** The same arithmetic written as an LL(1) grammar (one rule per precedence level, repetitions for the operators, like
+  * the fastparse version): parsed by the generated recursive-descent parser.
+  */
+object KindlingsCalcLL1 {
+  import hearth.kindlings.parser.*
+
+  val levels: Parser[Id, Double] = Grammar.grammar[Double, Id] { g =>
+    import g.*
+    val sum = nonTerminal[Double]
+    val sumOp = nonTerminal[Double => Double]
+    val product = nonTerminal[Double]
+    val productOp = nonTerminal[Double => Double]
+    val factor = nonTerminal[Double]
+    val num = terminal("[0-9]+(\\.[0-9]+)?").mapSlice(Numbers.double)
+    skip(" +")
+    sum ::= all(product, rep(sumOp)).pure((a, ops) => ops.foldLeft(a)((acc, op) => op(acc)))
+    sumOp ::= all("+", product).pure((_, b) => (a: Double) => a + b) ||
+      all("-", product).pure((_, b) => (a: Double) => a - b)
+    product ::= all(factor, rep(productOp)).pure((a, ops) => ops.foldLeft(a)((acc, op) => op(acc)))
+    productOp ::= all("*", factor).pure((_, b) => (a: Double) => a * b) ||
+      all("/", factor).pure((_, b) => (a: Double) => a / b)
+    factor ::= all("(", sum, ")").pure((_, e, _) => e) || all(num).pure(n => n)
+    sum
+  }
+}
+
 object FastparseCalc {
   import fastparse.*
   import NoWhitespace.*
@@ -103,12 +129,15 @@ class ParserCalcBenchmark {
 
   @Setup def check(): Unit = {
     val expected = KindlingsCalc.generated.parse(input)
-    val fast = FastparseCalc.parse(input)
-    if (math.abs(expected - fast) > 1e-6 * math.abs(expected))
-      throw new IllegalStateException(s"fastparse computed $fast, kindlings-parser $expected")
+    List("fastparse" -> FastparseCalc.parse(input), "LL(1)" -> KindlingsCalcLL1.levels.parse(input)).foreach {
+      case (name, value) =>
+        if (math.abs(expected - value) > 1e-6 * math.abs(expected))
+          throw new IllegalStateException(s"$name computed $value, kindlings-parser $expected")
+    }
   }
 
   @Benchmark def kindlingsGenerated: Double = KindlingsCalc.generated.parse(input)
   @Benchmark def kindlingsFastNumbers: Double = KindlingsCalc.fastNumbers.parse(input)
+  @Benchmark def kindlingsLL1: Double = KindlingsCalcLL1.levels.parse(input)
   @Benchmark def fastparse: Double = FastparseCalc.parse(input)
 }

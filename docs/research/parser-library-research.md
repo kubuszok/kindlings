@@ -96,9 +96,19 @@ and Scala Native (all tests green on all six). User guide: `docs/user-guide/pars
   results; effect results and the parse result go through `Prims.encode`/`decode`. Allocation -35% on the arithmetic
   benchmark, throughput unchanged.
 
+**Recursive-descent fast path ([parser-vs-jawn.md](parser-vs-jawn.md) §8)**
+- LL(1) grammars (detected; no effectful actions or precedence declarations, not `RequireLALR`) get a generated
+  recursive-descent parser (`DescentPlan`, `GeneratedReductions.descend`) tried first for `String` inputs by engines
+  that run a parse to completion. Values live in locals, single-use rules are inlined, repetitions fill builders in
+  loops; choices switch on the next char where one token starts with it, literals are compared with the input, regex
+  tokens with a unique first char get their own scanner (the reachable part of the lexer DFA). It never reports
+  errors: on a syntax error, a rejected value, an action's exception or nesting over 1000 it throws `DescentBail` and
+  the machine parses again. `FlatAnalysis` (first/follow/inlining) is shared with `LLProgram`.
+
 **Benchmarks**: see [parser-benchmarks.md](parser-benchmarks.md). On JSON, generated grammars are on par with or faster
 than parboiled2 and fastparse (2.13: 92 vs 90/86 ops/s; Scala 3: 112 vs 91/88), ~2x cats-parse, ~6x Parsley, and ~2.5x
-slower than hand-written jawn.
+slower than hand-written jawn with the LALR(1) machine; the recursive-descent fast path reaches ~90% of jawn on Scala 3
+and ~82% on Scala 2.13.
 
 ## 0. Requirements (as stated) and how they are read here
 

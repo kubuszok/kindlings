@@ -1,4 +1,4 @@
-# Why jawn parses JSON ~2.8x faster than kindlings-parser
+# Why jawn parsed JSON ~2.8x faster than kindlings-parser, and closing the gap
 
 > **Question**: what makes jawn (the hand-written parser behind circe-parser) so much faster than a generated
 > kindlings-parser grammar on the JSON benchmark, and which of those advantages a grammar-based parser can adopt.
@@ -204,10 +204,68 @@ different kind (recursive-descent-like code per rule, over a heap stack only for
 default; `enable(RequireLL1)` selects the LL(1) parser and guarantees the grammar is LL(1), with plain-language
 explanations when it is not.
 
-## 6. How to reproduce
+## 8. Implemented: a recursive-descent fast path for LL(1) grammars
+
+Section 7 ended with what closing the gap would take: values built without a value stack. That is a recursive-descent
+parser, and it is now generated for every LL(1) grammar (detected automatically; `DescentPlan` plans it, the bridges
+emit it as local methods of `GeneratedReductions.descend`). It is a fast path in front of the machine: it never reports
+errors, it gives up (`DescentBail`) on a syntax error, a rejected value, an exception thrown by an action or nesting
+deeper than 1000, and the machine then parses the input again. The machine's messages, stack safety and effect support
+are untouched, and a differential test (`DescentSpec`) checks that both parsers agree on thousands of generated inputs.
+
+Prototyped by hand first (`RdPrototype`, removed): recursive descent over the generated lexer gave 155 ops/s against
+102 for LALR(1) and 239 for jawn; deciding on characters instead of tokens gave 189 (85% of jawn). The generated
+version uses these techniques, all derived from the grammar, none specific to JSON:
+
+1. **Values in locals.** A rule used at several places is a method returning its value; a rule used at one place is
+   inlined (this always terminates: a cycle reachable from the start symbol is entered from outside, so one of its
+   rules has two uses). Symbols are read into local vals and the production's reduction - the very code the machine's
+   `reduce` runs - is applied to them. Repetitions are `while` loops filling their collection's builder.
+2. **Decisions on characters.** A choice (between productions, or whether a loop continues) switches on the next char
+   when only one token of the grammar, skipped ones included, can start with it; the lexer is only asked for the other
+   chars. One-char and keyword literals are compared with the input instead of being lexed, and the first token of the
+   production a decision picked is not looked at again (`{` is consumed by `cursor += 1`).
+3. **A scanner per token.** A regex token that is the only one starting with its first chars gets its own scanner: the
+   part of the lexer DFA reachable from those chars, emitted like the lexer. Every accepting state it reaches accepts
+   that token, so its longest match is the lexer's, without the lexer's first-char dispatch, skip loop and bookkeeping
+   of all tokens.
+4. **Skipped text inline.** Runs of whitespace are skipped with a table lookup per char. This exposed a bug in the
+   `SimpleSkip` analysis from section 6: it required the state after the first skipped char to loop on itself, but
+   `[ \t\r\n]+` compiles to two states (first char, further chars), so whitespace had never been skipped inline. The
+   analysis now accepts any set of states reachable through the char, as long as all of them accept a skipped token and
+   move only on such chars.
+5. **Small methods.** A lexer dispatch listed every ASCII char of a class such as `[^"\\]` as a `switch` alternative;
+   large classes are now range tests. The JSON string scanner went from 2651 to 450 bytes of bytecode and the whole
+   `String` lexer to half its size (which also made the LALR machine ~10% faster on Scala 3).
+
+Each step was profiled (JFR) before the next one: the prototype pointed at the lexer (60% of its time), the first
+generated version at `descentPeek` (a peek per decision and per token, 32%: now one char read per peek and no second
+peek before a decided token), and the dispatch code size at the JIT.
+
+Results, same session, 3 forks × 8 iterations:
+
+| JSON (~1 MB) | Scala 3 ops/s | Scala 2.13 ops/s |
+|---|---|---|
+| jawn + `J` facade | 224.5 ± 17.1 | 192.6 ± 8.2 |
+| **kindlings-parser, recursive descent, `Numbers.double`** | **199.0 ± 16.1 (89%)** | **155.3 ± 8.5 (81%)** |
+| kindlings-parser, recursive descent, `.toDouble` | 172.9 ± 17.7 (77%) | 142.8 ± 7.3 (74%) |
+| kindlings-parser, LALR(1) machine (`RequireLALR`) | 108.5 ± 4.8 | 85.1 ± 3.8 |
+
+The previous run (before the dispatch change, which did not change these rows beyond noise) gave 206.5 ± 14.1 vs
+221.7 ± 22.2 (93%) on Scala 3 and 162.7 ± 7.2 vs 195.1 ± 7.7 (83%) on Scala 2.13. So on Scala 3 the generated parser
+is at ~90% of jawn, and at ~82% on Scala 2.13, where the same plan and bytecode sizes run slower (so does jawn's own
+2.13 build). The remaining time is mostly the same work jawn does: copying strings (`jsonString` also rescans each
+string for `\`, which jawn knows while scanning), parsing numbers and building the AST.
+
+The fast path is general: the calculator benchmark written as an LL(1) grammar (one rule per precedence level,
+repetitions for the operators, closures for the operations) runs at 70.6 ± 6.1 ops/s, against 63.5 ± 6.4 for the
+precedence-based LALR(1) grammar with the same number parsing and 20.0 ± 1.6 for fastparse (Scala 3, 2 forks × 6).
+
+## 9. How to reproduce
 
 ```bash
-sbt --client 'benchmarks/Jmh/run -f 2 -wi 4 -i 6 -r 2 -w 2 .*ParserJsonBenchmark.(jawn|kindlingsGenerated)$'
+sbt --client 'benchmarks/Jmh/run -f 3 -wi 5 -i 8 -r 2 -w 2 .*ParserJsonBenchmark.(jawn|kindlingsFastNumbers|kindlingsGenerated|kindlingsLALR)$'
+sbt --client 'benchmarks/Jmh/run -f 2 -wi 4 -i 6 -r 2 -w 2 .*ParserCalcBenchmark.*'
 sbt --client 'benchmarks/Jmh/run -f 1 -wi 4 -i 5 -r 2 -w 2 -prof gc .*ParserJsonBenchmark.(kindlingsGenerated|jawn|circeJawn)$'
 sbt --client 'benchmarks/Jmh/run -f 1 -wi 4 -i 5 -r 2 -w 2 -prof "jfr:dir=/tmp/jfr;configName=profile;debugNonSafePoints=true;stackDepth=64" .*ParserJsonBenchmark.(kindlingsGenerated|jawn)$'
 jfr view --width 200 hot-methods /tmp/jfr/*kindlingsGenerated*/profile.jfr

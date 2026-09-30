@@ -258,8 +258,8 @@ with a unique first character has a scanner of its own. On the JSON benchmark it
 machine and within ~10-20% of jawn, the hand-written parser behind circe (see
 [the benchmarks](../research/parser-vs-jawn.md)).
 
-The recursive-descent parser does not report errors itself: on a syntax error, a value rejected by a collection, or
-nesting deeper than 1000 levels, it gives up and the machine parses the input again, reporting the error with its
+The recursive-descent parser does not report errors itself: on a syntax error, a value rejected by a collection, an
+exception thrown by an action, or nesting deeper than 1000 levels, it gives up and the machine parses the input again, reporting the error with its
 usual messages (or parsing the deep input on the heap). Both parsers run the same actions in the same order and give
 the same values, but on those inputs the actions that ran before the problem run a second time: keep actions free of
 side effects. The fast path is used when:
