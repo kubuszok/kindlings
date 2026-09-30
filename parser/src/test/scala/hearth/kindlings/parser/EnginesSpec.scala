@@ -56,6 +56,76 @@ final class EnginesSpec extends MacroSuite {
     }
   }
 
+  group("every built-in engine, with the recursive-descent parser and the machine") {
+
+    /** Whether `input` is parsed by the recursive-descent fast path (the grammars below are LL(1)). */
+    def descends[F[_]](p: Parser[F, ?], input: String): Boolean = {
+      val m = new internal.runtime.Machine(p.compiled, new internal.runtime.StringInput(input))
+      val _ = m.run()
+      m.descended
+    }
+    val valid = "[1, 2, 3]"
+    val invalid = "[1, 2"
+    def reader(input: String) = new java.io.StringReader(input)
+
+    test("Id") {
+      assert(descends(listsId, valid))
+      listsId.parse(valid) ==> List(1, 2, 3)
+      listsId.parseByMachine(valid) ==> List(1, 2, 3)
+      listsId.parse(reader(valid), 2) ==> List(1, 2, 3)
+      val error = intercept[ParseError](listsId.parse(invalid))
+      error.getMessage ==> intercept[ParseError](listsId.parseByMachine(invalid)).getMessage
+      assert(error.endOfInput)
+    }
+
+    test("Option") {
+      listsOption.parse(valid) ==> Some(List(1, 2, 3))
+      listsOption.parse(reader(valid), 2) ==> Some(List(1, 2, 3))
+      listsOption.parse(invalid) ==> None
+      listsOption.parseByMachine(invalid) ==> None
+    }
+
+    test("Try") {
+      listsTry.parse(valid) ==> Success(List(1, 2, 3))
+      listsTry.parse(reader(valid), 2) ==> Success(List(1, 2, 3))
+      (listsTry.parse(invalid), listsTry.parseByMachine(invalid)) match {
+        case (Failure(a: ParseError), Failure(b: ParseError)) => a.getMessage ==> b.getMessage
+        case other                                            => fail(s"unexpected $other")
+      }
+    }
+
+    test("Either[ParseError, *], Either[Throwable, *] and Either[String, *]") {
+      listsEitherParseError.parse(valid) ==> Right(List(1, 2, 3))
+      listsEitherThrowable.parse(reader(valid), 2) ==> Right(List(1, 2, 3))
+      listsEitherString.parse(valid) ==> Right(List(1, 2, 3))
+      val expected = intercept[ParseError](listsId.parse(invalid)).getMessage
+      listsEitherParseError.parse(invalid).left.map(_.getMessage) ==> Left(expected)
+      listsEitherThrowable.parse(invalid).left.map(_.getMessage) ==> Left(expected)
+      listsEitherString.parse(invalid) ==> Left(expected)
+      listsEitherString.parseByMachine(invalid) ==> Left(expected)
+    }
+
+    test("Either: an action returning Left stops the parse") {
+      sumEither.parse("1 2 3") ==> Right(6)
+      sumEither.parse("1 0 3") ==> Left("zero")
+      assert(sumEither.parse("1 +").isLeft)
+    }
+
+    test("Future") {
+      implicit val ec: scala.concurrent.ExecutionContext = munitExecutionContext
+      val lists = listsFuture
+      for {
+        fast <- lists.parse(valid)
+        machine <- lists.parseByMachine(valid)
+        fromReader <- lists.parse(reader(valid), 2)
+        error <- lists.parse(invalid).failed
+      } yield {
+        (fast, machine, fromReader) ==> ((List(1, 2, 3), List(1, 2, 3), List(1, 2, 3)))
+        assert(error.isInstanceOf[ParseError], error.toString)
+      }
+    }
+  }
+
   group("literal values and empty alternatives") {
 
     test("literal alternatives are singleton values; \"\" is the empty alternative") {
@@ -76,6 +146,81 @@ final class EnginesSpec extends MacroSuite {
   }
 }
 object EnginesSpec {
+
+  type EitherParseError[A] = Either[ParseError, A]
+  type EitherThrowable[A] = Either[Throwable, A]
+  type EitherString[A] = Either[String, A]
+
+  // the same LL(1) grammar (parsed by recursive descent for String inputs) in every built-in engine
+
+  val listsId: Parser[Id, List[Int]] = Grammar.grammar[List[Int], Id] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsOption: Parser[Option, List[Int]] = Grammar.grammar[List[Int], Option] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsTry: Parser[Try, List[Int]] = Grammar.grammar[List[Int], Try] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsEitherParseError: Parser[EitherParseError, List[Int]] = Grammar.grammar[List[Int], EitherParseError] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsEitherThrowable: Parser[EitherThrowable, List[Int]] = Grammar.grammar[List[Int], EitherThrowable] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsEitherString: Parser[EitherString, List[Int]] = Grammar.grammar[List[Int], EitherString] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  def listsFuture(implicit ec: scala.concurrent.ExecutionContext): Parser[Future, List[Int]] =
+    Grammar.grammar[List[Int], Future] { g =>
+      import g.*
+      val list = nonTerminal[List[Int]]
+      skip(" +")
+      list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+      list
+    }
+
+  val sumEither: Parser[EitherString, Int] = Grammar.grammar[Int, EitherString] { g =>
+    import g.*
+    val sum = nonTerminal[Int]
+    val num = terminal("[0-9]+").map(_.toInt)
+    skip(" +")
+    sum ::= (
+      all(num)(n => if (n == 0) Left("zero") else Right(n)) ||
+        all(sum, num)((s, n) => if (n == 0) Left("zero") else Right(s + n))
+    )
+    sum
+  }
 
   def sumId(log: ListBuffer[String]): Parser[Id, Int] = Grammar.grammar[Int, Id] { g =>
     import g.*

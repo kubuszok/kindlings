@@ -77,6 +77,19 @@ final class StreamsSpec extends MacroSuite {
         .unsafeToFuture()
     }
 
+    test("an LL(1) grammar gives the same value from a stream as from a String (recursive descent)") {
+      val text = (1 to 500).map(i => s"k$i = $i").mkString("\n")
+      val fromString = assignments.parse(text)
+      Stream
+        .emits(text.grouped(7).toSeq)
+        .covary[IO]
+        .through(assignments.pipeIn[IO])
+        .compile
+        .lastOrError
+        .map(_ ==> fromString)
+        .unsafeToFuture()
+    }
+
     test("running the same stream twice parses twice") {
       val stream = Stream("k = 1\n", "j = 2").covary[IO].through(assignments.pipeIn[IO])
       (for {

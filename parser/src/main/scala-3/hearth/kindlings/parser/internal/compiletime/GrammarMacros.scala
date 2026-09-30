@@ -1037,7 +1037,8 @@ private[parser] object GrammarMacros {
           tree,
           "`.as[C]` is only supported by `Grammar.grammar` (`Grammar.interpreted` collects repetitions into Lists)"
         )
-        val target = typeArg(tree, TypeRepr.of[hearth.kindlings.parser.Sym[Any]].typeSymbol)
+        // aliases (e.g. Iron's `A :| C`) are dealiased: providers recognise the underlying types (opaque types stay)
+        val target = typeArg(tree, TypeRepr.of[hearth.kindlings.parser.Sym[Any]].typeSymbol).dealias
         sym(inner, name) match {
           case r: Rep   => r.copy(collection = r.collection.copy(tpe = target, pos = pos(tree)))
           case s: SepBy => s.copy(collection = s.collection.copy(tpe = target, pos = pos(tree)))

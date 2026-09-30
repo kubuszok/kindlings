@@ -64,7 +64,6 @@ nav:
       - "Jsoniter Scala": "jsoniter-derivation.md"
       - "Mocking (ScalaMock-style)": "mock.md"
       - "Optics (quicklens-style lenses)": "optics.md"
-      - "Parser (yacc-style grammars)": "parser.md"
       - "PureConfig": "pureconfig-derivation.md"
       - "ScalaCheck": "scalacheck-derivation.md"
       - "sconfig (HOCON)": "sconfig-derivation.md"
@@ -72,6 +71,11 @@ nav:
       - "UBJson": "ubjson-derivation.md"
       - "XML": "xml-derivation.md"
       - "YAML": "yaml-derivation.md"
+  - "Parsing (yacc-style grammars)":
+      - "Overview": "parser.md"
+      - "Writing grammars": "parser-grammars.md"
+      - "Running parsers": "parser-running.md"
+      - "Parsers, flags and performance": "parser-performance.md"
   - "Integration Modules":
       - "Cats Collections": "cats-integration.md"
       - "Iron": "iron-integration.md"

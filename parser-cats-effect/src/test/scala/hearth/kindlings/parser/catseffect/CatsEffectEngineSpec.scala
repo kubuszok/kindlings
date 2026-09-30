@@ -48,6 +48,22 @@ final class CatsEffectEngineSpec extends MacroSuite {
         .unsafeToFuture()
     }
 
+    test("LL(1) grammars give the same values and errors as with the built-in engines") {
+      // with a step budget the engine runs the machine (the recursive-descent fast path runs to completion)
+      (for {
+        value <- lists.parse("[1, 2, 3]")
+        error <- lists.parse("[1, 2").attempt
+      } yield {
+        value ==> List(1, 2, 3)
+        error match {
+          case Left(e: ParseError) =>
+            e.getMessage ==> scala.util.Try(listsId.parse("[1, 2")).failed.get.getMessage
+            e.endOfInput ==> true
+          case other => fail(s"unexpected $other")
+        }
+      }).unsafeToFuture()
+    }
+
     test("readers are read with blocking, a tiny budget still parses") {
       val input = (1 to 5000).mkString(" ")
       Ref
@@ -63,6 +79,22 @@ final class CatsEffectEngineSpec extends MacroSuite {
   }
 }
 object CatsEffectEngineSpec {
+
+  val lists: Parser[IO, List[Int]] = Grammar.grammar[List[Int], IO] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
+
+  val listsId: Parser[Id, List[Int]] = Grammar.grammar[List[Int], Id] { g =>
+    import g.*
+    val list = nonTerminal[List[Int]]
+    skip(" +")
+    list ::= all("[", sepBy(terminal("[0-9]+").map(_.toInt), ","), "]").pure((_, ns, _) => ns)
+    list
+  }
 
   def summing(log: Ref[IO, List[Int]]): Parser[IO, Int] = summingWith(log)
 

@@ -6,7 +6,8 @@ import hearth.std.StdExtensions
 
 /** The code collecting the values of a repetition (`rep`, `rep1`, `sepBy`, `sepBy1`) into its collection, generated
   * through Hearth's `IsCollection` standard extension: the Scala and Java collections, arrays and whatever providers
-  * are on the classpath (e.g. cats `NonEmptyList` with `kindlings-cats-integration`).
+  * are on the classpath (e.g. cats `NonEmptyList` with `kindlings-cats-integration`); and through `IsValueType`, value
+  * types wrapping such a collection (`AnyVal` wrappers, refined/iron types with their providers).
   *
   * The generated code feeds the collection's own mutable `Builder` (no intermediate `List`): the builder is created
   * when the repetition starts, every element is appended as it is reduced, and `result()` (or the collection's smart
@@ -56,12 +57,61 @@ private[parser] trait CollectionCodegen { this: MacroCommons & StdExtensions =>
           Left(
             s"`.as[${Type.prettyPrint[C]}]`: the repeated values are ${Type.prettyPrint[A]}, which is not a subtype of the collection's element type ${Type.prettyPrint[Item]}"
           )
+      // a value type wrapping a collection (an `AnyVal` wrapper, a refined/iron type with a provider on the classpath):
+      // the collection is built, then wrapped (named tuples are not value types)
+      case IsValueType(vt) if !Type[C].isNamedTuple =>
+        import vt.Underlying as Inner
+        Type[Inner] match {
+          case IsMap(_) =>
+            Left(
+              s"`.as[${Type.prettyPrint[C]}]`: ${Type.prettyPrint[C]} wraps a map, and repetitions cannot be collected into maps (collect pairs into a sequence and convert it in the action)"
+            )
+          case IsCollection(c) =>
+            import c.Underlying as Item
+            if (Type[A] <:< Type[Item]) Right(wrapped[C, Inner, Item](vt.value, c.value))
+            else
+              Left(
+                s"`.as[${Type.prettyPrint[C]}]`: the repeated values are ${Type.prettyPrint[A]}, which is not a subtype of the element type ${Type.prettyPrint[Item]} of the collection ${Type.prettyPrint[Inner]} that ${Type.prettyPrint[C]} wraps"
+              )
+          case _ =>
+            Left(
+              s"`.as[${Type.prettyPrint[C]}]`: ${Type.prettyPrint[C]} is a value type wrapping ${Type.prettyPrint[Inner]}, which is not a supported collection"
+            )
+        }
       case _ =>
         Left(
           s"`.as[${Type.prettyPrint[C]}]`: ${Type.prettyPrint[C]} is not a supported collection (it needs an IsCollection provider: " +
             "Scala and Java collections and arrays are supported out of the box, other ones by a provider on the classpath, " +
-            "e.g. cats `NonEmptyList` / `Chain` with kindlings-cats-integration)"
+            "e.g. cats `NonEmptyList` / `Chain` with kindlings-cats-integration), nor a value type wrapping one"
         )
+    }
+  }
+
+  /** [[code]] of the collection `C` that the value type `V` wraps, whose `result` wraps the collection. */
+  private def wrapped[V: Type, C: Type, Item: Type](
+      vt: IsValueTypeOf[V, C],
+      c: IsCollectionOf[C, Item]
+  ): CollectionCode = {
+    val inner = code[C, Item](c)
+    import c.CtorResult
+    val result: Expr[Any => Any] = Expr.quote { (b: Any) =>
+      val builder = b.asInstanceOf[scala.collection.mutable.Builder[Item, CtorResult]]
+      val collection: C = Expr.splice(fromCtorResult[C, Item, CtorResult](c.build, Expr.quote(builder)))
+      (Expr.splice(fromCtor[C, V](vt.wrap, Expr.quote(collection))): Any)
+    }
+    val wrapRejects = vt.wrap match {
+      case _: CtorLikeOf.PlainValue[?, ?] => false
+      case _                              => true
+    }
+    inner.copy(result = result.asUntyped, rejectable = inner.rejectable || wrapRejects)
+  }
+
+  /** `build` applied to `in`: the value, or (smart constructors) a `RejectedValue` thrown for a rejection. */
+  private def fromCtor[In: Type, Out: Type](build: CtorLikeOf[In, Out], in: Expr[In]): Expr[Out] = {
+    val built = build.ctor(in)
+    build match {
+      case _: CtorLikeOf.PlainValue[?, ?] => built.asInstanceOf[Expr[Out]]
+      case _                              => unwrap[Out](built.asInstanceOf[Expr[Either[Any, Out]]])
     }
   }
 

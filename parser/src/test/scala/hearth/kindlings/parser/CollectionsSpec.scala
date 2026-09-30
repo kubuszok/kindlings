@@ -68,6 +68,70 @@ final class CollectionsSpec extends MacroSuite {
       ).check("has a smart constructor that can reject the repeated values")
     }
 
+    test("are collected into value types wrapping a collection") {
+      tags.parse("a b a") ==> Tags(Vector("a", "b", "a"))
+      tags.parse("") ==> Tags(Vector.empty)
+      uniqueTags.parse("[a, b, a]") ==> Right(UniqueTags(Set("a", "b")))
+    }
+
+    test("give the same values with the recursive-descent parser and the machine") {
+      // errors are compared by message; `Id` throws them
+      def outcome(result: => Any): Any = scala.util.Try(result) match {
+        case scala.util.Success(Left(e: Throwable)) => Left(e.getMessage)
+        case scala.util.Success(a: Array[?])        => a.toList
+        case scala.util.Success(value)              => value
+        case scala.util.Failure(e)                  => Left(e.getMessage)
+      }
+      def same[F[_], A](p: Parser[F, A], inputs: String*): Unit =
+        inputs.foreach(input => assertEquals(outcome(p.parse(input)), outcome(p.parseByMachine(input)), input))
+      same(lists, "[1 2] [] [3]", "[1 [")
+      same(optional, "", "x x")
+      same(vectors, "1, 2, 3", "", "1,")
+      same(sets, "a b a c b")
+      same(buffers, "1;2")
+      same(arraySeqs, "[1, 2, 3]")
+      same(widened, "1 2")
+      same(nested, "1 2; 3; 4 5 6")
+      same(chains, "1 2")
+      same(optionalVector, "", "1 2")
+      same(tags, "a b a", "")
+      same(uniqueTags, "[a, b, a]", "[]", "[a,")
+      same(lengths, "1.5m 2m", "1.5 m")
+      same(arrays, "4 5 6", "4 x")
+      same(nonEmpty, "1 2 3", "")
+    }
+
+    test("of value types wrapping maps or non-collections are rejected") {
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        import hearth.kindlings.parser.CollectionsSpec.Meters
+        Grammar.grammar[Meters, Id] { g =>
+          import g.*
+          val s = nonTerminal[Meters]
+          s ::= all(rep("x").as[Meters]).pure(m => m)
+          s
+        }
+        """
+      ).check("which is not a supported collection")
+      compileErrors(
+        """
+        import hearth.kindlings.parser.*
+        import hearth.kindlings.parser.CollectionsSpec.Index
+        Grammar.grammar[Index, Id] { g =>
+          import g.*
+          val s = nonTerminal[Index]
+          s ::= all(rep("x").as[Index]).pure(m => m)
+          s
+        }
+        """
+      ).check("wraps a map, and repetitions cannot be collected into maps")
+    }
+
+    test("non-terminals and terminals can produce value types") {
+      lengths.parse("1.5m 2m") ==> List(Meters(1.5), Meters(2.0))
+    }
+
     test("pass the collection through groups and optional symbols") {
       optionalVector.parse("") ==> None
       optionalVector.parse("1 2") ==> Some(Vector(1, 2))
@@ -131,6 +195,38 @@ final class CollectionsSpec extends MacroSuite {
   }
 }
 object CollectionsSpec {
+
+  final case class Tags(values: Vector[String]) extends AnyVal
+  final case class UniqueTags(values: Set[String]) extends AnyVal
+  final case class Meters(value: Double) extends AnyVal
+  final case class Index(entries: Map[String, Int]) extends AnyVal
+
+  val tags: Parser[Id, Tags] = Grammar.grammar[Tags, Id] { g =>
+    import g.*
+    val s = nonTerminal[Tags]
+    skip(" +")
+    s ::= all(rep(terminal("[a-z]+")).as[Tags]).pure(t => t)
+    s
+  }
+
+  val uniqueTags: Parser[Result, UniqueTags] = Grammar.grammar[UniqueTags, Result] { g =>
+    import g.*
+    val s = nonTerminal[UniqueTags]
+    skip(" +")
+    s ::= all("[", sepBy(terminal("[a-z]+"), ",").as[UniqueTags], "]").pure((_, t, _) => t)
+    s
+  }
+
+  val lengths: Parser[Id, List[Meters]] = Grammar.grammar[List[Meters], Id] { g =>
+    import g.*
+    val all_ = nonTerminal[List[Meters]]
+    val length = nonTerminal[Meters]
+    val number = terminal("[0-9]+(\\.[0-9]+)?").map(s => Meters(s.toDouble))
+    skip(" +")
+    all_ ::= all(rep(length)).pure(ls => ls)
+    length ::= all(number, "m").pure((n, _) => n)
+    all_
+  }
 
   val lists: Parser[Id, List[List[Int]]] = Grammar.grammar[List[List[Int]], Id] { g =>
     import g.*

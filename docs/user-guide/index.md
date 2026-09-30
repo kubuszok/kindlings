@@ -38,6 +38,9 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     libraryDependencies += "com.kubuszok" %% "kindlings-di-cats" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-mock" % "{{ kindlings_version() }}" % Test
     libraryDependencies += "com.kubuszok" %% "kindlings-optics" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-parser" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-parser-cats-effect" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-parser-fs2" % "{{ kindlings_version() }}"
 
     // extra:
     libraryDependencies += "com.kubuszok" %% "kindlings-jsoniter-json" % "{{ kindlings_version() }}"
@@ -75,6 +78,9 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     //> using dep com.kubuszok::kindlings-di-cats:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-mock:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-parser:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-parser-cats-effect:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-parser-fs2:{{ kindlings_version() }}
 
     // extra:
     //> using dep com.kubuszok::kindlings-jsoniter-json:{{ kindlings_version() }}
@@ -253,6 +259,7 @@ Not type-class derivation, but built on the same Hearth macro-agnostic API and c
 | [kindlings-di-cats](di-cats.md) | — | Cats-Effect `Resource`/`IO` wiring on top of `kindlings-di` |
 | [kindlings-mock](mock.md) | ScalaMock | Compile-time mocks (`mock[T]`) with expectations, generated without reflection or bytecode |
 | [kindlings-optics](optics.md) | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses. `.each` works over any `IsCollection`/`IsMap`/`IsOption` container (built-ins + cats `NonEmpty*` via `kindlings-cats-integration`) |
+| [kindlings-parser](parser.md) | yacc / fastparse | BNF grammars compiled at compile time into LALR(1) parsers (plus a recursive-descent fast path for LL(1) grammars), with typed actions, conflict diagnostics and a stack-safe, resumable machine; [Cats Effect](parser-running.md#cats-effect) and [fs2](parser-running.md#fs2-streams) modules |
 
 `kindlings-mock` is test-scope; the rest are cross-compiled for Scala 2.13 and 3 on JVM, Scala.js, and Scala Native.
 

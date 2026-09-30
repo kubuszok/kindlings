@@ -102,6 +102,9 @@ Built on the same Hearth macro-agnostic API and cross-compiled the same way, but
 | `kindlings-di-cats` | _(original)_ | Cats-Effect `Resource`/`IO` wiring on top of `kindlings-di` |
 | `kindlings-mock` | ScalaMock | Compile-time mocks (`mock[T]`) with expectations, no reflection or bytecode (test-scope) |
 | `kindlings-optics` | quicklens | `obj.modify(_.a.b)` lenses — nested copy/`.each`/`.at`/`.when`; `.each` works over any `IsCollection`/`IsMap`/`IsOption` container, incl. cats `NonEmpty*` via `kindlings-cats-integration` |
+| `kindlings-parser` | yacc / fastparse | BNF grammars compiled at compile time into LALR(1) parsers (plus a recursive-descent fast path for LL(1) grammars), with typed actions, conflict diagnostics and a stack-safe, resumable machine |
+| `kindlings-parser-cats-effect` | _(original)_ | `Parser[F, R]` for any Cats Effect `Async`/`Sync` `F` |
+| `kindlings-parser-fs2` | _(original)_ | fs2 pipes parsing a stream of chunks or bytes as one input, with bounded memory |
 
 ### Extra
 
