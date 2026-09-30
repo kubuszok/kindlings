@@ -29,6 +29,8 @@ object versions {
   val iron = "3.3.2"
   val jsoniterScala = "2.41.0"
   val kittens = "3.5.0"
+  val neotype = "0.7.2"
+  val newtypeCompat = "0.1.1"
   val pureconfig = "0.17.10"
   val quicklens = "1.9.15"
   val tapir = "1.13.31"

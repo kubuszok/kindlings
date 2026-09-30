@@ -74,6 +74,8 @@ nav:
   - "Integration Modules":
       - "Cats Collections": "cats-integration.md"
       - "Iron": "iron-integration.md"
+      - "Neotype": "neotype-integration.md"
+      - "scala-newtype": "newtype-integration.md"
       - "Refined": "refined-integration.md"
   - "Extra":
       - "Jsoniter JSON": "jsoniter-json.md"
@@ -134,6 +136,8 @@ extra:
     scalacheck: "1.19.0"
     refined: "0.11.3"
     iron: "3.3.2"
+    neotype: "0.7.2"
+    newtypeCompat: "0.1.1"
     sconfig: "1.12.4"
     scalaYaml: "0.3.1"
     scalaXml: "2.4.0"

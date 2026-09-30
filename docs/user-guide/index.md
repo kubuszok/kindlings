@@ -29,6 +29,8 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     // integrations:
     libraryDependencies += "com.kubuszok" %% "kindlings-cats-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-iron-integration" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-neotype-integration" % "{{ kindlings_version() }}"
+    libraryDependencies += "com.kubuszok" %% "kindlings-newtype-integration" % "{{ kindlings_version() }}"
     libraryDependencies += "com.kubuszok" %% "kindlings-refined-integration" % "{{ kindlings_version() }}"
 
     // macro utilities (not derivation):
@@ -64,6 +66,8 @@ Type class derivation that compiles faster, runs faster, and works the same on S
     // integrations:
     //> using dep com.kubuszok::kindlings-cats-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-iron-integration:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-neotype-integration:{{ kindlings_version() }}
+    //> using dep com.kubuszok::kindlings-newtype-integration:{{ kindlings_version() }}
     //> using dep com.kubuszok::kindlings-refined-integration:{{ kindlings_version() }}
 
     // macro utilities (not derivation):
@@ -179,7 +183,7 @@ Supported formats: plain integer (seconds), `Ns`, `Nms`, `Nm`.
 
 ### No imports for integration modules
 
-Refined types, Iron types, and Cats collections work automatically. Just add the integration dependency to your build — no imports, no configuration. The macro extension system discovers them at compile time.
+Refined types, Iron types, neotypes, scala-newtypes, and Cats collections work automatically. Just add the integration dependency to your build — no imports, no configuration. The macro extension system discovers them at compile time.
 
 ```scala
 // build.sbt — just add the dependency
@@ -233,6 +237,8 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
 |---|---|
 | [kindlings-cats-integration](cats-integration.md) | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated`, `Const` — handled automatically in all derivation modules |
 | [kindlings-iron-integration](iron-integration.md) | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
+| [kindlings-neotype-integration](neotype-integration.md) | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only, JVM + Scala.js) |
+| [kindlings-newtype-integration](newtype-integration.md) | scala-newtype `@newtype`/`@newsubtype` (via scala-newtype-compat) — unwrapped on encode, wrapped on decode (JVM only) |
 | [kindlings-refined-integration](refined-integration.md) | Refined types (`Refined[A, P]`) — validated on decode, unwrapped on encode |
 
 Add the integration jar to your build and the types work transparently — no imports, no configuration. The macro extension system discovers providers at compile time via SPI.

@@ -205,8 +205,9 @@ creates three interaction patterns that rule authors must understand:
 
 ### Opaque types intercept newtypes
 
-Libraries like `monix.newtypes`, `scala-newtype`, and `zio-prelude` define newtype wrappers
-that on Scala 3 are compiled as opaque types. The built-in opaque provider matches them
+Libraries like `monix.newtypes`, `neotype`, and `zio-prelude` define newtype wrappers
+that on Scala 3 are compiled as opaque types (`scala-newtype` is NOT one of them: its `@newtype` expansion is an
+abstract type member on both Scala 2 and Scala 3, see `newtype-integration`). The built-in opaque provider matches them
 *before* any custom newtype provider can run. This is usually correct — the newtype IS an
 opaque wrapper and should encode/decode as the underlying type. But if the newtype has
 validation logic (like refined types), a custom provider with `EitherStringOrValue` wrapping
@@ -243,6 +244,22 @@ needed for Scala 2 (where `Refined` is an `AnyVal` that needs validated wrapping
 
 - **Refined integration**: `refined-integration/src/main/scala/.../IsValueTypeProviderForRefined.scala` — cross-compiled (Scala 2 + 3), uses `refineV` for validation, `Refined.unapply` for unwrapping
 - **Iron integration**: `iron-integration/src/main/scala/.../IsValueTypeProviderForIron.scala` — Scala 3 only, uses `RuntimeConstraint.test` for validation, `asInstanceOf` for unwrapping (opaque type)
+- **Neotype integration**: `neotype-integration/src/main/scala/.../IsValueTypeProviderForNeotype.scala` — Scala 3 only (JVM + JS), no type constructor to match: recognizes `Foo.Type` as an opaque type *declared in* `neotype.Newtype`/`Subtype` (owner's `fullName`), takes the underlying type from `prefix.widen.baseType(owner)` and validates by calling `Foo.make(_)` on the companion built from the type's prefix (`Ref.term(termRef)`)
+- **scala-newtype integration**: `newtype-integration/src/main/{scala,scala-2,scala-3}/.../` — cross-compiled (JVM only), matches the `@newtype` expansion shape (abstract `Type` member next to `Repr`/`Base`/`Tag` in the companion) with a per-Scala-version `NewtypeReprPlatform` (`c.universe` / `quotes.reflect`), shared provider uses plain casts (`PlainValue`)
+
+### Matching types without a type constructor
+
+`Type.Ctor*.fromUntyped` only helps when the wrapper is an applied type constructor (`Refined[A, P]`, `IronType[A, C]`).
+Newtype-like libraries instead define a **type member of a companion object** (`Foo.Type`), so the provider has to look
+at the type's structure with platform reflection:
+
+- Keep all `quotes.reflect`/`c.universe` code in a separate class/object and pass `UntypedType`/`UntypedExpr` across
+  with `asInstanceOf` - on Scala 3 do NOT `import ctx3.{*, given}` in the provider body: the cross-quotes plugin then
+  rewrites `implicit val AT: Type[A] = tpe` into a self-referencing cast ("Infinite loop in function body").
+- A `Type[Either[String, A]]` needed for `UntypedExpr.toTyped` must be a NON-implicit `val` (pitfall #9).
+- Always set `priority` above Hearth's built-in opaque provider (`-1000`) when the wrapper is an opaque type and the
+  provider adds validation, otherwise the built-in one may match first.
+- Override `mightMatch` with a cheap sound pre-filter (e.g. `tpe.isOpaqueType`) when possible.
 
 ## Checklist for new integrations
 

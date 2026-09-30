@@ -78,12 +78,16 @@ If both Kindlings' and the original library's automatic derivation are in scope,
 
 - `kindlings-avro-derivation` — depends on `org.apache.avro:avro` (JVM-only)
 - `kindlings-pureconfig-derivation` — depends on `com.typesafe:config` (JVM-only)
+- `kindlings-newtype-integration` — depends on `com.kubuszok:newtype-compat` (JVM-only)
+
+`kindlings-neotype-integration` is available for JVM and Scala.js only (neotype is not published for Scala Native).
 
 All other modules are cross-compiled for JVM, Scala.js, and Scala Native.
 
 ## Which module is Scala 3-only?
 
 - `kindlings-iron-integration` — Iron is a Scala 3-only library (opaque types)
+- `kindlings-neotype-integration` — neotype is a Scala 3-only library (opaque types)
 
 All other modules support both Scala 2.13 and Scala 3.
 

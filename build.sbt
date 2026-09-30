@@ -67,6 +67,13 @@ val nativeEvictionWarn = List(
 // scope may be filtered here, each with a justification. Bump this on every release.
 val mimaPreviousVersion = "0.3.1"
 
+// Published modules first released AFTER `mimaPreviousVersion` - there is no baseline artifact to compare against yet.
+// Remove an entry once `mimaPreviousVersion` is bumped to a release that contains the module.
+val modulesWithoutMimaBaseline = Set(
+  "kindlings-neotype-integration",
+  "kindlings-newtype-integration"
+)
+
 val mimaSettings = Seq(
   // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
   // baseline. MiMa is scoped to JVM (some published modules are JVM-only, so per-module JS/Native baselines are
@@ -78,13 +85,15 @@ val mimaSettings = Seq(
     val isJvm = virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm))
     // `kindlings-macro-commons` was promoted to the published set AFTER 0.3.0, but it shipped in 0.3.1, so from
     // the 0.3.1 baseline on it has a baseline like every other published module.
-    if (isPublished && isJvm)
+    val hasBaseline = !modulesWithoutMimaBaseline(moduleName.value)
+    if (isPublished && isJvm && hasBaseline)
       Set((organization.value % moduleName.value % mimaPreviousVersion).cross(crossVersion.value))
     else Set.empty[ModuleID]
   },
   mimaFailOnNoPrevious :=
     projectType.?.value.contains(ProjectType.ScalaLibrary) &&
-      virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)),
+      virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)) &&
+      !modulesWithoutMimaBaseline(moduleName.value),
   mimaBinaryIssueFilters ++= Seq(
     // Everything under a `*.compiletime.*` package - the per-module `<module>.internal.compiletime.*` macro
     // implementations and the shared `hearth.kindlings.derivation.compiletime.*` (e.g. the `DerivationPolicy`
@@ -236,6 +245,8 @@ lazy val aliases = new Aliases(
     tapirSchemaDerivation,
     refinedIntegration,
     ironIntegration,
+    neotypeIntegration,
+    newtypeIntegration,
     xmlDerivation,
     catsDerivation,
     catsTaglessDerivation,
@@ -317,6 +328,8 @@ lazy val root = project
   .aggregate(tapirSchemaDerivation.projectRefs *)
   .aggregate(refinedIntegration.projectRefs *)
   .aggregate(ironIntegration.projectRefs *)
+  .aggregate(neotypeIntegration.projectRefs *)
+  .aggregate(newtypeIntegration.projectRefs *)
   .aggregate(xmlDerivation.projectRefs *)
   .aggregate(catsDerivation.projectRefs *)
   .aggregate(catsTaglessDerivation.projectRefs *)
@@ -800,6 +813,40 @@ lazy val ironIntegration = projectMatrix
   .settings(publishSettings *)
   .settings(libraryDependencies += "io.github.iltotore" %% "iron" % versions.iron)
 
+// neotype is Scala 3-only and published for JVM and Scala.js (no Scala Native artifacts).
+lazy val neotypeIntegration = projectMatrix
+  .in(file("neotype-integration"))
+  .someVariations(List(versions.scala3), List(VirtualAxis.jvm, VirtualAxis.js))(
+    (useCrossQuotes ++ dev.only1VersionInIDE) *
+  )
+  .settings(
+    moduleName := "kindlings-neotype-integration",
+    name := "kindlings-neotype-integration",
+    description := "Neotype integration — IsValueType provider for neotype.Newtype and neotype.Subtype",
+    macroExtensionTraits := Seq("hearth.std.StandardMacroExtension")
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "io.github.kitlangton" %% "neotype" % versions.neotype)
+
+// scala-newtype-compat (which brings io.estatico:newtype_2.13 onto both Scala 2.13 and Scala 3) is JVM-only.
+lazy val newtypeIntegration = projectMatrix
+  .in(file("newtype-integration"))
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))(
+    (useCrossQuotes ++ dev.only1VersionInIDE) *
+  )
+  .settings(
+    moduleName := "kindlings-newtype-integration",
+    name := "kindlings-newtype-integration",
+    description := "scala-newtype integration — IsValueType provider for @newtype/@newsubtype (via scala-newtype-compat)",
+    macroExtensionTraits := Seq("hearth.std.StandardMacroExtension")
+  )
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(publishSettings *)
+  .settings(libraryDependencies += "com.kubuszok" %% "newtype-compat" % versions.newtypeCompat)
+
 lazy val catsDerivation = projectMatrix
   .in(file("cats-derivation"))
   .someVariations(versions.scalas, versions.platforms)(
@@ -886,11 +933,24 @@ val jvmOnlyDerivatonsForIntegrationTests = List(
     project
       .dependsOn(LocalProject(s"avroDerivation$suffix"))
       .dependsOn(LocalProject(s"pureconfigDerivation$suffix"))
+      // scala-newtype-compat is JVM-only
+      .dependsOn(LocalProject(s"newtypeIntegration$suffix"))
       .settings(
-        // Add scalajvm-3 test sources for JVM + Scala 3 only (Iron × Avro/PureConfig)
+        // Add scalajvm-3 test sources for JVM + Scala 3 only (Iron/Neotype × Avro/PureConfig)
         Test / unmanagedSourceDirectories ++= foldVersion(scalaVersion.value)(
           for3 = Seq(baseDirectory.value / "src" / "test" / "scalajvm-3"),
           for2_13 = Seq.empty
+        ),
+        libraryDependencies += "com.kubuszok" %% "newtype-compat" % versions.newtypeCompat,
+        // @newtype expansion: macro annotations on Scala 2.13, scala-newtype-compat's compiler plugin on Scala 3
+        libraryDependencies ++= foldVersion(scalaVersion.value)(
+          for3 =
+            Seq(compilerPlugin("com.kubuszok" % "newtype-plugin" % versions.newtypeCompat cross CrossVersion.full)),
+          for2_13 = Seq.empty
+        ),
+        scalacOptions ++= foldVersion(scalaVersion.value)(
+          for3 = Seq.empty,
+          for2_13 = Seq("-Ymacro-annotations")
         )
       )
   }
@@ -904,10 +964,26 @@ val ironDepForScala3 = List(
   }
 )
 
+// neotype is Scala 3-only and has no Scala Native artifacts: add it (and its scala-3-jvmjs test sources) to the
+// Scala 3 JVM and JS rows only
+val neotypeDepForScala3JvmJs = List(
+  MatrixAction.ForScala(_.isScala3).Configure { project =>
+    val suffix = project.id.stripPrefix("integrationTests") // "", "JS", "Native"
+    if (suffix == "Native") project
+    else
+      project
+        .dependsOn(LocalProject(s"neotypeIntegration$suffix"))
+        .settings(
+          libraryDependencies += "io.github.kitlangton" %% "neotype" % versions.neotype,
+          Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scala-3-jvmjs"
+        )
+  }
+)
+
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
   .someVariations(versions.scalas, versions.platforms)(
-    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ jvmOnlyDerivatonsForIntegrationTests ++ nativeEvictionWarn) *
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ neotypeDepForScala3JvmJs ++ jvmOnlyDerivatonsForIntegrationTests ++ nativeEvictionWarn) *
   )
   .dependsOn(
     fastShowPretty,
