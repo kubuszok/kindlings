@@ -196,4 +196,20 @@ object LL1Spec {
     member ::= all(string, ":", value).pure((k, _, v) => k + ":" + v)
     value
   }
+  val jsonDefault: Parser[Id, String] = Grammar.grammar[String, Id] { g =>
+    import g.*
+    val value = nonTerminal[String]
+    val member = nonTerminal[String]
+    val string = terminal("\"[a-z]*\"").map(s => s.substring(1, s.length - 1))
+    val number = terminal("-?[0-9]+")
+    skip("[ \\n]+")
+    value ::= (
+      all("{", sepBy(member, ","), "}").pure((_, ms, _) => ms.mkString("{", ",", "}")) ||
+        all("[", sepBy(value, ","), "]").pure((_, vs, _) => vs.mkString("[", ",", "]")) ||
+        all(string).pure(s => s) || all(number).pure(n => n) ||
+        all("true").pure(_ => "true") || all("false").pure(_ => "false") || all("null").pure(_ => "null")
+    )
+    member ::= all(string, ":", value).pure((k, _, v) => k + ":" + v)
+    value
+  }
 }

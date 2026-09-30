@@ -181,6 +181,29 @@ That is the ~1 ms per parse the profile pointed at. Relative to jawn, generated 
 0.43x (3) in that session. What is left is value building (`toDouble`, lists, tuples, the AST), which jawn's facade does
 too, and the general costs of an LR machine (a state per shift, a reduction per production).
 
+## 7. Tried: an LL(1) backend (kept as an option, not the default)
+
+The architectural answer to jawn was a second backend: for LL(1) grammars, a generated top-down parser (`LLProgram`,
+`runLL`) - a state machine with one operation per state (expect a token, call a rule with a return address on a heap
+stack, reduce, return, choose by the next token), repetitions as loops, single-char punctuation checked by comparing
+chars, rules used at one place inlined. It gives the same values as LALR(1) and more precise error messages, but on
+JSON it is slower (same session, 3 forks × 6 iterations):
+
+| | Scala 2.13 ops/s | Scala 3 ops/s |
+|---|---|---|
+| jawn | 194.2 ± 10.1 | 225.6 ± 16.9 |
+| kindlings-parser, LALR(1) | 89.5 ± 6.0 | 104.5 ± 6.1 |
+| kindlings-parser, LL(1) (single-use rules inlined) | 76.3 ± 5.6 | 90.3 ± 3.9 |
+
+The profile explains it: the fast punctuation path cut lexing from ~22% to ~14% of the samples, but the program runs
+more steps than the LR machine - a `state` dispatch per operation, calls and returns for recursive rules, a value push
+per token and the same reductions (each production still builds its value on the value stack). An LR shift/reduce step
+does comparable work in one table lookup. Closing the gap with jawn would need values built without the value stack
+(an action applied as soon as its last symbol is read, collections filled in place), which is a code generator of a
+different kind (recursive-descent-like code per rule, over a heap stack only for recursion). So LALR(1) stays the
+default; `enable(RequireLL1)` selects the LL(1) parser and guarantees the grammar is LL(1), with plain-language
+explanations when it is not.
+
 ## 6. How to reproduce
 
 ```bash

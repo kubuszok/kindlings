@@ -246,14 +246,12 @@ val parser: Parser[IO, Int] = Grammar.grammar[Int, IO] { g =>
 ## Two parsers: LL(1) and LALR(1)
 
 Every grammar is compiled into LALR(1) tables, which handle left recursion, operator precedence and most programming
-language grammars. When the grammar is also **LL(1)** (it can be parsed top down by looking at the next token only,
-which is true of most data formats: JSON, configuration files, protocols), `Grammar.grammar` additionally generates a
-top-down parser for `String` inputs. It checks punctuation by comparing chars, builds repetitions straight into their
-collections and needs no parse tables. Both give the same values; the LL(1) parser's error messages list only the
-tokens valid in the current context. `Reader`/`InputStream` and push inputs use the LALR(1) tables.
-
-The choice is automatic. Grammar flags make it explicit (see below): `enable(RequireLL1)` fails the compilation when the
-grammar is not LL(1), `enable(RequireLALR)` always uses the LALR(1) parser.
+language grammars; this is the default parser. With `enable(RequireLL1)`, a grammar that is **LL(1)** (it can be parsed
+top down by looking at the next token only, which is true of most data formats: JSON, configuration files, protocols)
+gets a generated top-down parser for `String` inputs instead, and a grammar that is not fails to compile with an
+explanation. Both parsers give the same values. The LL(1) parser's error messages list only the tokens valid in the
+current context (the LALR(1) parser can also list tokens valid in other contexts); on the JSON benchmark it is currently
+~14% slower than the LALR(1) parser. `Reader`/`InputStream` and push inputs always use the LALR(1) tables.
 
 ### Grammar flags
 
@@ -269,8 +267,8 @@ Grammar.grammar[Json, Id] { g =>
 
 | Flag | Effect |
 |---|---|
-| `RequireLL1` | the grammar must be LL(1): otherwise compilation fails with an explanation of every problem (like `@tailrec` for tail calls) |
-| `RequireLALR` | always use the LALR(1) parser, even for LL(1) grammars |
+| `RequireLL1` | the grammar must be LL(1) - otherwise compilation fails with an explanation of every problem (like `@tailrec` for tail calls) - and `String` inputs are parsed top down |
+| `RequireLALR` | use the LALR(1) parser (the default; states it explicitly) |
 | `ThrowingInRuntime` | allow collections whose smart constructor can reject values in effects without an error channel (`Id`); the rejection is thrown as a `ParseError` |
 
 `disable(flag)` states that a flag is off (flags are off by default); setting a flag both ways, or requiring both parsers,

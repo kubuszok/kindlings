@@ -23,7 +23,7 @@ private[parser] object GrammarCompiler {
     * @param flags
     *   the enabled `GrammarFlag`s, by name
     * @param ll
-    *   the top-down (LL(1)) program, for generated code of LL(1) grammars (unless `RequireLALR`)
+    *   the top-down (LL(1)) program, for generated code of grammars with `enable(RequireLL1)`
     * @param singleCharTokens
     *   literal tokens of one ASCII char that no longer token can start with (parsed without the lexer)
     * @param slicers
@@ -394,7 +394,7 @@ private[parser] object GrammarCompiler {
         reduces += CodegenPlan.Reduce(p, prod.rhs.size, prod.lhs, constantGoto(prod.lhs), body, primOf(prod.lhs))
     }
     val llProgram: Option[LLProgram.Program] =
-      if (generated && !flags("RequireLALR") && ll1.isLL1)
+      if (generated && flags("RequireLL1") && ll1.isLL1)
         LLProgram.build(g.root, flat.nonTerminals, prods, flat.origins, g.nonTerminals.size, t => tokenId(t.pattern))
       else None
     val singleCharTokens: Map[Int, Char] = tokens.zipWithIndex.collect {

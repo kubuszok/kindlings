@@ -16,13 +16,14 @@ object GrammarFlag {
     */
   case object ThrowingInRuntime extends GrammarFlag("ThrowingInRuntime")
 
-  /** Fails the compilation unless the grammar is LL(1) - parseable by looking at one token ahead, top down - and
-    * explains why it is not. LL(1) grammars get the faster top-down parser anyway; this makes it a guarantee, like
-    * `@tailrec` does for tail calls.
+  /** Parses `String` inputs with a generated top-down parser, and fails the compilation unless the grammar is LL(1) -
+    * parseable by looking at one token ahead, top down - explaining why it is not (like `@tailrec` does for tail
+    * calls). The top-down parser reports only the tokens valid in the current context; on JSON it is currently ~14%
+    * slower than the LALR(1) parser, which is the default.
     */
   case object RequireLL1 extends GrammarFlag("RequireLL1")
 
-  /** Uses the LALR(1) parser even when the grammar is LL(1) (e.g. to compare both, or for its error messages). */
+  /** Uses the LALR(1) parser (the default; this states it explicitly). */
   case object RequireLALR extends GrammarFlag("RequireLALR")
 
   val all: List[GrammarFlag] = List(ThrowingInRuntime, RequireLL1, RequireLALR)

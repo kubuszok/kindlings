@@ -5,8 +5,8 @@ import hearth.kindlings.parser.internal.runtime.GeneratedGrammar
 
 import scala.util.{Failure, Success, Try}
 
-/** LL(1) grammars are parsed top down (the generated `runLL`) for `String` inputs; each grammar here has a twin with
-  * `enable(RequireLALR)` that must give exactly the same values and the same error messages.
+/** Grammars with `enable(RequireLL1)` are parsed top down (the generated `runLL`) for `String` inputs; each grammar
+  * here has an LALR(1) twin that must give exactly the same values and errors at the same positions.
   */
 final class LLBackendSpec extends MacroSuite {
 
@@ -17,10 +17,11 @@ final class LLBackendSpec extends MacroSuite {
 
   group("the LL(1) backend") {
 
-    test("is used for LL(1) grammars, and RequireLALR turns it off") {
+    test("is used with RequireLL1 only") {
       usesLL(statements) ==> true
       usesLL(statementsLALR) ==> false
-      usesLL(CalculatorSpec.calc) ==> false // left recursion with precedence: LALR only
+      usesLL(LL1Spec.jsonDefault) ==> false // LL(1), but the LALR(1) parser is the default
+      usesLL(CalculatorSpec.calc) ==> false
     }
 
     test("gives the same values and errors as the LALR parser") {
@@ -89,6 +90,7 @@ object LLBackendSpec {
   /** Statements with nested blocks, lists, options and expressions written with repetitions (LL(1)). */
   val statements: Parser[Result, String] = Grammar.grammar[String, Result] { g =>
     import g.*
+    enable(RequireLL1)
     val program = nonTerminal[String]
     val statement = nonTerminal[String]
     val expr = nonTerminal[Double]
@@ -148,6 +150,7 @@ object LLBackendSpec {
 
   val nesting: Parser[Id, Int] = Grammar.grammar[Int, Id] { g =>
     import g.*
+    enable(RequireLL1)
     val n = nonTerminal[Int]
     n ::= all("(", n, ")").pure((_, d, _) => d + 1) || all("x").pure(_ => 0)
     n
@@ -155,6 +158,7 @@ object LLBackendSpec {
 
   val effectful: Parser[Try, Int] = Grammar.grammar[Int, Try] { g =>
     import g.*
+    enable(RequireLL1)
     val total = nonTerminal[Int]
     val n = nonTerminal[Int]
     skip(" +")
