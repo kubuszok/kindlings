@@ -80,8 +80,6 @@ If both Kindlings' and the original library's automatic derivation are in scope,
 - `kindlings-pureconfig-derivation` — depends on `com.typesafe:config` (JVM-only)
 - `kindlings-newtype-integration` — depends on `com.kubuszok:newtype-compat` (JVM-only)
 
-`kindlings-neotype-integration` is available for JVM and Scala.js only (neotype is not published for Scala Native).
-
 All other modules are cross-compiled for JVM, Scala.js, and Scala Native.
 
 ## Which module is Scala 3-only?

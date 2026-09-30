@@ -25,10 +25,10 @@ private[compiletime] object NewtypeReprPlatform {
           val repr = companion.typeMember("Repr")
           val base = companion.typeMember("Base")
           val tag = companion.typeMember("Tag")
-          if (repr.isNoSymbol || base.isNoSymbol || tag.isNoSymbol || !tag.isClassDef) None
+          if repr.isNoSymbol || base.isNoSymbol || tag.isNoSymbol || !tag.isClassDef then None
           else {
             val reprRef = prefix.select(repr)
-            val applied = if (args.isEmpty) reprRef else reprRef.appliedTo(args)
+            val applied = if args.isEmpty then reprRef else reprRef.appliedTo(args)
             Some(applied.dealias.simplified.asInstanceOf[ctx.UntypedType])
           }
         case _ => None

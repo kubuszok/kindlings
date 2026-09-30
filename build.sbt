@@ -813,11 +813,10 @@ lazy val ironIntegration = projectMatrix
   .settings(publishSettings *)
   .settings(libraryDependencies += "io.github.iltotore" %% "iron" % versions.iron)
 
-// neotype is Scala 3-only and published for JVM and Scala.js (no Scala Native artifacts).
 lazy val neotypeIntegration = projectMatrix
   .in(file("neotype-integration"))
-  .someVariations(List(versions.scala3), List(VirtualAxis.jvm, VirtualAxis.js))(
-    (useCrossQuotes ++ dev.only1VersionInIDE) *
+  .someVariations(List(versions.scala3), versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
   )
   .settings(
     moduleName := "kindlings-neotype-integration",
@@ -956,34 +955,21 @@ val jvmOnlyDerivatonsForIntegrationTests = List(
   }
 )
 
-// Iron dependency added conditionally for Scala 3 only (ironIntegration has no Scala 2.13 rows)
+// Iron and neotype dependencies added conditionally for Scala 3 only (ironIntegration and neotypeIntegration have no
+// Scala 2.13 rows)
 val ironDepForScala3 = List(
   MatrixAction.ForScala(_.isScala3).Configure { project =>
     val suffix = project.id.stripPrefix("integrationTests") // "3", "JS3", "Native3"
-    project.dependsOn(LocalProject(s"ironIntegration$suffix"))
-  }
-)
-
-// neotype is Scala 3-only and has no Scala Native artifacts: add it (and its scala-3-jvmjs test sources) to the
-// Scala 3 JVM and JS rows only
-val neotypeDepForScala3JvmJs = List(
-  MatrixAction.ForScala(_.isScala3).Configure { project =>
-    val suffix = project.id.stripPrefix("integrationTests") // "", "JS", "Native"
-    if (suffix == "Native") project
-    else
-      project
-        .dependsOn(LocalProject(s"neotypeIntegration$suffix"))
-        .settings(
-          libraryDependencies += "io.github.kitlangton" %% "neotype" % versions.neotype,
-          Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "scala-3-jvmjs"
-        )
+    project
+      .dependsOn(LocalProject(s"ironIntegration$suffix"))
+      .dependsOn(LocalProject(s"neotypeIntegration$suffix"))
   }
 )
 
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
   .someVariations(versions.scalas, versions.platforms)(
-    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ neotypeDepForScala3JvmJs ++ jvmOnlyDerivatonsForIntegrationTests ++ nativeEvictionWarn) *
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForScala3 ++ jvmOnlyDerivatonsForIntegrationTests ++ nativeEvictionWarn) *
   )
   .dependsOn(
     fastShowPretty,
@@ -1014,7 +1000,10 @@ lazy val integrationTests = projectMatrix
       "org.ekrich" %% "sconfig" % versions.sconfig
     ),
     libraryDependencies ++= foldVersion(scalaVersion.value)(
-      for3 = Seq("io.github.iltotore" %% "iron" % versions.iron),
+      for3 = Seq(
+        "io.github.iltotore" %% "iron" % versions.iron,
+        "io.github.kitlangton" %% "neotype" % versions.neotype
+      ),
       for2_13 = Seq.empty
     )
   )

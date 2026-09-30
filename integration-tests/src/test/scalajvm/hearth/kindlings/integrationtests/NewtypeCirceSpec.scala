@@ -58,7 +58,9 @@ final class NewtypeCirceSpec extends MacroSuite {
     group("round-trip") {
 
       test("encode then decode preserves value") {
-        KindlingsDecoder.decode[NewtypeUser](KindlingsEncoder.encode(NewtypeUser.example)) ==> Right(NewtypeUser.example)
+        KindlingsDecoder.decode[NewtypeUser](KindlingsEncoder.encode(NewtypeUser.example)) ==> Right(
+          NewtypeUser.example
+        )
       }
     }
   }

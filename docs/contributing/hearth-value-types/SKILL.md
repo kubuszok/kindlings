@@ -244,7 +244,7 @@ needed for Scala 2 (where `Refined` is an `AnyVal` that needs validated wrapping
 
 - **Refined integration**: `refined-integration/src/main/scala/.../IsValueTypeProviderForRefined.scala` — cross-compiled (Scala 2 + 3), uses `refineV` for validation, `Refined.unapply` for unwrapping
 - **Iron integration**: `iron-integration/src/main/scala/.../IsValueTypeProviderForIron.scala` — Scala 3 only, uses `RuntimeConstraint.test` for validation, `asInstanceOf` for unwrapping (opaque type)
-- **Neotype integration**: `neotype-integration/src/main/scala/.../IsValueTypeProviderForNeotype.scala` — Scala 3 only (JVM + JS), no type constructor to match: recognizes `Foo.Type` as an opaque type *declared in* `neotype.Newtype`/`Subtype` (owner's `fullName`), takes the underlying type from `prefix.widen.baseType(owner)` and validates by calling `Foo.make(_)` on the companion built from the type's prefix (`Ref.term(termRef)`)
+- **Neotype integration**: `neotype-integration/src/main/scala/.../IsValueTypeProviderForNeotype.scala` — Scala 3 only, no type constructor to match: recognizes `Foo.Type` as an opaque type *declared in* `neotype.Newtype`/`Subtype` (owner's `fullName`), takes the underlying type from `prefix.widen.baseType(owner)` and validates by calling `Foo.make(_)` on the companion built from the type's prefix (`Ref.term(termRef)`)
 - **scala-newtype integration**: `newtype-integration/src/main/{scala,scala-2,scala-3}/.../` — cross-compiled (JVM only), matches the `@newtype` expansion shape (abstract `Type` member next to `Repr`/`Base`/`Tag` in the companion) with a per-Scala-version `NewtypeReprPlatform` (`c.universe` / `quotes.reflect`), shared provider uses plain casts (`PlainValue`)
 
 ### Matching types without a type constructor

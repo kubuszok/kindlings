@@ -88,7 +88,7 @@ The one exception: [Jsoniter Scala](https://github.com/plokhotnyuk/jsoniter-scal
 |---|---|
 | `kindlings-cats-integration` | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated` — handled automatically in all derivation modules |
 | `kindlings-iron-integration` | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
-| `kindlings-neotype-integration` | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only, JVM + Scala.js) |
+| `kindlings-neotype-integration` | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only) |
 | `kindlings-newtype-integration` | scala-newtype `@newtype`/`@newsubtype` (via scala-newtype-compat) — unwrapped on encode, wrapped on decode (JVM only) |
 | `kindlings-refined-integration` | Refined types (`Refined[A, P]`) — validated on decode, unwrapped on encode |
 

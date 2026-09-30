@@ -237,7 +237,7 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
 |---|---|
 | [kindlings-cats-integration](cats-integration.md) | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated`, `Const` — handled automatically in all derivation modules |
 | [kindlings-iron-integration](iron-integration.md) | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
-| [kindlings-neotype-integration](neotype-integration.md) | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only, JVM + Scala.js) |
+| [kindlings-neotype-integration](neotype-integration.md) | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only) |
 | [kindlings-newtype-integration](newtype-integration.md) | scala-newtype `@newtype`/`@newsubtype` (via scala-newtype-compat) — unwrapped on encode, wrapped on decode (JVM only) |
 | [kindlings-refined-integration](refined-integration.md) | Refined types (`Refined[A, P]`) — validated on decode, unwrapped on encode |
 

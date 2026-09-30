@@ -2,7 +2,7 @@
 
 Automatic support for [neotype](https://github.com/kitlangton/neotype) `Newtype`s and `Subtype`s in all Kindlings derivation modules. Add the dependency and neotype fields are handled transparently in Circe, Jsoniter, Avro, Cats, and every other module — no imports, no configuration.
 
-**Scala 3 only** — neotype is a Scala 3-only library. Available for JVM and Scala.js (neotype is not published for Scala Native).
+**Scala 3 only** — neotype is a Scala 3-only library. Available for JVM, Scala.js, and Scala Native.
 
 ## Installation
 
@@ -12,7 +12,7 @@ Automatic support for [neotype](https://github.com/kitlangton/neotype) `Newtype`
     libraryDependencies += "com.kubuszok" %% "kindlings-neotype-integration" % "{{ kindlings_version() }}"
     ```
 
-    Cross-platform (JVM / Scala.js):
+    Cross-platform (JVM / Scala.js / Scala Native):
 
     ```scala
     libraryDependencies += "com.kubuszok" %%% "kindlings-neotype-integration" % "{{ kindlings_version() }}"
@@ -104,6 +104,6 @@ A neotype wrapping another neotype is unwrapped one level at a time, so the vali
 | Scala versions | 2.13 and 3 (via scala-newtype-compat) | 3 only |
 | Kindlings module | `kindlings-newtype-integration` | `kindlings-neotype-integration` |
 | Validation on decode | None (zero-cost cast) | `Companion.make` (runs `validate`) |
-| Platforms | JVM | JVM, Scala.js |
+| Platforms | JVM | JVM, Scala.js, Scala Native |
 
 See [scala-newtype Integration](newtype-integration.md).
