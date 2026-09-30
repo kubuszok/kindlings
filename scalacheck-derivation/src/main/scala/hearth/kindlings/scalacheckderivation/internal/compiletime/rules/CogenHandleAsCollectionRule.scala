@@ -15,18 +15,16 @@ trait CogenHandleAsCollectionRuleImpl { this: CogenMacrosImpl & MacroCommons & S
       Type[A] match {
         case IsCollection(isCollection) =>
           import isCollection.Underlying as ElemType
-          import isCollection.value.CtorResult
           implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
 
+          // Read through `asIterable` instead of casting to `Iterable` (issue #218).
+          val toIterableFn = collectionToIterableFn[A, ElemType](isCollection.value)
           Log.info(s"Handling ${Type[A].prettyPrint} as Collection") >>
-            deriveCogenRecursively[ElemType](using cogenctx.nest[ElemType]).flatMap { elemCogen =>
-              MIO.pure(Rule.matched(Expr.quote {
+            deriveCogenRecursively[ElemType](using cogenctx.nest[ElemType]).map { elemCogen =>
+              Rule.matched(Expr.quote {
                 hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-                  .cogenCollection(
-                    Expr.splice(elemCogen).asInstanceOf[Cogen[Any]]
-                  )
-                  .asInstanceOf[Cogen[A]]
-              }))
+                  .cogenCollectionWithIterable(Expr.splice(elemCogen), Expr.splice(toIterableFn))
+              })
             }
         case _ =>
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a Collection"))

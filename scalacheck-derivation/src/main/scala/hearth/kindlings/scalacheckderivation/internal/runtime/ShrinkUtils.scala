@@ -12,9 +12,53 @@ object ShrinkUtils {
       case Some(x) => None #:: innerShrink.shrink(x).map(Some(_))
     }
 
+  /** Shrinks a collection by trying progressively smaller sublists and shrinking individual elements.
+    *
+    * Reads the value through the provider's `asIterable` and rebuilds every candidate through the provider's smart
+    * constructor (`build`), so containers that are not Scala `Iterable`s (e.g. `cats.data.NonEmptyList`) work, and
+    * candidates the constructor rejects (e.g. an empty list for a non-empty container) are simply dropped.
+    */
+  def shrinkCollectionWithBuild[Item, A](
+      elemShrink: Shrink[Item],
+      toIterable: A => Iterable[Item],
+      build: List[Item] => Either[Any, A]
+  ): Shrink[A] =
+    Shrink { value =>
+      val elems = toIterable(value).toList
+      if (elems.isEmpty) Stream.empty
+      else
+        // Try removing elements (halving strategy), then try shrinking individual elements
+        (removeChunks(elems) #::: shrinkOne(elems, elemShrink)).flatMap { candidate =>
+          build(candidate) match {
+            case Right(shrunk) => Stream(shrunk)
+            case Left(_)       => Stream.empty
+          }
+        }
+    }
+
+  /** Shrinks a map entry by shrinking its key, then its value. Pair access is provided by the macro, so this works for
+    * any pair representation (not only `Tuple2`).
+    */
+  def shrinkPair[Pair, K, V](
+      keyShrink: Shrink[K],
+      valueShrink: Shrink[V],
+      key: Pair => K,
+      value: Pair => V,
+      pair: (K, V) => Pair
+  ): Shrink[Pair] =
+    Shrink { p =>
+      val k = key(p)
+      val v = value(p)
+      keyShrink.shrink(k).map(pair(_, v)) #::: valueShrink.shrink(v).map(pair(k, _))
+    }
+
   /** Shrinks a collection by trying progressively smaller sublists and shrinking individual elements. Uses
     * Iterable[Any] at runtime to avoid higher-kinded type issues in macro-generated code.
     */
+  @deprecated(
+    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
+    "0.3.3"
+  )
   def shrinkCollection(
       elemShrink: Shrink[Any],
       factory: Any // scala.collection.IterableFactory[CC] — erased
@@ -94,6 +138,10 @@ object ShrinkUtils {
   }
 
   /** Shrinks a Map by shrinking its entries as a list of pairs. */
+  @deprecated(
+    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
+    "0.3.3"
+  )
   def shrinkMap(keyShrink: Shrink[Any], valueShrink: Shrink[Any]): Shrink[Any] =
     Shrink { value =>
       val entries = value.asInstanceOf[Map[Any, Any]].toList
@@ -107,6 +155,14 @@ object ShrinkUtils {
         (removeStreams #::: shrinkEntryStreams).asInstanceOf[Stream[Any]]
       }
     }
+
+  /** Lazy Shrink - defers (and memoizes) evaluation of the underlying Shrink until the first `shrink` call. Breaks
+    * infinite recursion for recursive types, whose cached shrinker would otherwise be built while building itself.
+    */
+  def shrinkLazy[A](shrink: => Shrink[A]): Shrink[A] = {
+    lazy val underlying = shrink
+    Shrink(value => underlying.shrink(value))
+  }
 
   /** Shrinks a value by unwrapping, shrinking the inner value, and re-wrapping. */
   def shrinkMapped(innerShrink: Shrink[Any], unwrap: Any => Any, wrap: Any => Any): Shrink[Any] =

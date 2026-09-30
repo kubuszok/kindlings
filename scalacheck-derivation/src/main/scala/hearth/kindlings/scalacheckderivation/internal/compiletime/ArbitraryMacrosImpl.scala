@@ -10,6 +10,7 @@ trait ArbitraryMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with ScalacheckDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with ScalacheckCollectionSupport
     with rules.ArbitraryUseCachedRuleImpl
     with rules.ArbitraryUseImplicitRuleImpl
     with rules.ArbitraryBuiltInRuleImpl

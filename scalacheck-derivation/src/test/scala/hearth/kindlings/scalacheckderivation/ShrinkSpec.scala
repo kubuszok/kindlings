@@ -133,6 +133,67 @@ class ShrinkSpec extends munit.FunSuite {
     assert(result.nonEmpty, "Should produce shrunk nested values")
   }
 
+  test("nested case class shrinks without a Shrink for it in scope (issue #219)") {
+    case class Inner(value: Int)
+    case class Outer(inner: Inner, n: Int)
+
+    val outer = Outer(Inner(50), 100)
+    val result = DeriveShrink.derived[Outer].shrink(outer).take(200).toList
+    assert(result.exists(_.inner != Inner(50)), "Should shrink the nested case class")
+    assert(result.exists(_.n != 100), "Should shrink the Int field")
+  }
+
+  test(
+    "nested case class inside a collection/Option/Either/tuple shrinks without a Shrink for it in scope (issue #219)"
+  ) {
+    case class Inner(value: Int)
+    case class Outer(inners: Vector[Inner], opt: Option[Inner], either: Either[String, Inner], tuple: (Inner, Int))
+
+    val outer = Outer(Vector(Inner(50)), Some(Inner(50)), Right(Inner(50)), (Inner(50), 1))
+    val result = DeriveShrink.derived[Outer].shrink(outer).take(500).toList
+    assert(result.exists(_.inners.exists(_ != Inner(50))), "Should shrink the nested case class inside a Vector")
+    assert(result.exists(_.opt.exists(_ != Inner(50))), "Should shrink the nested case class inside an Option")
+    assert(result.exists(_.either.exists(_ != Inner(50))), "Should shrink the nested case class inside an Either")
+    assert(result.exists(_.tuple._1 != Inner(50)), "Should shrink the nested case class inside a tuple")
+  }
+
+  test("recursive types shrink structurally without any Shrink in scope (issue #219)") {
+    sealed trait Tree
+    case class Node(value: Int, children: List[Tree], next: Option[Tree]) extends Tree
+    case class Tip(value: Int) extends Tree
+
+    val tree: Tree = Node(10, List(Tip(20), Node(30, Nil, Some(Tip(40)))), None)
+    val result = DeriveShrink.derived[Tree].shrink(tree).take(500).toList
+    assert(result.nonEmpty)
+    assert(
+      result.exists {
+        case Node(_, List(Tip(v), _), _) => v != 20
+        case _                           => false
+      },
+      "Should shrink nodes nested inside the List"
+    )
+  }
+
+  test("an explicit Shrink for a nested type still takes precedence, even a no-op one (issue #219)") {
+    case class Inner(value: Int)
+    case class Outer(inner: Inner, n: Int)
+
+    implicit val noShrinkInner: Shrink[Inner] = Shrink.shrinkAny[Inner]
+    val result = DeriveShrink.derived[Outer].shrink(Outer(Inner(50), 100)).take(200).toList
+    assert(result.nonEmpty)
+    assert(result.forall(_.inner == Inner(50)), "The explicit no-op Shrink[Inner] must be used")
+  }
+
+  test("a nested type no rule can handle still falls back to ScalaCheck's shrinkAny (issue #219)") {
+    final class Opaque(val value: Int)
+    case class Outer(opaque: Opaque, n: Int)
+
+    val opaque = new Opaque(1)
+    val result = DeriveShrink.derived[Outer].shrink(Outer(opaque, 100)).take(200).toList
+    assert(result.nonEmpty)
+    assert(result.forall(_.opaque eq opaque))
+  }
+
   test("derives Shrink for case class with Map field") {
     case class Config(settings: Map[String, Int])
 

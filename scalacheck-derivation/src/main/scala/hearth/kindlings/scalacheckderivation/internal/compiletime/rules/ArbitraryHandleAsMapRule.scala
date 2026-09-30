@@ -23,32 +23,30 @@ trait ArbitraryHandleAsMapRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & 
     private def deriveMapArbitrary[A: ArbitraryCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Gen[A]]]] = {
-      import isMap.{Key, Value, CtorResult}
+      import isMap.{Key, Value}
       implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
+      implicit val GenPair: Type[Gen[Pair]] = ArbitraryTypes.Gen[Pair]
 
-      for {
-        keyGen <- deriveArbitraryRecursively[Key](using arbctx.nest[Key])
-        valueGen <- deriveArbitraryRecursively[Value](using arbctx.nest[Value])
-      } yield {
-        val factoryExpr = isMap.factory
-        Rule.matched(Expr.quote {
-          _root_.org.scalacheck.Gen
-            .sized { n =>
-              _root_.org.scalacheck.Gen.resize(
-                scala.math.max(n / 2, 0),
-                _root_.org.scalacheck.Gen.listOf(
-                  for {
-                    k <- Expr.splice(keyGen)
-                    v <- Expr.splice(valueGen)
-                  } yield Expr.splice(isMap.pair(Expr.quote(k), Expr.quote(v)))
-                )
-              )
+      // Construct through the provider's `build` (not by treating `CtorResult` as `A`), see issue #218.
+      collectionBuildFn[A, Pair](isMap) match {
+        case Some(buildFn) =>
+          for {
+            keyGen <- deriveArbitraryRecursively[Key](using arbctx.nest[Key])
+            valueGen <- deriveArbitraryRecursively[Value](using arbctx.nest[Value])
+          } yield {
+            val pairGen: Expr[Gen[Pair]] = Expr.quote {
+              for {
+                k <- Expr.splice(keyGen)
+                v <- Expr.splice(valueGen)
+              } yield Expr.splice(isMap.pair(Expr.quote(k), Expr.quote(v)))
             }
-            .map { pairs =>
-              Expr.splice(factoryExpr).fromSpecific(pairs).asInstanceOf[CtorResult]
-            }
-            .asInstanceOf[Gen[A]]
-        })
+            Rule.matched(Expr.quote {
+              hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                .genCollection(Expr.splice(pairGen), Expr.splice(buildFn))
+            })
+          }
+        case None =>
+          MIO.pure(Rule.yielded(unsupportedCollectionBuild[A](isMap)))
       }
     }
   }

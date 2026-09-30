@@ -23,20 +23,35 @@ trait ShrinkHandleAsMapRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExt
     private def deriveMapShrink[A: ShrinkCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Shrink[A]]]] = {
-      import isMap.{Key, Value, CtorResult}
+      import isMap.{Key, Value}
       implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
+      implicit val ShrinkPair: Type[Shrink[Pair]] = ShrinkTypes.Shrink[Pair]
 
-      for {
-        keyShrink <- deriveShrinkRecursively[Key](using shrinkctx.nest[Key])
-        valueShrink <- deriveShrinkRecursively[Value](using shrinkctx.nest[Value])
-      } yield Rule.matched(Expr.quote {
-        hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
-          .shrinkMap(
-            Expr.splice(keyShrink).asInstanceOf[Shrink[Any]],
-            Expr.splice(valueShrink).asInstanceOf[Shrink[Any]]
-          )
-          .asInstanceOf[Shrink[A]]
-      })
+      // Read through `asIterable` and rebuild candidates through `build`, dropping the rejected ones (issue #218).
+      collectionBuildFn[A, Pair](isMap) match {
+        case Some(buildFn) =>
+          val toIterableFn = collectionToIterableFn[A, Pair](isMap)
+          for {
+            keyShrink <- deriveShrinkRecursively[Key](using shrinkctx.nest[Key])
+            valueShrink <- deriveShrinkRecursively[Value](using shrinkctx.nest[Value])
+          } yield {
+            val pairShrink: Expr[Shrink[Pair]] = Expr.quote {
+              hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils.shrinkPair(
+                Expr.splice(keyShrink),
+                Expr.splice(valueShrink),
+                (p: Pair) => Expr.splice(isMap.key(Expr.quote(p))),
+                (p: Pair) => Expr.splice(isMap.value(Expr.quote(p))),
+                (k: Key, v: Value) => Expr.splice(isMap.pair(Expr.quote(k), Expr.quote(v)))
+              )
+            }
+            Rule.matched(Expr.quote {
+              hearth.kindlings.scalacheckderivation.internal.runtime.ShrinkUtils
+                .shrinkCollectionWithBuild(Expr.splice(pairShrink), Expr.splice(toIterableFn), Expr.splice(buildFn))
+            })
+          }
+        case None =>
+          MIO.pure(Rule.yielded(unsupportedCollectionBuild[A](isMap)))
+      }
     }
   }
 }

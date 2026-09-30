@@ -10,6 +10,7 @@ trait ShrinkMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with ScalacheckDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with ScalacheckCollectionSupport
     with rules.ShrinkUseCachedRuleImpl
     with rules.ShrinkUseImplicitRuleImpl
     with rules.ShrinkBuiltInRuleImpl
@@ -20,6 +21,7 @@ trait ShrinkMacrosImpl
     with rules.ShrinkHandleAsSingletonRuleImpl
     with rules.ShrinkHandleAsCaseClassRuleImpl
     with rules.ShrinkHandleAsEnumRuleImpl
+    with rules.ShrinkFallbackToImplicitRuleImpl
     with rules.ShrinkDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -146,7 +148,8 @@ trait ShrinkMacrosImpl
         ShrinkHandleAsCollectionRule,
         ShrinkHandleAsSingletonRule,
         ShrinkHandleAsCaseClassRule,
-        ShrinkHandleAsEnumRule
+        ShrinkHandleAsEnumRule,
+        ShrinkFallbackToImplicitRule
       )(_[A]).flatMap {
         case Right(result) =>
           Log.info(s"Derived Shrink for ${Type[A].prettyPrint}") >> MIO.pure(result)

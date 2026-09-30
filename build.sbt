@@ -894,6 +894,9 @@ lazy val scalacheckDerivation = projectMatrix
     (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
   )
   .dependsOn(derivationCommons)
+  // cats-integration is a TEST dependency only: its `IsCollection`/`IsMap` providers (NonEmptyList, NonEmptyMap, ...)
+  // exercise containers that are not Scala `Iterable`s and whose smart constructors can reject input (see issue #218).
+  .dependsOn(catsIntegration % Test)
   .settings(
     moduleName := "kindlings-scalacheck-derivation",
     name := "kindlings-scalacheck-derivation",

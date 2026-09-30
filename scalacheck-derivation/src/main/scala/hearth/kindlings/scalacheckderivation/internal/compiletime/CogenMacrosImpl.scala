@@ -9,6 +9,7 @@ import org.scalacheck.Cogen
 trait CogenMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with ScalacheckDerivationPolicy
+    with ScalacheckCollectionSupport
     with rules.CogenUseCachedRuleImpl
     with rules.CogenUseImplicitRuleImpl
     with rules.CogenBuiltInRuleImpl

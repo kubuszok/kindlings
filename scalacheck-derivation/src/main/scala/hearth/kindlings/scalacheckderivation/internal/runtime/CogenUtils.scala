@@ -16,6 +16,22 @@ object CogenUtils {
       }
     }
 
+  /** Perturbs the seed with every element, reading the value through the provider's `asIterable` (so containers that
+    * are not Scala `Iterable`s, e.g. `cats.data.NonEmptyList`, work).
+    */
+  def cogenCollectionWithIterable[Item, A](elemCogen: Cogen[Item], toIterable: A => Iterable[Item]): Cogen[A] =
+    Cogen { (seed, value) =>
+      toIterable(value).foldLeft(seed)((s, elem) => elemCogen.perturb(s, elem))
+    }
+
+  /** Cogen for a map entry: perturbs the seed with the key, then the value. Pair access is provided by the macro. */
+  def cogenPair[Pair, K, V](keyCogen: Cogen[K], valueCogen: Cogen[V], key: Pair => K, value: Pair => V): Cogen[Pair] =
+    Cogen((seed, p) => valueCogen.perturb(keyCogen.perturb(seed, key(p)), value(p)))
+
+  @deprecated(
+    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
+    "0.3.3"
+  )
   def cogenCollection(elemCogen: Cogen[Any]): Cogen[Any] =
     Cogen { (seed, value) =>
       val coll = value.asInstanceOf[Iterable[Any]]
@@ -35,6 +51,10 @@ object CogenUtils {
     }
 
   /** Cogen for Map: perturbs seed with each key-value pair. */
+  @deprecated(
+    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
+    "0.3.3"
+  )
   def cogenMap(keyCogen: Cogen[Any], valueCogen: Cogen[Any]): Cogen[Any] =
     Cogen { (seed, value) =>
       val map = value.asInstanceOf[Map[Any, Any]]

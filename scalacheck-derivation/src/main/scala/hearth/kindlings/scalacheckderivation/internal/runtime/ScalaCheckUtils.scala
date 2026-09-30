@@ -4,6 +4,33 @@ import org.scalacheck.Gen
 
 object ScalaCheckUtils {
 
+  /** Generates a collection through the provider's smart constructor (`build`), so that the result has the requested
+    * container type even when its intermediate `CtorResult` differs (e.g. `List` for `cats.data.NonEmptyList`).
+    *
+    * `build` may reject a candidate (e.g. an empty list for a non-empty container). Instead of throwing, a rejected
+    * candidate is regenerated once with at least one element, and if that is rejected too the generator fails with
+    * ScalaCheck's own `Gen.fail` - no value, which `forAll` counts as discarded, never an exception.
+    *
+    * The size budget is halved for element generation to prevent infinite recursion on types like `List[TreeNode]`.
+    * `elemGen` is by-name for the same reason: for a recursive type it is a call to the cached generator being defined.
+    */
+  def genCollection[Item, A](elemGen: => Gen[Item], build: List[Item] => Either[Any, A]): Gen[A] =
+    Gen.sized { n =>
+      val size = scala.math.max(n / 2, 0)
+      Gen.resize(size, Gen.listOf(elemGen)).flatMap { items =>
+        build(items) match {
+          case Right(value) => Gen.const(value)
+          case Left(_)      =>
+            Gen.resize(size, Gen.nonEmptyListOf(elemGen)).flatMap { nonEmptyItems =>
+              build(nonEmptyItems) match {
+                case Right(value) => Gen.const(value)
+                case Left(_)      => Gen.fail[A]
+              }
+            }
+        }
+      }
+    }
+
   /** Combines a list of generators using flatMap chaining.
     *
     * This avoids relying on ScalaCheck's Buildable typeclass which has inconsistent behavior across ScalaCheck

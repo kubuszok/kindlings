@@ -25,18 +25,27 @@ trait CogenHandleAsMapRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExten
     ): MIO[Rule.Applicability[Expr[Cogen[A]]]] = {
       import isMap.{Key, Value}
       implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
+      implicit val CogenPair: Type[Cogen[Pair]] = CogenTypes.Cogen[Pair]
 
+      // Read through `asIterable` instead of casting to `Map` (issue #218).
+      val toIterableFn = collectionToIterableFn[A, Pair](isMap)
       for {
         keyCogen <- deriveCogenRecursively[Key](using cogenctx.nest[Key])
         valueCogen <- deriveCogenRecursively[Value](using cogenctx.nest[Value])
-      } yield Rule.matched(Expr.quote {
-        hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
-          .cogenMap(
-            Expr.splice(keyCogen).asInstanceOf[Cogen[Any]],
-            Expr.splice(valueCogen).asInstanceOf[Cogen[Any]]
+      } yield {
+        val pairCogen: Expr[Cogen[Pair]] = Expr.quote {
+          hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenPair(
+            Expr.splice(keyCogen),
+            Expr.splice(valueCogen),
+            (p: Pair) => Expr.splice(isMap.key(Expr.quote(p))),
+            (p: Pair) => Expr.splice(isMap.value(Expr.quote(p)))
           )
-          .asInstanceOf[Cogen[A]]
-      })
+        }
+        Rule.matched(Expr.quote {
+          hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils
+            .cogenCollectionWithIterable(Expr.splice(pairCogen), Expr.splice(toIterableFn))
+        })
+      }
     }
   }
 }

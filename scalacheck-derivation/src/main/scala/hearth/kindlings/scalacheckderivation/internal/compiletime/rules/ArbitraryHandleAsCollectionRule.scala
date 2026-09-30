@@ -15,29 +15,21 @@ trait ArbitraryHandleAsCollectionRuleImpl { this: ArbitraryMacrosImpl & MacroCom
       Type[A] match {
         case IsCollection(isCollection) =>
           import isCollection.Underlying as ElemType
-          import isCollection.value.CtorResult
+          implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
 
-          Log.info(s"Handling ${Type[A].prettyPrint} as Collection with element type ${ElemType.prettyPrint}") >>
-            deriveArbitraryRecursively[ElemType](using arbctx.nest[ElemType]).flatMap { elemGen =>
-              // Get the factory expression for building the collection
-              val factoryExpr = isCollection.value.factory
-
-              MIO.pure(Rule.matched(Expr.quote {
-                // Use Gen.sized to halve the size budget for element generation,
-                // preventing infinite recursion on types like List[TreeNode]
-                _root_.org.scalacheck.Gen
-                  .sized { n =>
-                    _root_.org.scalacheck.Gen.resize(
-                      scala.math.max(n / 2, 0),
-                      _root_.org.scalacheck.Gen.listOf(Expr.splice(elemGen))
-                    )
-                  }
-                  .map { list =>
-                    Expr.splice(factoryExpr).fromSpecific(list).asInstanceOf[CtorResult]
-                  }
-                  .asInstanceOf[Gen[A]]
-              }))
-            }
+          // Construct through the provider's `build` (not by treating `CtorResult` as `A`), see issue #218.
+          collectionBuildFn[A, ElemType](isCollection.value) match {
+            case Some(buildFn) =>
+              Log.info(s"Handling ${Type[A].prettyPrint} as Collection with element type ${ElemType.prettyPrint}") >>
+                deriveArbitraryRecursively[ElemType](using arbctx.nest[ElemType]).map { elemGen =>
+                  Rule.matched(Expr.quote {
+                    hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                      .genCollection(Expr.splice(elemGen), Expr.splice(buildFn))
+                  })
+                }
+            case None =>
+              MIO.pure(Rule.yielded(unsupportedCollectionBuild[A](isCollection.value)))
+          }
         case _ =>
           MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a Collection"))
       }

@@ -81,6 +81,19 @@ No configuration class is needed -- derivation is fully automatic based on the t
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
 - **Collections and Option** -- standard library instances are used
+- **Custom collections** -- any container with an `IsCollection`/`IsMap` provider on the classpath (e.g. cats
+  `NonEmptyList`, `NonEmptyMap`, `Chain` from `kindlings-cats-integration`) is built through the provider's smart
+  constructor: `Arbitrary` regenerates a rejected (e.g. empty) candidate with at least one element, and `Shrink` drops
+  candidates the constructor rejects, so a non-empty container never shrinks to an empty one
+
+!!! note "Shrink and nested types"
+
+    `Shrink` derivation ignores ScalaCheck's catch-all no-op `Shrink.shrinkAny` (and ScalaCheck's generic combinators
+    for collections, `Option`, `Either` and tuples, which would otherwise pass `shrinkAny` to their elements) while
+    searching for implicits, so nested case classes, sealed traits, collections, etc. are shrunk structurally even
+    without a `Shrink` in scope. Any other
+    `Shrink` in scope still wins - to opt a type out, provide e.g. `implicit val noShrink: Shrink[X] = Shrink.shrinkAny`.
+    Types that cannot be derived still fall back to `Shrink.shrinkAny`.
 
 ## Usage examples
 
