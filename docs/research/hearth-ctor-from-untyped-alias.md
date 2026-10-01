@@ -4,6 +4,9 @@ Confirmed with Hearth **0.4.2**, Scala **3.8.4**, Iron **3.3.2**.
 
 Upstream issue: https://github.com/kubuszok/hearth/issues/384
 
+**Status: RESOLVED in Hearth 0.4.3** (kubuszok/hearth#385): Scala 3 `Type.CtorN.fromUntyped` retries the match on the
+dealiased type. The parser no longer dealiases `.as[C]` targets itself.
+
 ## Expected vs actual
 
 Given `type AtLeastTwo = List[Int] :| MinLength[2]`, a

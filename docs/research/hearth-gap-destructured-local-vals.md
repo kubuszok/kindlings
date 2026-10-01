@@ -1,6 +1,12 @@
 # Hearth gap: `DestructuredExpr` does not expose local `val` definitions
 
-Status: **OPEN** (found 2026-09-29 while implementing the `parser` module, Hearth 0.4.2).
+Status: **RESOLVED in Hearth 0.4.3** (kubuszok/hearth#385; found 2026-09-29 while implementing the `parser` module,
+Hearth 0.4.2).
+
+Hearth now has `ValDefinition`/`LocalReference` (sharing one `LocalBinding` instance), `Import` and `LocalDefinition`
+nodes, `findReferences`/`Lambda.unusedParams` over the complete tree, and `position` on every node. The grammar block
+is read by the shared `parser/src/main/scala/.../internal/compiletime/GrammarExtractor.scala`; the per-compiler
+`GrammarMacros` keep only code generation.
 
 ## What is missing
 
@@ -29,7 +35,7 @@ DestructuredExpr.parse(expr) match {
 }
 ```
 
-## Workaround in Kindlings
+## Former workaround in Kindlings
 
 `parser/src/main/scala-{2,3}/.../internal/compiletime/GrammarMacros.scala` read the grammar block with the raw
 compiler APIs (only the extraction into a platform-independent `GrammarIR`); analysis and table generation are shared.
