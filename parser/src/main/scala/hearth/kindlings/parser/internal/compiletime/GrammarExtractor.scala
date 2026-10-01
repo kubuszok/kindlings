@@ -100,7 +100,8 @@ private[parser] trait GrammarExtractor { this: MacroCommons =>
     private def isDsl(call: DestructuredExpr.MethodCall): Boolean =
       call.method.Instance.plainPrint.startsWith("hearth.kindlings.parser.")
 
-    /** `recv.name[targs](args)(args2)...` on a DSL method: `(name, receiver, all value args)` (vararg elements inlined).
+    /** `recv.name[targs](args)(args2)...` on a DSL method: `(name, receiver, all value args)` (vararg elements
+      * inlined).
       *
       * The receiver is the instance as it is (not `MethodCall.receiver`): the DSL's implicit conversions (`litAlt`,
       * `symAlt`, ...) carry meaning and are matched as calls themselves.
@@ -160,11 +161,11 @@ private[parser] trait GrammarExtractor { this: MacroCommons =>
       case DslCall(kind @ ("enable" | "disable"), _, List(arg)) =>
         val known = hearth.kindlings.parser.GrammarFlag.all.map(_.name)
         val name = (arg match {
-          case call: DestructuredExpr.MethodCall          => call.method.name
-          case singleton: DestructuredExpr.Singleton      => singleton.name.split('.').last
-          case nd: DestructuredExpr.NonDestructurable     => nd.description.split('.').last
-          case ref: DestructuredExpr.LocalReference       => ref.binding.name
-          case _                                          => ""
+          case call: DestructuredExpr.MethodCall      => call.method.name
+          case singleton: DestructuredExpr.Singleton  => singleton.name.split('.').last
+          case nd: DestructuredExpr.NonDestructurable => nd.description.split('.').last
+          case ref: DestructuredExpr.LocalReference   => ref.binding.name
+          case _                                      => ""
         }).stripSuffix("$")
         if (!known.contains(name)) fail(arg, s"`$kind` expects one of the grammar flags: ${known.mkString(", ")}")
         statements += FlagSetting(name, kind == "enable", pos(stat))
@@ -256,9 +257,9 @@ private[parser] trait GrammarExtractor { this: MacroCommons =>
       case other => fail(other, "expected an inline regex literal: \"...\".r")
     }
     private def unwrapString(node: DestructuredExpr): String = node match {
-      case StringLiteral(s)                                              => s
+      case StringLiteral(s)                                                    => s
       case call: DestructuredExpr.MethodCall if singleValueArg(call).isDefined => unwrapString(singleValueArg(call).get)
-      case other                                                         => fail(other, "regex patterns must be string literals")
+      case other => fail(other, "regex patterns must be string literals")
     }
     private def singleValueArg(call: DestructuredExpr.MethodCall): Option[DestructuredExpr] =
       call.applied.collect { case values: DestructuredExpr.MethodCall.AppliedValues => values.args } match {
@@ -298,11 +299,11 @@ private[parser] trait GrammarExtractor { this: MacroCommons =>
     }
 
     private def sym(node: DestructuredExpr, name: Option[String]): Sym = node match {
-      case NonTerminalRef(id)                                                       => NtRef(id)
+      case NonTerminalRef(id)                                                      => NtRef(id)
       case ref: DestructuredExpr.LocalReference if terminals.contains(ref.binding) => terminals(ref.binding)
-      case DslCall("litSym", _, List(arg))   => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(node))
-      case DslCall("reSym", _, List(arg))    => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(node))
-      case DslCall("terminal", _, List(arg)) => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(node))
+      case DslCall("litSym", _, List(arg))         => IRTerm(LiteralPattern(stringLiteral(arg)), name, pos(node))
+      case DslCall("reSym", _, List(arg))          => IRTerm(RegexPattern(regexLiteral(arg)), name, pos(node))
+      case DslCall("terminal", _, List(arg))       => IRTerm(RegexPattern(stringLiteral(arg)), name, pos(node))
       case DslCall("mapSlice", terminal, List(fn)) =>
         checkNoGrammarRefs(fn)
         sym(terminal, name) match {
