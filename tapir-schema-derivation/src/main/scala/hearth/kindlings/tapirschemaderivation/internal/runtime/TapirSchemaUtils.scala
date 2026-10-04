@@ -239,7 +239,7 @@ object TapirSchemaUtils {
     else {
       val baseName = fullTypeName.substring(0, bracketIdx)
       val typeParamsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
-      val typeParams = splitTopLevelTypeParams(typeParamsStr).map(shortenTypeName)
+      val typeParams = splitTopLevelTypeParams(typeParamsStr).flatMap(shortenTypeNameFlat)
       SName(baseName, typeParams)
     }
   }
@@ -264,15 +264,19 @@ object TapirSchemaUtils {
     result.result()
   }
 
-  private def shortenTypeName(fullName: String): String = {
+  /** Recursively flattens a (possibly nested-generic) type name into one short name per type-parameter token, matching
+    * how tapir's own `generic.auto` derivation populates `typeParameterShortNames` (e.g. `List[SimplePerson]` becomes
+    * `List("List", "SimplePerson")`, not `List("List[SimplePerson]")`).
+    */
+  private def shortenTypeNameFlat(fullName: String): List[String] = {
     val bracketIdx = fullName.indexOf('[')
     if (bracketIdx < 0) {
-      fullName.split('.').last
+      List(fullName.split('.').last)
     } else {
       val base = fullName.substring(0, bracketIdx).split('.').last
       val params = fullName.substring(bracketIdx + 1, fullName.length - 1)
-      val shortParams = splitTopLevelTypeParams(params).map(shortenTypeName)
-      base + shortParams.mkString("[", ",", "]")
+      val shortParams = splitTopLevelTypeParams(params).flatMap(shortenTypeNameFlat)
+      base :: shortParams
     }
   }
 }
