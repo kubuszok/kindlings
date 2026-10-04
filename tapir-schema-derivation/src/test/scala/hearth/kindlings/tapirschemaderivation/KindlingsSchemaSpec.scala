@@ -84,10 +84,6 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
 
       test("nested generic type parameter SName is flattened, not bracketed") {
-        // typeParameterShortNames must contain one flat short name per type parameter
-        // *token*, matching tapir's own generic.auto derivation (e.g.
-        // List("List", "SimplePerson")), not a single opaque substring like
-        // "List[SimplePerson]" with literal brackets preserved.
         val schema = KindlingsSchema.derived[Box[List[SimplePerson]]].schema
         val name = schema.name.get
         assertEquals(
