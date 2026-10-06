@@ -25,7 +25,7 @@ object versions {
   val avro4s213 = "4.1.2"
   val avro4s3 = "5.0.15"
   val cats = "2.13.0"
-  val circe = "0.14.16"
+  val circe = "0.14.17"
   val iron = "3.3.2"
   val jsoniterScala = "2.41.2"
   val kittens = "3.5.0"
