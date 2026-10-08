@@ -33,7 +33,7 @@ object versions {
   val newtypeCompat = "0.1.1"
   val pureconfig = "0.17.10"
   val quicklens = "1.9.15"
-  val tapir = "1.13.32"
+  val tapir = "1.13.33"
   val refined = "0.11.4"
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.1"
