@@ -83,6 +83,16 @@ final class KindlingsSchemaSpec extends MacroSuite {
         )
       }
 
+      test("nested generic type parameter SName is flattened, not bracketed") {
+        val schema = KindlingsSchema.derived[Box[List[SimplePerson]]].schema
+        val name = schema.name.get
+        assertEquals(
+          name.typeParameterShortNames,
+          List("List", "SimplePerson"),
+          s"Expected flattened typeParameterShortNames, got: ${name.typeParameterShortNames}"
+        )
+      }
+
       test("non-parameterized type SName has empty typeParameterShortNames") {
         val schema = KindlingsSchema.derived[SimplePerson].schema
         val name = schema.name.get
