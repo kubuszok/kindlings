@@ -27,7 +27,7 @@ object versions {
   val cats = "2.13.0"
   val circe = "0.14.17"
   val iron = "3.3.2"
-  val jsoniterScala = "2.41.2"
+  val jsoniterScala = "2.41.4"
   val kittens = "3.5.0"
   val neotype = "0.7.2"
   val newtypeCompat = "0.1.1"
