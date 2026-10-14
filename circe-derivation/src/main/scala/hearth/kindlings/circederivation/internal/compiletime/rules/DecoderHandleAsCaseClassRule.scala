@@ -575,6 +575,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   }
                 }
             }
+            .map { decodeFields =>
+              // Reject non-object input, like circe's derived product decoders (bug #235). Without it, `downField`
+              // on a non-object yields failed cursors, so Option/default fields silently decode. Fail-fast reports
+              // only "expecting object"; accumulating also reports the field errors (e.g. missing required fields).
+              Expr.quote {
+                val isObject = Expr.splice(dctx.cursor).value.isObject
+                if (!isObject && Expr.splice(dctx.failFast))
+                  Left(CirceDerivationUtils.notAnObjectFailure(Expr.splice(dctx.cursor))): Any
+                else {
+                  val decoded = Expr.splice(decodeFields)
+                  if (isObject) decoded
+                  else CirceDerivationUtils.prependNotAnObject(Expr.splice(dctx.cursor), decoded)
+                }
+              }
+            }
       }
     }
 

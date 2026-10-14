@@ -4,6 +4,7 @@ import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
 
 case class SimplePerson(name: String, age: Int)
 case class EmptyClass()
+case class AllOptional(from: Option[Int], to: Option[Int])
 case class SingleField(value: Int)
 case class Address(street: String, city: String)
 case class PersonWithAddress(name: String, age: Int, address: Address)

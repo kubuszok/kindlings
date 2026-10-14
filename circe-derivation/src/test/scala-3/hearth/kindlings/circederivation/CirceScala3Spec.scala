@@ -101,6 +101,44 @@ final class CirceScala3Spec extends MacroSuite {
       val json = Json.obj("Green" -> Json.obj())
       KindlingsDecoder.decode[Color](json) ==> Right(Color.Green)
     }
+
+    test("decode parameterless enum case requires an object value (issue #235)") {
+      List(Json.fromInt(42), Json.Null, Json.fromString("x"), Json.arr()).foreach { inner =>
+        val Left(error) = KindlingsDecoder.decode[Color](Json.obj("Red" -> inner)): @unchecked
+        error.message ==> s"Got value '${inner.noSpaces}' with wrong type, expecting object"
+        error.pathToRootString ==> Some(".Red")
+      }
+    }
+
+    test("decode parameterless enum case requires an object value, accumulating (issue #235)") {
+      val decoder = KindlingsDecoder.derived[Color]
+      assert(decoder.decodeAccumulating(Json.obj("Red" -> Json.fromInt(42)).hcursor).isInvalid)
+      decoder.decodeAccumulating(Json.obj("Red" -> Json.obj()).hcursor) ==> cats.data.Validated.valid(Color.Red)
+    }
+
+    test("decode parameterless enum with discriminator") {
+      implicit val config: Configuration = Configuration.default.withDiscriminator("type")
+      KindlingsDecoder.decode[Color](Json.obj("type" -> Json.fromString("Blue"))) ==> Right(Color.Blue)
+    }
+
+    test("decode parameterless enum as string with enumAsStrings") {
+      implicit val config: Configuration = Configuration.default.withEnumAsStrings
+      KindlingsDecoder.decode[Color](Json.fromString("Blue")) ==> Right(Color.Blue)
+    }
+
+    test("decode parameterized enum case rejects non-object value (issue #235)") {
+      val Left(error) = KindlingsDecoder.decode[Fruit](Json.obj("Apple" -> Json.fromInt(42))): @unchecked
+      error.message ==> "Got value '42' with wrong type, expecting object"
+      error.pathToRootString ==> Some(".Apple")
+    }
+
+    test("decode parameterized enum case non-object value, accumulating (issue #235)") {
+      val result = KindlingsDecoder.derived[Fruit].decodeAccumulating(Json.obj("Apple" -> Json.fromInt(42)).hcursor)
+      result.fold(_.toList.map(e => (e.message, e.pathToRootString)), a => fail(s"expected invalid, got $a")) ==> List(
+        ("Got value '42' with wrong type, expecting object", Some(".Apple")),
+        ("Missing required field", Some(".Apple.weight"))
+      )
+    }
   }
 
   group("named tuples (Scala 3.7+)") {
@@ -160,6 +198,11 @@ final class CirceScala3Spec extends MacroSuite {
       test("single-element named tuple") {
         val json = Json.obj("field" -> Json.fromInt(3))
         KindlingsDecoder.decode[(field: Int)](json) ==> Right(Tuple1(3))
+      }
+
+      test("named tuple rejects non-object input (issue #235)") {
+        val Left(error) = KindlingsDecoder.decode[(from: Option[Int], to: Option[Int])](Json.fromInt(42)): @unchecked
+        error.message ==> "Got value '42' with wrong type, expecting object"
       }
     }
   }

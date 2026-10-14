@@ -176,9 +176,24 @@ object CirceDerivationUtils {
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, decoder: Decoder[A]): A = value.asInstanceOf[A]
 
+  /** Same failure circe's derived product decoders report for a non-object input (bug #235). */
+  def notAnObjectFailure(cursor: HCursor): DecodingFailure =
+    DecodingFailure(DecodingFailure.Reason.WrongTypeExpectation("object", cursor.value), cursor.history)
+
+  /** Fails with [[notAnObjectFailure]] as `Either` (failFast) or `ValidatedNel` (accumulating). */
+  def notAnObject(cursor: HCursor, failFast: Boolean): Any =
+    if (failFast) Left(notAnObjectFailure(cursor)) else Validated.invalidNel(notAnObjectFailure(cursor))
+
+  /** Prepends [[notAnObjectFailure]] to an accumulating result, keeping the field errors after it. */
+  def prependNotAnObject(cursor: HCursor, result: Any): Any =
+    result.asInstanceOf[ValidatedNel[DecodingFailure, Any]] match {
+      case Validated.Invalid(errors) => Validated.Invalid(errors.prepend(notAnObjectFailure(cursor)))
+      case Validated.Valid(_)        => Validated.invalidNel(notAnObjectFailure(cursor))
+    }
+
   def checkIsObject(cursor: HCursor): Either[DecodingFailure, Unit] =
     if (cursor.value.isObject) Right(())
-    else Left(DecodingFailure("Expected JSON object", cursor.history))
+    else Left(notAnObjectFailure(cursor))
 
   def sequenceDecodeResults(results: List[Either[DecodingFailure, Any]]): Either[DecodingFailure, Array[Any]] = {
     val arr = new Array[Any](results.size)
