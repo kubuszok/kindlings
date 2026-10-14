@@ -628,11 +628,112 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
     }
 
+    group("non-object input (issue #235)") {
+
+      val nonObjects = List(Json.fromString("s"), Json.fromInt(42), Json.arr(), Json.True, Json.Null)
+
+      def expectingObject[A](result: Either[io.circe.DecodingFailure, A], json: Json): Unit = {
+        val Left(error) = result: @unchecked
+        error.message ==> s"Got value '${json.noSpaces}' with wrong type, expecting object"
+        error.history ==> Nil
+      }
+
+      test("all-Option case class rejects non-object input") {
+        nonObjects.foreach(json => expectingObject(KindlingsDecoder.decode[AllOptional](json), json))
+      }
+
+      test("all-Option case class still decodes from empty object") {
+        KindlingsDecoder.decode[AllOptional](Json.obj()) ==> Right(AllOptional(None, None))
+      }
+
+      test("case class with required field reports expecting object, not missing field") {
+        nonObjects.foreach(json => expectingObject(KindlingsDecoder.decode[SimplePerson](json), json))
+      }
+
+      test("all-defaults case class with useDefaults rejects non-object input") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        nonObjects.foreach(json => expectingObject(KindlingsDecoder.decode[AllDefaults](json), json))
+      }
+
+      test("strict decoding rejects non-object input") {
+        implicit val config: Configuration = Configuration.default.withStrictDecoding
+        nonObjects.foreach(json => expectingObject(KindlingsDecoder.decode[AllOptional](json), json))
+      }
+
+      def accumulatedErrors[A](decoder: Decoder[A], json: Json): List[(String, Option[String])] =
+        decoder
+          .decodeAccumulating(json.hcursor)
+          .fold(_.toList.map(e => (e.message, e.pathToRootString)), a => fail(s"expected invalid, got $a"))
+
+      test("accumulating reports expecting object followed by missing required fields") {
+        accumulatedErrors(KindlingsDecoder.derived[SimplePerson], Json.fromInt(42)) ==> List(
+          ("Got value '42' with wrong type, expecting object", Some("")),
+          ("Missing required field", Some(".name")),
+          ("Missing required field", Some(".age"))
+        )
+      }
+
+      test("accumulating reports only expecting object when all fields are optional") {
+        accumulatedErrors(KindlingsDecoder.derived[AllOptional], Json.fromInt(42)) ==> List(
+          ("Got value '42' with wrong type, expecting object", Some(""))
+        )
+      }
+
+      test("accumulating reports only expecting object when all fields have defaults") {
+        implicit val config: Configuration = Configuration.default.withDefaults
+        accumulatedErrors(KindlingsDecoder.derived[AllDefaults], Json.fromInt(42)) ==> List(
+          ("Got value '42' with wrong type, expecting object", Some(""))
+        )
+      }
+
+      test("fail-fast reports only expecting object even with required fields") {
+        val Left(error) = KindlingsDecoder.derived[SimplePerson].apply(Json.fromInt(42).hcursor): @unchecked
+        error.message ==> "Got value '42' with wrong type, expecting object"
+      }
+
+      test("nested case class field rejects non-object input with its path") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(30), "address" -> Json.fromInt(1))
+        val Left(error) = KindlingsDecoder.decode[PersonWithAddress](json): @unchecked
+        error.message ==> "Got value '1' with wrong type, expecting object"
+        error.pathToRootString ==> Some(".address")
+      }
+
+      test("standalone case object rejects non-object input") {
+        nonObjects.foreach(json => expectingObject(KindlingsDecoder.decode[Yes.type](json), json))
+        KindlingsDecoder.decode[Yes.type](Json.obj()) ==> Right(Yes)
+      }
+
+      test("case object in wrapped sealed trait requires an object value") {
+        KindlingsDecoder.decode[SimpleEnumCirce](Json.obj("Yes" -> Json.obj())) ==> Right(Yes)
+        List(Json.fromInt(42), Json.Null, Json.fromString("x")).foreach { inner =>
+          val Left(error) = KindlingsDecoder.decode[SimpleEnumCirce](Json.obj("Yes" -> inner)): @unchecked
+          error.message ==> s"Got value '${inner.noSpaces}' with wrong type, expecting object"
+          error.pathToRootString ==> Some(".Yes")
+        }
+      }
+
+      test("case object in wrapped sealed trait requires an object value (accumulating)") {
+        val decoder = KindlingsDecoder.derived[SimpleEnumCirce]
+        assert(decoder.decodeAccumulating(Json.obj("Yes" -> Json.fromInt(42)).hcursor).isInvalid)
+        decoder.decodeAccumulating(Json.obj("Yes" -> Json.obj()).hcursor) ==> cats.data.Validated.valid(Yes)
+      }
+
+      test("case object with discriminator decodes") {
+        implicit val config: Configuration = Configuration.default.withDiscriminator("type")
+        KindlingsDecoder.decode[SimpleEnumCirce](Json.obj("type" -> Json.fromString("Yes"))) ==> Right(Yes)
+      }
+
+      test("case object with enumAsStrings decodes from a string") {
+        implicit val config: Configuration = Configuration.default.withEnumAsStrings
+        KindlingsDecoder.decode[SimpleEnumCirce](Json.fromString("Yes")) ==> Right(Yes)
+      }
+    }
+
     group("empty class with non-object input") {
 
-      test("decode Int as EmptyClass fails with Expected JSON object") {
+      test("decode Int as EmptyClass fails with expecting object") {
         val Left(error) = KindlingsDecoder.decode[EmptyClass](Json.fromInt(42)): @unchecked
-        error.message ==> "Expected JSON object"
+        error.message ==> "Got value '42' with wrong type, expecting object"
       }
 
       test("decode empty object as EmptyClass succeeds") {

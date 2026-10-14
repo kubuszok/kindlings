@@ -5,7 +5,8 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import io.circe.DecodingFailure
+import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
+import io.circe.{DecodingFailure, HCursor}
 
 trait DecoderHandleAsSingletonRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -17,8 +18,11 @@ trait DecoderHandleAsSingletonRuleImpl {
         SingletonValue.parse[A].toEither match {
           case Right(sv) =>
             implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+            @scala.annotation.nowarn("msg=is never used")
+            implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+            // Singletons are encoded as `{}`, and circe's derived decoders require an object (bug #235).
             MIO.pure(Rule.matched(Expr.quote {
-              Right(Expr.splice(sv.singletonExpr)): Either[DecodingFailure, A]
+              CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).map(_ => Expr.splice(sv.singletonExpr))
             }))
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))

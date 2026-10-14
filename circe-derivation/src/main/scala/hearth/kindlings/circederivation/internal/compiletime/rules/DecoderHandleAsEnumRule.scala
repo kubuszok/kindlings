@@ -88,7 +88,7 @@ trait DecoderHandleAsEnumRuleImpl {
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
               Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                deriveChildDecoder[A, ChildType](childName)
+                deriveChildDecoder[A, ChildType](childName, allCaseObjects)
               }
             }
             .flatMap { childDispatchers =>
@@ -164,7 +164,8 @@ trait DecoderHandleAsEnumRuleImpl {
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildDecoder[A: DecoderCtx, ChildType: Type](
-        childName: String
+        childName: String,
+        allCaseObjects: Boolean
     ): MIO[(Expr[String], Expr[HCursor], Expr[Any]) => Expr[Any]] = {
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
@@ -207,17 +208,25 @@ trait DecoderHandleAsEnumRuleImpl {
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
               Log.info(s"Using singleton for $childName") >>
-                MIO.pure { (typeNameExpr: Expr[String], _: Expr[HCursor], elseExpr: Expr[Any]) =>
+                MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                   Expr.quote {
                     if (
                       Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
                         .splice(typeNameExpr)
-                    )
-                      (if (Expr.splice(dctx.failFast))
-                         Right(Expr.splice(singleton).asInstanceOf[A]): Either[DecodingFailure, A]
-                       else
-                         Validated.valid(Expr.splice(singleton).asInstanceOf[A]): ValidatedNel[DecodingFailure, A]): Any
-                    else
+                    ) {
+                      // A singleton case is encoded as `{}` (wrapped) or just the discriminator, so like circe
+                      // require an object - except for enumAsStrings, where the cursor focuses the name string (#235).
+                      if (
+                        (Expr.splice(Expr(allCaseObjects)) && Expr.splice(dctx.config).enumAsStrings) ||
+                        Expr.splice(innerCursorExpr).value.isObject
+                      )
+                        (if (Expr.splice(dctx.failFast))
+                           Right(Expr.splice(singleton).asInstanceOf[A]): Either[DecodingFailure, A]
+                         else
+                           Validated
+                             .valid(Expr.splice(singleton).asInstanceOf[A]): ValidatedNel[DecodingFailure, A]): Any
+                      else CirceDerivationUtils.notAnObject(Expr.splice(innerCursorExpr), Expr.splice(dctx.failFast))
+                    } else
                       Expr.splice(elseExpr)
                   }
                 }

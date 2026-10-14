@@ -30,11 +30,16 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                   dctx.nestInCache(cursor, config, failFast)
                 )
                   .map { eitherExpr =>
-                    // Named tuples always use fail-fast decode; convert to ValidatedNel when failFast=false
+                    @scala.annotation.nowarn("msg=is never used")
+                    implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+                    // Named tuples always use fail-fast decode; convert to ValidatedNel when failFast=false.
+                    // Like case classes, reject non-object input up front (bug #235).
                     Expr.quote {
-                      (if (Expr.splice(failFast)) Expr.splice(eitherExpr)
-                       else
-                         Validated.fromEither(Expr.splice(eitherExpr)).leftMap(cats.data.NonEmptyList.one(_))): Any
+                      if (Expr.splice(cursor).value.isObject)
+                        (if (Expr.splice(failFast)) Expr.splice(eitherExpr)
+                         else
+                           Validated.fromEither(Expr.splice(eitherExpr)).leftMap(cats.data.NonEmptyList.one(_))): Any
+                      else CirceDerivationUtils.notAnObject(Expr.splice(cursor), Expr.splice(failFast))
                     }
                   }
               }
