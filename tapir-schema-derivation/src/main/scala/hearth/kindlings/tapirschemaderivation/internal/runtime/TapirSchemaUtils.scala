@@ -231,7 +231,10 @@ object TapirSchemaUtils {
     *
     * For `"com.example.Foo[com.example.Bar, scala.Int]"`:
     *   - `fullName = "com.example.Foo"`
-    *   - `typeParameterShortNames = List("Bar", "Int")`
+    *   - `typeParameterShortNames = List("com.example.Bar", "scala.Int")`
+    *
+    * Despite its name, tapir fills `typeParameterShortNames` with full names (the name is legacy, kept for backward
+    * compatibility), so that type parameters sharing a short name produce distinct SNames (softwaremill/tapir#3500).
     */
   def parseSName(fullTypeName: String): SName = {
     val bracketIdx = fullTypeName.indexOf('[')
@@ -239,7 +242,7 @@ object TapirSchemaUtils {
     else {
       val baseName = fullTypeName.substring(0, bracketIdx)
       val typeParamsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
-      val typeParams = splitTopLevelTypeParams(typeParamsStr).flatMap(shortenTypeName)
+      val typeParams = splitTopLevelTypeParams(typeParamsStr).flatMap(flattenTypeName)
       SName(baseName, typeParams)
     }
   }
@@ -264,18 +267,18 @@ object TapirSchemaUtils {
     result.result()
   }
 
-  /** Recursively flattens a type name into one short name per type-parameter token e.g. `List[SimplePerson]` becomes
-    * `List("List", "SimplePerson")`.
+  /** Recursively flattens a type name into one fully-qualified name per type-parameter token e.g.
+    * `scala.List[com.example.Foo]` becomes `List("scala.List", "com.example.Foo")`.
     */
-  private def shortenTypeName(fullName: String): List[String] = {
+  private def flattenTypeName(fullName: String): List[String] = {
     val bracketIdx = fullName.indexOf('[')
     if (bracketIdx < 0) {
-      List(fullName.split('.').last)
+      List(fullName)
     } else {
-      val base = fullName.substring(0, bracketIdx).split('.').last
+      val base = fullName.substring(0, bracketIdx)
       val params = fullName.substring(bracketIdx + 1, fullName.length - 1)
-      val shortParams = splitTopLevelTypeParams(params).flatMap(shortenTypeName)
-      base :: shortParams
+      val flatParams = splitTopLevelTypeParams(params).flatMap(flattenTypeName)
+      base :: flatParams
     }
   }
 }
