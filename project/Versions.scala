@@ -45,7 +45,7 @@ object versions {
   val parsley = "4.6.2"
   val tagging = "2.3.5"
   val scalacheck = "1.20.0"
-  val scalaJavaTime = "2.7.0"
+  val scalaJavaTime = "2.8.0"
   val scalaSaxParser = "0.1.1"
   val scalaYaml = "0.3.3"
   val scalaXml = "2.5.0"
