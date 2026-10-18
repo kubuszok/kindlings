@@ -31,7 +31,7 @@ object versions {
   val kittens = "3.5.0"
   val neotype = "0.7.2"
   val newtypeCompat = "0.1.1"
-  val pureconfig = "0.17.10"
+  val pureconfig = "0.17.11"
   val quicklens = "1.9.15"
   val tapir = "1.13.33"
   val refined = "0.11.4"
