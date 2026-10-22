@@ -50,5 +50,5 @@ object versions {
   val scalaYaml = "0.3.3"
   val scalaXml = "2.5.0"
   val catsTagless = "0.16.5"
-  val sconfig = "2.0.0"
+  val sconfig = "2.1.0"
 }
