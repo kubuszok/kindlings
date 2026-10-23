@@ -26,12 +26,16 @@ final class DerivesGenericSpec extends MacroSuite {
   group("derives KindlingsSchema on a generic type") {
 
     test("with a built-in type parameter") {
-      check(summon[KindlingsSchema[DerivedBox[Int]]].schema, SchemaType.SInteger(), "Int")
-      check(summon[KindlingsSchema[DerivedBox[String]]].schema, SchemaType.SString(), "String")
+      check(summon[KindlingsSchema[DerivedBox[Int]]].schema, SchemaType.SInteger(), "scala.Int")
+      check(summon[KindlingsSchema[DerivedBox[String]]].schema, SchemaType.SString(), "java.lang.String")
     }
 
     test("with a case class type parameter") {
-      check(summon[KindlingsSchema[DerivedBox[SimplePerson]]].schema, SchemaType.SProduct(Nil), "SimplePerson")
+      check(
+        summon[KindlingsSchema[DerivedBox[SimplePerson]]].schema,
+        SchemaType.SProduct(Nil),
+        "hearth.kindlings.tapirschemaderivation.SimplePerson"
+      )
     }
 
     test("nested in a derived case class") {

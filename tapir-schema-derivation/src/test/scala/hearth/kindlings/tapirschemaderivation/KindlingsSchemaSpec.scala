@@ -64,8 +64,8 @@ final class KindlingsSchemaSpec extends MacroSuite {
         val name = schema.name.get
         assertEquals(
           name.typeParameterShortNames,
-          List("SimplePerson"),
-          s"Expected typeParameterShortNames = List(SimplePerson), got: ${name.typeParameterShortNames}"
+          List("hearth.kindlings.tapirschemaderivation.SimplePerson"),
+          s"Expected typeParameterShortNames = List(hearth.kindlings.tapirschemaderivation.SimplePerson), got: ${name.typeParameterShortNames}"
         )
       }
 
@@ -78,9 +78,29 @@ final class KindlingsSchemaSpec extends MacroSuite {
         )
         assertEquals(
           name.typeParameterShortNames,
-          List("SimplePerson", "Nested"),
+          List("hearth.kindlings.tapirschemaderivation.SimplePerson", "hearth.kindlings.tapirschemaderivation.Nested"),
           s"Expected two type parameter short names, got: ${name.typeParameterShortNames}"
         )
+      }
+
+      test("nested generic type parameter SName is flattened, not bracketed") {
+        val schema = KindlingsSchema.derived[Box[List[SimplePerson]]].schema
+        val name = schema.name.get
+        assertEquals(
+          name.typeParameterShortNames,
+          List(
+            "scala.collection.immutable.List",
+            "hearth.kindlings.tapirschemaderivation.SimplePerson"
+          ),
+          s"Expected flattened typeParameterShortNames, got: ${name.typeParameterShortNames}"
+        )
+      }
+
+      // softwaremill/tapir#3463, fixed upstream by softwaremill/tapir#3500
+      test("type parameters with the same short name produce different SNames") {
+        val nameA = KindlingsSchema.derived[Box[SameShortNameA.B]].schema.name
+        val nameB = KindlingsSchema.derived[Box[SameShortNameB.B]].schema.name
+        assertNotEquals(nameA, nameB)
       }
 
       test("non-parameterized type SName has empty typeParameterShortNames") {
@@ -1022,9 +1042,13 @@ final class KindlingsSchemaSpec extends MacroSuite {
           case other => fail(s"Expected SProduct, got: $other")
         }
       }
-      check(implicitly[KindlingsSchema[ManualBox[Int]]].schema, SchemaType.SInteger(), "Int")
-      check(implicitly[KindlingsSchema[ManualBox[String]]].schema, SchemaType.SString(), "String")
-      check(implicitly[KindlingsSchema[ManualBox[SimplePerson]]].schema, SchemaType.SProduct(Nil), "SimplePerson")
+      check(implicitly[KindlingsSchema[ManualBox[Int]]].schema, SchemaType.SInteger(), "scala.Int")
+      check(implicitly[KindlingsSchema[ManualBox[String]]].schema, SchemaType.SString(), "java.lang.String")
+      check(
+        implicitly[KindlingsSchema[ManualBox[SimplePerson]]].schema,
+        SchemaType.SProduct(Nil),
+        "hearth.kindlings.tapirschemaderivation.SimplePerson"
+      )
     }
   }
 

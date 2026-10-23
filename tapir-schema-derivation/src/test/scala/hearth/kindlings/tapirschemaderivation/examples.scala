@@ -78,6 +78,10 @@ case class Box[A](value: A)
 
 case class Pair[A, B](first: A, second: B)
 
+// softwaremill/tapir#3463: type parameters with the same short name
+object SameShortNameA { case class B(a: String) }
+object SameShortNameB { case class B(b: Int) }
+
 // Combinatorial wrapper x inner-type test types
 case class CombOuter(
     optCaseClass: Option[SimplePerson],
