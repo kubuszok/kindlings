@@ -5,7 +5,7 @@ import org.scalacheck.{Arbitrary, Cogen, Gen, Shrink}
 import org.scalacheck.rng.Seed
 import hearth.kindlings.scalacheckderivation.extensions.*
 
-import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.collection.immutable.SortedMap
 
 final case class WithNEL(items: NonEmptyList[Int])
 final case class WithNEV(items: NonEmptyVector[Int])

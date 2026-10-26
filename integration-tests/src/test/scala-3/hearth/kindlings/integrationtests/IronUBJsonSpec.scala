@@ -3,7 +3,6 @@ package hearth.kindlings.integrationtests
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.any.*
 import io.github.iltotore.iron.constraint.numeric.*
-import io.github.iltotore.iron.constraint.string.*
 import hearth.MacroSuite
 import hearth.kindlings.ubjsonderivation.UBJsonValueCodec
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils

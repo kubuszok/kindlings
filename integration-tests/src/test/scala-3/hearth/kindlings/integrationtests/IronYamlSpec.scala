@@ -2,7 +2,6 @@ package hearth.kindlings.integrationtests
 
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
-import io.github.iltotore.iron.constraint.string.*
 import hearth.MacroSuite
 import hearth.kindlings.yamlderivation.{KindlingsYamlDecoder, KindlingsYamlEncoder}
 import org.virtuslab.yaml.Node

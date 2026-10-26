@@ -1,4 +1,6 @@
-package hearth.kindlings.optics
+// Deliberately OUTSIDE `hearth.kindlings.optics`: inside that package its package-object DSL is visible without any
+// import, so the bare import below would not be exercised at all.
+package hearth.kindlings.opticsbareimport
 
 import hearth.MacroSuite
 import hearth.kindlings.optics.*

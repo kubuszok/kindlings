@@ -182,6 +182,23 @@ val settings = Seq(
       "-Xsource-features:eta-expand-always", // silence warn that appears since 2.13.17
       "-Ytasty-reader"
     )
+  ),
+  // Unused-import linting stays off for main sources (see the comments above), but test sources do not use the
+  // `import x.Underlying as X` macro idiom, so there every unused import is an error. The Scala 3 suppressions below
+  // are each a PROVEN false positive (removing the import breaks compilation or the test's purpose), see
+  // docs/research/unused-imports-in-tests.md - add a file here only with the same kind of evidence.
+  Test / scalacOptions ++= foldVersion(scalaVersion.value)(
+    for3 = Seq(
+      "-Wunused:imports",
+      // implicits summoned only by a macro expansion (`LogGeneration` markers, opaque-type givens)
+      "-Wconf:src=.*/GenerationLoggingSpec\\.scala&msg=unused import:s",
+      "-Wconf:src=.*/AvroScala3Spec\\.scala&msg=unused import:s",
+      // wildcard used only in a type alias (`List[Int] :| MinLength[2]`)
+      "-Wconf:src=.*/IronParserSpec\\.scala&msg=unused import:s",
+      // Scala 2 macro-annotation imports (`@newtype`) in a source shared with Scala 3
+      "-Wconf:src=.*/newtypeExamples\\.scala&msg=unused import:s"
+    ),
+    for2_13 = Seq("-Ywarn-unused:imports")
   )
 ) ++ mimaSettings
 
