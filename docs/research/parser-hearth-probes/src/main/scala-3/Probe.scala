@@ -1,5 +1,5 @@
 //> using scala 3.8.4
-//> using dep com.kubuszok::hearth:0.4.2
+//> using dep com.kubuszok::hearth:0.4.3
 //> using dep io.github.iltotore::iron:3.3.2
 
 package parserhearthprobe
