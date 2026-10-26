@@ -1,0 +1,31 @@
+diff --git a/hearth-cross-quotes/src/main/scala-3/hearth/cq/CrossQuotesPlugin.scala b/hearth-cross-quotes/src/main/scala-3/hearth/cq/CrossQuotesPlugin.scala
+index fe2e1c9b..d1faf760 100644
+--- a/hearth-cross-quotes/src/main/scala-3/hearth/cq/CrossQuotesPlugin.scala
++++ b/hearth-cross-quotes/src/main/scala-3/hearth/cq/CrossQuotesPlugin.scala
+@@ -970,18 +970,21 @@ final class CrossQuotesPhase(loggingEnabled: (Option[JFile], Int, Int) => Boolea
+         case block: Block =>
+           val oldGivenCandidates = givenCandidates
+           try {
+-            // Imports and (implicit) defs can legally be forward-referenced from earlier statements in a block,
+-            // so their candidates are visible to every expansion in the block.
++            // (Implicit) defs can legally be forward-referenced from earlier statements in a block, so their
++            // candidates are visible to every expansion in the block.
+             givenCandidates = oldGivenCandidates ++ blockGivenCandidates(
+-              block.stats.filterNot(_.isInstanceOf[untpd.ValDef])
++              block.stats.filterNot(stat => stat.isInstanceOf[untpd.ValDef] || stat.isInstanceOf[untpd.Import])
+             )
+             // [hearth#285] Candidates from implicit vals become visible only AFTER their defining statement —
+             // injecting them into earlier expansions would generate an illegal forward reference to the val.
++            // The same holds for imports: an imported name is in scope only AFTER the import statement, so the
++            // `given casted$D` of an `import x.Underlying as D` must not be injected into an earlier `Type.of`.
+             val newStats = block.stats.map { stat =>
+               val transformed = transform(stat)
+               stat match {
+-                case vd: untpd.ValDef => givenCandidates = givenCandidates ++ blockGivenCandidates(vd :: Nil)
+-                case _                => ()
++                case vd: untpd.ValDef  => givenCandidates = givenCandidates ++ blockGivenCandidates(vd :: Nil)
++                case im: untpd.Import  => givenCandidates = givenCandidates ++ blockGivenCandidates(im :: Nil)
++                case _                 => ()
+               }
+               transformed
+             }

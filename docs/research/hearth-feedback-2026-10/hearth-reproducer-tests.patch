@@ -1,0 +1,941 @@
+diff --git a/build.sbt b/build.sbt
+index ae0ddfbf..4ba8a2fa 100644
+--- a/build.sbt
++++ b/build.sbt
+@@ -706,7 +706,8 @@ lazy val hearthTests = projectMatrix
+     macroExtensionTraits := Seq(
+       "hearth.SuccessfulMacroExtension",
+       "hearth.PartiallyFailedMacroExtension",
+-      "hearth.TotallyFailedMacroExtension"
++      "hearth.TotallyFailedMacroExtension",
++      "hearth.typed.KindlingsFeedbackFunction1Extension"
+     )
+   )
+   .jvmPlatform(Seq(versions.scala3), jvmOnlySettings)
+diff --git a/hearth-tests/src/main/scala-2/hearth/crossquotes/ImportOrderReproFixtures.scala b/hearth-tests/src/main/scala-2/hearth/crossquotes/ImportOrderReproFixtures.scala
+new file mode 100644
+index 00000000..212a8bb4
+--- /dev/null
++++ b/hearth-tests/src/main/scala-2/hearth/crossquotes/ImportOrderReproFixtures.scala
+@@ -0,0 +1,19 @@
++package hearth
++package crossquotes
++
++import scala.language.experimental.macros
++import scala.reflect.macros.blackbox
++
++final private class ImportOrderReproFixtures(val c: blackbox.Context)
++    extends MacroCommonsScala2
++    with ImportOrderReproFixturesImpl {
++
++  def importBeforeTypeOfImpl(expr: c.Expr[Any]): c.Expr[String] = importBeforeTypeOf(expr)
++  def importAfterTypeOfImpl(expr: c.Expr[Any]): c.Expr[String] = importAfterTypeOf(expr)
++}
++
++object ImportOrderReproFixtures {
++
++  def importBeforeTypeOf(expr: Any): String = macro ImportOrderReproFixtures.importBeforeTypeOfImpl
++  def importAfterTypeOf(expr: Any): String = macro ImportOrderReproFixtures.importAfterTypeOfImpl
++}
+diff --git a/hearth-tests/src/main/scala-2/hearth/typed/KindlingsFeedbackFixtures.scala b/hearth-tests/src/main/scala-2/hearth/typed/KindlingsFeedbackFixtures.scala
+new file mode 100644
+index 00000000..e9f26f0a
+--- /dev/null
++++ b/hearth-tests/src/main/scala-2/hearth/typed/KindlingsFeedbackFixtures.scala
+@@ -0,0 +1,42 @@
++package hearth
++package typed
++
++import hearth.data.Data
++
++import scala.language.experimental.macros
++import scala.reflect.macros.blackbox
++
++final private class KindlingsFeedbackFixtures(val c: blackbox.Context)
++    extends MacroCommonsScala2
++    with KindlingsFeedbackFixturesImpl {
++
++  def testGenericReturnWalkImpl[A: c.WeakTypeTag, R: c.WeakTypeTag](instance: c.Expr[A])(methodName: c.Expr[String]): c.Expr[Data] =
++    testGenericReturnWalk[A, R](instance)(methodName)
++  def testGenericReturnWalkViaCtor1OfImpl[A: c.WeakTypeTag, R: c.WeakTypeTag](instance: c.Expr[A])(
++      methodName: c.Expr[String]
++  ): c.Expr[Data] = testGenericReturnWalkViaCtor1Of[A, R](instance)(methodName)
++  def testDecomposeImpl[A: c.WeakTypeTag, B: c.WeakTypeTag]: c.Expr[Data] = testDecompose[A, B]
++  def testDecomposeExprTypeImpl[B: c.WeakTypeTag](expr: c.Expr[Any]): c.Expr[Data] = testDecomposeExprType[B](expr)
++  def testFunctionClassificationImpl[A: c.WeakTypeTag]: c.Expr[Data] = testFunctionClassification[A]
++  def testFqcnIdentityImpl[A: c.WeakTypeTag, B: c.WeakTypeTag]: c.Expr[Data] = testFqcnIdentity[A, B]
++  def testFunction1UnapplyImpl[A: c.WeakTypeTag]: c.Expr[Data] = testFunction1Unapply[A]
++  def testEnclosingMethodViewImpl: c.Expr[Data] = testEnclosingMethodView
++  def testEnclosingMethodParametersImpl: c.Expr[Data] = testEnclosingMethodParameters
++  def testSumEnclosingIntParametersImpl: c.Expr[Int] = testSumEnclosingIntParameters
++}
++
++object KindlingsFeedbackFixtures {
++
++  def testGenericReturnWalk[A, R](instance: A)(methodName: String): Data =
++    macro KindlingsFeedbackFixtures.testGenericReturnWalkImpl[A, R]
++  def testGenericReturnWalkViaCtor1Of[A, R](instance: A)(methodName: String): Data =
++    macro KindlingsFeedbackFixtures.testGenericReturnWalkViaCtor1OfImpl[A, R]
++  def testDecompose[A, B]: Data = macro KindlingsFeedbackFixtures.testDecomposeImpl[A, B]
++  def testDecomposeExprType[B](expr: Any): Data = macro KindlingsFeedbackFixtures.testDecomposeExprTypeImpl[B]
++  def testFunctionClassification[A]: Data = macro KindlingsFeedbackFixtures.testFunctionClassificationImpl[A]
++  def testFqcnIdentity[A, B]: Data = macro KindlingsFeedbackFixtures.testFqcnIdentityImpl[A, B]
++  def testFunction1Unapply[A]: Data = macro KindlingsFeedbackFixtures.testFunction1UnapplyImpl[A]
++  def testEnclosingMethodView: Data = macro KindlingsFeedbackFixtures.testEnclosingMethodViewImpl
++  def testEnclosingMethodParameters: Data = macro KindlingsFeedbackFixtures.testEnclosingMethodParametersImpl
++  def testSumEnclosingIntParameters: Int = macro KindlingsFeedbackFixtures.testSumEnclosingIntParametersImpl
++}
+diff --git a/hearth-tests/src/main/scala-3/hearth/crossquotes/ImportOrderReproFixtures.scala b/hearth-tests/src/main/scala-3/hearth/crossquotes/ImportOrderReproFixtures.scala
+new file mode 100644
+index 00000000..b95035fb
+--- /dev/null
++++ b/hearth-tests/src/main/scala-3/hearth/crossquotes/ImportOrderReproFixtures.scala
+@@ -0,0 +1,17 @@
++package hearth
++package crossquotes
++
++import scala.quoted.*
++
++final private class ImportOrderReproFixtures(q: Quotes) extends MacroCommonsScala3(using q), ImportOrderReproFixturesImpl
++
++object ImportOrderReproFixtures {
++
++  inline def importBeforeTypeOf(inline expr: Any): String = ${ importBeforeTypeOfImpl('expr) }
++  private def importBeforeTypeOfImpl(expr: Expr[Any])(using q: Quotes): Expr[String] =
++    new ImportOrderReproFixtures(q).importBeforeTypeOf(expr)
++
++  inline def importAfterTypeOf(inline expr: Any): String = ${ importAfterTypeOfImpl('expr) }
++  private def importAfterTypeOfImpl(expr: Expr[Any])(using q: Quotes): Expr[String] =
++    new ImportOrderReproFixtures(q).importAfterTypeOf(expr)
++}
+diff --git a/hearth-tests/src/main/scala-3/hearth/typed/KindlingsFeedbackFixtures.scala b/hearth-tests/src/main/scala-3/hearth/typed/KindlingsFeedbackFixtures.scala
+new file mode 100644
+index 00000000..02bb3073
+--- /dev/null
++++ b/hearth-tests/src/main/scala-3/hearth/typed/KindlingsFeedbackFixtures.scala
+@@ -0,0 +1,57 @@
++package hearth
++package typed
++
++import hearth.data.Data
++
++import scala.quoted.*
++
++final private class KindlingsFeedbackFixtures(q: Quotes) extends MacroCommonsScala3(using q), KindlingsFeedbackFixturesImpl
++
++object KindlingsFeedbackFixtures {
++
++  inline def testGenericReturnWalk[A, R](inline instance: A)(inline methodName: String): Data = ${
++    testGenericReturnWalkImpl[A, R]('instance, 'methodName)
++  }
++  private def testGenericReturnWalkImpl[A: Type, R: Type](instance: Expr[A], methodName: Expr[String])(using
++      q: Quotes
++  ): Expr[Data] = new KindlingsFeedbackFixtures(q).testGenericReturnWalk[A, R](instance)(methodName)
++
++  inline def testGenericReturnWalkViaCtor1Of[A, R](inline instance: A)(inline methodName: String): Data = ${
++    testGenericReturnWalkViaCtor1OfImpl[A, R]('instance, 'methodName)
++  }
++  private def testGenericReturnWalkViaCtor1OfImpl[A: Type, R: Type](instance: Expr[A], methodName: Expr[String])(using
++      q: Quotes
++  ): Expr[Data] = new KindlingsFeedbackFixtures(q).testGenericReturnWalkViaCtor1Of[A, R](instance)(methodName)
++
++  inline def testDecompose[A, B]: Data = ${ testDecomposeImpl[A, B] }
++  private def testDecomposeImpl[A: Type, B: Type](using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testDecompose[A, B]
++
++  inline def testDecomposeExprType[B](inline expr: Any): Data = ${ testDecomposeExprTypeImpl[B]('expr) }
++  private def testDecomposeExprTypeImpl[B: Type](expr: Expr[Any])(using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testDecomposeExprType[B](expr)
++
++  inline def testFunctionClassification[A]: Data = ${ testFunctionClassificationImpl[A] }
++  private def testFunctionClassificationImpl[A: Type](using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testFunctionClassification[A]
++
++  inline def testFqcnIdentity[A, B]: Data = ${ testFqcnIdentityImpl[A, B] }
++  private def testFqcnIdentityImpl[A: Type, B: Type](using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testFqcnIdentity[A, B]
++
++  inline def testFunction1Unapply[A]: Data = ${ testFunction1UnapplyImpl[A] }
++  private def testFunction1UnapplyImpl[A: Type](using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testFunction1Unapply[A]
++
++  inline def testEnclosingMethodView: Data = ${ testEnclosingMethodViewImpl }
++  private def testEnclosingMethodViewImpl(using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testEnclosingMethodView
++
++  inline def testEnclosingMethodParameters: Data = ${ testEnclosingMethodParametersImpl }
++  private def testEnclosingMethodParametersImpl(using q: Quotes): Expr[Data] =
++    new KindlingsFeedbackFixtures(q).testEnclosingMethodParameters
++
++  inline def testSumEnclosingIntParameters: Int = ${ testSumEnclosingIntParametersImpl }
++  private def testSumEnclosingIntParametersImpl(using q: Quotes): Expr[Int] =
++    new KindlingsFeedbackFixtures(q).testSumEnclosingIntParameters
++}
+diff --git a/hearth-tests/src/main/scala/hearth/crossquotes/ImportOrderReproFixturesImpl.scala b/hearth-tests/src/main/scala/hearth/crossquotes/ImportOrderReproFixturesImpl.scala
+new file mode 100644
+index 00000000..b9f82563
+--- /dev/null
++++ b/hearth-tests/src/main/scala/hearth/crossquotes/ImportOrderReproFixturesImpl.scala
+@@ -0,0 +1,25 @@
++package hearth
++package crossquotes
++
++/** kindlings feedback (2): on Scala 3 the cross-quotes plugin's rewrite of `Type.of[...]` fails with
++  * `[E006] Not found: type D` when an `import x.Underlying as D` FOLLOWS the `Type.of` in the same block.
++  *
++  * `importBeforeTypeOf` is the workaround (import first) and compiles on both platforms; `importAfterTypeOf` is the
++  * reproducer: it compiles on Scala 2.13 but not on Scala 3.
++  */
++trait ImportOrderReproFixturesImpl { this: MacroCommons =>
++
++  def importBeforeTypeOf(expr: Expr[Any]): Expr[String] = {
++    val tpe: ?? = expr.tpe.as_??
++    import tpe.Underlying as D
++    implicit val anyType: Type[Any] = Type.of[Any]
++    Expr(s"${Type[D].plainPrint} / ${Type[Any].plainPrint}")
++  }
++
++  def importAfterTypeOf(expr: Expr[Any]): Expr[String] = {
++    implicit val anyType: Type[Any] = Type.of[Any]
++    val tpe: ?? = expr.tpe.as_??
++    import tpe.Underlying as D
++    Expr(s"${Type[D].plainPrint} / ${Type[Any].plainPrint}")
++  }
++}
+diff --git a/hearth-tests/src/main/scala/hearth/examples/kindlings_feedback.scala b/hearth-tests/src/main/scala/hearth/examples/kindlings_feedback.scala
+new file mode 100644
+index 00000000..717589cf
+--- /dev/null
++++ b/hearth-tests/src/main/scala/hearth/examples/kindlings_feedback.scala
+@@ -0,0 +1,53 @@
++package hearth
++package examples
++package kindlingsfeedback
++
++// Test data for KindlingsFeedbackSpec: gaps found while porting kindlings macros (di / di-cats) to Hearth 0.4.3.
++
++// --- (1) generic method return type -------------------------------------------------------------------------------
++
++// Local stand-ins for cats-effect `Resource` / `Sync` / `SyncIO` (no cats dependency).
++trait Res[F[_], A]
++trait SyncLike[F[_]]
++trait SomeF[A]
++object SomeF {
++  implicit val syncLike: SyncLike[SomeF] = new SyncLike[SomeF] {}
++}
++final class Config
++
++final class Widget
++object Widget {
++  // type clause only, then nothing: `Widget.resource[SomeF]` is fully applied after `ApplyTypes`.
++  def resource[F[_]]: Res[F, Widget] = null
++}
++
++final class Service
++object Service {
++  // type clause, value clause, implicit (context-bound) clause.
++  @scala.annotation.nowarn
++  def resource[F[_]: SyncLike](config: Config): Res[F, Service] = null
++}
++
++final class Plain
++object Plain {
++  // NOT a `Res` - kindlings must be able to reject it by its (substituted) result type.
++  def resource[F[_]]: Option[Plain] = None
++}
++
++// --- (3) singleton types -------------------------------------------------------------------------------------------
++
++// covariant so that `Box[Int, String] <:< Box[Any, Any]` (used as a sanity check in the spec)
++final class Box[+A, +B](val a: A, val b: B)
++
++object SingletonVals {
++  val box: Box[Int, String] = new Box(1, "a")
++  val opt: Option[Int] = Some(1)
++  val str: String = "a"
++  val list: List[Int] = List(1)
++}
++
++// --- (7) Function1 subclass (not headed by `Function1` itself) -------------------------------------------------------
++
++class IntPredicate extends (Int => Boolean) {
++  def apply(i: Int): Boolean = i > 0
++}
+diff --git a/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackFixturesImpl.scala b/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackFixturesImpl.scala
+new file mode 100644
+index 00000000..b9340b8f
+--- /dev/null
++++ b/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackFixturesImpl.scala
+@@ -0,0 +1,232 @@
++package hearth
++package typed
++
++import hearth.data.Data
++import hearth.examples.kindlingsfeedback.*
++
++/** Fixtures for [[KindlingsFeedbackSpec]]: minimal reproducers of gaps found while porting kindlings macros to Hearth.
++  */
++trait KindlingsFeedbackFixturesImpl { this: MacroCommons =>
++
++  private def renderExpectations(m: Method): Data = Data.list(m.expectations.map {
++    case MethodExpectation.NeedsInstance   => Data("NeedsInstance")
++    case MethodExpectation.NeedsTypes(tps) =>
++      Data(tps.map(_.map(_.name).mkString(", ")).mkString("NeedsTypes[", "][", "]"))
++    case MethodExpectation.NeedsValues(ps) =>
++      Data(
++        ps.map(_.map { case (n, p) => s"$n: ${p.tpe.plainPrint}" }.mkString(", ")).mkString("NeedsValues(", ")(", ")")
++      )
++  }*)
++
++  private def stepName(m: Method): String = m match {
++    case _: Method.OnInstance  => "OnInstance"
++    case _: Method.ApplyTypes  => "ApplyTypes"
++    case _: Method.ApplyValues => "ApplyValues"
++    case _: Method.Result[?]   => "Result"
++  }
++
++  // `R` is the expected (substituted) return type: rendered as "=:= R" when it matches, so that the Scala 3 eta-expanded
++  // printing of the applied `F := SomeF` (`[A] => SomeF[A]`) does not obscure the comparison.
++  private def renderType[R: Type](t: ??): String =
++    if (t.Underlying =:= Type[R]) "=:= R" else t.plainPrint
++
++  private def renderStep[R: Type](m: Method): Data = Data.map(
++    "step" -> Data(stepName(m)),
++    "knownReturning" -> Data(m.knownReturning.map(renderType[R](_)).getOrElse("<none>")),
++    "expectations" -> renderExpectations(m)
++  )
++
++  // (1) Walk `A.methodName` (expected to return `R`) (a method of the companion object `A`) through the whole builder chain, applying
++  // `F := SomeF` at `ApplyTypes`, a `new Config` / summoned implicit at `ApplyValues`. Records every step.
++  def testGenericReturnWalk[A: Type, R: Type](instance: Expr[A])(methodName: Expr[String]): Expr[Data] =
++    genericReturnWalk[A, R](instance, methodName, viaCtor1Of = false)
++
++  // Same, but `F := SomeF` is passed as `Type.Ctor1.of[SomeF].asUntyped` (what kindlings does). On Scala 3 that is an
++  // eta-expanded type lambda, which is semantically equal but prints as `[A >: Nothing <: Any] => SomeF[A]`.
++  def testGenericReturnWalkViaCtor1Of[A: Type, R: Type](instance: Expr[A])(methodName: Expr[String]): Expr[Data] =
++    genericReturnWalk[A, R](instance, methodName, viaCtor1Of = true)
++
++  private def genericReturnWalk[A: Type, R: Type](
++      instance: Expr[A],
++      methodName: Expr[String],
++      viaCtor1Of: Boolean
++  ): Expr[Data] = {
++    val name = Expr.unapply(methodName).getOrElse(Environment.reportErrorAndAbort("method name must be a literal"))
++    val method = Type[A].methods.find(_.name == name).getOrElse(Environment.reportErrorAndAbort(s"no method $name"))
++    implicit val SomeFAny: Type[SomeF[Any]] = Type.of[SomeF[Any]]
++    val someF: ?? =
++      if (viaCtor1Of) Type.Ctor1.of[SomeF].asUntyped.as_??
++      else UntypedType.typeConstructor(UntypedType.fromTyped[SomeF[Any]]).as_??
++    implicit val ConfigType: Type[Config] = Type.of[Config]
++    implicit val StringType: Type[String] = Type.of[String]
++
++    val steps = scala.collection.mutable.ListBuffer.empty[Data]
++    @scala.annotation.tailrec
++    def loop(m: Method): Unit = {
++      steps += renderStep[R](m)
++      m match {
++        case oi: Method.OnInstance =>
++          loop(oi.apply(instance.asInstanceOf[Expr[oi.Instance]]))
++        case at: Method.ApplyTypes =>
++          loop(at.apply(at.typeParams.flatten.map(tp => tp -> someF).toMap))
++        case av: Method.ApplyValues =>
++          loop(av.apply(av.parameters.flatten.map { case (n, p) =>
++            import p.tpe.Underlying
++            val value: Expr_?? =
++              if (Underlying =:= Type.of[Config]) Expr.quote(new Config).as_??
++              else
++                Expr
++                  .summonImplicitByType(p.tpe.asUntyped)
++                  .map(UntypedExpr.as_??(_))
++                  .getOrElse(Environment.reportErrorAndAbort(s"cannot summon ${p.tpe.plainPrint}"))
++            n -> value
++          }.toMap))
++        case r: Method.Result[?] =>
++          import r.Returned
++          steps += Data.map(
++            "Result.Returned" -> Data(renderType[R](Type[r.Returned].as_??)),
++            // the danger: if `Returned` is `Nothing`, it conforms to ANY expected result type
++            "Returned <:< String" -> Data(Type[r.Returned] <:< Type.of[String]),
++            "built" -> Data(r.build() match {
++              case Right(e) => s"built: ${renderType[R](e.tpe.as_??)}"
++              case Left(e)  => s"FAILED: $e"
++            })
++          )
++      }
++    }
++    loop(method)
++    Expr(Data.list(steps.toList*))
++  }
++
++  // (3) singleton types
++  private def renderDecomposition[A: Type, B: Type](withPlainPrint: Boolean): Data = {
++    val untyped = UntypedType.fromTyped[A]
++    val printed =
++      if (withPlainPrint) List("plainPrint" -> Data(Type[A].plainPrint))
++      else Nil
++    val probes: List[(String, Data)] = List(
++      "decompose1" -> Data(Type.decompose1[A] match {
++        case Some((ctor, arg)) => s"Some((${ctor.asUntyped.plainPrint}, ${arg.plainPrint}))"
++        case None              => "None"
++      }),
++      "decompose2" -> Data(Type.decompose2[A] match {
++        case Some((ctor, (a1, a2))) => s"Some((${ctor.asUntyped.plainPrint}, ${a1.plainPrint}, ${a2.plainPrint}))"
++        case None                   => "None"
++      }),
++      "UntypedType.typeConstructor" -> Data(UntypedType.typeConstructor(untyped).plainPrint),
++      "UntypedType.typeArguments" -> Data(UntypedType.typeArguments(untyped).map(_.plainPrint).mkString("[", ", ", "]")),
++      "Type.typeArguments" -> Data(Type.typeArguments[A].map(_.plainPrint).mkString("[", ", ", "]")),
++      "hasSameTypeConstructor[A, B]" -> Data(Type.hasSameTypeConstructor[A, B]),
++      "Ctor2.of[Box].unapply" -> Data(Type.Ctor2.of[Box].unapply(Type[A]) match {
++        case Some((a1, a2)) => s"Some((${a1.plainPrint}, ${a2.plainPrint}))"
++        case None           => "None"
++      }),
++      "Ctor1.of[Option].unapply" -> Data(Type.Ctor1.of[Option].unapply(Type[A]) match {
++        case Some(a1) => s"Some(${a1.plainPrint})"
++        case None     => "None"
++      }),
++      "A <:< B" -> Data(Type[A] <:< Type[B])
++    )
++    Data.map((printed ++ probes)*)
++  }
++
++  def testDecompose[A: Type, B: Type]: Expr[Data] = Expr(renderDecomposition[A, B](withPlainPrint = true))
++
++  /** Same probes, but on the STATIC type of a user-provided argument expression (`Expr.typeOf`), which is how kindlings
++    * hit it: passing `SingletonVals.box` gives the singleton `SingletonVals.box.type` on Scala 3.
++    */
++  def testDecomposeExprType[B: Type](expr: Expr[Any]): Expr[Data] = {
++    val tpe: ?? = expr.tpe.as_??
++    import tpe.Underlying as A
++    // plainPrint omitted: Scala 2 already reports the WIDENED `Box[Int, String]` here, Scala 3 the singleton
++    // `SingletonVals.box.type` - only the decomposition results are compared.
++    Expr(renderDecomposition[A, B](withPlainPrint = false))
++  }
++
++  // (5) function / context-function classification
++  def testFunctionClassification[A: Type]: Expr[Data] = Expr(
++    Data.map(
++      "plainPrint" -> Data(Type[A].plainPrint),
++      "fqcn" -> Data(Type.fqcn[A]),
++      "fqcn.startsWith(scala.Function)" -> Data(Type.fqcn[A].startsWith("scala.Function")),
++      "Ctor2.of[Function1].unapply" -> Data(Type.Ctor2.of[Function1].unapply(Type[A]).isDefined),
++      "Ctor3.of[Function2].unapply" -> Data(Type.Ctor3.of[Function2].unapply(Type[A]).isDefined),
++      "<:< Function1[Nothing, Any]" -> Data(Type[A] <:< Type.of[Function1[Nothing, Any]])
++    )
++  )
++
++  // (6) `Type.fqcn` is not a type identity
++  def testFqcnIdentity[A: Type, B: Type]: Expr[Data] = Expr(
++    Data.map(
++      "fqcn[A]" -> Data(Type.fqcn[A]),
++      "fqcn[B]" -> Data(Type.fqcn[B]),
++      "fqcn[A] == fqcn[B]" -> Data(Type.fqcn[A] == Type.fqcn[B]),
++      "A =:= B" -> Data(Type[A] =:= Type[B])
++    )
++  )
++
++  // (7) `Type.Ctor2.of[Function1].unapply` - does it return `Nothing` for the (contravariant) first argument?
++  private def renderFunction1Unapply[A: Type](ctor: Type.Ctor2[Function1]): String =
++    ctor.unapply(Type[A]) match {
++      case Some((a1, a2)) => s"Some((${a1.plainPrint}, ${a2.plainPrint}))"
++      case None           => "None"
++    }
++
++  // Populated by `KindlingsFeedbackFunction1Extension` (a MacroExtension loaded through ServiceLoader, compiled in a
++  // different compilation unit) - the SPI path kindlings' docs claim needs `fromUntyped` wrapping.
++  var spiFunction1Ctor: Option[Type.Ctor2[Function1]] = None
++  def registerSpiFunction1Ctor(ctor: Type.Ctor2[Function1]): Unit = spiFunction1Ctor = Some(ctor)
++
++  def testFunction1Unapply[A: Type]: Expr[Data] = {
++    val sameUnit = Type.Ctor2.of[Function1]
++    val wrapped = Type.Ctor2.fromUntyped[Function1](sameUnit.asUntyped)
++    val otherUnit = KindlingsFeedbackOtherUnit.function1Ctor(this)
++    val loadResult = Environment.loadMacroExtensions[KindlingsFeedbackFunction1Extension]
++    val spi = spiFunction1Ctor
++    Expr(
++      Data.map(
++        "plainPrint" -> Data(Type[A].plainPrint),
++        "Ctor2.of[Function1] (same unit)" -> Data(renderFunction1Unapply[A](sameUnit)),
++        "Ctor2.fromUntyped(Ctor2.of[Function1].asUntyped)" -> Data(renderFunction1Unapply[A](wrapped)),
++        "Ctor2.of[Function1] (other compilation unit)" -> Data(renderFunction1Unapply[A](otherUnit)),
++        "Ctor2.of[Function1] (via MacroExtension SPI)" -> Data(spi match {
++          case Some(ctor) => renderFunction1Unapply[A](ctor)
++          case None       => s"<extension not loaded: ${loadResult.toEither.left.map(_.toVector.map(_.getMessage))}>"
++        })
++      )
++    )
++  }
++
++  // (4) parameters of the enclosing method (macwire uses them as wiring candidates)
++
++  /** What the PUBLIC 0.4.3 API exposes for the immediately-enclosing method: the `Enclosure.Method` fields. */
++  def testEnclosingMethodView: Expr[Data] = {
++    val rendered = enclosingScope.iterator.collectFirst { case m: Enclosure.Method =>
++      Data.map(
++        "name" -> Data(m.name),
++        // every field the case class has - there is no `parameters`
++        "fields" -> Data.list(m.productElementNames.toList.map(Data(_))*)
++      )
++    }
++    Expr(rendered.getOrElse(Data("<no enclosing method>")))
++  }
++
++  /** PROTOTYPE API (not in 0.4.3): value parameters of the immediately-enclosing method. */
++  def testEnclosingMethodParameters: Expr[Data] =
++    Expr(Data.list(Environment.enclosingMethodParameters.map(p => Data(s"${p.name}: ${p.tpe.plainPrint}"))*))
++
++  /** PROTOTYPE API: sum the enclosing method's `Int` parameters by USING their `ref`s in generated code. */
++  def testSumEnclosingIntParameters: Expr[Int] = {
++    implicit val IntType: Type[Int] = Type.of[Int]
++    val refs: List[Expr[Int]] = Environment.enclosingMethodParameters.collect {
++      case p if p.tpe.Underlying =:= Type.of[Int] => p.ref.value.asInstanceOf[Expr[Int]]
++    }
++    refs match {
++      case Nil          => Expr(0)
++      case head :: tail =>
++        tail.foldLeft(head) { (acc: Expr[Int], next: Expr[Int]) =>
++          Expr.quote(Expr.splice(acc) + Expr.splice(next))
++        }
++    }
++  }
++}
+diff --git a/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackOtherUnit.scala b/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackOtherUnit.scala
+new file mode 100644
+index 00000000..8b54394c
+--- /dev/null
++++ b/hearth-tests/src/main/scala/hearth/typed/KindlingsFeedbackOtherUnit.scala
+@@ -0,0 +1,25 @@
++package hearth
++package typed
++
++/** (7) A `Type.Ctor2.of[Function1]` created in a DIFFERENT compilation unit (file) than the fixture that unapplies it. */
++object KindlingsFeedbackOtherUnit {
++
++  def function1Ctor(ctx: MacroCommons): ctx.Type.Ctor2[Function1] = {
++    import ctx.*
++    Type.Ctor2.of[Function1]
++  }
++}
++
++/** (7) The same, but created inside a [[MacroExtension]] that is discovered through `ServiceLoader` (the
++  * `StandardMacroExtension` SPI path kindlings uses). Registered in `build.sbt` via `macroExtensionTraits`.
++  */
++abstract class KindlingsFeedbackFunction1Extension
++    extends MacroExtension[KindlingsFeedbackFixturesImpl & MacroCommons] {
++
++  def extend(ctx: KindlingsFeedbackFixturesImpl & MacroCommons): Unit = {
++    import ctx.*
++    ctx.registerSpiFunction1Ctor(Type.Ctor2.of[Function1])
++  }
++}
++
++final class KindlingsFeedbackFunction1ExtensionImpl extends KindlingsFeedbackFunction1Extension
+diff --git a/hearth-tests/src/test/scala-3/hearth/typed/KindlingsFeedbackScala3Spec.scala b/hearth-tests/src/test/scala-3/hearth/typed/KindlingsFeedbackScala3Spec.scala
+new file mode 100644
+index 00000000..73c4f522
+--- /dev/null
++++ b/hearth-tests/src/test/scala-3/hearth/typed/KindlingsFeedbackScala3Spec.scala
+@@ -0,0 +1,22 @@
++package hearth
++package typed
++
++import hearth.data.Data
++
++/** Scala 3-only part of [[KindlingsFeedbackSpec]] (context functions are a Scala 3 language feature). */
++final class KindlingsFeedbackScala3Spec extends MacroSuite {
++
++  group("(5) function type classification - context functions") {
++
++    test("Int ?=> String: no public predicate classifies it as a function; fqcn-based check misses it") {
++      KindlingsFeedbackFixtures.testFunctionClassification[Int ?=> String] <==> Data.map(
++        "plainPrint" -> Data("scala.ContextFunction1[scala.Int, java.lang.String]"),
++        "fqcn" -> Data("scala.ContextFunction1"),
++        "fqcn.startsWith(scala.Function)" -> Data(false),
++        "Ctor2.of[Function1].unapply" -> Data(false),
++        "Ctor3.of[Function2].unapply" -> Data(false),
++        "<:< Function1[Nothing, Any]" -> Data(false)
++      )
++    }
++  }
++}
+diff --git a/hearth-tests/src/test/scala/hearth/crossquotes/ImportOrderReproSpec.scala b/hearth-tests/src/test/scala/hearth/crossquotes/ImportOrderReproSpec.scala
+new file mode 100644
+index 00000000..abf8f3c9
+--- /dev/null
++++ b/hearth-tests/src/test/scala/hearth/crossquotes/ImportOrderReproSpec.scala
+@@ -0,0 +1,17 @@
++package hearth
++package crossquotes
++
++/** kindlings feedback (2) - see [[ImportOrderReproFixturesImpl]]. */
++final class ImportOrderReproSpec extends MacroSuite {
++
++  group("(2) cross-quotes: Type.of followed by `import x.Underlying as D` in the same block") {
++
++    test("import BEFORE Type.of (workaround)") {
++      ImportOrderReproFixtures.importBeforeTypeOf(List(1)) ==> "scala.collection.immutable.List[scala.Int] / scala.Any"
++    }
++
++    test("import AFTER Type.of (reproducer; fails to COMPILE on Scala 3)") {
++      ImportOrderReproFixtures.importAfterTypeOf(List(1)) ==> "scala.collection.immutable.List[scala.Int] / scala.Any"
++    }
++  }
++}
+diff --git a/hearth-tests/src/test/scala/hearth/typed/KindlingsFeedbackSpec.scala b/hearth-tests/src/test/scala/hearth/typed/KindlingsFeedbackSpec.scala
+new file mode 100644
+index 00000000..842f2708
+--- /dev/null
++++ b/hearth-tests/src/test/scala/hearth/typed/KindlingsFeedbackSpec.scala
+@@ -0,0 +1,269 @@
++package hearth
++package typed
++
++import hearth.data.Data
++import hearth.examples.kindlingsfeedback.*
++
++/** Minimal reproducers of gaps found while porting kindlings (di / di-cats / cats-derivation) macros to Hearth 0.4.3.
++  * Each group documents the EXPECTED (wanted) behavior; see `kindlings-feedback/<n>-*.md` for the write-ups.
++  */
++final class KindlingsFeedbackSpec extends MacroSuite {
++
++  // (4) macros expanded inside methods with parameters - plain methods (not test lambdas) to avoid `$anonfun` owners.
++  object ParamNest {
++
++    def view(a: Int, b: String)(implicit c: Long): Data = {
++      val local: Int = 1
++      val result: Data = KindlingsFeedbackFixtures.testEnclosingMethodView
++      val _ = (a, b, c, local)
++      result
++    }
++
++    def params(a: Int, b: String)(implicit c: Long): Data = {
++      val local: Int = 1
++      val result: Data = KindlingsFeedbackFixtures.testEnclosingMethodParameters
++      val _ = (a, b, c, local)
++      result
++    }
++
++    def genericParams[T](n: Int, s: String): Data = {
++      val result: Data = KindlingsFeedbackFixtures.testEnclosingMethodParameters
++      val _ = (n, s)
++      result
++    }
++
++    def sum(a: Int, b: Int, s: String): Int = {
++      val _ = s
++      KindlingsFeedbackFixtures.testSumEnclosingIntParameters
++    }
++  }
++
++  private val P = "hearth.examples.kindlingsfeedback"
++
++  group("(1) generic method: knownReturning after ApplyTypes") {
++
++    // `knownReturning`/`Returned` are rendered as "=:= R" when they are =:= the expected (substituted) return type R.
++
++    def step(name: String, knownReturning: String, expectations: String*): Data = Data.map(
++      "step" -> Data(name),
++      "knownReturning" -> Data(knownReturning),
++      "expectations" -> Data.list(expectations.map(Data(_))*)
++    )
++    val result: Data = Data.map(
++      "Result.Returned" -> Data("=:= R"),
++      "Returned <:< String" -> Data(false),
++      "built" -> Data("built: =:= R")
++    )
++
++    test("Widget.resource[F[_]]: Res[F, Widget] - Result.Returned is the substituted return type") {
++      KindlingsFeedbackFixtures.testGenericReturnWalk[Widget.type, Res[SomeF, Widget]](Widget)("resource") <==>
++        Data.list(
++          step("OnInstance", "<none>", "NeedsInstance", "NeedsTypes[F]"),
++          step("ApplyTypes", "<none>", "NeedsInstance", "NeedsTypes[F]"),
++          step("Result", "=:= R", "NeedsInstance", "NeedsTypes[F]"),
++          result
++        )
++    }
++
++    test("Plain.resource[F[_]]: Option[Plain] - Result.Returned must not be Nothing (it would pass any <:< check)") {
++      KindlingsFeedbackFixtures.testGenericReturnWalk[Plain.type, Option[Plain]](Plain)("resource") <==>
++        Data.list(
++          step("OnInstance", "<none>", "NeedsInstance", "NeedsTypes[F]"),
++          step("ApplyTypes", "<none>", "NeedsInstance", "NeedsTypes[F]"),
++          step("Result", "=:= R", "NeedsInstance", "NeedsTypes[F]"),
++          result
++        )
++    }
++
++    val serviceBefore = s"NeedsValues(config: $P.Config)(evidence$$1: $P.SyncLike[F])"
++    val serviceAfter = s"NeedsValues(config: $P.Config)(evidence$$1: $P.SyncLike[$P.SomeF])"
++
++    test("Service.resource[F[_]: SyncLike](config: Config): Res[F, Service] - known as soon as F is applied") {
++      KindlingsFeedbackFixtures.testGenericReturnWalk[Service.type, Res[SomeF, Service]](Service)("resource") <==>
++        Data.list(
++          step("OnInstance", "<none>", "NeedsInstance", "NeedsTypes[F]", serviceBefore),
++          step("ApplyTypes", "<none>", "NeedsInstance", "NeedsTypes[F]", serviceBefore),
++          // WANTED: the applied `F := SomeF` substituted into the return type, available right after ApplyTypes.
++          step("ApplyValues", "=:= R", "NeedsInstance", "NeedsTypes[F]", serviceAfter),
++          step("Result", "=:= R", "NeedsInstance", "NeedsTypes[F]", serviceAfter),
++          result
++        )
++    }
++
++    test("Service.resource with F passed as Type.Ctor1.of[SomeF].asUntyped (the kindlings way)") {
++      KindlingsFeedbackFixtures.testGenericReturnWalkViaCtor1Of[Service.type, Res[SomeF, Service]](Service)(
++        "resource"
++      ) <==>
++        Data.list(
++          step("OnInstance", "<none>", "NeedsInstance", "NeedsTypes[F]", serviceBefore),
++          step("ApplyTypes", "<none>", "NeedsInstance", "NeedsTypes[F]", serviceBefore),
++          step("ApplyValues", "=:= R", "NeedsInstance", "NeedsTypes[F]", serviceAfter),
++          step("Result", "=:= R", "NeedsInstance", "NeedsTypes[F]", serviceAfter),
++          result
++        )
++    }
++  }
++
++  group("(3) singleton types: decompose / typeConstructor / typeArguments / Ctor unapply") {
++
++    def expectedBox(plainPrint: String): Data = {
++      val printed: List[(String, Data)] = if (plainPrint.nonEmpty) List("plainPrint" -> Data(plainPrint)) else Nil
++      val probes: List[(String, Data)] = List(
++      "decompose1" -> Data("None"),
++      "decompose2" -> Data(s"Some(($P.Box, scala.Int, java.lang.String))"),
++      "UntypedType.typeConstructor" -> Data(s"$P.Box"),
++      "UntypedType.typeArguments" -> Data("[scala.Int, java.lang.String]"),
++      "Type.typeArguments" -> Data("[scala.Int, java.lang.String]"),
++      "hasSameTypeConstructor[A, B]" -> Data(true),
++      "Ctor2.of[Box].unapply" -> Data("Some((scala.Int, java.lang.String))"),
++      "Ctor1.of[Option].unapply" -> Data("None"),
++      "A <:< B" -> Data(true)
++      )
++      Data.map((printed ++ probes)*)
++    }
++
++    def expectedOpt(plainPrint: String): Data = Data.map(
++      "plainPrint" -> Data(plainPrint),
++      "decompose1" -> Data("Some((scala.Option, scala.Int))"),
++      "decompose2" -> Data("None"),
++      "UntypedType.typeConstructor" -> Data("scala.Option"),
++      "UntypedType.typeArguments" -> Data("[scala.Int]"),
++      "Type.typeArguments" -> Data("[scala.Int]"),
++      "hasSameTypeConstructor[A, B]" -> Data(true),
++      "Ctor2.of[Box].unapply" -> Data("None"),
++      "Ctor1.of[Option].unapply" -> Data("Some(scala.Int)"),
++      "A <:< B" -> Data(true)
++    )
++
++    test("baseline: declared type Box[Int, String]") {
++      KindlingsFeedbackFixtures.testDecompose[Box[Int, String], Box[Any, Any]] <==>
++        expectedBox(s"$P.Box[scala.Int, java.lang.String]")
++    }
++
++    test("singleton SingletonVals.box.type (explicit type argument)") {
++      KindlingsFeedbackFixtures.testDecompose[SingletonVals.box.type, Box[Any, Any]] <==>
++        expectedBox(s"$P.SingletonVals.box.type")
++    }
++
++    test("static type of the argument expression SingletonVals.box") {
++      // Scala 2 already reports the widened `Box[Int, String]` here, Scala 3 the singleton `SingletonVals.box.type`.
++      KindlingsFeedbackFixtures.testDecomposeExprType[Box[Any, Any]](SingletonVals.box) <==> expectedBox("")
++    }
++
++    test("baseline: declared type Option[Int]") {
++      KindlingsFeedbackFixtures.testDecompose[Option[Int], Option[Any]] <==> expectedOpt("scala.Option[scala.Int]")
++    }
++
++    test("singleton SingletonVals.opt.type (explicit type argument)") {
++      KindlingsFeedbackFixtures.testDecompose[SingletonVals.opt.type, Option[Any]] <==>
++        expectedOpt(s"$P.SingletonVals.opt.type")
++    }
++
++    test("singleton of a non-applied type (SingletonVals.str.type) still decomposes to None") {
++      KindlingsFeedbackFixtures.testDecompose[SingletonVals.str.type, String] <==> Data.map(
++        "plainPrint" -> Data(s"$P.SingletonVals.str.type"),
++        "decompose1" -> Data("None"),
++        "decompose2" -> Data("None"),
++        "UntypedType.typeConstructor" -> Data("java.lang.String"),
++        "UntypedType.typeArguments" -> Data("[]"),
++        "Type.typeArguments" -> Data("[]"),
++        "hasSameTypeConstructor[A, B]" -> Data(true),
++        "Ctor2.of[Box].unapply" -> Data("None"),
++        "Ctor1.of[Option].unapply" -> Data("None"),
++        "A <:< B" -> Data(true)
++      )
++    }
++  }
++
++  group("(5) function type classification") {
++
++    test("Int => String") {
++      KindlingsFeedbackFixtures.testFunctionClassification[Int => String] <==> Data.map(
++        "plainPrint" -> Data("scala.Function1[scala.Int, java.lang.String]"),
++        "fqcn" -> Data("scala.Function1"),
++        "fqcn.startsWith(scala.Function)" -> Data(true),
++        "Ctor2.of[Function1].unapply" -> Data(true),
++        "Ctor3.of[Function2].unapply" -> Data(false),
++        "<:< Function1[Nothing, Any]" -> Data(true)
++      )
++    }
++
++    test("IntPredicate extends (Int => Boolean): a function, but fqcn-based check misses it") {
++      KindlingsFeedbackFixtures.testFunctionClassification[IntPredicate] <==> Data.map(
++        "plainPrint" -> Data(s"$P.IntPredicate"),
++        "fqcn" -> Data(s"$P.IntPredicate"),
++        "fqcn.startsWith(scala.Function)" -> Data(false),
++        "Ctor2.of[Function1].unapply" -> Data(true),
++        "Ctor3.of[Function2].unapply" -> Data(false),
++        "<:< Function1[Nothing, Any]" -> Data(true)
++      )
++    }
++  }
++
++  group("(6) Type.fqcn is not a type identity") {
++
++    test("Box[Int, String] and Box[String, Int] share fqcn but are different types") {
++      KindlingsFeedbackFixtures.testFqcnIdentity[Box[Int, String], Box[String, Int]] <==> Data.map(
++        "fqcn[A]" -> Data(s"$P.Box"),
++        "fqcn[B]" -> Data(s"$P.Box"),
++        "fqcn[A] == fqcn[B]" -> Data(true),
++        "A =:= B" -> Data(false)
++      )
++    }
++  }
++
++  group("(7) Type.Ctor2.of[Function1].unapply") {
++
++    def expected(plainPrint: String, args: String): Data = Data.map(
++      "plainPrint" -> Data(plainPrint),
++      "Ctor2.of[Function1] (same unit)" -> Data(args),
++      "Ctor2.fromUntyped(Ctor2.of[Function1].asUntyped)" -> Data(args),
++      "Ctor2.of[Function1] (other compilation unit)" -> Data(args),
++      "Ctor2.of[Function1] (via MacroExtension SPI)" -> Data(args)
++    )
++
++    test("Int => Boolean") {
++      KindlingsFeedbackFixtures.testFunction1Unapply[Int => Boolean] <==>
++        expected("scala.Function1[scala.Int, scala.Boolean]", "Some((scala.Int, scala.Boolean))")
++    }
++
++    test("String => List[Int]") {
++      KindlingsFeedbackFixtures.testFunction1Unapply[String => List[Int]] <==>
++        expected(
++          "scala.Function1[java.lang.String, scala.collection.immutable.List[scala.Int]]",
++          "Some((java.lang.String, scala.collection.immutable.List[scala.Int]))"
++        )
++    }
++
++    test("IntPredicate extends (Int => Boolean) (subtype - not headed by Function1)") {
++      KindlingsFeedbackFixtures.testFunction1Unapply[IntPredicate] <==>
++        expected(s"$P.IntPredicate", "Some((scala.Int, scala.Boolean))")
++    }
++  }
++
++  group("(4) Enclosure.Method exposes no parameters of the enclosing method") {
++
++    test("0.4.3 public API: the enclosing method's view has localValues but no parameters") {
++      ParamNest.view(1, "x")(2L) <==> Data.map(
++        "name" -> Data("view"),
++        "fields" -> Data.list(Data("name"), Data("fullName"), Data("position"), Data("tpe"), Data("localValues"))
++      )
++    }
++
++    test("PROTOTYPE Environment.enclosingMethodParameters: all value clauses, incl. implicit") {
++      ParamNest.params(1, "x")(2L) <==> Data.list(
++        Data("a: scala.Int"),
++        Data("b: java.lang.String"),
++        Data("c: scala.Long")
++      )
++    }
++
++    test("PROTOTYPE Environment.enclosingMethodParameters: generic method, type params are not values") {
++      ParamNest.genericParams[String](1, "s") <==> Data.list(Data("n: scala.Int"), Data("s: java.lang.String"))
++    }
++
++    test("PROTOTYPE Environment.enclosingMethodParameters: refs are usable in generated code") {
++      ParamNest.sum(10, 32, "ignored") ==> 42
++    }
++  }
++}
+diff --git a/hearth/src/main/scala-2/hearth/EnvironmentsScala2.scala b/hearth/src/main/scala-2/hearth/EnvironmentsScala2.scala
+index 31c33c3a..7aebcad3 100644
+--- a/hearth/src/main/scala-2/hearth/EnvironmentsScala2.scala
++++ b/hearth/src/main/scala-2/hearth/EnvironmentsScala2.scala
+@@ -186,6 +186,30 @@ trait EnvironmentsScala2 extends Environments { this: MacroCommonsScala2 =>
+ 
+   object Environment extends EnvironmentModule {
+ 
++    // PROTOTYPE (kindlings feedback): the owner chain's method symbol carries its `paramLists`.
++    override lazy val enclosingMethodParameters: List[Enclosure.LocalValue] = {
++      import c.universe.{Position as _, *}
++      def isHidden(symbol: Symbol): Boolean = {
++        val n = symbol.name.decodedName.toString.trim
++        n.startsWith("$anonfun") || n.contains("$anon") || (symbol.isMethod && symbol.isSynthetic)
++      }
++      @scala.annotation.tailrec
++      def loop(symbol: Symbol): List[Enclosure.LocalValue] =
++        if (symbol == NoSymbol || symbol.isPackage || symbol.isPackageClass || symbol.isClass || symbol.isModule) Nil
++        else if (symbol.isMethod && !isHidden(symbol))
++          symbol.asMethod.paramLists.flatten.map { param =>
++            val tpe: UntypedType = param.typeSignature
++            val ref: c.Tree = c.universe.internal.gen.mkAttributedRef(param)
++            Enclosure.LocalValue(
++              param.name.decodedName.toString.trim,
++              UntypedType.as_??(tpe),
++              UntypedExpr.as_??(ref, tpe)
++            )
++          }
++        else loop(symbol.owner)
++      loop(c.internal.enclosingOwner)
++    }
++
+     override lazy val currentScalaVersion: ScalaVersion = ScalaVersion.byScalaLibrary(c)
+ 
+     override lazy val XMacroSettings: List[String] = c.settings
+diff --git a/hearth/src/main/scala-3/hearth/EnvironmentsScala3.scala b/hearth/src/main/scala-3/hearth/EnvironmentsScala3.scala
+index 361fa5a7..3811a3c3 100644
+--- a/hearth/src/main/scala-3/hearth/EnvironmentsScala3.scala
++++ b/hearth/src/main/scala-3/hearth/EnvironmentsScala3.scala
+@@ -184,6 +184,24 @@ trait EnvironmentsScala3 extends Environments { this: MacroCommonsScala3 =>
+ 
+   object Environment extends EnvironmentModule {
+ 
++    // PROTOTYPE (kindlings feedback): `Symbol.paramSymss` is NOT @experimental, so this needs no reflection.
++    override lazy val enclosingMethodParameters: List[Enclosure.LocalValue] = {
++      def isHidden(symbol: Symbol): Boolean = {
++        val n = symbol.name
++        n == "macro" || n.startsWith("$anonfun") || n.contains("$anon") ||
++        (symbol.isDefDef && symbol.flags.is(Flags.Synthetic) && symbol.flags.is(Flags.Macro))
++      }
++      @scala.annotation.tailrec
++      def loop(symbol: Symbol): List[Enclosure.LocalValue] =
++        if symbol.isNoSymbol || symbol.isPackageDef || symbol.isClassDef then Nil
++        else if symbol.isDefDef && !isHidden(symbol) then symbol.paramSymss.flatten.filter(_.isTerm).map { param =>
++          val tpe = param.termRef.widen
++          Enclosure.LocalValue(param.name, UntypedType.as_??(tpe), UntypedExpr.as_??(Ref(param): Term, tpe))
++        }
++        else loop(symbol.maybeOwner)
++      loop(Symbol.spliceOwner)
++    }
++
+     override lazy val currentScalaVersion: ScalaVersion = ScalaVersion.byScalaLibrary(quotes)
+ 
+     override lazy val XMacroSettings: List[String] = {
+diff --git a/hearth/src/main/scala/hearth/Environments.scala b/hearth/src/main/scala/hearth/Environments.scala
+index 2a7d06c3..c45feb9d 100644
+--- a/hearth/src/main/scala/hearth/Environments.scala
++++ b/hearth/src/main/scala/hearth/Environments.scala
+@@ -73,6 +73,14 @@ trait Environments extends EnvironmentCrossQuotesSupport { env: MacroCommons =>
+ 
+     final lazy val currentPosition: Position = Position.current
+ 
++    /** PROTOTYPE (kindlings feedback, not released): the value parameters (all clauses, including `implicit`/`using`)
++      * of the IMMEDIATELY-enclosing method, each with a [[Enclosure.LocalValue.ref]] usable in generated code (the
++      * macwire "enclosing method parameters are wiring candidates" case). Empty when the expansion is not inside a
++      * method. Type parameters are not included. Declared here (nested `EnvironmentModule`) rather than as a new
++      * `Enclosure.Method` field so that the case class shape (and so binary compatibility) is unchanged.
++      */
++    def enclosingMethodParameters: List[Enclosure.LocalValue]
++
+     def currentScalaVersion: ScalaVersion
+ 
+     final lazy val currentLanguageVersion: LanguageVersion = currentScalaVersion.toLanguageVersion
