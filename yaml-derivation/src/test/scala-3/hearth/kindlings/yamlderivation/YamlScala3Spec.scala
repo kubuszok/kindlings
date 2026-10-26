@@ -1,7 +1,7 @@
 package hearth.kindlings.yamlderivation
 
 import hearth.MacroSuite
-import org.virtuslab.yaml.{Node, Tag}
+import org.virtuslab.yaml.Node
 import org.virtuslab.yaml.Node.{MappingNode, ScalarNode, SequenceNode}
 
 final class YamlScala3Spec extends MacroSuite {

@@ -1,7 +1,6 @@
 package hearth.kindlings.integrationtests
 
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.any.*
 import io.github.iltotore.iron.constraint.numeric.*
 import io.github.iltotore.iron.constraint.string.*
 
