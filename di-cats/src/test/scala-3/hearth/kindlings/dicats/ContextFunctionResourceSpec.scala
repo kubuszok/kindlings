@@ -3,8 +3,8 @@ package hearth.kindlings.dicats
 import hearth.MacroSuite
 import cats.effect.{Resource, SyncIO}
 
-/** Scala 3 only: a context function (`A ?=> X`) passed to `wireResource` is a factory, its `using` parameters
-  * resolved from the graph and its result wrapped per its return shape, exactly like a plain function factory.
+/** Scala 3 only: a context function (`A ?=> X`) passed to `wireResource` is a factory, its `using` parameters resolved
+  * from the graph and its result wrapped per its return shape, exactly like a plain function factory.
   */
 final class ContextFunctionResourceSpec extends MacroSuite {
 

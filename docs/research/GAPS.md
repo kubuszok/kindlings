@@ -70,7 +70,7 @@ more module/wrapper combinations.
 |---|---|---|
 | jsoniter | `decodingOnly + encodingOnly compile error` in `compileErrors()` context | Works in real usage. |
 | tapir | Scala 2 tapir-schema tests broken | Pre-existing Hearth issue with Scala 2 type identity. |
-| di / di-cats | Hearth `UntypedType.parents` returns `Nil` for applied generic classes on Scala 2 | Worked around (count function classes in `baseClasses`) — see `hearth-gap-scala2-parents-generic-classes.md`. |
+| di / di-cats | Hearth `UntypedType.parents` returns `Nil` for applied generic classes on Scala 2 | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); the `baseClasses` workaround is removed (`!parents.exists(_.isFunction)`) — see `hearth-gap-scala2-parents-generic-classes.md`. |
 
 ### Resolved
 

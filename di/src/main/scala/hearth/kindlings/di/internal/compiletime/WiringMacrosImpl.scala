@@ -839,9 +839,8 @@ private[di] trait WiringMacrosImpl
     *
     * A class that merely EXTENDS a function type (`List[A]`/`Map[K, V]`/`Set[A]` via `PartialFunction`/`A => Boolean`,
     * or a user `class Maker extends (A => B)`) stays a plain instance: Hearth's `isFunction` reads the `FunctionN` base
-    * type, so we additionally require that the type's linearization holds exactly ONE function class - the type's own
-    * class, i.e. `FunctionN` itself. (Not `parents.exists(_.isFunction)`: on Scala 2 Hearth's `parents` returns `Nil`
-    * for generic classes, see `docs/research/hearth-gap-scala2-parents-generic-classes.md`.)
+    * type, so we additionally require that none of the type's direct parents is a function - which only holds for
+    * `FunctionN` itself.
     */
   private def isFunctionExpr(dep: Expr_??): Boolean = {
     import dep.Underlying as D
@@ -855,7 +854,7 @@ private[di] trait WiringMacrosImpl
 
   private def isFactoryType[D: Type]: Boolean =
     Type.isContextFunction[D] || (Type.isFunction[D] &&
-      UntypedType.dealias(UntypedType.fromTyped[D]).baseClasses.count(_.isFunction) == 1)
+      !UntypedType.dealias(UntypedType.fromTyped[D]).parents.exists(_.isFunction))
 
   /** The `apply` of a factory function value - its single SAM, ignoring specialized/bridge variants: the one taking as
     * many parameters as the function type has (preferring the highest arity if several qualify).

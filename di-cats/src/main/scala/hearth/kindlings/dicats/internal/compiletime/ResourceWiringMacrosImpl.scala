@@ -180,13 +180,11 @@ private[dicats] trait ResourceWiringMacrosImpl
     *
     * A class that merely EXTENDS a function type (`List[A]`/`Map[K, V]`/`Set[A]`, or a user `class Maker extends (A =>
     * B)`) stays a plain instance: Hearth's `isFunction` reads the `FunctionN` base type, so we additionally require
-    * that the type's linearization holds exactly ONE function class - the type's own class, i.e. `FunctionN` itself.
-    * (Not `parents.exists(_.isFunction)`: on Scala 2 Hearth's `parents` returns `Nil` for generic classes, see
-    * `docs/research/hearth-gap-scala2-parents-generic-classes.md`.)
+    * that none of the type's direct parents is a function - which only holds for `FunctionN` itself.
     */
   private def isFunction[D: Type]: Boolean =
     Type.isContextFunction[D] || (Type.isFunction[D] &&
-      UntypedType.dealias(UntypedType.fromTyped[D]).baseClasses.count(_.isFunction) == 1)
+      !UntypedType.dealias(UntypedType.fromTyped[D]).parents.exists(_.isFunction))
 
   /** Decompose a factory function value into its (instance-resolved) `apply`, parameter types, and return shape. */
   private def factoryProvider[F[_]](
