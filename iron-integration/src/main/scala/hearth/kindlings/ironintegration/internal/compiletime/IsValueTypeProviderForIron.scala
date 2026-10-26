@@ -15,15 +15,7 @@ final class IsValueTypeProviderForIron extends StandardMacroExtension { loader =
 
       override def name: String = loader.getClass.getName
 
-      // Use fromUntyped to avoid cross-compilation-boundary issues with Type.Ctor2.of.
-      // The Impl (from .of) captures scala.quoted.Type[HKT] at compile time, which may
-      // resolve to a different TypeRepr path than the one seen during macro expansion in
-      // downstream projects. FromUntypedImpl uses =:= and baseType for matching, which
-      // handles path differences correctly.
-      private lazy val IronTypeCtor = {
-        val impl = Type.Ctor2.of[io.github.iltotore.iron.IronType]
-        Type.Ctor2.fromUntyped[io.github.iltotore.iron.IronType](impl.asUntyped)
-      }
+      private lazy val IronTypeCtor = Type.Ctor2.of[io.github.iltotore.iron.IronType]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsValueType[A]] =

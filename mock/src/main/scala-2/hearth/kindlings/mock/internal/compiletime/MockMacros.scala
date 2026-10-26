@@ -20,7 +20,7 @@ final private[mock] class MockMacros(val c: blackbox.Context) extends MacroCommo
       case other                 =>
         c.abort(c.enclosingPosition, s"`.$dsl` could not extract the method reference from: ${showRaw(other)}")
     }
-    (c.Expr[Any](fTree), c.Expr[Seq[Any]](q"_root_.scala.Seq(..${args.map(_.tree)})"))
+    (c.Expr[Any](fTree), VarArgs.from[Any](args))
   }
 
   def expectsImpl(args: c.Expr[Any]*): c.Expr[CallHandler] = {

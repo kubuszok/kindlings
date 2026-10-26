@@ -135,16 +135,11 @@ override def asIterable(value: Expr[A]): Expr[Iterable[E]] =
 
 The helper methods take/return `Any` where the Newtype aliases would appear, and the generated code casts to the correct types.
 
-**c) `Type.Ctor1.fromUntyped` for cross-compilation-boundary matching**
+**c) `Type.Ctor1.of` vs `fromUntyped`**
 
-Same as value type integrations — always wrap with `fromUntyped`:
-
-```scala
-private lazy val NELCtor = {
-  val impl = Type.Ctor1.of[cats.data.NonEmptyList]
-  Type.Ctor1.fromUntyped[cats.data.NonEmptyList](impl.asUntyped)
-}
-```
+Plain `Type.Ctor1.of[cats.data.NonEmptyList]` is fine across compilation units / the extension SPI (re-measured on
+Hearth 0.4.3, see `hearth-value-types` skill). Wrap with `Type.Ctor1.fromUntyped(Type.Ctor1.of[F].asUntyped)` only when
+SUBTYPES of the constructor can reach the match (Scala 3 `.of` mis-decomposes contravariant arguments of subtypes).
 
 **d) Scala 3 tree invariant checker — keep correct types inside quotes**
 
@@ -253,7 +248,7 @@ sbt --client "catsIntegration/clean ; catsIntegration3/clean ; test-jvm-2_13 ; t
 |---------|---------|-----|
 | Path-dependent types in `Expr.quote` | Scala 2: "not found: value elem" | Helper method pattern (§3a) |
 | Newtype aliases in `Expr.quote` | Scala 2: "not found: value data" | Runtime helper pattern (§3b) |
-| Missing `fromUntyped` | Type matching silently fails | Always use `fromUntyped` (§3c) |
+| Subtype of the constructor matched with `.of` (Scala 3) | Contravariant argument comes back as `Nothing` | Use `fromUntyped` (§3c) |
 | Tree type mismatch | Scala 3: tree invariant checker failure | Cast inside quotes (§3d) |
 | SBT not reloaded after build.sbt change | SPI extension not loaded | `sbt --client "reload"` (§2) |
 
@@ -269,7 +264,7 @@ sbt --client "catsIntegration/clean ; catsIntegration3/clean ; test-jvm-2_13 ; t
 - [ ] `StandardMacroExtension` class with `IsCollection.registerProvider` calls
 - [ ] Helper methods with regular type parameters (not path-dependent)
 - [ ] Runtime helper object for Newtype aliases (if applicable)
-- [ ] `Type.Ctor1.fromUntyped` / `Type.Ctor2.fromUntyped` for all type constructors
+- [ ] `Type.Ctor1.fromUntyped` / `Type.Ctor2.fromUntyped` where subtypes of the constructor can be matched (§3c)
 - [ ] `@nowarn("msg=is never used")` on methods with implicit `Type` for cross-quotes
 - [ ] `EitherStringOrValue` for non-empty collections, `PlainValue` for always-valid collections
 - [ ] `IsMapOf` (not `IsCollectionOf`) for map-like types

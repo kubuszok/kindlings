@@ -41,7 +41,7 @@ trait FastShowPrettyMacrosImpl
 
   // Entrypoints to the macro
 
-  def deriveInline[A: Type](valueExpr: Expr[A], configExpr: Expr[RenderConfig], levelExpr: Expr[Int]): Expr[String] = {
+  def deriveInline[A: Type](valueExpr: Expr[A], configExpr: Expr[RenderConfig]): Expr[String] = {
     implicit val StringBuilder: Type[StringBuilder] = Types.StringBuilder
     implicit val RenderConfig: Type[RenderConfig] = Types.RenderConfig
     implicit val String: Type[String] = Types.String
@@ -51,7 +51,7 @@ trait FastShowPrettyMacrosImpl
       ValDefs.createVal[StringBuilder](Expr.quote(new StringBuilder)).use { sbVal =>
         ValDefs.createVal[A](valueExpr).use { valueVal =>
           ValDefs.createVal[RenderConfig](configExpr).use { configVal =>
-            ValDefs.createVal[Int](levelExpr).use { levelVal =>
+            ValDefs.createVal[Int](Expr.quote(Expr.splice(configVal).startLevel)).use { levelVal =>
               Expr.quote {
                 val _ = Expr.splice(sbVal)
                 val _ = Expr.splice(valueVal)

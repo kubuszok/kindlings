@@ -133,10 +133,10 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       s".when[${Type.prettyPrint[T]}]"
   }
 
-  def modify[S: Type, A: Type](obj: Expr[S], path: Expr[S => A]): Expr[PathModify[S, A]] = {
+  def modify[S: Type, A: Type, P: Type](obj: Expr[S], path: Expr[P]): Expr[PathModify[S, A]] = {
     ensureStdExtensionsLoaded()
     val trace = new Trace
-    val steps: List[PathStep] = parsePath[S, A](path)
+    val steps: List[PathStep] = parsePath[P](path)
     trace.step(s"modify[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}]")
     trace.step(s"parsed path: ${describeSteps(steps)}")
     // Build the copy-with-modification function `(s, mod) => <rebuilt s>`, where the leaf transformation applied at the
@@ -269,11 +269,11 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * Overlapping field prefixes are shared — `modifyAll(_.a.b, _.a.c)` copies `a` exactly once (quicklens semantics).
     * All paths must focus the same leaf type `A` (the call site pins this).
     */
-  def modifyAll[S: Type, A: Type](obj: Expr[S], paths: List[Expr[S => A]]): Expr[PathModify[S, A]] = {
+  def modifyAll[S: Type, A: Type, P: Type](obj: Expr[S], paths: List[Expr[P]]): Expr[PathModify[S, A]] = {
     ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAll` requires at least one path")
     val trace = new Trace
-    val pathSteps: List[List[PathStep]] = paths.map(parsePath[S, A])
+    val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAll[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}] over ${pathSteps.size} path(s)")
     pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
     val doModify: Expr[(S, A => A) => S] =
@@ -292,10 +292,10 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   /** `modifyLens[T](_.a.b)` → `PathLazyModify[T, U]`: a reusable lens NOT bound to an object. Same machinery as
     * [[modify]], but the rebuilt value is a function of the lambda parameter `t` rather than a captured object.
     */
-  def modifyLens[T: Type, Foc: Type](path: Expr[T => Foc]): Expr[PathLazyModify[T, Foc]] = {
+  def modifyLens[T: Type, Foc: Type, P: Type](path: Expr[P]): Expr[PathLazyModify[T, Foc]] = {
     ensureStdExtensionsLoaded()
     val trace = new Trace
-    val steps: List[PathStep] = parsePath[T, Foc](path)
+    val steps: List[PathStep] = parsePath[P](path)
     trace.step(s"modifyLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}]")
     trace.step(s"parsed path: ${describeSteps(steps)}")
     val doModify: Expr[(T, Foc => Foc) => T] =
@@ -314,11 +314,11 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   /** `modifyAllLens[T](_.a, _.b)` → `PathLazyModify[T, Foc]`: the multi-path reusable lens form. Same shared-prefix
     * merge as [[modifyAll]], but unbound from any object.
     */
-  def modifyAllLens[T: Type, Foc: Type](paths: List[Expr[T => Foc]]): Expr[PathLazyModify[T, Foc]] = {
+  def modifyAllLens[T: Type, Foc: Type, P: Type](paths: List[Expr[P]]): Expr[PathLazyModify[T, Foc]] = {
     ensureStdExtensionsLoaded()
     if (paths.isEmpty) abort("`modifyAllLens` requires at least one path")
     val trace = new Trace
-    val pathSteps: List[List[PathStep]] = paths.map(parsePath[T, Foc])
+    val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAllLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}] over ${pathSteps.size} path(s)")
     pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
     val doModify: Expr[(T, Foc => Foc) => T] =
@@ -425,10 +425,15 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * field access; a call to `each`/`eachWhere` (the marker extensions) is a collection traversal whose receiver is the
     * container expression (its element type is derived from the container — see [[eachStep]]). Bottoms out at the
     * lambda parameter reference.
+    *
+    * `P` is the path's static type: a plain `S => A` on Scala 2, the context function `OpticsContext ?=> (S => A)` on
+    * Scala 3. [[hearth.typed.Exprs.DestructuredExpr.skipContextualWrappers]] peels the contextual layer (the `?=>`
+    * lambda, or the block binding a synthetic `given`) down to the real `S => A` lambda — a no-op on Scala 2. The
+    * dropped `OpticsContext` may still be referenced from the marker-evidence argument positions in the body, but those
+    * are `PathStepEvidence`-typed and [[nonEvidenceArgs]] discards them.
     */
-  private def parsePath[S: Type, A: Type](path: Expr[S => A]): List[PathStep] = {
-    implicit val funType: Type[S => A] = Type.Ctor2.of[Function1].apply[S, A]
-    val parsed = DestructuredExpr.parse[S => A](path)
+  private def parsePath[P: Type](path: Expr[P]): List[PathStep] = {
+    val parsed = DestructuredExpr.skipContextualWrappers(DestructuredExpr.parse[P](path))
     parsed match {
       case lam: DestructuredExpr.Lambda =>
         lam.params match {
