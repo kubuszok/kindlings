@@ -1,7 +1,23 @@
 # Hearth gap: `Type.Ctor1.of[F]` / `Type.CtorK1.of[Alg]` for a Scala 2 macro method's own type parameter
 
-Status: **OPEN** (found 2026-10-25 with Hearth 0.4.3, while moving `cats-derivation` and `cats-tagless-derivation`
-off per-platform reflection). Scala 3 is not affected.
+Status: **RESOLVED** by kubuszok/hearth#389 (Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, 2026-10-26). Found 2026-10-25 with
+Hearth 0.4.3, while moving `cats-derivation` and `cats-tagless-derivation` off per-platform reflection. Scala 3 was not
+affected.
+
+**Resolution.** On Scala 2, `Type.Ctor1.of[F]` / `Type.Ctor2.of[F]` / `Type.CtorK1.of[Alg]` called where `F`/`Alg` is a
+type parameter of the enclosing macro method now use that method's implicit `c.WeakTypeTag[F[Any]]` (or `Type[F[Any]]`,
+`c.WeakTypeTag[Alg[Option]]`, ...) parameter, matched by the type parameter's name. The result is the tag type's
+`typeConstructor`, *not* dealiased, so it agrees with Scala 3 for type aliases. Without such an implicit parameter it
+aborts with an explanatory error instead of yielding an abstract constructor or crashing.
+
+**In Kindlings**, all 26 one-line Scala 2 entry points now call `of` directly (the implicit tag parameters stay, since
+`of` reads them):
+
+- `cats-derivation`: 19 × `derive<TC>[F](Type.Ctor1.of[F])` / `derive<TC>[F](Type.Ctor2.of[F])`;
+- `cats-tagless-derivation`: 6 × `derive<TC>[Alg](Type.CtorK1.of[Alg])`;
+- `di-cats` (`ResourceWiringMacros`): 1 × `Type.Ctor1.of[F]`.
+
+The rest of this document is the original report, kept for history.
 
 ## What is wrong
 
@@ -75,7 +91,7 @@ suite does not cover this case; the conclusion comes from reading the Hearth sou
 Scala 3 `Type.Ctor1.of[F]` both keep the alias constructor. The two platforms would then diverge, so the entry glue keeps
 `.tpe.typeConstructor`.
 
-## Current workaround (kept)
+## Former workaround (removed after kubuszok/hearth#389)
 
 Each Scala 2 entry point is one line of glue. Everything after it is shared code that uses only Hearth APIs:
 

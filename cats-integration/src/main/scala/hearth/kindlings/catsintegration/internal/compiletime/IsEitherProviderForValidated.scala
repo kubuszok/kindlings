@@ -21,10 +21,7 @@ final class IsEitherProviderForValidated extends StandardMacroExtension { loader
 
       override def name: String = loader.getClass.getName
 
-      private lazy val ValidatedCtor = {
-        val impl = Type.Ctor2.of[cats.data.Validated]
-        Type.Ctor2.fromUntyped[cats.data.Validated](impl.asUntyped)
-      }
+      private lazy val ValidatedCtor = Type.Ctor2.of[cats.data.Validated]
 
       // Cheap sound negative gate (hearth#347 pattern): Validated is class-headed, so a class-headed scrutinee can
       // only match when the constructor appears among its base classes.

@@ -182,9 +182,13 @@ Type[A] match {
 }
 ```
 
-### 11. `Type.Ctor2.of[Function1].unapply` wrong
+### 11. `Type.Ctor2.of[Function1].unapply` wrong (FIXED in kubuszok/hearth#389)
 
-**Severity: HIGH | Platform: Scala 3**
+**Severity: none since kubuszok/hearth#389 | Platform: Scala 3**
+
+**Fixed:** Hearth's Scala 3 `CtorN.of(...).unapply` now reads the arguments off the scrutinee's base type (and widens
+singleton types first), so plain `Type.Ctor2.of[Function1]` is correct for subtypes too. Kindlings removed all its
+`fromUntyped(of[F].asUntyped)` wrappers. The text below is kept for history.
 
 Re-measured on Hearth 0.4.3 (failing test in Hearth's own suite, see `docs/research/macwire-hearth-evaluation-claims.md`): for an
 EXACT applied type (`Int => Boolean`) `Type.Ctor2.of[Function1].unapply` is correct on both platforms. It is still wrong
@@ -195,14 +199,14 @@ match. Compilation-unit / SPI boundaries play no role (measured: same file, othe
 extension behave identically).
 
 ```scala
-// CORRECT:
+// Former workaround (no longer needed since kubuszok/hearth#389):
 val Function1Ctor2 = {
   val impl = Type.Ctor2.of[Function1]
   Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
 }
+// Now:
+val Function1Ctor2 = Type.Ctor2.of[Function1]
 ```
-
-Same fix applies to any `Type.Ctor2` use across SPI boundaries.
 
 **Reference:** `ContravariantMacrosImpl.scala`
 

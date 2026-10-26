@@ -41,10 +41,7 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationE
 
           val contravariantFields = scala.collection.mutable.Set.empty[String]
 
-          val Function1Ctor2 = {
-            val impl = Type.Ctor2.of[Function1]
-            Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
-          }
+          val Function1Ctor2 = Type.Ctor2.of[Function1]
 
           runSafe {
             fieldsInt

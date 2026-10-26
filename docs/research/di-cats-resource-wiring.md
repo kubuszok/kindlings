@@ -146,7 +146,7 @@ is the crux of the codegen.
   ```scala
   def wireResourceImpl[F[_], T](dependencies: c.Tree*)(implicit
       ft: c.WeakTypeTag[F[Any]], tt: c.WeakTypeTag[T]): c.Expr[Resource[F, T]] = {
-    val fCtor = Type.Ctor1.fromUntyped[F](ft.tpe.typeConstructor)
+    val fCtor = Type.Ctor1.of[F] // reads `ft` (kubuszok/hearth#389)
     wireResource[F, T](dependencies.toList.map(t => c.Expr[Any](t).as_??))(fCtor, ...)
   }
   ```

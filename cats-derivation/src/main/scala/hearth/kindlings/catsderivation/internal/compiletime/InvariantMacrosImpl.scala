@@ -42,10 +42,7 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
           // Field classification using string tags
           val fieldKinds = scala.collection.mutable.Map.empty[String, String]
 
-          val Function1Ctor2 = {
-            val impl = Type.Ctor2.of[Function1]
-            Type.Ctor2.fromUntyped[Function1](impl.asUntyped)
-          }
+          val Function1Ctor2 = Type.Ctor2.of[Function1]
 
           runSafe {
             fieldsInt

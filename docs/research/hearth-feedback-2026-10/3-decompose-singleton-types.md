@@ -1,5 +1,9 @@
 # `Type.decompose1/2`, `typeArguments` (and on Scala 3 `typeConstructor`/`hasSameTypeConstructor`) don't see through singleton types
 
+**Status:** fixed in kubuszok/hearth#389 (singleton types are widened in the type-constructor primitives). No Kindlings
+workaround was left to remove: the di-cats hand-rolled Scala 3 `widen` bridge had already been replaced by
+`DestructuredExpr`, which is still needed to recover the precise type of an `Any`-typed varargs argument.
+
 **Verdict:** confirmed bug on both platforms. The extent differs per platform (table below). `Type.CtorN.of[...].unapply`
 is **not** affected; it already handles singletons on both platforms.
 

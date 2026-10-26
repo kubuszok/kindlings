@@ -19,10 +19,7 @@ final class IsValueTypeProviderForConst extends StandardMacroExtension { loader 
 
       override def name: String = loader.getClass.getName
 
-      private lazy val ConstCtor = {
-        val impl = Type.Ctor2.of[cats.data.Const]
-        Type.Ctor2.fromUntyped[cats.data.Const](impl.asUntyped)
-      }
+      private lazy val ConstCtor = Type.Ctor2.of[cats.data.Const]
 
       // Cheap sound negative gate (hearth#347 pattern): Const is class-headed, so a class-headed scrutinee can only
       // match when the constructor appears among its base classes.

@@ -69,9 +69,12 @@ The most load-bearing entries to keep in mind for any macro work:
 - **`summonExprIgnoring` vs OOM** — always pass the library auto-derivation methods to
   ignore, otherwise summoning recurses into them and OOMs the compiler.
 - **`IsMap` before `IsCollection`** — `Map <: Iterable`, so check `IsMap` first.
-- **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — wrap with
-  `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)` when subtypes of `Function1` can reach the match (only those
-  are mis-decomposed; exact applied types and cross-unit/SPI use are fine - see pitfalls skill #11).
+- **~~`Type.Ctor2.of[Function1].unapply` wrong on Scala 3~~** — fixed in kubuszok/hearth#389 (subtypes are now
+  decomposed via their base type). Use plain `Type.CtorN.of[F]`; the `fromUntyped(of[F].asUntyped)` wrapper is no
+  longer needed (pitfalls skill #11).
+- **Scala 2 entry point for `F[_]` / `Alg[_[_]]`** — write `Type.Ctor1.of[F]` / `Type.CtorK1.of[Alg]` in the macro
+  bundle; since kubuszok/hearth#389 it reads the method's implicit `c.WeakTypeTag[F[Any]]` / `[Alg[Option]]` (keep
+  that parameter, it is matched by the type parameter's name).
 - **`Type.of[A]` bootstrap cycle in extensions** — see the pitfalls skill.
 - **`IsValueType` intercepts single-element named tuples (Scala 3)** — guard every
   `HandleAsValueTypeRule` with `if (Type[A].isNamedTuple)` before the `IsValueType`
@@ -255,7 +258,7 @@ Key reference files:
 - `SemigroupMacrosImpl.scala` — monomorphic derivation (summon field instances, combine pairwise)
 - `FunctorMacrosImpl.scala` — polymorphic derivation (erased approach, two-probe field classification)
 - `ConsKMacrosImpl.scala` — polymorphic with nested field handling (bridge method for type constructor summoning, runtime helper, carry-and-absorb algorithm)
-- `ContravariantMacrosImpl.scala` — Function1 field classification using `Type.Ctor2.fromUntyped`
+- `ContravariantMacrosImpl.scala` — Function1 field classification using `Type.Ctor2.of[Function1]`
 - `ApplicativeMacrosImpl.scala` — composed derivation (pure + map + ap body builders)
 - `NonEmptyAlternativeMacrosImpl.scala` — multi-trait composition (Applicative + SemigroupK patterns)
 
@@ -264,7 +267,7 @@ Key reference files:
 - `cats-integration/CatsCollectionAndMapProviders.scala` — reference for **collection/map providers** (NonEmptyList, NonEmptyVector, NonEmptyChain, Chain, NonEmptyMap, NonEmptySet)
 - `cats-integration/runtime/CatsConversions.scala` — reference for **runtime helper pattern** (Newtype aliases)
 
-Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), `fromUntyped` for cross-compilation-boundary matching.
+Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), plain `Type.CtorN.of` for constructor matching (also across the SPI).
 
 ### Documentation maintenance — follow `docs/contributing/kindlings-doc-maintenance/SKILL.md`
 

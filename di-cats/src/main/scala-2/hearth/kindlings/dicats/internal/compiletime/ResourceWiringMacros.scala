@@ -13,8 +13,9 @@ final private[dicats] class ResourceWiringMacros(val c: blackbox.Context)
       ft: c.WeakTypeTag[F[Any]],
       tt: c.WeakTypeTag[T]
   ): c.Expr[Resource[F, T]] = {
-    // Recover the `F` type constructor from the `F[Any]` WeakTypeTag (HKT type params are not directly tagged on 2.13).
-    val fCtor: Type.Ctor1[F] = Type.Ctor1.fromUntyped[F](ft.tpe.typeConstructor)
+    // `Type.Ctor1.of[F]` recovers the `F` type constructor from the implicit `F[Any]` WeakTypeTag
+    // (HKT type params are not directly tagged on 2.13).
+    val fCtor: Type.Ctor1[F] = Type.Ctor1.of[F]
     // On Scala 2 `Type[A] = c.WeakTypeTag[A]`, so `tt` already is the `Type[T]` we need.
     wireResource[F, T](dependencies.toList.map(t => preciseDependency(c.Expr[Any](t))))(tt, fCtor)
   }

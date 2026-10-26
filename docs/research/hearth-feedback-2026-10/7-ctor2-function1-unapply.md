@@ -1,5 +1,10 @@
 # `Type.Ctor2.of[Function1].unapply` returns `Nothing` for the contravariant argument, but only for SUBTYPES of `Function1` (Scala 3)
 
+**Status:** fixed in kubuszok/hearth#389 (Scala 3 `CtorN.of(...).unapply` reads the arguments off the scrutinee's base
+type, and widens singletons first). Kindlings dropped its `Type.CtorN.fromUntyped[F](Type.CtorN.of[F].asUntyped)`
+wrappers (cats-derivation `Contravariant`/`Invariant`, cats-integration collection/map and `Validated`/`Const`
+providers) in favour of plain `Type.CtorN.of[F]`.
+
 **Verdict:** the kindlings claim is half fixed and half still a bug, narrower than described:
 
 - `Type.Ctor2.of[Function1].unapply(Type[Int => Boolean])` returning `Nothing` for the first argument is **fixed** on
