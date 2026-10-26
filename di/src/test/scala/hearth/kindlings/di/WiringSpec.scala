@@ -346,7 +346,99 @@ final class WiringSpec extends MacroSuite {
     }
   }
 
+  group("DI.wire enclosing-method parameters") {
+
+    test("resolves dependencies from the enclosing method's parameters") {
+      val db = new WiringSpec.DatabaseAccess
+      val sf = new WiringSpec.SecurityFilter
+      val finder = WiringSpec.MethodParams.make(db, sf)
+      assert(finder.databaseAccess eq db)
+      assert(finder.securityFilter eq sf)
+    }
+
+    test("mixes parameters (innermost scope) with members of the enclosing object") {
+      val db = new WiringSpec.DatabaseAccess
+      val finder = WiringSpec.MethodParams.makeWithMember(db)
+      assert(finder.databaseAccess eq db)
+      assert(finder.securityFilter eq WiringSpec.MethodParams.securityFilter)
+    }
+
+    test("a parameter shadows a member of the same type (nearest scope wins, as in macwire)") {
+      val db = new WiringSpec.DatabaseAccess
+      val module = new WiringSpec.ParamShadowsMember
+      val finder = module.make(db)
+      assert(finder.databaseAccess eq db)
+      assert(finder.databaseAccess ne module.databaseAccess)
+      assert(finder.securityFilter eq module.securityFilter)
+    }
+
+    test("uses parameters from every clause, implicit ones included") {
+      val db = new WiringSpec.DatabaseAccess
+      val sf = new WiringSpec.SecurityFilter
+      val finder = WiringSpec.MethodParams.curried(db)(sf)
+      assert(finder.databaseAccess eq db)
+      assert(finder.securityFilter eq sf)
+    }
+
+    test("evaluates a by-name parameter") {
+      var evaluated = 0
+      val finder =
+        WiringSpec.MethodParams.byName({ evaluated += 1; new WiringSpec.DatabaseAccess }, new WiringSpec.SecurityFilter)
+      assert(finder.databaseAccess ne null)
+      evaluated ==> 1
+    }
+
+    test("sees the method's parameters through a lambda") {
+      val db = new WiringSpec.DatabaseAccess
+      val sf = new WiringSpec.SecurityFilter
+      val finders = WiringSpec.MethodParams.inLambda(db, sf)
+      assert(finders.forall(f => (f.databaseAccess eq db) && (f.securityFilter eq sf)))
+    }
+
+    test("wireList collects matching parameters too") {
+      val a = new WiringSpec.Plugin
+      val b = new WiringSpec.Plugin
+      val plugins = WiringSpec.MethodParams.plugins(a, b)
+      assert(plugins.size == 2 && (plugins.head eq a) && (plugins(1) eq b))
+    }
+  }
+
   group("DI.wire compile-time errors") {
+
+    test("reports two enclosing-method parameters of the same type as an ambiguity, with their names") {
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        class A()
+        class B(val a: A)
+        object Holder {
+          def make(first: A, second: A): B = DI.wire[B]
+        }
+        """
+      ).check(
+        "Found multiple values of type [",
+        "first",
+        "second"
+      )
+    }
+
+    test("a parameter of a method in a local class's method is not seen from a class body (class ends the search)") {
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        class A()
+        class B(val a: A)
+        object Holder {
+          def make(a: A): AnyRef = new AnyRef {
+            lazy val b: B = DI.wire[B]
+          }
+        }
+        """
+      ).check(
+        "Cannot find a value of type",
+        "A"
+      )
+    }
 
     test("reports a missing value by type") {
       compileErrors(
@@ -735,6 +827,24 @@ object WiringSpec {
     val primaryDb: Database @@ Primary = new Database("primary").taggedWith[Primary]
     val replicaDb: Database @@ Replica = new Database("replica").taggedWith[Replica]
     lazy val connector: Connector = DI.wire[Connector]
+  }
+
+  // Enclosing-method parameters as candidates.
+  object MethodParams {
+    val securityFilter: SecurityFilter = new SecurityFilter()
+    def make(databaseAccess: DatabaseAccess, filter: SecurityFilter): UserFinder = DI.wire[UserFinder]
+    def makeWithMember(databaseAccess: DatabaseAccess): UserFinder = DI.wire[UserFinder]
+    def curried(databaseAccess: DatabaseAccess)(implicit filter: SecurityFilter): UserFinder = DI.wire[UserFinder]
+    def byName(databaseAccess: => DatabaseAccess, filter: SecurityFilter): UserFinder = DI.wire[UserFinder]
+    def inLambda(databaseAccess: DatabaseAccess, filter: SecurityFilter): List[UserFinder] =
+      List(1, 2).map(_ => DI.wire[UserFinder])
+    def plugins(first: Plugin, second: Plugin): List[Plugin] = DI.wireList[Plugin]
+  }
+
+  class ParamShadowsMember {
+    val databaseAccess: DatabaseAccess = new DatabaseAccess()
+    val securityFilter: SecurityFilter = new SecurityFilter()
+    def make(otherAccess: DatabaseAccess): UserFinder = DI.wire[UserFinder]
   }
 
   // Set/List wiring.

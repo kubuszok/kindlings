@@ -65,11 +65,28 @@ Candidates are gathered from:
 
 - the members (declared **and inherited**) of the enclosing classes/objects — so module composition by trait
   inheritance works;
-- the public, parameterless members of any in-scope value whose type is annotated [`@Module`](#modules); and
+- the public, parameterless members of any in-scope value whose type is annotated [`@Module`](#modules);
+- the **parameters of the enclosing method** (every parameter clause, `implicit`/`using` ones included; by-name
+  parameters are evaluated where they are needed), on Scala 2 and Scala 3; and
 - (Scala 2 only) `val`s local to the enclosing method declared before the call site.
 
 When the same type is available in more than one scope, the **nearest** (innermost) scope wins; an ambiguity is an
-error only when a single scope offers more than one candidate.
+error only when a single scope offers more than one candidate. The enclosing method's parameters (together with its
+local `val`s) are the innermost scope, as in macwire: a parameter shadows a member of the same type, while two
+parameters of the same type are reported as an ambiguity, with their names.
+
+```scala
+object Wiring {
+  lazy val securityFilter = new SecurityFilter()
+
+  // databaseAccess comes from the parameter, securityFilter from the enclosing object
+  def userFinder(databaseAccess: DatabaseAccess): UserFinder = DI.wire[UserFinder]
+}
+```
+
+Only the **closest** enclosing method counts: a lambda between the call and the method is looked through, but the
+parameters of outer methods are not used, and a class body ends the search (`wire` in a local or anonymous class sees
+that class's members, not the parameters of the method that defines it).
 
 ### Composition by inheritance
 
@@ -308,8 +325,9 @@ To also see the full generation log (the resolution logic **and** the generated 
   endpoint (always recursive, always caching, customizable storage + construction overrides).
 - **Cross-platform.** macwire's request/session *scopes* rely on JVM bytecode proxies; this module targets JVM,
   Scala.js and Scala Native, so those JVM-only proxy scopes are intentionally not ported.
-- **Enclosing-method parameters / locals.** Local `val`s declared before the call site are discovered on Scala 2.
-  Enclosing-method *parameters* are not used for wiring; Hearth exposes them cross-platform since 0.4.4
-  (`Environment.enclosingMethodParameters`), but Kindlings' DI does not consult them.
+- **Enclosing-method parameters / locals.** The parameters of the closest enclosing method are candidates on both
+  Scala 2 and Scala 3 (via Hearth's `Environment.enclosingMethodParameters`, since 0.4.4). macwire also looks at the
+  parameters of outer enclosing methods and of enclosing lambdas; Kindlings does not. Local `val`s declared before
+  the call site are discovered on Scala 2 only.
 - Only the **immediately**-enclosing class exposes a usable `this`; members of *outer* enclosing classes are not
   reachable (enclosing **objects** always are, since they have a stable path).

@@ -4,9 +4,10 @@ package hearth.kindlings.di
   * on Hearth's macro-agnostic API so the very same implementation works on Scala 2.13 and Scala 3, across the JVM,
   * Scala.js and Scala Native.
   *
-  * The wiring macros inspect the '''lexical scope''' surrounding the call site (via Hearth's `enclosingScope`) to find
-  * already-constructed dependencies — `val`s/`def`s of the enclosing class/object, and (on Scala 2) `val`s local to the
-  * enclosing method — and use them to fill the constructor parameters of the wired type.
+  * The wiring macros inspect the '''lexical scope''' surrounding the call site (via Hearth's `enclosingScope` and
+  * `Environment.enclosingMethodParameters`) to find already-constructed dependencies — `val`s/`def`s of the enclosing
+  * class/object, the parameters of the enclosing method, and (on Scala 2) `val`s local to the enclosing method — and
+  * use them to fill the constructor parameters of the wired type.
   *
   * {{{
   * import hearth.kindlings.di.DI

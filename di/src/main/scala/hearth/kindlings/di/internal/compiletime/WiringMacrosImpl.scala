@@ -170,23 +170,39 @@ private[di] trait WiringMacrosImpl
     *     inherited), read off their `this`/module reference;
     *   - the public parameterless members of any in-scope value whose type is annotated with [[Module]] (or inherits
     *     such a type), exposed as a slightly-wider scope right after the value's own scope; and
+    *   - the value parameters of the immediately-enclosing method (all clauses, `implicit`/`using` ones included;
+    *     lambdas in between are skipped, a class body ends the search - see
+    *     [[hearth.Environments.EnvironmentModule.enclosingMethodParameters]]), on both Scala 2 and Scala 3; and
     *   - `val`s local to the enclosing method declared before the call site (Scala 2 only — see
     *     [[hearth.Environments.Enclosure.LocalValue]]).
+    *
+    * The method's parameters and its local `val`s form ONE scope, the innermost one - as in macwire, where "values
+    * declared in the current block, arguments of enclosing methods" are looked up before the members of the enclosing
+    * type. So a parameter shadows a member of the same type, while two parameters (or a parameter and a local `val`) of
+    * the same type are an ambiguity.
     *
     * Resolution then prefers the nearest scope that yields exactly one match (see [[resolveSingle]]); set/list wiring
     * flattens across all scopes.
     */
-  protected def collectScopes: List[List[Candidate]] =
-    enclosingScope.iterator
-      .flatMap {
-        case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members)
-        case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members)
-        case enc: Enclosure.Method => List(enc.localValues.map(lv => Candidate(lv.name, lv.ref)))
-        case _: Enclosure.Value    => Nil
-        case _: Enclosure.Package  => Nil
-      }
-      .toList
-      .filter(_.nonEmpty)
+  protected def collectScopes: List[List[Candidate]] = {
+    val parameters = Environment.enclosingMethodParameters.flatten.map(p => Candidate(p.name, p.ref))
+    // The parameters belong to the innermost enclosing method, i.e. the first `Enclosure.Method` of the chain (a class
+    // boundary before any method means there are no parameters at all).
+    var parametersPending = parameters.nonEmpty
+    val scopes = enclosingScope.iterator.flatMap {
+      case enc: Enclosure.Class  => scopesForMembers(enc.thisRef, enc.members)
+      case enc: Enclosure.Object => scopesForMembers(Some(enc.thisRef), enc.members)
+      case enc: Enclosure.Method =>
+        val locals = enc.localValues.map(lv => Candidate(lv.name, lv.ref))
+        if (parametersPending) {
+          parametersPending = false
+          List(parameters ++ locals)
+        } else List(locals)
+      case _: Enclosure.Value   => Nil
+      case _: Enclosure.Package => Nil
+    }.toList
+    (if (parametersPending) parameters :: scopes else scopes).filter(_.nonEmpty)
+  }
 
   /** Direct members of an enclosing instance form one scope; the public parameterless members of any `@Module`-typed
     * value among them form an immediately-wider scope.
