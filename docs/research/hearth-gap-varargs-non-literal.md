@@ -1,7 +1,18 @@
 # Hearth gap: `VarArgs.toIterable` cannot tell "no varargs" from "non-literal varargs" (Scala 3)
 
-Status: **OPEN** (found 2026-10-25 with Hearth 0.4.3; unchanged on Hearth `master` at `aded1a31`), while trying to
-replace the `scala.quoted.Varargs` match in `optics/src/main/scala-3/.../ModifyMacros.scala` with Hearth's `VarArgs`.
+Status: **RESOLVED** by kubuszok/hearth#389 (Hearth snapshot `0.4.3-17-gbd1e277-SNAPSHOT`, `@since 0.4.4`). Found
+2026-10-25 with Hearth 0.4.3, while trying to replace the `scala.quoted.Varargs` match in
+`optics/src/main/scala-3/.../ModifyMacros.scala` with Hearth's `VarArgs`.
+
+Resolution: Hearth added `VarArgs.toIterableOption[A](args: VarArgs[A]): Option[Iterable[Expr[A]]]`, which returns
+`Some(elements)` for literal varargs and `None` for a splatted sequence on both platforms (Scala 3 via
+`scala.quoted.Varargs.unapply`, Scala 2 by detecting the single `Typed(_, Ident(WILDCARD_STAR))` argument);
+`toIterable` is unchanged. Kindlings optics now takes the extra paths as `VarArgs[P]` in the shared
+`ModifyMacrosImpl.modifyAll`/`modifyAllLens` and rejects a splat via `toIterableOption(...).getOrElse(abort(...))`
+("`modifyAll` expects an explicit list of paths, ..."), so the Scala 3-only `Varargs` match is gone and Scala 2 now
+reports the same error for `paths: _*` (it used to hand the splat to the path parser as if it were a path). Covered by the shared
+`optics/src/test/scala/.../ModifyAllSplatSpec.scala` and the Scala 3 `ModifyAllVarargsSpec.scala` (`paths*` syntax).
+The sections below describe the original gap.
 
 ## What is wrong
 

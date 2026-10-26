@@ -36,7 +36,7 @@ private[optics] object ModifyMacros {
       path: Expr[OpticsContext ?=> (S => A)],
       paths: Expr[Seq[OpticsContext ?=> (S => A)]]
   )(using q: Quotes): Expr[PathModify[S, A]] =
-    new ModifyMacros(q).modifyAll[S, A, Path[S, A]](obj, path :: varargs(paths))
+    new ModifyMacros(q).modifyAll[S, A, Path[S, A]](obj, path, paths)
 
   def modifyLensImpl[T: Type, U: Type](path: Expr[OpticsContext ?=> (T => U)])(using
       q: Quotes
@@ -47,15 +47,5 @@ private[optics] object ModifyMacros {
       path: Expr[OpticsContext ?=> (T => U)],
       paths: Expr[Seq[OpticsContext ?=> (T => U)]]
   )(using q: Quotes): Expr[PathLazyModify[T, U]] =
-    new ModifyMacros(q).modifyAllLens[T, U, Path[T, U]](path :: varargs(paths))
-
-  // Not Hearth's `VarArgs.toIterable`: on Scala 3 it is `Varargs.unapply(args).getOrElse(Nil)`, so a non-literal
-  // `modifyAll(p, morePaths*)` would SILENTLY drop `morePaths` instead of reporting that the paths must be written out.
-  // See docs/research/hearth-gap-varargs-non-literal.md.
-  private def varargs[A](paths: Expr[Seq[A]])(using Quotes, Type[A]): List[Expr[A]] =
-    paths match {
-      case Varargs(es) => es.toList
-      case _           =>
-        quotes.reflect.report.errorAndAbort(s"`modifyAll` expects an explicit list of paths, got: ${paths.show}")
-    }
+    new ModifyMacros(q).modifyAllLens[T, U, Path[T, U]](path, paths)
 }
