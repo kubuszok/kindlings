@@ -269,9 +269,13 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * Overlapping field prefixes are shared — `modifyAll(_.a.b, _.a.c)` copies `a` exactly once (quicklens semantics).
     * All paths must focus the same leaf type `A` (the call site pins this).
     */
-  def modifyAll[S: Type, A: Type, P: Type](obj: Expr[S], paths: List[Expr[P]]): Expr[PathModify[S, A]] = {
+  def modifyAll[S: Type, A: Type, P: Type](
+      obj: Expr[S],
+      path: Expr[P],
+      morePaths: VarArgs[P]
+  ): Expr[PathModify[S, A]] = {
     ensureStdExtensionsLoaded()
-    if (paths.isEmpty) abort("`modifyAll` requires at least one path")
+    val paths = path :: explicitPaths("modifyAll", morePaths)
     val trace = new Trace
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAll[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}] over ${pathSteps.size} path(s)")
@@ -314,9 +318,9 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   /** `modifyAllLens[T](_.a, _.b)` → `PathLazyModify[T, Foc]`: the multi-path reusable lens form. Same shared-prefix
     * merge as [[modifyAll]], but unbound from any object.
     */
-  def modifyAllLens[T: Type, Foc: Type, P: Type](paths: List[Expr[P]]): Expr[PathLazyModify[T, Foc]] = {
+  def modifyAllLens[T: Type, Foc: Type, P: Type](path: Expr[P], morePaths: VarArgs[P]): Expr[PathLazyModify[T, Foc]] = {
     ensureStdExtensionsLoaded()
-    if (paths.isEmpty) abort("`modifyAllLens` requires at least one path")
+    val paths = path :: explicitPaths("modifyAllLens", morePaths)
     val trace = new Trace
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAllLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}] over ${pathSteps.size} path(s)")
@@ -333,6 +337,20 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     emitGenerationLog("modifyAllLens", trace, result.prettyPrint)
     result
   }
+
+  /** The extra paths of `modifyAll`/`modifyAllLens`, which must be written out at the call site: a splatted,
+    * non-literal sequence (`paths*` on Scala 3, `paths: _*` on Scala 2) only has its elements at runtime, so it is
+    * rejected rather than silently dropped.
+    */
+  private def explicitPaths[P](method: String, paths: VarArgs[P]): List[Expr[P]] =
+    VarArgs
+      .toIterableOption(paths)
+      .getOrElse(
+        abort(
+          s"`$method` expects an explicit list of paths, got a splatted sequence whose elements are only known at runtime"
+        )
+      )
+      .toList
 
   /** Rebuild `sExpr: S` applying `transformLeaf` at the focus of EVERY path in `paths`, sharing common `Field` prefixes
     * so a field on the shared prefix is copied only once. Strategy:
