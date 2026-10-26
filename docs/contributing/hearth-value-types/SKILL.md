@@ -2,7 +2,7 @@
 name: hearth-value-types
 description: >
   Creating IsValueType providers for external value types (refined, iron, opaque types).
-  Provider registration, wrap/unwrap methods, Type.Ctor2.of vs fromUntyped (subtype matching on Scala 3).
+  Provider registration, wrap/unwrap methods, Type.Ctor2.of (fromUntyped no longer needed).
 paths:
   - "**/compiletime/*ValueType*.scala"
   - "**/compiletime/*Provider*.scala"
@@ -195,9 +195,9 @@ use plain `Type.Ctor2.of[Refined]` / `of[Validate]` / `of[IronType]` and every i
 and a test in Hearth's own suite shows a constructor built in the same file, another file, or a `ServiceLoader`-loaded
 `MacroExtension` behaves identically.
 
-The one real difference: on Scala 3, for a SUBTYPE of the constructor (e.g. `trait IntPredicate extends (Int => Boolean)`)
-`of[...].unapply` returns `Nothing` for a contravariant argument, while `fromUntyped` (reading arguments via `baseType`)
-is correct. Wrap with `fromUntyped` only when subtypes of the constructor can reach the match. See
+The one real difference (before kubuszok/hearth#389): on Scala 3, for a SUBTYPE of the constructor (e.g. `trait IntPredicate extends (Int => Boolean)`)
+`of[...].unapply` returned `Nothing` for a contravariant argument, while `fromUntyped` (reading arguments via `baseType`)
+was correct. That is fixed in kubuszok/hearth#389, so plain `of` is now always the right choice. See
 `docs/research/macwire-hearth-evaluation-claims.md`.
 
 ## Opaque types, newtypes, and named tuples — interaction pitfalls

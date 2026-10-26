@@ -8,8 +8,9 @@ final private[catstaglessderivation] class InvariantKMacros(val c: blackbox.Cont
     extends MacroCommonsScala2
     with InvariantKMacrosImpl {
 
-  // Entry-point glue only: a Scala 2 macro receives the algebra `Alg[_[_]]` as a `WeakTypeTag[Alg[Option]]`, so its
-  // constructor is recovered from that tag. Everything else (type-class types, nested fields) is shared code.
+  // Entry-point glue only: a Scala 2 macro receives the algebra `Alg[_[_]]` as a `WeakTypeTag[Alg[Option]]`;
+  // `Type.CtorK1.of[Alg]` reads the constructor from that implicit tag.
+  // Everything else (type-class types, nested fields) is shared code.
   def deriveInvariantKImpl[Alg[_[_]]](implicit at: c.WeakTypeTag[Alg[Option]]): c.Expr[cats.tagless.InvariantK[Alg]] =
-    deriveInvariantK[Alg](Type.CtorK1.fromUntyped[Alg](at.tpe.typeConstructor))
+    deriveInvariantK[Alg](Type.CtorK1.of[Alg])
 }

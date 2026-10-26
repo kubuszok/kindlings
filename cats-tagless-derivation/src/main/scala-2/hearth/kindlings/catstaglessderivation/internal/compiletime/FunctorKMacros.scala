@@ -8,8 +8,9 @@ final private[catstaglessderivation] class FunctorKMacros(val c: blackbox.Contex
     extends MacroCommonsScala2
     with FunctorKMacrosImpl {
 
-  // Entry-point glue only: a Scala 2 macro receives the algebra `Alg[_[_]]` as a `WeakTypeTag[Alg[Option]]`, so its
-  // constructor is recovered from that tag. Everything else (type-class types, nested fields) is shared code.
+  // Entry-point glue only: a Scala 2 macro receives the algebra `Alg[_[_]]` as a `WeakTypeTag[Alg[Option]]`;
+  // `Type.CtorK1.of[Alg]` reads the constructor from that implicit tag.
+  // Everything else (type-class types, nested fields) is shared code.
   def deriveFunctorKImpl[Alg[_[_]]](implicit at: c.WeakTypeTag[Alg[Option]]): c.Expr[cats.tagless.FunctorK[Alg]] =
-    deriveFunctorK[Alg](Type.CtorK1.fromUntyped[Alg](at.tpe.typeConstructor))
+    deriveFunctorK[Alg](Type.CtorK1.of[Alg])
 }

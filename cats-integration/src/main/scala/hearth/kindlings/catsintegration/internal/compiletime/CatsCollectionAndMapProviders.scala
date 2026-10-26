@@ -341,10 +341,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyList"
 
-      private lazy val NELCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptyList]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptyList](impl.asUntyped)
-      }
+      private lazy val NELCtor = Type.Ctor1.of[cats.data.NonEmptyList]
 
       // Cheap sound negative gate (hearth#347 pattern): NonEmptyList is class-headed, so a
       // class-headed scrutinee can only match when the constructor appears among its base classes.
@@ -363,10 +360,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyVector"
 
-      private lazy val NEVCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptyVector]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptyVector](impl.asUntyped)
-      }
+      private lazy val NEVCtor = Type.Ctor1.of[cats.data.NonEmptyVector]
 
       // Cheap sound negative gate (hearth#347 pattern): NonEmptyVector is class-headed, so a
       // class-headed scrutinee can only match when the constructor appears among its base classes.
@@ -385,10 +379,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptySeq"
 
-      private lazy val NESeqCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptySeq]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptySeq](impl.asUntyped)
-      }
+      private lazy val NESeqCtor = Type.Ctor1.of[cats.data.NonEmptySeq]
 
       // Cheap sound negative gate (hearth#347 pattern): NonEmptySeq is class-headed, so a
       // class-headed scrutinee can only match when the constructor appears among its base classes.
@@ -410,10 +401,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyLazyList"
 
-      private lazy val NELLCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptyLazyList]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptyLazyList](impl.asUntyped)
-      }
+      private lazy val NELLCtor = Type.Ctor1.of[cats.data.NonEmptyLazyList]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
@@ -427,10 +415,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyChain"
 
-      private lazy val NECCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptyChain]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptyChain](impl.asUntyped)
-      }
+      private lazy val NECCtor = Type.Ctor1.of[cats.data.NonEmptyChain]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
@@ -444,10 +429,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#Chain"
 
-      private lazy val ChainCtor = {
-        val impl = Type.Ctor1.of[cats.data.Chain]
-        Type.Ctor1.fromUntyped[cats.data.Chain](impl.asUntyped)
-      }
+      private lazy val ChainCtor = Type.Ctor1.of[cats.data.Chain]
 
       // Cheap sound negative gate (hearth#347 pattern): Chain is class-headed, so a
       // class-headed scrutinee can only match when the constructor appears among its base classes.
@@ -466,10 +448,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyMap"
 
-      private lazy val NEMCtor = {
-        val impl = Type.Ctor2.of[cats.data.NonEmptyMap]
-        Type.Ctor2.fromUntyped[cats.data.NonEmptyMap](impl.asUntyped)
-      }
+      private lazy val NEMCtor = Type.Ctor2.of[cats.data.NonEmptyMap]
 
       @scala.annotation.nowarn("msg=is never used|is unchecked|Unused import")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =
@@ -497,10 +476,7 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptySet"
 
-      private lazy val NESCtor = {
-        val impl = Type.Ctor1.of[cats.data.NonEmptySet]
-        Type.Ctor1.fromUntyped[cats.data.NonEmptySet](impl.asUntyped)
-      }
+      private lazy val NESCtor = Type.Ctor1.of[cats.data.NonEmptySet]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =

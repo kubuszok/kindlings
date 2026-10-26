@@ -8,7 +8,7 @@ final private[catsderivation] class NonEmptyAlternativeMacros(val c: blackbox.Co
     extends MacroCommonsScala2
     with NonEmptyAlternativeMacrosImpl {
 
-  // Entry-point glue only: recover the statically-known `F` from the macro's `WeakTypeTag[F[Any]]`.
+  // Entry-point glue only: `of[F]` reads the statically-known `F` from the implicit `WeakTypeTag[F[Any]]`.
   def deriveNonEmptyAlternativeImpl[F[_]](implicit ft: c.WeakTypeTag[F[Any]]): c.Expr[cats.NonEmptyAlternative[F]] =
-    deriveNonEmptyAlternative[F](Type.Ctor1.fromUntyped[F](ft.tpe.typeConstructor))
+    deriveNonEmptyAlternative[F](Type.Ctor1.of[F])
 }
