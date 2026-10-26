@@ -9,15 +9,10 @@ final private[fastshowpretty] class FastShowPrettyMacros(val c: blackbox.Context
     with FastShowPrettyMacrosImpl
     with AnnotationSupport {
 
-  import c.universe.*
-
   def deriveInlineWithConfigImpl[A: c.WeakTypeTag](
       value: c.Expr[A],
       config: c.Expr[RenderConfig]
-  ): c.Expr[String] = {
-    val levelExpr = c.Expr[Int](q"$config.startLevel")
-    deriveInline[A](value, config, levelExpr)
-  }
+  ): c.Expr[String] = deriveInline[A](value, config)
 
   def deriveTypeClassImpl[A: c.WeakTypeTag]: c.Expr[FastShowPretty[A]] = deriveTypeClass[A]
 }

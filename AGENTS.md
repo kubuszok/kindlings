@@ -70,7 +70,8 @@ The most load-bearing entries to keep in mind for any macro work:
   ignore, otherwise summoning recurses into them and OOMs the compiler.
 - **`IsMap` before `IsCollection`** — `Map <: Iterable`, so check `IsMap` first.
 - **`Type.Ctor2.of[Function1].unapply` wrong on Scala 3** — wrap with
-  `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)`.
+  `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)` when subtypes of `Function1` can reach the match (only those
+  are mis-decomposed; exact applied types and cross-unit/SPI use are fine - see pitfalls skill #11).
 - **`Type.of[A]` bootstrap cycle in extensions** — see the pitfalls skill.
 - **`IsValueType` intercepts single-element named tuples (Scala 3)** — guard every
   `HandleAsValueTypeRule` with `if (Type[A].isNamedTuple)` before the `IsValueType`

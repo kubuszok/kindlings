@@ -186,9 +186,13 @@ Type[A] match {
 
 **Severity: HIGH | Platform: Scala 3**
 
-`Impl.unapply` returns `Nothing` for the first type arg of `Function1[Int, Boolean]` on
-Scala 3. Always wrap with `Type.Ctor2.fromUntyped[Function1](impl.asUntyped)` for reliable
-decomposition.
+Re-measured on Hearth 0.4.3 (failing test in Hearth's own suite, see `docs/research/macwire-hearth-evaluation-claims.md`): for an
+EXACT applied type (`Int => Boolean`) `Type.Ctor2.of[Function1].unapply` is correct on both platforms. It is still wrong
+on Scala 3 for a SUBTYPE of the constructor (`trait IntPredicate extends (Int => Boolean)`): `.of` yields
+`Some((Nothing, Boolean))` for the contravariant argument, while `fromUntyped` (which reads the arguments via
+`baseType`) yields `Some((Int, Boolean))`. Wrap with `fromUntyped` when subtypes of the constructor can reach the
+match. Compilation-unit / SPI boundaries play no role (measured: same file, other file and a `ServiceLoader`-loaded
+extension behave identically).
 
 ```scala
 // CORRECT:

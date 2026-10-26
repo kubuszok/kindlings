@@ -15,14 +15,7 @@ final class IsValueTypeProviderForRefined extends StandardMacroExtension { loade
 
       override def name: String = loader.getClass.getName
 
-      // Use fromUntyped to avoid cross-compilation-boundary issues with Type.Ctor2.of's Impl.
-      // The Impl captures scala.quoted.Type[HKT] at compile time, which may resolve to a
-      // different TypeRepr path than the one seen during macro expansion in downstream projects.
-      // FromUntypedImpl uses =:= and baseType for matching, which handles path differences.
-      private lazy val RefinedCtor = {
-        val impl = Type.Ctor2.of[eu.timepit.refined.api.Refined]
-        Type.Ctor2.fromUntyped[eu.timepit.refined.api.Refined](impl.asUntyped)
-      }
+      private lazy val RefinedCtor = Type.Ctor2.of[eu.timepit.refined.api.Refined]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsValueType[A]] =
@@ -34,10 +27,8 @@ final class IsValueTypeProviderForRefined extends StandardMacroExtension { loade
 
             // Construct Type[Validate[Inner, Pred]] for summoning later
             // NOT implicit to avoid Type.of bootstrap cycle
-            val validateType: Type[eu.timepit.refined.api.Validate[Inner, Pred]] = {
-              val impl = Type.Ctor2.of[eu.timepit.refined.api.Validate]
-              Type.Ctor2.fromUntyped[eu.timepit.refined.api.Validate](impl.asUntyped).apply[Inner, Pred]
-            }
+            val validateType: Type[eu.timepit.refined.api.Validate[Inner, Pred]] =
+              Type.Ctor2.of[eu.timepit.refined.api.Validate].apply[Inner, Pred]
 
             // Summon Validate[Inner, Pred] at macro expansion time (user's call site). Done
             // eagerly (not inside the ctor callback) so that a missing instance becomes an

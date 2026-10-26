@@ -109,8 +109,12 @@ The top pitfalls encountered in practice, by frequency:
 2. **Sibling splice isolation** (#1, #26) -- use def-caching, not LambdaBuilder
 3. **`summonExprIgnoring` vs OOM** (#14) -- always pass ignored implicits
 4. **`IsMap` before `IsCollection`** (#10) -- check map first in pattern match
-5. **`Type.Ctor2.of[Function1].unapply`** (#11) -- wrap with `fromUntyped`
-6. **`fromUntyped` for ALL SPI-boundary type matching** -- not just Function1; any `Type.Ctor1/Ctor2`
+5. **`Type.Ctor2.of[Function1].unapply`** (#11) -- wrap with `fromUntyped` when SUBTYPES of the constructor
+   (e.g. `IntPredicate extends (Int => Boolean)`) can reach the match: Scala 3 `.of` returns `Nothing` for their
+   contravariant argument. Exact applied types are fine with plain `.of` on both platforms.
+6. **~~`fromUntyped` for ALL SPI-boundary type matching~~** -- DISPROVEN on Hearth 0.4.3 (`refined`/`iron`
+   providers now use plain `Type.Ctor2.of` and all integration tests pass; Hearth-suite test shows SPI-loaded
+   extensions behave like same-file code). Original claim, kept for history: any `Type.Ctor1/Ctor2`
    created in one compilation unit and `unapply`'d in another (via `StandardMacroExtension` SPI)
    needs `fromUntyped` wrapping. Affects: iron/refined integrations, cats collection/map providers,
    cats-derivation contravariant/bifunctor. Pattern: `val MyCtor = Type.Ctor2.fromUntyped[F](Type.Ctor2.of[F].asUntyped)`
