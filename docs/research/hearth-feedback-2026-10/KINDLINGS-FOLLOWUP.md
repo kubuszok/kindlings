@@ -15,9 +15,10 @@ it. Background and evidence: [`../macwire-hearth-evaluation-claims.md`](../macwi
 
 ## Items
 
-Check first which items the Hearth release actually fixes. Items 1–7 have drafts and failing tests in Hearth
-(`hearth-reproducer-tests.patch`). Items 8–11 were only documented in kindlings (`../hearth-gap-*.md`), so they may
-still be open. Leave the workaround for any item that is still open.
+Status (2026-10-26, per the Hearth maintainer): items **1–10 are addressed** in the Hearth snapshot. Item **11 is
+not fixed and has no ETA**: keep its workaround (`isResource`/`resourceUnderlying` by FQCN) and its comment as they are.
+If any of 1–10 turns out not to work against the snapshot, keep that item's workaround and report it back with the
+failing test.
 
 | # | Hearth item | Kindlings site | Change | Proof |
 |---|---|---|---|---|
@@ -31,7 +32,7 @@ still be open. Leave the workaround for any item that is still open.
 | 8 | `VarArgs.toIterable` drops non-literal varargs | Scala 3 `Varargs(...)` matches: `optics/src/main/scala-3/.../ModifyMacros.scala`, `di/src/main/scala-3/.../WiringMacros.scala`, `di-cats/src/main/scala-3/.../ResourceWiringMacros.scala` | shared `VarArgs` API, if it now reports non-literal varargs instead of returning `Nil` | `optics/src/test/scala-3/.../ModifyAllVarargsSpec.scala` |
 | 9 | Path-dependent type prefix / type members | `newtype-integration/src/main/scala-{2,3}/.../NewtypeReprPlatform.scala`; `IsValueTypeProviderForNeotype.scala` (owner lookup) | shared code | newtype and neotype integration tests |
 | 10 | `Ctor*.of` on a Scala 2 macro's own type parameter | one-line Scala 2 entry points: `Type.CtorN.fromUntyped(ft.tpe.typeConstructor)` in `cats-derivation/src/main/scala-2` (19), `cats-tagless-derivation/src/main/scala-2`, `di-cats/src/main/scala-2` | `Type.Ctor1.of[F]` / `CtorK1.of[Alg]` | cats-derivation and cats-tagless suites on 2.13 |
-| 11 | No `Ctor` for mixed kinds (`Resource[F[_], A]`) | `ResourceWiringMacrosImpl.isResource` / `resourceUnderlying` (FQCN + `decompose2`) | the new extractor | `ResourceWiringSpec`, `ResourceMethodSpec` |
+| 11 | No `Ctor` for mixed kinds (`Resource[F[_], A]`) | `ResourceWiringMacrosImpl.isResource` / `resourceUnderlying` (FQCN + `decompose2`) | **none: still open in Hearth, no ETA** | `ResourceWiringSpec`, `ResourceMethodSpec` |
 
 ## After the changes
 
