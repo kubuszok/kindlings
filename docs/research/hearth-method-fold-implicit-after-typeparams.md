@@ -1,7 +1,9 @@
 # Hearth gap: `Method.fold` drops an implicit clause that follows a type-parameter clause
 
-**Status:** reproducer for an upstream Hearth bug — filed as
-[kubuszok/hearth#331](https://github.com/kubuszok/hearth/issues/331).
+**Status:** **RESOLVED in Hearth 0.4.1** ([kubuszok/hearth#331](https://github.com/kubuszok/hearth/issues/331)).
+The per-platform reflection workaround in `di-cats` was removed on 2026-10-25: companion `resource[F]` support now goes
+through `Method` (`OnInstance` → `ApplyTypes` → `fold`). The remaining follow-up gap (the return type is unknown after
+`ApplyTypes`, and is `Nothing` on Scala 2) is tracked in `hearth-gap-method-generic-return-type.md`.
 **Discovered by:** the `di-cats` companion `resource[F]` auto-discovery work (kindlings PR #159).
 **Hearth version:** see `versions.hearth` in `build.sbt`.
 

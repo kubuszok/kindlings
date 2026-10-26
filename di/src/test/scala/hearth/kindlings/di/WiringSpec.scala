@@ -99,6 +99,19 @@ final class WiringSpec extends MacroSuite {
 
   group("DI.autowire") {
 
+    test("keeps distinct applications of a generic type as distinct graph nodes") {
+      val intBox = new WiringSpec.Box(1)
+      val stringBox = new WiringSpec.Box("s")
+      val boxes = DI.autowire[WiringSpec.TwoBoxes](intBox, stringBox)
+      assert(boxes.ints eq intBox)
+      assert(boxes.strings eq stringBox)
+    }
+
+    test("constructs distinct applications of a generic type separately") {
+      val tags = DI.autowire[WiringSpec.TwoTags]()
+      assert(tags.a ne tags.b)
+    }
+
     test("builds an object graph from provided instances") {
       val db = new WiringSpec.DatabaseAccess()
       val sf = new WiringSpec.SecurityFilter()
@@ -826,6 +839,19 @@ object WiringSpec {
     val stringBox: Box[String] = new Box("s")
     lazy val boxConsumerInt: BoxConsumer[Int] = DI.wire[BoxConsumer[Int]]
     lazy val boxConsumerString: BoxConsumer[String] = DI.wire[BoxConsumer[String]]
+  }
+
+  // Graph nodes must be keyed by the full type, not by the type constructor's FQCN.
+  class TwoBoxes(val ints: Box[Int], val strings: Box[String])
+  class Tag[X]()
+  class TagA
+  class TagB
+  class TwoTags(val a: Tag[TagA], val b: Tag[TagB])
+  class TagAHolder(val tag: Tag[TagA])
+  class TagBHolder(val tag: Tag[TagB])
+  class TwoTagConsumers(val ha: TagAHolder, val hb: TagBHolder, val a2: Tag[TagA], val b2: Tag[TagB]) {
+    def a1: Tag[TagA] = ha.tag
+    def b1: Tag[TagB] = hb.tag
   }
 
   // Std-lib collection deps not over-matched.

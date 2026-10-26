@@ -56,8 +56,8 @@ final private[kindlings] case class WiringNode(
 
 private[kindlings] object WiringGraph {
 
-  /** A node as collected during resolution, before the DAG-aware tree is assembled. `key` is a stable identity (a type
-    * FQCN); `depKeys` reference other collected nodes.
+  /** A node as collected during resolution, before the DAG-aware tree is assembled. `key` is a stable per-type identity
+    * (see `WiringGraphLogging.WiringKeys`); `depKeys` reference other collected nodes.
     */
   final case class RawNode(key: String, tpe: String, kind: NodeKind, storage: Storage, depKeys: List[String])
 
@@ -137,11 +137,8 @@ private[kindlings] object WiringGraph {
   // helpers
   // ----------------------------------------------------------------------------------------------
 
-  private def shortName(fqcn: String): String = {
-    val noGenerics = fqcn
-    val base = noGenerics.split('.').last
-    base
-  }
+  /** Drops every package/enclosing-object prefix, including inside type arguments: `a.b.Box[a.b.Tag]` -> `Box[Tag]`. */
+  private def shortName(fqcn: String): String = fqcn.replaceAll("""[\w$]+\.""", "")
 
   private def mermaidId(fqcn: String): String = {
     val cleaned = fqcn.map(c => if (c.isLetterOrDigit) c else '_')

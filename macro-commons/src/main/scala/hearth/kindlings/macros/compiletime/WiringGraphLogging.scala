@@ -13,6 +13,21 @@ private[kindlings] trait WiringGraphLogging { this: hearth.MacroCommons =>
   /** Per-module settings namespace for `-Xmacro-settings:<ns>.logWiring=...`, e.g. `"di"` | `"diCats"`. */
   protected def wiringLoggingNamespace: String
 
+  /** Per-expansion registry of wiring-graph node keys. Types that are `=:=` share one key (the first-seen
+    * `plainPrint`), every other type gets its own - so distinct applications of one type constructor (`Box[A]` vs
+    * `Box[B]`) are distinct nodes. Backed by Hearth's `Type.Cache`, which compares keys with `=:=`; `Type.fqcn` must
+    * NOT be used as a node identity, since it drops the type arguments.
+    */
+  final protected class WiringKeys {
+    private type Key[A] = String
+    private val cache = new Type.Cache[Key]
+
+    def apply(t: ??): String = {
+      import t.Underlying as T
+      cache.getOrPut(Type[T])(Type.plainPrint[T])
+    }
+  }
+
   sealed protected trait WiringLogMode
   protected object WiringLogMode {
     case object Tree extends WiringLogMode
