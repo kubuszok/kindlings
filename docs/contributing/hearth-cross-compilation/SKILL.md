@@ -42,7 +42,7 @@ For higher-level rules around extension loading and `LambdaBuilder` scope, see
 | 8 | [Phantom type-parameter inference](pitfalls.md#8-phantom-type-parameter-inference) | HIGH | Both |
 | 9 | [`Type.of[A]` bootstrap cycle in extensions](pitfalls.md#9-typeof-a-bootstrap-cycle-in-extensions) | CRITICAL | Both |
 | 10 | [`IsMap` before `IsCollection` ordering](pitfalls.md#10-ismap-before-iscollection-ordering) | HIGH | Both |
-| 11 | [`Type.Ctor2.of[Function1].unapply` wrong](pitfalls.md#11-typector2offunction1unapply-wrong) | HIGH | Scala 3 |
+| 11 | ~~[`Type.Ctor2.of[Function1].unapply` wrong](pitfalls.md#11-typector2offunction1unapply-wrong)~~ (fixed in kubuszok/hearth#389) | — | Scala 3 |
 | 12 | [`primaryConstructor` strict type checking](pitfalls.md#12-primaryconstructor-strict-type-checking) | HIGH | Both |
 | 13 | [`Array` needs `ClassTag`](pitfalls.md#13-array-needs-classtag) | MEDIUM | Both |
 

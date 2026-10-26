@@ -1,6 +1,6 @@
 # Hearth gap: no API for a type's prefix, its type members, or a type symbol's owner
 
-Status: **RESOLVED** by kubuszok/hearth#389 (`Type.pseudoCompanionObject`, Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, to be
+Status: **RESOLVED** by kubuszok/hearth#389 (`Type.pseudoCompanionObject`, Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, verified against `0.4.3-24-gc0c6e43-SNAPSHOT`, to be
 released in 0.4.4). Found 2026-10-25 with Hearth 0.4.3 while moving `newtype-integration` and `neotype-integration` off
 raw reflection.
 

@@ -1,6 +1,6 @@
 # Hearth gap: `VarArgs.toIterable` cannot tell "no varargs" from "non-literal varargs" (Scala 3)
 
-Status: **RESOLVED** by kubuszok/hearth#389 (Hearth snapshot `0.4.3-17-gbd1e277-SNAPSHOT`, `@since 0.4.4`). Found
+Status: **RESOLVED** by kubuszok/hearth#389 (first in Hearth snapshot `0.4.3-17-gbd1e277-SNAPSHOT`, `@since 0.4.4`; verified against `0.4.3-24-gc0c6e43-SNAPSHOT`). Found
 2026-10-25 with Hearth 0.4.3, while trying to replace the `scala.quoted.Varargs` match in
 `optics/src/main/scala-3/.../ModifyMacros.scala` with Hearth's `VarArgs`.
 

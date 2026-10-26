@@ -1,6 +1,6 @@
 # Hearth gap: `Type.Ctor1.of[F]` / `Type.CtorK1.of[Alg]` for a Scala 2 macro method's own type parameter
 
-Status: **RESOLVED** by kubuszok/hearth#389 (Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, 2026-10-26). Found 2026-10-25 with
+Status: **RESOLVED** by kubuszok/hearth#389 (first in Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, 2026-10-26; verified against `0.4.3-24-gc0c6e43-SNAPSHOT`, to be released as 0.4.4). Found 2026-10-25 with
 Hearth 0.4.3, while moving `cats-derivation` and `cats-tagless-derivation` off per-platform reflection. Scala 3 was not
 affected.
 

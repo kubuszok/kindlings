@@ -1,6 +1,6 @@
 # Hearth gap: the return type of a generic method is unknown after `ApplyTypes` (and `Nothing` on Scala 2)
 
-Status: **RESOLVED by kubuszok/hearth#389** (Hearth 0.4.4; Kindlings pins `0.4.3-17-gbd1e277-SNAPSHOT`). `knownReturning`
+Status: **RESOLVED by kubuszok/hearth#389** (Hearth 0.4.4; verified against `0.4.3-24-gc0c6e43-SNAPSHOT`, which Kindlings pins). `knownReturning`
 is known right after `ApplyTypes` and the Scala 2 `Result` is no longer `Nothing`. `ResourceWiringMacrosImpl.returnsResourceOf`
 now reads `applied.knownReturning` directly (no placeholder trial-application), and the `ResourceMethodSpec` test below is
 a plain test again, passing on 2.13 and 3.
