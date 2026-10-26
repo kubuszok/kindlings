@@ -26,7 +26,7 @@ kindlings, with evidence that can be re-run. Verdicts:
 | 6 | "Context functions aren't treated as factories (`fqcn.startsWith("scala.Function")`)" | **TRUE (kindlings) + small Hearth gap** | The check is in kindlings (`WiringMacrosImpl.isFunctionExpr`, di-cats `isFunction`). Hearth has no public predicate for `FunctionN`/`ContextFunctionN` types; one exists only privately in Scala 3 (`UntypedTypesScala3.isContextFunctionType`). **Resolved by kubuszok/hearth#389**: kindlings now uses `Type.isFunction`/`isContextFunction`/`functionComponents`; context function literals are factories on Scala 3 (`ContextFunctionWiringSpec`, `ContextFunctionResourceSpec`). |
 | 7 | "An enclosing `Ox` would be picked up by implicit search" | **TRUE (kindlings design)** | Kindlings resolves implicit parameters with `Expr.summonImplicit` at the call site, as macwire does. Nothing in Hearth forces this: a macro can fill the `using` list from the members of an explicit scope term (`Class[S].methods` + `Method` application), as #2 now does for its explicit parameters. |
 | 8 | "Method-local vals are visible only on Scala 2" | **TRUE, deliberately unsupported** | The Scala 3 compiler gives `DefDef.rhs = None` for the method being expanded (`EnvironmentsScala3.scala` `localValuesOf`, documented on `Enclosure.Method`). A MacWire written without Hearth has the same limit. |
-| 9 | (not claimed, found here) enclosing-method **parameters** are not exposed | **TRUE (Hearth gap)** | `Enclosure.Method` has no parameters field, although both compilers know them. Hearth exposes them since 0.4.4 (`Environment.enclosingMethodParameters`, kubuszok/hearth#389); kindlings DI does not use them (`docs/user-guide/di.md`). |
+| 9 | (not claimed, found here) enclosing-method **parameters** are not exposed | **TRUE (Hearth gap)** | `Enclosure.Method` has no parameters field, although both compilers know them. Hearth exposes them since 0.4.4 (`Environment.enclosingMethodParameters`, kubuszok/hearth#389). **Resolved**: kindlings DI uses them (verified against Hearth `0.4.3-24-gc0c6e43-SNAPSHOT`) as the innermost scope, together with the method's local vals, as macwire does - a parameter shadows a member of the same type, two parameters of the same type are an ambiguity (`WiringSpec` "DI.wire enclosing-method parameters", 2.13 and 3). |
 | 10 | "di-cats only chains provided `Resource`s; there's no ownership model" | **TRUE (scope)** | By design: acquisition and release are supplied as `Resource[F, X]`. Unrelated to Hearth. |
 | 11 | "The build disables `-Wunused:imports` because of `import x.Underlying as T`" | **TRUE** | `build.sbt:130`. The cause is Scala 3 compiler bugs (scala/scala3 #18564, #19252, #19657, #19912), not Hearth itself, but it is a real cost of the `Underlying` import style. |
 | 12 | "`DI.plan`'s `def` storage clashes with lifecycle" | **TRUE (design)** | `asDefs` re-creates on every use, by design (`DIPlanSpec` "asDefs re-creates a dependency on each use"). |
@@ -46,7 +46,7 @@ kindlings, with evidence that can be re-run. Verdicts:
 | neotype | raw reflection for underlying type, companion, `make` | `Ctor1.of[Newtype].unapply`, `Expr.singletonOf`, `Method` | mostly replaceable, done; prefix/owner lookup was a real gap, closed by `Type.pseudoCompanionObject` (kubuszok/hearth#389) |
 | newtype | raw reflection for prefix + type members | `Type.pseudoCompanionObject` + `unsafeUnwrap` via `Method` | was a real gap (`hearth-gap-type-prefix-and-members.md`), closed by kubuszok/hearth#389 |
 | Scala 2 `c.prefix` unwrap (jsoniter, yaml, xml, mock, optics, di `DI.plan`) | — | unchanged | necessary entry-point glue |
-| Scala 2 `WeakTypeTag[F[Any]].tpe.typeConstructor` entry recovery (cats, cats-tagless, di-cats) | — | unchanged | necessary: `Type.Ctor1.of[F]`/`CtorK1.of[Alg]` on a macro's own type parameter fails on 2.13, see `hearth-gap-scala2-ctor-of-macro-type-param.md` |
+| Scala 2 `WeakTypeTag[F[Any]].tpe.typeConstructor` entry recovery (cats, cats-tagless, di-cats) | — | `Type.Ctor1.of[F]` / `CtorK1.of[Alg]` | was necessary (`Ctor*.of` on a macro's own type parameter failed on 2.13, see `hearth-gap-scala2-ctor-of-macro-type-param.md`); fixed by kubuszok/hearth#389, done |
 
 Results with everything applied: all JVM suites, 2.13 3328 passed / 1 failed (the intentional Hearth-bug test below)
 and Scala 3 3691 passed / 0 failed.
@@ -56,22 +56,26 @@ and Scala 3 3691 passed / 0 failed.
 Drafts: `docs/research/hearth-feedback-2026-10/*.md`. The failing tests are in
 `hearth-feedback-2026-10/hearth-reproducer-tests.patch`, which applies to Hearth `aded1a31` (0.4.3-4).
 
-| # | Item | Verdict | Platforms |
-|---|---|---|---|
-| 1 | Generic method return type after `ApplyTypes` | gap (both), bug (`Result.Returned = Nothing` on 2.13) | 2.13, 3 |
-| 2 | Cross-quotes: `Type.of` before `import x.Underlying as T` | bug; fix verified (`2-cross-quotes-import-order.fix.patch`, full suite green) | 3 |
-| 3 | `decompose1/2`, `typeArguments` on singleton types | bug (`Ctor*.unapply` already OK) | 2.13, 3 |
-| 4 | Enclosing-method parameters | gap; prototype `Environment.enclosingMethodParameters` passes on both | 2.13, 3 |
-| 5 | No `isFunction` / `isContextFunction` predicate | API request | 2.13, 3 |
-| 6 | `Type.fqcn` has no scaladoc warning that it is not a type identity | doc request | — |
-| 7 | `Ctor2.of[Function1].unapply` | exact types fixed; still wrong for SUBTYPES on Scala 3; "SPI boundary" claim never true | 3 |
-| 8 | `VarArgs.toIterable` silently drops non-literal varargs | API gap (`toIterableOption`) | 3 |
-| 9 | Path-dependent type prefix / type members / owner | API gap | 2.13, 3 |
-| 10 | `Ctor*.of` on a Scala 2 macro's own type parameter | bug (crash / silent abstract `F`) | 2.13 |
-| 11 | No `Ctor` for mixed kinds like `Resource[F[_], A]` | API gap (minor) | 2.13, 3 |
+| # | Item | Verdict | Platforms | Status |
+|---|---|---|---|---|
+| 1 | Generic method return type after `ApplyTypes` | gap (both), bug (`Result.Returned = Nothing` on 2.13) | 2.13, 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): di-cats reads `knownReturning` after `ApplyTypes` |
+| 2 | Cross-quotes: `Type.of` before `import x.Underlying as T` | bug; fix verified (`2-cross-quotes-import-order.fix.patch`, full suite green) | 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): natural import order in `preciseDependency` |
+| 3 | `decompose1/2`, `typeArguments` on singleton types | bug (`Ctor*.unapply` already OK) | 2.13, 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): no kindlings workaround existed |
+| 4 | Enclosing-method parameters | gap; prototype `Environment.enclosingMethodParameters` passes on both | 2.13, 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): `DI.wire` uses the enclosing method's parameters |
+| 5 | No `isFunction` / `isContextFunction` predicate | API request | 2.13, 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): di/di-cats use `isFunction`/`isContextFunction` |
+| 6 | `Type.fqcn` has no scaladoc warning that it is not a type identity | doc request | — | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): scaladoc only, nothing to change |
+| 7 | `Ctor2.of[Function1].unapply` | exact types fixed; still wrong for SUBTYPES on Scala 3; "SPI boundary" claim never true | 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): plain `Type.Ctor2.of[Function1]` |
+| 8 | `VarArgs.toIterable` silently drops non-literal varargs | API gap (`toIterableOption`) | 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): optics uses `VarArgs.toIterableOption` |
+| 9 | Path-dependent type prefix / type members / owner | API gap | 2.13, 3 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): newtype/neotype use `Type.pseudoCompanionObject` |
+| 10 | `Ctor*.of` on a Scala 2 macro's own type parameter | bug (crash / silent abstract `F`) | 2.13 | **RESOLVED** in `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4): Scala 2 entry points use `Type.CtorN.of`/`CtorK1.of` |
+| 11 | No `Ctor` for mixed kinds like `Resource[F[_], A]` | API gap (minor) | 2.13, 3 | open in Hearth, no ETA: FQCN workaround kept |
 
 ## Other findings while porting
 
+- On Scala 2, `UntypedType.parents` returned `Nil` for applied generic classes (and `baseClasses` left generic base
+  classes' type parameters unresolved), so di/di-cats counted function classes in `baseClasses` instead. **Resolved** in
+  Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); the workaround is removed. See
+  [hearth-gap-scala2-parents-generic-classes.md](hearth-gap-scala2-parents-generic-classes.md).
 - On Scala 3, `Type.of[...]` placed before `import x.Underlying as T` in the same block fails with "Not found: type T".
   See [hearth-gap-cross-quotes-import-order.md](hearth-gap-cross-quotes-import-order.md).
 - `Resource[F[_], A]` has a mixed-kind constructor that no `Type.Ctor*` extractor models (`Ctor2` is `(*, *) -> *`;

@@ -20,6 +20,15 @@ not fixed and has no ETA**: keep its workaround (`isResource`/`resourceUnderlyin
 If any of 1–10 turns out not to work against the snapshot, keep that item's workaround and report it back with the
 failing test.
 
+**Done (2026-10-26, branch `di-hearth-api-cleanup`, Hearth `0.4.3-24-gc0c6e43-SNAPSHOT`, to be released as 0.4.4):**
+every item 1–10 works against the snapshot and its workaround is removed (item 3 had none; item 6 needed nothing).
+Item 4 is implemented: `DI.wire`/`wireRec`/`wireWith`/`wireSet`/`wireList` use the closest enclosing method's
+parameters as the innermost scope (together with its Scala 2 local vals), as macwire does - a parameter shadows a member
+of the same type, two parameters of the same type are an ambiguity. The Scala 2 `parents` workaround
+(`hearth-gap-scala2-parents-generic-classes.md`) is removed too. Item 11 is untouched. After `cleanFull`, all suites
+pass: JVM 2.13 3386/3386, JVM 3 3709/3709, JS 2.13 2784/2784, JS 3 3049/3049 (the JS 3 run needed a second sbt server
+for the last module after a heap OOM in the server, not a test failure).
+
 | # | Hearth item | Kindlings site | Change | Proof |
 |---|---|---|---|---|
 | 1 | Generic method return type after `ApplyTypes` (`Nothing` on 2.13) | `di-cats/.../ResourceWiringMacrosImpl.scala` `returnsResourceOf`, `nullPlaceholder`, trial application in `companionResourceMethod` | read `knownReturning` after `ApplyTypes`; drop the placeholder trial application | `ResourceMethodSpec` "ignores a companion resource[F] that does not return a Resource of the type" turns green on 2.13 JVM + JS (the PR's only red CI) |

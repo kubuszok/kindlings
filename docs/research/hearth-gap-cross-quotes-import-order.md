@@ -1,6 +1,6 @@
 # Hearth gap: `Type.of` before `import x.Underlying as T` fails on Scala 3 ("Not found: type T")
 
-Status: **RESOLVED by kubuszok/hearth#389** (Hearth 0.4.4; Kindlings pins `0.4.3-17-gbd1e277-SNAPSHOT`). di-cats'
+Status: **RESOLVED by kubuszok/hearth#389** (Hearth 0.4.4; verified against `0.4.3-24-gc0c6e43-SNAPSHOT`, which Kindlings pins). di-cats'
 `preciseDependency` is back in the natural order (`Type.of[Any]`, then `import parsed.tpe.Underlying as D`) and compiles on
 Scala 3.
 
