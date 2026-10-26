@@ -18,10 +18,9 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveInvariant[F[_]](
-      FCtor0: Type.Ctor1[F],
-      InvariantFType: Type[cats.Invariant[F]]
-  ): Expr[cats.Invariant[F]] = {
+  def deriveInvariant[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Invariant[F]] = {
+    // `Type[cats.Invariant[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val InvariantFType: Type[cats.Invariant[F]] = Type.CtorK1.of[cats.Invariant].apply[F](using FCtor0)
     val macroName = "Invariant.derived"
     enforceDerivationPolicyOrAbort(InvariantFType.prettyPrint)
 

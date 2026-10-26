@@ -16,17 +16,46 @@ trait InvariantKMacrosImpl
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
 
-  protected def mkWCtor1: Type.Ctor1[CatsTaglessFactories.WCtor1]
-  protected def mkWCtor2: Type.Ctor1[CatsTaglessFactories.WCtor2]
+  protected def mkWCtor1: Type.Ctor1[CatsTaglessFactories.WCtor1] = Type.Ctor1.of[CatsTaglessFactories.WCtor1]
+  protected def mkWCtor2: Type.Ctor1[CatsTaglessFactories.WCtor2] = Type.Ctor1.of[CatsTaglessFactories.WCtor2]
+
+  /** Applies a type class of kind `((* -> *) -> *) -> *` (given as an anchor, e.g. `Type[InvariantK[DummyHKT]]`) to an
+    * algebra constructor of kind `(* -> *) -> *` (e.g. `InnerAlg`), building e.g. `Type[InvariantK[InnerAlg]]`.
+    *
+    * Uses Hearth's `UntypedType.applyTypeArgs`, which re-applies the anchor's (dealiased) type CONSTRUCTOR to the new
+    * arguments on both Scala 2 and Scala 3 - no `c.universe.appliedType` / `TypeRepr.appliedTo` needed.
+    */
+  final protected def applyTypeClassToAlgebra[Anchor, Out](
+      typeClassAnchorType: Type[Anchor],
+      algCtor: UntypedType
+  ): Type[Out] =
+    UntypedType.applyTypeArgs(typeClassAnchorType.asUntyped, List(algCtor)).asTyped[Out]
 
   /** Extract the HKT constructor from a nested field type (e.g. InnerAlg from InnerAlg[Option]) and construct an
     * applied type class type (e.g. Type[InvariantK[InnerAlg]]). The anchor type provides the type class constructor
-    * (e.g. Type[InvariantK[DummyHKT]]). Returns None if the field type is not an applied HKT.
+    * (e.g. Type[InvariantK[DummyHKT]]). Returns None if the field type is not a (dealiased) type applied to exactly one
+    * argument.
+    *
+    * Cross-platform via Hearth's `UntypedType.dealias` / `typeArguments` / `typeConstructor` / `applyTypeArgs` (this
+    * used to be the per-platform `TaglessKBridgeScala2` / `TaglessKBridgeScala3`).
     */
-  protected def constructTypeClassTypeForField(
+  final protected def constructTypeClassTypeForField(
       fieldType: Type[Any],
       typeClassAnchorType: Type[Any]
-  ): Option[NestedFieldInfo]
+  ): Option[NestedFieldInfo] = {
+    val dealiased = UntypedType.dealias(fieldType.asUntyped)
+    UntypedType.typeArguments(dealiased) match {
+      case _ :: Nil =>
+        val fieldHKTCtor = UntypedType.typeConstructor(dealiased)
+        Some(
+          NestedFieldInfo(
+            typeClassType = applyTypeClassToAlgebra[Any, Any](typeClassAnchorType, fieldHKTCtor),
+            ctorK1Untyped = fieldHKTCtor
+          )
+        )
+      case _ => None
+    }
+  }
 
   final case class NestedFieldInfo(
       typeClassType: Type[Any],
@@ -103,9 +132,10 @@ trait InvariantKMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveInvariantK[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      InvariantKAlgType: Type[cats.tagless.InvariantK[Alg]]
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.InvariantK[Alg]] = {
+    val InvariantKAlgType: Type[cats.tagless.InvariantK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
     val macroName = "InvariantK.derived"
     enforceDerivationPolicyOrAbort(InvariantKAlgType.prettyPrint)
 

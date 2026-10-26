@@ -12,10 +12,12 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveBitraverse[F[_, _]](
-      FCtor0: Type.Ctor2[F],
-      BitraverseFType: Type[cats.Bitraverse[F]]
-  ): Expr[cats.Bitraverse[F]] = {
+  def deriveBitraverse[F[_, _]](FCtor0: Type.Ctor2[F]): Expr[cats.Bitraverse[F]] = {
+    // `Type[cats.Bitraverse[F]]` built cross-platform by re-applying the type class constructor to `F`
+    // (Hearth `UntypedType.applyTypeArgs` - there is no `CtorK` for `* -> * -> *` arguments).
+    val BitraverseFType: Type[cats.Bitraverse[F]] = UntypedType
+      .applyTypeArgs(Type.of[cats.Bitraverse[Either]].asUntyped, List(FCtor0.asUntyped))
+      .asTyped[cats.Bitraverse[F]]
     val macroName = "Bitraverse.derived"
     enforceDerivationPolicyOrAbort(BitraverseFType.prettyPrint)
 

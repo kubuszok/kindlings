@@ -96,10 +96,9 @@ trait ApplicativeMacrosImpl
   }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
-  def deriveApplicative[F[_]](
-      FCtor0: Type.Ctor1[F],
-      ApplicativeFType: Type[cats.Applicative[F]]
-  ): Expr[cats.Applicative[F]] = {
+  def deriveApplicative[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Applicative[F]] = {
+    // `Type[cats.Applicative[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val ApplicativeFType: Type[cats.Applicative[F]] = Type.CtorK1.of[cats.Applicative].apply[F](using FCtor0)
     val macroName = "Applicative.derived"
     enforceDerivationPolicyOrAbort(ApplicativeFType.prettyPrint)
 

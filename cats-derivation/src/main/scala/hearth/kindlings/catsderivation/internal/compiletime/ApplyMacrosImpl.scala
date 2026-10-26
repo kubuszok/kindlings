@@ -18,7 +18,9 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveApply[F[_]](FCtor0: Type.Ctor1[F], ApplyFType: Type[cats.Apply[F]]): Expr[cats.Apply[F]] = {
+  def deriveApply[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Apply[F]] = {
+    // `Type[cats.Apply[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val ApplyFType: Type[cats.Apply[F]] = Type.CtorK1.of[cats.Apply].apply[F](using FCtor0)
     val macroName = "Apply.derived"
     enforceDerivationPolicyOrAbort(ApplyFType.prettyPrint)
 

@@ -8,17 +8,7 @@ final private[catsderivation] class NonEmptyTraverseMacros(val c: blackbox.Conte
     extends MacroCommonsScala2
     with NonEmptyTraverseMacrosImpl {
 
-  def deriveNonEmptyTraverseImpl[F[_]](implicit
-      ft: c.WeakTypeTag[F[Any]]
-  ): c.Expr[cats.NonEmptyTraverse[F]] = {
-    val untypedF: UntypedType = ft.tpe.typeConstructor
-    val fCtor: Type.Ctor1[F] = Type.Ctor1.fromUntyped[F](untypedF)
-
-    val netCtor = c.universe.weakTypeOf[cats.NonEmptyTraverse[Any]].typeConstructor
-    val netFTpe = c.universe.appliedType(netCtor, List(ft.tpe.typeConstructor))
-    val netFType =
-      c.WeakTypeTag[cats.NonEmptyTraverse[F]](netFTpe).asInstanceOf[Type[cats.NonEmptyTraverse[F]]]
-
-    deriveNonEmptyTraverse[F](fCtor, netFType)
-  }
+  // Entry-point glue only: recover the statically-known `F` from the macro's `WeakTypeTag[F[Any]]`.
+  def deriveNonEmptyTraverseImpl[F[_]](implicit ft: c.WeakTypeTag[F[Any]]): c.Expr[cats.NonEmptyTraverse[F]] =
+    deriveNonEmptyTraverse[F](Type.Ctor1.fromUntyped[F](ft.tpe.typeConstructor))
 }

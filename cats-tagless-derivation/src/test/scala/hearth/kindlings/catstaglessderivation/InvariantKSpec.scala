@@ -44,6 +44,13 @@ final class InvariantKSpec extends MacroSuite {
       result.x ==> List(7)
     }
 
+    test("nested algebra through a type alias") {
+      val alg = examples.OuterAliased[Option](examples.InnerAlg2[Option](Some(true)), Some(7))
+      val result = examples.OuterAliased.invariantK.imapK(alg)(fk)(gk)
+      result.inner.value ==> List(true)
+      result.x ==> List(7)
+    }
+
     test("empty to non-empty via fk") {
       val result = examples.DirectAlg.invariantK.imapK(examples.DirectAlg[Option](None, None))(fk)(gk)
       result.a ==> List.empty[Int]
@@ -82,6 +89,13 @@ final class InvariantKSpec extends MacroSuite {
     test("nested algebra without explicit instance (recursive derivation)") {
       val alg = examples.OuterAlg2[Option](examples.InnerAlg2[Option](Some(true)), Some(7))
       val result = examples.OuterAlg2.functorK.mapK(alg)(fk)
+      result.inner.value ==> List(true)
+      result.x ==> List(7)
+    }
+
+    test("nested algebra through a type alias") {
+      val alg = examples.OuterAliased[Option](examples.InnerAlg2[Option](Some(true)), Some(7))
+      val result = examples.OuterAliased.functorK.mapK(alg)(fk)
       result.inner.value ==> List(true)
       result.x ==> List(7)
     }

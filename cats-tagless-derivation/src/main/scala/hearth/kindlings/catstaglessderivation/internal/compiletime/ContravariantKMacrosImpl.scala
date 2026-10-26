@@ -62,9 +62,10 @@ trait ContravariantKMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveContravariantK[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      ContravariantKAlgType: Type[cats.tagless.ContravariantK[Alg]]
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.ContravariantK[Alg]] = {
+    val ContravariantKAlgType: Type[cats.tagless.ContravariantK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
     val macroName = "ContravariantK.derived"
     enforceDerivationPolicyOrAbort(ContravariantKAlgType.prettyPrint)
 

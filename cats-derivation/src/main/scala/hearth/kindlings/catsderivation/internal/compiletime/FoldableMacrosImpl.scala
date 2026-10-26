@@ -37,10 +37,9 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveFoldable[F[_]](
-      FCtor0: Type.Ctor1[F],
-      FoldableFType: Type[cats.Foldable[F]]
-  ): Expr[cats.Foldable[F]] = {
+  def deriveFoldable[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Foldable[F]] = {
+    // `Type[cats.Foldable[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val FoldableFType: Type[cats.Foldable[F]] = Type.CtorK1.of[cats.Foldable].apply[F](using FCtor0)
     val macroName = "Foldable.derived"
     enforceDerivationPolicyOrAbort(FoldableFType.prettyPrint)
 

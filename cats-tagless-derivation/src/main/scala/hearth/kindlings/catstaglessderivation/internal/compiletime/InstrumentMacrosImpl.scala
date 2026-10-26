@@ -25,11 +25,16 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveInstrument[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      InstrumentAlgType: Type[cats.tagless.aop.Instrument[Alg]],
-      FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]],
-      algebraName: String
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.aop.Instrument[Alg]] = {
+    val InstrumentAlgType: Type[cats.tagless.aop.Instrument[Alg]] = applyTypeClassToAlgebra(
+      Type.of[cats.tagless.aop.Instrument[CatsTaglessFactories.DummyHKT]],
+      AlgCtorK10.asUntyped
+    )
+    val FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
+    // Name of the algebra itself (e.g. `MyAlg` from `MyAlg[Option]`) via Hearth's cross-platform `Type#shortName`.
+    val algebraName: String = AlgCtorK10.apply[Option](using Type.Ctor1.of[Option]).shortName
     val macroName = "Instrument.derived"
     enforceDerivationPolicyOrAbort(InstrumentAlgType.prettyPrint)
 

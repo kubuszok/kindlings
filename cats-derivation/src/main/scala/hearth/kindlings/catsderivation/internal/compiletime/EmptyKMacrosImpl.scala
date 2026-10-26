@@ -13,7 +13,9 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveEmptyK[F[_]](FCtor0: Type.Ctor1[F], EmptyKFType: Type[alleycats.EmptyK[F]]): Expr[alleycats.EmptyK[F]] = {
+  def deriveEmptyK[F[_]](FCtor0: Type.Ctor1[F]): Expr[alleycats.EmptyK[F]] = {
+    // `Type[alleycats.EmptyK[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val EmptyKFType: Type[alleycats.EmptyK[F]] = Type.CtorK1.of[alleycats.EmptyK].apply[F](using FCtor0)
     val macroName = "EmptyK.derived"
     enforceDerivationPolicyOrAbort(EmptyKFType.prettyPrint)
 

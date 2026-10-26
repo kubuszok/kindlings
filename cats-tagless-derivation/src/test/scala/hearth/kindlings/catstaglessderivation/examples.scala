@@ -56,6 +56,15 @@ object examples {
     implicit val functorK: FunctorK[OuterAlg2] = KindlingsFunctorK.derived
   }
 
+  // Nested algebra referenced through a type alias — the field's constructor is discovered after dealiasing
+  // (Hearth's UntypedType.dealias/typeConstructor), on both Scala 2 and Scala 3.
+  type InnerAlias[F[_]] = InnerAlg2[F]
+  case class OuterAliased[F[_]](inner: InnerAlias[F], x: F[Int])
+  object OuterAliased {
+    implicit val invariantK: InvariantK[OuterAliased] = KindlingsInvariantK.derived
+    implicit val functorK: FunctorK[OuterAliased] = KindlingsFunctorK.derived
+  }
+
   // --- ContravariantK: nested-only algebra (no direct F[X] fields) ---
 
   case class InnerContra[F[_]](name: String)

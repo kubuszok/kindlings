@@ -120,10 +120,12 @@ trait BifunctorMacrosImpl
   }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
-  def deriveBifunctor[F[_, _]](
-      FCtor0: Type.Ctor2[F],
-      BifunctorFType: Type[cats.Bifunctor[F]]
-  ): Expr[cats.Bifunctor[F]] = {
+  def deriveBifunctor[F[_, _]](FCtor0: Type.Ctor2[F]): Expr[cats.Bifunctor[F]] = {
+    // `Type[cats.Bifunctor[F]]` built cross-platform by re-applying the type class constructor to `F`
+    // (Hearth `UntypedType.applyTypeArgs` - there is no `CtorK` for `* -> * -> *` arguments).
+    val BifunctorFType: Type[cats.Bifunctor[F]] = UntypedType
+      .applyTypeArgs(Type.of[cats.Bifunctor[Either]].asUntyped, List(FCtor0.asUntyped))
+      .asTyped[cats.Bifunctor[F]]
     val macroName = "Bifunctor.derived"
     enforceDerivationPolicyOrAbort(BifunctorFType.prettyPrint)
 

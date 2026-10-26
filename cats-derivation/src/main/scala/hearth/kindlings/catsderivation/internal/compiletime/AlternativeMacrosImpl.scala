@@ -22,10 +22,9 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveAlternative[F[_]](
-      FCtor0: Type.Ctor1[F],
-      AltFType: Type[cats.Alternative[F]]
-  ): Expr[cats.Alternative[F]] = {
+  def deriveAlternative[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Alternative[F]] = {
+    // `Type[cats.Alternative[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val AltFType: Type[cats.Alternative[F]] = Type.CtorK1.of[cats.Alternative].apply[F](using FCtor0)
     val macroName = "Alternative.derived"
     enforceDerivationPolicyOrAbort(AltFType.prettyPrint)
 
