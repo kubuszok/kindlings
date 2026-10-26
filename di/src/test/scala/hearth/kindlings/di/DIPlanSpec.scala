@@ -10,6 +10,17 @@ final class DIPlanSpec extends MacroSuite {
 
   group("DI.plan storage strategies") {
 
+    test("keeps distinct applications of a generic type as distinct graph nodes") {
+      val tags = DI.plan[WiringSpec.TwoTags].build
+      assert(tags.a ne tags.b)
+    }
+
+    test("a storage override for one application of a generic type does not affect another") {
+      val tags = DI.plan[WiringSpec.TwoTagConsumers].storeAsDef[WiringSpec.Tag[WiringSpec.TagA]].build
+      assert(tags.a1 ne tags.a2)
+      assert(tags.b1 eq tags.b2)
+    }
+
     test("default (val) storage builds the whole graph and shares each instance exactly once") {
       val app = DI.plan[WiringSpec.RecApp].build
       app.service.databaseAccess ==> app.handler.databaseAccess

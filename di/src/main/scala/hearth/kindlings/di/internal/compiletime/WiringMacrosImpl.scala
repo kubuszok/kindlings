@@ -470,9 +470,10 @@ private[di] trait WiringMacrosImpl
   def autowire[A: Type](rawDeps: List[Expr_??]): Expr[A] = {
     checkDuplicateDependencyTypes(rawDeps)
     val used = scala.collection.mutable.Set.empty[Int]
-    // Collected in resolution order, keyed by type FQCN — feeds both the ZIO-Magic wiring graph and the full log.
+    // Collected in resolution order, keyed by `=:=`-identity — feeds both the ZIO-Magic wiring graph and the full log.
+    val keys = new WiringKeys
     val graphNodes = scala.collection.mutable.LinkedHashMap.empty[String, WiringGraph.RawNode]
-    val rootKey: String = Type.fqcn[A]
+    val rootKey: String = keys(Type[A].as_??)
 
     val block: Expr[A] = DirectStyle[ValDefs].scoped { runSafe =>
       val memo = scala.collection.mutable.LinkedHashMap.empty[String, Expr_??]
@@ -488,7 +489,7 @@ private[di] trait WiringMacrosImpl
         val arguments: Map[String, Expr_??] = params.map { case (name, parameter) =>
           val ref =
             if (parameter.isImplicit) {
-              val pk = keyOf(parameter.tpe)
+              val pk = keys(parameter.tpe)
               val _ = graphNodes.getOrElseUpdate(
                 pk,
                 WiringGraph.RawNode(pk, displayOf(parameter.tpe), NodeKind.Summoned, Storage.Inline, Nil)
@@ -497,7 +498,7 @@ private[di] trait WiringMacrosImpl
             } else expand(parameter.tpe, breadcrumb :+ t)
           name -> ref
         }.toMap
-        val depKeys = params.map { case (_, parameter) => keyOf(parameter.tpe) }
+        val depKeys = params.map { case (_, parameter) => keys(parameter.tpe) }
         applyArguments(method, arguments) match {
           case Right(built) => (built, depKeys)
           case Left(err)    => Environment.reportErrorAndAbort(err)
@@ -506,7 +507,7 @@ private[di] trait WiringMacrosImpl
 
       def expand(t: ??, breadcrumb: List[??]): Expr_?? = {
         import t.Underlying as T
-        val key = Type.fqcn[T]
+        val key = keys(t)
         memo.getOrElseUpdate(
           key, {
             verifyNotCyclic(t, breadcrumb)
@@ -563,9 +564,6 @@ private[di] trait WiringMacrosImpl
     block
   }
 
-  /** Stable per-type key (FQCN) used to identify nodes in the wiring graph. */
-  private def keyOf(t: ??): String = { import t.Underlying as T; Type.fqcn[T] }
-
   /** Human-readable type name for the wiring graph (ANSI colour codes from `prettyPrint` stripped for clean output). */
   private def displayOf(t: ??): String = {
     import t.Underlying as T
@@ -589,10 +587,8 @@ private[di] trait WiringMacrosImpl
       debug: Option[WiringLogMode]
   ) {
     def withOverride(key: String, s: Storage): PlanConfig = copy(overrides = overrides.updated(key, s))
-    def withProvider(t: ??, factory: DestructuredExpr): PlanConfig = {
-      import t.Underlying as T
-      copy(providers = providers.updated(Type.fqcn[T], PlanProvider(t, factory)))
-    }
+    def withProvider(key: String, t: ??, factory: DestructuredExpr): PlanConfig =
+      copy(providers = providers.updated(key, PlanProvider(t, factory)))
     def storageFor(key: String): Storage = overrides.getOrElse(key, default)
   }
   private object PlanConfig {
@@ -603,9 +599,10 @@ private[di] trait WiringMacrosImpl
     * honouring the requested storage strategy and construction overrides.
     */
   def buildPlan[A: Type](plan: Expr[DIPlan[A]]): Expr[A] = {
-    val config = parsePlanConfig[A](plan)
+    val keys = new WiringKeys
+    val config = parsePlanConfig[A](plan, keys)
     val graphNodes = scala.collection.mutable.LinkedHashMap.empty[String, WiringGraph.RawNode]
-    val rootKey: String = Type.fqcn[A]
+    val rootKey: String = keys(Type[A].as_??)
 
     val block: Expr[A] = DirectStyle[ValDefs].scoped { runSafe =>
       val memo = scala.collection.mutable.LinkedHashMap.empty[String, Expr_??]
@@ -625,7 +622,7 @@ private[di] trait WiringMacrosImpl
         val arguments: Map[String, Expr_??] = params.map { case (name, parameter) =>
           val ref =
             if (parameter.isImplicit) {
-              val pk = keyOf(parameter.tpe)
+              val pk = keys(parameter.tpe)
               val _ = graphNodes.getOrElseUpdate(
                 pk,
                 WiringGraph.RawNode(pk, displayOf(parameter.tpe), NodeKind.Summoned, Storage.Inline, Nil)
@@ -634,7 +631,7 @@ private[di] trait WiringMacrosImpl
             } else expand(parameter.tpe, breadcrumb :+ t)
           name -> ref
         }.toMap
-        val depKeys = params.map { case (_, parameter) => keyOf(parameter.tpe) }
+        val depKeys = params.map { case (_, parameter) => keys(parameter.tpe) }
         applyArguments(method, arguments) match {
           case Right(built) => (built, depKeys)
           case Left(err)    => Environment.reportErrorAndAbort(err)
@@ -643,7 +640,7 @@ private[di] trait WiringMacrosImpl
 
       def expand(t: ??, breadcrumb: List[??]): Expr_?? = {
         import t.Underlying as T
-        val key = Type.fqcn[T]
+        val key = keys(t)
         memo.getOrElseUpdate(
           key, {
             verifyNotCyclic(t, breadcrumb)
@@ -695,19 +692,19 @@ private[di] trait WiringMacrosImpl
     * it into a [[PlanConfig]]. The receiver of each builder call is processed first, so an outer (later) call wins over
     * an inner (earlier) one for the whole-graph default.
     */
-  private def parsePlanConfig[A: Type](plan: Expr[DIPlan[A]]): PlanConfig = {
+  private def parsePlanConfig[A: Type](plan: Expr[DIPlan[A]], keys: WiringKeys): PlanConfig = {
     implicit val planTpe: Type[DIPlan[A]] = Type.of[DIPlan[A]]
     def loop(d: DestructuredExpr, acc: PlanConfig): PlanConfig = d match {
       case mc: DestructuredExpr.MethodCall =>
         val receiver = mc.applied.collectFirst { case ai: DestructuredExpr.MethodCall.AppliedInstance => ai.value }
         val base = receiver.map(loop(_, acc)).getOrElse(acc)
-        applyPlanCall(mc, base)
+        applyPlanCall(mc, base, keys)
       case _ => acc
     }
     loop(DestructuredExpr.parse[DIPlan[A]](plan), PlanConfig.empty)
   }
 
-  private def applyPlanCall(mc: DestructuredExpr.MethodCall, acc: PlanConfig): PlanConfig = {
+  private def applyPlanCall(mc: DestructuredExpr.MethodCall, acc: PlanConfig, keys: WiringKeys): PlanConfig = {
     def typeArg: Option[??] =
       mc.applied.collectFirst {
         case at: DestructuredExpr.MethodCall.AppliedTypes if at.typeArgs.nonEmpty => at.typeArgs.last
@@ -715,7 +712,7 @@ private[di] trait WiringMacrosImpl
     def valueArg: Option[DestructuredExpr] =
       mc.applied.collect { case av: DestructuredExpr.MethodCall.AppliedValues => av.args }.flatten.headOption
     def overrideStorage(s: Storage): PlanConfig =
-      typeArg.fold(acc) { t => import t.Underlying as T; acc.withOverride(Type.fqcn[T], s) }
+      typeArg.fold(acc)(t => acc.withOverride(keys(t), s))
     // Enum-argument DSL: read the `PlanStorage.*` / `PlanDebug.*` case-object passed as the value argument by matching
     // its (singleton) static type. Returns None if the argument is not one of the known singletons.
     def storageArg: Option[Storage] = valueArg.flatMap { d =>
@@ -744,7 +741,7 @@ private[di] trait WiringMacrosImpl
       case "debug"          => debugArg.fold(acc)(m => acc.copy(debug = Some(m)))
       case "provide"        =>
         (typeArg, valueArg) match {
-          case (Some(t), Some(factory)) => acc.withProvider(t, factory)
+          case (Some(t), Some(factory)) => acc.withProvider(keys(t), t, factory)
           case _                        => acc
         }
       case "debugTree"    => acc.copy(debug = Some(WiringLogMode.Tree))

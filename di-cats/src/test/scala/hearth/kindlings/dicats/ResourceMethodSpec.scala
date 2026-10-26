@@ -44,6 +44,27 @@ final class ResourceMethodSpec extends MacroSuite {
       res.use(SyncIO.pure).unsafeRunSync().service.config.url ==> "jdbc://transitive"
     }
 
+    test("ignores a companion resource[F] that does not return a Resource of the type") {
+      // `Plain.resource[F]` returns an `Option`, so `Plain` must be built through its constructor instead. Checked via
+      // `compileErrors` so that the Scala 2 failure (Hearth reports the generic method's result type as `Nothing`, see
+      // docs/research/hearth-gap-method-generic-return-type.md) fails only this test, not the whole suite's compilation.
+      val errors = compileErrors(
+        """
+        import hearth.kindlings.dicats.DICats
+        import cats.effect.{Resource, SyncIO}
+        import hearth.kindlings.dicats.ResourceMethodSpec.*
+        val res: Resource[SyncIO, Plain] = DICats.wireResource[SyncIO, Plain]()
+        """
+      )
+      assert(errors.isEmpty, errors)
+    }
+
+    test("keeps distinct applications of a generic type as distinct nodes") {
+      val res: Resource[SyncIO, TwoTags] = DICats.wireResource[SyncIO, TwoTags]()
+      val tags = res.use(SyncIO.pure).unsafeRunSync()
+      assert(tags.a ne tags.b)
+    }
+
     test("reports the explicit resource param via the graph path when it cannot be resolved") {
       // Service.resource's explicit `config` param is resolved from the graph: with no Config provided it is recursively
       // constructed, which fails on its non-wireable `String` — the path proves the arg is threaded through the graph.
@@ -87,4 +108,15 @@ object ResourceMethodSpec {
   }
 
   final class Server(val service: Service)
+
+  final class Plain() { def id: Int = 7 }
+  object Plain {
+    def resource[F[_]]: Option[Plain] = None
+  }
+
+  // Graph nodes must be keyed by the full type, not by the type constructor's FQCN.
+  final class Tag[X]()
+  final class TagA
+  final class TagB
+  final class TwoTags(val a: Tag[TagA], val b: Tag[TagB])
 }
