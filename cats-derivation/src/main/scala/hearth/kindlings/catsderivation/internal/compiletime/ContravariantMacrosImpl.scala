@@ -18,10 +18,9 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationE
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveContravariant[F[_]](
-      FCtor0: Type.Ctor1[F],
-      ContravariantFType: Type[cats.Contravariant[F]]
-  ): Expr[cats.Contravariant[F]] = {
+  def deriveContravariant[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Contravariant[F]] = {
+    // `Type[cats.Contravariant[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val ContravariantFType: Type[cats.Contravariant[F]] = Type.CtorK1.of[cats.Contravariant].apply[F](using FCtor0)
     val macroName = "Contravariant.derived"
     enforceDerivationPolicyOrAbort(ContravariantFType.prettyPrint)
 

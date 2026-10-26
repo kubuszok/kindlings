@@ -18,7 +18,9 @@ trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSuppo
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def derivePure[F[_]](FCtor0: Type.Ctor1[F], PureFType: Type[alleycats.Pure[F]]): Expr[alleycats.Pure[F]] = {
+  def derivePure[F[_]](FCtor0: Type.Ctor1[F]): Expr[alleycats.Pure[F]] = {
+    // `Type[alleycats.Pure[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val PureFType: Type[alleycats.Pure[F]] = Type.CtorK1.of[alleycats.Pure].apply[F](using FCtor0)
     val macroName = "Pure.derived"
     enforceDerivationPolicyOrAbort(PureFType.prettyPrint)
 

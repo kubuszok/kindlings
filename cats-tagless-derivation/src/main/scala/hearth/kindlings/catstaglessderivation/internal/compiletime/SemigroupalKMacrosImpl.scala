@@ -13,7 +13,7 @@ trait SemigroupalKMacrosImpl
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
 
-  protected def mkWCtor3: Type.Ctor1[CatsTaglessFactories.WCtor3]
+  protected def mkWCtor3: Type.Ctor1[CatsTaglessFactories.WCtor3] = Type.Ctor1.of[CatsTaglessFactories.WCtor3]
 
   // --- Context ---
 
@@ -64,9 +64,10 @@ trait SemigroupalKMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveSemigroupalK[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]]
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.SemigroupalK[Alg]] = {
+    val SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.SemigroupalK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
     val macroName = "SemigroupalK.derived"
     enforceDerivationPolicyOrAbort(SemigroupalKAlgType.prettyPrint)
 

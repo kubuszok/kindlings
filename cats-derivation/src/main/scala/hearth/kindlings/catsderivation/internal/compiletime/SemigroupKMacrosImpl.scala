@@ -13,10 +13,9 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveSemigroupK[F[_]](
-      FCtor0: Type.Ctor1[F],
-      SemigroupKFType: Type[cats.SemigroupK[F]]
-  ): Expr[cats.SemigroupK[F]] = {
+  def deriveSemigroupK[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.SemigroupK[F]] = {
+    // `Type[cats.SemigroupK[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val SemigroupKFType: Type[cats.SemigroupK[F]] = Type.CtorK1.of[cats.SemigroupK].apply[F](using FCtor0)
     val macroName = "SemigroupK.derived"
     enforceDerivationPolicyOrAbort(SemigroupKFType.prettyPrint)
 

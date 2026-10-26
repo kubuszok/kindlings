@@ -62,9 +62,10 @@ trait FunctorKMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveFunctorK[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]]
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.FunctorK[Alg]] = {
+    val FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
     val macroName = "FunctorK.derived"
     enforceDerivationPolicyOrAbort(FunctorKAlgType.prettyPrint)
 

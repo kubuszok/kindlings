@@ -156,7 +156,9 @@ trait FunctorMacrosImpl
   }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter|unused local definition")
-  def deriveFunctor[F[_]](FCtor0: Type.Ctor1[F], FunctorFType: Type[cats.Functor[F]]): Expr[cats.Functor[F]] = {
+  def deriveFunctor[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Functor[F]] = {
+    // `Type[cats.Functor[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val FunctorFType: Type[cats.Functor[F]] = Type.CtorK1.of[cats.Functor].apply[F](using FCtor0)
     val macroName = "Functor.derived"
     enforceDerivationPolicyOrAbort(FunctorFType.prettyPrint)
 

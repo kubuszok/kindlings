@@ -18,10 +18,9 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveReducible[F[_]](
-      FCtor0: Type.Ctor1[F],
-      ReducibleFType: Type[cats.Reducible[F]]
-  ): Expr[cats.Reducible[F]] = {
+  def deriveReducible[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Reducible[F]] = {
+    // `Type[cats.Reducible[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val ReducibleFType: Type[cats.Reducible[F]] = Type.CtorK1.of[cats.Reducible].apply[F](using FCtor0)
     val macroName = "Reducible.derived"
     enforceDerivationPolicyOrAbort(ReducibleFType.prettyPrint)
 

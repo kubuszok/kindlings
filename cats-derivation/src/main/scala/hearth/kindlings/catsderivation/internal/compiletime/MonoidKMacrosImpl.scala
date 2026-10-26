@@ -13,10 +13,9 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveMonoidK[F[_]](
-      FCtor0: Type.Ctor1[F],
-      MonoidKFType: Type[cats.MonoidK[F]]
-  ): Expr[cats.MonoidK[F]] = {
+  def deriveMonoidK[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.MonoidK[F]] = {
+    // `Type[cats.MonoidK[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val MonoidKFType: Type[cats.MonoidK[F]] = Type.CtorK1.of[cats.MonoidK].apply[F](using FCtor0)
     val macroName = "MonoidK.derived"
     enforceDerivationPolicyOrAbort(MonoidKFType.prettyPrint)
 

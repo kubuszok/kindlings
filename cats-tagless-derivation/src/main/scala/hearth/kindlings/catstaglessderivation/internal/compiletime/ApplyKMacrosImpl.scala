@@ -25,11 +25,14 @@ trait ApplyKMacrosImpl extends FunctorKMacrosImpl with SemigroupalKMacrosImpl { 
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveApplyK[Alg[_[_]]](
-      AlgCtorK10: Type.CtorK1[Alg],
-      ApplyKAlgType: Type[cats.tagless.ApplyK[Alg]],
-      FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]],
-      SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]]
+      AlgCtorK10: Type.CtorK1[Alg]
   ): Expr[cats.tagless.ApplyK[Alg]] = {
+    val ApplyKAlgType: Type[cats.tagless.ApplyK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.ApplyK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
+    val FunctorKAlgType: Type[cats.tagless.FunctorK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
+    val SemigroupalKAlgType: Type[cats.tagless.SemigroupalK[Alg]] =
+      applyTypeClassToAlgebra(Type.of[cats.tagless.SemigroupalK[CatsTaglessFactories.DummyHKT]], AlgCtorK10.asUntyped)
     val macroName = "ApplyK.derived"
     enforceDerivationPolicyOrAbort(ApplyKAlgType.prettyPrint)
 

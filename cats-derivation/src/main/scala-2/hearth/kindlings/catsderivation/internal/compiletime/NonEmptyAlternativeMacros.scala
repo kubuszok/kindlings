@@ -8,17 +8,7 @@ final private[catsderivation] class NonEmptyAlternativeMacros(val c: blackbox.Co
     extends MacroCommonsScala2
     with NonEmptyAlternativeMacrosImpl {
 
-  def deriveNonEmptyAlternativeImpl[F[_]](implicit
-      ft: c.WeakTypeTag[F[Any]]
-  ): c.Expr[cats.NonEmptyAlternative[F]] = {
-    val untypedF: UntypedType = ft.tpe.typeConstructor
-    val fCtor: Type.Ctor1[F] = Type.Ctor1.fromUntyped[F](untypedF)
-
-    val neaCtor = c.universe.weakTypeOf[cats.NonEmptyAlternative[Any]].typeConstructor
-    val neaFTpe = c.universe.appliedType(neaCtor, List(ft.tpe.typeConstructor))
-    val neaFType =
-      c.WeakTypeTag[cats.NonEmptyAlternative[F]](neaFTpe).asInstanceOf[Type[cats.NonEmptyAlternative[F]]]
-
-    deriveNonEmptyAlternative[F](fCtor, neaFType)
-  }
+  // Entry-point glue only: recover the statically-known `F` from the macro's `WeakTypeTag[F[Any]]`.
+  def deriveNonEmptyAlternativeImpl[F[_]](implicit ft: c.WeakTypeTag[F[Any]]): c.Expr[cats.NonEmptyAlternative[F]] =
+    deriveNonEmptyAlternative[F](Type.Ctor1.fromUntyped[F](ft.tpe.typeConstructor))
 }

@@ -19,10 +19,9 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivati
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveNonEmptyTraverse[F[_]](
-      FCtor0: Type.Ctor1[F],
-      NETFType: Type[cats.NonEmptyTraverse[F]]
-  ): Expr[cats.NonEmptyTraverse[F]] = {
+  def deriveNonEmptyTraverse[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.NonEmptyTraverse[F]] = {
+    // `Type[cats.NonEmptyTraverse[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val NETFType: Type[cats.NonEmptyTraverse[F]] = Type.CtorK1.of[cats.NonEmptyTraverse].apply[F](using FCtor0)
     val macroName = "NonEmptyTraverse.derived"
     enforceDerivationPolicyOrAbort(NETFType.prettyPrint)
 

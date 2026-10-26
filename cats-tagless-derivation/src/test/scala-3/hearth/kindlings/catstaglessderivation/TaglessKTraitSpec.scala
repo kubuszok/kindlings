@@ -2,8 +2,6 @@ package hearth.kindlings.catstaglessderivation
 
 import hearth.MacroSuite
 import cats.arrow.FunctionK
-import cats.data.Tuple2K
-import cats.tagless.aop.Instrumentation
 
 final class TaglessKTraitSpec extends MacroSuite {
 

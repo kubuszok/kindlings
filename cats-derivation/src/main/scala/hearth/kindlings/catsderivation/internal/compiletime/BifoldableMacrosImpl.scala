@@ -10,10 +10,12 @@ trait BifoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveBifoldable[F[_, _]](
-      FCtor0: Type.Ctor2[F],
-      BifoldableFType: Type[cats.Bifoldable[F]]
-  ): Expr[cats.Bifoldable[F]] = {
+  def deriveBifoldable[F[_, _]](FCtor0: Type.Ctor2[F]): Expr[cats.Bifoldable[F]] = {
+    // `Type[cats.Bifoldable[F]]` built cross-platform by re-applying the type class constructor to `F`
+    // (Hearth `UntypedType.applyTypeArgs` - there is no `CtorK` for `* -> * -> *` arguments).
+    val BifoldableFType: Type[cats.Bifoldable[F]] = UntypedType
+      .applyTypeArgs(Type.of[cats.Bifoldable[Either]].asUntyped, List(FCtor0.asUntyped))
+      .asTyped[cats.Bifoldable[F]]
     val macroName = "Bifoldable.derived"
     enforceDerivationPolicyOrAbort(BifoldableFType.prettyPrint)
 

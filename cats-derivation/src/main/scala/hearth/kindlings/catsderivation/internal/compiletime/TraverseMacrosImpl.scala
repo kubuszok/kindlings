@@ -40,10 +40,9 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveTraverse[F[_]](
-      FCtor0: Type.Ctor1[F],
-      TraverseFType: Type[cats.Traverse[F]]
-  ): Expr[cats.Traverse[F]] = {
+  def deriveTraverse[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.Traverse[F]] = {
+    // `Type[cats.Traverse[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val TraverseFType: Type[cats.Traverse[F]] = Type.CtorK1.of[cats.Traverse].apply[F](using FCtor0)
     val macroName = "Traverse.derived"
     enforceDerivationPolicyOrAbort(TraverseFType.prettyPrint)
 

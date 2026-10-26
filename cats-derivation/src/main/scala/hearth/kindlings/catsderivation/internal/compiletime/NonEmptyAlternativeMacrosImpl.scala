@@ -21,10 +21,9 @@ trait NonEmptyAlternativeMacrosImpl extends CatsDerivationTimeout with CatsDeriv
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-  def deriveNonEmptyAlternative[F[_]](
-      FCtor0: Type.Ctor1[F],
-      NEAFType: Type[cats.NonEmptyAlternative[F]]
-  ): Expr[cats.NonEmptyAlternative[F]] = {
+  def deriveNonEmptyAlternative[F[_]](FCtor0: Type.Ctor1[F]): Expr[cats.NonEmptyAlternative[F]] = {
+    // `Type[cats.NonEmptyAlternative[F]]` built cross-platform from `F`'s constructor (Hearth `Type.CtorK1#apply`).
+    val NEAFType: Type[cats.NonEmptyAlternative[F]] = Type.CtorK1.of[cats.NonEmptyAlternative].apply[F](using FCtor0)
     val macroName = "NonEmptyAlternative.derived"
     enforceDerivationPolicyOrAbort(NEAFType.prettyPrint)
 
