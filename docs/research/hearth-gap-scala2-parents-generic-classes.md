@@ -1,7 +1,12 @@
 # Hearth gap: `UntypedType.parents` is empty for applied generic classes on Scala 2
 
-Status: **OPEN** (found 2026-10-26 with Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, kubuszok/hearth#389, while replacing
-di/di-cats' `fqcn.startsWith("scala.Function")` with `Type.isFunction`). Scala 2.13 only; Scala 3 is correct.
+Status: **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (to be released as 0.4.4): Scala 2's `parents` now
+unwraps the `PolyType` of a generic class, and `baseClasses` resolves the type arguments of generic base classes
+(`instanceTpe.baseType`). The Kindlings workaround below is removed: di and di-cats use
+`!parents.exists(_.isFunction)` again, and the tests listed below pass on 2.13 and 3.
+
+Found 2026-10-26 with Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, kubuszok/hearth#389, while replacing di/di-cats'
+`fqcn.startsWith("scala.Function")` with `Type.isFunction`. Scala 2.13 only; Scala 3 was correct.
 
 ## What is wrong
 
@@ -32,7 +37,7 @@ For a polymorphic class the signature is a `PolyType(typeParams, ClassInfoType(.
 applied generic class (`List[A]`, `Map[K, V]`, `Function1[A, B]`, ...) gets `Nil`. Unwrapping the `PolyType`
 (`resultType`) before matching, then substituting the type arguments, should fix it.
 
-## Kindlings workaround
+## Kindlings workaround (removed)
 
 di (`WiringMacrosImpl.isFactoryType`) and di-cats (`ResourceWiringMacrosImpl.isFunction`) count function classes in
 `baseClasses` instead: a type is exactly a function type when its linearization holds exactly one function class (its
