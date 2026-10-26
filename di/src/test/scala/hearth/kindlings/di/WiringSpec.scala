@@ -129,6 +129,25 @@ final class WiringSpec extends MacroSuite {
       finder.securityFilter ==> sf
     }
 
+    test("uses a factory function typed through an alias") {
+      val db = new WiringSpec.DatabaseAccess()
+      val sf = new WiringSpec.SecurityFilter()
+      val mk: WiringSpec.UserFinderFactory = (d, s) => new WiringSpec.UserFinder(d, s)
+      val finder = DI.autowire[WiringSpec.UserFinder](db, sf, mk)
+      finder.databaseAccess ==> db
+      finder.securityFilter ==> sf
+    }
+
+    test("treats a value whose class extends a function type as an instance, not a factory") {
+      // `FinderMaker extends (DatabaseAccess => UserFinder)` and `List[Plugin]` (a `Int => Plugin`) are function
+      // SUBTYPES: they are wired as plain instances, only values typed as a function type itself are factories.
+      val maker = new WiringSpec.FinderMaker
+      val plugins = List(new WiringSpec.Plugin)
+      val holder = DI.autowire[WiringSpec.MakerHolder](maker, plugins)
+      (holder.maker eq maker) ==> true
+      (holder.plugins eq plugins) ==> true
+    }
+
     test("constructs intermediate dependencies not provided explicitly") {
       val db = new WiringSpec.DatabaseAccess()
       // RecApp(service, handler) — neither provided; both built from the single provided db.
@@ -586,6 +605,13 @@ object WiringSpec {
   class DatabaseAccess()
   class SecurityFilter()
   class UserFinder(val databaseAccess: DatabaseAccess, val securityFilter: SecurityFilter)
+
+  // Factory/function-subtype fixtures for `autowire`.
+  type UserFinderFactory = (DatabaseAccess, SecurityFilter) => UserFinder
+  class FinderMaker extends (DatabaseAccess => UserFinder) {
+    def apply(databaseAccess: DatabaseAccess): UserFinder = new UserFinder(databaseAccess, new SecurityFilter)
+  }
+  class MakerHolder(val maker: FinderMaker, val plugins: List[Plugin])
 
   // macwire `autowireMembersOf` fixture (ported from its `autowire/autowireMembersOf.success` test case): `b` is a
   // plain (private) ctor param exposed only via the no-arg `def bb`; `cc` has a parameter and must NOT be a provider.

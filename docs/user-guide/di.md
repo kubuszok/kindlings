@@ -147,6 +147,12 @@ val finder: UserFinder = DI.autowire[UserFinder](db, sf)
 val finder2 = DI.autowire[UserFinder](db, sf, (d: DatabaseAccess, s: SecurityFilter) => new UserFinder(d, s))
 ```
 
+A dependency is a **factory** when its static type is a function type itself — `(A, B) => C`, also through a type
+alias — or, on Scala 3, a context function (`(A, B) ?=> C`, whose `using` parameters are wired from the graph like
+ordinary ones). Pass a context function as a literal: a reference to a `val f: A ?=> C` is applied by the compiler
+before the macro sees it. A value whose class merely *extends* a function type (`List[A]`, `Map[K, V]`,
+`class Maker extends (A => B)`) is an ordinary instance. The same rules apply to `DICats.wireResource`.
+
 `autowire` reports, at compile time:
 
 - **cyclic dependencies**,
@@ -302,7 +308,8 @@ To also see the full generation log (the resolution logic **and** the generated 
   endpoint (always recursive, always caching, customizable storage + construction overrides).
 - **Cross-platform.** macwire's request/session *scopes* rely on JVM bytecode proxies; this module targets JVM,
   Scala.js and Scala Native, so those JVM-only proxy scopes are intentionally not ported.
-- **Enclosing-method parameters / locals.** Local `val`s declared before the call site are discovered on Scala 2;
-  enclosing-method *parameters* are not currently exposed cross-platform by the underlying macro API.
+- **Enclosing-method parameters / locals.** Local `val`s declared before the call site are discovered on Scala 2.
+  Enclosing-method *parameters* are not used for wiring; Hearth exposes them cross-platform since 0.4.4
+  (`Environment.enclosingMethodParameters`), but Kindlings' DI does not consult them.
 - Only the **immediately**-enclosing class exposes a usable `this`; members of *outer* enclosing classes are not
   reachable (enclosing **objects** always are, since they have a stable path).

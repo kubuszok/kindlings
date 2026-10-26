@@ -1,5 +1,7 @@
 # Cross-quotes (Scala 3): `Type.of` before a later `import x.Underlying as D` in the same block fails with "Not found: type D"
 
+**Status:** RESOLVED by kubuszok/hearth#389 (Hearth 0.4.4); see `../hearth-gap-cross-quotes-import-order.md`.
+
 **Verdict:** confirmed bug, in the Scala 3 cross-quotes compiler plugin. A one-line-scope fix has been verified: it makes
 the reproducer pass and causes no regression in the 1386 Scala 3 hearth-tests.
 

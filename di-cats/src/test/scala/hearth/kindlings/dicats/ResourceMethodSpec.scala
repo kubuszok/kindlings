@@ -45,18 +45,11 @@ final class ResourceMethodSpec extends MacroSuite {
     }
 
     test("ignores a companion resource[F] that does not return a Resource of the type") {
-      // `Plain.resource[F]` returns an `Option`, so `Plain` must be built through its constructor instead. Checked via
-      // `compileErrors` so that the Scala 2 failure (Hearth reports the generic method's result type as `Nothing`, see
-      // docs/research/hearth-gap-method-generic-return-type.md) fails only this test, not the whole suite's compilation.
-      val errors = compileErrors(
-        """
-        import hearth.kindlings.dicats.DICats
-        import cats.effect.{Resource, SyncIO}
-        import hearth.kindlings.dicats.ResourceMethodSpec.*
-        val res: Resource[SyncIO, Plain] = DICats.wireResource[SyncIO, Plain]()
-        """
-      )
-      assert(errors.isEmpty, errors)
+      // `Plain.resource[F]` returns an `Option`, so `Plain` must be built through its constructor instead. (On Scala 2
+      // this needs Hearth >= 0.4.4, which stopped reporting a generic method's result type as `Nothing` - see
+      // docs/research/hearth-gap-method-generic-return-type.md.)
+      val res: Resource[SyncIO, Plain] = DICats.wireResource[SyncIO, Plain]()
+      res.use(SyncIO.pure).unsafeRunSync().id ==> 7
     }
 
     test("keeps distinct applications of a generic type as distinct nodes") {
