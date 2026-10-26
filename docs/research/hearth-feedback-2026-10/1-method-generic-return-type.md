@@ -1,5 +1,7 @@
 # `Method` chain: return type of a generic method is unknown after `ApplyTypes` (and `Nothing` on Scala 2)
 
+**Status:** RESOLVED by kubuszok/hearth#389 (Hearth 0.4.4); see `../hearth-gap-method-generic-return-type.md`.
+
 **Verdict:** confirmed. It is a gap on both platforms and a bug on Scala 2.13. There is also a cosmetic Scala 3 side issue (1b).
 
 **Platforms:** Scala 2.13 (gap + bug), Scala 3 (gap; cosmetic 1b). Tested with Hearth `0.4.3-4-gaded1a31`, Scala 2.13.16 / 3.3.8, JVM.

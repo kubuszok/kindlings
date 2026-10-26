@@ -103,15 +103,18 @@ private[dicats] trait ResourceWiringMacrosImpl
     def resultType: ?? = x
   }
 
-  /** A `FunctionN` factory dependency. `applyM` is the function value's `apply` (its params are resolved from the graph
-    * at emit time); `returnKind` classifies how its result is wrapped into the chain; `x` is the underlying result type
-    * `X` (the function's return type, or the `X` of its `Resource[F, X]`/`F[X]` return).
+  /** A `FunctionN` (or Scala 3 context function) factory dependency. `applyM` is the function value's `apply` (its
+    * params are resolved from the graph at emit time - for a context function its `using` params too, since they ARE
+    * the factory's inputs, flagged by `contextual`); `returnKind` classifies how its result is wrapped into the chain;
+    * `x` is the underlying result type `X` (the function's return type, or the `X` of its `Resource[F, X]`/`F[X]`
+    * return).
     */
   final private case class FactoryP(
       value: Expr_??,
       applyM: Method.OnInstance,
       returnKind: ReturnKind,
-      x: ??
+      x: ??,
+      contextual: Boolean
   ) extends Provider {
     def resultType: ?? = x
   }
@@ -149,12 +152,8 @@ private[dicats] trait ResourceWiringMacrosImpl
     */
   def preciseDependency(dependency: Expr[Any]): Expr_?? = {
     implicit val anyType: Type[Any] = Type.of[Any]
-    asPreciselyTyped(DestructuredExpr.parse(dependency))
-  }
-
-  // Kept apart from `preciseDependency`: on Scala 3 the cross-quotes plugin fails ("Not found: type D") when a
-  // `Type.of[...]` precedes an `import x.Underlying as D` in the same block.
-  private def asPreciselyTyped(parsed: DestructuredExpr): Expr_?? = {
+    val parsed = DestructuredExpr.parse(dependency)
+    // `Type.of` before `import x.Underlying` in one block needs Hearth >= 0.4.4 on Scala 3 (kubuszok/hearth#389).
     import parsed.tpe.Underlying as D
     parsed.toUntypedExpr.asTyped[D].as_??
   }
@@ -176,32 +175,48 @@ private[dicats] trait ResourceWiringMacrosImpl
     else Instance(dep)
   }
 
-  /** A dependency whose static type is a `scala.FunctionN` is a factory method (a lambda or eta-expanded method). */
-  private def isFunction[D: Type]: Boolean = Type.fqcn[D].startsWith("scala.Function")
+  /** A dependency whose static type IS a function type is a factory method (a lambda or eta-expanded method): a
+    * `FunctionN` (incl. aliases and Scala 3's `Function23+`) or a Scala 3 context function (`(A, B) ?=> C`).
+    *
+    * A class that merely EXTENDS a function type (`List[A]`/`Map[K, V]`/`Set[A]`, or a user `class Maker extends (A =>
+    * B)`) stays a plain instance: Hearth's `isFunction` reads the `FunctionN` base type, so we additionally require
+    * that the type's linearization holds exactly ONE function class - the type's own class, i.e. `FunctionN` itself.
+    * (Not `parents.exists(_.isFunction)`: on Scala 2 Hearth's `parents` returns `Nil` for generic classes, see
+    * `docs/research/hearth-gap-scala2-parents-generic-classes.md`.)
+    */
+  private def isFunction[D: Type]: Boolean =
+    Type.isContextFunction[D] || (Type.isFunction[D] &&
+      UntypedType.dealias(UntypedType.fromTyped[D]).baseClasses.count(_.isFunction) == 1)
 
   /** Decompose a factory function value into its (instance-resolved) `apply`, parameter types, and return shape. */
   private def factoryProvider[F[_]](
       dep: Expr_??
   )(implicit fAnyType: Type[F[Any]], anyType: Type[Any]): Provider = {
     import dep.Underlying as D
-    // A function value may expose several `apply`s (specialized/bridge variants); the genuine SAM has the most
-    // parameters with the most specific (non-erased) types, so prefer the highest-arity one.
+    val contextual = Type.isContextFunction[D]
+    val components = Type.functionComponents[D].orElse(Type.contextFunctionComponents[D])
+    // A function value may expose several `apply`s (specialized/bridge variants); the genuine SAM takes as many
+    // parameters as the function type has, with the most specific (non-erased) types, so prefer the highest-arity one.
     val applyOpt = new Class[D]()
       .method("apply")
       .collect {
         case m: Method.OnInstance if m.isAvailable(AtCallSite) => m
       }
+      .filter(m => components.forall(_._1.size == m.totalParameters.flatten.size))
       .sortBy(m => -m.totalParameters.flatten.size)
       .headOption
     applyOpt match {
       case None =>
         Environment.reportErrorAndAbort(s"The factory ${Type.prettyPrint[D]} has no accessible apply method.")
       case Some(applyM) =>
-        val ret = applyM.knownReturning.getOrElse(
-          Environment.reportErrorAndAbort(s"Cannot determine the return type of factory ${Type.prettyPrint[D]}.")
-        )
+        val ret = components
+          .map(_._2)
+          .orElse(applyM.knownReturning)
+          .getOrElse(
+            Environment.reportErrorAndAbort(s"Cannot determine the return type of factory ${Type.prettyPrint[D]}.")
+          )
         val (kind, x) = classifyReturn[F](ret)
-        FactoryP(dep, applyM, kind, x)
+        FactoryP(dep, applyM, kind, x, contextual)
     }
   }
 
@@ -306,10 +321,16 @@ private[dicats] trait ResourceWiringMacrosImpl
       case _                    => None
     }
 
-  /** The graph keys of a method's/factory's parameters (implicit params are recorded as `Summoned` leaf nodes). */
-  private def depKeysOf(resolver: Resolver, params: List[(String, Parameter)]): List[String] =
+  /** The graph keys of a method's/factory's parameters (implicit params are recorded as `Summoned` leaf nodes, unless
+    * `contextual` - a context function factory's `using` params are wired from the graph).
+    */
+  private def depKeysOf(
+      resolver: Resolver,
+      params: List[(String, Parameter)],
+      contextual: Boolean = false
+  ): List[String] =
     params.flatMap { case (_, parameter) =>
-      if (parameter.isImplicit) {
+      if (parameter.isImplicit && !contextual) {
         val k = resolver.keys(parameter.tpe)
         recordGraphNode(resolver, k, parameter.tpe, NodeKind.Summoned, Nil)
         Some(k)
@@ -536,12 +557,12 @@ private[dicats] trait ResourceWiringMacrosImpl
     // Resolve the factory's params (records their nodes/missing paths now).
     val paramResolvers: List[(String, Map[String, Expr_??] => Expr_??)] =
       factoryParams.map { case (pname, parameter) =>
-        if (parameter.isImplicit) pname -> summonResolver(parameter)
+        if (parameter.isImplicit && !f.contextual) pname -> summonResolver(parameter)
         else
           pname -> resolveTypeViaResolver[F](resolver, parameter.tpe, path :+ s"$methodLabel.$pname", missing)
             .getOrElse((_: Map[String, Expr_??]) => nullPlaceholder(parameter.tpe))
       }
-    recordGraphNode(resolver, key, x, NodeKind.Provided("factory"), depKeysOf(resolver, factoryParams))
+    recordGraphNode(resolver, key, x, NodeKind.Provided("factory"), depKeysOf(resolver, factoryParams, f.contextual))
 
     ensureNode(resolver, key, x) { bound =>
       val args: Map[String, Expr_??] = paramResolvers.map { case (n, r) => n -> r(bound) }.toMap
@@ -639,25 +660,16 @@ private[dicats] trait ResourceWiringMacrosImpl
 
   /** Whether `applied` (`resource` with OUR `F` applied) returns a `Resource[F, <:X]`.
     *
-    * Hearth 0.4.3 exposes no return type for a generic method until every clause is applied (`knownReturning` is `None`
-    * on each step after `ApplyTypes`), so we trial-apply the remaining clauses with placeholder arguments (never built)
-    * and read the terminal `Result` type. On Scala 2 that type is `Nothing` (a Hearth bug, see
-    * `docs/research/hearth-gap-method-generic-return-type.md`), which conforms to everything - so a non-conforming
-    * `resource` is not rejected there until Hearth is fixed.
+    * Since Hearth 0.4.4 (kubuszok/hearth#389) the `Method` chain knows a generic method's return type as soon as its
+    * type arguments are applied, on both platforms - so it is read directly instead of trial-applying the remaining
+    * clauses with placeholders (which on Scala 2 used to yield `Nothing`, see
+    * `docs/research/hearth-gap-method-generic-return-type.md`).
     */
-  private def returnsResourceOf[F[_], X](applied: Method)(implicit resourceFX: Type[Resource[F, X]]): Boolean = {
-    @scala.annotation.tailrec
-    def resultType(m: Method): Option[??] = m match {
-      case av: Method.ApplyValues =>
-        resultType(av.apply(av.parameters.flatten.map { case (n, p) => n -> nullPlaceholder(p.tpe) }.toMap))
-      case r: Method.Result[?] => r.knownReturning
-      case _                   => None
-    }
-    resultType(applied).exists { rt =>
+  private def returnsResourceOf[F[_], X](applied: Method)(implicit resourceFX: Type[Resource[F, X]]): Boolean =
+    applied.knownReturning.exists { rt =>
       import rt.Underlying as R
-      Type[R] <:< Type[Resource[F, X]]
+      Type[R] <:< Type[Resource[F, X]] && !(Type[R] =:= Type.of[Nothing])
     }
-  }
 
   /** Construct a value of type `t` via its primary constructor (or a single companion `apply`), resolving each
     * parameter via `resolveType`. Returns a builder producing the (constructed) value, or `None` if missing deps were

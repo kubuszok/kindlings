@@ -70,6 +70,7 @@ more module/wrapper combinations.
 |---|---|---|
 | jsoniter | `decodingOnly + encodingOnly compile error` in `compileErrors()` context | Works in real usage. |
 | tapir | Scala 2 tapir-schema tests broken | Pre-existing Hearth issue with Scala 2 type identity. |
+| di / di-cats | Hearth `UntypedType.parents` returns `Nil` for applied generic classes on Scala 2 | Worked around (count function classes in `baseClasses`) — see `hearth-gap-scala2-parents-generic-classes.md`. |
 
 ### Resolved
 
@@ -78,6 +79,7 @@ more module/wrapper combinations.
 | Annotation extraction (#283) | **Fixed in Hearth 0.3.1-45** — `annotationTypes` / `annotationsOfType` / `hasAnnotationOfType` / `Annotations.decodedConstructorArguments`. Kindlings already migrated off the workaround (shared `AnnotationSupport` is native-API-backed convenience only). Gap doc deleted 2026-06-15. |
 | HKT ctor primitives, first-order (#284) | **Fixed in Hearth 0.3.1-45** — `decompose1/2` + `CtorK1` + summon. `cats-derivation` migrated off the bridges. The higher-order `CtorK1`-argument case (`cats-tagless`) is **resolved too** (2026-10-25, Hearth 0.4.3 `UntypedType.dealias`/`typeArguments`/`typeConstructor`/`applyTypeArgs`; `TaglessKBridgeScala{2,3}` deleted) — see `hearth-gap-hkt-ctor-primitives.md`. The Scala 2 entry glue (`Type.Ctor1.of[F]`/`CtorK1.of[Alg]` broken for a macro's own type parameter) is **resolved** by kubuszok/hearth#389: all Scala 2 entry points now call `Type.CtorN.of[F]` / `Type.CtorK1.of[Alg]` — see `hearth-gap-scala2-ctor-of-macro-type-param.md`. |
 | `Type.of` bootstrap cycle in extensions (#285) | **Fixed in Hearth 0.3.1-45** — self-referential `implicit val …: Type[A] = Type.of[A]` now works in cross-quotes inside a `StandardMacroExtension`. circe + jsoniter field-config extensions migrated off the bypass (and the per-platform scala-2/scala-3 pairs collapsed into one shared file each). Gap doc deleted 2026-06-15. |
+| Generic method return type after `ApplyTypes` (`Nothing` on Scala 2); cross-quotes `Type.of` before `import x.Underlying`; no `isFunction`/`isContextFunction` | **Resolved by kubuszok/hearth#389** (Hearth 0.4.4) — di-cats reads `knownReturning` directly, `preciseDependency` uses the natural import order, di/di-cats use the function predicates. See `hearth-gap-method-generic-return-type.md`, `hearth-gap-cross-quotes-import-order.md`. |
 | Splice isolation: `Option[SealedTrait]` on Scala 3 | Fixed in Hearth 0.4.0. |
 | Default values for generic case classes on Scala 3 | Fixed in Hearth 0.3.0-94. |
 | Scala 2 anonymous instance scope | Fixed in Hearth 0.3.0-96. |

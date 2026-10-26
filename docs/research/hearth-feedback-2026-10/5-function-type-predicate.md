@@ -1,5 +1,10 @@
 # No public predicate/extractor for function and context-function types
 
+**Status:** RESOLVED by kubuszok/hearth#389 (Hearth 0.4.4): `Type.isFunction`, `isContextFunction`, `functionComponents`,
+`contextFunctionComponents`. Kindlings `di`/`di-cats` use them instead of `fqcn.startsWith("scala.Function")`; context
+functions are now factories on Scala 3. `isFunction` is true for function SUBTYPES too (`List[A]`, `Map[K, V]`), so
+Kindlings additionally requires exactly one function class in the linearization to keep those as instances.
+
 **Verdict:** confirmed gap (an API request, not a bug). There is no public `isFunction`/`isContextFunction` and no arity
 extractor. The only tools are a `Type.CtorN.of[FunctionM]` per arity, or `fqcn` string matching, which is wrong for
 subclasses and for `ContextFunctionN`.

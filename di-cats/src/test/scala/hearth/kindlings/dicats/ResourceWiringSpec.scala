@@ -209,6 +209,24 @@ final class ResourceWiringSpec extends MacroSuite {
       created.toList ==> List("a", "b", "c")
     }
 
+    test("a factory typed through an alias is a factory") {
+      val config = new Config("alias")
+      val makeDb: DbFactory = (cfg: Config) => new Db(cfg)
+      val res: Resource[SyncIO, AppWithDb] = DICats.wireResource[SyncIO, AppWithDb](config, makeDb)
+      (res.use(a => SyncIO(a)).unsafeRunSync().db.config eq config) ==> true
+    }
+
+    test("a value whose class extends a function type is an instance, not a factory") {
+      // `DbMaker extends (Config => Db)` and `List[Config]` (a `Int => Config`) are function SUBTYPES: only values
+      // typed as a function type itself are factories.
+      val maker = new DbMaker
+      val configs = List(new Config("listed"))
+      val res: Resource[SyncIO, MakerHolder] = DICats.wireResource[SyncIO, MakerHolder](maker, configs)
+      val out = res.use(h => SyncIO(h)).unsafeRunSync()
+      (out.maker eq maker) ==> true
+      (out.configs eq configs) ==> true
+    }
+
     test("chained factory methods are topologically ordered (a before b)") {
       val created = ListBuffer.empty[String]
       val theA: () => Resource[SyncIO, ServiceA] =
@@ -456,6 +474,9 @@ object ResourceWiringSpec {
   final class Diamond(val b: B2, val c: C2, val a: A2)
 
   // Factory-method / chaining fixtures.
+  type DbFactory = Config => Db
+  final class DbMaker extends (Config => Db) { def apply(config: Config): Db = new Db(config) }
+  final class MakerHolder(val maker: DbMaker, val configs: List[Config])
   final class ServiceC(val a: ServiceA, val b: ServiceB)
   final class NeedsC(val c: ServiceC)
   final class ServiceC2(val b: ServiceB)

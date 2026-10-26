@@ -484,11 +484,18 @@ private[di] trait WiringMacrosImpl
       }
 
       // Build via `method`, returning the expression AND the FQCN keys of the dependencies it consumed (for the graph).
-      def buildViaMethod(t: ??, method: Method, breadcrumb: List[??]): (Expr_??, List[String]) = {
+      // `contextual` = the method is a context function's `apply`, whose `using` parameters ARE the factory's inputs,
+      // so they are wired from the graph like explicit ones instead of being summoned.
+      def buildViaMethod(
+          t: ??,
+          method: Method,
+          breadcrumb: List[??],
+          contextual: Boolean = false
+      ): (Expr_??, List[String]) = {
         val params = method.totalParameters.flatten.toList
         val arguments: Map[String, Expr_??] = params.map { case (name, parameter) =>
           val ref =
-            if (parameter.isImplicit) {
+            if (parameter.isImplicit && !contextual) {
               val pk = keys(parameter.tpe)
               val _ = graphNodes.getOrElseUpdate(
                 pk,
@@ -524,7 +531,8 @@ private[di] trait WiringMacrosImpl
                   case Some((dep, i, applyM)) =>
                     used += i
                     val applied = applyM.apply(dep.value.asInstanceOf[Expr[applyM.Instance]])
-                    val (built, depKeys) = buildViaMethod(t, applied, breadcrumb)
+                    val (built, depKeys) =
+                      buildViaMethod(t, applied, breadcrumb, contextual = isContextFunctionExpr(dep))
                     graphNodes(key) =
                       WiringGraph.RawNode(key, displayOf(t), NodeKind.Provided("factory"), Storage.Val, depKeys)
                     valNode[T](built)
@@ -810,22 +818,49 @@ private[di] trait WiringMacrosImpl
     e.toUntypedExpr.asTyped[T].as_??
   }
 
-  /** A provided dependency is a factory when its type is a `scala.FunctionN`. */
+  /** A provided dependency is a factory when its static type IS a function type: a `FunctionN` (incl. aliases and Scala
+    * 3's `Function23+`) or a Scala 3 context function (`(A, B) ?=> C`).
+    *
+    * A class that merely EXTENDS a function type (`List[A]`/`Map[K, V]`/`Set[A]` via `PartialFunction`/`A => Boolean`,
+    * or a user `class Maker extends (A => B)`) stays a plain instance: Hearth's `isFunction` reads the `FunctionN` base
+    * type, so we additionally require that the type's linearization holds exactly ONE function class - the type's own
+    * class, i.e. `FunctionN` itself. (Not `parents.exists(_.isFunction)`: on Scala 2 Hearth's `parents` returns `Nil`
+    * for generic classes, see `docs/research/hearth-gap-scala2-parents-generic-classes.md`.)
+    */
   private def isFunctionExpr(dep: Expr_??): Boolean = {
     import dep.Underlying as D
-    Type.fqcn[D].startsWith("scala.Function")
+    isFactoryType[D]
   }
 
-  /** The highest-arity `apply` of a factory function value (its single SAM, ignoring specialized/bridge variants). */
+  private def isContextFunctionExpr(dep: Expr_??): Boolean = {
+    import dep.Underlying as D
+    Type.isContextFunction[D]
+  }
+
+  private def isFactoryType[D: Type]: Boolean =
+    Type.isContextFunction[D] || (Type.isFunction[D] &&
+      UntypedType.dealias(UntypedType.fromTyped[D]).baseClasses.count(_.isFunction) == 1)
+
+  /** The `apply` of a factory function value - its single SAM, ignoring specialized/bridge variants: the one taking as
+    * many parameters as the function type has (preferring the highest arity if several qualify).
+    */
   private def factoryApply(dep: Expr_??): Option[Method.OnInstance] = {
     import dep.Underlying as D
+    val arity = Type.functionComponents[D].orElse(Type.contextFunctionComponents[D]).map(_._1.size)
     new Class[D]()
       .method("apply")
       .collect {
         case m: Method.OnInstance if m.isAvailable(AtCallSite) => m
       }
+      .filter(m => arity.forall(_ == m.totalParameters.flatten.size))
       .sortBy(m => -m.totalParameters.flatten.size)
       .headOption
+  }
+
+  /** The result type of a factory function value (`C` for `(A, B) => C` or `(A, B) ?=> C`). */
+  private def factoryResult(dep: Expr_??): Option[??] = {
+    import dep.Underlying as D
+    Type.functionComponents[D].orElse(Type.contextFunctionComponents[D]).map(_._2)
   }
 
   private def findInstanceProvider(t: ??, rawDeps: List[Expr_??]): Option[(Expr_??, Int)] = {
@@ -842,11 +877,11 @@ private[di] trait WiringMacrosImpl
     import t.Underlying as T
     rawDeps.zipWithIndex.iterator
       .flatMap { case (dep, i) =>
-        if (isFunctionExpr(dep)) factoryApply(dep).flatMap { applyM =>
-          applyM.knownReturning.collect {
-            case rt if { import rt.Underlying as R; Type[R] <:< Type[T] } => (dep, i, applyM)
-          }
-        }
+        if (isFunctionExpr(dep))
+          factoryResult(dep)
+            .filter { rt => import rt.Underlying as R; Type[R] <:< Type[T] }
+            .flatMap(_ => factoryApply(dep))
+            .map(applyM => (dep, i, applyM))
         else None
       }
       .nextOption()
