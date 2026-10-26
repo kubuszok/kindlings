@@ -43,8 +43,8 @@ kindlings, with evidence that can be re-run. Verdicts:
 | fast-show-pretty | Scala 2 `q"$config.startLevel"` | shared `Expr.quote(Expr.splice(config).startLevel)` | replaceable, done (also stops evaluating the config twice on 2.13) |
 | mock | Scala 2 `q"Seq(..$args)"` | `VarArgs.from` | replaceable, done |
 | refined / iron | `Ctor2.of(...).asUntyped` → `fromUntyped` "for cross-compilation boundaries" | plain `Type.Ctor2.of` | the workaround was unnecessary (integration tests 222 + 148 pass) |
-| neotype | raw reflection for underlying type, companion, `make` | `Ctor1.of[Newtype].unapply`, `Expr.singletonOf`, `Method` | mostly replaceable, done; prefix/owner lookup is a real gap |
-| newtype | raw reflection for prefix + type members | unchanged | real gap, `hearth-gap-type-prefix-and-members.md` |
+| neotype | raw reflection for underlying type, companion, `make` | `Ctor1.of[Newtype].unapply`, `Expr.singletonOf`, `Method` | mostly replaceable, done; prefix/owner lookup was a real gap, closed by `Type.pseudoCompanionObject` (kubuszok/hearth#389) |
+| newtype | raw reflection for prefix + type members | `Type.pseudoCompanionObject` + `unsafeUnwrap` via `Method` | was a real gap (`hearth-gap-type-prefix-and-members.md`), closed by kubuszok/hearth#389 |
 | Scala 2 `c.prefix` unwrap (jsoniter, yaml, xml, mock, optics, di `DI.plan`) | — | unchanged | necessary entry-point glue |
 | Scala 2 `WeakTypeTag[F[Any]].tpe.typeConstructor` entry recovery (cats, cats-tagless, di-cats) | — | unchanged | necessary: `Type.Ctor1.of[F]`/`CtorK1.of[Alg]` on a macro's own type parameter fails on 2.13, see `hearth-gap-scala2-ctor-of-macro-type-param.md` |
 
