@@ -1,7 +1,36 @@
 # Hearth gap: no API for a type's prefix, its type members, or a type symbol's owner
 
-Status: **OPEN** (found 2026-10-25 with Hearth 0.4.3; also absent from Hearth `master` at `aded1a31`), while moving
-`newtype-integration` and `neotype-integration` off raw reflection.
+Status: **RESOLVED** by kubuszok/hearth#389 (`Type.pseudoCompanionObject`, Hearth `0.4.3-17-gbd1e277-SNAPSHOT`, to be
+released in 0.4.4). Found 2026-10-25 with Hearth 0.4.3 while moving `newtype-integration` and `neotype-integration` off
+raw reflection.
+
+## Resolution
+
+Hearth did not add the generic operations listed under "Wanted" (no type-member-by-name lookup, no owner name). It added
+one targeted API instead: `Type.pseudoCompanionObject[A]: Option[Expr_??]` (also `Type[A].pseudoCompanionObject` and
+`UntypedType.pseudoCompanionObject: Option[(UntypedType, UntypedExpr)]`). It returns the type's real companion when it
+has one, and otherwise the object whose abstract/opaque type member `A` is (after dealiasing): `UserName` for both
+`UserName` and `UserName.Type`. That covers operation 1 (the prefix). Operations 2-4 are replaced by reading the
+object's members through existing APIs, which also proves that `A` really is the newtype's `Type`:
+
+- **neotype**: `pseudoCompanionObject`, then `Type.Ctor1.of[neotype.Newtype]`/`Subtype` `.unapply` on the object's
+  type gives the underlying type. The "declared in `neotype.Newtype`" owner check (operation 4) is replaced by
+  requiring `make`'s result type (`Method.ApplyValues.knownReturning` after applying the companion) to be
+  `Either[String, A]`. `NeotypeReflection` is gone; the provider no longer matches on `MacroCommonsScala3`.
+- **scala-newtype**: `pseudoCompanionObject`, then the companion's `unsafeUnwrap` member through the `Method` API
+  (`fold`, applying `A`'s type arguments for a generic newtype). Its result type is `Coercible[Type, Repr]`, so
+  `Type.Ctor2.of[Coercible].unapply` gives `Repr` (operations 2 and 3) and `from =:= A` proves the match. Both encodings
+  always generate `unsafeUnwrap`: the Scala 2 macro annotation (estatico 0.4.4) and the scala-newtype-compat plugin on
+  Scala 3. `apply` was not used because the Scala 2 macro generates it only for a `case class`. Both
+  `NewtypeReprPlatform` files (`scala-2`/`scala-3`) are deleted; the provider is shared code.
+
+Verified with `integrationTests2_13/testFull` (148 passed) and `integrationTests/testFull` (222 passed), including all
+`Newtype*Spec` (monomorphic, `@newsubtype`, generic `NewtypeTags[A]`, user-provided instances) and `Neotype*Spec`. A
+mutation check (forcing `reprOf` to `None`) makes the `Newtype*Spec` derivations fail to compile, so the new lookup is
+what makes them pass.
+
+Nothing remains open for these two integrations. The "Wanted" API below would still be needed by an encoding that has
+no member whose signature names both the newtype and its wrapped type.
 
 ## What is missing
 
@@ -66,7 +95,7 @@ Scala 2.13 (`sbt --client newtypeIntegration2_13/compile`):
 [error] GapProbe.scala:13:32: value select is not a member of GapProbe.this.UntypedTypeModule
 ```
 
-## Raw reflection this forces (current code)
+## Raw reflection this forced (before kubuszok/hearth#389)
 
 - `newtype-integration/src/main/scala-2/hearth/kindlings/newtypeintegration/internal/compiletime/NewtypeReprPlatform.scala:13-21`:
   operations 1, 2 and 3 (`TypeRef(prefix, sym, args)`, `prefix.member(TypeName("Repr"|"Base"|"Tag"))`,

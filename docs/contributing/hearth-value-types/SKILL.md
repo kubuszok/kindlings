@@ -246,14 +246,18 @@ needed for Scala 2 (where `Refined` is an `AnyVal` that needs validated wrapping
 
 - **Refined integration**: `refined-integration/src/main/scala/.../IsValueTypeProviderForRefined.scala` — cross-compiled (Scala 2 + 3), uses `refineV` for validation, `Refined.unapply` for unwrapping
 - **Iron integration**: `iron-integration/src/main/scala/.../IsValueTypeProviderForIron.scala` — Scala 3 only, uses `RuntimeConstraint.test` for validation, `asInstanceOf` for unwrapping (opaque type)
-- **Neotype integration**: `neotype-integration/src/main/scala/.../IsValueTypeProviderForNeotype.scala` — Scala 3 only, no type constructor to match: recognizes `Foo.Type` as an opaque type *declared in* `neotype.Newtype`/`Subtype` (owner's `fullName`), takes the underlying type from `prefix.widen.baseType(owner)` and validates by calling `Foo.make(_)` on the companion built from the type's prefix (`Ref.term(termRef)`)
-- **scala-newtype integration**: `newtype-integration/src/main/{scala,scala-2,scala-3}/.../` — cross-compiled (JVM only), matches the `@newtype` expansion shape (abstract `Type` member next to `Repr`/`Base`/`Tag` in the companion) with a per-Scala-version `NewtypeReprPlatform` (`c.universe` / `quotes.reflect`), shared provider uses plain casts (`PlainValue`)
+- **Neotype integration**: `neotype-integration/src/main/scala/.../IsValueTypeProviderForNeotype.scala` — Scala 3 only, no raw reflection: finds the object `Foo` of `Foo.Type` with `Type.pseudoCompanionObject`, the underlying type with `Type.Ctor1.of[neotype.Newtype]`/`Subtype` `.unapply` on the object's type, and validates by calling `Foo.make(_)` through the `Method` API; `make`'s result type `Either[String, A]` proves that `A` is `Foo.Type`
+- **scala-newtype integration**: `newtype-integration/src/main/scala/.../IsValueTypeProviderForNewtype.scala` — cross-compiled (JVM only), shared code only: `Type.pseudoCompanionObject` finds the object `Foo` of the abstract type member `Foo.Type`, and the result type of its always-generated `unsafeUnwrap: Coercible[Type, Repr]` (type arguments applied for a generic newtype) gives the wrapped type and proves that `A` is `Foo.Type`; plain casts (`PlainValue`)
 
 ### Matching types without a type constructor
 
 `Type.Ctor*.fromUntyped` only helps when the wrapper is an applied type constructor (`Refined[A, P]`, `IronType[A, C]`).
-Newtype-like libraries instead define a **type member of a companion object** (`Foo.Type`), so the provider has to look
-at the type's structure with platform reflection:
+Newtype-like libraries instead define a **type member of a companion object** (`Foo.Type`). Use
+`Type.pseudoCompanionObject[A]` (Hearth 0.4.4) to get that object (the type's prefix), then read the wrapped type from
+the object: its base type (`Type.Ctor1.of[Newtype].unapply`) or a member's signature via the `Method` API. Check that
+the same signature names `A` itself, so that another type member of the object is not mistaken for the newtype.
+
+If platform reflection is still needed:
 
 - Keep all `quotes.reflect`/`c.universe` code in a separate class/object and pass `UntypedType`/`UntypedExpr` across
   with `asInstanceOf` - on Scala 3 do NOT `import ctx3.{*, given}` in the provider body: the cross-quotes plugin then
