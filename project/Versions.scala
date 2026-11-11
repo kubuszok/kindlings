@@ -49,6 +49,6 @@ object versions {
   val scalaSaxParser = "0.1.1"
   val scalaYaml = "0.3.3"
   val scalaXml = "2.5.0"
-  val catsTagless = "0.16.5"
+  val catsTagless = "0.16.6"
   val sconfig = "2.0.0"
 }
