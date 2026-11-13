@@ -85,10 +85,211 @@ final case class UBJsonConfig(
   def withSkipNestedOptionValues: UBJsonConfig = copy(skipNestedOptionValues = true)
   def withScalaTransientSupport: UBJsonConfig = copy(scalaTransientSupport = true)
   def withTransientNull: UBJsonConfig = copy(transientNull = true)
+
+  // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
+  // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
+  def copy(
+      fieldNameMapper: String => String = this.fieldNameMapper,
+      adtLeafClassNameMapper: String => String = this.adtLeafClassNameMapper,
+      discriminatorFieldName: Option[String] = this.discriminatorFieldName,
+      skipUnexpectedFields: Boolean = this.skipUnexpectedFields,
+      enumAsStrings: Boolean = this.enumAsStrings,
+      transientDefault: Boolean = this.transientDefault,
+      transientEmpty: Boolean = this.transientEmpty,
+      transientNone: Boolean = this.transientNone,
+      requireCollectionFields: Boolean = this.requireCollectionFields,
+      requireDefaultFields: Boolean = this.requireDefaultFields,
+      checkFieldDuplication: Boolean = this.checkFieldDuplication,
+      bigDecimalPrecision: Int = this.bigDecimalPrecision,
+      bigDecimalScaleLimit: Int = this.bigDecimalScaleLimit,
+      bigDecimalDigitsLimit: Int = this.bigDecimalDigitsLimit,
+      mapMaxInsertNumber: Int = this.mapMaxInsertNumber,
+      setMaxInsertNumber: Int = this.setMaxInsertNumber,
+      circeLikeObjectEncoding: Boolean = this.circeLikeObjectEncoding,
+      javaEnumValueNameMapper: String => String = this.javaEnumValueNameMapper,
+      bigIntDigitsLimit: Int = this.bigIntDigitsLimit,
+      requireDiscriminatorFirst: Boolean = this.requireDiscriminatorFirst,
+      useScalaEnumValueId: Boolean = this.useScalaEnumValueId,
+      skipNestedOptionValues: Boolean = this.skipNestedOptionValues,
+      scalaTransientSupport: Boolean = this.scalaTransientSupport,
+      transientNull: Boolean = this.transientNull
+  ): UBJsonConfig = new UBJsonConfig(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    circeLikeObjectEncoding,
+    javaEnumValueNameMapper,
+    bigIntDigitsLimit,
+    requireDiscriminatorFirst,
+    useScalaEnumValueId,
+    skipNestedOptionValues,
+    scalaTransientSupport,
+    transientNull
+  )
+
+  /** The `copy` of Kindlings 0.3.2 (without the fields added since); the other fields keep their values. */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
+    "0.3.4"
+  )
+  def copy(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int
+  ): UBJsonConfig = new UBJsonConfig(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    this.circeLikeObjectEncoding,
+    this.javaEnumValueNameMapper,
+    this.bigIntDigitsLimit,
+    this.requireDiscriminatorFirst,
+    this.useScalaEnumValueId,
+    this.skipNestedOptionValues,
+    this.scalaTransientSupport,
+    this.transientNull
+  )
+
+  /** The constructor of Kindlings 0.3.2 (without the fields added since, which get their defaults). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use the primary constructor",
+    "0.3.4"
+  )
+  def this(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int
+  ) = this(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    false,
+    identity[String],
+    308,
+    true,
+    false,
+    false,
+    false,
+    false
+  )
 }
-object UBJsonConfig {
+object UBJsonConfig extends UBJsonConfigCompanionCompat {
 
   implicit val default: UBJsonConfig = UBJsonConfig()
+
+  /** The `apply` of Kindlings 0.3.2 (without the fields added since, which get their defaults). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use apply with named arguments",
+    "0.3.4"
+  )
+  def apply(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int
+  ): UBJsonConfig = new UBJsonConfig(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber
+  )
+
+  // The name mappers of Kindlings 0.3.2: package-private, but public (with static forwarders) in the bytecode.
+  @deprecated("kept for binary compatibility with Kindlings 0.3.x; use enforce_snake_case", "0.3.4")
+  private[ubjsonderivation] val snakeCase: String => String = s => enforce_snake_case(s)
+  @deprecated("kept for binary compatibility with Kindlings 0.3.x; use `enforce-kebab-case`", "0.3.4")
+  private[ubjsonderivation] val kebabCase: String => String = s => `enforce-kebab-case`(s)
+  @deprecated("kept for binary compatibility with Kindlings 0.3.x; use EnforcePascalCase", "0.3.4")
+  private[ubjsonderivation] val pascalCase: String => String = s => EnforcePascalCase(s)
 
   /** jsoniter-scala's error for contradictory settings, if any. Checked at compile time for configs known then, and
     * otherwise when a codec is created (`IllegalArgumentException`).

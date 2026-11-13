@@ -64,9 +64,10 @@ object OptimizedCodecs {
   val alwaysEmitStrictLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](using
     JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withSkipUnexpectedFields(false)
   )
-  val alwaysEmitCheckDuplicationLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](
-    using JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withCheckFieldDuplication
-  )
+  val alwaysEmitCheckDuplicationLeaf: KindlingsJsonValueCodec[ParityAAA] =
+    KindlingsJsonValueCodec.derived[ParityAAA](using
+      JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withCheckFieldDuplication
+    )
   val skipNestedOptions: KindlingsJsonValueCodec[List[ParityNestedOptions]] =
     KindlingsJsonValueCodec.derived[List[ParityNestedOptions]](using
       JsoniterConfig.default.withTransientNone.withSkipNestedOptionValues
@@ -77,9 +78,10 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[ParityZeroAdt](using
       JsoniterConfig.default.withDiscriminator("type").withSkipUnexpectedFields(false)
     )
-  val discriminatorCheckDuplication: KindlingsJsonValueCodec[ParityAdt] = KindlingsJsonValueCodec.derived[ParityAdt](
-    using JsoniterConfig.default.withDiscriminator("type").withCheckFieldDuplication
-  )
+  val discriminatorCheckDuplication: KindlingsJsonValueCodec[ParityAdt] =
+    KindlingsJsonValueCodec.derived[ParityAdt](using
+      JsoniterConfig.default.withDiscriminator("type").withCheckFieldDuplication
+    )
   val defaultsAdt: KindlingsJsonValueCodec[ParityDefaultsAdt] =
     KindlingsJsonValueCodec.derived[ParityDefaultsAdt](using JsoniterConfig.default.withDiscriminator("type"))
   val defaults2RequireDefaults: KindlingsJsonValueCodec[ParityDefaults2] =
@@ -131,9 +133,10 @@ object OptimizedCodecs {
     .derived[scala.collection.mutable.Set[List[BigDecimal]]](using JsoniterConfig.default.withStringified)
   val stringifiedOption: KindlingsJsonValueCodec[Option[BigInt]] =
     KindlingsJsonValueCodec.derived[Option[BigInt]](using JsoniterConfig.default.withStringified)
-  val stringifiedDigits3: KindlingsJsonValueCodec[List[BigDecimal]] = KindlingsJsonValueCodec.derived[List[BigDecimal]](
-    using JsoniterConfig.default.withStringified.withBigDecimalDigitsLimit(3)
-  )
+  val stringifiedDigits3: KindlingsJsonValueCodec[List[BigDecimal]] =
+    KindlingsJsonValueCodec.derived[List[BigDecimal]](using
+      JsoniterConfig.default.withStringified.withBigDecimalDigitsLimit(3)
+    )
   val stringifiedIds: KindlingsJsonValueCodec[ParityLocation.ParityLocation] =
     KindlingsJsonValueCodec.derived[ParityLocation.ParityLocation](using
       JsoniterConfig.default.withStringified.withUseScalaEnumValueId
@@ -184,9 +187,10 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[List[ParityAdt]](using JsoniterConfig.makeCirceLike)
   val openapiPreset: KindlingsJsonValueCodec[ParityPresetRecord] =
     KindlingsJsonValueCodec.derived[ParityPresetRecord](using JsoniterConfig.makeOpenapiLike)
-  val openapiPresetAdt: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](
-    using JsoniterConfig.makeOpenapiLike("kind", OptimizedCodecsHelpers.aaaMapper)
-  )
+  val openapiPresetAdt: KindlingsJsonValueCodec[List[ParityAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityAdt]](using
+      JsoniterConfig.makeOpenapiLike("kind", OptimizedCodecsHelpers.aaaMapper)
+    )
 }
 object OptimizedCodecsHelpers {
   // (a partial-function literal inside the config argument is duplicated by the Scala 2 macro expansion: keep it in a

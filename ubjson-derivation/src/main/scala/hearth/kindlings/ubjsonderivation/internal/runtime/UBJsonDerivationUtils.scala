@@ -370,6 +370,13 @@ object UBJsonDerivationUtils {
   def missingRequiredField[A](in: UBJsonReader, fieldName: String): A =
     in.decodeError("missing required field \"" + fieldName + "\"")
 
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; the macro no longer emits it",
+    "0.3.4"
+  )
+  def throwMissingField(fieldName: String): Nothing =
+    throw new IllegalArgumentException(s"missing required field: $fieldName")
+
   def throwDuplicateField(in: UBJsonReader, fieldName: String): Nothing =
     in.decodeError(s"duplicate field: $fieldName")
 

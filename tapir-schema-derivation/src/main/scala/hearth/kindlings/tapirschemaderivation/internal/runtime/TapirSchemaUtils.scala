@@ -118,7 +118,7 @@ object TapirSchemaUtils {
       wrapNonObjects = wrapNonObjects
     )
 
-  /** As [[coproductSchema]], also describing how the subtypes are encoded without a discriminator.
+  /** As `coproductSchema`, also describing how the subtypes are encoded without a discriminator.
     *
     * @param singletons
     *   which subtypes are singletons (case objects). Same size and order as `subtypes`.
