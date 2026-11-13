@@ -37,13 +37,10 @@ trait DecoderHandleAsEnumRuleImpl {
       // Use exhaustive (leaf) children to flatten nested sealed trait hierarchies.
       // This ensures intermediate sealed traits like MotorVehicle in Vehicle > MotorVehicle > Truck
       // are skipped — only concrete leaf types (Truck, Motorcycle, Bicycle) are decoded.
-      val childrenList = enumm.exhaustiveChildren match {
-        case Some(ec) => ec.toList
-        case None     => enumm.directChildren.toList
-      }
+      val childrenList = adtLeaves[A](enumm)
 
       // Check at compile time if all children are singletons (case objects with no fields)
-      val isJavaEnum = Type[A].isJavaEnum
+      val isJavaEnum = isJavaEnumType[A]
       val allCaseObjects = Type[A].isEnumeration || isJavaEnum ||
         childrenList.forall { case (_, child) =>
           SingletonValue.unapply(child.Underlying).isDefined
@@ -60,188 +57,168 @@ trait DecoderHandleAsEnumRuleImpl {
           })
 
         case Some(children) =>
-          val knownNames: List[String] = children.toList.map(_._1)
-
           val isScalaEnumeration = Type[A].isEnumeration
+          val isEnumerationOrJavaEnum = isScalaEnumeration || isJavaEnum
 
-          // For each child, derive BOTH wrapper-mode and inline (discriminator-mode) decoders,
-          // and optionally string-enum dispatchers for case-object children
+          // For each child: a wrapper-mode decoder (`{"Leaf":{...}}`; singletons skip the inner object), an inline
+          // (discriminator-mode) decoder, and for singletons a string decoder (`"Leaf"`).
           children
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
-              val isSingleton = SingletonValue.unapply(Type[ChildType]).isDefined || isScalaEnumeration ||
-                Type[A].isJavaEnum
+              val isSingleton = SingletonValue.unapply(Type[ChildType]).isDefined || isEnumerationOrJavaEnum
               Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
                 for {
-                  wrapper <- deriveChildDecoder[A, ChildType](childName)
-                  inline <- deriveChildDecoderInline[A, ChildType](childName)
+                  wrapper <-
+                    if (isEnumerationOrJavaEnum) MIO.pure(None)
+                    else deriveChildDecoder[A, ChildType](childName).map(Some(_))
+                  inline <-
+                    if (isEnumerationOrJavaEnum) MIO.pure(None)
+                    else deriveChildDecoderInline[A, ChildType](childName).map(Some(_))
                   stringEnum <-
-                    if (allCaseObjects || isSingleton)
-                      deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
+                    if (isSingleton) deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
                     else MIO.pure(None)
                   enumId <-
-                    if (allCaseObjects && isScalaEnumeration)
-                      deriveChildDecoderEnumId[A, ChildType](childName).map(Some(_))
+                    if (isScalaEnumeration) deriveChildDecoderEnumId[A, ChildType](childName).map(Some(_))
                     else MIO.pure(None)
-                  circeLikeWrapper <-
-                    if (isSingleton)
-                      deriveChildDecoderCirceLikeWrapper[A, ChildType](childName).map(Some(_))
-                    else MIO.pure(None)
-                } yield (wrapper, inline, stringEnum, enumId, circeLikeWrapper)
+                } yield (wrapper, inline, stringEnum, enumId)
               }
             }
-            .flatMap { allDispatchers =>
-              val wrapperDispatchers = allDispatchers.toList.map(_._1)
-              val inlineDispatchers = allDispatchers.toList.map(_._2)
+            .map { allDispatchers =>
+              val wrapperDispatchers = allDispatchers.toList.flatMap(_._1)
+              // Leaves with user-provided codecs re-read the whole object (see deriveChildDecoderInline).
+              val markLeaves: Expr[Boolean] = Expr(childrenList.exists { case (_, child) =>
+                import child.Underlying as ChildType
+                hasUserCodecAsLeaf[ChildType]
+              })
+              val inlineDispatchers = allDispatchers.toList.flatMap(_._2)
+              val stringDispatchers = allDispatchers.toList.flatMap(_._3)
+              val enumIdDispatchers = allDispatchers.toList.flatMap(_._4)
 
               implicit val IntT: Type[Int] = CTypes.Int
+              implicit val BooleanT: Type[Boolean] = CTypes.Boolean
 
-              def buildErrorExpr(typeNameExpr: Expr[String]): Expr[A] = Expr.quote {
-                Expr
-                  .splice(dctx.reader)
-                  .decodeError(
-                    "Unknown type discriminator: " + Expr.splice(typeNameExpr) +
-                      ". Expected one of: " + Expr.splice(Expr(knownNames)).mkString(", ")
-                  ): A
+              // jsoniter-scala's errors: `illegal value of discriminator field "type"` in discriminator mode,
+              // `illegal discriminator` for an unknown wrapper key / object name, `illegal enum value "X"` for enums.
+              val wrapperError: Expr[String] => Expr[A] =
+                _ => Expr.quote(JsoniterDerivationUtils.unknownDiscriminator[A](Expr.splice(dctx.reader), null))
+              val enumValueError: Expr[String] => Expr[A] =
+                name => Expr.quote(Expr.splice(dctx.reader).enumValueError(Expr.splice(name)): A)
+              val inlineError: Expr[A] = Expr.quote {
+                JsoniterDerivationUtils.unknownDiscriminator[A](
+                  Expr.splice(dctx.reader),
+                  Expr.splice(dctx.config).discriminatorFieldName.orNull
+                )
               }
 
               // Per project rule 5, [[LambdaBuilder]] is reserved for collection / Optional iteration lambdas.
-              // The dispatch functions built here are spliced into runtime helper calls
-              // (`readEnumAsString` etc.); each `dispatcher` is itself a closure that composes its body
-              // using the active Quotes when invoked, so a direct cross-quotes function literal works.
-              def buildDispatchLambda(
-                  dispatchers: List[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]]
-              ): MIO[Expr[String => A]] =
-                MIO.pure(Expr.quote { (typeName: String) =>
+              // The dispatch functions built here are spliced into runtime helper calls; each `dispatcher` is a
+              // closure composing its body with the active Quotes, so a direct cross-quotes function literal works.
+              def dispatchLambda(
+                  dispatchers: List[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]],
+                  error: Expr[String] => Expr[A]
+              ): Expr[String => A] =
+                Expr.quote { (typeName: String) =>
                   Expr.splice {
-                    dispatchers.foldRight(buildErrorExpr(Expr.quote(typeName))) { case (dispatcher, elseExpr) =>
+                    dispatchers.foldRight(error(Expr.quote(typeName))) { case (dispatcher, elseExpr) =>
                       dispatcher(Expr.quote(typeName), dctx.reader, elseExpr)
                     }
                   }
-                })
+                }
 
-              def buildIntErrorExpr(idExpr: Expr[Int]): Expr[A] = Expr.quote {
-                Expr
-                  .splice(dctx.reader)
-                  .decodeError(
-                    "Unknown enum value id: " + Expr.splice(idExpr)
-                  ): A
-              }
-
-              def buildIntDispatchLambda(
-                  dispatchers: List[(Expr[Int], Expr[JsonReader], Expr[A]) => Expr[A]]
-              ): MIO[Expr[Int => A]] =
-                MIO.pure(Expr.quote { (enumId: Int) =>
+              val intDispatchLambda: Expr[Int => A] =
+                Expr.quote { (enumId: Int) =>
                   Expr.splice {
-                    dispatchers.foldRight(buildIntErrorExpr(Expr.quote(enumId))) { case (dispatcher, elseExpr) =>
+                    enumIdDispatchers.foldRight(
+                      Expr.quote(Expr.splice(dctx.reader).decodeError("illegal enum value " + enumId): A)
+                    ) { case (dispatcher, elseExpr) =>
                       dispatcher(Expr.quote(enumId), dctx.reader, elseExpr)
                     }
                   }
-                })
+                }
 
-              for {
-                wrapperDispatchFn <- buildDispatchLambda(wrapperDispatchers)
-                inlineDispatchFn <- buildDispatchLambda(inlineDispatchers)
-                result <-
-                  if (allCaseObjects) {
-                    val stringEnumDispatchers = allDispatchers.toList.flatMap(_._3)
-                    val enumIdDispatchers = allDispatchers.toList.flatMap(_._4)
-                    for {
-                      stringEnumDispatchFn <- buildDispatchLambda(stringEnumDispatchers)
-                      enumIdDispatchFnOpt <-
-                        if (enumIdDispatchers.nonEmpty) buildIntDispatchLambda(enumIdDispatchers).map(Some(_))
-                        else MIO.pure(None)
-                    } yield enumIdDispatchFnOpt match {
-                      case Some(enumIdDispatchFn) =>
-                        // Scala Enumeration with useScalaEnumValueId support
-                        Expr.quote {
-                          val config = Expr.splice(dctx.config)
-                          val reader = Expr.splice(dctx.reader)
-                          if (config.useScalaEnumValueId)
-                            JsoniterDerivationUtils.readScalaEnumValueId[A](reader)(
-                              Expr.splice(enumIdDispatchFn)
-                            )
-                          else if (config.enumAsStrings)
-                            JsoniterDerivationUtils.readEnumAsString[A](reader)(
-                              Expr.splice(stringEnumDispatchFn)
-                            )
-                          else
-                            config.discriminatorFieldName match {
-                              case Some(field) =>
-                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                                  Expr.splice(inlineDispatchFn)
-                                )
-                              case None =>
-                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                            }
-                        }
-                      case None =>
-                        // Non-Enumeration all-case-objects enum
-                        Expr.quote {
-                          val config = Expr.splice(dctx.config)
-                          val reader = Expr.splice(dctx.reader)
-                          if (config.enumAsStrings)
-                            JsoniterDerivationUtils.readEnumAsString[A](reader)(
-                              Expr.splice(stringEnumDispatchFn)
-                            )
-                          else
-                            config.discriminatorFieldName match {
-                              case Some(field) =>
-                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                                  Expr.splice(inlineDispatchFn)
-                                )
-                              case None =>
-                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                            }
-                        }
-                    }
-                  } else {
-                    // Mixed enum (case objects + case classes)
-                    // Build circe-like combined dispatchers: singletons consume inner {},
-                    // case classes use regular wrapper dispatch
-                    val circeLikeDispatchers = allDispatchers.toList.map { t =>
-                      t._5.getOrElse(t._1) // circe-like wrapper for singletons, regular wrapper for case classes
-                    }
-                    val hasSingletons = allDispatchers.toList.exists(_._5.isDefined)
-                    (if (hasSingletons)
-                       buildDispatchLambda(circeLikeDispatchers).map(Some(_))
-                     else MIO.pure(None)).map { circeLikeDispatchFnOpt =>
-                      circeLikeDispatchFnOpt match {
-                        case Some(circeLikeDispatchFn) =>
-                          Expr.quote {
-                            val config = Expr.splice(dctx.config)
-                            val reader = Expr.splice(dctx.reader)
-                            if (config.circeLikeObjectEncoding)
-                              JsoniterDerivationUtils.readWrapped[A](reader)(
-                                Expr.splice(circeLikeDispatchFn)
-                              )
-                            else
-                              config.discriminatorFieldName match {
-                                case Some(field) =>
-                                  JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                                    Expr.splice(inlineDispatchFn)
-                                  )
-                                case None =>
-                                  JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                              }
-                          }
-                        case None =>
-                          Expr.quote {
-                            val config = Expr.splice(dctx.config)
-                            val reader = Expr.splice(dctx.reader)
-                            config.discriminatorFieldName match {
-                              case Some(field) =>
-                                JsoniterDerivationUtils.readWithDiscriminator[A](reader, field)(
-                                  Expr.splice(inlineDispatchFn)
-                                )
-                              case None =>
-                                JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperDispatchFn))
-                            }
-                          }
-                      }
+              def inlineDispatchLambda: Expr[(String, Boolean) => A] =
+                Expr.quote { (typeName: String, afterOpen: Boolean) =>
+                  Expr.splice {
+                    inlineDispatchers.foldRight(inlineError) { case (dispatcher, elseExpr) =>
+                      dispatcher(Expr.quote(typeName), dctx.reader, Expr.quote(afterOpen), elseExpr)
                     }
                   }
-              } yield result
+                }
+
+              if (isEnumerationOrJavaEnum) {
+                // As in jsoniter-scala: Java enum and Enumeration values are always JSON strings (or the
+                // Enumeration value's id with useScalaEnumValueId), whatever the discriminator settings.
+                val byName = dispatchLambda(stringDispatchers, enumValueError)
+                if (isScalaEnumeration) Expr.quote {
+                  if (Expr.splice(dctx.config).useScalaEnumValueId)
+                    JsoniterDerivationUtils
+                      .readScalaEnumValueId[A](Expr.splice(dctx.reader), Expr.splice(dctx.stringifiedExpr))(
+                        Expr.splice(intDispatchLambda)
+                      )
+                  else JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(byName))
+                }
+                else
+                  Expr.quote(JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(byName)))
+              } else {
+                val wrapperFn = dispatchLambda(wrapperDispatchers, wrapperError)
+                val inlineFn = inlineDispatchLambda
+                // Singletons as strings: in wrapper mode (`"Leaf"`, unless circeLikeObjectEncoding), and with
+                // enumAsStrings for ADTs of case objects only. Objects are accepted on decoding too.
+                val stringFn: Option[Expr[String => A]] =
+                  if (stringDispatchers.isEmpty) None
+                  else
+                    Some(
+                      dispatchLambda(stringDispatchers, wrapperError)
+                    ) // as jsoniter-scala: `illegal discriminator` (Java enums / Enumeration: `illegal enum value`)
+                val enumAsStringsApplies: Expr[Boolean] =
+                  if (allCaseObjects) Expr.quote(Expr.splice(dctx.config).enumAsStrings) else Expr(false)
+                stringFn match {
+                  case Some(strings) =>
+                    Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      val reader = Expr.splice(dctx.reader)
+                      if (reader.isNextToken('"'.toByte)) {
+                        reader.rollbackToken()
+                        if (config.discriminatorFieldName.isEmpty || Expr.splice(enumAsStringsApplies))
+                          JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(strings))
+                        else reader.decodeError("expected '{'")
+                      } else {
+                        reader.rollbackToken()
+                        config.discriminatorFieldName match {
+                          case Some(field) =>
+                            JsoniterDerivationUtils
+                              .readWithDiscriminator[A](
+                                reader,
+                                field,
+                                config.requireDiscriminatorFirst,
+                                Expr.splice(markLeaves)
+                              )(
+                                Expr.splice(inlineFn)
+                              )
+                          case None => JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperFn))
+                        }
+                      }
+                    }
+                  case None =>
+                    Expr.quote {
+                      val config = Expr.splice(dctx.config)
+                      val reader = Expr.splice(dctx.reader)
+                      config.discriminatorFieldName match {
+                        case Some(field) =>
+                          JsoniterDerivationUtils
+                            .readWithDiscriminator[A](
+                              reader,
+                              field,
+                              config.requireDiscriminatorFirst,
+                              Expr.splice(markLeaves)
+                            )(
+                              Expr.splice(inlineFn)
+                            )
+                        case None => JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperFn))
+                      }
+                    }
+                }
+              }
             }
       }
     }
@@ -252,92 +229,91 @@ trait DecoderHandleAsEnumRuleImpl {
     ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
-      summonJsonValueCodecCached[ChildType] match {
-        case Right(codecExpr) =>
-          Log.info(s"Found implicit JsonValueCodec[$childName], using it") >>
-            MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
-              Expr.quote {
-                if (
-                  JsoniterDerivationUtils.mapEnumName(
-                    Expr.splice(dctx.config),
-                    Expr.splice(Expr(childName)),
-                    Expr.splice(Expr(Type[A].isJavaEnum))
-                  ) == Expr
-                    .splice(typeNameExpr)
-                )
-                  Expr
-                    .splice(codecExpr)
-                    .decodeValue(Expr.splice(readerExpr), Expr.splice(codecExpr).nullValue)
-                    .asInstanceOf[A]
-                else
-                  Expr.splice(elseExpr)
-              }
-            }
+      // A non-abstract sealed base as its own leaf: deriving it recursively would be this codec.
+      val baseAsLeaf: Option[ProductType[ChildType]] =
+        if (Type[ChildType] =:= Type[A]) ProductType.asLeaf[ChildType] else None
 
-        case Left(_) =>
-          // Try singletonOf first — handles Enumeration values, Java enum values, case objects
-          Expr.singletonOf[ChildType] match {
-            case Some(singleton) =>
-              Log.info(s"Using singleton for $childName") >>
-                MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
-                  Expr.quote {
-                    if (
-                      JsoniterDerivationUtils.mapEnumName(
-                        Expr.splice(dctx.config),
-                        Expr.splice(Expr(childName)),
-                        Expr.splice(Expr(Type[A].isJavaEnum))
-                      ) == Expr
-                        .splice(typeNameExpr)
-                    ) {
-                      // Consume the inner empty object {} written by EncoderHandleAsSingletonRule
-                      JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
-                      Expr.splice(singleton).asInstanceOf[A]
-                    } else
-                      Expr.splice(elseExpr)
+      if (baseAsLeaf.isDefined)
+        DecoderHandleAsCaseClassRule
+          .decodeProduct[ChildType](baseAsLeaf.get)(using dctx.nest[ChildType](dctx.reader))
+          .map { decodedExpr => (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+            Expr.quote {
+              if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
+                Expr.splice(decodedExpr).asInstanceOf[A]
+              else Expr.splice(elseExpr)
+            }
+          }
+      else
+        summonJsonValueCodecCached[ChildType] match {
+          case Right(codecExpr) =>
+            Log.info(s"Found implicit JsonValueCodec[$childName], using it") >>
+              MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
+                Expr.quote {
+                  if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
+                    Expr
+                      .splice(codecExpr)
+                      .decodeValue(Expr.splice(readerExpr), Expr.splice(codecExpr).nullValue)
+                      .asInstanceOf[A]
+                  else
+                    Expr.splice(elseExpr)
+                }
+              }
+
+          case Left(_) =>
+            // Try singletonOf first — handles Enumeration values, Java enum values, case objects
+            Expr.singletonOf[ChildType] match {
+              case Some(singleton) =>
+                Log.info(s"Using singleton for $childName") >>
+                  MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
+                    Expr.quote {
+                      if (
+                        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
+                      ) {
+                        // Consume the inner empty object {} written by EncoderHandleAsSingletonRule
+                        JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
+                        Expr.splice(singleton).asInstanceOf[A]
+                      } else
+                        Expr.splice(elseExpr)
+                    }
+                  }
+              case None =>
+                // No singleton - derive via full rules chain
+                deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.reader)).flatMap { decodedExpr =>
+                  dctx.getHelper[ChildType].map {
+                    case Some(helper) =>
+                      (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) => {
+                        val helperCallExpr = helper(readerExpr, dctx.config)
+                        Expr.quote {
+                          if (
+                            Expr
+                              .splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(
+                              typeNameExpr
+                            )
+                          )
+                            Expr.splice(helperCallExpr).asInstanceOf[A]
+                          else
+                            Expr.splice(elseExpr)
+                        }
+                      }
+
+                    case None =>
+                      // No helper registered (e.g., built-in types like String, Int) — use the derived expression directly
+                      (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
+                        Expr.quote {
+                          if (
+                            Expr
+                              .splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(
+                              typeNameExpr
+                            )
+                          )
+                            Expr.splice(decodedExpr).asInstanceOf[A]
+                          else
+                            Expr.splice(elseExpr)
+                        }
                   }
                 }
-            case None =>
-              // No singleton - derive via full rules chain
-              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.reader)).flatMap { decodedExpr =>
-                dctx.getHelper[ChildType].map {
-                  case Some(helper) =>
-                    (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) => {
-                      val helperCallExpr = helper(readerExpr, dctx.config)
-                      Expr.quote {
-                        if (
-                          JsoniterDerivationUtils.mapEnumName(
-                            Expr.splice(dctx.config),
-                            Expr.splice(Expr(childName)),
-                            Expr.splice(Expr(Type[A].isJavaEnum))
-                          ) == Expr
-                            .splice(typeNameExpr)
-                        )
-                          Expr.splice(helperCallExpr).asInstanceOf[A]
-                        else
-                          Expr.splice(elseExpr)
-                      }
-                    }
-
-                  case None =>
-                    // No helper registered (e.g., built-in types like String, Int) — use the derived expression directly
-                    (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
-                      Expr.quote {
-                        if (
-                          JsoniterDerivationUtils.mapEnumName(
-                            Expr.splice(dctx.config),
-                            Expr.splice(Expr(childName)),
-                            Expr.splice(Expr(Type[A].isJavaEnum))
-                          ) == Expr
-                            .splice(typeNameExpr)
-                        )
-                          Expr.splice(decodedExpr).asInstanceOf[A]
-                        else
-                          Expr.splice(elseExpr)
-                      }
-                }
-              }
-          }
-      }
+            }
+        }
     }
 
     /** Derive an inline child decoder for discriminator mode. Uses decodeCaseClassFieldsInline to read fields from an
@@ -346,58 +322,79 @@ trait DecoderHandleAsEnumRuleImpl {
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildDecoderInline[A: DecoderCtx, ChildType: Type](
         childName: String
-    ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
+    ): MIO[(Expr[String], Expr[JsonReader], Expr[Boolean], Expr[A]) => Expr[A]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
 
-      CaseClass.parse[ChildType].toOption match {
-        case Some(cc) =>
-          DecoderHandleAsCaseClassRule
-            .decodeCaseClassFieldsInline[ChildType](cc)(using dctx.nest[ChildType](dctx.reader))
-            .map { inlineExpr => (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
-              Expr.quote {
-                if (
-                  JsoniterDerivationUtils.mapEnumName(
-                    Expr.splice(dctx.config),
-                    Expr.splice(Expr(childName)),
-                    Expr.splice(Expr(Type[A].isJavaEnum))
-                  ) == Expr
-                    .splice(typeNameExpr)
-                )
-                  Expr.splice(inlineExpr).asInstanceOf[A]
-                else
-                  Expr.splice(elseExpr)
-              }
-            }
-
-        case None =>
-          // Not a case class — check if singleton for inline (discriminator) mode
-          Expr.singletonOf[ChildType] match {
-            case Some(singleton) =>
-              // Singleton in discriminator mode: the discriminator field has been read by readWithDiscriminator.
-              // Consume remaining fields (if any) and the closing } of the outer object.
-              Log.info(s"Using singleton for inline child $childName") >>
-                MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
-                  Expr.quote {
-                    if (
-                      JsoniterDerivationUtils.mapEnumName(
-                        Expr.splice(dctx.config),
-                        Expr.splice(Expr(childName)),
-                        Expr.splice(Expr(Type[A].isJavaEnum))
-                      ) == Expr
-                        .splice(typeNameExpr)
-                    ) {
-                      JsoniterDerivationUtils.skipInlineObjectRemainder(Expr.splice(readerExpr))
-                      Expr.splice(singleton).asInstanceOf[A]
-                    } else
-                      Expr.splice(elseExpr)
-                  }
-                }
-            case None =>
-              // Non-singleton, non-case-class: fall back to wrapper-style decoder
-              deriveChildDecoder[A, ChildType](childName)
-          }
+      def matches(typeNameExpr: Expr[String]): Expr[Boolean] = Expr.quote {
+        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
       }
+
+      if (hasUserCodecAsLeaf[ChildType]) {
+        // As in jsoniter-scala: a user-provided codec of a leaf reads the whole object (discriminator included).
+        val codecExpr = summonJsonValueCodecCached[ChildType].toOption.get
+        MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], _: Expr[Boolean], elseExpr: Expr[A]) =>
+          Expr.quote {
+            if (Expr.splice(matches(typeNameExpr)))
+              JsoniterDerivationUtils
+                .readWholeObjectWith(Expr.splice(readerExpr), Expr.splice(codecExpr))
+                .asInstanceOf[A]
+            else Expr.splice(elseExpr)
+          }
+        }
+      } else
+        ProductType.asLeaf[ChildType] match {
+          case Some(cc) if SingletonValue.unapply(Type[ChildType]).isEmpty =>
+            DecoderHandleAsCaseClassRule
+              .decodeCaseClassFieldsInline[ChildType](cc)(using dctx.nest[ChildType](dctx.reader))
+              .map {
+                inlineDecode =>
+                  (typeNameExpr: Expr[String], _: Expr[JsonReader], afterOpenExpr: Expr[Boolean], elseExpr: Expr[A]) =>
+                    Expr.quote {
+                      if (Expr.splice(matches(typeNameExpr))) Expr.splice(inlineDecode(afterOpenExpr)).asInstanceOf[A]
+                      else Expr.splice(elseExpr)
+                    }
+              }
+
+          case _ =>
+            Expr.singletonOf[ChildType] match {
+              case Some(singleton) =>
+                // Singleton in discriminator mode: skip the rest of the object (jsoniter-scala skips the content of
+                // objects decoded as case objects), including the discriminator when the object was re-read.
+                Log.info(s"Using singleton for inline child $childName") >>
+                  MIO.pure {
+                    (
+                        typeNameExpr: Expr[String],
+                        readerExpr: Expr[JsonReader],
+                        afterOpenExpr: Expr[Boolean],
+                        elseExpr: Expr[A]
+                    ) =>
+                      Expr.quote {
+                        if (Expr.splice(matches(typeNameExpr))) {
+                          JsoniterDerivationUtils.readInlineObjectWithoutFields(
+                            Expr.splice(readerExpr),
+                            true,
+                            null,
+                            false,
+                            Expr.splice(afterOpenExpr)
+                          )
+                          Expr.splice(singleton).asInstanceOf[A]
+                        } else Expr.splice(elseExpr)
+                      }
+                  }
+              case None =>
+                // Non-singleton, non-case-class: fall back to wrapper-style decoder
+                deriveChildDecoder[A, ChildType](childName).map {
+                  wrapper =>
+                    (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], _: Expr[Boolean], elseExpr: Expr[A]) =>
+                      wrapper(typeNameExpr, readerExpr, elseExpr)
+                }
+            }
+        }
     }
+
+    private def hasUserCodecAsLeaf[ChildType: Type]: Boolean =
+      SingletonValue.unapply(Type[ChildType]).isEmpty && summonJsonValueCodecCached[ChildType].isRight
 
     /** Derive a string-enum child decoder that returns the singleton instance directly without reading from the reader.
       * Used when all enum children are case objects and enumAsStrings is enabled.
@@ -414,14 +411,7 @@ trait DecoderHandleAsEnumRuleImpl {
           Log.info(s"Using singleton for string enum child $childName") >>
             MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
-                if (
-                  JsoniterDerivationUtils.mapEnumName(
-                    Expr.splice(dctx.config),
-                    Expr.splice(Expr(childName)),
-                    Expr.splice(Expr(Type[A].isJavaEnum))
-                  ) == Expr
-                    .splice(typeNameExpr)
-                )
+                if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
                   Expr.splice(sv.singletonExpr).asInstanceOf[A]
                 else
                   Expr.splice(elseExpr)
@@ -446,12 +436,7 @@ trait DecoderHandleAsEnumRuleImpl {
                   MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
                     Expr.quote {
                       if (
-                        JsoniterDerivationUtils.mapEnumName(
-                          Expr.splice(dctx.config),
-                          Expr.splice(Expr(childName)),
-                          Expr.splice(Expr(Type[A].isJavaEnum))
-                        ) == Expr
-                          .splice(typeNameExpr)
+                        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
                       )
                         Expr.splice(instanceExpr).asInstanceOf[A]
                       else
@@ -468,82 +453,6 @@ trait DecoderHandleAsEnumRuleImpl {
               val err = CodecDerivationError.UnexpectedParameterInSingleton(
                 Type[ChildType].prettyPrint,
                 "Expected singleton/case object for string enum but got"
-              )
-              Log.error(err.message) >> MIO.fail(err)
-          }
-      }
-    }
-
-    /** Derive a circe-like wrapper child decoder for singleton children. Similar to deriveChildDecoderStringEnum but
-      * reads an empty JSON object {} before returning the singleton value, matching circe's encoding of case objects as
-      * {"TypeName":{}}.
-      */
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def deriveChildDecoderCirceLikeWrapper[A: DecoderCtx, ChildType: Type](
-        childName: String
-    ): MIO[(Expr[String], Expr[JsonReader], Expr[A]) => Expr[A]] = {
-      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
-
-      SingletonValue.unapply(Type[ChildType]) match {
-        case Some(sv) =>
-          Log.info(s"Using singleton for circe-like wrapper child $childName") >>
-            MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
-              Expr.quote {
-                if (
-                  JsoniterDerivationUtils.mapEnumName(
-                    Expr.splice(dctx.config),
-                    Expr.splice(Expr(childName)),
-                    Expr.splice(Expr(Type[A].isJavaEnum))
-                  ) == Expr
-                    .splice(typeNameExpr)
-                ) {
-                  JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
-                  Expr.splice(sv.singletonExpr).asInstanceOf[A]
-                } else
-                  Expr.splice(elseExpr)
-              }
-            }
-        case None =>
-          // Fall back to CaseClass.construct for zero-arg case classes
-          CaseClass.parse[ChildType].toOption match {
-            case Some(cc) if cc.primaryConstructor.totalParameters.flatten.isEmpty =>
-              val constructMIO: MIO[Option[Expr[ChildType]]] =
-                cc.construct[MIO](new CaseClass.ConstructField[MIO] {
-                  def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-                    val err = CodecDerivationError.UnexpectedParameterInSingleton(
-                      Type[ChildType].prettyPrint,
-                      "Unexpected parameter in singleton"
-                    )
-                    Log.error(err.message) >> MIO.fail(err)
-                  }
-                })
-              constructMIO.flatMap {
-                case Some(instanceExpr) =>
-                  MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
-                    Expr.quote {
-                      if (
-                        JsoniterDerivationUtils.mapEnumName(
-                          Expr.splice(dctx.config),
-                          Expr.splice(Expr(childName)),
-                          Expr.splice(Expr(Type[A].isJavaEnum))
-                        ) == Expr
-                          .splice(typeNameExpr)
-                      ) {
-                        JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
-                        Expr.splice(instanceExpr).asInstanceOf[A]
-                      } else
-                        Expr.splice(elseExpr)
-                    }
-                  }
-                case None =>
-                  val err = CodecDerivationError.CannotConstructType(Type[ChildType].prettyPrint, isSingleton = true)
-                  Log.error(err.message) >> MIO.fail(err)
-              }
-
-            case _ =>
-              val err = CodecDerivationError.UnexpectedParameterInSingleton(
-                Type[ChildType].prettyPrint,
-                "Expected singleton/case object for circe-like wrapper but got"
               )
               Log.error(err.message) >> MIO.fail(err)
           }

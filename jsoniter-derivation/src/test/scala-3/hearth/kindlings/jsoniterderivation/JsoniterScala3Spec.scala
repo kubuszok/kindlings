@@ -146,7 +146,7 @@ final class JsoniterScala3Spec extends MacroSuite {
     test("simple enum wrapper-mode produces correct JSON (#196)") {
       val codec = KindlingsJsonValueCodec.derived[Color]
       val json = writeToString(Color.Red: Color)(codec)
-      json ==> """{"Red":{}}"""
+      json ==> "\"Red\""
     }
   }
 

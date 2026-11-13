@@ -57,8 +57,9 @@ trait EncoderHandleAsNamedTupleRuleImpl {
                   .asInstanceOf[Field]
               }
               Log.namedScope(s"Encoding named tuple field $fName: ${Type[Field].prettyPrint}") {
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldEnc =>
-                  (fName, fieldEnc)
+                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr).copy(stringified = Some(false))).map {
+                  fieldEnc =>
+                    (fName, fieldEnc)
                 }
               }
             }

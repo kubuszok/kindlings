@@ -38,17 +38,21 @@ trait DecoderHandleAsCollectionRuleImpl {
                     val factoryExpr = isCollection.value.factory
                     val buildStep = isCollection.value.build
 
+                    @scala.annotation.nowarn("msg=is never used")
+                    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+                    val isSetType = Type[A] <:< Type.of[scala.collection.Set[Item]]
                     val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
                       val decodeFnVal = Expr.splice(decodeFn)
                       val reader = Expr.splice(dctx.reader)
-                      val maxInserts = Expr.splice(dctx.config).setMaxInsertNumber
+                      // As in jsoniter-scala, `setMaxInsertNumber` limits only sets.
+                      val maxInserts =
+                        if (Expr.splice(Expr(isSetType))) Expr.splice(dctx.config).setMaxInsertNumber else Int.MaxValue
                       val collBuilder = Expr.splice(factoryExpr).newBuilder
                       reader.readArrayStart()
                       var count = 0
                       while (!reader.isArrayEnd()) {
                         count += 1
-                        if (count > maxInserts)
-                          reader.decodeError("too many collection items (max: " + maxInserts + ")")
+                        if (count > maxInserts) reader.decodeError("too many set inserts")
                         collBuilder += decodeFnVal(reader)
                       }
                       collBuilder

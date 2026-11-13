@@ -197,3 +197,167 @@ case class LargeRecModel(
     nodes: List[LargeRecNode] = Nil,
     animations: List[LargeRecAnimation] = Nil
 )
+
+// Absent-field decoding test types (see UBJsonAbsentFieldsSpec)
+case class UbAbsentRecord(
+    name: String,
+    opt: Option[String],
+    n: Int = 7,
+    xs: List[Int] = Nil,
+    ys: Vector[Int],
+    m: Map[String, Int]
+)
+case class UbAbsentOptionWithNoneDefault(next: Option[String] = None)
+sealed trait UbAbsentAdt
+case class UbAbsentLeaf(name: String, opt: Option[Int], n: Int = 3, xs: List[Int]) extends UbAbsentAdt
+
+/** Configs read from mutable fields so that the macro cannot evaluate them at compile time. */
+object UbAbsentRuntimeConfigs {
+  @volatile var default: UBJsonConfig = UBJsonConfig()
+  @volatile var requireDefault: UBJsonConfig = UBJsonConfig().withRequireDefaultFields
+}
+
+// jsoniter-scala parity test types (see UBJsonParitySpec)
+case class UbZeroFields()
+case class UbAllTransient(@transientField x: Int = 1)
+case class UbEmptyCapable(a: Array[Int], s: String, m: Map[String, Int], l: List[Int])
+case class UbArrayDefault(a: Array[Int] = Array(1, 2), n: Int = 0)
+
+/** Configs read from mutable fields, so that the macro cannot evaluate them at compile time. */
+object UbParityRuntimeConfigs {
+  @volatile var default: UBJsonConfig = UBJsonConfig()
+  @volatile var strict: UBJsonConfig = UBJsonConfig().withSkipUnexpectedFields(false)
+  @volatile var setLimit2: UBJsonConfig = UBJsonConfig().withSetMaxInsertNumber(2)
+  @volatile var transientEmpty: UBJsonConfig = UBJsonConfig().withTransientEmpty
+  @volatile var transientDefault: UBJsonConfig = UBJsonConfig().withTransientDefault
+}
+
+// jsoniter-derivation parity (see UBJsonJsoniterParitySpec)
+sealed trait UbMixed
+object UbMixed {
+  case object Origin extends UbMixed
+  final case class Point(x: Int, y: Int) extends UbMixed
+  @hearth.kindlings.ubjsonderivation.annotations.named("renamed-leaf")
+  final case class Renamed(v: String) extends UbMixed
+}
+case class UbNamedField(@hearth.kindlings.ubjsonderivation.annotations.named("b") a: Int)
+object UbSize extends Enumeration {
+  val Small: Value = Value
+  val Big: Value = Value("BIG")
+}
+case class UbTuples(t: (Int, String), l: List[(Int, Int)], size: UbSize.Value)
+case class UbBigInt(b: BigInt)
+case class UbDuplicatedKeys(a: Int, @fieldName("a") b: Int)
+
+object UbJsoniterParityRuntimeConfigs {
+  @volatile var default: UBJsonConfig = UBJsonConfig()
+  @volatile var discriminator: UBJsonConfig = UBJsonConfig().withDiscriminator("type")
+  @volatile var circeLike: UBJsonConfig = UBJsonConfig().withCirceLikeObjectEncoding
+  @volatile var fullNames: UBJsonConfig =
+    UBJsonConfig().withDiscriminator("type").withAdtLeafClassNameMapper((s: String) => s)
+  @volatile var contradictory: UBJsonConfig = UBJsonConfig().withRequireDefaultFields.withTransientDefault
+  @volatile var bigIntDigits3: UBJsonConfig = UBJsonConfig().withBigIntDigitsLimit(3)
+}
+
+object UbDiscriminatorRuntimeConfigs {
+  @volatile var anywhere: UBJsonConfig = UBJsonConfig().withDiscriminator("type").withRequireDiscriminatorFirst(false)
+  @volatile var anywhereStrict: UBJsonConfig =
+    UBJsonConfig().withDiscriminator("type").withRequireDiscriminatorFirst(false).withSkipUnexpectedFields(false)
+}
+
+// --- Ported from jsoniter-derivation: plain classes, multiple parameter lists, scala.transient, Enumeration ids,
+// nested options, nested sealed hierarchies ---
+
+class UbPlainClass(val id: Int, var name: String) {
+  override def hashCode(): Int = id * 31 + java.util.Objects.hashCode(name)
+  override def equals(obj: Any): Boolean = obj match {
+    case c: UbPlainClass => id == c.id && java.util.Objects.equals(name, c.name)
+    case _               => false
+  }
+  override def toString: String = s"UbPlainClass($id,$name)"
+}
+class UbPlainWithDefaults(val id: Int, val tags: List[String] = List("a"), val note: Option[String] = None) {
+  override def hashCode(): Int = java.util.Objects.hash(Int.box(id), tags, note)
+  override def equals(obj: Any): Boolean = obj match {
+    case c: UbPlainWithDefaults => id == c.id && tags == c.tags && note == c.note
+    case _                      => false
+  }
+  override def toString: String = s"UbPlainWithDefaults($id,$tags,$note)"
+}
+case class UbHasPlain(inner: UbPlainClass, list: List[UbPlainClass])
+class UbNoAccessor(val a: Int, b: Int) { override def toString: String = s"UbNoAccessor($a,$b)" }
+
+sealed trait UbPlainAdt
+class UbPlainLeaf() extends UbPlainAdt {
+  override def hashCode(): Int = 1
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[UbPlainLeaf]
+  override def toString: String = "UbPlainLeaf()"
+}
+class UbPlainLeafWithFields(val x: Int, var y: String) extends UbPlainAdt {
+  override def hashCode(): Int = x
+  override def equals(obj: Any): Boolean = obj match {
+    case c: UbPlainLeafWithFields => x == c.x && y == c.y
+    case _                        => false
+  }
+  override def toString: String = s"UbPlainLeafWithFields($x,$y)"
+}
+object UbPlainObject extends UbPlainAdt
+
+// a non-abstract sealed base is one of its own leaves (as in jsoniter-scala)
+sealed class UbSealedBase
+case class UbSealedB(n: Int) extends UbSealedBase
+case class UbSealedC(s: String) extends UbSealedBase
+
+case class UbMultiList(i: Int)(val l: Long)(var s: String) {
+  override def toString: String = s"UbMultiList($i)($l)($s)"
+}
+case class UbMultiListDependent(i: Int = 1)(val l: Long = i - 1L)(var s: String = s"$i-$l") {
+  override def toString: String = s"UbMultiListDependent($i)($l)($s)"
+}
+case class UbGenericMultiList[A](a: A)(@transientField val n: Int = 2)(val as: List[A] = List.fill(n)(a))(
+    val m: Int = as.size * n
+) {
+  override def toString: String = s"UbGenericMultiList($a)($n)($as)($m)"
+}
+sealed trait UbMultiListAdt
+case class UbMultiData1(i: Int)(val pos: Int) extends UbMultiListAdt
+case class UbMultiData2(i: Int)(val pos: Int) extends UbMultiListAdt
+
+case class UbScalaTransient(required: String, @transient transient: String = "default")
+
+object UbLocation extends Enumeration {
+  type UbLocation = Value
+  val IP, GPS: UbLocation = Value
+  val Named: UbLocation = Value("named-value")
+}
+case class UbEnums(lt: UbLocation.UbLocation, l: List[UbLocation.UbLocation])
+
+case class UbNestedOptions(f1: Option[String], f2: Option[Option[String]] = None)
+case class UbNestedOptions3(y: Option[String], x: Option[Option[Option[String]]] = None)
+
+sealed trait UbVehicle
+sealed trait UbMotorVehicle extends UbVehicle
+case class UbTruck(payload: Int) extends UbMotorVehicle
+case class UbMotorcycle(cc: Int) extends UbMotorVehicle
+case object UbScooter extends UbMotorVehicle
+case class UbBicycle(gears: Int) extends UbVehicle
+
+case class UbNotNullable(s: String, n: Int)
+
+object UbPortRuntimeConfigs {
+  @volatile var default: UBJsonConfig = UBJsonConfig()
+  @volatile var discriminator: UBJsonConfig = UBJsonConfig().withDiscriminator("type")
+  @volatile var discriminatorAnywhere: UBJsonConfig =
+    UBJsonConfig().withDiscriminator("type").withRequireDiscriminatorFirst(false)
+  @volatile var circeLike: UBJsonConfig = UBJsonConfig().withCirceLikeObjectEncoding
+  @volatile var scalaTransient: UBJsonConfig = UBJsonConfig().withScalaTransientSupport
+  @volatile var enumIds: UBJsonConfig = UBJsonConfig().withUseScalaEnumValueId
+  @volatile var skipNestedOptions: UBJsonConfig = UBJsonConfig().withSkipNestedOptionValues.withTransientNone
+  @volatile var discriminatorTransientNone: UBJsonConfig = UBJsonConfig().withDiscriminator("type").withTransientNone
+  @volatile var transientNull: UBJsonConfig = UBJsonConfig().withTransientNull
+  @volatile var transientDefault: UBJsonConfig = UBJsonConfig().withTransientDefault
+}
+
+case class UbScalaTransientNoDefault(a: Int, @transient b: Int)
+
+case class UbFieldDefaults(l: List[Int] = List(0), o: Option[Int] = Some(1), s: String = "d", n: Int = 2)

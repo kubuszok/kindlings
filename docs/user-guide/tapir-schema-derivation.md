@@ -71,6 +71,25 @@ When `kindlings-circe-derivation` or `kindlings-jsoniter-derivation` is on the c
 
 For example, if your Circe `Configuration` uses `withSnakeCaseMemberNames`, the generated Tapir schema will also use `snake_case` field names — no additional configuration needed, no risk of drift.
 
+#### What a `JsoniterConfig` changes
+
+With a jsoniter `JsoniterConfig` the schemas describe what the jsoniter codecs (derived with the same config) write:
+
+- **ADTs without a discriminator** (Kindlings' default) are described as wrapped: each leaf is a single-field object
+  keyed by the leaf's name (`{"Circle":{"radius":1.0}}`), and case objects are strings (`"Origin"`), also in ADTs
+  mixing case classes and case objects. With `circeLikeObjectEncoding` case objects are wrapped too (`{"Origin":{}}`).
+  With a discriminator, case objects are objects with just the discriminator field (`{"type":"Origin"}`).
+- **Nested sealed hierarchies** are flattened to their leaves, as the codecs read and write only the leaves.
+- **Leaf names**: `@named` on a leaf is used as is, otherwise `adtLeafClassNameMapper` receives the leaf's
+  fully-qualified name (`pkg.Outer.Leaf`, Scala 3 enum cases as `pkg.Enum.Case`), as in the codecs.
+- **Java enums and `scala.Enumeration`** values are strings whatever the discriminator (Java enum values named by
+  `javaEnumValueNameMapper`, `Enumeration` values by their `toString`), or integer `id`s with `useScalaEnumValueId`.
+- **Tuples** are arrays: positional `_1`, `_2`, ... fields marked with Tapir's `Schema.Tuple` attribute, which Tapir's
+  docs interpreter renders as an array with `prefixItems`.
+- **Fields**: `@named` on a field renames it like `@fieldName`.
+- **`Option[Option[A]]`**: the inner `Option` is described as the ADT the codecs write it as (`{"Some":{"value":1}}` /
+  `"None"`, or `{"type":"Some","value":1}` / `{"type":"None"}` with a discriminator), unless `skipNestedOptionValues`.
+
 #### Disambiguating multiple JSON configs
 
 If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails. Import an implicit `PreferSchemaConfig` to tell the macro which one to use:

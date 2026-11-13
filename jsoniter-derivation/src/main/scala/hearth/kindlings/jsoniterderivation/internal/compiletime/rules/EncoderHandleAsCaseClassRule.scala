@@ -18,37 +18,47 @@ trait EncoderHandleAsCaseClassRuleImpl {
   private def buildFieldSkipConditions[Field: Type](
       fieldExpr: Expr[Field],
       param: Option[Parameter],
-      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig]
+      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig],
+      instanceValues: Map[String, Expr_??]
   )(implicit AnyT: Type[Any]): List[Expr[Boolean]] = {
-    val defaultAsAnyOpt: Option[Expr[Any]] = param.filter(_.hasDefault).flatMap { p =>
-      p.defaultValue.flatMap { method =>
-        foldInstanceFree(method, "Default value")(
-          onTypes = _ => Map.empty,
-          onValues = _ => Map.empty
-        ).toOption
-          .map { ee => import ee.Underlying; ee.value.upcast[Any] }
-      }
+    // Defaults of non-first parameter lists may depend on the preceding parameters: they are computed from the values of
+    // the encoded instance (as jsoniter-scala does).
+    val defaultAsAnyOpt: Option[Expr[Any]] = param.flatMap { p =>
+      parameterDefault(p, instanceValues).map { ee => import ee.Underlying; ee.value.upcast[Any] }
     }
 
     val isOptionField = Type[Field] match {
       case IsOption(_) => true
       case _           => false
     }
-    val isStringField = Type[Field] =:= CTypes.String
-    val isCollectionField = !isOptionField && {
-      val isMap = Type[Field] match { case IsMap(_) => true; case _ => false }
-      val isColl = Type[Field] match { case IsCollection(_) => true; case _ => false }
-      isMap || isColl
-    }
-    val isEmptyCapable = isStringField || isCollectionField
+    // As in jsoniter-scala, `transientEmpty` applies to collections, maps and arrays (also `IArray` and integration
+    // collections), but not to `String`s (an empty string is written as `""`).
+    val asIterable: Option[Expr[Iterable[Any]]] =
+      if (isOptionField || Type[Field] =:= CTypes.String) None
+      else
+        Type[Field] match {
+          case IsCollection(isCollection) =>
+            import isCollection.Underlying as Item
+            Some(isCollection.value.asIterable(fieldExpr).asInstanceOf[Expr[Iterable[Any]]]) // Iterable is covariant
+          case _ => None
+        }
+    // Arrays (and `IArray`s) are compared by contents with their default.
+    val isArrayLike = asIterable.isDefined && !(Type[Field] <:< Type.of[Iterable[Any]])
 
     val conditions = List.newBuilder[Expr[Boolean]]
 
     defaultAsAnyOpt.foreach { defaultExpr =>
-      conditions += Expr.quote {
-        Expr.splice(config).transientDefault &&
-        Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
-      }
+      conditions +=
+        (if (isArrayLike) Expr.quote {
+           Expr.splice(config).transientDefault &&
+           hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+             .valueEquals(Expr.splice(fieldExpr).asInstanceOf[Any], Expr.splice(defaultExpr))
+         }
+         else
+           Expr.quote {
+             Expr.splice(config).transientDefault &&
+             Expr.splice(fieldExpr).asInstanceOf[Any] == Expr.splice(defaultExpr)
+           })
     }
 
     if (isOptionField) {
@@ -58,17 +68,22 @@ trait EncoderHandleAsCaseClassRuleImpl {
       }
     }
 
-    if (isEmptyCapable) {
-      if (isStringField) {
+    if (Type[Field] <:< Type.of[Iterator[Any]]) {
+      // `asIterable` would consume the iterator: check `hasNext` instead (as jsoniter-scala does)
+      conditions += Expr.quote {
+        Expr.splice(config).transientEmpty && !Expr.splice(fieldExpr).asInstanceOf[Iterator[Any]].hasNext
+      }
+    } else
+      asIterable.foreach { iterable =>
         conditions += Expr.quote {
-          Expr.splice(config).transientEmpty &&
-          Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
+          Expr.splice(config).transientEmpty && Expr.splice(iterable).isEmpty
         }
-      } else {
-        conditions += Expr.quote {
-          Expr.splice(config).transientEmpty &&
-          Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
-        }
+      }
+
+    // As in jsoniter-scala: `transientNull` skips fields of nullable types (Scala 3 `T | Null`) holding `null`.
+    if (nullableUnionUnderlying[Field].isDefined) {
+      conditions += Expr.quote {
+        Expr.splice(config).transientNull && (Expr.splice(fieldExpr).asInstanceOf[AnyRef] eq null)
       }
     }
 
@@ -102,7 +117,9 @@ trait EncoderHandleAsCaseClassRuleImpl {
       JsonWriterT: Type[JsonWriter],
       UnitT: Type[Unit]
   ): Option[Expr[Unit]] =
-    if (Type[Field] =:= Type.of[Int])
+    if (literalKey[Field].isDefined || nullableUnionUnderlying[Field].isDefined)
+      None // nullable unions and literal types are written by their own rule
+    else if (Type[Field] =:= Type.of[Int])
       Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Int])))
     else if (Type[Field] =:= Type.of[Long])
       Some(Expr.quote(Expr.splice(writer).writeVal(Expr.splice(value).asInstanceOf[Long])))
@@ -123,11 +140,35 @@ trait EncoderHandleAsCaseClassRuleImpl {
     else
       None
 
+  /** `alwaysEmitDiscriminator`: the codec of an ADT leaf (not derived through its sealed parent) writes the
+    * discriminator too, as in jsoniter-scala. Sealed trait codecs write fields only, so this is never duplicated.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def writeAlwaysEmittedDiscriminator[A: EncoderCtx]: Expr[Unit] = {
+    implicit val UnitT: Type[Unit] = CTypes.Unit
+    implicit val StringT: Type[String] = CTypes.String
+    alwaysEmittedDiscriminatorKey[A](ectx.config, ectx.evaluatedConfig) match {
+      case None      => Expr.quote(())
+      case Some(key) =>
+        val leafName: Expr[String] = namedAnnotationOf[A] match {
+          case Some(name) => Expr(name)
+          case None => Expr.quote(Expr.splice(ectx.config).adtLeafClassNameMapper(Expr.splice(Expr(adtLeafName[A]))))
+        }
+        Expr.quote {
+          val discriminatorKey = Expr.splice(key)
+          if (discriminatorKey ne null) {
+            Expr.splice(ectx.writer).writeKey(discriminatorKey)
+            Expr.splice(ectx.writer).writeVal(Expr.splice(leafName))
+          }
+        }
+    }
+  }
+
   object EncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A].toEither match {
+        ProductType.parse[A] match {
           case Right(caseClass) =>
             // Note: caching is handled by deriveEncoderRecursively — do NOT call setHelper here
             // to avoid conflicts with the forward-declaration in deriveEncoderRecursively.
@@ -141,7 +182,9 @@ trait EncoderHandleAsCaseClassRuleImpl {
     /** Encode only the key-value field pairs (no writeObjectStart/writeObjectEnd). */
     @scala.annotation.nowarn("msg=is never used")
     private[compiletime] def encodeCaseClassFieldsOnly[A: EncoderCtx](
-        caseClass: CaseClass[A]
+        caseClass: ProductType[A],
+        // encoded by its sealed parent's codec, which writes the discriminator next to the fields
+        viaSealedParent: Boolean = false
     ): MIO[Expr[Unit]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
@@ -151,27 +194,55 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
       implicit val stringifiedT: Type[stringified] = CTypes.Stringified
 
-      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      val allFields = caseClass.fieldValuesAt(ectx.value).toList
+      val instanceValues: Map[String, Expr_??] = allFields.toMap
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor.
       // Only access primaryConstructor when there are actual fields to process.
       val paramsByName: Map[String, Parameter] =
-        if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.totalParameters.flatten.toMap
+        if (allFields.isEmpty && SingletonValue.unapply(Type[A]).isDefined) Map.empty
+        else caseClass.params.toMap
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+        case (name, param) if isTransientParam[A](param, ectx.evaluatedConfig) && !param.hasDefault => name
       } match {
         case Some(name) =>
           val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
           Log.error(err.message) >> MIO.fail(err)
+        case None if paramsByName.exists { case (name, p) =>
+              !isTransientParam[A](p, ectx.evaluatedConfig) && !allFields.exists(_._1 == name)
+            } =>
+          // jsoniter-scala rejects these too: the decoder needs the parameter, but the encoder cannot read it.
+          val name = caseClass.params.collectFirst {
+            case (name, p) if !isTransientParam[A](p, ectx.evaluatedConfig) && !allFields.exists(_._1 == name) => name
+          }.get
+          val err = CodecDerivationError.ParameterWithoutAccessor(name, Type[A].prettyPrint)
+          Log.error(err.message) >> MIO.fail(err)
         case None =>
           val nonTransientFields = allFields.filter { case (name, _) =>
-            paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
+            paramsByName.get(name).forall(p => !isTransientParam[A](p, ectx.evaluatedConfig))
           }
 
-          NonEmptyList.fromList(nonTransientFields) match {
+          val collisionCheck: MIO[Unit] = ectx.evaluatedConfig match {
+            case Some(config) =>
+              val keys = nonTransientFields.map { case (name, _) =>
+                paramsByName
+                  .get(name)
+                  .flatMap(p => fieldNameOverride(p))
+                  .getOrElse(config.fieldNameMapper(name))
+              }
+              // The discriminator is a key of this object only when it is written: through the sealed parent, or by
+              // the leaf's own codec with alwaysEmitDiscriminator (as in jsoniter-scala).
+              val discriminator =
+                if (viaSealedParent || (config.alwaysEmitDiscriminator && hasSealedParent[A]))
+                  config.discriminatorFieldName.toList
+                else Nil
+              checkFieldNameCollisions[A](keys ++ discriminator)
+            case None => MIO.pure(())
+          }
+
+          collisionCheck >> (NonEmptyList.fromList(nonTransientFields) match {
             case Some(nonEmptyFields) =>
               nonEmptyFields
                 .parTraverse { case (fName, fieldValue) =>
@@ -179,49 +250,27 @@ trait EncoderHandleAsCaseClassRuleImpl {
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
                     val hasStringifiedAnnotation =
                       paramsByName.get(fName).exists(p => hasAnnotationType[stringified](p))
-                    val isStringifiedStaticallyFalse =
-                      ectx.evaluatedConfig.exists(!_.isStringified)
-                    val fieldEncMIO: MIO[Expr[Unit]] = if (hasStringifiedAnnotation) {
-                      deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
-                        case Some(enc) => MIO.pure(enc)
-                        case None      =>
-                          val err = CodecDerivationError
-                            .StringifiedOnNonNumeric(fName, Type[A].prettyPrint, Type[Field].prettyPrint)
-                          Log.error(err.message) >> MIO.fail(err)
-                      }
-                    } else if (isStringifiedStaticallyFalse) {
-                      val inlined: Option[Expr[Unit]] =
+                    // `@stringified` stringifies the numbers/booleans of the field's value (also inside options,
+                    // collections, map values and tuples); otherwise the config's isStringified decides. The flag never
+                    // leaks into the fields of nested case classes.
+                    val fieldCtx = ectx.nest(fieldExpr).copy(stringified = Some(hasStringifiedAnnotation))
+                    val isStringifiedStaticallyFalse = fieldCtx.stringifiedMode.contains(false)
+                    val inlined: Option[Expr[Unit]] =
+                      if (!isStringifiedStaticallyFalse) None
+                      else
                         inlineBuiltInEncode[Field](fieldExpr, ectx.writer).flatMap { _ =>
                           summonJsonValueCodecCached[Field] match {
                             case Right(_) => None
                             case Left(_)  => inlineBuiltInEncode[Field](fieldExpr, ectx.writer)
                           }
                         }
-                      inlined match {
-                        case Some(enc) => MIO.pure(enc)
-                        case None      => deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
-                      }
-                    } else {
-                      // When no @stringified annotation, check if global isStringified applies
-                      deriveStringifiedEncoder[Field](fieldExpr, ectx.writer) match {
-                        case Some(stringifiedEnc) =>
-                          // Numeric field: generate both paths, select at runtime
-                          deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { normalEnc =>
-                            Expr.quote {
-                              if (Expr.splice(ectx.config).isStringified)
-                                Expr.splice(stringifiedEnc)
-                              else
-                                Expr.splice(normalEnc)
-                            }
-                          }
-                        case None =>
-                          // Non-numeric field: always normal encoding
-                          deriveEncoderRecursively[Field](using ectx.nest(fieldExpr))
-                      }
+                    val fieldEncMIO: MIO[Expr[Unit]] = inlined match {
+                      case Some(enc) => MIO.pure(enc)
+                      case None      => deriveEncoderRecursively[Field](using fieldCtx)
                     }
                     fieldEncMIO.map { fieldEnc =>
                       val nameOverride =
-                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldNameAnn](p))
+                        paramsByName.get(fName).flatMap(p => fieldNameOverride(p))
 
                       val mappedFieldName: Option[String] = nameOverride.orElse(
                         ectx.evaluatedConfig.map(_.fieldNameMapper(fName))
@@ -250,12 +299,26 @@ trait EncoderHandleAsCaseClassRuleImpl {
                           }
                       }
                       val noTransientChecksNeeded = ectx.evaluatedConfig.exists { c =>
-                        !c.transientDefault && !c.transientNone && !c.transientEmpty
+                        !c.transientDefault && !c.transientNone && !c.transientEmpty && !c.transientNull
                       }
                       val condList =
                         if (noTransientChecksNeeded) Nil
-                        else buildFieldSkipConditions[Field](fieldExpr, paramsByName.get(fName), ectx.config)
-                      applySkipConditions(unconditionalWrite, condList)
+                        else
+                          buildFieldSkipConditions[Field](
+                            fieldExpr,
+                            paramsByName.get(fName),
+                            ectx.config,
+                            instanceValues
+                          )
+                      // `scala.transient` with a runtime config: skipped when `scalaTransientSupport` is on
+                      val runtimeTransient: List[Expr[Boolean]] =
+                        paramsByName
+                          .get(fName)
+                          .filter(p => isTransientAtRuntimeOnly[A](p, ectx.evaluatedConfig)) match {
+                          case Some(_) => List(Expr.quote(Expr.splice(ectx.config).scalaTransientSupport))
+                          case None    => Nil
+                        }
+                      applySkipConditions(unconditionalWrite, runtimeTransient ++ condList)
                     }
                   }
                 }
@@ -271,57 +334,20 @@ trait EncoderHandleAsCaseClassRuleImpl {
 
             case None =>
               MIO.pure(Expr.quote(()): Expr[Unit])
-          }
+          })
       }
     }
 
-    @scala.annotation.nowarn("msg=is never used")
-    private def deriveStringifiedEncoder[F: Type](value: Expr[F], writer: Expr[JsonWriter])(implicit
-        JsonWriterT: Type[JsonWriter],
-        UnitT: Type[Unit]
-    ): Option[Expr[Unit]] =
-      if (Type[F] =:= CTypes.Int)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Int])
-        })
-      else if (Type[F] =:= CTypes.Long)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Long])
-        })
-      else if (Type[F] =:= CTypes.Double)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Double])
-        })
-      else if (Type[F] =:= CTypes.Float)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Float])
-        })
-      else if (Type[F] =:= CTypes.Short)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Short])
-        })
-      else if (Type[F] =:= CTypes.Byte)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[Byte])
-        })
-      else if (Type[F] =:= CTypes.BigDecimal)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[BigDecimal])
-        })
-      else if (Type[F] =:= CTypes.BigInt)
-        Some(Expr.quote {
-          Expr.splice(writer).writeValAsString(Expr.splice(value).asInstanceOf[BigInt])
-        })
-      else None
-
     /** Encode a full JSON object: writeObjectStart + fields + writeObjectEnd. */
     @scala.annotation.nowarn("msg=is never used")
-    private def encodeCaseClassFields[A: EncoderCtx](
-        caseClass: CaseClass[A]
+    private[compiletime] def encodeCaseClassFields[A: EncoderCtx](
+        caseClass: ProductType[A]
     ): MIO[Expr[Unit]] =
       encodeCaseClassFieldsOnly(caseClass).map { fieldsExpr =>
+        val discriminator = writeAlwaysEmittedDiscriminator[A]
         Expr.quote {
           Expr.splice(ectx.writer).writeObjectStart()
+          Expr.splice(discriminator)
           Expr.splice(fieldsExpr)
           Expr.splice(ectx.writer).writeObjectEnd()
         }

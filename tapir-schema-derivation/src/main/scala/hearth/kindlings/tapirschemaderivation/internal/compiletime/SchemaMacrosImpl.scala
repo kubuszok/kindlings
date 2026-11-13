@@ -20,6 +20,7 @@ trait SchemaMacrosImpl
     with rules.SchemaHandleAsOptionRuleImpl
     with rules.SchemaHandleAsMapRuleImpl
     with rules.SchemaHandleAsCollectionRuleImpl
+    with rules.SchemaHandleAsTupleRuleImpl
     with rules.SchemaHandleAsValueTypeRuleImpl
     with rules.SchemaHandleAsSingletonRuleImpl
     with rules.SchemaHandleAsCaseClassRuleImpl
@@ -46,6 +47,7 @@ trait SchemaMacrosImpl
     lazy val AnyType: Type[Any] = Type.of[Any]
     lazy val ListAnyType: Type[List[Any]] = Type.of[List[Any]]
     lazy val StringType: Type[String] = Type.of[String]
+    lazy val BooleanType: Type[Boolean] = Type.of[Boolean]
   }
 
   // Methods to ignore during implicit search — prevents triggering expensive auto-derivation, and makes sure that
@@ -309,6 +311,7 @@ trait SchemaMacrosImpl
         SchemaHandleAsOptionRule,
         SchemaHandleAsMapRule,
         SchemaHandleAsCollectionRule,
+        SchemaHandleAsTupleRule,
         SchemaHandleAsValueTypeRule,
         SchemaHandleAsSingletonRule,
         SchemaHandleAsCaseClassRule,
@@ -597,6 +600,18 @@ trait SchemaMacrosImpl
 
   // Enum / sealed trait derivation
 
+  /** Java enums (including Scala 3 enums extending `java.lang.Enum`) and `scala.Enumeration`s. */
+  private def isValueEnum[A: Type]: Boolean =
+    Type[A].isEnumeration || Type[A].isJavaEnum || Type[A] <:< Type.of[java.lang.Enum[?]]
+
+  private def booleansListExpr(values: List[Boolean]): Expr[List[Boolean]] = {
+    @scala.annotation.nowarn("msg=is never used")
+    implicit val booleanT: Type[Boolean] = TsTypes.BooleanType
+    values.foldRight(Expr.quote(Nil: List[Boolean])) { (value, acc) =>
+      Expr.quote(Expr.splice(Expr(value)) :: Expr.splice(acc))
+    }
+  }
+
   @scala.annotation.nowarn("msg=is never used")
   protected def deriveEnumSchema[A: SchemaCtx](e: Enum[A]): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
@@ -607,23 +622,34 @@ trait SchemaMacrosImpl
     val sNameExpr = computeSNameExpr[A](sctx.derivedType)
     val discriminatorExpr: Expr[Option[String]] = sctx.jsonCfg.discriminatorFieldName
     val enumAsStringsExpr: Expr[Boolean] = sctx.jsonCfg.enumAsStrings
-    val children = e.directChildren.toList
+    // Nested sealed hierarchies are flattened to their leaves when the JSON library encodes only the leaves.
+    val children: List[(String, ??<:[A])] =
+      if (sctx.jsonCfg.flattensNestedSubtypes) e.exhaustiveChildren match {
+        case Some(leaves) => leaves.toList
+        case None         => e.directChildren.toList
+      }
+      else e.directChildren.toList
     val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
 
     // Build resolved constructor names for discriminator mapping (C3)
     val resolvedNamesListExpr: Expr[List[String]] = children
-      .map { case (childName, _) =>
-        sctx.jsonCfg.resolveConstructorName(childName)
+      .map { case (childName, child) =>
+        import child.Underlying as ChildType
+        sctx.jsonCfg.resolveSubtypeName[A, ChildType](childName)
       }
       .foldRight(Expr.quote(Nil: List[String])) { (nameExpr, acc) =>
         Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
       }
 
-    // Check at compile time if all children are singletons (C4 — stringEnumSchema)
-    val allSingletons: Boolean = children.forall { case (_, child) =>
+    val singletonFlags: List[Boolean] = children.map { case (_, child) =>
       import child.Underlying as ChildType
       SingletonValue.parse[ChildType].toEither.isRight
     }
+    // Check at compile time if all children are singletons (C4 — stringEnumSchema)
+    val allSingletons: Boolean = singletonFlags.forall(identity)
+    val singletonFlagsExpr: Expr[List[Boolean]] = booleansListExpr(singletonFlags)
+    val singletonsAsStringsExpr: Expr[Boolean] = sctx.jsonCfg.singletonSubtypesAsStrings
+    val wrappedExpr: Expr[Boolean] = sctx.jsonCfg.wrapsSubtypesWithoutDiscriminator
 
     // Build singleton values list for stringEnumSchema (only when all children are singletons)
     val singletonValuesOpt: Option[Expr[List[A]]] = if (allSingletons) {
@@ -654,7 +680,34 @@ trait SchemaMacrosImpl
       ) { (schemaExpr, acc) =>
         Expr.quote(Expr.splice(schemaExpr).asInstanceOf[Schema[Any]] :: Expr.splice(acc))
       }
+      coproductExpr = Expr.quote {
+        TapirSchemaUtils.coproductSchemaWithEncoding[A](
+          Expr.splice(sNameExpr),
+          Expr.splice(subtypesListExpr),
+          Expr.splice(discriminatorExpr),
+          Expr.splice(resolvedNamesListExpr),
+          Expr.splice(singletonFlagsExpr),
+          Expr.splice(singletonsAsStringsExpr),
+          Expr.splice(wrappedExpr)
+        )
+      }
       rawSchemaExpr = singletonValuesOpt match {
+        // Java enum / scala.Enumeration values — at runtime, branch on valueEnumsAsStrings (and Enumeration ids)
+        case Some(singletonValuesExpr) if isValueEnum[A] =>
+          val asIdsExpr: Expr[Boolean] =
+            if (Type[A].isEnumeration) sctx.jsonCfg.enumerationValuesAsIds else Expr(false)
+          val asStringsExpr: Expr[Boolean] = sctx.jsonCfg.valueEnumsAsStrings
+          Expr.quote {
+            if (Expr.splice(asIdsExpr))
+              TapirSchemaUtils.enumerationIdSchema[A](Expr.splice(sNameExpr), Expr.splice(singletonValuesExpr))
+            else if (Expr.splice(asStringsExpr))
+              TapirSchemaUtils.stringEnumSchema[A](
+                Expr.splice(sNameExpr),
+                Expr.splice(singletonValuesExpr),
+                Expr.splice(resolvedNamesListExpr)
+              )
+            else Expr.splice(coproductExpr)
+          }
         // All children are singletons — at runtime, branch on enumAsStrings
         case Some(singletonValuesExpr) =>
           Expr.quote {
@@ -664,30 +717,84 @@ trait SchemaMacrosImpl
                 Expr.splice(singletonValuesExpr),
                 Expr.splice(resolvedNamesListExpr)
               )
-            else
-              TapirSchemaUtils.coproductSchema[A](
-                Expr.splice(sNameExpr),
-                Expr.splice(subtypesListExpr),
-                Expr.splice(discriminatorExpr),
-                Expr.splice(resolvedNamesListExpr)
-              )
+            else Expr.splice(coproductExpr)
           }
         // Not all singletons — always coproduct
-        case None =>
-          Expr.quote {
-            TapirSchemaUtils.coproductSchema[A](
-              Expr.splice(sNameExpr),
-              Expr.splice(subtypesListExpr),
-              Expr.splice(discriminatorExpr),
-              Expr.splice(resolvedNamesListExpr)
-            )
-          }
+        case None => coproductExpr
       }
       schemaExpr = Expr.quote {
         TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))
       }
       result <- setCachedAndGet[A](sctx.cache, schemaExpr)
     } yield result
+  }
+
+  // Nested Option derivation
+
+  /** The schema of `O`, an `Option` nested directly in an `Option`: when the JSON library encodes it as an ADT (see
+    * `JsonSchemaConfig.nestedOptionsAsAdts`), a coproduct of `Some` and `None` (whose value is again in a nested
+    * position when it is an `Option`), otherwise an `Option` schema.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def deriveNestedOptionSchema[O: SchemaCtx](encoding: NestedOptionEncoding): MIO[Expr[Schema[O]]] = {
+    implicit val SchemaO: Type[Schema[O]] = TsTypes.TapirSchemaOf[O]
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    implicit val stringT: Type[String] = TsTypes.StringType
+    Type[O] match {
+      case IsOption(isOption) =>
+        import isOption.Underlying as Value
+        val valueSchemaMIO: MIO[Expr[Schema[Value]]] = Type[Value] match {
+          case IsOption(_) => deriveNestedOptionSchema[Value](encoding)(using sctx.nest[Value])
+          case _           => deriveSchemaRecursively[Value](using sctx.nest[Value])
+        }
+        valueSchemaMIO.map { valueSchema =>
+          val discriminatorExpr = sctx.jsonCfg.discriminatorFieldName
+          val singletonsAsStringsExpr = sctx.jsonCfg.singletonSubtypesAsStrings
+          val wrappedExpr = sctx.jsonCfg.wrapsSubtypesWithoutDiscriminator
+          val valueTypeName: Expr[String] = Expr(Type.plainPrint[Value])
+          Expr.quote {
+            if (Expr.splice(encoding.enabled))
+              TapirSchemaUtils
+                .nestedOptionAdtSchema[Value](
+                  Expr.splice(valueSchema),
+                  Expr.splice(valueTypeName),
+                  Expr.splice(encoding.someName),
+                  Expr.splice(encoding.noneName),
+                  Expr.splice(encoding.valueFieldName),
+                  Expr.splice(discriminatorExpr),
+                  Expr.splice(singletonsAsStringsExpr),
+                  Expr.splice(wrappedExpr)
+                )
+                .asInstanceOf[Schema[O]]
+            else TapirSchemaUtils.optionSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[O]]
+          }
+        }
+      case _ => deriveSchemaRecursively[O]
+    }
+  }
+
+  // Tuple derivation
+
+  /** A tuple encoded as a JSON array (see `JsonSchemaConfig.tuplesAsArrays`). */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def deriveTupleSchema[A: SchemaCtx](cc: CaseClass[A]): MIO[Expr[Schema[A]]] = {
+    implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    cc.primaryConstructor.totalParameters.flatten.toList
+      .foldLeft(MIO.pure(List.empty[Expr[Schema[Any]]])) { case (acc, (_, param)) =>
+        import param.tpe.Underlying as Element
+        acc.flatMap { results =>
+          deriveSchemaRecursively[Element](using sctx.nest[Element]).map { elementSchema =>
+            results :+ elementSchema.asInstanceOf[Expr[Schema[Any]]]
+          }
+        }
+      }
+      .map { elementSchemas =>
+        val elementsExpr = elementSchemas.foldRight(Expr.quote(Nil: List[Schema[Any]])) { (schemaExpr, acc) =>
+          Expr.quote(Expr.splice(schemaExpr).asInstanceOf[Schema[Any]] :: Expr.splice(acc))
+        }
+        Expr.quote(TapirSchemaUtils.tupleSchema[A](Expr.splice(elementsExpr)))
+      }
   }
 
   // SName computation

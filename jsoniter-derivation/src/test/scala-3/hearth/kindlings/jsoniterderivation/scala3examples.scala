@@ -109,3 +109,32 @@ enum JsoniterVehicle {
 // Scala 3 enum used in a case class
 case class WithColor(name: String, color: Color)
 case class WithVehicle(owner: String, vehicle: JsoniterVehicle)
+
+// jsoniter-scala NewEnumSpec parity
+enum ParityTrafficLight {
+  case Red, Yellow, Green
+}
+enum ParityJavaLike extends java.lang.Enum[ParityJavaLike] {
+  case `JDK-11`, `JDK-17`
+}
+enum ParityRgb(val rgb: Int) {
+  case Red extends ParityRgb(0xff0000)
+  case Green extends ParityRgb(0x00ff00)
+}
+enum ParityColorAdt(val rgb: Int) {
+  case Red extends ParityColorAdt(0xff0000)
+  case Mix(mix: Int) extends ParityColorAdt(mix)
+}
+enum ParitySide {
+  @hearth.kindlings.jsoniterderivation.annotations.named("0")
+  case Buy
+  @hearth.kindlings.jsoniterderivation.annotations.named("1")
+  case Sell
+}
+
+// nullable (`T | Null`) fields and transientNull (Spec ~2590, NewTypeSpec ~404)
+case class ParityNullableFields(s: String | Null, l: Int | Null, n: Int, ls: List[Int] | Null = null)
+object NullableRuntimeConfigs {
+  @volatile var default: JsoniterConfig = JsoniterConfig.default
+  @volatile var transientNull: JsoniterConfig = JsoniterConfig.default.withTransientNull
+}

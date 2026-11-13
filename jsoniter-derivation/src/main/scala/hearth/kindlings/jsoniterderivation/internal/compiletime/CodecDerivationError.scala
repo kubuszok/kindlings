@@ -31,9 +31,16 @@ private[compiletime] object CodecDerivationError {
   final case class UnexpectedParameterInSingleton(tpeName: String, context: String) extends CodecDerivationError {
     override def message: String = s"$context: $tpeName"
   }
-  final case class StringifiedOnNonNumeric(fieldName: String, tpeName: String, fieldTypeName: String)
-      extends CodecDerivationError {
+
+  /** jsoniter-scala's wording (Scala 2 flavour). */
+  final case class ParameterWithoutAccessor(paramName: String, tpeName: String) extends CodecDerivationError {
     override def message: String =
-      s"@stringified on field '$fieldName' of $tpeName requires a numeric type, but found $fieldTypeName"
+      s"'$paramName' parameter of '$tpeName' should be defined as 'val' or 'var' in the primary constructor."
+  }
+  final case class Collision(override val message: String) extends CodecDerivationError
+  final case class UnsupportedMapKey(keyTypeName: String) extends CodecDerivationError {
+    override def message: String =
+      s"Map key type $keyTypeName cannot be used as a JSON object key: provide an implicit JsonKeyCodec[$keyTypeName] " +
+        "or enable mapAsArray"
   }
 }

@@ -568,6 +568,8 @@ lazy val tapirOpenapiJsoniter = projectMatrix
     (dev.only1VersionInIDE ++ tapirOpenapiJsoniterPlatformDeps ++ nativeEvictionWarn) *
   )
   .dependsOn(jsoniterJson, jsoniterDerivation)
+  // end-to-end tests: KindlingsSchema (derived with a JsoniterConfig) -> JSON Schema -> JSON
+  .dependsOn(tapirSchemaDerivation % Test)
   .settings(
     moduleName := "kindlings-tapir-openapi-jsoniter",
     name := "kindlings-tapir-openapi-jsoniter",

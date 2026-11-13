@@ -338,4 +338,36 @@ final class UBJsonReader private (private val in: InputStream) {
 
   /** Get the current read position. */
   def currentPosition: Int = pos
+
+  // --- Marks (as jsoniter-scala's `JsonReader.setMark` / `rollbackToMark`) ---
+
+  private var markPos: Int = -1
+  private var markPeeked: Int = -1
+
+  /** Marks the current position, so that [[rollbackToMark]] can return to it (the input is a byte array). */
+  def setMark(): Unit = {
+    in.mark(Int.MaxValue)
+    markPos = pos
+    markPeeked = peeked
+  }
+
+  /** Returns to the position of the last [[setMark]]. */
+  def rollbackToMark(): Unit = {
+    if (markPos < 0) throw new IllegalStateException("expected preceding call of 'setMark()'")
+    in.reset()
+    pos = markPos
+    peeked = markPeeked
+    markPos = -1
+  }
+
+  /** A key which the next fields-only read of an already-opened object skips (the discriminator, when it was found by
+    * scanning the object rather than read as its first field).
+    */
+  private[ubjsonderivation] var pendingSkipKey: String = null
+
+  private[ubjsonderivation] def takePendingSkipKey(): String = {
+    val key = pendingSkipKey
+    pendingSkipKey = null
+    key
+  }
 }

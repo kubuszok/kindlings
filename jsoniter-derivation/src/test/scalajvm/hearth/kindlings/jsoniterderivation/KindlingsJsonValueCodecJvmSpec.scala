@@ -350,7 +350,7 @@ final class KindlingsJsonValueCodecJvmSpec extends MacroSuite {
 
       test("Java enum round-trip with snake_case mapper") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withEnumAsStrings
-          .withJavaEnumValueNameMapper(JsoniterConfig.snakeCase)
+          .withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
         val codec = KindlingsJsonValueCodec.derived[JavaColor]
         val json = writeToString[JavaColor](JavaColor.RED)(codec)
         assert(json.contains("r_e_d") || json.contains("red"), s"expected mapped name in: $json")

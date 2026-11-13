@@ -6,12 +6,13 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader, UBJsonValueCodec, UBJsonWriter}
-import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, stringified, transientField}
+import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, named, stringified, transientField}
 
 trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with UbjsonDerivationPolicy
+    with ProductTypes
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -19,6 +20,7 @@ trait CodecMacrosImpl
     with rules.EncoderHandleAsOptionRuleImpl
     with rules.EncoderHandleAsMapRuleImpl
     with rules.EncoderHandleAsCollectionRuleImpl
+    with rules.EncoderHandleAsTupleRuleImpl
     with rules.EncoderHandleAsSingletonRuleImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl
@@ -29,9 +31,11 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsOptionRuleImpl
     with rules.DecoderHandleAsMapRuleImpl
     with rules.DecoderHandleAsCollectionRuleImpl
+    with rules.DecoderHandleAsTupleRuleImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl
+    with rules.DecoderAbsentFieldSupport
     with rules.EncoderDerivationPolicyRuleImpl
     with rules.DecoderDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -40,6 +44,22 @@ trait CodecMacrosImpl
   // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "ubjsonDerivation"
+
+  /** Evaluates the config at compile time when possible; `Some` enables the optimized codegen. Overridden per Scala
+    * version to follow immutable local `val`s (Scala 3 inline-argument proxies) and to refuse `var`s, as in
+    * jsoniter-derivation (see docs/research/hearth-gap-semieval-local-vals-and-vars.md).
+    */
+  protected def semiEvalConfig(configExpr: Expr[UBJsonConfig]): Option[UBJsonConfig] =
+    configExpr.semiEval.toOption.filter(usableAtCompileTime)
+
+  /** `semiEval` may return a config whose function-valued fields (user lambdas, e.g. a `PartialFunction` name mapper)
+    * cannot be called at compile time (they throw `UndeclaredThrowableException`, see
+    * docs/research/hearth-gap-semieval-local-vals-and-vars.md section 4): such configs are runtime configs.
+    */
+  private def usableAtCompileTime(config: UBJsonConfig): Boolean =
+    scala.util.Try {
+      config.fieldNameMapper("a") + config.adtLeafClassNameMapper("a.B") + config.javaEnumValueNameMapper("A")
+    }.isSuccess
 
   // Entrypoints
 
@@ -52,7 +72,12 @@ trait CodecMacrosImpl
     implicit val UBJsonWriterT: Type[UBJsonWriter] = CTypes.UBJsonWriter
     implicit val UnitT: Type[Unit] = CTypes.Unit
 
-    deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]]("UBJsonValueCodec.derived", configExpr) {
+    val macroName = "UBJsonValueCodec.derived"
+    val evConfig = semiEvalConfig(configExpr)
+    // Contradictory configs (jsoniter-scala's messages): a compile-time error for configs known then, otherwise an
+    // IllegalArgumentException when the codec is created.
+    evConfig.flatMap(UBJsonConfig.configError).foreach(msg => Environment.reportErrorAndAbort(s"$macroName: $msg"))
+    val codec = deriveCodecFromCtxAndAdaptForEntrypoint[A, UBJsonValueCodec[A]](macroName, configExpr) {
       case (encodeFn, decodeFn, nullValueExpr) =>
         Expr.quote {
           hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationFactories.codecInstance[A](
@@ -61,6 +86,180 @@ trait CodecMacrosImpl
             (writer: UBJsonWriter, value: A) => Expr.splice(encodeFn(Expr.quote(value), Expr.quote(writer), configExpr))
           )
         }
+    }
+    if (evConfig.isDefined) codec
+    else
+      Expr.quote {
+        UBJsonConfig.validate(Expr.splice(configExpr))
+        Expr.splice(codec)
+      }
+  }
+
+  // jsoniter-scala naming of fields and ADT leaves (shared design with jsoniter-derivation's CodecMacrosImpl)
+
+  /** Java enums, including Scala 3 enums extending `java.lang.Enum` (which Hearth's `isJavaEnum` does not report). */
+  private[compiletime] def isJavaEnumType[A: Type]: Boolean =
+    Type[A].isJavaEnum || Type[A] <:< Type.of[java.lang.Enum[?]]
+
+  /** For a Scala 3 union type with `Null` (`T | Null`, jsoniter-scala's "nullable" types): `T`. Always `None` on Scala 2.
+    * Such values are `null` or a `T`; as case class fields they are optional (absent is `null`) and `transientNull`
+    * skips them when `null`.
+    */
+  protected def nullableUnionUnderlying[A: Type]: Option[??] = None
+
+  /** The default value of a constructor parameter. A default of a non-first parameter list may depend on the preceding
+    * parameters: it is only available when `argumentValues` provides all of them (as in jsoniter-scala, which computes
+    * such defaults from the decoded/encoded values).
+    */
+  private[compiletime] def parameterDefault(param: Parameter, argumentValues: Map[String, Expr_??]): Option[Expr_??] =
+    if (!param.hasDefault) None
+    else
+      param.defaultValue.flatMap { method =>
+        // untyped: the value parameters of a generic default method are only typed once its type arguments are applied
+        val needed = method.asUntyped.parameters.flatMap(_.keys.toList)
+        if (!needed.forall(argumentValues.contains)) None
+        else
+          foldInstanceFree(method, "Default value")(
+            onTypes = _ => Map.empty,
+            onValues = _ => argumentValues.filter { case (name, _) => needed.contains(name) }
+          ).toOption
+      }
+
+  /** `@transientField`, or `scala.transient` with `scalaTransientSupport` (when the config is known at compile time).
+    */
+  private[compiletime] def isTransientParam[A: Type](
+      param: Parameter,
+      evaluatedConfig: Option[UBJsonConfig]
+  ): Boolean = {
+    implicit val TransientFieldT: Type[transientField] = CTypes.TransientField
+    hasAnnotationType[transientField](param) ||
+    (evaluatedConfig.exists(_.scalaTransientSupport) && hasScalaTransient[A](param))
+  }
+
+  /** `scala.transient` on a parameter / its field. */
+  private[compiletime] def hasScalaTransient[A: Type](param: Parameter): Boolean = {
+    implicit val ScalaTransientT: Type[scala.transient] = CTypes.ScalaTransient
+    // `scala.transient` targets fields (`@field`), so it is found on the case field rather than on the parameter.
+    def onCaseField: Boolean = CaseClass.parse[A].toOption.exists { cc =>
+      cc.caseFields.exists(f => f.name.trim == param.name && f.hasAnnotationOfType[scala.transient])
+    } || Type[A].unsortedMethodsNamed(param.name).exists(_.hasAnnotationOfType[scala.transient])
+    hasAnnotationType[scala.transient](param) || onCaseField
+  }
+
+  /** A `scala.transient` (and not `@transientField`) parameter with a config known only at runtime: transient only when
+    * `config.scalaTransientSupport` is on, so the generic codegen checks the flag (skip on write, default on read).
+    */
+  private[compiletime] def isTransientAtRuntimeOnly[A: Type](
+      param: Parameter,
+      evaluatedConfig: Option[UBJsonConfig]
+  ): Boolean = {
+    implicit val TransientFieldT: Type[transientField] = CTypes.TransientField
+    evaluatedConfig.isEmpty && !hasAnnotationType[transientField](param) && hasScalaTransient[A](param)
+  }
+
+  /** The leaves of an ADT / enum (nested sealed hierarchies flattened), and as in jsoniter-scala the type itself (last,
+    * so that its subtypes match first) when it is a non-abstract sealed class.
+    */
+  private[compiletime] def adtLeaves[A: Type](enumm: Enum[A]): List[(String, ??<:[A])] = {
+    val children: List[(String, ??<:[A])] = enumm.exhaustiveChildren match {
+      case Some(ec) => ec.toList
+      case None     => enumm.directChildren.toList
+    }
+    val isBaseALeaf = !Type[A].isAbstract && !Type[A].isTrait && !Type[A].isEnumeration && !isJavaEnumType[A] &&
+      !children.exists(_._2.Underlying =:= Type[A]) && ProductType.asLeaf[A].isDefined
+    if (isBaseALeaf) children :+ (Type[A].shortName -> Type[A].as_??<:[A]) else children
+  }
+
+  /** The key override of a field: `@fieldName`, or (as jsoniter-scala, whose only field-rename annotation it is)
+    * `@named`.
+    */
+  private[compiletime] def fieldNameOverride(param: Parameter): Option[String] = {
+    implicit val FieldNameT: Type[fieldNameAnn] = CTypes.FieldName
+    implicit val NamedT: Type[named] = CTypes.Named
+    getAnnotationStringArg[fieldNameAnn](param).orElse(getAnnotationStringArg[named](param))
+  }
+
+  /** The `@named` override of an ADT leaf's name, if any. */
+  private[compiletime] def namedAnnotationOf[Child: Type]: Option[String] = {
+    implicit val NamedT: Type[named] = CTypes.Named
+    getTypeAnnotationStringArg[named, Child]
+  }
+
+  /** The fully-qualified name of ADT leaf `Child` of `A` passed to `adtLeafClassNameMapper`, as in jsoniter-scala
+    * (`pkg.Outer.Leaf`, without `$`/`.type` suffixes and type arguments; Scala 3 enum cases as `pkg.Enum.Case`).
+    */
+  private[compiletime] def adtLeafFullName[A: Type, Child: Type](childName: String): String = {
+    def clean(printed: String): String = {
+      val noArgs = printed.indexOf('[') match {
+        case -1 => printed
+        case i  => printed.substring(0, i)
+      }
+      noArgs.stripSuffix(".type").stripSuffix("$")
+    }
+    val printed = clean(Type.plainPrint[Child])
+    if (printed == childName || printed.endsWith("." + childName)) printed
+    else clean(Type.plainPrint[A]) + "." + childName
+  }
+
+  /** The name of an enum case / ADT leaf `Child` of `A`, as in jsoniter-scala: Java enum values use
+    * `javaEnumValueNameMapper`, `scala.Enumeration` values their `toString`, other leaves `@named` or
+    * `adtLeafClassNameMapper` of their fully-qualified names.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def enumLeafNameExpr[A: Type, Child: Type](
+      childName: String,
+      config: Expr[UBJsonConfig],
+      evaluatedConfig: Option[UBJsonConfig]
+  ): Expr[String] = {
+    implicit val StringT: Type[String] = CTypes.String
+    if (isJavaEnumType[A]) evaluatedConfig match {
+      case Some(c) => Expr(c.javaEnumValueNameMapper(childName))
+      case None    => Expr.quote(Expr.splice(config).javaEnumValueNameMapper(Expr.splice(Expr(childName))))
+    }
+    else if (Type[A].isEnumeration)
+      SingletonValue.unapply(Type[Child]) match {
+        case Some(sv) => Expr.quote(Expr.splice(sv.singletonExpr).toString)
+        case None     => Expr(childName)
+      }
+    else
+      namedAnnotationOf[Child] match {
+        case Some(name) => Expr(name)
+        case None       =>
+          val fullName = adtLeafFullName[A, Child](childName)
+          evaluatedConfig match {
+            case Some(c) => Expr(c.adtLeafClassNameMapper(fullName))
+            case None    => Expr.quote(Expr.splice(config).adtLeafClassNameMapper(Expr.splice(Expr(fullName))))
+          }
+      }
+  }
+
+  /** Fails derivation when keys of a case class collide (after `fieldNameMapper` / `@fieldName` / `@named`), as
+    * jsoniter-scala does. Only checked when the names are known at compile time.
+    */
+  private[compiletime] def checkFieldNameCollisions[A: Type](names: List[String]): MIO[Unit] = {
+    val collisions = names.groupBy(identity).collect { case (n, ns) if ns.size > 1 => n }.toList.sorted
+    if (collisions.isEmpty) MIO.pure(())
+    else {
+      val err = CodecDerivationError.Collision(
+        s"Duplicated key(s) defined for '${Type[A].prettyPrint}': ${collisions.mkString("'", "', '", "'")}. " +
+          "Keys are derived from field names of the class that are mapped by the 'UBJsonConfig.fieldNameMapper' " +
+          "function or can be overridden by '@fieldName' / '@named' annotation(s). Result keys should be unique."
+      )
+      Log.error(err.message) >> MIO.fail(err)
+    }
+  }
+
+  /** Fails derivation when ADT leaves map to the same name, as jsoniter-scala does (compile-time names only). */
+  private[compiletime] def checkDiscriminatorValueCollisions[A: Type](names: List[String]): MIO[Unit] = {
+    val collisions = names.groupBy(identity).collect { case (n, ns) if ns.size > 1 => n }.toList.sorted
+    if (collisions.isEmpty) MIO.pure(())
+    else {
+      val err = CodecDerivationError.Collision(
+        s"Duplicated discriminator defined for ADT base '${Type[A].prettyPrint}': ${collisions.mkString("'", "', '", "'")}. " +
+          "Values for leaf classes of ADT that are returned by the 'UBJsonConfig.adtLeafClassNameMapper' function " +
+          s"(or '@named' annotations, or 'javaEnumValueNameMapper' for Java enums) should be unique. Names: ${names.mkString(", ")}"
+      )
+      Log.error(err.message) >> MIO.fail(err)
     }
   }
 
@@ -96,7 +295,7 @@ trait CodecMacrosImpl
           val selfType: Option[??] = Some(Type[A].as_??)
 
           // semiEval: evaluate config at compile time for optimized codegen.
-          val evConfig: Option[UBJsonConfig] = configExpr.semiEval.toOption
+          val evConfig: Option[UBJsonConfig] = semiEvalConfig(configExpr)
 
           // Encoder
           val encMIO: MIO[(Expr[A], Expr[UBJsonWriter], Expr[UBJsonConfig]) => Expr[Unit]] = {
@@ -159,9 +358,10 @@ trait CodecMacrosImpl
       ) { (errorLogs, errors) =>
         val errorsRendered = errors
           .map { e =>
-            e.getMessage.split("\n").toList match {
+            val msg = Option(e.getMessage).getOrElse(e.toString)
+            msg.split("\n").toList match {
               case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
+              case _            => "  - " + msg
             }
           }
           .mkString("\n")
@@ -197,7 +397,7 @@ trait CodecMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveNullValue[A: Type]: MIO[Expr[A]] = MIO.pure {
-    if (Type[A] <:< Type.of[AnyRef]) Expr.quote(null.asInstanceOf[A])
+    if (Type[A] <:< Type.of[AnyRef] || nullableUnionUnderlying[A].isDefined) Expr.quote(null.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Boolean]) Expr.quote(false.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Byte]) Expr.quote(0.toByte.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Short]) Expr.quote(0.toShort.asInstanceOf[A])
@@ -309,21 +509,24 @@ trait CodecMacrosImpl
   // Encoder derivation
 
   def deriveEncoderRecursively[A: EncoderCtx]: MIO[Expr[Unit]] =
-    // Cache ALL types (including built-ins, options, collections) as helper defs.
-    ectx.getHelper[A].flatMap {
-      case Some(helperCall) =>
-        Log.info(s"Using cached encoder for ${Type[A].prettyPrint}") >>
-          MIO.pure(helperCall(ectx.value, ectx.writer, ectx.config))
-      case None =>
-        for {
-          _ <- ectx.setHelper[A] { (value, writer, config) =>
-            deriveEncoderViaRules[A](using ectx.nestInCache(value, writer, config))
-          }
-          helper <- ectx.getHelper[A]
-        } yield helper.get(ectx.value, ectx.writer, ectx.config)
-    }
+    // `T | Null` is not cached (`String | Null` =:= `String` would share the helper of `String`): inlined.
+    if (nullableUnionUnderlying[A].isDefined) deriveEncoderViaRules[A]
+    // Cache ALL other types (including built-ins, options, collections) as helper defs.
+    else
+      ectx.getHelper[A].flatMap {
+        case Some(helperCall) =>
+          Log.info(s"Using cached encoder for ${Type[A].prettyPrint}") >>
+            MIO.pure(helperCall(ectx.value, ectx.writer, ectx.config))
+        case None =>
+          for {
+            _ <- ectx.setHelper[A] { (value, writer, config) =>
+              deriveEncoderViaRules[A](using ectx.nestInCache(value, writer, config))
+            }
+            helper <- ectx.getHelper[A]
+          } yield helper.get(ectx.value, ectx.writer, ectx.config)
+      }
 
-  private def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Unit]] =
+  private[compiletime] def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Unit]] =
     Log
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
@@ -336,6 +539,7 @@ trait CodecMacrosImpl
           // so the standalone EncoderHandleAsMapRule is no longer in the chain (its object is kept for
           // deriveMapEntries).
           EncoderHandleAsCollectionRule,
+          EncoderHandleAsTupleRule,
           EncoderHandleAsSingletonRule,
           EncoderHandleAsCaseClassRule,
           EncoderHandleAsEnumRule
@@ -449,21 +653,24 @@ trait CodecMacrosImpl
   // Decoder derivation
 
   def deriveDecoderRecursively[A: DecoderCtx]: MIO[Expr[A]] =
-    // Cache ALL types (including built-ins, options, collections) as helper defs.
-    dctx.getHelper[A].flatMap {
-      case Some(helperCall) =>
-        Log.info(s"Using cached decoder for ${Type[A].prettyPrint}") >>
-          MIO.pure(helperCall(dctx.reader, dctx.config))
-      case None =>
-        for {
-          _ <- dctx.setHelper[A] { (reader, config) =>
-            deriveDecoderViaRules[A](using dctx.nestInCache(reader, config))
-          }
-          helper <- dctx.getHelper[A]
-        } yield helper.get(dctx.reader, dctx.config)
-    }
+    // `T | Null` is not cached (`String | Null` =:= `String` would share the helper of `String`): inlined.
+    if (nullableUnionUnderlying[A].isDefined) deriveDecoderViaRules[A]
+    // Cache ALL other types (including built-ins, options, collections) as helper defs.
+    else
+      dctx.getHelper[A].flatMap {
+        case Some(helperCall) =>
+          Log.info(s"Using cached decoder for ${Type[A].prettyPrint}") >>
+            MIO.pure(helperCall(dctx.reader, dctx.config))
+        case None =>
+          for {
+            _ <- dctx.setHelper[A] { (reader, config) =>
+              deriveDecoderViaRules[A](using dctx.nestInCache(reader, config))
+            }
+            helper <- dctx.getHelper[A]
+          } yield helper.get(dctx.reader, dctx.config)
+      }
 
-  private def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[A]] =
+  private[compiletime] def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[A]] =
     Log
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
@@ -476,6 +683,7 @@ trait CodecMacrosImpl
           // so the standalone DecoderHandleAsMapRule is no longer in the chain (its object is kept for
           // decodeMapEntries).
           DecoderHandleAsCollectionRule,
+          DecoderHandleAsTupleRule,
           DecoderHandleAsSingletonRule,
           DecoderHandleAsCaseClassRule,
           DecoderHandleAsEnumRule
@@ -514,6 +722,8 @@ trait CodecMacrosImpl
     val FieldName: Type.Lazy[fieldNameAnn] = Type.Lazy(Type.of[fieldNameAnn])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
     val Stringified: Type.Lazy[stringified] = Type.Lazy(Type.of[stringified])
+    val Named: Type.Lazy[named] = Type.Lazy(Type.of[named])
+    val ScalaTransient: Type.Lazy[scala.transient] = Type.Lazy(Type.of[scala.transient])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])

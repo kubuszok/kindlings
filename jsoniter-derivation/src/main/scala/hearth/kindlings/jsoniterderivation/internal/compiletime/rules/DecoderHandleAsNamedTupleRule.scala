@@ -70,7 +70,7 @@ trait DecoderHandleAsNamedTupleRuleImpl {
             .parTraverse { case ((fName, param), index) =>
               import param.tpe.Underlying as Field
               Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decodeFn =>
+                deriveFieldDecoder[Field](using Type[Field], dctx.copy(stringified = Some(false))).map { decodeFn =>
                   val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
                     Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
                   }
@@ -95,12 +95,25 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                 .traverse { decodedValuesExpr =>
                   val fieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
+                  val absentFieldFillAll: List[Expr[Unit]] = absentFieldFillExprs(
+                    indexedFields.map { case ((fName, param), index) => (fName, param, index, None) },
+                    decodedValuesExpr,
+                    dctx.config,
+                    dctx.reader
+                  )
                   foldInstanceFree(constructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
                   ) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                    case Left(error)          =>
+                    case Right(constructExpr) =>
+                      val construct = constructExpr.value.asInstanceOf[Expr[A]]
+                      MIO.pure(absentFieldFillAll.foldRight(construct) { (fill, rest) =>
+                        Expr.quote {
+                          Expr.splice(fill)
+                          Expr.splice(rest)
+                        }
+                      })
+                    case Left(error) =>
                       val err = CodecDerivationError.CannotConstructType(
                         Type[A].prettyPrint,
                         isSingleton = false,
@@ -125,7 +138,7 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                       Expr.splice {
                         fieldMappings.foldRight(Expr.quote {
                           if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
-                          else reader.decodeError("unexpected field: " + fieldName)
+                          else JsoniterDerivationUtils.unexpectedField(reader, fieldName)
                         }: Expr[Unit]) { case ((name, index, decodeFnErased), elseExpr) =>
                           Expr.quote {
                             if (fieldName == Expr.splice(dctx.config).fieldNameMapper(Expr.splice(Expr(name)))) {

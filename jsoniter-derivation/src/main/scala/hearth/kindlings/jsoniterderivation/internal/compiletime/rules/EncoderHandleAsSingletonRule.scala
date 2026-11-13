@@ -14,8 +14,10 @@ trait EncoderHandleAsSingletonRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
         SingletonValue.parse[A].toEither match {
           case Right(_) =>
+            val discriminator = writeAlwaysEmittedDiscriminator[A]
             MIO.pure(Rule.matched(Expr.quote {
               Expr.splice(ectx.writer).writeObjectStart()
+              Expr.splice(discriminator)
               Expr.splice(ectx.writer).writeObjectEnd()
             }))
           case Left(reason) =>

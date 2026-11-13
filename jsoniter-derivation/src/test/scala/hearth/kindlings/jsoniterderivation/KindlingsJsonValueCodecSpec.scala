@@ -340,17 +340,17 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         }
       }
 
-      test("case-object-only sealed trait wrapper-mode produces correct JSON (#196)") {
+      test("case-object-only sealed trait wrapper-mode produces a string, as jsoniter-scala (#196)") {
         val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
         val json = writeToString[CardinalDirection](North)(codec)
-        json ==> """{"North":{}}"""
+        json ==> "\"North\""
       }
 
       test("mixed enum wrapper-mode case object round-trip (#196)") {
         val codec = KindlingsJsonValueCodec.derived[MixedEnum]
         val pending: MixedEnum = Pending
         val json = writeToString(pending)(codec)
-        json ==> """{"Pending":{}}"""
+        json ==> "\"Pending\""
         val decoded = readFromString[MixedEnum](json)(codec)
         decoded ==> pending
       }
@@ -404,18 +404,20 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       test("enum as string with constructor name transform") {
         implicit val config: JsoniterConfig =
-          JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toLowerCase)
+          JsoniterConfig(
+            enumAsStrings = true,
+            adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toLowerCase)
+          )
         val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
         writeToString[CardinalDirection](North)(codec) ==> "\"north\""
         readFromString[CardinalDirection]("\"north\"")(codec) ==> (North: CardinalDirection)
       }
 
-      test("enumAsStrings=false still uses wrapper-style") {
-        implicit val config: JsoniterConfig = JsoniterConfig(enumAsStrings = false)
+      test("enumAsStrings=false with a discriminator uses objects") {
+        implicit val config: JsoniterConfig =
+          JsoniterConfig(enumAsStrings = false, discriminatorFieldName = Some("type"))
         val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
-        val json = writeToString[CardinalDirection](North)(codec)
-        assert(json.contains("\"North\""))
-        assert(json.contains("{"))
+        writeToString[CardinalDirection](North)(codec) ==> """{"type":"North"}"""
       }
     }
 
@@ -625,7 +627,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       test("custom constructor name transform") {
         implicit val config: JsoniterConfig =
-          JsoniterConfig(adtLeafClassNameMapper = _.toLowerCase)
+          JsoniterConfig(adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toLowerCase))
         val codec = KindlingsJsonValueCodec.derived[Shape]
         val value: Shape = Circle(5.0)
         val json = writeToString(value)(codec)
@@ -673,11 +675,11 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     group("error handling") {
 
-      test("missing field uses null/default value") {
+      test("missing required field fails (as in jsoniter-scala)") {
         val codec = KindlingsJsonValueCodec.derived[SimplePerson]
         val json = """{"name":"Alice"}"""
-        val decoded = readFromString[SimplePerson](json)(codec)
-        decoded ==> SimplePerson("Alice", 0)
+        val error = intercept[JsonReaderException](readFromString[SimplePerson](json)(codec))
+        assert(error.getMessage.contains("missing required field \"age\""), error.getMessage)
       }
     }
 
@@ -913,16 +915,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         decoded ==> value
       }
 
-      test("@stringified on non-numeric field is compile error") {
-        compileErrors(
-          """
-          import hearth.kindlings.jsoniterderivation.annotations.stringified
-          case class BadStringified(name: String, @stringified label: String)
-          hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[BadStringified]
-          """
-        ).check(
-          "@stringified on field 'label'"
-        )
+      test("@stringified on a String field has no effect (as in jsoniter-scala)") {
+        val codec = KindlingsJsonValueCodec.derived[StringifiedString]
+        writeToString(StringifiedString("a", "b"))(codec) ==> """{"name":"a","label":"b"}"""
+        readFromString[StringifiedString]("""{"name":"a","label":"b"}""")(codec) ==> StringifiedString("a", "b")
       }
     }
 
@@ -1085,7 +1081,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       test("encodingOnly codec throws on decode") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withEncodingOnly
         val codec = KindlingsJsonValueCodec.derived[SimplePerson]
-        intercept[UnsupportedOperationException] {
+        intercept[NotImplementedError] {
           readFromString[SimplePerson]("""{"name":"Alice","age":30}""")(codec)
         }
       }
@@ -1099,7 +1095,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
       test("decodingOnly codec throws on encode") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withDecodingOnly
         val codec = KindlingsJsonValueCodec.derived[SimplePerson]
-        intercept[UnsupportedOperationException] {
+        intercept[NotImplementedError] {
           writeToString(SimplePerson("Alice", 30))(codec)
         }
       }
@@ -1107,20 +1103,19 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     group("isStringified (global)") {
 
-      test("global isStringified encodes numeric fields as strings") {
+      test("global isStringified does not apply to case class fields (as in jsoniter-scala)") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
         val codec = KindlingsJsonValueCodec.derived[WithNumericFields]
-        val json = writeToString(WithNumericFields(42, 3.14, "hello"))(codec)
-        assert(json.contains("\"42\""))
-        assert(json.contains("\"3.14\""))
-        assert(json.contains("\"hello\""))
+        writeToString(WithNumericFields(42, 3.14, "hello"))(codec) ==> """{"count":42,"score":3.14,"name":"hello"}"""
+        readFromString[WithNumericFields]("""{"count":42,"score":3.14,"name":"hello"}""")(codec) ==>
+          WithNumericFields(42, 3.14, "hello")
       }
 
-      test("global isStringified decodes numeric fields from strings") {
+      test("global isStringified applies to the root value down to the first case class") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withStringified
-        val codec = KindlingsJsonValueCodec.derived[WithNumericFields]
-        val json = """{"count":"42","score":"3.14","name":"hello"}"""
-        readFromString[WithNumericFields](json)(codec) ==> WithNumericFields(42, 3.14, "hello")
+        val codec = KindlingsJsonValueCodec.derived[List[Map[String, Long]]]
+        writeToString(List(Map("a" -> 1L)))(codec) ==> """[{"a":"1"}]"""
+        readFromString[List[Map[String, Long]]]("""[{"a":"1"}]""")(codec) ==> List(Map("a" -> 1L))
       }
 
       test("without isStringified, numeric fields use normal encoding") {
@@ -1340,7 +1335,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireDefaultFields
         val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
         val json = """{"name":"Alice"}"""
-        intercept[IllegalArgumentException] {
+        intercept[JsonReaderException] {
           readFromString[WithDefaultFields](json)(codec)
         }
       }
@@ -1363,13 +1358,18 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         readFromString[WithCollectionFields](json)(codec) ==> WithCollectionFields("Alice", List("a"), Map("x" -> 1))
       }
 
-      test("throws when collection field is missing") {
+      test("throws when collection field without default is missing") {
+        implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireCollectionFields
+        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        intercept[JsonReaderException] {
+          readFromString[WithListField]("{}")(codec)
+        }
+      }
+
+      test("collection field with a default value uses the default (as in jsoniter-scala)") {
         implicit val config: JsoniterConfig = JsoniterConfig.default.withRequireCollectionFields
         val codec = KindlingsJsonValueCodec.derived[WithCollectionFields]
-        val json = """{"name":"Alice"}"""
-        intercept[IllegalArgumentException] {
-          readFromString[WithCollectionFields](json)(codec)
-        }
+        readFromString[WithCollectionFields]("""{"name":"Alice"}""")(codec) ==> WithCollectionFields("Alice")
       }
 
       test("round-trip works when all fields present") {
@@ -1415,14 +1415,12 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         readFromString[WithBigDecimalField](json)(codec) ==> WithBigDecimalField(BigDecimal("123.456"))
       }
 
-      test("rejects BigDecimal exceeding precision limit") {
+      test("rounds BigDecimal to the precision limit (as in jsoniter-scala)") {
         implicit val config: JsoniterConfig =
           JsoniterConfig.default.withBigDecimalPrecision(5)
         val codec = KindlingsJsonValueCodec.derived[WithBigDecimalField]
         val json = """{"value":123456.789}"""
-        intercept[JsonReaderException] {
-          readFromString[WithBigDecimalField](json)(codec)
-        }
+        readFromString[WithBigDecimalField](json)(codec) ==> WithBigDecimalField(BigDecimal("1.2346E+5"))
       }
 
       test("accepts BigDecimal within custom precision") {
@@ -1444,7 +1442,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       test("rejects BigInt exceeding digits limit") {
         implicit val config: JsoniterConfig =
-          JsoniterConfig.default.withBigDecimalDigitsLimit(3)
+          JsoniterConfig.default.withBigIntDigitsLimit(3)
         val codec = KindlingsJsonValueCodec.derived[WithBigIntField]
         val json = """{"value":12345}"""
         intercept[JsonReaderException] {
@@ -1484,30 +1482,24 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         readFromString[WithListField](json)(codec) ==> WithListField(List(1, 2, 3))
       }
 
-      test("rejects collection exceeding limit") {
+      test("rejects set exceeding limit") {
         implicit val config: JsoniterConfig =
           JsoniterConfig.default.withSetMaxInsertNumber(2)
-        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        val codec = KindlingsJsonValueCodec.derived[WithSetField]
         val json = """{"items":[1,2,3]}"""
         intercept[JsonReaderException] {
-          readFromString[WithListField](json)(codec)
+          readFromString[WithSetField](json)(codec)
         }
       }
     }
 
     group("feature interactions") {
 
-      test("transientDefault + requireDefaultFields: encoder omits defaults, decoder requires them") {
-        implicit val config: JsoniterConfig =
-          JsoniterConfig.default.withTransientDefault.withRequireDefaultFields
-        val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
-        // Encoder omits default values
-        val json = writeToString(WithDefaultFields("Alice", 25, true))(codec)
-        json ==> """{"name":"Alice"}"""
-        // Decoder requires all fields — missing defaults cause error
-        intercept[IllegalArgumentException] {
-          readFromString[WithDefaultFields](json)(codec)
-        }
+      test("transientDefault + requireDefaultFields is rejected when the codec is created (runtime config)") {
+        // A compile-time-known config with these flags is a compile error; a runtime one fails as jsoniter-scala would.
+        implicit val config: JsoniterConfig = ConflictingRuntimeConfigs.transientDefaultRequireDefault
+        val error = intercept[IllegalArgumentException](KindlingsJsonValueCodec.derived[WithDefaultFields])
+        error.getMessage ==> "'requireDefaultFields' and 'transientDefault' cannot be 'true' simultaneously"
       }
 
       test("transientNone + @fieldName on Option field") {
@@ -1546,17 +1538,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         readFromString[WithStringifiedInt](json)(codec) ==> value
       }
 
-      test("requireCollectionFields + transientEmpty") {
-        implicit val config: JsoniterConfig =
-          JsoniterConfig.default.withRequireCollectionFields.withTransientEmpty
-        val codec = KindlingsJsonValueCodec.derived[WithCollectionFields]
-        // Encoder omits empty collections
-        val json = writeToString(WithCollectionFields("Alice", Nil, Map.empty))(codec)
-        assert(!json.contains("tags"))
-        // Decoder requires collection fields — missing ones cause error
-        intercept[IllegalArgumentException] {
-          readFromString[WithCollectionFields](json)(codec)
-        }
+      test("requireCollectionFields + transientEmpty is rejected when the codec is created (runtime config)") {
+        implicit val config: JsoniterConfig = ConflictingRuntimeConfigs.requireCollectionTransientEmpty
+        val error = intercept[IllegalArgumentException](KindlingsJsonValueCodec.derived[WithListField])
+        error.getMessage ==> "'requireCollectionFields' and 'transientEmpty' cannot be 'true' simultaneously"
       }
 
       test("mapAsArray + mapMaxInsertNumber DoS limit") {
@@ -1575,7 +1560,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
       test("enumAsStrings + adtLeafClassNameMapper") {
         implicit val config: JsoniterConfig =
-          JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toLowerCase)
+          JsoniterConfig(
+            enumAsStrings = true,
+            adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toLowerCase)
+          )
         val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
         val json = writeToString[CardinalDirection](North)(codec)
         json ==> "\"north\""
@@ -1595,12 +1583,12 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
           JsoniterConfig.default.withDecodingOnly.withRequireDefaultFields
         val codec = KindlingsJsonValueCodec.derived[WithDefaultFields]
         // Encoding throws
-        val _ = intercept[UnsupportedOperationException] {
+        val _ = intercept[NotImplementedError] {
           writeToString(WithDefaultFields("Alice"))(codec)
         }
         // Decoding respects requireDefaultFields
         val json = """{"name":"Alice"}"""
-        intercept[IllegalArgumentException] {
+        intercept[JsonReaderException] {
           readFromString[WithDefaultFields](json)(codec)
         }
       }
@@ -1613,7 +1601,7 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val json = writeToString(WithDefaultFields("Alice", 25, true))(codec)
         json ==> """{"name":"Alice"}"""
         // Decoding throws
-        intercept[UnsupportedOperationException] {
+        intercept[NotImplementedError] {
           readFromString[WithDefaultFields](json)(codec)
         }
       }
@@ -2222,7 +2210,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     test("enumAsStrings + constructorNameMapper: names are transformed AND encoded as strings") {
       implicit val config: JsoniterConfig =
-        JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toUpperCase)
+        JsoniterConfig(
+          enumAsStrings = true,
+          adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toUpperCase)
+        )
       val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
       // All directions should encode as upper-case strings
       writeToString[CardinalDirection](North)(codec) ==> "\"NORTH\""
@@ -2236,7 +2227,10 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     test("enumAsStrings + constructorNameMapper: original untransformed name is rejected") {
       implicit val config: JsoniterConfig =
-        JsoniterConfig(enumAsStrings = true, adtLeafClassNameMapper = _.toUpperCase)
+        JsoniterConfig(
+          enumAsStrings = true,
+          adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toUpperCase)
+        )
       val codec = KindlingsJsonValueCodec.derived[CardinalDirection]
       // Original mixed-case name should fail decoding
       intercept[JsonReaderException] {
@@ -2684,13 +2678,19 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
 
     group("setMaxInsertNumber = 2 (explicit limit)") {
 
-      test("collection with 3 elements rejected") {
+      test("set with 3 elements rejected") {
         implicit val config: JsoniterConfig = JsoniterConfig(setMaxInsertNumber = 2)
-        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        val codec = KindlingsJsonValueCodec.derived[WithSetField]
         val json = """{"items":[1,2,3]}"""
         intercept[JsonReaderException] {
-          readFromString[WithListField](json)(codec)
+          readFromString[WithSetField](json)(codec)
         }
+      }
+
+      test("non-set collection is not limited (as in jsoniter-scala)") {
+        implicit val config: JsoniterConfig = JsoniterConfig(setMaxInsertNumber = 2)
+        val codec = KindlingsJsonValueCodec.derived[WithListField]
+        readFromString[WithListField]("""{"items":[1,2,3]}""")(codec) ==> WithListField(List(1, 2, 3))
       }
 
       test("collection within limit accepted") {
@@ -2707,6 +2707,8 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val d = JsoniterConfig.jsoniterScalaDefaults
         assertEquals(d.discriminatorFieldName, Some("type"))
         assertEquals(d.transientDefault, true)
+        assertEquals(d.transientEmpty, true)
+        assertEquals(d.transientNone, true)
         assertEquals(d.checkFieldDuplication, true)
         assertEquals(d.mapMaxInsertNumber, 1024)
         assertEquals(d.setMaxInsertNumber, 1024)
@@ -2724,6 +2726,15 @@ final class KindlingsJsonValueCodecSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derived[AllOptionalWithDefaults]
         val json = writeToString(AllOptionalWithDefaults())(codec)
         assert(!json.contains("\"x\""), s"expected default field omitted in: $json")
+      }
+
+      test("preset omits None and empty fields, and reads them back (as jsoniter-scala)") {
+        implicit val config: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults
+        val codec = KindlingsJsonValueCodec.derived[AbsentFieldsRecord]
+        val value = AbsentFieldsRecord("a", None, 7, Nil, Vector.empty, Map.empty)
+        val json = writeToString(value)(codec)
+        json ==> """{"name":"a"}"""
+        readFromString[AbsentFieldsRecord](json)(codec) ==> value
       }
     }
   }

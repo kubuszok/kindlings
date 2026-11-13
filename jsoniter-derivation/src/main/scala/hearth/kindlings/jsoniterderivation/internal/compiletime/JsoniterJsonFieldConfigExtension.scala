@@ -20,6 +20,31 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     implicit val ConfigT: Type[JsoniterConfig] = Type.of[JsoniterConfig]
     implicit val FieldNameT: Type[annotations.fieldName] = Type.of[annotations.fieldName]
     implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
+    implicit val NamedT: Type[annotations.named] = Type.of[annotations.named]
+
+    def stringArg[Ann](anns: List[Expr[Ann]]): Option[String] =
+      anns.headOption
+        .flatMap(ann => Annotations.decodedConstructorArguments(ann))
+        .flatMap(_.headOption.flatMap(_.toOption))
+        .collect { case s: String => s }
+
+    // As jsoniter-derivation's CodecMacrosImpl.isJavaEnumType: also Scala 3 enums extending java.lang.Enum
+    def isJavaEnum[A: Type]: Boolean = Type[A].isJavaEnum || Type[A] <:< Type.of[java.lang.Enum[?]]
+
+    // As jsoniter-derivation's CodecMacrosImpl.adtLeafFullName: the fully-qualified name of an ADT leaf, passed to
+    // adtLeafClassNameMapper (`pkg.Outer.Leaf`, without `$`/`.type` suffixes and type arguments).
+    def adtLeafFullName[A: Type, Child: Type](childName: String): String = {
+      def clean(printed: String): String = {
+        val noArgs = printed.indexOf('[') match {
+          case -1 => printed
+          case i  => printed.substring(0, i)
+        }
+        noArgs.stripSuffix(".type").stripSuffix("$")
+      }
+      val printed = clean(Type.plainPrint[Child])
+      if (printed == childName || printed.endsWith("." + childName)) printed
+      else clean(Type.plainPrint[A]) + "." + childName
+    }
 
     Expr.summonImplicit[JsoniterConfig].toOption match {
       case Some(configExpr) =>
@@ -29,13 +54,11 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           def configType: UntypedType = UntypedType.fromTyped[JsoniterConfig]
 
           def resolveFieldName(param: Parameter, scalaName: String): Expr[String] = {
-            // Native Hearth annotation API (Hearth issue #283): read the @fieldName(...) String literal.
-            val customName: Option[String] = param
-              .annotationsOfType[annotations.fieldName]
-              .headOption
-              .flatMap(ann => Annotations.decodedConstructorArguments(ann))
-              .flatMap(_.headOption.flatMap(_.toOption))
-              .collect { case s: String => s }
+            // Native Hearth annotation API (Hearth issue #283): read the @fieldName(...) String literal, or (as
+            // jsoniter-scala, whose only field-rename annotation it is) @named(...).
+            val customName: Option[String] =
+              stringArg(param.annotationsOfType[annotations.fieldName])
+                .orElse(stringArg(param.annotationsOfType[annotations.named]))
             customName match {
               case Some(name) => mkStringExpr(name)
               case None       =>
@@ -56,8 +79,13 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           def discriminatorFieldName: Expr[Option[String]] =
             Expr.quote(Expr.splice(configExpr).discriminatorFieldName)
 
+          // Case objects of all-case-object ADTs are JSON strings with enumAsStrings, and without a discriminator
+          // unless circeLikeObjectEncoding (as in jsoniter-scala).
           def enumAsStrings: Expr[Boolean] =
-            Expr.quote(Expr.splice(configExpr).enumAsStrings)
+            Expr.quote {
+              val c = Expr.splice(configExpr)
+              c.enumAsStrings || (c.discriminatorFieldName.isEmpty && !c.circeLikeObjectEncoding)
+            }
 
           def useDefaults: Expr[Boolean] =
             Expr.quote(false)
@@ -73,6 +101,55 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
           def numericFieldsAsStrings: Expr[Boolean] =
             Expr.quote(Expr.splice(configExpr).isStringified)
+
+          // As jsoniter-derivation's CodecMacrosImpl.enumLeafNameExpr: Java enum values use javaEnumValueNameMapper,
+          // scala.Enumeration values their toString, other leaves @named or adtLeafClassNameMapper of their
+          // fully-qualified names.
+          override def resolveSubtypeName[Parent: Type, Child: Type](scalaName: String): Expr[String] =
+            if (isJavaEnum[Parent])
+              Expr.quote(Expr.splice(configExpr).javaEnumValueNameMapper(Expr.splice(mkStringExpr(scalaName))))
+            else if (Type[Parent].isEnumeration)
+              SingletonValue.unapply(Type[Child]) match {
+                case Some(sv) => Expr.quote(Expr.splice(sv.singletonExpr).toString)
+                case None     => mkStringExpr(scalaName)
+              }
+            else
+              stringArg(Type[Child].annotationsOfType[annotations.named]) match {
+                case Some(name) => mkStringExpr(name)
+                case None       =>
+                  val fullName = mkStringExpr(adtLeafFullName[Parent, Child](scalaName))
+                  Expr.quote(Expr.splice(configExpr).adtLeafClassNameMapper(Expr.splice(fullName)))
+              }
+
+          override def flattensNestedSubtypes: Boolean = true
+
+          // Java enum and Enumeration values are always strings (or Enumeration ids with useScalaEnumValueId)
+          override def valueEnumsAsStrings: Expr[Boolean] = Expr.quote(true)
+
+          override def enumerationValuesAsIds: Expr[Boolean] =
+            Expr.quote(Expr.splice(configExpr).useScalaEnumValueId)
+
+          // Case objects are `"Leaf"` without a discriminator (`{"Leaf":{}}` with circeLikeObjectEncoding)
+          override def singletonSubtypesAsStrings: Expr[Boolean] =
+            Expr.quote {
+              val c = Expr.splice(configExpr)
+              c.discriminatorFieldName.isEmpty && !c.circeLikeObjectEncoding
+            }
+
+          // Without a discriminator, leaves are `{"Leaf":{...}}`
+          override def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = Expr.quote(true)
+
+          override def tuplesAsArrays: Boolean = true
+
+          // See JsoniterDerivationUtils.writeNestedOptionAsAdt
+          override def nestedOptionsAsAdts: Option[NestedOptionEncoding] = Some(
+            new NestedOptionEncoding(
+              enabled = Expr.quote(!Expr.splice(configExpr).skipNestedOptionValues),
+              someName = Expr.quote(Expr.splice(configExpr).adtLeafClassNameMapper("scala.Some")),
+              noneName = Expr.quote(Expr.splice(configExpr).adtLeafClassNameMapper("scala.None")),
+              valueFieldName = Expr.quote(Expr.splice(configExpr).fieldNameMapper("value"))
+            )
+          )
         })
       case None => () // no JsoniterConfig in scope
     }

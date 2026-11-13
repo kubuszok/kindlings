@@ -16,7 +16,9 @@ trait EncoderHandleAsBuiltInRuleImpl {
         val value = ectx.value
 
         val result: Option[Expr[Unit]] =
-          if (Type[A] =:= Type.of[Int])
+          // `T | Null` (Scala 3) may be `=:=` to a reference `T`: handled by the Option rule (null or a `T`)
+          if (nullableUnionUnderlying[A].isDefined) None
+          else if (Type[A] =:= Type.of[Int])
             Some(Expr.quote(Expr.splice(writer).writeInt(Expr.splice(value).asInstanceOf[Int])))
           else if (Type[A] =:= Type.of[Long])
             Some(Expr.quote(Expr.splice(writer).writeLong(Expr.splice(value).asInstanceOf[Long])))

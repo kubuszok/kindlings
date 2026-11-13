@@ -6,7 +6,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonWriter}
 object JsoniterDerivationFactories {
 
   def codecInstance[A](
-      nullVal: A,
+      nullVal: => A,
       decodeFn: (JsonReader, A) => A,
       encodeFn: (A, JsonWriter) => Unit
   ): KindlingsJsonValueCodec[A] = new KindlingsJsonValueCodec[A] {
@@ -16,7 +16,7 @@ object JsoniterDerivationFactories {
   }
 
   def jsonCodecInstance[A](
-      nullVal: A,
+      nullVal: => A,
       decodeFn: (JsonReader, A) => A,
       encodeFn: (A, JsonWriter) => Unit,
       decodeKeyFn: JsonReader => A,

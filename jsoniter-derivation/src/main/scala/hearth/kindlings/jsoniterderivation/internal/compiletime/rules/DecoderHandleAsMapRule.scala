@@ -9,6 +9,7 @@ import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.JsoniterConfig
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
+import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 
 trait DecoderHandleAsMapRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -32,11 +33,15 @@ trait DecoderHandleAsMapRuleImpl {
     ): MIO[Rule.Applicability[Expr[A]]] = {
       import isMap.{Key, Value, CtorResult}
       implicit val StringT: Type[String] = CTypes.String
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      val nullAsEmptyMap = DecoderHandleAsCollectionRule.nullAsEmpty[A, Pair](isMap)
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       @scala.annotation.nowarn("msg=is never used")
       implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
 
-      if (Key <:< Type[String]) {
+      // String keys use the inlined fast path unless a user-provided JsonKeyCodec[String] exists.
+      if (Key =:= Type[String] && CTypes.JsonKeyCodec[Key].summonExprIgnoring().toEither.isLeft) {
         val mapAsArrayStaticallyFalse = dctx.evaluatedConfig.exists(!_.mapAsArray)
         val mapAsArrayStaticallyTrue = dctx.evaluatedConfig.exists(_.mapAsArray)
         if (mapAsArrayStaticallyFalse)
@@ -76,17 +81,22 @@ trait DecoderHandleAsMapRuleImpl {
                       val maxInserts = Expr.splice(dctx.config).mapMaxInsertNumber
                       val mapBuilder = Expr.splice(factoryExpr).newBuilder
                       if (Expr.splice(dctx.config).mapAsArray) {
-                        if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
-                        if (!reader.isNextToken(']'.toByte)) {
+                        if (
+                          JsoniterDerivationUtils.openArray(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader
+                            .isNextToken(']'.toByte)
+                        ) {
                           reader.rollbackToken()
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
                             count += 1
                             if (count > maxInserts)
-                              reader.decodeError("too many map entries (max: " + maxInserts + ")")
+                              reader.decodeError("too many map inserts")
+                            JsoniterDerivationUtils.openPair(reader)
                             val key = keyDecodeFnVal(reader)
+                            JsoniterDerivationUtils.pairSeparator(reader)
                             val value = decodeFnVal(reader)
+                            JsoniterDerivationUtils.closePair(reader)
                             mapBuilder += Expr.splice(
                               isMap.pair(
                                 Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
@@ -98,15 +108,17 @@ trait DecoderHandleAsMapRuleImpl {
                           if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
                         }
                       } else {
-                        if (!reader.isNextToken('{'.toByte)) reader.decodeError("expected '{'")
-                        if (!reader.isNextToken('}'.toByte)) {
+                        if (
+                          JsoniterDerivationUtils.openObject(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader
+                            .isNextToken('}'.toByte)
+                        ) {
                           reader.rollbackToken()
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
                             count += 1
                             if (count > maxInserts)
-                              reader.decodeError("too many map entries (max: " + maxInserts + ")")
+                              reader.decodeError("too many map inserts")
                             val key = keyDecoderVal(reader)
                             val value = decodeFnVal(reader)
                             mapBuilder += Expr.splice(
@@ -155,7 +167,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(err)    => throw new IllegalArgumentException(err)
+                            case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
                           }
                         })
                       case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -163,7 +175,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(errs)   => throw new IllegalArgumentException(errs.mkString("\n"))
+                            case Left(errs)   => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
                           }
                         })
                       case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
@@ -171,7 +183,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(err)    => throw err
+                            case Left(err)    => Expr.splice(dctx.reader).decodeError(err.getMessage)
                           }
                         })
                       case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -181,15 +193,18 @@ trait DecoderHandleAsMapRuleImpl {
                             case Right(value) => value
                             case Left(errs)   =>
                               val iter = errs.iterator
-                              if (iter.hasNext) throw iter.next()
-                              else throw new IllegalArgumentException("map construction failed")
+                              if (iter.hasNext) Expr.splice(dctx.reader).decodeError(iter.next().getMessage)
+                              else Expr.splice(dctx.reader).decodeError("map construction failed")
                           }
                         })
                     }
                   }
               }
+          case None if dctx.evaluatedConfig.exists(!_.mapAsArray) =>
+            val err = CodecDerivationError.UnsupportedMapKey(Key.prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
           case None =>
-            // No key decoder — mapAsArray-only support
+            // No key decoder — mapAsArray-only support (the config is only known at runtime)
             LambdaBuilder
               .of1[JsonReader]("valueReader")
               .traverse { valueReaderExpr =>
@@ -214,17 +229,22 @@ trait DecoderHandleAsMapRuleImpl {
                       val maxInserts = Expr.splice(dctx.config).mapMaxInsertNumber
                       val mapBuilder = Expr.splice(factoryExpr).newBuilder
                       if (Expr.splice(dctx.config).mapAsArray) {
-                        if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
-                        if (!reader.isNextToken(']'.toByte)) {
+                        if (
+                          JsoniterDerivationUtils.openArray(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader
+                            .isNextToken(']'.toByte)
+                        ) {
                           reader.rollbackToken()
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
                             count += 1
                             if (count > maxInserts)
-                              reader.decodeError("too many map entries (max: " + maxInserts + ")")
+                              reader.decodeError("too many map inserts")
+                            JsoniterDerivationUtils.openPair(reader)
                             val key = keyDecodeFnVal(reader)
+                            JsoniterDerivationUtils.pairSeparator(reader)
                             val value = decodeFnVal(reader)
+                            JsoniterDerivationUtils.closePair(reader)
                             mapBuilder += Expr.splice(
                               isMap.pair(
                                 Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
@@ -271,7 +291,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(err)    => throw new IllegalArgumentException(err)
+                            case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
                           }
                         })
                       case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -279,7 +299,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(errs)   => throw new IllegalArgumentException(errs.mkString("\n"))
+                            case Left(errs)   => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
                           }
                         })
                       case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
@@ -287,7 +307,7 @@ trait DecoderHandleAsMapRuleImpl {
                         Rule.matched(Expr.quote {
                           Expr.splice(eitherExpr) match {
                             case Right(value) => value
-                            case Left(err)    => throw err
+                            case Left(err)    => Expr.splice(dctx.reader).decodeError(err.getMessage)
                           }
                         })
                       case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -297,8 +317,8 @@ trait DecoderHandleAsMapRuleImpl {
                             case Right(value) => value
                             case Left(errs)   =>
                               val iter = errs.iterator
-                              if (iter.hasNext) throw iter.next()
-                              else throw new IllegalArgumentException("map construction failed")
+                              if (iter.hasNext) Expr.splice(dctx.reader).decodeError(iter.next().getMessage)
+                              else Expr.splice(dctx.reader).decodeError("map construction failed")
                           }
                         })
                     }
@@ -323,6 +343,10 @@ trait DecoderHandleAsMapRuleImpl {
         JsonReaderT: Type[JsonReader],
         JsoniterConfigT: Type[JsoniterConfig]
     ): MIO[Rule.Applicability[Expr[A]]] = {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      val nullAsEmptyMap = DecoderHandleAsCollectionRule.nullAsEmpty[A, Pair](isMap)
+      @scala.annotation.nowarn("msg=is never used")
       implicit val IntT: Type[Int] = CTypes.Int
       import isMap.CtorResult
       val maxInserts = dctx.evaluatedConfig.get.mapMaxInsertNumber
@@ -333,8 +357,10 @@ trait DecoderHandleAsMapRuleImpl {
         val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
           val reader = Expr.splice(dctx.reader)
           val mapBuilder = Expr.splice(factoryExpr).newBuilder
-          if (!reader.isNextToken('{'.toByte)) reader.decodeError("expected '{'")
-          if (!reader.isNextToken('}'.toByte)) {
+          if (
+            JsoniterDerivationUtils
+              .openObject(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader.isNextToken('}'.toByte)
+          ) {
             reader.rollbackToken()
             var count: Int = 1
             val key = reader.readKeyAsString()
@@ -347,7 +373,7 @@ trait DecoderHandleAsMapRuleImpl {
             while (reader.isNextToken(','.toByte)) {
               count += 1
               if (count > Expr.splice(Expr(maxInserts)))
-                reader.decodeError("too many map entries (max: " + Expr.splice(Expr(maxInserts)) + ")")
+                reader.decodeError("too many map inserts")
               val k = reader.readKeyAsString()
               mapBuilder += Expr.splice(
                 isMap.pair(
@@ -370,7 +396,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(err)    => throw new IllegalArgumentException(err)
+                case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
               }
             })
           case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -378,7 +404,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(errs)   => throw new IllegalArgumentException(errs.mkString("\n"))
+                case Left(errs)   => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
               }
             })
           case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
@@ -386,7 +412,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(err)    => throw err
+                case Left(err)    => Expr.splice(dctx.reader).decodeError(err.getMessage)
               }
             })
           case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -396,8 +422,8 @@ trait DecoderHandleAsMapRuleImpl {
                 case Right(value) => value
                 case Left(errs)   =>
                   val iter = errs.iterator
-                  if (iter.hasNext) throw iter.next()
-                  else throw new IllegalArgumentException("map construction failed")
+                  if (iter.hasNext) Expr.splice(dctx.reader).decodeError(iter.next().getMessage)
+                  else Expr.splice(dctx.reader).decodeError("map construction failed")
               }
             })
         }
@@ -412,6 +438,10 @@ trait DecoderHandleAsMapRuleImpl {
         JsonReaderT: Type[JsonReader],
         JsoniterConfigT: Type[JsoniterConfig]
     ): MIO[Rule.Applicability[Expr[A]]] = {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      val nullAsEmptyMap = DecoderHandleAsCollectionRule.nullAsEmpty[A, Pair](isMap)
+      @scala.annotation.nowarn("msg=is never used")
       implicit val IntT: Type[Int] = CTypes.Int
       import isMap.CtorResult
       val maxInserts = dctx.evaluatedConfig.get.mapMaxInsertNumber
@@ -422,28 +452,36 @@ trait DecoderHandleAsMapRuleImpl {
         val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
           val reader = Expr.splice(dctx.reader)
           val mapBuilder = Expr.splice(factoryExpr).newBuilder
-          if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
-          if (!reader.isNextToken(']'.toByte)) {
+          if (
+            JsoniterDerivationUtils
+              .openArray(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader.isNextToken(']'.toByte)
+          ) {
             reader.rollbackToken()
             var count: Int = 1
+            JsoniterDerivationUtils.openPair(reader)
             val key = reader.readString(null)
+            JsoniterDerivationUtils.pairSeparator(reader)
             mapBuilder += Expr.splice(
               isMap.pair(
                 Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
                 decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
               )
             )
+            JsoniterDerivationUtils.closePair(reader)
             while (reader.isNextToken(','.toByte)) {
               count += 1
               if (count > Expr.splice(Expr(maxInserts)))
-                reader.decodeError("too many map entries (max: " + Expr.splice(Expr(maxInserts)) + ")")
+                reader.decodeError("too many map inserts")
+              JsoniterDerivationUtils.openPair(reader)
               val k = reader.readString(null)
+              JsoniterDerivationUtils.pairSeparator(reader)
               mapBuilder += Expr.splice(
                 isMap.pair(
                   Expr.quote(k).asInstanceOf[Expr[isMap.Key]],
                   decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
                 )
               )
+              JsoniterDerivationUtils.closePair(reader)
             }
             if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
           }
@@ -459,7 +497,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(err)    => throw new IllegalArgumentException(err)
+                case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
               }
             })
           case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -467,7 +505,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(errs)   => throw new IllegalArgumentException(errs.mkString("\n"))
+                case Left(errs)   => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
               }
             })
           case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
@@ -475,7 +513,7 @@ trait DecoderHandleAsMapRuleImpl {
             Rule.matched(Expr.quote {
               Expr.splice(eitherExpr) match {
                 case Right(value) => value
-                case Left(err)    => throw err
+                case Left(err)    => Expr.splice(dctx.reader).decodeError(err.getMessage)
               }
             })
           case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -485,8 +523,8 @@ trait DecoderHandleAsMapRuleImpl {
                 case Right(value) => value
                 case Left(errs)   =>
                   val iter = errs.iterator
-                  if (iter.hasNext) throw iter.next()
-                  else throw new IllegalArgumentException("map construction failed")
+                  if (iter.hasNext) Expr.splice(dctx.reader).decodeError(iter.next().getMessage)
+                  else Expr.splice(dctx.reader).decodeError("map construction failed")
               }
             })
         }
@@ -501,6 +539,9 @@ trait DecoderHandleAsMapRuleImpl {
         JsonReaderT: Type[JsonReader],
         JsoniterConfigT: Type[JsoniterConfig]
     ): MIO[Rule.Applicability[Expr[A]]] = {
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      val nullAsEmptyMap = DecoderHandleAsCollectionRule.nullAsEmpty[A, Pair](isMap)
       import isMap.CtorResult
       LambdaBuilder
         .of1[JsonReader]("valueReader")
@@ -528,16 +569,21 @@ trait DecoderHandleAsMapRuleImpl {
                 val maxInserts = Expr.splice(dctx.config).mapMaxInsertNumber
                 val mapBuilder = Expr.splice(factoryExpr).newBuilder
                 if (Expr.splice(dctx.config).mapAsArray) {
-                  if (!reader.isNextToken('['.toByte)) reader.decodeError("expected '['")
-                  if (!reader.isNextToken(']'.toByte)) {
+                  if (
+                    JsoniterDerivationUtils
+                      .openArray(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader.isNextToken(']'.toByte)
+                  ) {
                     reader.rollbackToken()
                     var count = 0
                     var continueLoop = true
                     while (continueLoop) {
                       count += 1
-                      if (count > maxInserts) reader.decodeError("too many map entries (max: " + maxInserts + ")")
+                      if (count > maxInserts) reader.decodeError("too many map inserts")
+                      JsoniterDerivationUtils.openPair(reader)
                       val key = keyDecodeFnVal(reader)
+                      JsoniterDerivationUtils.pairSeparator(reader)
                       val value = decodeFnVal(reader)
+                      JsoniterDerivationUtils.closePair(reader)
                       mapBuilder += Expr.splice(
                         isMap.pair(
                           Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
@@ -549,14 +595,16 @@ trait DecoderHandleAsMapRuleImpl {
                     if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
                   }
                 } else {
-                  if (!reader.isNextToken('{'.toByte)) reader.decodeError("expected '{'")
-                  if (!reader.isNextToken('}'.toByte)) {
+                  if (
+                    JsoniterDerivationUtils.openObject(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader
+                      .isNextToken('}'.toByte)
+                  ) {
                     reader.rollbackToken()
                     var count = 0
                     var continueLoop = true
                     while (continueLoop) {
                       count += 1
-                      if (count > maxInserts) reader.decodeError("too many map entries (max: " + maxInserts + ")")
+                      if (count > maxInserts) reader.decodeError("too many map inserts")
                       val key = reader.readKeyAsString()
                       mapBuilder += Expr.splice(
                         isMap.pair(
@@ -603,7 +651,7 @@ trait DecoderHandleAsMapRuleImpl {
                   Rule.matched(Expr.quote {
                     Expr.splice(eitherExpr) match {
                       case Right(value) => value
-                      case Left(err)    => throw new IllegalArgumentException(err)
+                      case Left(err)    => Expr.splice(dctx.reader).decodeError(err)
                     }
                   })
                 case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -611,7 +659,7 @@ trait DecoderHandleAsMapRuleImpl {
                   Rule.matched(Expr.quote {
                     Expr.splice(eitherExpr) match {
                       case Right(value) => value
-                      case Left(errs)   => throw new IllegalArgumentException(errs.mkString("\n"))
+                      case Left(errs)   => Expr.splice(dctx.reader).decodeError(errs.mkString("\n"))
                     }
                   })
                 case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
@@ -619,7 +667,7 @@ trait DecoderHandleAsMapRuleImpl {
                   Rule.matched(Expr.quote {
                     Expr.splice(eitherExpr) match {
                       case Right(value) => value
-                      case Left(err)    => throw err
+                      case Left(err)    => Expr.splice(dctx.reader).decodeError(err.getMessage)
                     }
                   })
                 case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -629,8 +677,8 @@ trait DecoderHandleAsMapRuleImpl {
                       case Right(value) => value
                       case Left(errs)   =>
                         val iter = errs.iterator
-                        if (iter.hasNext) throw iter.next()
-                        else throw new IllegalArgumentException("map construction failed")
+                        if (iter.hasNext) Expr.splice(dctx.reader).decodeError(iter.next().getMessage)
+                        else Expr.splice(dctx.reader).decodeError("map construction failed")
                     }
                   })
               }
@@ -657,8 +705,61 @@ trait DecoderHandleAsMapRuleImpl {
               }
               .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
 
-          if (Type[K] =:= Type.of[Int])
+          val literal = literalKey[K]
+          if (literal.isDefined) {
+            val (keyString, keyValue) = literal.get
+            val error = "expected key: \"" + keyString + "\""
+            Some(makeKeyDecoder { r =>
+              Expr.quote {
+                if (Expr.splice(r).readKeyAsString() != Expr.splice(Expr(keyString)))
+                  Expr.splice(r).decodeError(Expr.splice(Expr(error)))
+                Expr.splice(keyValue)
+              }
+            })
+          } else if (Type[K] =:= Type.of[String])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsString().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Int])
             Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsInt().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Byte])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsByte().asInstanceOf[K])))
+          else if (Type[K] =:= Type.of[Char])
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsChar().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.JavaCharacter)
+            Some(
+              makeKeyDecoder(r =>
+                Expr.quote(java.lang.Character.valueOf(Expr.splice(r).readKeyAsChar()).asInstanceOf[K])
+              )
+            )
+          else if (Type[K] =:= CTypes.UUID)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsUUID().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.Duration)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsDuration().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.Instant)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsInstant().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.LocalDate)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsLocalDate().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.LocalDateTime)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsLocalDateTime().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.LocalTime)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsLocalTime().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.MonthDay)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsMonthDay().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.OffsetDateTime)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsOffsetDateTime().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.OffsetTime)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsOffsetTime().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.Period)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsPeriod().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.Year)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsYear().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.YearMonth)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsYearMonth().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.ZonedDateTime)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsZonedDateTime().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.ZoneId)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsZoneId().asInstanceOf[K])))
+          else if (Type[K] =:= CTypes.ZoneOffset)
+            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsZoneOffset().asInstanceOf[K])))
           else if (Type[K] =:= Type.of[Long])
             Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsLong().asInstanceOf[K])))
           else if (Type[K] =:= Type.of[Double])
@@ -670,9 +771,23 @@ trait DecoderHandleAsMapRuleImpl {
           else if (Type[K] =:= Type.of[Boolean])
             Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBoolean().asInstanceOf[K])))
           else if (Type[K] =:= Type.of[BigDecimal])
-            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigDecimal().asInstanceOf[K])))
+            Some(makeKeyDecoder { r =>
+              Expr.quote {
+                val config = Expr.splice(ctx.config)
+                Expr
+                  .splice(r)
+                  .readKeyAsBigDecimal(
+                    JsoniterDerivationUtils.mathContext(config.bigDecimalPrecision),
+                    config.bigDecimalScaleLimit,
+                    config.bigDecimalDigitsLimit
+                  )
+                  .asInstanceOf[K]
+              }
+            })
           else if (Type[K] =:= Type.of[BigInt])
-            Some(makeKeyDecoder(r => Expr.quote(Expr.splice(r).readKeyAsBigInt().asInstanceOf[K])))
+            Some(makeKeyDecoder { r =>
+              Expr.quote(Expr.splice(r).readKeyAsBigInt(Expr.splice(ctx.config).bigIntDigitsLimit).asInstanceOf[K])
+            })
           // Java boxed primitives — decode key as primitive, then box
           else if (Type[K] =:= CTypes.JavaByte)
             Some(
@@ -710,7 +825,9 @@ trait DecoderHandleAsMapRuleImpl {
             None
         }
 
-        builtIn.getOrElse {
+        // As in jsoniter-scala, a user-provided JsonKeyCodec takes precedence over the built-in key types.
+        val hasUserKeyCodec = CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither.isRight
+        (if (hasUserKeyCodec) None else builtIn).getOrElse {
           // 2. Try summoning user-provided JsonKeyCodec[K]
           CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither match {
             case Right(keyCodecExpr) =>
@@ -742,7 +859,7 @@ trait DecoderHandleAsMapRuleImpl {
                             MIO.pure(Expr.quote {
                               Expr.splice(wrapResult) match {
                                 case scala.Right(v)  => v
-                                case scala.Left(msg) => throw new IllegalArgumentException(msg)
+                                case scala.Left(msg) => Expr.splice(ctx.reader).decodeError(msg)
                               }
                             })
                           case _ =>
@@ -767,12 +884,36 @@ trait DecoderHandleAsMapRuleImpl {
                         case None => MIO.pure(None)
                       }
                     }
+                case _
+                    if !ctx.evaluatedConfig
+                      .exists(!_.inlineOneValueClasses) && oneValueClassField[K](ctx.evaluatedConfig).isDefined =>
+                  // 3b. inlineOneValueClasses: a one-value class key is its field's key (as jsoniter-scala)
+                  val (product, fName, param) = oneValueClassField[K](ctx.evaluatedConfig).get
+                  import param.tpe.Underlying as Inner
+                  deriveKeyDecoding[Inner].flatMap {
+                    case Some(innerKeyDecoder) =>
+                      LambdaBuilder
+                        .of1[JsonReader]("reader")
+                        .traverse { readerExpr =>
+                          val inner: Expr[Inner] =
+                            Expr.quote(Expr.splice(innerKeyDecoder).apply(Expr.splice(readerExpr)))
+                          constructOneValueClass[K](product, fName, inner.as_??) match {
+                            case Right(constructed) => MIO.pure(constructed)
+                            case Left(error)        =>
+                              MIO.fail(
+                                CodecDerivationError.CannotConstructType(Type[K].prettyPrint, false, Some(error))
+                              )
+                          }
+                        }
+                        .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
+                    case None => MIO.pure(None)
+                  }
                 case _ =>
                   // 4. Enum (all case objects) — read key as string, match against case names
                   Enum.parse[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = enumm.directChildren.toList
-                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                      val allCaseObjects = Type[K].isEnumeration || isJavaEnumType[K] || childrenList.forall {
                         case (_, child) =>
                           SingletonValue.unapply(child.Underlying).isDefined
                       }
@@ -815,30 +956,53 @@ trait DecoderHandleAsMapRuleImpl {
                                 }
                               }
                               .flatMap { casesNel =>
-                                // Build Map[String, K] expression
-                                val mapEntries: List[Expr[(String, K)]] = casesNel.toList.map { case (name, caseExpr) =>
-                                  Expr.quote {
-                                    (Expr.splice(Expr(name)), Expr.splice(caseExpr))
-                                  }
-                                }
-                                val lookupMapExpr: Expr[Map[String, K]] = mapEntries.foldLeft(
-                                  Expr.quote(Map.empty[String, K])
-                                ) { (accExpr, entryExpr) =>
-                                  Expr.quote(Expr.splice(accExpr) + Expr.splice(entryExpr))
+                                implicit val IntT: Type[Int] = CTypes.Int
+                                // The same names as enum values (see enumLeafNameExpr); Enumeration ids with
+                                // useScalaEnumValueId, as in jsoniter-scala.
+                                val cases: List[(Expr[K], Expr[String])] = casesNel.toList.map {
+                                  case (name, caseExpr) =>
+                                    val child = childrenList.find(_._1 == name).get._2
+                                    import child.Underlying as ChildType
+                                    (caseExpr, enumLeafNameExpr[K, ChildType](name, ctx.config))
                                 }
                                 LambdaBuilder
                                   .of1[JsonReader]("reader")
                                   .traverse { readerExpr =>
-                                    MIO.pure(
-                                      Expr.quote {
-                                        val keyStr = Expr.splice(readerExpr).readKeyAsString()
-                                        Expr
-                                          .splice(lookupMapExpr)
-                                          .getOrElse(
-                                            keyStr,
-                                            Expr.splice(readerExpr).decodeError("unknown enum key: " + keyStr): K
-                                          )
+                                    val byName: Expr[K] = Expr.quote {
+                                      val keyStr = Expr.splice(readerExpr).readKeyAsString()
+                                      Expr.splice {
+                                        cases.foldRight(
+                                          Expr.quote(Expr.splice(readerExpr).enumValueError(keyStr): K)
+                                        ) { case ((value, caseName), elseExpr) =>
+                                          Expr.quote {
+                                            if (keyStr == Expr.splice(caseName)) Expr.splice(value)
+                                            else Expr.splice(elseExpr)
+                                          }
+                                        }
                                       }
+                                    }
+                                    MIO.pure(
+                                      if (Type[K].isEnumeration) Expr.quote {
+                                        if (Expr.splice(ctx.config).useScalaEnumValueId) {
+                                          val id = Expr.splice(readerExpr).readKeyAsInt()
+                                          Expr.splice {
+                                            cases.foldRight(
+                                              Expr.quote(
+                                                Expr.splice(readerExpr).decodeError("illegal enum value " + id): K
+                                              )
+                                            ) { case ((value, _), elseExpr) =>
+                                              Expr.quote {
+                                                if (
+                                                  id == hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+                                                    .scalaEnumValueId(Expr.splice(value))
+                                                ) Expr.splice(value)
+                                                else Expr.splice(elseExpr)
+                                              }
+                                            }
+                                          }
+                                        } else Expr.splice(byName)
+                                      }
+                                      else byName
                                     )
                                   }
                                   .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])

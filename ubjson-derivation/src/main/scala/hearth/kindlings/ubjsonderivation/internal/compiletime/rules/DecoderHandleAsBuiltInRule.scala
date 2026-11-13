@@ -17,7 +17,9 @@ trait DecoderHandleAsBuiltInRuleImpl {
         val reader = dctx.reader
 
         val result: Option[Expr[A]] =
-          if (Type[A] =:= Type.of[Int])
+          // `T | Null` (Scala 3) may be `=:=` to a reference `T`: handled by the Option rule (null or a `T`)
+          if (nullableUnionUnderlying[A].isDefined) None
+          else if (Type[A] =:= Type.of[Int])
             Some(Expr.quote(Expr.splice(reader).readInt().asInstanceOf[A]))
           else if (Type[A] =:= Type.of[Long])
             Some(Expr.quote(Expr.splice(reader).readLong().asInstanceOf[A]))
@@ -55,7 +57,7 @@ trait DecoderHandleAsBuiltInRuleImpl {
                   .validateBigInt(
                     Expr.splice(reader),
                     bd.toBigInt,
-                    Expr.splice(dctx.config).bigDecimalDigitsLimit
+                    Expr.splice(dctx.config).bigIntDigitsLimit
                   )
                   .asInstanceOf[A]
               }

@@ -5,6 +5,7 @@ import hearth.fp.data.NonEmptyVector
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import hearth.kindlings.jsoniterderivation.{annotations, JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
@@ -21,6 +22,7 @@ trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with JsoniterDerivationPolicy
+    with ProductTypes
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
@@ -29,6 +31,7 @@ trait CodecMacrosImpl
     with rules.EncoderHandleAsOptionRuleImpl
     with rules.EncoderHandleAsMapRuleImpl
     with rules.EncoderHandleAsCollectionRuleImpl
+    with rules.EncoderHandleAsTupleRuleImpl
     with rules.EncoderHandleAsNamedTupleRuleImpl
     with rules.EncoderHandleAsOneValueClassRuleImpl
     with rules.EncoderHandleAsSingletonRuleImpl
@@ -42,11 +45,13 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsOptionRuleImpl
     with rules.DecoderHandleAsMapRuleImpl
     with rules.DecoderHandleAsCollectionRuleImpl
+    with rules.DecoderHandleAsTupleRuleImpl
     with rules.DecoderHandleAsNamedTupleRuleImpl
     with rules.DecoderHandleAsOneValueClassRuleImpl
     with rules.DecoderHandleAsSingletonRuleImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl
+    with rules.DecoderAbsentFieldSupport
     with rules.EncoderDerivationPolicyRuleImpl
     with rules.DecoderDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -55,6 +60,249 @@ trait CodecMacrosImpl
   // $COVERAGE-ON$
 
   override protected def derivationSettingsNamespace: String = "jsoniterDerivation"
+
+  /** Evaluates the config at compile time when possible; `Some` enables the optimized codegen (no runtime config
+    * checks). Overridden on Scala 3 to also follow immutable local `val`s (including the proxies Scala 3 creates for
+    * non-inline arguments of inline methods, like `derived[A](using JsoniterConfig.default.withX)`).
+    */
+  protected def semiEvalConfig(configExpr: Expr[JsoniterConfig]): Option[JsoniterConfig] =
+    configExpr.semiEval.toOption
+
+  /** Element types of a tuple type (`TupleN`, and on Scala 3 also generic tuples: `EmptyTuple`, `H *: T`, match types
+    * reducing to them, and tuples with more than 22 elements), or `None` for other types. Named tuples are not tuples
+    * here (they are JSON objects).
+    */
+  protected def tupleElementTypes[A: Type]: Option[List[??]] =
+    if (!Type[A].isTuple || Type[A].isNamedTuple) None
+    else CaseClass.parse[A].toOption.map(_.primaryConstructor.totalParameters.flatten.toList.map(_._2.tpe))
+
+  /** For a Scala 3 union type with `Null` (`T | Null`, jsoniter-scala's "nullable" types): `T`. Always `None` on Scala 2.
+    * Such values are `null` or a `T`; as case class fields they are optional (absent is `null`) and `transientNull`
+    * skips them when `null`.
+    */
+  protected def nullableUnionUnderlying[A: Type]: Option[??] = None
+
+  /** Builds a tuple which is not a `TupleN` case class (Scala 3 generic tuples) from its elements. */
+  protected def constructGenericTuple[A: Type](elements: List[Expr_??]): Option[Expr[A]] = {
+    val _ = elements
+    None
+  }
+
+  /** The default value of a constructor parameter. A default of a non-first parameter list may depend on the preceding
+    * parameters: it is only available when `argumentValues` provides all of them (as in jsoniter-scala, which computes
+    * such defaults from the decoded/encoded values).
+    */
+  private[compiletime] def parameterDefault(param: Parameter, argumentValues: Map[String, Expr_??]): Option[Expr_??] =
+    if (!param.hasDefault) None
+    else
+      param.defaultValue.flatMap { method =>
+        // untyped: the value parameters of a generic default method are only typed once its type arguments are applied
+        val needed = method.asUntyped.parameters.flatMap(_.keys.toList)
+        if (!needed.forall(argumentValues.contains)) None
+        else
+          foldInstanceFree(method, "Default value")(
+            onTypes = _ => Map.empty,
+            onValues = _ => argumentValues.filter { case (name, _) => needed.contains(name) }
+          ).toOption
+      }
+
+  /** `inlineOneValueClasses`: a class with exactly one non-transient field (not a value class, those are handled by the
+    * value type rules), with that field's name and parameter.
+    */
+  private[compiletime] def oneValueClassField[A: Type](
+      evaluatedConfig: Option[JsoniterConfig]
+  ): Option[(ProductType[A], String, Parameter)] =
+    if (IsValueType.unapply(Type[A]).isDefined || Type[A].isTuple) None
+    else
+      ProductType.parse[A].toOption.flatMap { product =>
+        product.params.filterNot { case (_, p) => isTransientParam[A](p, evaluatedConfig) } match {
+          case (name, param) :: Nil => Some((product, name, param))
+          case _                    => None
+        }
+      }
+
+  /** Constructs a one-value class (see [[oneValueClassField]]) from its field's value and the defaults of its transient
+    * parameters.
+    */
+  private[compiletime] def constructOneValueClass[A: Type](
+      product: ProductType[A],
+      fieldName: String,
+      value: Expr_??
+  ): Either[String, Expr[A]] = {
+    val others = product.params.filterNot(_._1 == fieldName).foldLeft(Map(fieldName -> value)) {
+      case (acc, (name, param)) => parameterDefault(param, acc).fold(acc)(d => acc + (name -> d))
+    }
+    foldInstanceFree(product.primaryConstructor, "Constructor")(onTypes = _ => Map.empty, onValues = _ => others)
+      .map(_.value.asInstanceOf[Expr[A]])
+  }
+
+  /** `@transientField`, or `scala.transient` with `scalaTransientSupport` (only known with a compile-time config). */
+  private[compiletime] def isTransientParam[A: Type](
+      param: Parameter,
+      evaluatedConfig: Option[JsoniterConfig]
+  ): Boolean = {
+    implicit val TransientFieldT: Type[annotations.transientField] = CTypes.TransientField
+    hasAnnotationType[annotations.transientField](param) ||
+    (evaluatedConfig.exists(_.scalaTransientSupport) && hasScalaTransient[A](param))
+  }
+
+  /** `scala.transient` on a parameter / its field. */
+  private[compiletime] def hasScalaTransient[A: Type](param: Parameter): Boolean = {
+    implicit val ScalaTransientT: Type[scala.transient] = CTypes.ScalaTransient
+    // `scala.transient` targets fields (`@field`), so it is found on the case field rather than on the parameter.
+    def onCaseField: Boolean = CaseClass.parse[A].toOption.exists { cc =>
+      cc.caseFields.exists(f => f.name.trim == param.name && f.hasAnnotationOfType[scala.transient])
+    } || Type[A].unsortedMethodsNamed(param.name).exists(_.hasAnnotationOfType[scala.transient])
+    hasAnnotationType[scala.transient](param) || onCaseField
+  }
+
+  /** A `scala.transient` (and not `@transientField`) parameter with a config known only at runtime: transient only when
+    * `config.scalaTransientSupport` is on, so the generic codegen checks the flag (skip on write, default on read).
+    */
+  private[compiletime] def isTransientAtRuntimeOnly[A: Type](
+      param: Parameter,
+      evaluatedConfig: Option[JsoniterConfig]
+  ): Boolean = {
+    implicit val TransientFieldT: Type[annotations.transientField] = CTypes.TransientField
+    evaluatedConfig.isEmpty && !hasAnnotationType[annotations.transientField](param) && hasScalaTransient[A](param)
+  }
+
+  /** A literal (singleton) type's JSON key and value, e.g. `"2"` and `2` for the type `2` (jsoniter-scala writes
+    * literal keys as their `toString`).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def literalKey[K: Type]: Option[(String, Expr[K])] = {
+    def of[U](codec: TypeCodec[U])(implicit ec: ExprCodec[U], ut: Type[U]): Option[(String, Expr[K])] =
+      codec.fromType(Type[K]).map { e =>
+        val v: U = e.value
+        (v.toString, Expr.quote(Expr.splice(Expr(v)).asInstanceOf[K]))
+      }
+    implicit val StringT: Type[String] = CTypes.String
+    implicit val IntT: Type[Int] = CTypes.Int
+    implicit val LongT: Type[Long] = CTypes.Long
+    implicit val DoubleT: Type[Double] = CTypes.Double
+    implicit val FloatT: Type[Float] = CTypes.Float
+    implicit val ShortT: Type[Short] = CTypes.Short
+    implicit val ByteT: Type[Byte] = CTypes.Byte
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    implicit val CharT: Type[Char] = CTypes.Char
+    of(Type.StringCodec)
+      .orElse(of(Type.CharCodec))
+      .orElse(of(Type.IntCodec))
+      .orElse(of(Type.LongCodec))
+      .orElse(of(Type.BooleanCodec))
+      .orElse(of(Type.DoubleCodec))
+      .orElse(of(Type.FloatCodec))
+      .orElse(of(Type.ShortCodec))
+      .orElse(of(Type.ByteCodec))
+  }
+
+  /** Java enums, including Scala 3 enums extending `java.lang.Enum` (which Hearth's `isJavaEnum` does not report). */
+  private[compiletime] def isJavaEnumType[A: Type]: Boolean =
+    Type[A].isJavaEnum || Type[A] <:< Type.of[java.lang.Enum[?]]
+
+  /** The JSON name of an enum case / ADT leaf `Child` of `A`, as in jsoniter-scala: Java enum values use
+    * `javaEnumValueNameMapper` (on the constant's name), `scala.Enumeration` values their `toString` (`Value("A")` is
+    * `"A"`), and other ADT leaves `adtLeafClassNameMapper`.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def enumLeafNameExpr[A: Type, Child: Type](
+      childName: String,
+      config: Expr[JsoniterConfig]
+  ): Expr[String] = {
+    implicit val StringT: Type[String] = CTypes.String
+    if (isJavaEnumType[A]) Expr.quote(Expr.splice(config).javaEnumValueNameMapper(Expr.splice(Expr(childName))))
+    else if (Type[A].isEnumeration)
+      SingletonValue.unapply(Type[Child]) match {
+        case Some(sv) => Expr.quote(Expr.splice(sv.singletonExpr).toString)
+        case None     => Expr(childName)
+      }
+    else
+      namedAnnotationOf[Child] match {
+        case Some(name) => Expr(name)
+        case None       =>
+          Expr.quote(
+            Expr.splice(config).adtLeafClassNameMapper(Expr.splice(Expr(adtLeafFullName[A, Child](childName))))
+          )
+      }
+  }
+
+  /** The fully-qualified name of ADT leaf `Child` of `A` passed to `adtLeafClassNameMapper`, as in jsoniter-scala
+    * (`pkg.Outer.Leaf`, without `$`/`.type` suffixes and type arguments; Scala 3 enum cases as `pkg.Enum.Case`).
+    */
+  private[compiletime] def adtLeafFullName[A: Type, Child: Type](childName: String): String = {
+    def clean(printed: String): String = {
+      val noArgs = printed.indexOf('[') match {
+        case -1 => printed
+        case i  => printed.substring(0, i)
+      }
+      noArgs.stripSuffix(".type").stripSuffix("$")
+    }
+    val printed = clean(Type.plainPrint[Child])
+    if (printed == childName || printed.endsWith("." + childName)) printed
+    else clean(Type.plainPrint[A]) + "." + childName
+  }
+
+  /** The leaves of an ADT / enum (nested sealed hierarchies flattened), and as in jsoniter-scala the type itself (last,
+    * so that its subtypes match first) when it is a non-abstract sealed class.
+    */
+  private[compiletime] def adtLeaves[A: Type](enumm: Enum[A]): List[(String, ??<:[A])] = {
+    val children: List[(String, ??<:[A])] = enumm.exhaustiveChildren match {
+      case Some(ec) => ec.toList
+      case None     => enumm.directChildren.toList
+    }
+    val isBaseALeaf = !Type[A].isAbstract && !Type[A].isTrait && !Type[A].isEnumeration && !isJavaEnumType[A] &&
+      !children.exists(_._2.Underlying =:= Type[A]) && ProductType.asLeaf[A].isDefined
+    if (isBaseALeaf) children :+ (Type[A].shortName -> Type[A].as_??<:[A]) else children
+  }
+
+  /** The JSON key override of a field: `@fieldName`, or (as jsoniter-scala, whose only field-rename annotation it is)
+    * `@named`.
+    */
+  private[compiletime] def fieldNameOverride(param: Parameter): Option[String] = {
+    implicit val FieldNameT: Type[annotations.fieldName] = CTypes.FieldName
+    implicit val NamedT: Type[annotations.named] = CTypes.Named
+    getAnnotationStringArg[annotations.fieldName](param).orElse(getAnnotationStringArg[annotations.named](param))
+  }
+
+  /** The `@named` override of an ADT leaf's name, if any. */
+  private[compiletime] def namedAnnotationOf[Child: Type]: Option[String] = {
+    implicit val NamedT: Type[annotations.named] = CTypes.Named
+    getTypeAnnotationStringArg[annotations.named, Child]
+  }
+
+  /** Whether `A` extends a sealed trait/class, i.e. is an ADT leaf (`alwaysEmitDiscriminator` applies to it). */
+  private[compiletime] def hasSealedParent[A: Type]: Boolean =
+    Type[A].baseClasses.exists { parent =>
+      import parent.Underlying as P
+      !(Type[P] =:= Type[A]) && Type[P].isSealed
+    }
+
+  /** The (unmapped, fully-qualified) name of an ADT leaf, as passed to `adtLeafClassNameMapper`. */
+  private[compiletime] def adtLeafName[A: Type]: String =
+    adtLeafFullName[A, A](Type[A].shortName.stripSuffix(".type").stripSuffix("$"))
+
+  /** The discriminator key that the codec of ADT leaf `A` writes and accepts when `alwaysEmitDiscriminator` is on, or a
+    * `null` expression when it does not apply.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private[compiletime] def alwaysEmittedDiscriminatorKey[A: Type](
+      config: Expr[JsoniterConfig],
+      evaluatedConfig: Option[JsoniterConfig]
+  ): Option[Expr[String]] = {
+    implicit val StringT: Type[String] = CTypes.String
+    if (!hasSealedParent[A]) None
+    else
+      evaluatedConfig match {
+        case Some(c) =>
+          if (c.alwaysEmitDiscriminator) c.discriminatorFieldName.map(name => Expr(name)) else None
+        case None =>
+          Some(Expr.quote {
+            val c = Expr.splice(config)
+            if (c.alwaysEmitDiscriminator) c.discriminatorFieldName.orNull else null
+          })
+      }
+  }
 
   // Shared type representations — centralized here so all rules access them consistently.
   private[compiletime] object CTypes {
@@ -81,6 +329,8 @@ trait CodecMacrosImpl
     val FieldName: Type.Lazy[annotations.fieldName] = Type.Lazy(Type.of[annotations.fieldName])
     val TransientField: Type.Lazy[annotations.transientField] = Type.Lazy(Type.of[annotations.transientField])
     val Stringified: Type.Lazy[annotations.stringified] = Type.Lazy(Type.of[annotations.stringified])
+    val Named: Type.Lazy[annotations.named] = Type.Lazy(Type.of[annotations.named])
+    val ScalaTransient: Type.Lazy[scala.transient] = Type.Lazy(Type.of[scala.transient])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Long: Type.Lazy[Long] = Type.Lazy(Type.of[Long])
     val Double: Type.Lazy[Double] = Type.Lazy(Type.of[Double])
@@ -88,6 +338,7 @@ trait CodecMacrosImpl
     val Short: Type.Lazy[Short] = Type.Lazy(Type.of[Short])
     val Byte: Type.Lazy[Byte] = Type.Lazy(Type.of[Byte])
     val Boolean: Type.Lazy[Boolean] = Type.Lazy(Type.of[Boolean])
+    val Char: Type.Lazy[Char] = Type.Lazy(Type.of[Char])
     val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
     val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
@@ -149,12 +400,15 @@ trait CodecMacrosImpl
           (in: JsonReader, default: A) => {
             val _ = default
             if (Expr.splice(configExpr).encodingOnly)
-              throw new UnsupportedOperationException("encoding-only codec cannot decode")
-            Expr.splice(decodeFn(Expr.quote(in), configExpr))
+              throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
+            // as jsoniter-scala: a JSON `null` is the `default` argument (when it is not `null`)
+            JsoniterDerivationUtils.readNullAsDefaultArgument[A](in, default, Expr.splice(nullAsDefaultApplies[A]))(r =>
+              Expr.splice(decodeFn(Expr.quote(r), configExpr))
+            )
           },
           (x: A, out: JsonWriter) =>
             if (Expr.splice(configExpr).decodingOnly)
-              throw new UnsupportedOperationException("decoding-only codec cannot encode")
+              throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
             else
               Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
         )
@@ -191,16 +445,17 @@ trait CodecMacrosImpl
           writeToString[A](Expr.splice(valueExpr))(Expr.splice(codecExpr))
         }
       case Left(_) =>
-        deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A, String]("KindlingsJsonValueCodec.writeToString") { encodeFn =>
-          Expr.quote {
-            writeToString[A](Expr.splice(valueExpr))(new JsonValueCodec[A] {
-              def nullValue: A = null.asInstanceOf[A]
-              def decodeValue(in: JsonReader, default: A): A =
-                throw new UnsupportedOperationException("encode-only codec")
-              def encodeValue(x: A, out: JsonWriter): Unit =
-                Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
-            })
-          }
+        deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A, String]("KindlingsJsonValueCodec.writeToString", configExpr) {
+          encodeFn =>
+            Expr.quote {
+              writeToString[A](Expr.splice(valueExpr))(new JsonValueCodec[A] {
+                def nullValue: A = null.asInstanceOf[A]
+                def decodeValue(in: JsonReader, default: A): A =
+                  throw new UnsupportedOperationException("encode-only codec")
+                def encodeValue(x: A, out: JsonWriter): Unit =
+                  Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
+              })
+            }
         }
     }
   }
@@ -239,7 +494,8 @@ trait CodecMacrosImpl
         }
       case Left(_) =>
         deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A, Either[JsonReaderException, A]](
-          "KindlingsJsonValueCodec.readFromString"
+          "KindlingsJsonValueCodec.readFromString",
+          configExpr
         ) { case (decodeFn, nullValueExpr) =>
           Expr.quote {
             try
@@ -291,7 +547,8 @@ trait CodecMacrosImpl
           val keyEncMIO: MIO[Option[Expr[(A, JsonWriter) => Unit]]] = {
             val stubValue = Expr.quote(null.asInstanceOf[A])
             val stubWriter = Expr.quote(null.asInstanceOf[JsonWriter])
-            implicit val ctx: EncoderCtx[A] = EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType)
+            implicit val ctx: EncoderCtx[A] =
+              EncoderCtx.from(stubValue, stubWriter, configExpr, cache, selfType, semiEvalConfig(configExpr))
             EncoderHandleAsMapRule.deriveKeyEncoding[A]
           }
 
@@ -299,7 +556,8 @@ trait CodecMacrosImpl
           val keyDecMIO: MIO[Option[Expr[JsonReader => A]]] = {
             implicit val StringT: Type[String] = CTypes.String
             val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
-            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType)
+            implicit val ctx: DecoderCtx[A] =
+              DecoderCtx.from(stubReader, configExpr, cache, selfType, semiEvalConfig(configExpr))
             DecoderHandleAsMapRule.deriveKeyDecoding[A]
           }
 
@@ -369,7 +627,7 @@ trait CodecMacrosImpl
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = Some(Type[A].as_??)
-          val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
+          val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           // Validate config for contradictory flag combinations at compile time
           validateConfigOrAbort(evConfig, "KindlingsJsonCodec.derived")
@@ -444,14 +702,25 @@ trait CodecMacrosImpl
           }
 
           val vals = runSafe(cache.get)
+          val validation: Expr[Unit] =
+            if (evConfig.isDefined) Expr.quote(())
+            else Expr.quote(JsoniterConfig.validate(Expr.splice(configExpr)))
           val resultExpr = Expr.quote {
+            Expr.splice(validation)
             hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.jsonCodecInstance[A](
               Expr.splice(nullVal),
               (in: JsonReader, default: A) => {
                 val _ = default
-                Expr.splice(decFn(Expr.quote(in), configExpr))
+                if (Expr.splice(configExpr).encodingOnly)
+                  throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
+                JsoniterDerivationUtils.readNullAsDefaultArgument[A](in, default, Expr.splice(nullAsDefaultApplies[A]))(
+                  r => Expr.splice(decFn(Expr.quote(r), configExpr))
+                )
               },
-              (x: A, out: JsonWriter) => Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr)),
+              (x: A, out: JsonWriter) =>
+                if (Expr.splice(configExpr).decodingOnly)
+                  throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
+                else Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr)),
               (in: JsonReader) => Expr.splice(keyDecFn).apply(Expr.splice(Expr.quote(in))),
               (x: A, out: JsonWriter) =>
                 Expr.splice(keyEncFn).apply(Expr.splice(Expr.quote(x)), Expr.splice(Expr.quote(out)))
@@ -473,7 +742,10 @@ trait CodecMacrosImpl
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
-  def deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+  def deriveEncoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[JsoniterConfig]
+  )(
       provideCtxAndAdapt: (
           (Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]
       ) => Expr[Out]
@@ -495,6 +767,7 @@ trait CodecMacrosImpl
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = None
+          val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
             val defBuilder =
@@ -504,7 +777,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType)))
+                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined encoder-only encode body for ${Type[A].prettyPrint}")
@@ -521,7 +794,7 @@ trait CodecMacrosImpl
 
           val vals = runSafe(cache.get)
           val resultExpr = provideCtxAndAdapt(encFn)
-          vals.toValDefs.use(_ => resultExpr)
+          vals.toValDefs.use(_ => validatedAtRuntime(evConfig, configExpr, resultExpr))
         }
       }
       .flatTap { result =>
@@ -535,7 +808,10 @@ trait CodecMacrosImpl
       )(renderDerivationErrorMessage)
   }
 
-  def deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
+  def deriveDecoderOnlyFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[JsoniterConfig]
+  )(
       provideCtxAndAdapt: (
           (Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A],
           Expr[A]
@@ -557,6 +833,7 @@ trait CodecMacrosImpl
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = None
+          val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
             val defBuilder =
@@ -566,7 +843,7 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType)))
+                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
                 })
               }
               _ <- Log.info(s"Defined decoder-only decode body for ${Type[A].prettyPrint}")
@@ -585,7 +862,7 @@ trait CodecMacrosImpl
 
           val vals = runSafe(cache.get)
           val resultExpr = provideCtxAndAdapt(decFn, nullVal)
-          vals.toValDefs.use(_ => resultExpr)
+          vals.toValDefs.use(_ => validatedAtRuntime(evConfig, configExpr, resultExpr))
         }
       }
       .flatTap { result =>
@@ -636,7 +913,7 @@ trait CodecMacrosImpl
           // semiEval: evaluate config at compile time for optimized codegen.
           // KNOWN ISSUE (hearth): semiEval fails on Inlined(...) wrapping module field access
           // like JsoniterConfig.default. Pending fix in hearth 0.3.1.
-          val evConfig: Option[JsoniterConfig] = configExpr.semiEval.toOption
+          val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
           // Validate config for contradictory flag combinations at compile time
           validateConfigOrAbort(evConfig, macroName)
@@ -688,7 +965,7 @@ trait CodecMacrosImpl
 
           val vals = runSafe(cache.get)
           val resultExpr = provideCtxAndAdapt(encFn, decFn, nullVal)
-          vals.toValDefs.use(_ => resultExpr)
+          vals.toValDefs.use(_ => validatedAtRuntime(evConfig, configExpr, resultExpr))
         }
       }
       .flatTap { result =>
@@ -745,33 +1022,78 @@ trait CodecMacrosImpl
   // - requireCollectionFields + transientEmpty: warning (well-defined but likely unintended)
   // - requireDefaultFields + transientDefault: warning (well-defined but likely unintended)
 
+  // Config conflict validation (compile-time configs only), with jsoniter-scala's messages.
   private def validateConfigOrAbort(evConfig: Option[JsoniterConfig], macroName: String): Unit =
-    evConfig.foreach { config =>
-      // Hard error: a codec that can neither encode nor decode is useless
-      if (config.decodingOnly && config.encodingOnly)
-        Environment.reportErrorAndAbort(
-          s"$macroName: JsoniterConfig has both decodingOnly = true and encodingOnly = true. " +
-            "A codec cannot both reject encoding and reject decoding."
-        )
-      // Warnings for confusing but technically valid combinations
-      if (config.requireCollectionFields && config.transientEmpty)
-        Environment.reportWarn(
-          s"$macroName: JsoniterConfig has both requireCollectionFields = true and transientEmpty = true. " +
-            "The encoder will omit empty collections but the decoder will reject their absence."
-        )
-      if (config.requireDefaultFields && config.transientDefault)
-        Environment.reportWarn(
-          s"$macroName: JsoniterConfig has both requireDefaultFields = true and transientDefault = true. " +
-            "The encoder will omit default-valued fields but the decoder will reject their absence."
-        )
+    evConfig.flatMap(JsoniterConfig.configError).foreach { msg =>
+      Environment.reportErrorAndAbort(s"$macroName: $msg")
     }
+
+  /** With a config known only at runtime, the contradictory settings are checked when the codec is created. */
+  @scala.annotation.nowarn("msg=is never used")
+  private def validatedAtRuntime[Out: Type](
+      evConfig: Option[JsoniterConfig],
+      configExpr: Expr[JsoniterConfig],
+      result: Expr[Out]
+  ): Expr[Out] =
+    if (evConfig.isDefined) result
+    else
+      Expr.quote {
+        JsoniterConfig.validate(Expr.splice(configExpr))
+        Expr.splice(result)
+      }
+
+  /** Fails derivation when keys of a case class collide (after `fieldNameMapper` / `@fieldName`), also with the
+    * discriminator of an ADT leaf, as jsoniter-scala does. Only checked when the names are known at compile time.
+    */
+  private[compiletime] def checkFieldNameCollisions[A: Type](names: List[String]): MIO[Unit] = {
+    val collisions = names.groupBy(identity).collect { case (n, ns) if ns.size > 1 => n }.toList.sorted
+    if (collisions.isEmpty) MIO.pure(())
+    else {
+      val err = CodecDerivationError.Collision(
+        s"Duplicated JSON key(s) defined for '${Type[A].prettyPrint}': ${collisions.mkString("'", "', '", "'")}. " +
+          "Keys are derived from field names of the class that are mapped by the 'JsoniterConfig.fieldNameMapper' " +
+          "function or can be overridden by '@fieldName' annotation(s). Result keys should be unique and should not " +
+          "match with a key for the discriminator field that is specified by the 'JsoniterConfig.discriminatorFieldName' option."
+      )
+      Log.error(err.message) >> MIO.fail(err)
+    }
+  }
+
+  /** Fails derivation when ADT leaves (or Java enum values) map to the same name, as jsoniter-scala does. */
+  private[compiletime] def checkDiscriminatorValueCollisions[A: Type](names: List[String]): MIO[Unit] = {
+    val collisions = names.groupBy(identity).collect { case (n, ns) if ns.size > 1 => n }.toList.sorted
+    if (collisions.isEmpty) MIO.pure(())
+    else {
+      val err = CodecDerivationError.Collision(
+        s"Duplicated discriminator defined for ADT base '${Type[A].prettyPrint}': ${collisions.mkString("'", "', '", "'")}. " +
+          "Values for leaf classes of ADT that are returned by the 'JsoniterConfig.adtLeafClassNameMapper' function " +
+          s"(or '@named' annotations, or 'javaEnumValueNameMapper' for Java enums) should be unique. Names: ${names.mkString(", ")}"
+      )
+      Log.error(err.message) >> MIO.fail(err)
+    }
+  }
 
   // Null value derivation
 
   @scala.annotation.nowarn("msg=is never used")
-  def deriveNullValue[A: Type]: MIO[Expr[A]] = MIO.pure {
-    if (Type[A] <:< Type.of[AnyRef]) Expr.quote(null.asInstanceOf[A])
-    else if (Type[A] =:= Type.of[Boolean]) Expr.quote(false.asInstanceOf[A])
+  /** Whether a top-level JSON `null` may decode as `decodeValue`'s `default` (reference types; not primitives). */
+  @scala.annotation.nowarn("msg=is never used")
+  private def nullAsDefaultApplies[A: Type]: Expr[Boolean] = {
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    Expr(Type[A] <:< Type.of[AnyRef])
+  }
+
+  /** The codec's `nullValue` (also passed as `default` to the decoders of top-level values), as jsoniter-scala's
+    * `genNullValue`: `None` for `Option`s, empty collections/maps/arrays, zero for primitives and their boxes, a value
+    * class wrapping its value's `nullValue`, `null` otherwise.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  // (lazy: it inspects IsCollection & co., which must run after the standard extensions are loaded)
+  def deriveNullValue[A: Type]: MIO[Expr[A]] = MIO.pure(()).map(_ => nullValueOf[A])
+
+  @scala.annotation.nowarn("msg=is never used")
+  private def nullValueOf[A: Type]: Expr[A] =
+    if (Type[A] =:= Type.of[Boolean]) Expr.quote(false.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Byte]) Expr.quote(0.toByte.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Short]) Expr.quote(0.toShort.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Int]) Expr.quote(0.asInstanceOf[A])
@@ -779,7 +1101,42 @@ trait CodecMacrosImpl
     else if (Type[A] =:= Type.of[Float]) Expr.quote(0.0f.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Double]) Expr.quote(0.0.asInstanceOf[A])
     else if (Type[A] =:= Type.of[Char]) Expr.quote('\u0000'.asInstanceOf[A])
-    else Expr.quote(null.asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaBoolean) Expr.quote(java.lang.Boolean.FALSE.asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaByte) Expr.quote(java.lang.Byte.valueOf(0.toByte).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaShort) Expr.quote(java.lang.Short.valueOf(0.toShort).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaInteger) Expr.quote(java.lang.Integer.valueOf(0).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaLong) Expr.quote(java.lang.Long.valueOf(0L).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaFloat) Expr.quote(java.lang.Float.valueOf(0.0f).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaDouble) Expr.quote(java.lang.Double.valueOf(0.0).asInstanceOf[A])
+    else if (Type[A] =:= CTypes.JavaCharacter) Expr.quote(java.lang.Character.valueOf('\u0000').asInstanceOf[A])
+    else if (Type[A] =:= CTypes.String || nullableUnionUnderlying[A].isDefined) Expr.quote(null.asInstanceOf[A])
+    else
+      Type[A] match {
+        case IsOption(_)                                             => Expr.quote(scala.None.asInstanceOf[A])
+        case IsValueType(isValueType) if Type[A] <:< Type.of[AnyVal] =>
+          import isValueType.Underlying as Inner
+          isValueType.value.wrap match {
+            case _: CtorLikeOf.PlainValue[?, ?] =>
+              isValueType.value.wrap.apply(nullValueOf[Inner]).asInstanceOf[Expr[A]]
+            case _ => Expr.quote(null.asInstanceOf[A])
+          }
+        case _ =>
+          if (Type[A] <:< CTypes.ImmutableBitSet || Type[A] =:= CTypes.CollectionBitSet)
+            Expr.quote(scala.collection.immutable.BitSet.empty.asInstanceOf[A])
+          else if (Type[A] <:< CTypes.MutableBitSet) Expr.quote(new scala.collection.mutable.BitSet().asInstanceOf[A])
+          else emptyCollectionOf[A].getOrElse(Expr.quote(null.asInstanceOf[A]))
+      }
+
+  /** Cache keys / def names of helpers derived in the different stringified modes (see `EncoderCtx.stringified`). */
+  private[compiletime] def stringifiedKeySuffix(stringified: Option[Boolean]): String = stringified match {
+    case Some(true)  => "-stringified"
+    case Some(false) => "-plain"
+    case None        => ""
+  }
+  private[compiletime] def stringifiedNamePrefix(stringified: Option[Boolean]): String = stringified match {
+    case Some(true)  => "stringified_"
+    case Some(false) => "plain_"
+    case None        => ""
   }
 
   // Encoder Context
@@ -791,8 +1148,26 @@ trait CodecMacrosImpl
       config: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[JsoniterConfig] = None
+      evaluatedConfig: Option[JsoniterConfig] = None,
+      // As in jsoniter-scala, `config.isStringified` applies from the root value down to the first case class / ADT
+      // (`None`: inherited from the config); a case class field is stringified only by its own `@stringified`
+      // (`Some(true)`, also inside options, collections, map values and tuples) and `Some(false)` otherwise.
+      stringified: Option[Boolean] = None
   ) {
+
+    /** Whether numbers/booleans are written as strings: `Some` when known at compile time. */
+    def stringifiedMode: Option[Boolean] = stringified.orElse(evaluatedConfig.map(_.isStringified))
+
+    private def helperKey: String = "cached-encode-method" + stringifiedKeySuffix(stringified)
+
+    /** [[stringifiedMode]] as an expression (read from the config at runtime when not known at compile time). */
+    def stringifiedExpr: Expr[Boolean] = {
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      stringifiedMode match {
+        case Some(b) => Expr(b)
+        case None    => Expr.quote(Expr.splice(config).isStringified)
+      }
+    }
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
       tpe = Type[B],
@@ -826,7 +1201,7 @@ trait CodecMacrosImpl
       implicit val UnitT: Type[Unit] = CTypes.Unit
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-      cache.get3Ary[B, JsonWriter, JsoniterConfig, Unit]("cached-encode-method")
+      cache.get3Ary[B, JsonWriter, JsoniterConfig, Unit](helperKey)
     }
     def setHelper[B: Type](
         helper: (Expr[B], Expr[JsonWriter], Expr[JsoniterConfig]) => MIO[Expr[Unit]]
@@ -835,12 +1210,14 @@ trait CodecMacrosImpl
       implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
       implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
       val defBuilder =
-        ValDefBuilder.ofDef3[B, JsonWriter, JsoniterConfig, Unit](s"encode_${Type[B].shortName}")
+        ValDefBuilder.ofDef3[B, JsonWriter, JsoniterConfig, Unit](
+          s"encode_${stringifiedNamePrefix(stringified)}${Type[B].shortName}"
+        )
       for {
         _ <- Log.info(s"Forward-declaring encode helper for ${Type[B].prettyPrint}")
-        _ <- cache.forwardDeclare("cached-encode-method", defBuilder)
+        _ <- cache.forwardDeclare(helperKey, defBuilder)
         _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-encode-method", defBuilder) { case (_, (value, writer, config)) =>
+          runSafe(cache.buildCachedWith(helperKey, defBuilder) { case (_, (value, writer, config)) =>
             runSafe(helper(value, writer, config))
           })
         }
@@ -899,7 +1276,7 @@ trait CodecMacrosImpl
         } yield helper.get(ectx.value, ectx.writer, ectx.config)
     }
 
-  private def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Unit]] =
+  private[compiletime] def deriveEncoderViaRules[A: EncoderCtx]: MIO[Expr[Unit]] =
     Log
       .namedScope(s"Deriving encoder for type ${Type[A].prettyPrint}") {
         Rules(
@@ -915,6 +1292,7 @@ trait CodecMacrosImpl
           // so the standalone EncoderHandleAsMapRule is no longer in the chain (its object is kept for
           // deriveMapEntries / deriveKeyEncoding).
           EncoderHandleAsCollectionRule,
+          EncoderHandleAsTupleRule,
           EncoderHandleAsNamedTupleRule,
           EncoderHandleAsOneValueClassRule,
           EncoderHandleAsSingletonRule,
@@ -943,8 +1321,24 @@ trait CodecMacrosImpl
       config: Expr[JsoniterConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[JsoniterConfig] = None
+      evaluatedConfig: Option[JsoniterConfig] = None,
+      // See EncoderCtx.stringified.
+      stringified: Option[Boolean] = None
   ) {
+
+    /** Whether numbers/booleans are read from strings: `Some` when known at compile time. */
+    def stringifiedMode: Option[Boolean] = stringified.orElse(evaluatedConfig.map(_.isStringified))
+
+    private def helperKey: String = "cached-decode-method" + stringifiedKeySuffix(stringified)
+
+    /** [[stringifiedMode]] as an expression (read from the config at runtime when not known at compile time). */
+    def stringifiedExpr: Expr[Boolean] = {
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      stringifiedMode match {
+        case Some(b) => Expr(b)
+        case None    => Expr.quote(Expr.splice(config).isStringified)
+      }
+    }
 
     def nest[B: Type](newReader: Expr[JsonReader]): DecoderCtx[B] = copy[B](
       tpe = Type[B],
@@ -975,7 +1369,7 @@ trait CodecMacrosImpl
     def getHelper[B: Type]: MIO[Option[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[B]]] = {
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-      cache.get2Ary[JsonReader, JsoniterConfig, B]("cached-decode-method")
+      cache.get2Ary[JsonReader, JsoniterConfig, B](helperKey)
     }
     def setHelper[B: Type](
         helper: (Expr[JsonReader], Expr[JsoniterConfig]) => MIO[Expr[B]]
@@ -983,12 +1377,14 @@ trait CodecMacrosImpl
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
       val defBuilder =
-        ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, B](s"decode_${Type[B].shortName}")
+        ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, B](
+          s"decode_${stringifiedNamePrefix(stringified)}${Type[B].shortName}"
+        )
       for {
         _ <- Log.info(s"Forward-declaring decode helper for ${Type[B].prettyPrint}")
-        _ <- cache.forwardDeclare("cached-decode-method", defBuilder)
+        _ <- cache.forwardDeclare(helperKey, defBuilder)
         _ <- MIO.scoped { runSafe =>
-          runSafe(cache.buildCachedWith("cached-decode-method", defBuilder) { case (_, (reader, config)) =>
+          runSafe(cache.buildCachedWith(helperKey, defBuilder) { case (_, (reader, config)) =>
             runSafe(helper(reader, config))
           })
         }
@@ -1089,7 +1485,7 @@ trait CodecMacrosImpl
       }
   }
 
-  private def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[A]] =
+  private[compiletime] def deriveDecoderViaRules[A: DecoderCtx]: MIO[Expr[A]] =
     Log
       .namedScope(s"Deriving decoder for type ${Type[A].prettyPrint}") {
         Rules(
@@ -1105,6 +1501,7 @@ trait CodecMacrosImpl
           // so the standalone DecoderHandleAsMapRule is no longer in the chain (its object is kept for
           // decodeMapEntries / deriveKeyDecoding).
           DecoderHandleAsCollectionRule,
+          DecoderHandleAsTupleRule,
           DecoderHandleAsNamedTupleRule,
           DecoderHandleAsOneValueClassRule,
           DecoderHandleAsSingletonRule,
