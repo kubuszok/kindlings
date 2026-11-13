@@ -1,5 +1,12 @@
 # Hearth gap: `semiEval` and named arguments (Scala 3)
 
+Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, to be released as 0.4.4): `semiEval`
+evaluates named arguments on Scala 3 and follows the `$proxy` vals of inline methods itself, as the whole argument
+and inside an argument (`Configuration(.., f$proxy1, ..)`), including `Inlined` bindings. `SemiEvalConfigScala3` no
+longer strips `NamedArg`s or inlines proxies. Two things are still done in Kindlings (see the end of this document):
+refusing the default arguments of another inline method (evaluating them still breaks the compilation of the
+enclosing class), and following a lazy local val (a local `given Configuration = ...`), which Hearth skips.
+
 Found while making circe-derivation evaluate its `Configuration` at compile time (audit round 3, item 5g).
 
 ## Symptom
@@ -75,3 +82,25 @@ enclosing class (`CirceScala3Spec is already defined`), so `deriveEnum` is an ov
 argument.
 
 Suggested Hearth fix: `semiEval` (Scala 3) could follow inline proxies (`Inlined` bindings) itself.
+
+## Still worked around with Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (2026-11-13)
+
+`SemiEvalConfigScala3` now only inspects the configuration with its local vals inlined, and calls Hearth's `semiEval`
+on the original expression unless:
+
+- **it calls the default argument of another (inline) method.** `KindlingsEncoder.derive[Shape](discriminator =
+  Some("type"))` builds `Configuration(derive$default$1[Shape], ..., discriminator$proxy1, ...)`. Hearth now follows the
+  proxies itself and evaluates such a default getter, and the compilation of the enclosing class fails with
+  `CirceScala3Spec is already defined as class CirceScala3Spec` (reported at the class, no macro position). Verified by
+  disabling the check: `circeDerivation/testFull` then fails to compile `CirceScala3Spec` (tests 427-433:
+  `KindlingsCodecAsObject.derive`, `KindlingsEncoder.derive`, `KindlingsDecoder.derive` with named arguments).
+  Reproducer (not minimized outside Kindlings): an `inline def derive[A](x: Int = 1, y: Int = 2) =
+  macroCall[A](using Cfg(x, y))` whose macro calls `semiEval` on the configuration, called as `derive[A](y = 3)` from a
+  test class. `deriveEnum` therefore stays an overload rather than taking a default argument.
+- Hearth's `semiEval` returns `Left` and the configuration is a reference to a lazy local val, e.g. a local
+  `given Configuration = Configuration(enumAsStrings = true)` (`CirceScala3Spec` "a compile-time configuration in a
+  local val is evaluated"): Hearth skips lazy local vals ("its right-hand side may refer to itself"), so it is followed
+  to its right-hand side here.
+
+The `NamedArg` retry and the `$proxy` inlining are removed (Hearth does both). `SemiEvalConfigScala2` (which refused
+`var`s) is removed too.
