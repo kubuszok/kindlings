@@ -5,6 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.{Decoder, DecodingFailure, Json, JsonObject}
 
 trait DecoderHandleAsBuiltInTypeRuleImpl {
@@ -59,7 +60,10 @@ trait DecoderHandleAsBuiltInTypeRuleImpl {
               Expr.quote(Expr.splice(cursor).as[BigInt](Decoder.decodeBigInt).asInstanceOf[Either[DecodingFailure, A]])
             )
           else if (Type[A] =:= Type.of[Unit])
-            Some(Expr.quote(Right(().asInstanceOf[A])))
+            // Like circe's Decoder[Unit]: only null, {} and [] are accepted.
+            Some(
+              Expr.quote(CirceDerivationUtils.decodeUnit(Expr.splice(cursor)).asInstanceOf[Either[DecodingFailure, A]])
+            )
           else if (Type[A] =:= Type.of[Json])
             Some(Expr.quote(Expr.splice(cursor).as[Json](Decoder.decodeJson).asInstanceOf[Either[DecodingFailure, A]]))
           else if (Type[A] =:= Type.of[JsonObject])
@@ -72,7 +76,7 @@ trait DecoderHandleAsBuiltInTypeRuleImpl {
             None
 
         MIO.pure(result match {
-          case Some(expr) => Rule.matched(expr)
+          case Some(expr) => Rule.matched(liftEither[A](expr))
           case None       => Rule.yielded(s"The type ${Type[A].prettyPrint} is not a built-in type")
         })
       }

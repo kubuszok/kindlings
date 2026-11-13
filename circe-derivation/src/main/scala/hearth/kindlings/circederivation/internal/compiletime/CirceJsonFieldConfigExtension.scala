@@ -21,6 +21,17 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     implicit val FieldNameT: Type[annotations.fieldName] = Type.of[annotations.fieldName]
     implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
 
+    val EncoderCtor: Type.Ctor1[io.circe.Encoder] = Type.Ctor1.of[io.circe.Encoder]
+    // The same implicits as the encoder derivation ignores (Kindlings' and circe's own auto-derivation).
+    lazy val ignoredEncoderImplicits: Seq[UntypedMethod] =
+      Type.of[KindlingsEncoder.type].unsortedMethods.collect {
+        case method if method.isImplicit => method.asUntyped
+      } ++ Type.of[KindlingsCodecAsObject.type].unsortedMethods.collect {
+        case method if method.isImplicit => method.asUntyped
+      } ++ Type.of[io.circe.Encoder.type].unsortedMethods.collect {
+        case method if method.name == "derived" || method.name.startsWith("encodeLiteral") => method.asUntyped
+      }
+
     Expr.summonImplicit[Configuration].toOption match {
       case Some(configExpr) =>
         ctx.JsonSchemaConfig.register(new ctx.JsonSchemaConfig {
@@ -73,6 +84,30 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
           def numericFieldsAsStrings: Expr[Boolean] =
             Expr.quote(false)
+
+          // A child that does not encode to a JSON object is written as `{"Name": value}` with a discriminator.
+          override def wrapsNonObjectSubtypesWithDiscriminator: Boolean = true
+
+          // Nested sealed hierarchies are flattened (like circe's ConfiguredEncoder), except for an intermediate with a
+          // user-provided Encoder, which writes it (as is, when it is a Kindlings-derived sum encoder).
+          override def flattensNestedSubtypes: Boolean = true
+
+          override def nestedSubtypeInstance(subtype: ??): Option[Expr[Boolean]] = {
+            import subtype.Underlying as Sub
+            implicit val EncoderSub: Type[io.circe.Encoder[Sub]] = EncoderCtor[Sub]
+            Type[io.circe.Encoder[Sub]].summonExprIgnoring(ignoredEncoderImplicits*).toOption.map { instance =>
+              Expr.quote(
+                hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
+                  .isKindlingsSumEncoder(Expr.splice(instance))
+              )
+            }
+          }
+
+          // Without a discriminator every subtype is written as `{"Name": value}`.
+          override def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = Expr.quote(true)
+
+          override def unwrapsValueClasses: Option[Expr[Boolean]] =
+            Some(Expr.quote(Expr.splice(configExpr).unwrapValueClasses))
         })
       case None => () // no circe Configuration in scope
     }

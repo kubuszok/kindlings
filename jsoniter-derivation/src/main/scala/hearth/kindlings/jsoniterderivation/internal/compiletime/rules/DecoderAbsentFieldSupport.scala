@@ -135,10 +135,10 @@ trait DecoderAbsentFieldSupport {
     }
   }
 
-  /** The value a JSON `null` decodes to for a field with a default value: the default (jsoniter-scala passes the field's
-    * default as `default` to its decoder, and reference-typed decoders return it for `null`), also for `Option`s with a
-    * default. `None` for nullable `T | Null` fields, primitives and value classes (`null` is rejected), and fields
-    * without a default.
+  /** The value a JSON `null` decodes to for a field with a default value: the default (jsoniter-scala passes the
+    * field's default as `default` to its decoder, and reference-typed decoders return it for `null`), also for
+    * `Option`s with a default. `None` for nullable `T | Null` fields, primitives and value classes (`null` is
+    * rejected), and fields without a default.
     */
   @scala.annotation.nowarn("msg=is never used")
   protected def nullAsDefaultValue[Field: Type](param: Parameter): Option[Expr[Field]] = {

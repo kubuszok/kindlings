@@ -175,11 +175,15 @@ final class UBJsonJsoniterParitySpec extends MacroSuite {
         UBJsonValueCodec.derived[UbBigInt]
       }
       error.getMessage ==> "'requireDefaultFields' and 'transientDefault' cannot be 'true' simultaneously"
-      intercept[IllegalArgumentException](UBJsonConfig.validate(UBJsonConfig().withCirceLikeObjectEncoding.withDiscriminator("t")))
+      intercept[IllegalArgumentException](
+        UBJsonConfig.validate(UBJsonConfig().withCirceLikeObjectEncoding.withDiscriminator("t"))
+      )
     }
 
     test("duplicated keys fail the derivation") {
-      compileErrors("hearth.kindlings.ubjsonderivation.UBJsonValueCodec.derived[hearth.kindlings.ubjsonderivation.UbDuplicatedKeys]")
+      compileErrors(
+        "hearth.kindlings.ubjsonderivation.UBJsonValueCodec.derived[hearth.kindlings.ubjsonderivation.UbDuplicatedKeys]"
+      )
         .check("Duplicated key(s) defined for")
     }
   }

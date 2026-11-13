@@ -6,6 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 import hearth.kindlings.circederivation.Configuration
+import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.{Decoder, DecodingFailure, HCursor}
 
 trait DecoderUseCachedDefWhenAvailableRuleImpl {
@@ -28,9 +29,7 @@ trait DecoderUseCachedDefWhenAvailableRuleImpl {
         instance: Expr[Decoder[A]]
     ): MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Found cached decoder instance for ${Type[A].prettyPrint}") >> MIO.pure(
-        Rule.matched(Expr.quote {
-          Expr.splice(instance).apply(Expr.splice(dctx.cursor))
-        })
+        Rule.matched(runDecoderInstance[A](instance))
       )
 
     private def callCachedHelper[A: DecoderCtx](
@@ -39,7 +38,9 @@ trait DecoderUseCachedDefWhenAvailableRuleImpl {
       implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
       Log.info(s"Found cached decoder helper for ${Type[A].prettyPrint}") >> MIO.pure(
         Rule.matched(Expr.quote {
-          Expr.splice(helperCall(dctx.cursor, dctx.config, dctx.failFast)).asInstanceOf[Either[DecodingFailure, A]]
+          CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+            Expr.splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+          )
         })
       )
     }

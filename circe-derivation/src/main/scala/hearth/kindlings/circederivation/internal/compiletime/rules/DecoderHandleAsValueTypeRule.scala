@@ -6,6 +6,7 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
+import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.DecodingFailure
 
 trait DecoderHandleAsValueTypeRuleImpl {
@@ -21,22 +22,39 @@ trait DecoderHandleAsValueTypeRuleImpl {
           Type[A] match {
             case IsValueType(isValueType) =>
               import isValueType.Underlying as Inner
-
-              DTypes
-                .Decoder[Inner]
-                .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-                .toEither match {
-                case Right(innerDecoder) =>
-                  @scala.annotation.nowarn("msg=is never used")
-                  implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
-                  buildWrapLambda[A, Inner](isValueType.value).map { builder =>
-                    val wrapLambda = builder.build[Either[DecodingFailure, A]]
-                    Rule.matched(Expr.quote {
-                      Expr.splice(innerDecoder).apply(Expr.splice(dctx.cursor)).flatMap(Expr.splice(wrapLambda))
-                    })
+              anyValCaseClass[A] match {
+                case None => decodeUnwrapped[A, Inner](isValueType.value, dctx).map(Rule.matched)
+                // An `AnyVal` case class: unwrapped by default, decoded as a product (like upstream circe) with
+                // `unwrapValueClasses = false`. Cached as a helper of both forms (a cached helper of only the product
+                // form, set by the case-class rule, would be reused for the unwrapped form too).
+                case Some(caseClass) =>
+                  dctx.evaluatedConfig.map(_.unwrapValueClasses) match {
+                    case Some(true) => decodeUnwrapped[A, Inner](isValueType.value, dctx).map(Rule.matched)
+                    case _          =>
+                      implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                      implicit val AnyT: Type[Any] = DTypes.Any
+                      val staticallyProduct = dctx.evaluatedConfig.exists(!_.unwrapValueClasses)
+                      for {
+                        _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
+                          val ctx = dctx.nestInCache(cursor, config, failFast)
+                          val productMIO = DecoderHandleAsCaseClassRule.decodeCaseClassFields[A](caseClass)(using ctx)
+                          if (staticallyProduct) productMIO
+                          else
+                            for {
+                              unwrapped <- decodeUnwrapped[A, Inner](isValueType.value, ctx)
+                              product <- productMIO
+                            } yield Expr.quote {
+                              if (Expr.splice(config).unwrapValueClasses) (Expr.splice(unwrapped): Any)
+                              else Expr.splice(product)
+                            }
+                        }
+                        helper <- dctx.getHelper[A]
+                      } yield Rule.matched(Expr.quote {
+                        CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+                          Expr.splice(helper.get(dctx.cursor, dctx.config, dctx.failFast))
+                        )
+                      })
                   }
-                case Left(reason) =>
-                  MIO.pure(Rule.yielded(s"Value type inner ${Type[Inner].prettyPrint} has no Decoder: $reason"))
               }
 
             case _ =>
@@ -44,10 +62,46 @@ trait DecoderHandleAsValueTypeRuleImpl {
           }
       }
 
+    /** The unwrapped form: the inner value's decoder (user-provided or derived), then the value type's wrapper. */
+    private def decodeUnwrapped[A, Inner: Type](
+        isValueType: IsValueTypeOf[A, Inner],
+        ctx: DecoderCtx[A]
+    ): MIO[Expr[Either[DecodingFailure, A]]] = {
+      implicit val decoderCtx: DecoderCtx[A] = ctx
+      implicit val AT: Type[A] = ctx.tpe
+      @scala.annotation.nowarn("msg=is never used")
+      implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+      val innerResultMIO: MIO[Expr[Either[DecodingFailure, Inner]]] = DTypes
+        .Decoder[Inner]
+        .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+        .toEither match {
+        case Right(innerDecoder) =>
+          MIO.pure(runDecoderInstance[Inner](innerDecoder)(using dctx.nest[Inner](dctx.cursor)))
+        case Left(_) =>
+          // No implicit for the inner type: derive it recursively, symmetric with the encoder's value-type
+          // rule (which encodes the unwrapped inner value with a derived encoder).
+          deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.cursor))
+      }
+      for {
+        innerResult <- innerResultMIO
+        builder <- buildWrapLambda[A, Inner](isValueType)
+      } yield {
+        val wrapLambda = builder.build[Either[DecodingFailure, A]]
+        Expr.quote {
+          CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+            CirceDerivationUtils
+              .flatMapResult(Expr.splice(dctx.failFast), Expr.splice(innerResult), Expr.splice(wrapLambda))
+          )
+        }
+      }
+    }
+
     @scala.annotation.nowarn("msg=is never used")
-    private def buildWrapLambda[A: Type, Inner: Type](
+    private def buildWrapLambda[A: DecoderCtx, Inner: Type](
         isValueType: IsValueTypeOf[A, Inner]
     ) = {
+      // Smart-constructor errors keep the cursor history (circe's `emap` uses `c.history`).
+      val cursor = dctx.cursor
       implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
       LambdaBuilder
         .of1[Inner]("inner")
@@ -60,7 +114,7 @@ trait DecoderHandleAsValueTypeRuleImpl {
               val wrapResult = isValueType.wrap.apply(innerExpr).asInstanceOf[Expr[Either[String, A]]]
               MIO.pure(Expr.quote {
                 Expr.splice(wrapResult).left.map { (msg: String) =>
-                  io.circe.DecodingFailure(msg, Nil)
+                  io.circe.DecodingFailure(msg, Expr.splice(cursor).history)
                 }
               })
             case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
@@ -68,14 +122,14 @@ trait DecoderHandleAsValueTypeRuleImpl {
                 isValueType.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Iterable[String], A]]]
               MIO.pure(Expr.quote {
                 Expr.splice(wrapResult).left.map { (errs: Iterable[String]) =>
-                  io.circe.DecodingFailure(errs.mkString("\n"), Nil)
+                  io.circe.DecodingFailure(errs.mkString("\n"), Expr.splice(cursor).history)
                 }
               })
             case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
               val wrapResult = isValueType.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Throwable, A]]]
               MIO.pure(Expr.quote {
                 Expr.splice(wrapResult).left.map { (err: Throwable) =>
-                  io.circe.DecodingFailure(err.getMessage, Nil)
+                  io.circe.DecodingFailure(err.getMessage, Expr.splice(cursor).history)
                 }
               })
             case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
@@ -83,7 +137,7 @@ trait DecoderHandleAsValueTypeRuleImpl {
                 isValueType.wrap.apply(innerExpr).asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
               MIO.pure(Expr.quote {
                 Expr.splice(wrapResult).left.map { (errs: Iterable[Throwable]) =>
-                  io.circe.DecodingFailure(errs.map(_.getMessage).mkString("\n"), Nil)
+                  io.circe.DecodingFailure(errs.map(_.getMessage).mkString("\n"), Expr.splice(cursor).history)
                 }
               })
           }

@@ -449,6 +449,21 @@ final class RoundTripSpec extends MacroSuite {
           .getOrElse(io.circe.Json.Null)
         assert(KindlingsDecoder.decode[Shape](json).isLeft)
       }
+
+      test("strict decoding with discriminator round-trips") {
+        implicit val config: Configuration = Configuration(strictDecoding = true, discriminator = Some("type"))
+        val value: Shape = Circle(5.0)
+        val json = KindlingsEncoder.encode[Shape](value)
+        KindlingsDecoder.decode[Shape](json) ==> Right(value)
+      }
+
+      test("strict decoding with discriminator rejects extra fields") {
+        implicit val config: Configuration = Configuration(strictDecoding = true, discriminator = Some("type"))
+        val json = io.circe.parser
+          .parse("""{"type":"Circle","radius":5.0,"extra":"oops"}""")
+          .getOrElse(io.circe.Json.Null)
+        assert(KindlingsDecoder.decode[Shape](json).isLeft)
+      }
     }
 
     group("accumulating + defaults") {

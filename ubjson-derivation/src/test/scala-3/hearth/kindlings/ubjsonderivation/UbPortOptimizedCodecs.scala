@@ -9,7 +9,9 @@ object UbPortOptimizedCodecs {
   val enumIds: UBJsonValueCodec[UbEnums] =
     UBJsonValueCodec.derived[UbEnums](using UBJsonConfig.default.withUseScalaEnumValueId)
   val skipNestedOptions: UBJsonValueCodec[List[UbNestedOptions]] =
-    UBJsonValueCodec.derived[List[UbNestedOptions]](using UBJsonConfig.default.withSkipNestedOptionValues.withTransientNone)
+    UBJsonValueCodec.derived[List[UbNestedOptions]](using
+      UBJsonConfig.default.withSkipNestedOptionValues.withTransientNone
+    )
   val nestedOptions3Discriminator: UBJsonValueCodec[UbNestedOptions3] =
     UBJsonValueCodec.derived[UbNestedOptions3](using UBJsonConfig.default.withDiscriminator("type").withTransientNone)
   val nestedOptions3: UBJsonValueCodec[UbNestedOptions3] =

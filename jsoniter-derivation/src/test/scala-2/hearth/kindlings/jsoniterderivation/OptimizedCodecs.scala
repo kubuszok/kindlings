@@ -6,81 +6,185 @@ package hearth.kindlings.jsoniterderivation
   * difference is the syntax of passing the config explicitly.
   */
 object OptimizedCodecs {
-  val strictPrimitive: KindlingsJsonValueCodec[AbsentPrimitive] = KindlingsJsonValueCodec.derived[AbsentPrimitive](JsoniterConfig.default.withSkipUnexpectedFields(false))
-  val absentAllTransient: KindlingsJsonValueCodec[AbsentFieldsRecord] = KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withTransientNone.withTransientDefault.withTransientEmpty)
-  val absentRequireDefault: KindlingsJsonValueCodec[AbsentFieldsRecord] = KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withRequireDefaultFields)
-  val absentRequireDefaultOptionNone: KindlingsJsonValueCodec[AbsentOptionWithNoneDefault] = KindlingsJsonValueCodec.derived[AbsentOptionWithNoneDefault](JsoniterConfig.default.withRequireDefaultFields)
-  val absentRequireCollection: KindlingsJsonValueCodec[AbsentFieldsRecord] = KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withRequireCollectionFields)
-  val absentStrict: KindlingsJsonValueCodec[AbsentFieldsRecord] = KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withSkipUnexpectedFields(false))
-  val absentCheckDuplication: KindlingsJsonValueCodec[AbsentFieldsRecord] = KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withCheckFieldDuplication)
-  val absentDiscriminator: KindlingsJsonValueCodec[AbsentAdt] = KindlingsJsonValueCodec.derived[AbsentAdt](JsoniterConfig.default.withDiscriminator("type"))
-  val absentSnakeCase: KindlingsJsonValueCodec[AbsentCamelCase] = KindlingsJsonValueCodec.derived[AbsentCamelCase](JsoniterConfig.default.withSnakeCaseFieldNames)
-  val strictZero: KindlingsJsonValueCodec[ParityZeroFields] = KindlingsJsonValueCodec.derived[ParityZeroFields](JsoniterConfig.default.withSkipUnexpectedFields(false))
-  val strictAllTransient: KindlingsJsonValueCodec[ParityAllTransient] = KindlingsJsonValueCodec.derived[ParityAllTransient](JsoniterConfig.default.withSkipUnexpectedFields(false))
-  val setLimit10List: KindlingsJsonValueCodec[List[Int]] = KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.default.withSetMaxInsertNumber(10))
-  val setLimit10Set: KindlingsJsonValueCodec[Set[Int]] = KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.default.withSetMaxInsertNumber(10))
-  val jsoniterScalaDefaultsList: KindlingsJsonValueCodec[List[Int]] = KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults)
-  val jsoniterScalaDefaultsSet: KindlingsJsonValueCodec[Set[Int]] = KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.jsoniterScalaDefaults)
-  val transientEmpty: KindlingsJsonValueCodec[ParityEmptyCapable] = KindlingsJsonValueCodec.derived[ParityEmptyCapable](JsoniterConfig.default.withTransientEmpty)
-  val transientDefault: KindlingsJsonValueCodec[ParityArrayDefault] = KindlingsJsonValueCodec.derived[ParityArrayDefault](JsoniterConfig.default.withTransientDefault)
-  val requireCollectionNulls: KindlingsJsonValueCodec[ParityNullCollections] = KindlingsJsonValueCodec.derived[ParityNullCollections](JsoniterConfig.default.withRequireCollectionFields)
-  val precision5: KindlingsJsonValueCodec[ParityBigDecimal] = KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalPrecision(5))
-  val scaleLimit2: KindlingsJsonValueCodec[ParityBigDecimal] = KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalScaleLimit(2))
-  val digitsLimit3: KindlingsJsonValueCodec[ParityBigDecimal] = KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalDigitsLimit(3))
-  val bigIntDigitsLimit3: KindlingsJsonValueCodec[ParityBigInt] = KindlingsJsonValueCodec.derived[ParityBigInt](JsoniterConfig.default.withBigIntDigitsLimit(3))
-  val alwaysEmitLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator)
-  val alwaysEmitObject: KindlingsJsonValueCodec[ParityDDD.type] = KindlingsJsonValueCodec.derived[ParityDDD.type](JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator)
-  val alwaysEmitBase: KindlingsJsonValueCodec[ParityAdt] = KindlingsJsonValueCodec.derived[ParityAdt](JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator)
-  val alwaysEmitStrictLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withSkipUnexpectedFields(false))
-  val alwaysEmitCheckDuplicationLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withCheckFieldDuplication)
-  val skipNestedOptions: KindlingsJsonValueCodec[List[ParityNestedOptions]] = KindlingsJsonValueCodec.derived[List[ParityNestedOptions]](JsoniterConfig.default.withTransientNone.withSkipNestedOptionValues)
-  val discriminatorZeroAdt: KindlingsJsonValueCodec[ParityZeroAdt] = KindlingsJsonValueCodec.derived[ParityZeroAdt](JsoniterConfig.default.withDiscriminator("type"))
-  val discriminatorStrictZeroAdt: KindlingsJsonValueCodec[ParityZeroAdt] = KindlingsJsonValueCodec.derived[ParityZeroAdt](JsoniterConfig.default.withDiscriminator("type").withSkipUnexpectedFields(false))
-  val discriminatorCheckDuplication: KindlingsJsonValueCodec[ParityAdt] = KindlingsJsonValueCodec.derived[ParityAdt](JsoniterConfig.default.withDiscriminator("type").withCheckFieldDuplication)
-  val defaultsAdt: KindlingsJsonValueCodec[ParityDefaultsAdt] = KindlingsJsonValueCodec.derived[ParityDefaultsAdt](JsoniterConfig.default.withDiscriminator("type"))
-  val defaults2RequireDefaults: KindlingsJsonValueCodec[ParityDefaults2] = KindlingsJsonValueCodec.derived[ParityDefaults2](JsoniterConfig.default.withRequireDefaultFields)
-  val inlineOneValueClasses: KindlingsJsonValueCodec[ParityHasWrapper] = KindlingsJsonValueCodec.derived[ParityHasWrapper](JsoniterConfig.default.withInlineOneValueClasses)
-  val mapAsArray: KindlingsJsonValueCodec[Map[String, Int]] = KindlingsJsonValueCodec.derived[Map[String, Int]](JsoniterConfig.default.withMapAsArray)
-  val mapAsArrayIntKeys: KindlingsJsonValueCodec[Map[Int, String]] = KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.default.withMapAsArray)
-  val discAnywhere: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false))
-  val discAnywhereT: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("t").withRequireDiscriminatorFirst(false))
-  val discAnywhereStrict: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false).withSkipUnexpectedFields(false))
-  val discAnywhereCheckDuplication: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false).withCheckFieldDuplication)
-  val discFirst: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("type"))
-  val adtCirceLike: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.default.withCirceLikeObjectEncoding)
-  val adtDiscriminator: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.default.withDiscriminator("type"))
-  val directionsDiscriminator: KindlingsJsonValueCodec[List[CardinalDirection]] = KindlingsJsonValueCodec.derived[List[CardinalDirection]](JsoniterConfig.default.withDiscriminator("type"))
-  val directionsEnumAsStrings: KindlingsJsonValueCodec[List[CardinalDirection]] = KindlingsJsonValueCodec.derived[List[CardinalDirection]](JsoniterConfig.default.withDiscriminator("type").withEnumAsStrings)
-  val enumsDiscriminator: KindlingsJsonValueCodec[ParityEnums] = KindlingsJsonValueCodec.derived[ParityEnums](JsoniterConfig.default.withDiscriminator("type"))
-  val enumIds: KindlingsJsonValueCodec[ParityEnums] = KindlingsJsonValueCodec.derived[ParityEnums](JsoniterConfig.default.withDiscriminator("type").withUseScalaEnumValueId)
-  val stringifiedAll: KindlingsJsonValueCodec[ParityAllNumbers] = KindlingsJsonValueCodec.derived[ParityAllNumbers](JsoniterConfig.default.withStringified)
-  val stringifiedInt: KindlingsJsonValueCodec[Int] = KindlingsJsonValueCodec.derived[Int](JsoniterConfig.default.withStringified)
-  val stringifiedSet: KindlingsJsonValueCodec[scala.collection.mutable.Set[List[BigDecimal]]] = KindlingsJsonValueCodec.derived[scala.collection.mutable.Set[List[BigDecimal]]](JsoniterConfig.default.withStringified)
-  val stringifiedOption: KindlingsJsonValueCodec[Option[BigInt]] = KindlingsJsonValueCodec.derived[Option[BigInt]](JsoniterConfig.default.withStringified)
-  val stringifiedDigits3: KindlingsJsonValueCodec[List[BigDecimal]] = KindlingsJsonValueCodec.derived[List[BigDecimal]](JsoniterConfig.default.withStringified.withBigDecimalDigitsLimit(3))
-  val stringifiedIds: KindlingsJsonValueCodec[ParityLocation.ParityLocation] = KindlingsJsonValueCodec.derived[ParityLocation.ParityLocation](JsoniterConfig.default.withStringified.withUseScalaEnumValueId)
-  val transientNull: KindlingsJsonValueCodec[ParityNullable] = KindlingsJsonValueCodec.derived[ParityNullable](JsoniterConfig.default.withTransientNull)
-  val scalaTransient: KindlingsJsonValueCodec[ParityScalaTransient] = KindlingsJsonValueCodec.derived[ParityScalaTransient](JsoniterConfig.default.withScalaTransientSupport)
-  val bigDecimalDigitsLimit3BigInt: KindlingsJsonValueCodec[ParityBigInt] = KindlingsJsonValueCodec.derived[ParityBigInt](JsoniterConfig.default.withBigDecimalDigitsLimit(3))
-  val stringifiedLiteral: KindlingsJsonValueCodec[2] = KindlingsJsonValueCodec.derived[2](JsoniterConfig.default.withStringified)
-  val nonCaseDefaults: KindlingsJsonValueCodec[ParityNonCaseWithDefaults] = KindlingsJsonValueCodec.derived[ParityNonCaseWithDefaults](JsoniterConfig.jsoniterScalaDefaults)
-  val plainAdtDiscriminator: KindlingsJsonValueCodec[List[ParityPlainAdt]] = KindlingsJsonValueCodec.derived[List[ParityPlainAdt]](JsoniterConfig.default.withDiscriminator("type"))
-  val sealedBaseDiscriminator: KindlingsJsonValueCodec[List[ParitySealedBase]] = KindlingsJsonValueCodec.derived[List[ParitySealedBase]](JsoniterConfig.default.withDiscriminator("type"))
-  val multiListDefault: KindlingsJsonValueCodec[ParityMultiListDefault] = KindlingsJsonValueCodec.derived[ParityMultiListDefault](JsoniterConfig.jsoniterScalaDefaults)
-  val multiListDefaultRequired: KindlingsJsonValueCodec[ParityMultiListDefault] = KindlingsJsonValueCodec.derived[ParityMultiListDefault](JsoniterConfig.default.withRequireDefaultFields)
-  val multiListDependent: KindlingsJsonValueCodec[ParityMultiListDependent] = KindlingsJsonValueCodec.derived[ParityMultiListDependent](JsoniterConfig.jsoniterScalaDefaults)
-  val genericMultiList: KindlingsJsonValueCodec[ParityGenericMultiList[String]] = KindlingsJsonValueCodec.derived[ParityGenericMultiList[String]](JsoniterConfig.jsoniterScalaDefaults)
-  val multiListAdt: KindlingsJsonValueCodec[List[ParityMultiListAdt]] = KindlingsJsonValueCodec.derived[List[ParityMultiListAdt]](JsoniterConfig.default.withDiscriminator("type"))
-  val nestedOptions3: KindlingsJsonValueCodec[ParityNestedOptions3] = KindlingsJsonValueCodec.derived[ParityNestedOptions3](JsoniterConfig.jsoniterScalaDefaults)
-  val nestedOptions3CirceLike: KindlingsJsonValueCodec[ParityNestedOptions3] = KindlingsJsonValueCodec.derived[ParityNestedOptions3](JsoniterConfig.default.withCirceLikeObjectEncoding)
-  val customLeafDiscriminator: KindlingsJsonValueCodec[List[ParityCustomAdt]] = KindlingsJsonValueCodec.derived[List[ParityCustomAdt]](JsoniterConfig.default.withDiscriminator("type"))
-  val customLeafDiscriminatorAnywhere: KindlingsJsonValueCodec[List[ParityCustomAdt]] = KindlingsJsonValueCodec.derived[List[ParityCustomAdt]](JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false))
-  val iteratorField: KindlingsJsonValueCodec[ParityIteratorField] = KindlingsJsonValueCodec.derived[ParityIteratorField](JsoniterConfig.jsoniterScalaDefaults)
-  val inlineKeys: KindlingsJsonValueCodec[Map[ParityUserKey, Int]] = KindlingsJsonValueCodec.derived[Map[ParityUserKey, Int]](JsoniterConfig.default.withInlineOneValueClasses)
-  val inlineTagged: KindlingsJsonValueCodec[List[ParityTaggedId]] = KindlingsJsonValueCodec.derived[List[ParityTaggedId]](JsoniterConfig.default.withInlineOneValueClasses)
-  val circeLikePreset: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.makeCirceLike)
-  val openapiPreset: KindlingsJsonValueCodec[ParityPresetRecord] = KindlingsJsonValueCodec.derived[ParityPresetRecord](JsoniterConfig.makeOpenapiLike)
-  val openapiPresetAdt: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.makeOpenapiLike("kind", OptimizedCodecsHelpers.aaaMapper))
+  val strictPrimitive: KindlingsJsonValueCodec[AbsentPrimitive] =
+    KindlingsJsonValueCodec.derived[AbsentPrimitive](JsoniterConfig.default.withSkipUnexpectedFields(false))
+  val absentAllTransient: KindlingsJsonValueCodec[AbsentFieldsRecord] =
+    KindlingsJsonValueCodec.derived[AbsentFieldsRecord](
+      JsoniterConfig.default.withTransientNone.withTransientDefault.withTransientEmpty
+    )
+  val absentRequireDefault: KindlingsJsonValueCodec[AbsentFieldsRecord] =
+    KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withRequireDefaultFields)
+  val absentRequireDefaultOptionNone: KindlingsJsonValueCodec[AbsentOptionWithNoneDefault] =
+    KindlingsJsonValueCodec.derived[AbsentOptionWithNoneDefault](JsoniterConfig.default.withRequireDefaultFields)
+  val absentRequireCollection: KindlingsJsonValueCodec[AbsentFieldsRecord] =
+    KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withRequireCollectionFields)
+  val absentStrict: KindlingsJsonValueCodec[AbsentFieldsRecord] =
+    KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withSkipUnexpectedFields(false))
+  val absentCheckDuplication: KindlingsJsonValueCodec[AbsentFieldsRecord] =
+    KindlingsJsonValueCodec.derived[AbsentFieldsRecord](JsoniterConfig.default.withCheckFieldDuplication)
+  val absentDiscriminator: KindlingsJsonValueCodec[AbsentAdt] =
+    KindlingsJsonValueCodec.derived[AbsentAdt](JsoniterConfig.default.withDiscriminator("type"))
+  val absentSnakeCase: KindlingsJsonValueCodec[AbsentCamelCase] =
+    KindlingsJsonValueCodec.derived[AbsentCamelCase](JsoniterConfig.default.withSnakeCaseFieldNames)
+  val strictZero: KindlingsJsonValueCodec[ParityZeroFields] =
+    KindlingsJsonValueCodec.derived[ParityZeroFields](JsoniterConfig.default.withSkipUnexpectedFields(false))
+  val strictAllTransient: KindlingsJsonValueCodec[ParityAllTransient] =
+    KindlingsJsonValueCodec.derived[ParityAllTransient](JsoniterConfig.default.withSkipUnexpectedFields(false))
+  val setLimit10List: KindlingsJsonValueCodec[List[Int]] =
+    KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.default.withSetMaxInsertNumber(10))
+  val setLimit10Set: KindlingsJsonValueCodec[Set[Int]] =
+    KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.default.withSetMaxInsertNumber(10))
+  val jsoniterScalaDefaultsList: KindlingsJsonValueCodec[List[Int]] =
+    KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults)
+  val jsoniterScalaDefaultsSet: KindlingsJsonValueCodec[Set[Int]] =
+    KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.jsoniterScalaDefaults)
+  val transientEmpty: KindlingsJsonValueCodec[ParityEmptyCapable] =
+    KindlingsJsonValueCodec.derived[ParityEmptyCapable](JsoniterConfig.default.withTransientEmpty)
+  val transientDefault: KindlingsJsonValueCodec[ParityArrayDefault] =
+    KindlingsJsonValueCodec.derived[ParityArrayDefault](JsoniterConfig.default.withTransientDefault)
+  val requireCollectionNulls: KindlingsJsonValueCodec[ParityNullCollections] =
+    KindlingsJsonValueCodec.derived[ParityNullCollections](JsoniterConfig.default.withRequireCollectionFields)
+  val precision5: KindlingsJsonValueCodec[ParityBigDecimal] =
+    KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalPrecision(5))
+  val scaleLimit2: KindlingsJsonValueCodec[ParityBigDecimal] =
+    KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalScaleLimit(2))
+  val digitsLimit3: KindlingsJsonValueCodec[ParityBigDecimal] =
+    KindlingsJsonValueCodec.derived[ParityBigDecimal](JsoniterConfig.default.withBigDecimalDigitsLimit(3))
+  val bigIntDigitsLimit3: KindlingsJsonValueCodec[ParityBigInt] =
+    KindlingsJsonValueCodec.derived[ParityBigInt](JsoniterConfig.default.withBigIntDigitsLimit(3))
+  val alwaysEmitLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](
+    JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator
+  )
+  val alwaysEmitObject: KindlingsJsonValueCodec[ParityDDD.type] = KindlingsJsonValueCodec.derived[ParityDDD.type](
+    JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator
+  )
+  val alwaysEmitBase: KindlingsJsonValueCodec[ParityAdt] = KindlingsJsonValueCodec.derived[ParityAdt](
+    JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator
+  )
+  val alwaysEmitStrictLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](
+    JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withSkipUnexpectedFields(false)
+  )
+  val alwaysEmitCheckDuplicationLeaf: KindlingsJsonValueCodec[ParityAAA] = KindlingsJsonValueCodec.derived[ParityAAA](
+    JsoniterConfig.default.withDiscriminator("type").withAlwaysEmitDiscriminator.withCheckFieldDuplication
+  )
+  val skipNestedOptions: KindlingsJsonValueCodec[List[ParityNestedOptions]] =
+    KindlingsJsonValueCodec.derived[List[ParityNestedOptions]](
+      JsoniterConfig.default.withTransientNone.withSkipNestedOptionValues
+    )
+  val discriminatorZeroAdt: KindlingsJsonValueCodec[ParityZeroAdt] =
+    KindlingsJsonValueCodec.derived[ParityZeroAdt](JsoniterConfig.default.withDiscriminator("type"))
+  val discriminatorStrictZeroAdt: KindlingsJsonValueCodec[ParityZeroAdt] =
+    KindlingsJsonValueCodec.derived[ParityZeroAdt](
+      JsoniterConfig.default.withDiscriminator("type").withSkipUnexpectedFields(false)
+    )
+  val discriminatorCheckDuplication: KindlingsJsonValueCodec[ParityAdt] = KindlingsJsonValueCodec.derived[ParityAdt](
+    JsoniterConfig.default.withDiscriminator("type").withCheckFieldDuplication
+  )
+  val defaultsAdt: KindlingsJsonValueCodec[ParityDefaultsAdt] =
+    KindlingsJsonValueCodec.derived[ParityDefaultsAdt](JsoniterConfig.default.withDiscriminator("type"))
+  val defaults2RequireDefaults: KindlingsJsonValueCodec[ParityDefaults2] =
+    KindlingsJsonValueCodec.derived[ParityDefaults2](JsoniterConfig.default.withRequireDefaultFields)
+  val inlineOneValueClasses: KindlingsJsonValueCodec[ParityHasWrapper] =
+    KindlingsJsonValueCodec.derived[ParityHasWrapper](JsoniterConfig.default.withInlineOneValueClasses)
+  val mapAsArray: KindlingsJsonValueCodec[Map[String, Int]] =
+    KindlingsJsonValueCodec.derived[Map[String, Int]](JsoniterConfig.default.withMapAsArray)
+  val mapAsArrayIntKeys: KindlingsJsonValueCodec[Map[Int, String]] =
+    KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.default.withMapAsArray)
+  val discAnywhere: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](
+    JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false)
+  )
+  val discAnywhereT: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](
+    JsoniterConfig.default.withDiscriminator("t").withRequireDiscriminatorFirst(false)
+  )
+  val discAnywhereStrict: KindlingsJsonValueCodec[List[DiscAdt]] = KindlingsJsonValueCodec.derived[List[DiscAdt]](
+    JsoniterConfig.default
+      .withDiscriminator("type")
+      .withRequireDiscriminatorFirst(false)
+      .withSkipUnexpectedFields(false)
+  )
+  val discAnywhereCheckDuplication: KindlingsJsonValueCodec[List[DiscAdt]] =
+    KindlingsJsonValueCodec.derived[List[DiscAdt]](
+      JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false).withCheckFieldDuplication
+    )
+  val discFirst: KindlingsJsonValueCodec[List[DiscAdt]] =
+    KindlingsJsonValueCodec.derived[List[DiscAdt]](JsoniterConfig.default.withDiscriminator("type"))
+  val adtCirceLike: KindlingsJsonValueCodec[List[ParityAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.default.withCirceLikeObjectEncoding)
+  val adtDiscriminator: KindlingsJsonValueCodec[List[ParityAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.default.withDiscriminator("type"))
+  val directionsDiscriminator: KindlingsJsonValueCodec[List[CardinalDirection]] =
+    KindlingsJsonValueCodec.derived[List[CardinalDirection]](JsoniterConfig.default.withDiscriminator("type"))
+  val directionsEnumAsStrings: KindlingsJsonValueCodec[List[CardinalDirection]] =
+    KindlingsJsonValueCodec.derived[List[CardinalDirection]](
+      JsoniterConfig.default.withDiscriminator("type").withEnumAsStrings
+    )
+  val enumsDiscriminator: KindlingsJsonValueCodec[ParityEnums] =
+    KindlingsJsonValueCodec.derived[ParityEnums](JsoniterConfig.default.withDiscriminator("type"))
+  val enumIds: KindlingsJsonValueCodec[ParityEnums] = KindlingsJsonValueCodec.derived[ParityEnums](
+    JsoniterConfig.default.withDiscriminator("type").withUseScalaEnumValueId
+  )
+  val stringifiedAll: KindlingsJsonValueCodec[ParityAllNumbers] =
+    KindlingsJsonValueCodec.derived[ParityAllNumbers](JsoniterConfig.default.withStringified)
+  val stringifiedInt: KindlingsJsonValueCodec[Int] =
+    KindlingsJsonValueCodec.derived[Int](JsoniterConfig.default.withStringified)
+  val stringifiedSet: KindlingsJsonValueCodec[scala.collection.mutable.Set[List[BigDecimal]]] = KindlingsJsonValueCodec
+    .derived[scala.collection.mutable.Set[List[BigDecimal]]](JsoniterConfig.default.withStringified)
+  val stringifiedOption: KindlingsJsonValueCodec[Option[BigInt]] =
+    KindlingsJsonValueCodec.derived[Option[BigInt]](JsoniterConfig.default.withStringified)
+  val stringifiedDigits3: KindlingsJsonValueCodec[List[BigDecimal]] = KindlingsJsonValueCodec.derived[List[BigDecimal]](
+    JsoniterConfig.default.withStringified.withBigDecimalDigitsLimit(3)
+  )
+  val stringifiedIds: KindlingsJsonValueCodec[ParityLocation.ParityLocation] =
+    KindlingsJsonValueCodec.derived[ParityLocation.ParityLocation](
+      JsoniterConfig.default.withStringified.withUseScalaEnumValueId
+    )
+  val transientNull: KindlingsJsonValueCodec[ParityNullable] =
+    KindlingsJsonValueCodec.derived[ParityNullable](JsoniterConfig.default.withTransientNull)
+  val scalaTransient: KindlingsJsonValueCodec[ParityScalaTransient] =
+    KindlingsJsonValueCodec.derived[ParityScalaTransient](JsoniterConfig.default.withScalaTransientSupport)
+  val bigDecimalDigitsLimit3BigInt: KindlingsJsonValueCodec[ParityBigInt] =
+    KindlingsJsonValueCodec.derived[ParityBigInt](JsoniterConfig.default.withBigDecimalDigitsLimit(3))
+  val stringifiedLiteral: KindlingsJsonValueCodec[2] =
+    KindlingsJsonValueCodec.derived[2](JsoniterConfig.default.withStringified)
+  val nonCaseDefaults: KindlingsJsonValueCodec[ParityNonCaseWithDefaults] =
+    KindlingsJsonValueCodec.derived[ParityNonCaseWithDefaults](JsoniterConfig.jsoniterScalaDefaults)
+  val plainAdtDiscriminator: KindlingsJsonValueCodec[List[ParityPlainAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityPlainAdt]](JsoniterConfig.default.withDiscriminator("type"))
+  val sealedBaseDiscriminator: KindlingsJsonValueCodec[List[ParitySealedBase]] =
+    KindlingsJsonValueCodec.derived[List[ParitySealedBase]](JsoniterConfig.default.withDiscriminator("type"))
+  val multiListDefault: KindlingsJsonValueCodec[ParityMultiListDefault] =
+    KindlingsJsonValueCodec.derived[ParityMultiListDefault](JsoniterConfig.jsoniterScalaDefaults)
+  val multiListDefaultRequired: KindlingsJsonValueCodec[ParityMultiListDefault] =
+    KindlingsJsonValueCodec.derived[ParityMultiListDefault](JsoniterConfig.default.withRequireDefaultFields)
+  val multiListDependent: KindlingsJsonValueCodec[ParityMultiListDependent] =
+    KindlingsJsonValueCodec.derived[ParityMultiListDependent](JsoniterConfig.jsoniterScalaDefaults)
+  val genericMultiList: KindlingsJsonValueCodec[ParityGenericMultiList[String]] =
+    KindlingsJsonValueCodec.derived[ParityGenericMultiList[String]](JsoniterConfig.jsoniterScalaDefaults)
+  val multiListAdt: KindlingsJsonValueCodec[List[ParityMultiListAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityMultiListAdt]](JsoniterConfig.default.withDiscriminator("type"))
+  val nestedOptions3: KindlingsJsonValueCodec[ParityNestedOptions3] =
+    KindlingsJsonValueCodec.derived[ParityNestedOptions3](JsoniterConfig.jsoniterScalaDefaults)
+  val nestedOptions3CirceLike: KindlingsJsonValueCodec[ParityNestedOptions3] =
+    KindlingsJsonValueCodec.derived[ParityNestedOptions3](JsoniterConfig.default.withCirceLikeObjectEncoding)
+  val customLeafDiscriminator: KindlingsJsonValueCodec[List[ParityCustomAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityCustomAdt]](JsoniterConfig.default.withDiscriminator("type"))
+  val customLeafDiscriminatorAnywhere: KindlingsJsonValueCodec[List[ParityCustomAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityCustomAdt]](
+      JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false)
+    )
+  val iteratorField: KindlingsJsonValueCodec[ParityIteratorField] =
+    KindlingsJsonValueCodec.derived[ParityIteratorField](JsoniterConfig.jsoniterScalaDefaults)
+  val inlineKeys: KindlingsJsonValueCodec[Map[ParityUserKey, Int]] =
+    KindlingsJsonValueCodec.derived[Map[ParityUserKey, Int]](JsoniterConfig.default.withInlineOneValueClasses)
+  val inlineTagged: KindlingsJsonValueCodec[List[ParityTaggedId]] =
+    KindlingsJsonValueCodec.derived[List[ParityTaggedId]](JsoniterConfig.default.withInlineOneValueClasses)
+  val circeLikePreset: KindlingsJsonValueCodec[List[ParityAdt]] =
+    KindlingsJsonValueCodec.derived[List[ParityAdt]](JsoniterConfig.makeCirceLike)
+  val openapiPreset: KindlingsJsonValueCodec[ParityPresetRecord] =
+    KindlingsJsonValueCodec.derived[ParityPresetRecord](JsoniterConfig.makeOpenapiLike)
+  val openapiPresetAdt: KindlingsJsonValueCodec[List[ParityAdt]] = KindlingsJsonValueCodec.derived[List[ParityAdt]](
+    JsoniterConfig.makeOpenapiLike("kind", OptimizedCodecsHelpers.aaaMapper)
+  )
 }
 object OptimizedCodecsHelpers {
   // (a partial-function literal inside the config argument is duplicated by the Scala 2 macro expansion: keep it in a

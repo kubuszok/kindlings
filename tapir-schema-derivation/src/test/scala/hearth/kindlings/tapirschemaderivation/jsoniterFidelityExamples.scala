@@ -90,7 +90,10 @@ object FidEnumAsStrings {
 object FidFullNames {
   // identity: the leaves are named by their fully-qualified names
   implicit val config: JsoniterConfig =
-    JsoniterConfig.default.withDiscriminator("type").withAdtLeafClassNameMapper((s: String) => s).withUseScalaEnumValueId
+    JsoniterConfig.default
+      .withDiscriminator("type")
+      .withAdtLeafClassNameMapper((s: String) => s)
+      .withUseScalaEnumValueId
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
   val derived: FidDerived =
     FidDerived("full names", KindlingsSchema.derived[FidHolder].schema, KindlingsJsonValueCodec.derived[FidHolder])
@@ -101,7 +104,11 @@ object FidSkipNestedOptions {
     JsoniterConfig.default.withSkipNestedOptionValues.withSnakeCaseFieldNames.withKebabCaseAdtLeafClassNames
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
   val derived: FidDerived =
-    FidDerived("skipNestedOptionValues", KindlingsSchema.derived[FidHolder].schema, KindlingsJsonValueCodec.derived[FidHolder])
+    FidDerived(
+      "skipNestedOptionValues",
+      KindlingsSchema.derived[FidHolder].schema,
+      KindlingsJsonValueCodec.derived[FidHolder]
+    )
 }
 
 /** A config known only at runtime. */

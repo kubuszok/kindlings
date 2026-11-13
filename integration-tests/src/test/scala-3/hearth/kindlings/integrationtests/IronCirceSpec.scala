@@ -51,6 +51,20 @@ final class IronCirceSpec extends MacroSuite {
         val result = KindlingsDecoder.decode[IronPerson](json)
         assert(result.isLeft, s"Expected Left but got $result")
       }
+
+      test("smart-constructor errors keep the cursor history (like circe's emap)") {
+        val json = Json.obj("name" -> Json.fromString("Alice"), "age" -> Json.fromInt(-1))
+        val Left(err) = KindlingsDecoder.decode[IronPerson](json): @unchecked
+        err.pathToRootString ==> Some(".age")
+        val Left(err2) = KindlingsDecoder.derived[IronPerson].decodeJson(json): @unchecked
+        err2.pathToRootString ==> Some(".age")
+      }
+
+      test("smart-constructor map-key errors keep the cursor history") {
+        val json = Json.obj("values" -> Json.obj("-1" -> Json.fromInt(1)))
+        val Left(err) = KindlingsDecoder.decode[WithIronIntKeyMap](json): @unchecked
+        err.pathToRootString ==> Some(".values.-1")
+      }
     }
 
     group("round-trip") {

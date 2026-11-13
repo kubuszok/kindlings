@@ -3,8 +3,8 @@ package hearth.kindlings.jsoniterderivation
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import hearth.MacroSuite
 
-/** java.time map keys (jsoniter-scala `readKeyAsX` / `writeKey` overloads). JVM-only, like the other java.time tests
-  * of this module (see `KindlingsJsonValueCodecJvmSpec`).
+/** java.time map keys (jsoniter-scala `readKeyAsX` / `writeKey` overloads). JVM-only, like the other java.time tests of
+  * this module (see `KindlingsJsonValueCodecJvmSpec`).
   */
 final class JavaTimeMapKeysSpec extends MacroSuite {
 

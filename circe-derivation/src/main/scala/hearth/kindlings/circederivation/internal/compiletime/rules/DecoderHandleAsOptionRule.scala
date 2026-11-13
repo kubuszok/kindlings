@@ -21,21 +21,21 @@ trait DecoderHandleAsOptionRuleImpl {
             import isOption.Underlying as Inner
             implicit val HCursorT: Type[HCursor] = DTypes.HCursor
             implicit val EitherDFInner: Type[Either[DecodingFailure, Inner]] = DTypes.DecoderResult[Inner]
+            implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+            implicit val AnyT: Type[Any] = DTypes.Any
 
             LambdaBuilder
               .of1[HCursor]("innerCursor")
               .traverse { innerCursorExpr =>
-                deriveDecoderRecursively[Inner](using dctx.nest[Inner](innerCursorExpr))
+                deriveDecoderRecursively[Inner](using dctx.nest[Inner](innerCursorExpr)).map(_.upcast[Any])
               }
               .map { builder =>
-                val decodeFn = builder.build[Either[DecodingFailure, Inner]]
+                val decodeFn = builder.build[Any]
                 Rule.matched(Expr.quote {
-                  CirceDerivationUtils
-                    .decodeOptionFromFn(
-                      Expr.splice(dctx.cursor),
-                      Expr.splice(decodeFn)
-                    )
-                    .asInstanceOf[Either[DecodingFailure, A]]
+                  CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+                    CirceDerivationUtils
+                      .decodeOptionResult(Expr.splice(dctx.cursor), Expr.splice(dctx.failFast), Expr.splice(decodeFn))
+                  )
                 })
               }
 

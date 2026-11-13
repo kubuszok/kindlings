@@ -51,7 +51,9 @@ final class UBJsonParitySpec extends MacroSuite {
       }
       List(static, runtime).foreach { c =>
         val error =
-          intercept[UBJsonReaderException](UBJsonDerivationUtils.readFromBytes[UbZeroFields](objectBytes("x" -> "1"))(c))
+          intercept[UBJsonReaderException](
+            UBJsonDerivationUtils.readFromBytes[UbZeroFields](objectBytes("x" -> "1"))(c)
+          )
         assert(error.getMessage.contains("unexpected field"), error.getMessage)
       }
     }

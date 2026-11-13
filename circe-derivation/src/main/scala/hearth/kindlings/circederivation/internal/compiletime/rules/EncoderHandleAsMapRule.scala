@@ -59,7 +59,10 @@ trait EncoderHandleAsMapRuleImpl {
             })
           }
       } else {
-        // Non-String keys — try to derive a key-to-String function
+        // Non-String keys — try to derive a key-to-String function. The pair lambda returns the key itself (not the
+        // encoded key): splicing the key-encoding function literal inside the LambdaBuilder body would nest a lambda
+        // created with a different owner (Scala 3 "Block contains definition with different owners").
+        implicit val KeyJsonPairT: Type[(Key, Json)] = Type.of[(Key, Json)]
         deriveKeyEncoder[Key].flatMap {
           case Some(keyEncoderLambda) =>
             LambdaBuilder
@@ -69,17 +72,18 @@ trait EncoderHandleAsMapRuleImpl {
                 val valueExpr = isMap.value(pairExpr)
                 deriveEncoderRecursively[Value](using ectx.nest(valueExpr)).map { valueJson =>
                   Expr.quote {
-                    (Expr.splice(keyEncoderLambda).apply(Expr.splice(keyExpr)), Expr.splice(valueJson))
+                    (Expr.splice(keyExpr), Expr.splice(valueJson))
                   }
                 }
               }
               .map { builder =>
-                val pairLambda = builder.build[(String, Json)]
+                val pairLambda = builder.build[(Key, Json)]
                 val iterableExpr = isMap.asIterable(ectx.value)
                 Rule.matched(Expr.quote {
-                  CirceDerivationUtils.jsonFromMappedPairs[Pair](
+                  CirceDerivationUtils.jsonFromKeyedPairs[Pair, Key](
                     Expr.splice(iterableExpr),
-                    Expr.splice(pairLambda)
+                    Expr.splice(pairLambda),
+                    Expr.splice(keyEncoderLambda)
                   )
                 })
               }
@@ -99,7 +103,8 @@ trait EncoderHandleAsMapRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     private def deriveKeyEncoder[K: Type](implicit ctx: EncoderCtx[?]): MIO[Option[Expr[K => String]]] =
       Log.info(s"Attempting to derive key encoder for ${Type[K].prettyPrint}") >> {
-        // 1. Built-in types — inline key.toString (same as circe's KeyEncoder[Int] etc.)
+        // 1. A KeyEncoder in scope (user-provided, or circe's own for Int/Long/...) takes precedence over everything
+        //    else (like the decoder, and like circe's `Encoder.encodeMap`); the built-in toString is only a fallback.
         val builtIn: Option[Expr[K => String]] = {
           def makeToStringKeyEncoder: Expr[K => String] =
             Expr.quote((k: K) => k.toString)
@@ -112,47 +117,68 @@ trait EncoderHandleAsMapRuleImpl {
           else None
         }
 
-        builtIn match {
-          case Some(fn) => MIO.pure(Some(fn))
-          case None     =>
-            // 2. Try summoning user-provided KeyEncoder[K] — splice it directly,
-            //    no LambdaBuilder needed.
-            Types.KeyEncoder[K].summonExprIgnoring().toEither match {
-              case Right(keyEncoderExpr) =>
-                Log.info(s"Found implicit KeyEncoder[${Type[K].prettyPrint}]") >>
-                  MIO.pure(Some(Expr.quote { (k: K) =>
-                    Expr.splice(keyEncoderExpr).apply(k)
-                  }))
-              case Left(_) =>
-                // 3. Try value type — unwrap to inner, recurse
-                Type[K] match {
-                  case IsValueType(isValueType) =>
-                    import isValueType.Underlying as Inner
-                    deriveKeyEncoder[Inner].map {
-                      case Some(innerKeyEncoder) =>
-                        // We need a `K => String` that unwraps to `Inner` then applies the
-                        // inner encoder. The unwrap helper is path-dependent on `isValueType`,
-                        // so we route through a local helper closing over its `value`.
-                        Some(buildValueTypeKeyEncoder[K, Inner](isValueType.value, innerKeyEncoder))
-                      case None => None
+        Types.KeyEncoder[K].summonExprIgnoring().toEither match {
+          case Right(keyEncoderExpr) =>
+            Log.info(s"Found implicit KeyEncoder[${Type[K].prettyPrint}]") >>
+              MIO.pure(Some(Expr.quote { (k: K) =>
+                Expr.splice(keyEncoderExpr).apply(k)
+              }))
+          case Left(_) if builtIn.isDefined =>
+            MIO.pure(builtIn)
+          case Left(_) =>
+            // 2. Try value type — unwrap to inner, recurse
+            Type[K] match {
+              case IsValueType(isValueType) =>
+                import isValueType.Underlying as Inner
+                deriveKeyEncoder[Inner].map {
+                  case Some(innerKeyEncoder) =>
+                    // We need a `K => String` that unwraps to `Inner` then applies the
+                    // inner encoder. The unwrap helper is path-dependent on `isValueType`,
+                    // so we route through a local helper closing over its `value`.
+                    Some(buildValueTypeKeyEncoder[K, Inner](isValueType.value, innerKeyEncoder))
+                  case None => None
+                }
+              case _ =>
+                // 4. Try enum (all case objects) — use toString for key
+                Enum.parse[K].toOption match {
+                  case Some(enumm) =>
+                    val childrenList =
+                      flattenedChildren[K](enumm)(_ => false) // nested case-object hierarchies are flattened
+                    val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                      case (_, child) =>
+                        SingletonValue.unapply(child.Underlying).isDefined
                     }
-                  case _ =>
-                    // 4. Try enum (all case objects) — use toString for key
-                    Enum.parse[K].toOption match {
-                      case Some(enumm) =>
-                        val childrenList = enumm.directChildren.toList
-                        val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
-                          case (_, child) =>
-                            SingletonValue.unapply(child.Underlying).isDefined
-                        }
-                        if (allCaseObjects) {
-                          val configExpr = ctx.config
-                          MIO.pure(Some(Expr.quote { (k: K) =>
-                            Expr.splice(configExpr).transformConstructorNames(k.toString)
-                          }))
-                        } else MIO.pure(None)
-                      case None => MIO.pure(None)
-                    }
+                    if (allCaseObjects) {
+                      val configExpr = ctx.config
+                      // Use the constructor name (as the decoder and enum values do), not `toString`, which a
+                      // case object may override. Enumeration/Java enum values have no singleton type to compare
+                      // against here, and their name is their `toString` unless overridden.
+                      val singletons: List[(String, Expr[K])] = childrenList.flatMap { case (name, child) =>
+                        SingletonValue
+                          .unapply(child.Underlying)
+                          .map(sv => (name, sv.singletonExpr.asInstanceOf[Expr[K]]))
+                      }
+                      if (Type[K].isEnumeration || Type[K].isJavaEnum || singletons.size != childrenList.size)
+                        MIO.pure(Some(Expr.quote { (k: K) =>
+                          Expr.splice(configExpr).transformConstructorNames(k.toString)
+                        }))
+                      else
+                        MIO.pure(Some(Expr.quote { (k: K) =>
+                          Expr
+                            .splice(configExpr)
+                            .transformConstructorNames(Expr.splice {
+                              val kExpr: Expr[K] = Expr.quote(k)
+                              singletons.foldRight(Expr.quote(k.toString): Expr[String]) {
+                                case ((name, singleton), elseExpr) =>
+                                  Expr.quote {
+                                    if (Expr.splice(kExpr) == Expr.splice(singleton)) Expr.splice(Expr(name))
+                                    else Expr.splice(elseExpr)
+                                  }
+                              }
+                            })
+                        }))
+                    } else MIO.pure(None)
+                  case None => MIO.pure(None)
                 }
             }
         }

@@ -1,6 +1,12 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReaderException, JsonValueCodec, ReaderConfig}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  writeToString,
+  JsonReaderException,
+  JsonValueCodec,
+  ReaderConfig
+}
 import hearth.MacroSuite
 
 /** Absent-field decoding semantics, aligned with jsoniter-scala's `JsonCodecMaker.make` (issue #264):
@@ -83,7 +89,9 @@ final class AbsentFieldsSpec extends MacroSuite {
         val codec = KindlingsJsonValueCodec.derived[AbsentOptionWithSomeDefault]
         readFromString[AbsentOptionWithSomeDefault]("{}")(codec) ==> AbsentOptionWithSomeDefault(Some("d"))
         // as jsoniter-scala (Defaults2, Spec ~2530): JSON null is the field's default too
-        readFromString[AbsentOptionWithSomeDefault]("""{"opt":null}""")(codec) ==> AbsentOptionWithSomeDefault(Some("d"))
+        readFromString[AbsentOptionWithSomeDefault]("""{"opt":null}""")(codec) ==> AbsentOptionWithSomeDefault(
+          Some("d")
+        )
       }
     }
 
@@ -255,7 +263,8 @@ final class AbsentFieldsSpec extends MacroSuite {
           KindlingsJsonValueCodec.derived[AbsentFieldsRecord]
         }
         List(c, cRuntime).foreach { codec =>
-          val _ = intercept[JsonReaderException](readFromString[AbsentFieldsRecord]("""{"name":"a","extra":1}""")(codec))
+          val _ =
+            intercept[JsonReaderException](readFromString[AbsentFieldsRecord]("""{"name":"a","extra":1}""")(codec))
         }
       }
 
@@ -266,7 +275,8 @@ final class AbsentFieldsSpec extends MacroSuite {
           KindlingsJsonValueCodec.derived[AbsentFieldsRecord]
         }
         List(c, cRuntime).foreach { codec =>
-          val _ = intercept[JsonReaderException](readFromString[AbsentFieldsRecord]("""{"name":"a","name":"b"}""")(codec))
+          val _ =
+            intercept[JsonReaderException](readFromString[AbsentFieldsRecord]("""{"name":"a","name":"b"}""")(codec))
         }
       }
     }

@@ -137,7 +137,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("unknown discriminator produces error") {
         val json = Json.obj("Unknown" -> Json.obj())
         val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
-        error.getMessage ==> "DecodingFailure at .Unknown: Unknown type discriminator: Unknown. Expected one of: Circle, Rectangle"
+        error.getMessage ==> "DecodingFailure at .Unknown: type Shape has no class/object/case named 'Unknown'."
       }
     }
 
@@ -436,7 +436,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "extra" -> Json.fromString("unexpected")
         )
         val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
-        error.message ==> "Unexpected field(s): extra"
+        error.message ==> "Strict decoding SimplePerson - unexpected fields: extra; valid fields: name, age."
       }
 
       test("passes without strictDecoding even with extra fields") {
@@ -452,7 +452,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
         implicit val config: Configuration = Configuration.default.withStrictDecoding
         val json = Json.obj("foo" -> Json.fromInt(1))
         val Left(error) = KindlingsDecoder.decode[EmptyClass](json): @unchecked
-        error.message ==> "Unexpected field(s): foo"
+        error.message ==> "Strict decoding EmptyClass - unexpected fields: foo; valid fields: ."
       }
 
       test("strictDecoding with name transform") {
@@ -665,11 +665,9 @@ final class KindlingsDecoderSpec extends MacroSuite {
           .decodeAccumulating(json.hcursor)
           .fold(_.toList.map(e => (e.message, e.pathToRootString)), a => fail(s"expected invalid, got $a"))
 
-      test("accumulating reports expecting object followed by missing required fields") {
+      test("accumulating reports only expecting object even with required fields (Scala 3 core parity)") {
         accumulatedErrors(KindlingsDecoder.derived[SimplePerson], Json.fromInt(42)) ==> List(
-          ("Got value '42' with wrong type, expecting object", Some("")),
-          ("Missing required field", Some(".name")),
-          ("Missing required field", Some(".age"))
+          ("Got value '42' with wrong type, expecting object", Some(""))
         )
       }
 
@@ -758,7 +756,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("unknown discriminator in wrapper-style") {
         val json = Json.obj("Unknown" -> Json.obj())
         val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
-        error.getMessage ==> "DecodingFailure at .Unknown: Unknown type discriminator: Unknown. Expected one of: Circle, Rectangle"
+        error.getMessage ==> "DecodingFailure at .Unknown: type Shape has no class/object/case named 'Unknown'."
       }
     }
 
@@ -1011,10 +1009,10 @@ final class KindlingsDecoderSpec extends MacroSuite {
         KindlingsDecoder.decode[WithOptionAndDefault](json) ==> Right(WithOptionAndDefault("test", Some("default")))
       }
 
-      test("null for non-Option with default fails decode") {
+      test("null for non-Option with default uses the default (like circe)") {
         implicit val config: Configuration = Configuration.default.withDefaults
         val json = Json.obj("name" -> Json.fromString("test"), "age" -> Json.Null)
-        assert(KindlingsDecoder.decode[PersonWithDefaults](json).isLeft)
+        KindlingsDecoder.decode[PersonWithDefaults](json) ==> Right(PersonWithDefaults("test", 25))
       }
 
       test("missing key for Option without default") {
@@ -1097,7 +1095,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
           "baz" -> Json.fromInt(99)
         )
         val Left(error) = KindlingsDecoder.decode[SimplePerson](json): @unchecked
-        assert(error.message.contains("Unexpected field(s):"))
+        assert(error.message.contains("unexpected fields:"))
         assert(error.message.contains("baz"))
         assert(error.message.contains("foo"))
       }
@@ -1175,9 +1173,13 @@ final class KindlingsDecoderSpec extends MacroSuite {
         val decoder = KindlingsDecoder.derived[SimplePerson]
         val result = decoder.decodeAccumulating(json.hcursor)
         assert(result.isInvalid)
-        // At minimum, the type error for "name" must be reported
+        // Like circe: the strict failure is reported first, followed by the type error for "name"
         result.fold(
-          errors => assert(errors.size >= 1),
+          errors => {
+            errors.size ==> 2
+            assert(errors.head.message.contains("extra"))
+            errors.toList(1).pathToRootString ==> Some(".name")
+          },
           _ => fail("expected invalid")
         )
       }
@@ -1436,7 +1438,7 @@ final class KindlingsDecoderSpec extends MacroSuite {
         implicit val config: Configuration = Configuration(strictDecoding = true)
         val json = Json.obj("Circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0), "extra" -> Json.True))
         val Left(error) = KindlingsDecoder.decode[Shape](json): @unchecked
-        assert(error.message.contains("Unexpected field(s):"))
+        assert(error.message.contains("unexpected fields:"))
         assert(error.message.contains("extra"))
       }
 
@@ -1569,13 +1571,13 @@ final class KindlingsDecoderSpec extends MacroSuite {
       test("non-string JSON for enumAsStrings sealed trait gives clear error") {
         implicit val config: Configuration = Configuration(enumAsStrings = true)
         val Left(error) = KindlingsDecoder.decode[CardinalDirection](Json.fromInt(42)): @unchecked
-        assert(error.message.contains("Expected a JSON string for enum value"))
+        error.reason ==> io.circe.DecodingFailure.Reason.WrongTypeExpectation("string", Json.fromInt(42))
       }
 
       test("unknown string for enumAsStrings sealed trait gives clear error") {
         implicit val config: Configuration = Configuration(enumAsStrings = true)
         val Left(error) = KindlingsDecoder.decode[CardinalDirection](Json.fromString("NorthWest")): @unchecked
-        assert(error.message.contains("Unknown type discriminator"))
+        error.message ==> "enum CardinalDirection does not contain case: NorthWest"
       }
     }
 
@@ -1595,8 +1597,6 @@ final class KindlingsDecoderSpec extends MacroSuite {
     group("patch decoders") {
 
       test("patch decoder updates only provided fields") {
-        implicit val enc: io.circe.Encoder[SimplePerson] = KindlingsEncoder.derived[SimplePerson]
-        implicit val dec: io.circe.Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val patchDec = KindlingsDecoder.patch[SimplePerson]
         val patchJson = io.circe.parser.parse("""{"age": 99}""").toOption.get
         val patchFn = patchDec.decodeJson(patchJson).toOption.get
@@ -1607,8 +1607,6 @@ final class KindlingsDecoderSpec extends MacroSuite {
       }
 
       test("empty patch returns identity") {
-        implicit val enc: io.circe.Encoder[SimplePerson] = KindlingsEncoder.derived[SimplePerson]
-        implicit val dec: io.circe.Decoder[SimplePerson] = KindlingsDecoder.derived[SimplePerson]
         val patchDec = KindlingsDecoder.patch[SimplePerson]
         val patchJson = io.circe.parser.parse("""{}""").toOption.get
         val patchFn = patchDec.decodeJson(patchJson).toOption.get

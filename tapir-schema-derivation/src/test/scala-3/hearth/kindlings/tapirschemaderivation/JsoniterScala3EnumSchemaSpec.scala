@@ -65,7 +65,10 @@ final class JsoniterScala3EnumSchemaSpec extends MacroSuite {
       case c: SchemaType.SCoproduct[?] =>
         assertEquals(
           c.discriminator.map(_.mapping.keySet).getOrElse(Set.empty),
-          Set("hearth.kindlings.tapirschemaderivation.FidShape.Dot", "hearth.kindlings.tapirschemaderivation.FidShape.Square")
+          Set(
+            "hearth.kindlings.tapirschemaderivation.FidShape.Dot",
+            "hearth.kindlings.tapirschemaderivation.FidShape.Square"
+          )
         )
       case other => fail(s"Expected SCoproduct, got: $other")
     }

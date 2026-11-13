@@ -115,13 +115,17 @@ case class ParityIteratorField(it: Iterator[Int], n: Int)
 object ParityKeyCodecs {
   implicit val upperStringKeys: com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[String] =
     new com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[String] {
-      def decodeKey(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader): String = in.readKeyAsString().toLowerCase
-      def encodeKey(x: String, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit = out.writeKey(x.toUpperCase)
+      def decodeKey(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader): String =
+        in.readKeyAsString().toLowerCase
+      def encodeKey(x: String, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        out.writeKey(x.toUpperCase)
     }
   implicit val hexIntKeys: com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[Int] =
     new com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[Int] {
-      def decodeKey(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader): Int = Integer.parseInt(in.readKeyAsString(), 16)
-      def encodeKey(x: Int, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit = out.writeKey(Integer.toHexString(x))
+      def decodeKey(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader): Int =
+        Integer.parseInt(in.readKeyAsString(), 16)
+      def encodeKey(x: Int, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        out.writeKey(Integer.toHexString(x))
     }
 }
 
@@ -146,7 +150,10 @@ case class ParityPresetRecord(l: List[Int], o: Option[Int] = None, d: Int = 1)
 
 // null / default semantics (Spec ~674, ~2530, ~3673)
 case class ParityDefaults2(
-    st: String = "VVV", bi: BigInt = -1, oc: Option[Char] = Some('X'), l: List[Int] = List(0),
+    st: String = "VVV",
+    bi: BigInt = -1,
+    oc: Option[Char] = Some('X'),
+    l: List[Int] = List(0),
     ab: scala.collection.mutable.ArrayBuffer[Int] = scala.collection.mutable.ArrayBuffer(1, 2),
     m: Map[Int, Boolean] = Map(1 -> true),
     s: Set[String] = Set("VVV"),
@@ -172,7 +179,8 @@ object ParityTag {
 }
 case class ParityTagged(a: ParityTag = ParityTag("dflt"), b: ParityTag)
 sealed trait ParityDefaultsAdt
-case class ParityDefaultsLeaf(l: List[Int] = List(0), t: ParityTag = ParityTag("dflt"), n: Int = 0) extends ParityDefaultsAdt
+case class ParityDefaultsLeaf(l: List[Int] = List(0), t: ParityTag = ParityTag("dflt"), n: Int = 0)
+    extends ParityDefaultsAdt
 
 // A custom Option codec: null is None, a missing field is the default (Spec ~674)
 case class ParityCustomOptionEx(opt: Option[String] = Some("hiya"), level: Option[Int] = Some(10))
@@ -203,7 +211,10 @@ object ParityCounter {
       def nullValue: ParityCounter = ParityCounter(-1)
       def encodeValue(x: ParityCounter, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
         out.writeVal(x.n)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ParityCounter): ParityCounter =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: ParityCounter
+      ): ParityCounter =
         if (in.isNextToken('{'.toByte)) {
           if (!in.isNextToken('}'.toByte)) in.decodeError("expected '}'")
           default

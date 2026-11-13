@@ -90,6 +90,18 @@ With a jsoniter `JsoniterConfig` the schemas describe what the jsoniter codecs (
 - **`Option[Option[A]]`**: the inner `Option` is described as the ADT the codecs write it as (`{"Some":{"value":1}}` /
   `"None"`, or `{"type":"Some","value":1}` / `{"type":"None"}` with a discriminator), unless `skipNestedOptionValues`.
 
+#### What a circe `Configuration` changes
+
+With a circe `Configuration`, the schema also follows how circe codes sealed hierarchies and value classes:
+
+- without a discriminator, every subtype is shown in the wrapped form circe writes (`{"Circle":{"radius":1.0}}`, a
+  product with a single field named after the subtype); with a discriminator, a subtype that is not a JSON object is
+  shown wrapped (it cannot carry the discriminator);
+- nested sealed hierarchies are flattened to their leaves, like circe writes them; an intermediate sealed trait with a
+  hand-written circe `Encoder` is kept as one subtype (its schema is the intermediate's `Schema`), one whose instance
+  was derived by Kindlings is flattened;
+- with `unwrapValueClasses = false` (`withoutValueClassUnwrapping`), `AnyVal` case classes are shown as objects.
+
 #### Disambiguating multiple JSON configs
 
 If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails. Import an implicit `PreferSchemaConfig` to tell the macro which one to use:

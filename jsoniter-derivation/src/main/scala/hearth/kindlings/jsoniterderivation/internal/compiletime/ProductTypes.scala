@@ -24,13 +24,14 @@ trait ProductTypes { this: MacroCommons & StdExtensions =>
 
     /** Values of the parameters which have an accessible accessor, read off `instance`, in declaration order. */
     def fieldValuesAt(instance: Expr[A]): ListMap[String, Expr_??] = {
-      val caseValues: ListMap[String, Expr_??] = caseClass.fold(ListMap.empty[String, Expr_??])(_.caseFieldValuesAt(instance))
+      val caseValues: ListMap[String, Expr_??] =
+        caseClass.fold(ListMap.empty[String, Expr_??])(_.caseFieldValuesAt(instance))
       ListMap.from(params.flatMap { case (name, _) =>
         caseValues.get(name).orElse(accessorValue(name, instance)).map(name -> _)
       })
     }
 
-    private def accessorValue(name: String, instance: Expr[A]): Option[Expr_??] = {
+    private def accessorValue(name: String, instance: Expr[A]): Option[Expr_??] =
       Method
         .unsortedMethodsNamed[A](name)(tpe)
         .collectFirst {
@@ -44,7 +45,6 @@ trait ProductTypes { this: MacroCommons & StdExtensions =>
             case _ => None
           }
         }
-    }
   }
 
   protected object ProductType {

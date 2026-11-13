@@ -67,7 +67,9 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
         UBJsonValueCodec.derived[List[UbSealedBase]]
       }
       List(UbPortOptimizedCodecs.sealedBase, runtime).foreach { codec =>
-        UbRender.encode(values)(codec) ==> """[{"type":"UbSealedBase"},{"type":"UbSealedB","n":1},{"type":"UbSealedC","s":"c"}]"""
+        UbRender.encode(values)(
+          codec
+        ) ==> """[{"type":"UbSealedBase"},{"type":"UbSealedB","n":1},{"type":"UbSealedC","s":"c"}]"""
         val decoded = UbRender.roundTrip(values)(codec)
         decoded.map(_.getClass) ==> values.map(_.getClass)
         decoded.tail ==> values.tail
@@ -106,7 +108,9 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
       }
       List(UbPortOptimizedCodecs.multiListAdt, runtime).foreach { codec =>
         val values = List[UbMultiListAdt](UbMultiData1(1)(2), UbMultiData2(3)(4))
-        UbRender.encode(values)(codec) ==> """[{"type":"UbMultiData1","i":1,"pos":2},{"type":"UbMultiData2","i":3,"pos":4}]"""
+        UbRender.encode(values)(
+          codec
+        ) ==> """[{"type":"UbMultiData1","i":1,"pos":2},{"type":"UbMultiData2","i":3,"pos":4}]"""
         UbRender.roundTrip(values)(codec).map {
           case d: UbMultiData1 => (d.i, d.pos)
           case d: UbMultiData2 => (d.i, d.pos)
@@ -129,7 +133,8 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
           "s" -> (_.writeNull())
         ) ==> UbFieldDefaults()
         decode(codec)("l" -> (_.writeNull()), "n" -> (_.writeInt(3))) ==> UbFieldDefaults(n = 3)
-        UbRender.roundTrip(UbFieldDefaults(List(1), Some(5), "x", 4))(codec) ==> UbFieldDefaults(List(1), Some(5), "x", 4)
+        UbRender
+          .roundTrip(UbFieldDefaults(List(1), Some(5), "x", 4))(codec) ==> UbFieldDefaults(List(1), Some(5), "x", 4)
         // as in jsoniter-scala: `None` is written as null, which decodes as the default
         UbRender.roundTrip(UbFieldDefaults(o = None))(codec) ==> UbFieldDefaults()
         assert(decodeError(codec, bytes("n" -> (_.writeNull()))).nonEmpty)
@@ -175,7 +180,10 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
       List(UbPortOptimizedCodecs.enumIds, runtime).foreach { codec =>
         UbRender.encode(value)(codec) ==> """{"lt":1,"l":[0,2]}"""
         UbRender.roundTrip(value)(codec) ==> value
-        assert(decodeError(codec, bytes("lt" -> (_.writeInt(7)), "l" -> { w => w.writeArrayStart(); w.writeArrayEnd() })).contains("illegal enum value"))
+        assert(
+          decodeError(codec, bytes("lt" -> (_.writeInt(7)), "l" -> { w => w.writeArrayStart(); w.writeArrayEnd() }))
+            .contains("illegal enum value")
+        )
       }
       val runtimeDefault = {
         implicit val c: UBJsonConfig = UbPortRuntimeConfigs.default
@@ -235,9 +243,13 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
         UbRender.encode(someNone)(codec) ==> """{"x":{"type":"None"}}"""
         UbRender.encode(someSomeNone)(codec) ==> """{"x":{"type":"Some","value":{"type":"None"}}}"""
         List(none, someSomeSome, someNone, someSomeNone).foreach(v => UbRender.roundTrip(v)(codec) ==> v)
-        val missing = bytes("x" -> { w => w.writeObjectStart(); w.writeFieldName("type"); w.writeString("Some"); w.writeObjectEnd() })
+        val missing = bytes("x" -> { w =>
+          w.writeObjectStart(); w.writeFieldName("type"); w.writeString("Some"); w.writeObjectEnd()
+        })
         assert(decodeError(codec, missing).contains("missing required field \"value\""))
-        val unknown = bytes("x" -> { w => w.writeObjectStart(); w.writeFieldName("type"); w.writeString("X"); w.writeObjectEnd() })
+        val unknown = bytes("x" -> { w =>
+          w.writeObjectStart(); w.writeFieldName("type"); w.writeString("X"); w.writeObjectEnd()
+        })
         assert(decodeError(codec, unknown).contains("illegal value of discriminator field \"type\""))
       }
     }
@@ -295,7 +307,10 @@ final class UBJsonJsoniterPortSpec extends MacroSuite {
         UbRender.roundTrip(vehicles)(codec) ==> vehicles
       }
       val motor = UBJsonValueCodec.derived[List[UbMotorVehicle]]
-      UbRender.roundTrip(List[UbMotorVehicle](UbTruck(1), UbScooter))(motor) ==> List[UbMotorVehicle](UbTruck(1), UbScooter)
+      UbRender.roundTrip(List[UbMotorVehicle](UbTruck(1), UbScooter))(motor) ==> List[UbMotorVehicle](
+        UbTruck(1),
+        UbScooter
+      )
     }
   }
 }

@@ -33,3 +33,9 @@ type ParrotOrHamster = Parrot | Hamster
 
 // Issue #206: generic case class with `derives` should use built-in codecs for type parameters
 case class Envelope[A](elem: A) derives KindlingsEncoder, KindlingsDecoder
+
+// An intermediate sealed trait with `derives`: flattened like upstream's ConfiguredCodec of a sum.
+sealed trait DerivesGP
+case class DerivesUncle(n: Int) extends DerivesGP
+sealed trait DerivesParent extends DerivesGP derives KindlingsCodecAsObject
+case class DerivesChild(a: Int) extends DerivesParent

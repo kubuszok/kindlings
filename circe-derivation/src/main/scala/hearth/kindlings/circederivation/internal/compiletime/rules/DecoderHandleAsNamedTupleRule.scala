@@ -47,9 +47,9 @@ trait DecoderHandleAsNamedTupleRuleImpl {
                 case Some(helperCall) =>
                   implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
                   MIO.pure(Rule.matched(Expr.quote {
-                    Expr
-                      .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
-                      .asInstanceOf[Either[DecodingFailure, A]]
+                    CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+                      Expr.splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                    )
                   }))
                 case None =>
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))

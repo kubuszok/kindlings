@@ -618,7 +618,10 @@ lazy val circeDerivation = projectMatrix
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-core" % versions.circe,
       "io.circe" %% "circe-parser" % versions.circe % Test
-    )
+    ),
+    // The Scala 2 @JsonCodec / @ConfiguredJsonCodec macro annotations are only recognized (definition) and expanded
+    // (use) with -Ymacro-annotations.
+    scalacOptions ++= (if (scalaVersion.value.startsWith("2.")) Seq("-Ymacro-annotations") else Nil)
   )
 
 lazy val jsoniterDerivation = projectMatrix

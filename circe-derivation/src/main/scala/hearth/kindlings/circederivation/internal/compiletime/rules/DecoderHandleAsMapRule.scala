@@ -39,194 +39,68 @@ trait DecoderHandleAsMapRuleImpl {
       implicit val EitherDFValue: Type[Either[DecodingFailure, Value]] = DTypes.DecoderResult[Value]
       implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
 
-      if (Key <:< Type[String]) {
-        LambdaBuilder
-          .of1[HCursor]("valueCursor")
-          .traverse { valueCursorExpr =>
-            deriveDecoderRecursively[Value](using dctx.nest[Value](valueCursorExpr))
-          }
-          .map { builder =>
-            val decodeFn = builder.build[Either[DecodingFailure, Value]]
-            val factoryExpr = isMap.factory
-            val buildStep = isMap.build
+      implicit val AnyT: Type[Any] = DTypes.Any
 
-            val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
-              val cursor = Expr.splice(dctx.cursor)
-              val decoder = CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
-              val mapBuilder = Expr.splice(factoryExpr).newBuilder
-              cursor.keys match {
-                case None =>
-                  throw new CirceDerivationUtils.CollectionBuildException(
-                    DecodingFailure("Expected JSON object", cursor.history)
-                  )
-                case Some(keys) =>
-                  val iter = keys.iterator
-                  while (iter.hasNext) {
-                    val key = iter.next()
-                    cursor.downField(key).as(decoder) match {
-                      case Right(v) =>
-                        mapBuilder += Expr.splice(
-                          isMap.pair(Expr.quote(key.asInstanceOf[Key]), Expr.quote(v))
-                        )
-                      case Left(err) =>
-                        throw new CirceDerivationUtils.CollectionBuildException(err)
-                    }
-                  }
-              }
-              mapBuilder
+      val keyDecoderMIO: MIO[Option[Expr[String => Either[DecodingFailure, Key]]]] =
+        if (Key <:< Type[String]) {
+          implicit val EitherDFKey: Type[Either[DecodingFailure, Key]] = DTypes.DecoderResult[Key]
+          MIO.pure(Some(Expr.quote((s: String) => Right(s.asInstanceOf[Key]): Either[DecodingFailure, Key])))
+        } else deriveKeyDecoder[Key]
+
+      keyDecoderMIO.flatMap {
+        case Some(keyDecoderLambda) =>
+          LambdaBuilder
+            .of1[HCursor]("valueCursor")
+            .traverse { valueCursorExpr =>
+              deriveDecoderRecursively[Value](using dctx.nest[Value](valueCursorExpr)).map(_.upcast[Any])
             }
-            val buildResultExpr = buildStep.ctor(readLoop)
+            .map { builder =>
+              val decodeFn = builder.build[Any]
+              val factoryExpr = isMap.factory
 
-            buildStep match {
-              case _: CtorLikeOf.PlainValue[?, ?] =>
-                Rule.matched(Expr.quote {
-                  try Right(Expr.splice(buildResultExpr.asInstanceOf[Expr[A]]))
-                  catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                })
-              case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
-                Rule.matched(Expr.quote {
-                  try
-                    Expr.splice(eitherExpr) match {
-                      case Right(value) => Right(value)
-                      case Left(err)    => Left(DecodingFailure(err, Expr.splice(dctx.cursor).history))
-                    }
-                  catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                })
-              case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
-                Rule.matched(Expr.quote {
-                  try
-                    Expr.splice(eitherExpr) match {
-                      case Right(value) => Right(value)
-                      case Left(errs)   => Left(DecodingFailure(errs.mkString("\n"), Expr.splice(dctx.cursor).history))
-                    }
-                  catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                })
-              case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
-                Rule.matched(Expr.quote {
-                  try
-                    Expr.splice(eitherExpr) match {
-                      case Right(value) => Right(value)
-                      case Left(err)    => Left(DecodingFailure(err.getMessage, Expr.splice(dctx.cursor).history))
-                    }
-                  catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                })
-              case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                Rule.matched(Expr.quote {
-                  try
-                    Expr.splice(eitherExpr) match {
-                      case Right(value) => Right(value)
-                      case Left(errs)   =>
-                        Left(DecodingFailure(errs.map(_.getMessage).mkString("\n"), Expr.splice(dctx.cursor).history))
-                    }
-                  catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                })
-            }
-          }
-      } else {
-        deriveKeyDecoder[Key].flatMap {
-          case Some(keyDecoderLambda) =>
-            LambdaBuilder
-              .of1[HCursor]("valueCursor")
-              .traverse { valueCursorExpr =>
-                deriveDecoderRecursively[Value](using dctx.nest[Value](valueCursorExpr))
-              }
-              .map { builder =>
-                val decodeFn = builder.build[Either[DecodingFailure, Value]]
-                val factoryExpr = isMap.factory
-                val buildStep = isMap.build
-
-                val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
-                  val cursor = Expr.splice(dctx.cursor)
-                  val decoder = CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
-                  val keyDecoder = Expr.splice(keyDecoderLambda)
-                  val mapBuilder = Expr.splice(factoryExpr).newBuilder
-                  cursor.keys match {
-                    case None =>
-                      throw new CirceDerivationUtils.CollectionBuildException(
-                        DecodingFailure("Expected JSON object", cursor.history)
-                      )
-                    case Some(keys) =>
-                      val iter = keys.iterator
-                      while (iter.hasNext) {
-                        val keyStr = iter.next()
-                        keyDecoder(keyStr) match {
-                          case Right(key) =>
-                            cursor.downField(keyStr).as(decoder) match {
-                              case Right(v) =>
-                                mapBuilder += Expr.splice(isMap.pair(Expr.quote(key), Expr.quote(v)))
-                              case Left(err) =>
-                                throw new CirceDerivationUtils.CollectionBuildException(err)
-                            }
-                          case Left(err) =>
-                            throw new CirceDerivationUtils.CollectionBuildException(err)
-                        }
-                      }
-                  }
-                  mapBuilder
-                }
-                val buildResultExpr = buildStep.ctor(readLoop)
-
-                buildStep match {
-                  case _: CtorLikeOf.PlainValue[?, ?] =>
-                    Rule.matched(Expr.quote {
-                      try Right(Expr.splice(buildResultExpr.asInstanceOf[Expr[A]]))
-                      catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                    })
-                  case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
-                    Rule.matched(Expr.quote {
-                      try
-                        Expr.splice(eitherExpr) match {
-                          case Right(value) => Right(value)
-                          case Left(err)    => Left(DecodingFailure(err, Expr.splice(dctx.cursor).history))
-                        }
-                      catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                    })
-                  case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
-                    Rule.matched(Expr.quote {
-                      try
-                        Expr.splice(eitherExpr) match {
-                          case Right(value) => Right(value)
-                          case Left(errs)   =>
-                            Left(DecodingFailure(errs.mkString("\n"), Expr.splice(dctx.cursor).history))
-                        }
-                      catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                    })
-                  case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
-                    Rule.matched(Expr.quote {
-                      try
-                        Expr.splice(eitherExpr) match {
-                          case Right(value) => Right(value)
-                          case Left(err)    => Left(DecodingFailure(err.getMessage, Expr.splice(dctx.cursor).history))
-                        }
-                      catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                    })
-                  case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                    val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                    Rule.matched(Expr.quote {
-                      try
-                        Expr.splice(eitherExpr) match {
-                          case Right(value) => Right(value)
-                          case Left(errs)   =>
-                            Left(
-                              DecodingFailure(errs.map(_.getMessage).mkString("\n"), Expr.splice(dctx.cursor).history)
+              // Like circe's MapDecoder: fail-fast stops at the first failure, accumulating collects all of them; key
+              // failures are reported at the key's cursor.
+              val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
+                val cursor = Expr.splice(dctx.cursor)
+                val failFast = Expr.splice(dctx.failFast)
+                val decode = Expr.splice(decodeFn)
+                val keyDecoder = Expr.splice(keyDecoderLambda)
+                val mapBuilder = Expr.splice(factoryExpr).newBuilder
+                cursor.keys match {
+                  case None =>
+                    throw new CirceDerivationUtils.CollectionBuildException(
+                      CirceDerivationUtils.wrongTypeFailure("object", cursor)
+                    )
+                  case Some(keys) =>
+                    val errors = new CirceDerivationUtils.FailureCollector
+                    val iter = keys.iterator
+                    while (iter.hasNext) {
+                      val keyStr = iter.next()
+                      val valueCursor = cursor.downField(keyStr).asInstanceOf[HCursor]
+                      keyDecoder(keyStr) match {
+                        case Right(key) =>
+                          val value = decode(valueCursor)
+                          if (errors.add(failFast, value))
+                            mapBuilder += Expr.splice(
+                              isMap.pair(
+                                Expr.quote(key),
+                                Expr.quote(CirceDerivationUtils.resultValue[Value](value))
+                              )
                             )
-                        }
-                      catch { case e: CirceDerivationUtils.CollectionBuildException => Left(e.failure) }
-                    })
+                        case Left(err) =>
+                          errors.addFailure(failFast, CirceDerivationUtils.keyFailure(err, valueCursor))
+                      }
+                    }
+                    errors.throwIfFailed()
                 }
+                mapBuilder
               }
-          case None =>
-            MIO.pure(
-              Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
-            )
-        }
+              wrapBuildResult[A](isMap.build, isMap.build.ctor(readLoop).asInstanceOf[Expr[Any]])
+            }
+        case None =>
+          MIO.pure(
+            Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
+          )
       }
     }
 
@@ -239,7 +113,9 @@ trait DecoderHandleAsMapRuleImpl {
       implicit val EitherDFK: Type[Either[DecodingFailure, K]] = DTypes.DecoderResult[K]
 
       Log.info(s"Attempting to derive key decoder for ${Type[K].prettyPrint}") >> {
-        val builtIn: Option[Expr[String => Either[DecodingFailure, K]]] =
+        // A KeyDecoder in scope (user-provided, or circe's own for Int/Long/...) takes precedence over everything
+        // else; the built-in parsers below are only a fallback.
+        def builtIn: Option[Expr[String => Either[DecodingFailure, K]]] =
           if (Type[K] =:= Type.of[Int])
             Some(Expr.quote { (s: String) =>
               CirceDerivationUtils.decodeKeyInt(s).asInstanceOf[Either[DecodingFailure, K]]
@@ -262,7 +138,7 @@ trait DecoderHandleAsMapRuleImpl {
             })
           else None
 
-        builtIn.map(fn => MIO.pure(Some(fn): Option[Expr[String => Either[DecodingFailure, K]]])).getOrElse {
+        {
           DTypes.KeyDecoder[K].summonExprIgnoring().toEither match {
             case Right(keyDecoderExpr) =>
               Log.info(s"Found implicit KeyDecoder[${Type[K].prettyPrint}]") >>
@@ -270,13 +146,12 @@ trait DecoderHandleAsMapRuleImpl {
                   Some(Expr.quote { (s: String) =>
                     Expr.splice(keyDecoderExpr).apply(s) match {
                       case Some(k) => Right(k): Either[DecodingFailure, K]
-                      case None    =>
-                        Left(
-                          DecodingFailure("Failed to decode map key: " + s, Nil)
-                        ): Either[DecodingFailure, K]
+                      case None    => Left(CirceDerivationUtils.invalidKeyFailure): Either[DecodingFailure, K]
                     }
                   }): Option[Expr[String => Either[DecodingFailure, K]]]
                 )
+            case Left(_) if builtIn.isDefined =>
+              MIO.pure(builtIn)
             case Left(_) =>
               Type[K] match {
                 case IsValueType(isValueType) =>
@@ -289,7 +164,8 @@ trait DecoderHandleAsMapRuleImpl {
                 case _ =>
                   Enum.parse[K].toOption match {
                     case Some(enumm) =>
-                      val childrenList = enumm.directChildren.toList
+                      val childrenList =
+                        flattenedChildren[K](enumm)(_ => false) // nested case-object hierarchies are flattened
                       val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
                         case (_, child) =>
                           SingletonValue.unapply(child.Underlying).isDefined

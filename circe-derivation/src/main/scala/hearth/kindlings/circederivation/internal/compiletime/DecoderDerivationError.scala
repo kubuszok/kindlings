@@ -24,6 +24,12 @@ private[compiletime] object DecoderDerivationError {
       constructorError.fold(prefix)(err => s"$prefix: $err")
     }
   }
+  final case class EnumAsStringsWithNonSingletonCases(tpeName: String, nonSingletons: List[String])
+      extends DecoderDerivationError {
+    override def message: String =
+      s"enumAsStrings is enabled but $tpeName has cases that are not singletons (${nonSingletons.mkString(", ")}); " +
+        "only sums of case objects/parameterless enum cases can be decoded from strings (like circe's ConfiguredEnumCodec)"
+  }
   final case class UnexpectedParameterInSingleton(tpeName: String, context: String) extends DecoderDerivationError {
     override def message: String = s"$context: $tpeName"
   }

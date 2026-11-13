@@ -9,6 +9,7 @@ final private[circederivation] class EncoderMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with AnnotationSupport
     with LoadStandardExtensionsOnce
+    with SemiEvalConfigScala2
     with EncoderMacrosImpl {
 
   def deriveEncoderImpl[A: c.WeakTypeTag](
@@ -23,6 +24,10 @@ final private[circederivation] class EncoderMacros(val c: blackbox.Context)
       config: c.Expr[Configuration]
   ): c.Expr[Encoder.AsObject[A]] =
     deriveEncoderAsObjectTypeClass[A](config).asInstanceOf[c.Expr[Encoder.AsObject[A]]]
+
+  def deriveUnwrappedEncoderImpl[A: c.WeakTypeTag](
+      config: c.Expr[Configuration]
+  ): c.Expr[KindlingsEncoder[A]] = deriveUnwrappedEncoderTypeClass[A](config)
 
   def deriveInlineEncodeImpl[A: c.WeakTypeTag](
       value: c.Expr[A]

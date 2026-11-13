@@ -9,16 +9,16 @@ object UbRender {
     def put(a: Any): Unit = { val _ = sb.append(a) }
     def str(s: String): Unit = put("\"" + s.replace("\"", "\\\"") + "\"")
     def value(): Unit = in.peekToken() match {
-      case 'Z' => in.readNull(); put("null")
-      case 'T' | 'F' => put(in.readBoolean())
+      case 'Z'                   => in.readNull(); put("null")
+      case 'T' | 'F'             => put(in.readBoolean())
       case 'i' | 'U' | 'I' | 'l' => put(in.readInt())
-      case 'L' => put(in.readLong())
-      case 'd' => put(in.readFloat())
-      case 'D' => put(in.readDouble())
-      case 'H' => put(in.readBigDecimal())
-      case 'C' => str(in.readChar().toString)
-      case 'S' => str(in.readString())
-      case '[' =>
+      case 'L'                   => put(in.readLong())
+      case 'd'                   => put(in.readFloat())
+      case 'D'                   => put(in.readDouble())
+      case 'H'                   => put(in.readBigDecimal())
+      case 'C'                   => str(in.readChar().toString)
+      case 'S'                   => str(in.readString())
+      case '['                   =>
         in.readArrayStart(); put('[')
         var first = true
         while (!in.isArrayEnd()) { if (!first) put(','); first = false; value() }

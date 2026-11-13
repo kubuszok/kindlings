@@ -9,6 +9,7 @@ final private[circederivation] class DecoderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupport,
       LoadStandardExtensionsOnce,
+      SemiEvalConfigScala3,
       DecoderMacrosImpl
 private[circederivation] object DecoderMacros {
 
@@ -21,6 +22,21 @@ private[circederivation] object DecoderMacros {
       config: Expr[Configuration]
   )(using q: Quotes): Expr[KindlingsDecoder[A]] =
     new DecoderMacros(q).deriveDecoderTypeClass[A](config)
+
+  def derivePatchDecoderImpl[A: Type](
+      config: Expr[Configuration]
+  )(using q: Quotes): Expr[Decoder[A => A]] =
+    new DecoderMacros(q).derivePatchDecoderTypeClass[A](config)
+
+  def deriveIncompleteDecoderImpl[F: Type](
+      config: Expr[Configuration]
+  )(using q: Quotes): Expr[Decoder[F]] =
+    new DecoderMacros(q).deriveIncompleteDecoderTypeClass[F](config)
+
+  def deriveUnwrappedDecoderImpl[A: Type](
+      config: Expr[Configuration]
+  )(using q: Quotes): Expr[KindlingsDecoder[A]] =
+    new DecoderMacros(q).deriveUnwrappedDecoderTypeClass[A](config)
 
   def deriveInlineDecodeImpl[A: Type](
       json: Expr[Json],

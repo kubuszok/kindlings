@@ -134,6 +134,13 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
     def resolveSubtypeName[Parent: Type, Child: Type](scalaName: String): Expr[String] =
       resolveConstructorName(scalaName)
 
+    /** Whether, with a discriminator, a subtype that does not encode to a JSON object is written in the wrapped form
+      * (`{"ConstructorName": value}`) instead of carrying the discriminator.
+      *
+      * Circe: true (like circe-generic-extras). Default: false.
+      */
+    def wrapsNonObjectSubtypesWithDiscriminator: Boolean = false
+
     /** Whether nested sealed hierarchies are flattened to their leaves (the codecs read and write only the leaves, e.g.
       * `{"type":"Truck"}` rather than an intermediate `MotorVehicle` subtype). Defaults to `false`.
       */
@@ -149,6 +156,23 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       * JSON strings (their encoded names). Defaults to `false`.
       */
     def singletonSubtypesAsStrings: Expr[Boolean] = falseExpr
+
+    /** With [[flattensNestedSubtypes]]: whether the nested sealed hierarchy `subtype` has its own (user-provided)
+      * instance in the JSON library. `None` (the default): it has none, its leaves are flattened. `Some(flattened)`: it
+      * is written by that instance, as one subtype named after it, unless `flattened` evaluates (at runtime) to `true` -
+      * the instance was derived by the library for that sum and writes its leaves as the outer sum would.
+      *
+      * Circe: an `Encoder` of the intermediate (`flattened` when it is a Kindlings-derived sum encoder).
+      */
+    def nestedSubtypeInstance(subtype: ??): Option[Expr[Boolean]] = None
+
+    /** Whether `AnyVal` case classes are coded as their single field's value. `None` (the default): always.
+      * `Some(flag)`: when `flag` evaluates (at runtime) to `true`, otherwise they are coded as objects, like other case
+      * classes.
+      *
+      * Circe: `config.unwrapValueClasses`.
+      */
+    def unwrapsValueClasses: Option[Expr[Boolean]] = None
 
     /** Whether, without a discriminator, the subtypes of an ADT are wrapped in a single-field object whose key is the
       * subtype's encoded name (`{"Circle":{"radius":1.0}}`). Defaults to `false` (the subtypes are not wrapped).

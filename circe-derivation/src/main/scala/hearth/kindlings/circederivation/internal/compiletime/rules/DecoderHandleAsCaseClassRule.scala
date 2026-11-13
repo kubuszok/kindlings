@@ -30,9 +30,9 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 case Some(helperCall) =>
                   implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
                   MIO.pure(Rule.matched(Expr.quote {
-                    Expr
-                      .splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
-                      .asInstanceOf[Either[DecodingFailure, A]]
+                    CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+                      Expr.splice(helperCall(dctx.cursor, dctx.config, dctx.failFast))
+                    )
                   }))
                 case None =>
                   MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
@@ -44,8 +44,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
         }
       }
 
+    /** How an absent field is decoded when its default is not used. */
+    sealed private trait FieldKind
+    private case object PlainField extends FieldKind
+    private case object OptionField extends FieldKind
+
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
-    private def decodeCaseClassFields[A: DecoderCtx](
+    private[rules] def decodeCaseClassFields[A: DecoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[Any]] = {
       implicit val StringT: Type[String] = DTypes.String
@@ -59,6 +64,13 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
       implicit val transientFieldT: Type[transientField] = DTypes.TransientField
 
+      // circe names a product by its simple name (`Mirror.MirroredLabel`) in strict-decoding failures.
+      val typeNameExpr: Expr[String] = Expr(Type[A].shortName)
+      rejectMultipleParameterLists[A](caseClass, "KindlingsDecoder").foreach { msg =>
+        return Log.error(msg) >> MIO.fail(
+          DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(msg))
+        )
+      }
       val constructor = caseClass.primaryConstructor
       val fieldsList = constructor.totalParameters.flatten.toList
 
@@ -134,7 +146,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
                            val config = Expr.splice(dctx.config)
                            if (config.strictDecoding)
                              CirceDerivationUtils
-                               .checkStrictDecoding(Expr.splice(dctx.cursor), Set.empty[String])
+                               .checkStrictDecoding(
+                                 Expr.splice(dctx.cursor),
+                                 Expr.splice(typeNameExpr),
+                                 config.discriminator.toList
+                               )
                                .map(_ => Expr.splice(expr))
                            else
                              Right(Expr.splice(expr)): Either[DecodingFailure, A]
@@ -145,7 +161,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
                            .andThen { _ =>
                              if (Expr.splice(dctx.config).strictDecoding)
                                CirceDerivationUtils
-                                 .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), Set.empty[String])
+                                 .checkStrictDecodingAccumulating(
+                                   Expr.splice(dctx.cursor),
+                                   Expr.splice(typeNameExpr),
+                                   Expr.splice(dctx.config).discriminator.toList
+                                 )
                                  .map(_ => Expr.splice(expr))
                              else
                                Validated.valid(Expr.splice(expr)): ValidatedNel[DecodingFailure, A]
@@ -199,9 +219,66 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   // Detect Option[_] fields at compile time — absent fields should decode as None,
                   // not fail (bug #120: circe's .as() on a failed cursor fails immediately without
                   // calling the decoder, so Decoder[Option[T]] never gets a chance to return None).
-                  val isOptionField: Boolean = Type[Field] match {
-                    case IsOption(_) => true
-                    case _           => false
+                  // This holds whether or not the field has a default (with useDefaults=false circe ignores the
+                  // default, and its Option decoder still turns a missing key into None).
+                  // A value type wrapping an Option (`case class MaybeName(v: Option[String]) extends AnyVal`) is
+                  // decoded as if the absent field was `null`, so the wrapped Option decoder yields `None`.
+                  val fieldKind: FieldKind = Type[Field] match {
+                    case IsOption(_)                   => OptionField
+                    case _ if Type[Field].isNamedTuple => PlainField
+                    // Decoded with `tryDecode` like an Option: a derived (unwrapping) decoder accepts an absent key
+                    // as `null` (`nullableDecoderFromFF`), while a user-provided decoder keeps circe's semantics
+                    // (by default an absent key is a missing-field failure).
+                    case IsValueType(isValueType) =>
+                      import isValueType.Underlying as Inner
+                      Type[Inner] match {
+                        case IsOption(_) => OptionField
+                        case _           => PlainField
+                      }
+                    case _ => PlainField
+                  }
+
+                  // Field name expression: a constant when resolved at compile time, else computed from the config.
+                  def fieldNameExpr: Expr[String] = resolvedFieldName match {
+                    case Some(resolvedName) => Expr(resolvedName)
+                    case None => Expr.quote(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))))
+                  }
+
+                  // Decoding without using the default value.
+                  def plainFF(name: Expr[String]): Expr[Either[DecodingFailure, Any]] = fieldKind match {
+                    case OptionField =>
+                      Expr.quote {
+                        CirceDerivationUtils.decodeOptionFieldAsAny(
+                          Expr.splice(dctx.cursor),
+                          Expr.splice(name),
+                          Expr.splice(decoderExpr)
+                        )
+                      }
+                    case PlainField =>
+                      Expr.quote {
+                        Expr
+                          .splice(dctx.cursor)
+                          .downField(Expr.splice(name))
+                          .as(Expr.splice(decoderExpr))
+                          .asInstanceOf[Either[DecodingFailure, Any]]
+                      }
+                  }
+                  def plainAcc(name: Expr[String]): Expr[ValidatedNel[DecodingFailure, Any]] = fieldKind match {
+                    case OptionField =>
+                      Expr.quote {
+                        CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
+                          Expr.splice(dctx.cursor),
+                          Expr.splice(name),
+                          Expr.splice(decoderExpr)
+                        )
+                      }
+                    case PlainField =>
+                      Expr.quote {
+                        Expr
+                          .splice(decoderExpr)
+                          .tryDecodeAccumulating(Expr.splice(dctx.cursor).downField(Expr.splice(name)))
+                          .map(x => x: Any)
+                      }
                   }
 
                   // --- Fail-fast decode expression ---
@@ -211,92 +288,25 @@ trait DecoderHandleAsCaseClassRuleImpl {
                         case Some(d) => Expr.quote(Right(Expr.splice(d)): Either[DecodingFailure, Any])
                         case None    => Expr.quote(Right(null): Either[DecodingFailure, Any])
                       }
-                    } else {
-                      resolvedFieldName match {
-                        case Some(resolvedName) =>
-                          defaultAsAnyOpt match {
-                            case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
-                              // useDefaults is statically false — skip the defaults branch entirely
-                              Expr.quote {
-                                Expr
-                                  .splice(dctx.cursor)
-                                  .downField(Expr.splice(Expr(resolvedName)))
-                                  .as(Expr.splice(decoderExpr))
-                                  .asInstanceOf[Either[DecodingFailure, Any]]
-                              }
-                            case Some(defaultAnyExpr) =>
-                              Expr.quote {
-                                val config = Expr.splice(dctx.config)
-                                if (config.useDefaults) {
-                                  val field = Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
-                                  if (field.failed)
-                                    Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
-                                  else
-                                    field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
-                                } else
-                                  Expr
-                                    .splice(dctx.cursor)
-                                    .downField(Expr.splice(Expr(resolvedName)))
-                                    .as(Expr.splice(decoderExpr))
-                                    .asInstanceOf[Either[DecodingFailure, Any]]
-                              }
-                            case None if isOptionField =>
-                              // Option[T] without default: absent field → Right(None) (bug #120)
-                              Expr.quote {
-                                CirceDerivationUtils.decodeOptionFieldAsAny(
-                                  Expr.splice(dctx.cursor),
-                                  Expr.splice(Expr(resolvedName)),
-                                  Expr.splice(decoderExpr)
-                                )
-                              }
-                            case None =>
-                              Expr.quote {
-                                Expr
-                                  .splice(dctx.cursor)
-                                  .downField(Expr.splice(Expr(resolvedName)))
-                                  .as(Expr.splice(decoderExpr))
-                                  .asInstanceOf[Either[DecodingFailure, Any]]
-                              }
+                    } else
+                      defaultAsAnyOpt match {
+                        case Some(_) if useDefaultsStaticallyFalse =>
+                          // useDefaults is statically false — skip the defaults branch entirely
+                          plainFF(fieldNameExpr)
+                        case Some(defaultAnyExpr) =>
+                          // Missing field, or a null the decoder rejects, decodes to the default (circe parity)
+                          Expr.quote {
+                            if (Expr.splice(dctx.config).useDefaults)
+                              CirceDerivationUtils.decodeFieldUsingDefault(
+                                Expr.splice(dctx.cursor),
+                                Expr.splice(fieldNameExpr),
+                                Expr.splice(decoderExpr),
+                                Expr.splice(defaultAnyExpr)
+                              )
+                            else Expr.splice(plainFF(fieldNameExpr))
                           }
-                        case None =>
-                          defaultAsAnyOpt match {
-                            case Some(defaultAnyExpr) =>
-                              Expr.quote {
-                                val config = Expr.splice(dctx.config)
-                                val fn = config.transformMemberNames(Expr.splice(Expr(fName)))
-                                if (config.useDefaults) {
-                                  val field = Expr.splice(dctx.cursor).downField(fn)
-                                  if (field.failed)
-                                    Right(Expr.splice(defaultAnyExpr)): Either[DecodingFailure, Any]
-                                  else
-                                    field.as(Expr.splice(decoderExpr)).asInstanceOf[Either[DecodingFailure, Any]]
-                                } else
-                                  Expr
-                                    .splice(dctx.cursor)
-                                    .downField(fn)
-                                    .as(Expr.splice(decoderExpr))
-                                    .asInstanceOf[Either[DecodingFailure, Any]]
-                              }
-                            case None if isOptionField =>
-                              // Option[T] without default, runtime field name: absent field → Right(None) (bug #120)
-                              Expr.quote {
-                                CirceDerivationUtils.decodeOptionFieldAsAny(
-                                  Expr.splice(dctx.cursor),
-                                  Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                                  Expr.splice(decoderExpr)
-                                )
-                              }
-                            case None =>
-                              Expr.quote {
-                                Expr
-                                  .splice(dctx.cursor)
-                                  .downField(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))))
-                                  .as(Expr.splice(decoderExpr))
-                                  .asInstanceOf[Either[DecodingFailure, Any]]
-                              }
-                          }
+                        case None => plainFF(fieldNameExpr)
                       }
-                    }
 
                   // --- Accumulating decode expression ---
                   val accExpr: Expr[ValidatedNel[DecodingFailure, Any]] =
@@ -307,101 +317,23 @@ trait DecoderHandleAsCaseClassRuleImpl {
                         case None =>
                           Expr.quote(Validated.valid(null): ValidatedNel[DecodingFailure, Any])
                       }
-                    } else {
-                      resolvedFieldName match {
-                        case Some(resolvedName) =>
-                          defaultAsAnyOpt match {
-                            case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
-                              // useDefaults is statically false — skip the defaults branch entirely
-                              Expr.quote {
-                                Expr
-                                  .splice(decoderExpr)
-                                  .tryDecodeAccumulating(
-                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
-                                  )
-                                  .map(x => x: Any)
-                              }
-                            case Some(defaultAnyExpr) =>
-                              Expr.quote {
-                                val config = Expr.splice(dctx.config)
-                                if (config.useDefaults)
-                                  CirceDerivationUtils.decodeFieldWithDefaultAccumulating(
-                                    Expr.splice(dctx.cursor),
-                                    Expr.splice(Expr(resolvedName)),
-                                    Expr.splice(decoderExpr),
-                                    Expr.splice(defaultAnyExpr)
-                                  )
-                                else
-                                  Expr
-                                    .splice(decoderExpr)
-                                    .tryDecodeAccumulating(
-                                      Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
-                                    )
-                                    .map(x => x: Any)
-                              }
-                            case None if isOptionField =>
-                              // Option[T] without default: absent field → Valid(None) (bug #120)
-                              Expr.quote {
-                                CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
-                                  Expr.splice(dctx.cursor),
-                                  Expr.splice(Expr(resolvedName)),
-                                  Expr.splice(decoderExpr)
-                                )
-                              }
-                            case None =>
-                              Expr.quote {
-                                Expr
-                                  .splice(decoderExpr)
-                                  .tryDecodeAccumulating(
-                                    Expr.splice(dctx.cursor).downField(Expr.splice(Expr(resolvedName)))
-                                  )
-                                  .map(x => x: Any)
-                              }
+                    } else
+                      defaultAsAnyOpt match {
+                        case Some(_) if useDefaultsStaticallyFalse =>
+                          plainAcc(fieldNameExpr)
+                        case Some(defaultAnyExpr) =>
+                          Expr.quote {
+                            if (Expr.splice(dctx.config).useDefaults)
+                              CirceDerivationUtils.decodeFieldUsingDefaultAccumulating(
+                                Expr.splice(dctx.cursor),
+                                Expr.splice(fieldNameExpr),
+                                Expr.splice(decoderExpr),
+                                Expr.splice(defaultAnyExpr)
+                              )
+                            else Expr.splice(plainAcc(fieldNameExpr))
                           }
-                        case None =>
-                          defaultAsAnyOpt match {
-                            case Some(defaultAnyExpr) =>
-                              Expr.quote {
-                                val config = Expr.splice(dctx.config)
-                                val fn = config.transformMemberNames(Expr.splice(Expr(fName)))
-                                if (config.useDefaults)
-                                  CirceDerivationUtils.decodeFieldWithDefaultAccumulating(
-                                    Expr.splice(dctx.cursor),
-                                    fn,
-                                    Expr.splice(decoderExpr),
-                                    Expr.splice(defaultAnyExpr)
-                                  )
-                                else
-                                  Expr
-                                    .splice(decoderExpr)
-                                    .tryDecodeAccumulating(Expr.splice(dctx.cursor).downField(fn))
-                                    .map(x => x: Any)
-                              }
-                            case None if isOptionField =>
-                              // Option[T] without default, runtime field name: absent field → Valid(None) (bug #120)
-                              Expr.quote {
-                                CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
-                                  Expr.splice(dctx.cursor),
-                                  Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                                  Expr.splice(decoderExpr)
-                                )
-                              }
-                            case None =>
-                              Expr.quote {
-                                Expr
-                                  .splice(decoderExpr)
-                                  .tryDecodeAccumulating(
-                                    Expr
-                                      .splice(dctx.cursor)
-                                      .downField(
-                                        Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
-                                      )
-                                  )
-                                  .map(x => x: Any)
-                              }
-                          }
+                        case None => plainAcc(fieldNameExpr)
                       }
-                    }
 
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
@@ -488,7 +420,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
 
                   // Step 4: Wrap with if(failFast) branching and strictDecoding check
                   // When evaluatedConfig is available, pre-compute all field names as constants
-                  val resolvedFieldNames: Option[Expr[Set[String]]] =
+                  val resolvedFieldNames: Option[Expr[List[String]]] =
                     dctx.evaluatedConfig match {
                       case Some(evCfg) =>
                         // Pre-compute all field names at compile time
@@ -497,10 +429,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           .map { case (name, p) =>
                             getAnnotationStringArg[fieldName](p).getOrElse(evCfg.transformMemberNames(name))
                           }
-                        val setExpr = names.foldRight(Expr.quote(Set.empty[String])) { (name, acc) =>
-                          Expr.quote(Expr.splice(acc) + Expr.splice(Expr(name)))
+                        val listExpr = names.foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
+                          Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
                         }
-                        Some(setExpr)
+                        Some(listExpr)
                       case None =>
                         if (hasAnyFieldNameAnnotation) {
                           val nameExprs = fieldsList
@@ -520,7 +452,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                   Expr.splice(acc)
                               }
                           }
-                          Some(Expr.quote(Expr.splice(resolvedList).toSet))
+                          Some(resolvedList)
                         } else None
                     }
 
@@ -545,12 +477,16 @@ trait DecoderHandleAsCaseClassRuleImpl {
                            val expectedFields = Expr.splice(
                              resolvedFieldNames.getOrElse(
                                Expr.quote {
-                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames)
                                }
                              )
                            )
                            CirceDerivationUtils
-                             .checkStrictDecoding(Expr.splice(dctx.cursor), expectedFields)
+                             .checkStrictDecoding(
+                               Expr.splice(dctx.cursor),
+                               Expr.splice(typeNameExpr),
+                               expectedFields ++ config.discriminator
+                             )
                              .flatMap(_ => decoded)
                          } else decoded
                        } else {
@@ -562,13 +498,19 @@ trait DecoderHandleAsCaseClassRuleImpl {
                            val expectedFields = Expr.splice(
                              resolvedFieldNames.getOrElse(
                                Expr.quote {
-                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames).toSet
+                                 Expr.splice(fieldNamesListExpr).map(config.transformMemberNames)
                                }
                              )
                            )
-                           CirceDerivationUtils
-                             .checkStrictDecodingAccumulating(Expr.splice(dctx.cursor), expectedFields)
-                             .andThen(_ => decoded)
+                           CirceDerivationUtils.withStrictFailureAccumulating(
+                             CirceDerivationUtils
+                               .checkStrictDecodingAccumulating(
+                                 Expr.splice(dctx.cursor),
+                                 Expr.splice(typeNameExpr),
+                                 expectedFields ++ config.discriminator
+                               ),
+                             decoded
+                           )
                          } else decoded
                        }): Any
                     }
@@ -576,18 +518,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 }
             }
             .map { decodeFields =>
-              // Reject non-object input, like circe's derived product decoders (bug #235). Without it, `downField`
-              // on a non-object yields failed cursors, so Option/default fields silently decode. Fail-fast reports
-              // only "expecting object"; accumulating also reports the field errors (e.g. missing required fields).
+              // Reject non-object input, like circe's derived product decoders (bug #235): both fail-fast and
+              // accumulating report only "expecting object" (Scala 3 core `ConfiguredDecoder.decodeProductBase`).
               Expr.quote {
-                val isObject = Expr.splice(dctx.cursor).value.isObject
-                if (!isObject && Expr.splice(dctx.failFast))
-                  Left(CirceDerivationUtils.notAnObjectFailure(Expr.splice(dctx.cursor))): Any
-                else {
-                  val decoded = Expr.splice(decodeFields)
-                  if (isObject) decoded
-                  else CirceDerivationUtils.prependNotAnObject(Expr.splice(dctx.cursor), decoded)
-                }
+                if (Expr.splice(dctx.cursor).value.isObject) Expr.splice(decodeFields)
+                else CirceDerivationUtils.notAnObject(Expr.splice(dctx.cursor), Expr.splice(dctx.failFast))
               }
             }
       }

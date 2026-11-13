@@ -12,6 +12,8 @@ final class Scala2LiteralFieldsGapSpec extends MacroSuite {
   test("case classes with literal-typed fields are not derivable on Scala 2 yet") {
     compileErrors(
       "hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[hearth.kindlings.jsoniterderivation.ParityLiteralTypes]"
-    ).check("KindlingsJsonValueCodec.derived[hearth.kindlings.jsoniterderivation.ParityLiteralTypes]") // surfaces as "type mismatch" or "assignment to non variable", depending on the codegen order
+    ).check(
+      "KindlingsJsonValueCodec.derived[hearth.kindlings.jsoniterderivation.ParityLiteralTypes]"
+    ) // surfaces as "type mismatch" or "assignment to non variable", depending on the codegen order
   }
 }

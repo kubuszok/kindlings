@@ -9,6 +9,7 @@ final private[circederivation] class DecoderMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with AnnotationSupport
     with LoadStandardExtensionsOnce
+    with SemiEvalConfigScala2
     with DecoderMacrosImpl {
 
   def deriveDecoderImpl[A: c.WeakTypeTag](
@@ -18,6 +19,18 @@ final private[circederivation] class DecoderMacros(val c: blackbox.Context)
   def deriveKindlingsDecoderImpl[A: c.WeakTypeTag](
       config: c.Expr[Configuration]
   ): c.Expr[KindlingsDecoder[A]] = deriveDecoderTypeClass[A](config)
+
+  def derivePatchDecoderImpl[A: c.WeakTypeTag](
+      config: c.Expr[Configuration]
+  ): c.Expr[Decoder[A => A]] = derivePatchDecoderTypeClass[A](config)
+
+  def deriveIncompleteDecoderImpl[F: c.WeakTypeTag](
+      config: c.Expr[Configuration]
+  ): c.Expr[Decoder[F]] = deriveIncompleteDecoderTypeClass[F](config)
+
+  def deriveUnwrappedDecoderImpl[A: c.WeakTypeTag](
+      config: c.Expr[Configuration]
+  ): c.Expr[KindlingsDecoder[A]] = deriveUnwrappedDecoderTypeClass[A](config)
 
   def deriveInlineDecodeImpl[A: c.WeakTypeTag](
       json: c.Expr[Json]
