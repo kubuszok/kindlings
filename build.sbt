@@ -101,7 +101,12 @@ val mimaSettings = Seq(
     // there (chiefly the synthetic `derivationPolicyChecked` field accessor added to the internal `DerivationPolicy`
     // trait, which is implemented only by kindlings' own `*MacrosImpl` classes, plus internal helper objects), so
     // none of it is user-observable. Users call the public derivation entry points, not `*.compiletime.*`.
-    ProblemFilters.exclude[Problem]("hearth.kindlings.*compiletime*")
+    ProblemFilters.exclude[Problem]("hearth.kindlings.*compiletime*"),
+    // Scala 3 emits the static initializer of an object holding a `lazy val` as `private static {}` (instead of
+    // `public static {}`); these companions gained `lazy val`s (the jsoniter-scala name mappers). `<clinit>` is run
+    // only by the JVM, which ignores its access flags, and no bytecode can invoke it, so this is not a binary break.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("hearth.kindlings.jsoniterderivation.JsoniterConfig.<clinit>"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("hearth.kindlings.ubjsonderivation.UBJsonConfig.<clinit>")
   )
 )
 

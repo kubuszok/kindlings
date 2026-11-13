@@ -395,7 +395,7 @@ trait CodecMacrosImpl
       configExpr
     ) { case (encodeFn, decodeFn, nullValueExpr) =>
       Expr.quote {
-        hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.codecInstance[A](
+        hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.lazyCodecInstance[A](
           Expr.splice(nullValueExpr),
           (in: JsonReader, default: A) => {
             val _ = default
@@ -707,7 +707,7 @@ trait CodecMacrosImpl
             else Expr.quote(JsoniterConfig.validate(Expr.splice(configExpr)))
           val resultExpr = Expr.quote {
             Expr.splice(validation)
-            hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.jsonCodecInstance[A](
+            hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationFactories.lazyJsonCodecInstance[A](
               Expr.splice(nullVal),
               (in: JsonReader, default: A) => {
                 val _ = default

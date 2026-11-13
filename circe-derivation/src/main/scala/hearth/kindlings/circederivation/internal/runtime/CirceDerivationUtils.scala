@@ -939,4 +939,110 @@ object CirceDerivationUtils {
   ): Boolean =
     names.exists(n => transformConstructorNames(n) == constructorName) ||
       (intermediateFor(constructorName, intermediates) ne null)
+
+  // --- Helpers of Kindlings 0.3.x, kept for binary compatibility of code compiled against it (with their 0.3.2
+  // behaviour); the macros no longer emit them ---
+
+  final private val Compat03 =
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; the macro no longer emits it"
+
+  @deprecated(Compat03, "0.3.4")
+  def decodeEnumFromString[A](cursor: HCursor, knownSubtypes: List[String])(
+      dispatch: String => Either[DecodingFailure, A]
+  ): Either[DecodingFailure, A] =
+    cursor.as[String] match {
+      case Right(typeName) => dispatch(typeName)
+      case Left(_)         =>
+        Left(
+          DecodingFailure(
+            s"Expected a JSON string for enum value. Known values: ${knownSubtypes.mkString(", ")}",
+            cursor.history
+          )
+        )
+    }
+
+  @deprecated(Compat03, "0.3.4")
+  def checkStrictDecoding(cursor: HCursor, expectedFields: Set[String]): Decoder.Result[Unit] = {
+    val actualKeys = cursor.keys.map(_.toSet).getOrElse(Set.empty)
+    val unexpected = actualKeys -- expectedFields
+    if (unexpected.isEmpty) Right(())
+    else
+      Left(
+        DecodingFailure(
+          s"Unexpected field(s): ${unexpected.toList.sorted.mkString(", ")}",
+          cursor.history
+        )
+      )
+  }
+
+  @deprecated(Compat03, "0.3.4")
+  def checkStrictDecodingWithDiscriminator(
+      cursor: HCursor,
+      expectedFields: Set[String],
+      discriminatorField: String
+  ): Decoder.Result[Unit] =
+    checkStrictDecoding(cursor, expectedFields + discriminatorField)
+
+  @deprecated(Compat03, "0.3.4")
+  def checkStrictDecodingAccumulating(
+      cursor: HCursor,
+      expectedFields: Set[String]
+  ): ValidatedNel[DecodingFailure, Unit] =
+    Validated.fromEither(checkStrictDecoding(cursor, expectedFields)).leftMap(NonEmptyList.one)
+
+  @deprecated(Compat03, "0.3.4")
+  def decodeWrapped(cursor: HCursor): Decoder.Result[(String, HCursor)] =
+    cursor.keys.flatMap(_.headOption) match {
+      case Some(typeName) =>
+        Right((typeName, cursor.downField(typeName).success.getOrElse(cursor)))
+      case None =>
+        Left(
+          DecodingFailure(
+            "Expected a JSON object with a single key as type discriminator",
+            cursor.history
+          )
+        )
+    }
+
+  @deprecated(Compat03, "0.3.4")
+  def decodeDiscriminator(cursor: HCursor, field: String): Decoder.Result[(String, HCursor)] =
+    cursor.downField(field).as[String] match {
+      case Right(typeName) => Right((typeName, cursor))
+      case Left(failure)   => Left(failure)
+    }
+
+  @deprecated(Compat03, "0.3.4")
+  def failedToMatchSubtype(typeName: String, cursor: HCursor, knownSubtypes: List[String]): DecodingFailure =
+    DecodingFailure(
+      s"Unknown type discriminator: $typeName. Expected one of: ${knownSubtypes.mkString(", ")}",
+      cursor.history
+    )
+
+  /** The 0.3.x `KindlingsDecoder.patch`: the patch JSON is deep-merged into the encoded original, which is decoded back
+    * (keeping the original when that fails).
+    */
+  @deprecated(Compat03, "0.3.4")
+  def patchDecoder[A](decoder: Decoder[A], encoder: Encoder[A]): Decoder[A => A] =
+    new Decoder[A => A] {
+      def apply(c: HCursor): Decoder.Result[A => A] = {
+        val patchJson = c.value
+        if (patchJson.isNull || patchJson.asObject.exists(_.isEmpty)) Right(identity)
+        else
+          Right { (original: A) =>
+            val originalJson = encoder(original)
+            val merged = deepMergeCompat03(originalJson, patchJson)
+            decoder.decodeJson(merged).getOrElse(original)
+          }
+      }
+    }
+
+  private def deepMergeCompat03(base: Json, patch: Json): Json =
+    (base.asObject, patch.asObject) match {
+      case (Some(baseObj), Some(patchObj)) =>
+        val merged = baseObj.toMap ++ patchObj.toMap.map { case (k, v) =>
+          k -> baseObj(k).map(deepMergeCompat03(_, v)).getOrElse(v)
+        }
+        Json.fromJsonObject(JsonObject.fromMap(merged))
+      case _ => patch
+    }
 }

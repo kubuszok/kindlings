@@ -2,7 +2,8 @@ package hearth.kindlings.circederivation
 
 import io.circe.{Decoder, DecodingFailure, HCursor, Json}
 
-private[circederivation] trait KindlingsDecoderCompanionCompat { this: KindlingsDecoder.type =>
+private[circederivation] trait KindlingsDecoderCompanionCompat extends KindlingsDecoderBinaryCompat {
+  this: KindlingsDecoder.type =>
 
   inline def decode[A](json: Json)(using config: Configuration): Either[DecodingFailure, A] = ${
     internal.compiletime.DecoderMacros.deriveInlineDecodeImpl[A]('json, 'config)

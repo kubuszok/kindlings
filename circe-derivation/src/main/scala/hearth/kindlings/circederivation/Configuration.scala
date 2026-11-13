@@ -38,10 +38,96 @@ final case class Configuration(
     * `ConfiguredCodec`, circe-generic and circe-generic-extras) does: `{"value":5}` instead of `5`.
     */
   def withoutValueClassUnwrapping: Configuration = copy(unwrapValueClasses = false)
+
+  // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
+  // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
+  def copy(
+      transformMemberNames: String => String = this.transformMemberNames,
+      transformConstructorNames: String => String = this.transformConstructorNames,
+      useDefaults: Boolean = this.useDefaults,
+      discriminator: Option[String] = this.discriminator,
+      strictDecoding: Boolean = this.strictDecoding,
+      enumAsStrings: Boolean = this.enumAsStrings,
+      unwrapValueClasses: Boolean = this.unwrapValueClasses
+  ): Configuration = new Configuration(
+    transformMemberNames,
+    transformConstructorNames,
+    useDefaults,
+    discriminator,
+    strictDecoding,
+    enumAsStrings,
+    unwrapValueClasses
+  )
+
+  /** The `copy` of Kindlings 0.3.2 (without `unwrapValueClasses`, which keeps its value). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
+    "0.3.4"
+  )
+  def copy(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      useDefaults: Boolean,
+      discriminator: Option[String],
+      strictDecoding: Boolean,
+      enumAsStrings: Boolean
+  ): Configuration = new Configuration(
+    transformMemberNames,
+    transformConstructorNames,
+    useDefaults,
+    discriminator,
+    strictDecoding,
+    enumAsStrings,
+    this.unwrapValueClasses
+  )
+
+  /** The constructor of Kindlings 0.3.2 (without `unwrapValueClasses`, which gets its default). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use the primary constructor",
+    "0.3.4"
+  )
+  def this(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      useDefaults: Boolean,
+      discriminator: Option[String],
+      strictDecoding: Boolean,
+      enumAsStrings: Boolean
+  ) = this(
+    transformMemberNames,
+    transformConstructorNames,
+    useDefaults,
+    discriminator,
+    strictDecoding,
+    enumAsStrings,
+    true
+  )
 }
 object Configuration {
 
   implicit val default: Configuration = Configuration()
+
+  /** The `apply` of Kindlings 0.3.2 (without `unwrapValueClasses`, which gets its default). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use apply with named arguments",
+    "0.3.4"
+  )
+  def apply(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      useDefaults: Boolean,
+      discriminator: Option[String],
+      strictDecoding: Boolean,
+      enumAsStrings: Boolean
+  ): Configuration =
+    new Configuration(
+      transformMemberNames,
+      transformConstructorNames,
+      useDefaults,
+      discriminator,
+      strictDecoding,
+      enumAsStrings
+    )
 
   // Kept for source compatibility; the public versions live in `renaming`.
   private[circederivation] val snakeCase: String => String = renaming.snakeCase

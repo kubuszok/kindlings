@@ -228,7 +228,7 @@ object JsoniterDerivationUtils {
     }
   }
 
-  /** Reads the rest of an object with the single `valueKey` field (see [[readObjectInline]] for `afterOpen`). */
+  /** Reads the rest of an object with the single `valueKey` field (see `readObjectInline` for `afterOpen`). */
   private def readValueField[A](
       in: JsonReader,
       valueKey: String,
@@ -559,7 +559,7 @@ object JsoniterDerivationUtils {
   }
 
   /** Reads an ADT object in discriminator mode and dispatches on the discriminator value; `dispatch` receives the value
-    * and whether the reader is right after the object's `{` (`afterOpen`, see [[readObjectInline]]) or right after the
+    * and whether the reader is right after the object's `{` (`afterOpen`, see `readObjectInline`) or right after the
     * discriminator value. As in jsoniter-scala: with `requireFirst` the discriminator must be the first key (`expected
     * key: "type"` otherwise); without it, the decoder marks the object start, skips to the discriminator (`missing
     * required field "type"` when absent) and re-reads the object from the mark.
@@ -724,7 +724,7 @@ object JsoniterDerivationUtils {
 
   // --- Validation helpers ---
 
-  /** Marks slots of [[readObject]]/[[readObjectInline]] arrays whose fields were absent from the JSON object (`null`
+  /** Marks slots of [[readObject]]/`readObjectInline` arrays whose fields were absent from the JSON object (`null`
     * cannot be used, because it is a legal decoded value).
     */
   private object AbsentField
@@ -811,4 +811,105 @@ object JsoniterDerivationUtils {
     if (isJavaEnum) config.javaEnumValueNameMapper(base) else base
   }
 
+  // --- Helpers of Kindlings 0.3.x, kept for binary compatibility of codecs compiled against it (with their 0.3.2
+  // behaviour); the macro no longer emits them ---
+
+  final private val Compat03 =
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; the macro no longer emits it"
+
+  @deprecated(Compat03, "0.3.4")
+  def writeScalaEnumValueId(out: JsonWriter, value: Any): Unit =
+    out.writeVal(value.asInstanceOf[scala.Enumeration#Value].id)
+
+  @deprecated(Compat03, "0.3.4")
+  def readScalaEnumValueId[A](in: JsonReader)(dispatch: Int => A): A = {
+    val id = in.readInt()
+    dispatch(id)
+  }
+
+  /** Skip remaining fields and consume closing } of an already-opened inline object (e.g., after the discriminator
+    * field was consumed).
+    */
+  @deprecated(Compat03, "0.3.4")
+  @scala.annotation.nowarn("msg=unused value|discarded non-Unit")
+  def skipInlineObjectRemainder(in: JsonReader): Unit =
+    if (in.isNextToken(','.toByte)) {
+      in.readKeyAsString()
+      in.skip()
+      while (in.isNextToken(','.toByte)) {
+        in.readKeyAsString()
+        in.skip()
+      }
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
+    } else {
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}'")
+    }
+
+  @deprecated(Compat03, "0.3.4")
+  def readObjectInline[A](
+      in: JsonReader,
+      fieldCount: Int,
+      construct: Array[Any] => A
+  )(dispatch: (String, Array[Any], JsonReader) => Unit): A = {
+    val arr = new Array[Any](fieldCount)
+    // Object is already open and discriminator key-value has been read.
+    // Check for more fields (comma after discriminator value).
+    if (in.isNextToken(','.toByte)) {
+      val key = in.readKeyAsString()
+      dispatch(key, arr, in)
+      while (in.isNextToken(','.toByte)) {
+        val k = in.readKeyAsString()
+        dispatch(k, arr, in)
+      }
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
+    } else {
+      if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}'")
+    }
+    construct(arr)
+  }
+
+  @deprecated(Compat03, "0.3.4")
+  def readWithDiscriminator[A](in: JsonReader, discriminatorField: String)(dispatch: String => A): A = {
+    // The discriminator has to be the first field.
+    if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{' for discriminated enum")
+    val firstKey = in.readKeyAsString()
+    if (firstKey != discriminatorField)
+      in.decodeError("expected discriminator field '" + discriminatorField + "' as first field, got '" + firstKey + "'")
+    val typeName = in.readString(null)
+    // The dispatch function continues reading the rest of the object from the same reader.
+    dispatch(typeName)
+  }
+
+  @deprecated(Compat03, "0.3.4")
+  def throwMissingField(fieldName: String): Nothing =
+    throw new IllegalArgumentException(s"missing required field: $fieldName")
+
+  @deprecated(Compat03, "0.3.4")
+  def validateBigDecimal(
+      in: JsonReader,
+      value: BigDecimal,
+      precision: Int,
+      scaleLimit: Int,
+      digitsLimit: Int
+  ): BigDecimal = {
+    if (value ne null) {
+      val u = value.underlying()
+      if (u.precision > precision)
+        in.decodeError(s"BigDecimal precision ${u.precision} exceeds limit $precision")
+      if (u.scale > scaleLimit || u.scale < -scaleLimit)
+        in.decodeError(s"BigDecimal scale ${u.scale} exceeds limit $scaleLimit")
+      if (u.unscaledValue.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103
+        in.decodeError(s"BigDecimal digits exceed limit $digitsLimit")
+    }
+    value
+  }
+
+  @deprecated(Compat03, "0.3.4")
+  def validateBigInt(in: JsonReader, value: BigInt, digitsLimit: Int): BigInt = {
+    if (value ne null) {
+      if (value.underlying.bitLength * 30103 / 100000 + 1 > digitsLimit) // log10(2) ≈ 0.30103
+        in.decodeError(s"BigInt digits exceed limit $digitsLimit")
+    }
+    value
+  }
 }
