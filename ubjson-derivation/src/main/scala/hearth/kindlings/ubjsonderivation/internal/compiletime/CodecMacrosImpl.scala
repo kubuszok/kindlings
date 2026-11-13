@@ -115,8 +115,7 @@ trait CodecMacrosImpl
     if (!param.hasDefault) None
     else
       param.defaultValue.flatMap { method =>
-        // untyped: the value parameters of a generic default method are only typed once its type arguments are applied
-        val needed = method.asUntyped.parameters.flatMap(_.keys.toList)
+        val needed = method.totalParameters.flatMap(_.keys.toList)
         if (!needed.forall(argumentValues.contains)) None
         else
           foldInstanceFree(method, "Default value")(
