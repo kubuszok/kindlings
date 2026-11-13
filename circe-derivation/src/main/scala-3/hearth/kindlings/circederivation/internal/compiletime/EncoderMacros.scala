@@ -9,6 +9,7 @@ final private[circederivation] class EncoderMacros(q: Quotes)
     extends MacroCommonsScala3(using q),
       AnnotationSupport,
       LoadStandardExtensionsOnce,
+      SemiEvalConfigScala3,
       EncoderMacrosImpl
 private[circederivation] object EncoderMacros {
 
@@ -26,6 +27,11 @@ private[circederivation] object EncoderMacros {
       config: Expr[Configuration]
   )(using q: Quotes): Expr[Encoder.AsObject[A]] =
     new EncoderMacros(q).deriveEncoderAsObjectTypeClass[A](config)
+
+  def deriveUnwrappedEncoderImpl[A: Type](
+      config: Expr[Configuration]
+  )(using q: Quotes): Expr[KindlingsEncoder[A]] =
+    new EncoderMacros(q).deriveUnwrappedEncoderTypeClass[A](config)
 
   def deriveInlineEncodeImpl[A: Type](
       value: Expr[A],

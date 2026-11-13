@@ -11,6 +11,7 @@ import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 trait EncoderMacrosImpl
     extends CirceDerivationTimeout
     with CirceDerivationPolicy
+    with SealedHierarchyFlattening
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsLiteralTypeRuleImpl
@@ -20,6 +21,7 @@ trait EncoderMacrosImpl
     with rules.EncoderHandleAsMapRuleImpl
     with rules.EncoderHandleAsCollectionRuleImpl
     with rules.EncoderHandleAsNamedTupleRuleImpl
+    with rules.EncoderHandleAsTupleRuleImpl
     with rules.EncoderHandleAsSingletonRuleImpl
     with rules.EncoderHandleAsCaseClassRuleImpl
     with rules.EncoderHandleAsEnumRuleImpl
@@ -35,7 +37,8 @@ trait EncoderMacrosImpl
   def deriveInlineEncode[A: Type](valueExpr: Expr[A], configExpr: Expr[Configuration]): Expr[Json] = {
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
-    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
+    val evConfig: Option[Configuration] = semiEvalConfig(configExpr)
+    evaluatedConfigFlags = evConfig
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Json]("KindlingsEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
@@ -50,24 +53,51 @@ trait EncoderMacrosImpl
     }
   }
 
-  @scala.annotation.nowarn("msg=is never used")
+  @scala.annotation.nowarn("msg=is never used|Non local returns")
   def deriveEncoderTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsEncoder[A]] = {
     implicit val EncoderA: Type[Encoder[A]] = Types.Encoder[A]
     implicit val KindlingsEncoderA: Type[KindlingsEncoder[A]] = Types.KindlingsEncoder[A]
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
     val selfType: Option[??] = Some(Type[A].as_??)
-    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
+    val evConfig: Option[Configuration] = semiEvalConfig(configExpr)
+    evaluatedConfigFlags = evConfig
+
+    // Like circe's semiauto/`derives` (which return `Encoder.AsObject` for products and sums), return an
+    // `Encoder.AsObject` instance whenever the type is known to encode to a JSON object.
+    if (nonObjectReason[A](evaluatedConfigFlags).isEmpty) {
+      implicit val KindlingsEncoderAsObjectA: Type[KindlingsEncoderAsObject[A]] = Types.KindlingsEncoderAsObject[A]
+      return deriveEncoderAsObjectTypeClass[A](configExpr).upcast[KindlingsEncoder[A]]
+    }
+
+    // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
+    val markedSum: Boolean = isMarkedSum[A]
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoder[A]]("KindlingsEncoder.derived") { fromCtx =>
       ValDefs.createVal[Configuration](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
-          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
-            val _ = a
-            Expr.splice {
-              fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-            }
+          Expr.splice {
+            if (markedSum)
+              Expr.quote {
+                hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.sumEncoderInstance[A] {
+                  (a: A) =>
+                    val _ = a
+                    Expr.splice {
+                      fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
+                    }
+                }
+              }
+            else
+              Expr.quote {
+                hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] {
+                  (a: A) =>
+                    val _ = a
+                    Expr.splice {
+                      fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
+                    }
+                }
+              }
           }
         }
       }
@@ -76,48 +106,129 @@ trait EncoderMacrosImpl
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEncoderAsObjectTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsEncoderAsObject[A]] = {
-    // Compile-time validation: only case classes, named tuples, sealed traits produce objects.
-    // Note: value types (e.g., case class Foo(x: Int) extends AnyVal) ARE case classes and pass this check,
-    // but produce non-object JSON at runtime — the runtime guard in encodeObject handles this.
-    val isCaseClass = CaseClass.parse[A].toOption.isDefined
-    val isNamedTuple = NamedTuple.parse[A].toOption.isDefined
-    val isEnum = Enum.parse[A].toOption.isDefined
-    if (!isCaseClass && !isNamedTuple && !isEnum)
+    // Compile-time validation: like circe's semiauto/`derives`, only products and sums encode to JSON objects.
+    val evConfigForCheck: Option[Configuration] = semiEvalConfig(configExpr)
+    evaluatedConfigFlags = evConfigForCheck
+    // A sum of singletons with a configuration only known at runtime is allowed (enumAsStrings fails at runtime).
+    nonObjectReason[A](evConfigForCheck).filterNot(_ == maybeObject).foreach { reason =>
       Environment.reportErrorAndAbort(
-        s"KindlingsEncoder.deriveAsObject: ${Type[A].prettyPrint} is not a case class, sealed trait, or named tuple. " +
+        s"KindlingsEncoder.deriveAsObject: ${Type[A].prettyPrint} does not encode to a JSON object ($reason). " +
           "Use KindlingsEncoder.derived instead."
       )
+    }
 
     implicit val KindlingsEncoderAsObjectA: Type[KindlingsEncoderAsObject[A]] = Types.KindlingsEncoderAsObject[A]
     implicit val JsonObjectT: Type[JsonObject] = Types.JsonObject
     implicit val JsonT: Type[Json] = Types.Json
     implicit val ConfigT: Type[Configuration] = Types.Configuration
     val selfType: Option[??] = Some(Type[A].as_??)
-    val evConfig: Option[Configuration] = configExpr.semiEval.toOption
+    val evConfig: Option[Configuration] = semiEvalConfig(configExpr)
+    evaluatedConfigFlags = evConfig
 
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoderAsObject[A]]("KindlingsEncoder.deriveAsObject") {
       fromCtx =>
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
           Expr.quote {
             val cfg = Expr.splice(configVal)
-            hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderAsObjectInstance[A] {
-              (a: A) =>
-                val _ = a
-                val json: Json = Expr.splice {
-                  fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-                }
-                json.asObject match {
-                  case Some(obj) => obj
-                  case None      =>
-                    throw new IllegalStateException(
-                      "Encoder.AsObject: produced non-object JSON. This can happen when using enumAsStrings=true " +
-                        "with a sealed trait of case objects. Use KindlingsEncoder.derived instead."
-                    )
-                }
+            // (no local `val` around the splice: lambdas built inside it, e.g. for an `Option` of a value class, would
+            // be owned by a different symbol than the `val`, which Scala 3 rejects)
+            val encodeObject: A => JsonObject = (a: A) => {
+              val _ = a
+              hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils.asJsonObjectOrThrow(Expr.splice {
+                fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
+              })
+            }
+            // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
+            if (Expr.splice(Expr(isMarkedSum[A])))
+              hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                .sumEncoderAsObjectInstance[A](encodeObject)
+            else
+              hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                .encoderAsObjectInstance[A](encodeObject)
+          }
+        }
+    }
+  }
+
+  /** `KindlingsEncoder.deriveUnwrapped[A]`: like generic-extras' `deriveUnwrappedEncoder`, a single-field case class is
+    * encoded as its field's JSON.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveUnwrappedEncoderTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsEncoder[A]] = {
+    val singleField: (CaseClass[A], Parameter) = singleFieldCaseClass[A]("KindlingsEncoder.deriveUnwrapped")
+    val caseClass: CaseClass[A] = singleField._1
+    val param: Parameter = singleField._2
+    import param.tpe.Underlying as Field
+    val evConfig: Option[Configuration] = semiEvalConfig(configExpr)
+    evaluatedConfigFlags = evConfig
+
+    unwrappedEncoderExpr[A, Field](caseClass, param.name, configExpr, evConfig)
+  }
+
+  @scala.annotation.nowarn("msg=is never used")
+  private def unwrappedEncoderExpr[A: Type, Field: Type](
+      caseClass: CaseClass[A],
+      fieldName: String,
+      configExpr: Expr[Configuration],
+      evConfig: Option[Configuration]
+  ): Expr[KindlingsEncoder[A]] = {
+    implicit val KindlingsEncoderA: Type[KindlingsEncoder[A]] = Types.KindlingsEncoder[A]
+    implicit val ConfigT: Type[Configuration] = Types.Configuration
+    def fieldOf(a: Expr[A]): Expr[Field] =
+      caseClass
+        .caseFieldValuesAt(a)
+        .collectFirst { case (name, v) if name == fieldName => v.value.asInstanceOf[Expr[Field]] }
+        .getOrElse(Environment.reportErrorAndAbort(s"Cannot access field $fieldName"))
+    deriveEncoderFromCtxAndAdaptForEntrypoint[Field, KindlingsEncoder[A]]("KindlingsEncoder.deriveUnwrapped") {
+      fromCtx =>
+        def encode(a: Expr[A], cfg: Expr[Configuration]): Expr[Json] =
+          fromCtx(EncoderCtx.from[Field](fieldOf(a), cfg, derivedType = None, evConfig))
+        ValDefs.createVal[Configuration](configExpr).use { configVal =>
+          Expr.quote {
+            val cfg = Expr.splice(configVal)
+            hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
+              val _ = a
+              Expr.splice(encode(Expr.quote(a), Expr.quote(cfg)))
             }
           }
         }
     }
+  }
+
+  /** Reason returned by [[nonObjectReason]] when it depends on a configuration only known at runtime. */
+  final protected val maybeObject: String =
+    "enumAsStrings may encode the cases as JSON strings and the configuration is not known at compile time"
+
+  /** Why `A` may not encode to a JSON object, or `None` when it always does (a product or a sum, as in circe). */
+  protected def nonObjectReason[A: Type](evConfig: Option[Configuration]): Option[String] = {
+    // IsOption/IsCollection/IsValueType need the standard extensions; this runs before the derivation's MIO run.
+    ensureStandardExtensionsLoaded().unsafe.runSync: Unit
+    if (Type[A].isTuple && !Type[A].isNamedTuple) Some("a tuple is encoded as a JSON array")
+    else if (Type[A].isNamedTuple) None
+    else
+      Type[A] match {
+        case IsOption(_)     => Some("an Option is encoded as its value or null")
+        case IsCollection(_) => Some("a collection or map is not a product or a sum")
+        case IsValueType(_)  =>
+          if (evConfig.exists(!_.unwrapValueClasses) && anyValCaseClass[A].isDefined) None
+          else Some("a value class is encoded as its underlying value")
+        case _ =>
+          if (Type[A].isEnumeration || Type[A].isJavaEnum)
+            Some("an Enumeration/Java enum is not a sealed product hierarchy")
+          else if (CaseClass.parse[A].toOption.isDefined && Enum.parse[A].toOption.isEmpty) None
+          else
+            Enum.parse[A].toOption match {
+              case Some(enumm) =>
+                val leaves = flattenedChildren[A](enumm)(_ => false)
+                val allSingletons = leaves.forall { case (_, c) => SingletonValue.unapply(c.Underlying).isDefined }
+                if (!allSingletons || evConfig.exists(!_.enumAsStrings)) None
+                else if (evConfig.exists(_.enumAsStrings)) Some("enumAsStrings encodes the cases as JSON strings")
+                else Some(maybeObject)
+              case None =>
+                if (CaseClass.parse[A].toOption.isDefined) None
+                else Some("it is not a case class, sealed trait or named tuple")
+            }
+      }
   }
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
@@ -320,6 +431,7 @@ trait EncoderMacrosImpl
           // deriveMapEntries / deriveKeyEncoder).
           EncoderHandleAsCollectionRule,
           EncoderHandleAsNamedTupleRule,
+          EncoderHandleAsTupleRule,
           EncoderHandleAsSingletonRule,
           EncoderHandleAsCaseClassRule,
           EncoderHandleAsEnumRule

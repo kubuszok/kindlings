@@ -49,7 +49,8 @@ trait DecoderHandleAsTupleRuleImpl {
                   ) match {
                     case Right(expr) => MIO.pure(expr.value.asInstanceOf[Expr[A]])
                     case Left(error) =>
-                      val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                      val err =
+                        CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
                       Log.error(err.message) >> MIO.fail(err)
                   }
                 case None =>

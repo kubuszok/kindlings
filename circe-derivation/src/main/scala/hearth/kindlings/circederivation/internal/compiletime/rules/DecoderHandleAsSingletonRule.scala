@@ -20,10 +20,18 @@ trait DecoderHandleAsSingletonRuleImpl {
             implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
             @scala.annotation.nowarn("msg=is never used")
             implicit val HCursorT: Type[HCursor] = DTypes.HCursor
-            // Singletons are encoded as `{}`, and circe's derived decoders require an object (bug #235).
-            MIO.pure(Rule.matched(Expr.quote {
-              CirceDerivationUtils.checkIsObject(Expr.splice(dctx.cursor)).map(_ => Expr.splice(sv.singletonExpr))
-            }))
+            // Singletons are encoded as `{}`, and circe's derived decoders require an object (bug #235); like circe's
+            // derived decoder of a case object (a product without fields), strict decoding rejects any key but the
+            // discriminator.
+            MIO.pure(Rule.matched(liftEither[A](Expr.quote {
+              CirceDerivationUtils
+                .checkSingletonObject(
+                  Expr.splice(dctx.cursor),
+                  Expr.splice(Expr(Type[A].shortName)),
+                  Expr.splice(dctx.config)
+                )
+                .map(_ => Expr.splice(sv.singletonExpr))
+            })))
           case Left(reason) =>
             MIO.pure(Rule.yielded(reason))
         }

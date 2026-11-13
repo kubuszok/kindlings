@@ -20,4 +20,10 @@ private[compiletime] object EncoderDerivationError {
     override def message: String =
       s"The type $tpeName does not have any children!"
   }
+  final case class EnumAsStringsWithNonSingletonCases(tpeName: String, nonSingletons: List[String])
+      extends EncoderDerivationError {
+    override def message: String =
+      s"enumAsStrings is enabled but $tpeName has cases that are not singletons (${nonSingletons.mkString(", ")}); " +
+        "only sums of case objects/parameterless enum cases can be encoded as strings (like circe's ConfiguredEnumCodec)"
+  }
 }

@@ -47,7 +47,9 @@ final class JsoniterScalaLiteralParitySpec extends MacroSuite {
       roundTrip(KindlingsJsonValueCodec.derived[Map[3L, Int]])(Map[3L, Int]((3L, 0)), "{\"3\":0}")
       roundTrip(KindlingsJsonValueCodec.derived[Map[4.0f, Int]])(Map[4.0f, Int]((4.0f, 0)), "{\"4.0\":0}")
       roundTrip(KindlingsJsonValueCodec.derived[Map[5.0, Int]])(Map[5.0, Int]((5.0, 0)), "{\"5.0\":0}")
-      decodeError("expected key: \"2\"")(readFromString[Map[2, Int]]("{\"0\":0}")(KindlingsJsonValueCodec.derived[Map[2, Int]]))
+      decodeError("expected key: \"2\"")(
+        readFromString[Map[2, Int]]("{\"0\":0}")(KindlingsJsonValueCodec.derived[Map[2, Int]])
+      )
     }
   }
 }

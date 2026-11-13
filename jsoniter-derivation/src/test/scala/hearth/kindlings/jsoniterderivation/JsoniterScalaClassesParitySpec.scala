@@ -24,7 +24,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("are encoded and decoded through their accessors") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityNonCaseClass] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityNonCaseClass])
         List[JsonValueCodec[ParityNonCaseClass]](KindlingsJsonValueCodec.derived[ParityNonCaseClass], cRuntime)
           .foreach { c =>
             writeToString(new ParityNonCaseClass(1, "VVV"))(c) ==> """{"id":1,"name":"VVV"}"""
@@ -50,7 +50,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
         val value = ParityHasNonCaseClass(new ParityNonCaseClass(1, "a"), List(new ParityNonCaseClass(2, "b")))
         val json = """{"inner":{"id":1,"name":"a"},"list":[{"id":2,"name":"b"}]}"""
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityHasNonCaseClass] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityHasNonCaseClass])
         List[JsonValueCodec[ParityHasNonCaseClass]](KindlingsJsonValueCodec.derived[ParityHasNonCaseClass], cRuntime)
           .foreach { c =>
             writeToString(value)(c) ==> json
@@ -81,7 +81,8 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
         val cRuntime = runtime(ClassesRuntimeConfigs.discriminator) { implicit c =>
           KindlingsJsonValueCodec.derived[List[ParityPlainAdt]]
         }
-        val json = """[{"type":"ParityPlainLeaf"},{"type":"ParityPlainLeafWithFields","x":1,"y":"a"},{"type":"ParityPlainObject"}]"""
+        val json =
+          """[{"type":"ParityPlainLeaf"},{"type":"ParityPlainLeafWithFields","x":1,"y":"a"},{"type":"ParityPlainObject"}]"""
         List[JsonValueCodec[List[ParityPlainAdt]]](OptimizedCodecs.plainAdtDiscriminator, cRuntime).foreach { c =>
           writeToString(all)(c) ==> json
           readFromString[List[ParityPlainAdt]](json)(c) ==> all
@@ -90,7 +91,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("wrapper-style") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[List[ParityPlainAdt]] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[List[ParityPlainAdt]])
         val json = """[{"ParityPlainLeaf":{}},{"ParityPlainLeafWithFields":{"x":1,"y":"a"}},"ParityPlainObject"]"""
         List[JsonValueCodec[List[ParityPlainAdt]]](KindlingsJsonValueCodec.derived[List[ParityPlainAdt]], cRuntime)
           .foreach { c =>
@@ -121,7 +122,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("wrapper-style") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[List[ParitySealedBase]] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[List[ParitySealedBase]])
         val json = """[{"ParitySealedBase":{}},{"ParitySealedB":{"n":1}},{"ParitySealedC":{"s":"VVV"}}]"""
         List[JsonValueCodec[List[ParitySealedBase]]](KindlingsJsonValueCodec.derived[List[ParitySealedBase]], cRuntime)
           .foreach { c =>
@@ -135,7 +136,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("all parameter lists are encoded and decoded") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityMultiList] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityMultiList])
         List[JsonValueCodec[ParityMultiList]](KindlingsJsonValueCodec.derived[ParityMultiList], cRuntime).foreach { c =>
           writeToString(new ParityMultiList(1)(2)("VVV"))(c) ==> """{"i":1,"l":2,"s":"VVV"}"""
           val decoded = readFromString[ParityMultiList]("""{"i":1,"l":2,"s":"VVV"}""")(c)
@@ -255,7 +256,9 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("inner options are encoded as the ADT Option, wrapper-style") {
         val cRuntime =
-          runtime(NestedOptionsRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityNestedOptions3] }
+          runtime(NestedOptionsRuntimeConfigs.default) { implicit c =>
+            KindlingsJsonValueCodec.derived[ParityNestedOptions3]
+          }
         List[JsonValueCodec[ParityNestedOptions3]](KindlingsJsonValueCodec.derived[ParityNestedOptions3], cRuntime)
           .foreach { c =>
             writeToString(someSomeSome)(c) ==> """{"y":null,"x":{"Some":{"value":{"Some":{"value":"VVV"}}}}}"""
@@ -287,7 +290,9 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
           writeToString(values)(c) ==> json
           readFromString[List[ParityCustomAdt]](json)(c) ==> values
         }
-        readFromString[List[ParityCustomAdt]]("""[{"custom":3,"type":"ParityCustomLeaf"},{"a":2,"type":"ParityRegularLeaf"}]""")(
+        readFromString[List[ParityCustomAdt]](
+          """[{"custom":3,"type":"ParityCustomLeaf"},{"a":2,"type":"ParityRegularLeaf"}]"""
+        )(
           OptimizedCodecs.customLeafDiscriminatorAnywhere
         ) ==> List(ParityCustomLeaf(3), ParityRegularLeaf(2))
       }
@@ -321,7 +326,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
     group("inlineOneValueClasses") {
       test("applies to map keys") {
         val cRuntime =
-          runtime(OneValueRuntimeConfigs.inline) { implicit c => KindlingsJsonValueCodec.derived[Map[ParityUserKey, Int]] }
+          runtime(OneValueRuntimeConfigs.inline)(implicit c => KindlingsJsonValueCodec.derived[Map[ParityUserKey, Int]])
         List[JsonValueCodec[Map[ParityUserKey, Int]]](OptimizedCodecs.inlineKeys, cRuntime).foreach { c =>
           writeToString(Map(ParityUserKey("abc") -> 1))(c) ==> """{"abc":1}"""
           readFromString[Map[ParityUserKey, Int]]("""{"abc":1}""")(c) ==> Map(ParityUserKey("abc") -> 1)
@@ -330,7 +335,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("fills the defaults of transient parameters") {
         val cRuntime =
-          runtime(OneValueRuntimeConfigs.inline) { implicit c => KindlingsJsonValueCodec.derived[List[ParityTaggedId]] }
+          runtime(OneValueRuntimeConfigs.inline)(implicit c => KindlingsJsonValueCodec.derived[List[ParityTaggedId]])
         List[JsonValueCodec[List[ParityTaggedId]]](OptimizedCodecs.inlineTagged, cRuntime).foreach { c =>
           writeToString(List(ParityTaggedId(1, "x")))(c) ==> "[1]"
           readFromString[List[ParityTaggedId]]("[1]")(c) ==> List(ParityTaggedId(1))
@@ -368,11 +373,12 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
             3 -> scala.collection.mutable.BitSet.empty
           )
         )
-        val c = runtime(StringifiedRuntimeConfigs.stringified) { implicit c => KindlingsJsonValueCodec.derived[M] }
+        val c = runtime(StringifiedRuntimeConfigs.stringified)(implicit c => KindlingsJsonValueCodec.derived[M])
         writeToString(value)(c) ==> """{"1":{"2":["4","5","6"],"3":[]}}"""
         readFromString[M]("""{"1":{"2":["4","5","6"],"3":[]}}""")(c) ==> value
         val plain = KindlingsJsonValueCodec.derived[scala.collection.immutable.BitSet]
-        readFromString[scala.collection.immutable.BitSet]("[1,200]")(plain) ==> scala.collection.immutable.BitSet(1, 200)
+        readFromString[scala.collection.immutable.BitSet]("[1,200]")(plain) ==> scala.collection.immutable
+          .BitSet(1, 200)
         decodeError("illegal value for bit set")(readFromString[scala.collection.immutable.BitSet]("[1024]")(plain))
       }
     }
@@ -387,13 +393,19 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
       test("withDiscriminatorFieldName and the JsonCodecMaker.makeXxx presets") {
         JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).discriminatorFieldName ==> None
         JsoniterConfig.makeWithoutDiscriminator.discriminatorFieldName ==> None
-        JsoniterConfig.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.discriminatorFieldName ==> Some("name")
+        JsoniterConfig.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.discriminatorFieldName ==> Some(
+          "name"
+        )
         writeToString(List[ParityAdt](ParityAAA(1), ParityDDD))(OptimizedCodecs.circeLikePreset) ==>
           """[{"ParityAAA":{"a":1}},{"ParityDDD":{}}]"""
         writeToString(ParityPresetRecord(Nil))(OptimizedCodecs.openapiPreset) ==> """{"l":[],"d":1}"""
-        decodeError("""missing required field "l"""")(readFromString[ParityPresetRecord]("{}")(OptimizedCodecs.openapiPreset))
+        decodeError("""missing required field "l"""")(
+          readFromString[ParityPresetRecord]("{}")(OptimizedCodecs.openapiPreset)
+        )
         val adt = OptimizedCodecs.openapiPresetAdt
-        writeToString(List[ParityAdt](ParityAAA(1), ParityDDD))(adt) ==> """[{"kind":"aaa","a":1},{"kind":"ParityDDD"}]"""
+        writeToString(List[ParityAdt](ParityAAA(1), ParityDDD))(
+          adt
+        ) ==> """[{"kind":"aaa","a":1},{"kind":"ParityDDD"}]"""
         readFromString[List[ParityAdt]]("""[{"a":1,"kind":"aaa"}]""")(adt) ==> List(ParityAAA(1))
       }
     }
@@ -413,7 +425,10 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
         val inner = KindlingsJsonValueCodec.derived[ParityDefaults2]
         val withDefault = new JsonValueCodec[ParityDefaults2] {
           def nullValue: ParityDefaults2 = ParityDefaults2(st = "D")
-          def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, d: ParityDefaults2): ParityDefaults2 =
+          def decodeValue(
+              in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+              d: ParityDefaults2
+          ): ParityDefaults2 =
             inner.decodeValue(in, d)
           def encodeValue(x: ParityDefaults2, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
             inner.encodeValue(x, out)
@@ -424,18 +439,20 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("null for defaulted fields (also a Some-defaulted Option) is the default (Defaults2, Spec ~2530)") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2])
         List[JsonValueCodec[ParityDefaults2]](KindlingsJsonValueCodec.derived[ParityDefaults2], cRuntime).foreach { c =>
           readFromString[ParityDefaults2]("{}")(c) ==> ParityDefaults2()
           readFromString[ParityDefaults2]("""{"st":null,"bi":null,"oc":null,"l":null}""")(c) ==> ParityDefaults2()
         }
       }
 
-      test("an empty JSON collection for a collection field with a default decodes as the default (Defaults2, Spec ~2530)") {
+      test(
+        "an empty JSON collection for a collection field with a default decodes as the default (Defaults2, Spec ~2530)"
+      ) {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2])
         val cRuntimeRequire =
-          runtime(ClassesRuntimeConfigs.requireDefaults) { implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2] }
+          runtime(ClassesRuntimeConfigs.requireDefaults)(implicit c => KindlingsJsonValueCodec.derived[ParityDefaults2])
         List[JsonValueCodec[ParityDefaults2]](KindlingsJsonValueCodec.derived[ParityDefaults2], cRuntime).foreach { c =>
           readFromString[ParityDefaults2]("""{"l":[],"ab":[],"m":{},"s":[],"v":[]}""")(c) ==> ParityDefaults2()
           readFromString[ParityDefaults2]("""{"l":null,"ab":null,"m":null,"s":null}""")(c) ==> ParityDefaults2()
@@ -450,7 +467,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
           decodeError("""missing required field "st"""")(readFromString[ParityDefaults2]("""{"l":[]}""")(c))
         }
         val adtRuntime =
-          runtime(ClassesRuntimeConfigs.discriminator) { implicit c => KindlingsJsonValueCodec.derived[ParityDefaultsAdt] }
+          runtime(ClassesRuntimeConfigs.discriminator)(implicit c => KindlingsJsonValueCodec.derived[ParityDefaultsAdt])
         List[JsonValueCodec[ParityDefaultsAdt]](OptimizedCodecs.defaultsAdt, adtRuntime).foreach { c =>
           readFromString[ParityDefaultsAdt]("""{"type":"ParityDefaultsLeaf","l":[]}""")(c) ==> ParityDefaultsLeaf()
         }
@@ -458,7 +475,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
 
       test("a user-provided field codec receives the field's default as the default argument (Spec ~674, ~3673)") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityTagged] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityTagged])
         List[JsonValueCodec[ParityTagged]](KindlingsJsonValueCodec.derived[ParityTagged], cRuntime).foreach { c =>
           readFromString[ParityTagged]("""{"a":"keep","b":"keep"}""")(c) ==>
             ParityTagged(ParityTag("dflt"), ParityTag("null-value"))
@@ -468,7 +485,7 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
           readFromString[ParityTagged]("""{"a":"y","b":"x"}""")(c) ==> ParityTagged(ParityTag("y"), ParityTag("x"))
         }
         val adtRuntime =
-          runtime(ClassesRuntimeConfigs.discriminator) { implicit c => KindlingsJsonValueCodec.derived[ParityDefaultsAdt] }
+          runtime(ClassesRuntimeConfigs.discriminator)(implicit c => KindlingsJsonValueCodec.derived[ParityDefaultsAdt])
         List[JsonValueCodec[ParityDefaultsAdt]](OptimizedCodecs.defaultsAdt, adtRuntime).foreach { c =>
           readFromString[ParityDefaultsAdt]("""{"type":"ParityDefaultsLeaf","t":"keep"}""")(c) ==> ParityDefaultsLeaf()
         }
@@ -477,10 +494,13 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
       test("a custom Option codec decides what null is, the default fills a missing field (Spec ~674)") {
         import ParityCustomOptionCodecs.*
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityCustomOptionEx] }
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityCustomOptionEx])
         List[JsonValueCodec[ParityCustomOptionEx]](KindlingsJsonValueCodec.derived[ParityCustomOptionEx], cRuntime)
           .foreach { c =>
-            readFromString[ParityCustomOptionEx]("""{"opt":null,"level":null}""")(c) ==> ParityCustomOptionEx(None, None)
+            readFromString[ParityCustomOptionEx]("""{"opt":null,"level":null}""")(c) ==> ParityCustomOptionEx(
+              None,
+              None
+            )
             writeToString(ParityCustomOptionEx(None, None))(c) ==> """{"opt":null,"level":null}"""
             readFromString[ParityCustomOptionEx]("{}")(c) ==> ParityCustomOptionEx()
             readFromString[ParityCustomOptionEx]("""{"opt":"pakikisama","level":5}""")(c) ==>
@@ -492,10 +512,17 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
     group("user-provided field codecs") {
       test("receive the field's default value as `default`, otherwise their nullValue") {
         val cRuntime =
-          runtime(ClassesRuntimeConfigs.default) { implicit c => KindlingsJsonValueCodec.derived[ParityHasCounter] }
-        List[JsonValueCodec[ParityHasCounter]](KindlingsJsonValueCodec.derived[ParityHasCounter], cRuntime).foreach { c =>
-          readFromString[ParityHasCounter]("""{"c":{},"d":{}}""")(c) ==> ParityHasCounter(ParityCounter(7), ParityCounter(-1))
-          readFromString[ParityHasCounter]("""{"c":1,"d":2}""")(c) ==> ParityHasCounter(ParityCounter(1), ParityCounter(2))
+          runtime(ClassesRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[ParityHasCounter])
+        List[JsonValueCodec[ParityHasCounter]](KindlingsJsonValueCodec.derived[ParityHasCounter], cRuntime).foreach {
+          c =>
+            readFromString[ParityHasCounter]("""{"c":{},"d":{}}""")(c) ==> ParityHasCounter(
+              ParityCounter(7),
+              ParityCounter(-1)
+            )
+            readFromString[ParityHasCounter]("""{"c":1,"d":2}""")(c) ==> ParityHasCounter(
+              ParityCounter(1),
+              ParityCounter(2)
+            )
         }
       }
     }

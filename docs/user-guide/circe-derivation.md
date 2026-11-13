@@ -55,8 +55,14 @@ Drop-in replacement for `circe-generic` / `circe-generic-extras` — derives `En
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `KindlingsEncoder.derived[A]` | `KindlingsEncoder[A]` | Sanely-automatic encoder (given/implicit, also usable as semi-automatic) |
-| `KindlingsEncoder.deriveAsObject[A]` | `Encoder.AsObject[A]` | Object encoder |
+| `KindlingsEncoder.derived[A]` | `KindlingsEncoder[A]` | Sanely-automatic encoder (given/implicit, also usable as semi-automatic); for products and sums the instance is also an `Encoder.AsObject` (like circe's semiauto/`derives`) |
+| `KindlingsEncoder.deriveAsObject[A]` | `Encoder.AsObject[A]` | Object encoder; a type that does not encode to a JSON object (value class, tuple, `enumAsStrings` enum known at compile time, ...) is a compile-time error |
+| `KindlingsEncoder.deriveUnwrapped[A]` / `KindlingsDecoder.deriveUnwrapped[A]` | `KindlingsEncoder[A]` / `KindlingsDecoder[A]` | Explicit unwrapping of any single-field case class (generic-extras' `deriveUnwrapped*`); automatic unwrapping only applies to `AnyVal` value classes |
+| `KindlingsDecoder.patch[A]` | `Decoder[A => A]` | Patch decoder (circe-generic's `deriveFor[A].patch`): every field is optional, an absent or `null` key keeps the original value |
+| `KindlingsDecoder.incomplete[F]` | `Decoder[F]` | Incomplete decoder (circe-generic's `deriveFor[F].incomplete`, generic-extras' `deriveConfiguredFor[F].incomplete`): `F = (P1, ..., Pn) => C`, each `Pi` supplies the first remaining field of `C` of that type, the other fields are decoded; a `Labelled["name", T]` parameter supplies the field `name` (circe-generic's shapeless `FieldType`) |
+| `KindlingsCodecAsObject.deriveEnum(...)` / `KindlingsEncoder.deriveEnum(...)` / `KindlingsDecoder.deriveEnum(...)` | `Codec[A]` / `KindlingsEncoder[A]` / `KindlingsDecoder[A]` | Scala 3 only: a sum of singletons as strings (`enumAsStrings`), with optional `transformConstructorNames`, like Scala 3 core's `ConfiguredEnumCodec.derive(...)`; a sum with non-singleton cases is a compile-time error |
+| `KindlingsCodecAsObject.derive(...)` / `KindlingsEncoder.derive(...)` / `KindlingsDecoder.derive(...)` | as `derived` | Scala 3 only: the configuration as named arguments, like Scala 3 core's `ConfiguredCodec.derive(transformMemberNames = ..., ...)` |
+| `@JsonCodec` / `@JsonCodec(encodeOnly = true)` / `@JsonCodec(decodeOnly = true)` / `@ConfiguredJsonCodec` | companion members | Scala 2 only (requires `-Ymacro-annotations`): adds the derived instances to the companion like circe-generic / generic-extras; `@JsonCodec` uses `Configuration.default`, `@ConfiguredJsonCodec` the `Configuration` in scope. On Scala 3 use `derives` |
 | `KindlingsEncoder.encode[A](value)` | `Json` | Inline encoding (no instance allocation) |
 | `KindlingsDecoder.derived[A]` | `KindlingsDecoder[A]` | Sanely-automatic decoder (given/implicit, also usable as semi-automatic) |
 | `KindlingsDecoder.decode[A](json)` | `Either[DecodingFailure, A]` | Inline decoding |
@@ -67,6 +73,10 @@ All methods take an implicit/using `Configuration` parameter (defaults to `Confi
 ### Type hierarchy
 
 `KindlingsEncoder[A]` extends `Encoder[A]` and `KindlingsDecoder[A]` extends `Decoder[A]`, so derived instances work anywhere the original Circe types are expected.
+
+`KindlingsDecoder[A]` and `KindlingsCodecAsObject[A]` also extend `ExtrasDecoder[A]` (a port of generic-extras'
+`ExtrasDecoder`): `isStrict` is `true` for a derived case-class decoder with `strictDecoding`, and
+`decodeStrict(cursor)` returns the extraneous fields of a failed strict decoding.
 
 ## Configuration
 
@@ -99,7 +109,20 @@ implicit val config: Configuration = Configuration.default
 | `withoutDiscriminator` | No discriminator (default — wrapping object) |
 | `withStrictDecoding` | Fail on unexpected JSON fields |
 | `withoutStrictDecoding` | Ignore unexpected fields (default) |
-| `withEnumAsStrings` | Encode Scala 3 / Java enums as strings |
+| `withEnumAsStrings` / `withoutEnumAsStrings` | Encode sums of singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as strings |
+| `withValueClassUnwrapping` | Code `AnyVal` case classes as their field's value (default): `UserId(5)` → `5` |
+| `withoutValueClassUnwrapping` | Code `AnyVal` case classes as JSON objects, like upstream circe: `UserId(5)` → `{"value":5}` |
+
+The name transformations are also available as functions in `renaming` (like Scala 3 core's
+`io.circe.derivation.renaming`): `renaming.snakeCase`, `renaming.screamingSnakeCase`, `renaming.kebabCase`,
+`renaming.pascalCase` and `renaming.replaceWith("Old" -> "new", ...)`, e.g.
+`Configuration.default.withTransformConstructorNames(renaming.replaceWith("Circle" -> "round"))`.
+
+A configuration that can be evaluated at compile time (e.g. `Configuration.default.withDiscriminator("type")` or
+`Configuration(strictDecoding = true)` passed inline, and on Scala 3 also a local `implicit val`/`given`) enables
+compile-time checks (e.g. `enumAsStrings` on a sum with non-singleton cases) and skips runtime configuration checks in
+the generated code. Other configurations are read at runtime. On Scala 2, a local `implicit val` is only known at
+runtime (Scala 2 macros cannot read a local value's definition).
 
 ## Annotations
 
@@ -140,7 +163,7 @@ case class User(
     val shape: Shape = Circle(5.0)
     println(KindlingsEncoder.encode(shape).noSpaces)
     // expected output:
-    // {"type":"circle","radius":5.0}
+    // {"radius":5.0,"type":"circle"}
 
     val decoded = io.circe.parser.parse("""{"width":3,"height":4,"type":"rectangle"}""")
       .flatMap(KindlingsDecoder.decode[Shape](_))
@@ -189,6 +212,113 @@ case class User(
     // Right(Settings(localhost,8080,false))
     ```
 
+## Behaviour matching upstream circe
+
+Decoding and encoding follow circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder` (and circe-generic-extras on
+Scala 2):
+
+- **Nested sealed hierarchies are flattened.** With `sealed trait GrandParent; sealed trait Parent extends GrandParent;
+  case class Child(a: Int) extends Parent`, `Child(1)` is encoded as `{"Child":{"a":1}}` (or `{"a":1,"type":"Child"}`
+  with a discriminator), and `Child` is decoded from its own name at the top level. This also holds when `Parent` has an
+  instance derived by Kindlings (`sealed trait Parent extends GrandParent derives KindlingsCodecAsObject`, or
+  `implicit val codec = KindlingsCodecAsObject.derived[Parent]` in its companion): like Scala 3 core with a
+  `ConfiguredCodec` of the intermediate, its output is used as it is and the names of its subtypes are dispatched to it
+  (with the intermediate's own configuration). An intermediate sealed trait with a hand-written `Encoder`/`Decoder`
+  keeps using it, under the intermediate's name (Scala 3 core; generic-extras on Scala 2 ignores such instances, since
+  shapeless flattens the hierarchy to its leaves).
+- **A leaf reachable through several intermediates** (`case class C(..) extends A with B`, `A` and `B` both under the
+  same sum) is written once, under its own name; when intermediates have hand-written instances, the first one (in
+  declaration order) containing the leaf is used.
+- **`enumAsStrings` on nested case objects**: a hierarchy of case objects is an enum, also when an intermediate has a
+  user-provided instance (like `ConfiguredEnumCodec`, which ignores such instances): the leaves are coded by name.
+- **`useDefaults`**: an absent field, or a `null` that the field's decoder rejects, decodes to the default value. A `null`
+  the decoder accepts (`None` for an `Option`) is kept, and a `Decoder[Option[X]]` that decodes an absent key to a value
+  (overriding `tryDecode`) keeps that value; circe's `Option` decoder's absent-key `None` falls back to the default.
+- **Absent `Option` fields** decode as `None` when `useDefaults` is off, whether or not the field has a default and
+  whether the element type is derived or not. An absent field whose type is a value class over an `Option` decodes as
+  the wrapped `None` when its decoder is derived (unwrapped) - or, with `useDefaults`, as the field's default, like a
+  plain `Option` field; a user-provided decoder of the value class keeps circe's semantics (by default a missing-field
+  failure).
+- **Strict decoding**: the discriminator key is an expected field; in `decodeAccumulating` the strict failure is reported
+  first, followed by the field errors; a wrapper object with more than one key is rejected (the failure lists the direct
+  subtypes, like circe's `constructorNames`); a case object (in a sum, at the top level or as a field) rejects any key
+  other than the discriminator (`{"Yes":{"extra":1}}` fails).
+- **Accumulating decoding** (`decodeAccumulating`) accumulates inside nested derived types, `Option`s, collections and
+  maps (every element), and for top-level derived non-products (`KindlingsDecoder.derived[List[Person]]`). A non-object
+  input to a product reports only "expecting object" (Scala 3 core `ConfiguredDecoder`).
+- **Error messages and cursor history** follow Scala 3 core: `type Shape has no class/object/case named 'X'.`,
+  `Shape: could not find discriminator field 'type' or its null.` (at `.type`),
+  `Strict decoding Person - unexpected fields: a, b; valid fields: name, age.` (unexpected fields in JSON order),
+  `Strict decoding Shape - expected a single key json object with one of: Circle, Rectangle.`,
+  `enum Color does not contain case: X`, `WrongTypeExpectation` (`"object"`, `"array"`, `"non-empty json object"`,
+  `"string"`) for wrong JSON types, `Couldn't decode key.` at the key's cursor, and smart-constructor (value type)
+  errors at the field's cursor.
+- **Discriminator position**: the discriminator is appended after the fields (`{"radius":1.0,"type":"Circle"}`), like
+  both Scala 3 core and generic-extras (`JsonObject.add`).
+- **Tuples** (also containing derived types) encode and decode as JSON arrays of the exact arity, like circe's
+  `Encoder`/`Decoder.encodeTupleN`/`decodeTupleN`.
+- **Map keys**: a `KeyEncoder`/`KeyDecoder` in scope (user-provided, or circe's own) takes precedence over the built-in
+  key codecs on both sides (also for `Int`/`Long`/`Double`/`Short`/`Byte` keys of a map whose values are derived);
+  derived keys (value classes, enums, nested case-object hierarchies) are only used when there is none.
+- **`Option` and absent keys**: a user-provided `Decoder[Option[X]]` is consulted for an absent key (its `tryDecode` on
+  the failed cursor), and a derived `Decoder[Option[X]]` (`KindlingsDecoder.derived[Option[X]]`) keeps circe's
+  absent-key `tryDecode` semantics.
+- `KindlingsDecoder.derived[Unit]` accepts only `null`, `{}` and `[]`, like circe's `Decoder[Unit]`.
+- **Case classes with several parameter lists** are rejected at compile time, also when the first list is empty
+  (`case class A()(val b: Int)`): circe does not derive them either, and encoding every list but decoding only the first
+  one would not round-trip.
+- **`enumAsStrings` on a sum with non-singleton cases** is a compile-time error when the configuration can be evaluated
+  at compile time (like circe's `ConfiguredEnumCodec`, which only derives for sums of singletons). A configuration only
+  known at runtime (e.g. computed by a method, or a local `implicit val` on Scala 2) cannot be checked: then the decoder
+  fails with a `DecodingFailure` and the encoder throws an `IllegalArgumentException`, both naming the problem.
+- **Patch decoders** (`KindlingsDecoder.patch[A]`): each field is decoded as `Option[V]` (circe's
+  `Decoder.decodeOption`), so an absent or `null` key keeps the original value, a value of the wrong type fails at decode
+  time, a non-object patch fails, and nested values are replaced (not deep-merged). Member names follow the
+  configuration; defaults are not used (an absent key always keeps the original value).
+- **Wrapper objects with superfluous keys** (non-strict): the first key (in JSON order) naming a known constructor is
+  used, so `{"extra":true,"Circle":{"radius":1.0}}` decodes as `Circle` (Scala 3 core; generic-extras picks the first
+  constructor in declaration order found among the keys, which differs only for objects naming several constructors).
+- **Errors inside collection elements** keep their cursor history (`DecodingFailure#pathToRootString` gives e.g.
+  `.members[1].age`).
+- **Value classes: Kindlings default vs upstream.** By default, `AnyVal` case classes are coded as their field's value
+  (`UserId(5)` → `5`, also when the field's type is derived), a documented improvement over upstream circe, where every
+  derivation (Scala 3 core, circe-generic, generic-extras) codes them as products. `withoutValueClassUnwrapping`
+  (`unwrapValueClasses = false`) restores the upstream format for encoding and decoding: `{"value":5}`, and for
+  value-class sum children `{"IntId":{"v":5}}` (or `{"v":5,"type":"IntId"}` with a discriminator). Other value types
+  (opaque types, refined/newtype integrations) are always unwrapped; `deriveUnwrapped` unwraps explicitly.
+- **Enum map keys** use the constructor name with `transformConstructorNames` on both sides (not `toString`).
+- `KindlingsCodecAsObject` keeps the decoder's `decodeAccumulating`.
+- **Discriminator with a child that does not encode to a JSON object** (e.g. an unwrapped value class, or a
+  user-provided `Encoder` producing a string): like circe-generic-extras, the child is written in the wrapped form
+  (`{"IntId":5}`) since it cannot carry the discriminator field. Kindlings also reads this form back, so it round-trips
+  (generic-extras only writes it), and the tapir schema derivation shows this form for circe configurations.
+- **tapir schemas** (`tapir-schema-derivation` with a circe `Configuration`) describe what the codec writes: subtypes
+  wrapped as `{"Name": ..}` without a discriminator, nested sealed hierarchies flattened to their leaves (an intermediate
+  with a hand-written `Encoder` kept as one subtype, one with a Kindlings-derived instance flattened), and `AnyVal` case
+  classes as objects with `unwrapValueClasses = false`.
+
+## Migration notes (wire format changes)
+
+Changes of the encoded JSON, and of decoding, made to match upstream circe. Values written by an earlier Kindlings
+version may need to be migrated:
+
+- **Nested sealed hierarchies**: a leaf of a nested sealed trait was written under the intermediate's name
+  (`{"Parent":{"Child":{..}}}`, or `"type":"Parent"` with a discriminator); it is now written under its own name
+  (`{"Child":{..}}` / `"type":"Child"`), and the old nested form is no longer read. The same applies to an intermediate
+  whose instance is derived by Kindlings. Intermediates with hand-written instances keep the nested form.
+- **Map keys**: a user-provided `KeyEncoder` for `Int`/`Long`/`Double`/`Short`/`Byte` was ignored by the encoder when the
+  map's values were derived (the decoder used it, so such maps did not round-trip); it is now used.
+- **`useDefaults`**: a `Decoder[Option[X]]` decoding an absent key to a value now wins over the field's default.
+- **Value classes over `Option` with a user-provided decoder**: an absent key is now decoded by that decoder's
+  `tryDecode` (by default a missing-field failure) instead of as `null`.
+- **Strict decoding**: case objects decoded outside a sum now reject extra keys; the strict wrapper failure lists the
+  direct subtypes instead of the flattened leaves.
+- **`useDefaults` and value classes over `Option`**: an absent field of such a type with a default (and a derived
+  decoder) now decodes to the default instead of the wrapped `None`.
+- **Compile-time configurations**: more configurations are evaluated at compile time (named arguments, Scala 3 local
+  vals), so e.g. `enumAsStrings` on a sum with non-singleton cases can now be a compile-time error where it was a
+  runtime failure.
+
 ## Debugging
 
 Import the debug package to log the derivation process at compile time:
@@ -216,9 +346,10 @@ scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
 | Recursive types | Needs `Lazy` / workarounds | Just works |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |
-| Scala 3 enums | Partial (parameterless cases only, via `ConfiguredEnum*`) | Yes (full enums) |
+| Scala 3 enums | Yes (object encoding of full enums; string encoding via `ConfiguredEnum*` for parameterless cases only) | Yes (object encoding of full enums; `enumAsStrings` for parameterless cases) |
 | Java enums | No | Yes |
-| `@ConfiguredJsonCodec` annotation | Yes | No (use `Configuration` directly) |
+| `@JsonCodec` / `@ConfiguredJsonCodec` annotations | Scala 2 (`-Ymacro-annotations`) | Scala 2 (`-Ymacro-annotations`); Scala 3: `derives` |
+| Value classes | Encoded as products | Unwrapped by default; `withoutValueClassUnwrapping` for the upstream product format |
 
 ### Benchmarks
 

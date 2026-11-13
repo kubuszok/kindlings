@@ -7,6 +7,17 @@ import sttp.tapir.{Schema, SchemaType}
 
 final class KindlingsSchemaSpec extends MacroSuite {
 
+  /** A subtype in the wrapped form (`{"Name": value}`, circe without a discriminator) as the wrapped schema. */
+  private def unwrapSubtype(s: Schema[?]): Schema[?] = s.schemaType match {
+    case p: SchemaType.SProduct[?] if s.name.isEmpty && p.fields.size == 1 => p.fields.head.schema
+    case _                                                                 => s
+  }
+
+  private def fieldNamesOf(s: Schema[?]): List[String] = s.schemaType match {
+    case p: SchemaType.SProduct[?] => p.fields.map(_.name.encodedName)
+    case _                         => Nil
+  }
+
   implicit val config: Configuration = Configuration.default
   implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
 
@@ -716,7 +727,8 @@ final class KindlingsSchemaSpec extends MacroSuite {
       schema.schemaType match {
         case c: SchemaType.SCoproduct[TreeNode] =>
           // Branch has two TreeNode fields — both should resolve to SRef
-          val branchSubtype = c.subtypes.find(_.name.exists(_.fullName.endsWith("Branch")))
+          // (circe writes the subtypes wrapped, `{"Branch":{..}}`)
+          val branchSubtype = c.subtypes.map(unwrapSubtype).find(_.name.exists(_.fullName.endsWith("Branch")))
           assert(branchSubtype.isDefined, "Should have a Branch subtype")
           branchSubtype.get.schemaType match {
             case p: SchemaType.SProduct[?] =>
@@ -1073,7 +1085,12 @@ final class KindlingsSchemaSpec extends MacroSuite {
       List("primitives", "caseClasses").foreach { name =>
         fields(name).schemaType match {
           case c: SchemaType.SCoproduct[?] =>
-            assertEquals(c.subtypes.flatMap(_.name).map(_.fullName), List("scala.util.Left", "scala.util.Right"))
+            // (circe writes the subtypes wrapped: `{"Left":..}`)
+            assertEquals(
+              c.subtypes.map(unwrapSubtype).flatMap(_.name).map(_.fullName),
+              List("scala.util.Left", "scala.util.Right")
+            )
+            assertEquals(c.subtypes.map(fieldNamesOf), List(List("Left"), List("Right")))
           case other => fail(s"$name: expected SCoproduct, got: $other")
         }
       }
@@ -1103,6 +1120,18 @@ final class KindlingsSchemaSpec extends MacroSuite {
   }
 
   group("discriminator child metadata") {
+
+    test("circe: a non-object child is shown in circe's wrapped form, outside the discriminator mapping") {
+      CirceNonObjectChildDerivation.schema.schemaType match {
+        case c: SchemaType.SCoproduct[CirceMixedSum] =>
+          val fieldNames = c.subtypes.map(_.schemaType).collect { case p: SchemaType.SProduct[?] =>
+            p.fields.map(_.name.encodedName)
+          }
+          assertEquals(fieldNames, List(List("CirceMixedIntId"), List("type", "x")))
+          assertEquals(c.discriminator.map(_.mapping.keySet), Some(Set("CirceMixedObj")))
+        case other => fail(s"Expected SCoproduct, got: $other")
+      }
+    }
 
     test("discriminator adds field to child schemas") {
       val schema = JsoniterDiscriminatorChildDerivation.schema
@@ -1161,6 +1190,16 @@ object CirceSnakeCaseDerivation {
     case p: SchemaType.SProduct[CamelCasePerson] => p.fields.map(_.name.encodedName)
     case _                                       => Nil
   }
+}
+
+sealed trait CirceMixedSum extends Any
+final case class CirceMixedIntId(v: Int) extends AnyVal with CirceMixedSum
+final case class CirceMixedObj(x: Int) extends CirceMixedSum
+
+object CirceNonObjectChildDerivation {
+  implicit val config: Configuration = Configuration(discriminator = Some("type"))
+  implicit val prefer: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val schema: Schema[CirceMixedSum] = KindlingsSchema.derived[CirceMixedSum].schema
 }
 
 object CirceDiscriminatorDerivation {

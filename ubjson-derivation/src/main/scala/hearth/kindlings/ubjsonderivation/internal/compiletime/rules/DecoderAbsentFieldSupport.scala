@@ -8,7 +8,8 @@ import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader}
 import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 /** Absent-field semantics of the case class decoders, the same as in Kindlings' jsoniter derivation (which follows
-  * jsoniter-scala's `JsonCodecMaker.make`). A field missing from the JSON object is filled with, in order of precedence:
+  * jsoniter-scala's `JsonCodecMaker.make`). A field missing from the JSON object is filled with, in order of
+  * precedence:
   *
   *   1. its default value (unless `requireDefaultFields`),
   *   1. `None` for an `Option` (never required),
@@ -94,8 +95,8 @@ trait DecoderAbsentFieldSupport {
     }
   }
 
-  /** For decoders collecting field values into an `Array[Any]` (absent slots hold
-    * `UBJsonDerivationUtils.AbsentField`): replace each absent slot with the field's runtime fallback.
+  /** For decoders collecting field values into an `Array[Any]` (absent slots hold `UBJsonDerivationUtils.AbsentField`):
+    * replace each absent slot with the field's runtime fallback.
     *
     * @param fields
     *   (field name, parameter, array index, `@fieldName` override)
@@ -154,9 +155,9 @@ trait DecoderAbsentFieldSupport {
       .toOption
       .isDefined
     default match {
-      case None                => decode
+      case None                    => decode
       case Some(_) if hasUserCodec => decode
-      case Some(d)             =>
+      case Some(d)                 =>
         val isCollection = !(Type[Field] =:= CTypes.String) && (Type[Field] match {
           case IsCollection(_) => true
           case _               => false
@@ -173,8 +174,9 @@ trait DecoderAbsentFieldSupport {
         val nullAsDefault =
           !isNestedOption && nullableUnionUnderlying[Field].isEmpty && Type[Field] <:< Type.of[AnyRef]
         val emptyAsDefault: Expr[UBJsonReader] => Expr[Field] =
-          if (isCollection) reader =>
-            Expr.quote(UBJsonDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d)))
+          if (isCollection)
+            reader =>
+              Expr.quote(UBJsonDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d)))
           else decode
         if (!nullAsDefault) emptyAsDefault
         else

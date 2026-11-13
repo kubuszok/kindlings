@@ -12,6 +12,78 @@ import io.circe.{DecodingFailure, HCursor}
 trait DecoderHandleAsCollectionRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
+  /** Turns a collection/map builder expression (that may throw `CollectionBuildException`) into a result honouring
+    * `dctx.failFast`, for every kind of collection constructor.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def wrapBuildResult[A: DecoderCtx](
+      buildStep: CtorLikeOf[?, ?],
+      buildResultExpr: Expr[Any]
+  ): Rule.Applicability[Expr[Either[DecodingFailure, A]]] = {
+    implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+    implicit val AnyT: Type[Any] = DTypes.Any
+    val converted: Expr[Any] = buildStep match {
+      case _: CtorLikeOf.PlainValue[?, ?] =>
+        val value = buildResultExpr.asInstanceOf[Expr[A]]
+        Expr.quote(CirceDerivationUtils.okResult(Expr.splice(dctx.failFast), Expr.splice(value)))
+      case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
+        Expr.quote {
+          Expr.splice(eitherExpr) match {
+            case Right(value) => CirceDerivationUtils.okResult(Expr.splice(dctx.failFast), value)
+            case Left(err)    =>
+              CirceDerivationUtils
+                .failResult(Expr.splice(dctx.failFast), DecodingFailure(err, Expr.splice(dctx.cursor).history))
+          }
+        }
+      case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
+        Expr.quote {
+          Expr.splice(eitherExpr) match {
+            case Right(value) => CirceDerivationUtils.okResult(Expr.splice(dctx.failFast), value)
+            case Left(errs)   =>
+              CirceDerivationUtils.failResult(
+                Expr.splice(dctx.failFast),
+                DecodingFailure(errs.mkString("\n"), Expr.splice(dctx.cursor).history)
+              )
+          }
+        }
+      case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
+        Expr.quote {
+          Expr.splice(eitherExpr) match {
+            case Right(value) => CirceDerivationUtils.okResult(Expr.splice(dctx.failFast), value)
+            case Left(err)    =>
+              CirceDerivationUtils.failResult(
+                Expr.splice(dctx.failFast),
+                DecodingFailure(err.getMessage, Expr.splice(dctx.cursor).history)
+              )
+          }
+        }
+      case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+        Expr.quote {
+          Expr.splice(eitherExpr) match {
+            case Right(value) => CirceDerivationUtils.okResult(Expr.splice(dctx.failFast), value)
+            case Left(errs)   =>
+              CirceDerivationUtils.failResult(
+                Expr.splice(dctx.failFast),
+                DecodingFailure(errs.map(_.getMessage).mkString("\n"), Expr.splice(dctx.cursor).history)
+              )
+          }
+        }
+    }
+    Rule.matched(Expr.quote {
+      CirceDerivationUtils.unsafeResult[Either[DecodingFailure, A]](
+        try Expr.splice(converted)
+        catch {
+          case e: CirceDerivationUtils.CollectionBuildException =>
+            CirceDerivationUtils.collectionFailure(Expr.splice(dctx.failFast), e)
+        }
+      )
+    })
+  }
+
   object DecoderHandleAsCollectionRule extends DecoderDerivationRule("handle as collection or map when possible") {
 
     @scala.annotation.nowarn("msg=is never used")
@@ -30,114 +102,47 @@ trait DecoderHandleAsCollectionRuleImpl {
                 import isCollection.value.CtorResult
                 implicit val HCursorT: Type[HCursor] = DTypes.HCursor
                 implicit val EitherDFItem: Type[Either[DecodingFailure, Item]] = DTypes.DecoderResult[Item]
-                implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
+                implicit val AnyT: Type[Any] = DTypes.Any
 
                 LambdaBuilder
                   .of1[HCursor]("itemCursor")
                   .traverse { itemCursorExpr =>
-                    deriveDecoderRecursively[Item](using dctx.nest[Item](itemCursorExpr))
+                    deriveDecoderRecursively[Item](using dctx.nest[Item](itemCursorExpr)).map(_.upcast[Any])
                   }
                   .map { builder =>
-                    val decodeFn = builder.build[Either[DecodingFailure, Item]]
+                    val decodeFn = builder.build[Any]
                     val factoryExpr = isCollection.value.factory
-                    val buildStep = isCollection.value.build
 
+                    // Like circe's SeqDecoder: fail-fast stops at the first element error, accumulating collects the
+                    // errors of every element. Elements are decoded through the array cursor so that their errors keep
+                    // the cursor history (e.g. `.members[1].age`).
                     val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
                       val cursor = Expr.splice(dctx.cursor)
-                      val decoder = CirceDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
+                      val failFast = Expr.splice(dctx.failFast)
+                      val decode = Expr.splice(decodeFn)
                       val collBuilder = Expr.splice(factoryExpr).newBuilder
                       cursor.values match {
                         case None =>
                           throw new CirceDerivationUtils.CollectionBuildException(
-                            DecodingFailure("Expected JSON array", cursor.history)
+                            CirceDerivationUtils.wrongTypeFailure("array", cursor)
                           )
                         case Some(jsonValues) =>
-                          val iter = jsonValues.iterator
-                          while (iter.hasNext)
-                            decoder.decodeJson(iter.next()) match {
-                              case Right(item) => collBuilder += item
-                              case Left(err)   => throw new CirceDerivationUtils.CollectionBuildException(err)
-                            }
+                          val errors = new CirceDerivationUtils.FailureCollector
+                          var itemCursor: io.circe.ACursor = if (jsonValues.isEmpty) null else cursor.downArray
+                          while (itemCursor ne null) {
+                            val item = decode(itemCursor.asInstanceOf[HCursor])
+                            if (errors.add(failFast, item)) collBuilder += CirceDerivationUtils.resultValue[Item](item)
+                            val next = itemCursor.right
+                            itemCursor = if (next.succeeded) next else null
+                          }
+                          errors.throwIfFailed()
                       }
                       collBuilder
                     }
-                    val buildResultExpr = buildStep.ctor(readLoop)
-
-                    buildStep match {
-                      case _: CtorLikeOf.PlainValue[?, ?] =>
-                        Rule.matched(Expr.quote {
-                          try Right(Expr.splice(buildResultExpr.asInstanceOf[Expr[A]]))
-                          catch {
-                            case e: CirceDerivationUtils.CollectionBuildException =>
-                              Left(e.failure)
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(err)    =>
-                                Left(DecodingFailure(err, Expr.splice(dctx.cursor).history))
-                            }
-                          catch {
-                            case e: CirceDerivationUtils.CollectionBuildException =>
-                              Left(e.failure)
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(errs)   =>
-                                Left(DecodingFailure(errs.mkString("\n"), Expr.splice(dctx.cursor).history))
-                            }
-                          catch {
-                            case e: CirceDerivationUtils.CollectionBuildException =>
-                              Left(e.failure)
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(err)    =>
-                                Left(DecodingFailure(err.getMessage, Expr.splice(dctx.cursor).history))
-                            }
-                          catch {
-                            case e: CirceDerivationUtils.CollectionBuildException =>
-                              Left(e.failure)
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(errs)   =>
-                                Left(
-                                  DecodingFailure(
-                                    errs.map(_.getMessage).mkString("\n"),
-                                    Expr.splice(dctx.cursor).history
-                                  )
-                                )
-                            }
-                          catch {
-                            case e: CirceDerivationUtils.CollectionBuildException =>
-                              Left(e.failure)
-                          }
-                        })
-                    }
+                    wrapBuildResult[A](
+                      isCollection.value.build,
+                      isCollection.value.build.ctor(readLoop).asInstanceOf[Expr[Any]]
+                    )
                   }
             }
 

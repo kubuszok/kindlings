@@ -28,7 +28,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       }
 
     @scala.annotation.nowarn("msg=is never used")
-    private def encodeCaseClassFields[A: EncoderCtx](
+    private[rules] def encodeCaseClassFields[A: EncoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[Json]] = {
       implicit val JsonT: Type[Json] = Types.Json
@@ -44,66 +44,72 @@ trait EncoderHandleAsCaseClassRuleImpl {
         if (allFields.isEmpty) Map.empty
         else caseClass.primaryConstructor.totalParameters.flatten.toMap
 
+      // Checked even without case fields (`case class A()(val b: Int)`), like the decoder; singletons are skipped.
+      val multipleLists = rejectMultipleParameterLists[A](caseClass, "KindlingsEncoder")
       // Validate: @transientField on fields without defaults is a compile error
-      paramsByName.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
-      } match {
-        case Some(name) =>
-          val err = EncoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
-          Log.error(err.message) >> MIO.fail(err)
-        case None =>
-          val nonTransientFields = allFields.filter { case (name, _) =>
-            paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
-          }
+      if (multipleLists.isDefined) {
+        val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, multipleLists.toList)
+        Log.error(err.message) >> MIO.fail(err)
+      } else
+        paramsByName.collectFirst {
+          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+        } match {
+          case Some(name) =>
+            val err = EncoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
+          case None =>
+            val nonTransientFields = allFields.filter { case (name, _) =>
+              paramsByName.get(name).forall(p => !hasAnnotationType[transientField](p))
+            }
 
-          NonEmptyList.fromList(nonTransientFields) match {
-            case Some(fields) =>
-              fields
-                .parTraverse { case (fName, fieldValue) =>
-                  import fieldValue.{Underlying as Field, value as fieldExpr}
-                  Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldJson =>
-                      val nameOverride =
-                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
-                      // When evaluatedConfig is available and no @fieldName annotation, pre-compute the mapped name
-                      val resolvedName: Option[String] = nameOverride.orElse(
-                        ectx.evaluatedConfig.map(_.transformMemberNames(fName))
-                      )
-                      (fName, fieldJson, resolvedName)
+            NonEmptyList.fromList(nonTransientFields) match {
+              case Some(fields) =>
+                fields
+                  .parTraverse { case (fName, fieldValue) =>
+                    import fieldValue.{Underlying as Field, value as fieldExpr}
+                    Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
+                      deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { fieldJson =>
+                        val nameOverride =
+                          paramsByName.get(fName).flatMap(p => getAnnotationStringArg[fieldName](p))
+                        // When evaluatedConfig is available and no @fieldName annotation, pre-compute the mapped name
+                        val resolvedName: Option[String] = nameOverride.orElse(
+                          ectx.evaluatedConfig.map(_.transformMemberNames(fName))
+                        )
+                        (fName, fieldJson, resolvedName)
+                      }
                     }
                   }
-                }
-                .map { fieldPairs =>
-                  fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) {
-                    case ((fName, fieldJson, Some(resolvedName)), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(Expr(resolvedName)),
-                          Expr.splice(fieldJson)
-                        ) ::
-                          Expr.splice(acc)
-                      }
-                    case ((fName, fieldJson, None), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                          Expr.splice(fieldJson)
-                        ) ::
-                          Expr.splice(acc)
-                      }
+                  .map { fieldPairs =>
+                    fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) {
+                      case ((fName, fieldJson, Some(resolvedName)), acc) =>
+                        Expr.quote {
+                          (
+                            Expr.splice(Expr(resolvedName)),
+                            Expr.splice(fieldJson)
+                          ) ::
+                            Expr.splice(acc)
+                        }
+                      case ((fName, fieldJson, None), acc) =>
+                        Expr.quote {
+                          (
+                            Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
+                            Expr.splice(fieldJson)
+                          ) ::
+                            Expr.splice(acc)
+                        }
+                    }
                   }
-                }
-                .map { fieldsListExpr =>
-                  Expr.quote {
-                    CirceDerivationUtils.jsonFromFields(Expr.splice(fieldsListExpr))
+                  .map { fieldsListExpr =>
+                    Expr.quote {
+                      CirceDerivationUtils.jsonFromFields(Expr.splice(fieldsListExpr))
+                    }
                   }
-                }
-            case None =>
-              MIO.pure(Expr.quote {
-                CirceDerivationUtils.jsonFromFields(Nil)
-              })
-          }
-      }
+              case None =>
+                MIO.pure(Expr.quote {
+                  CirceDerivationUtils.jsonFromFields(Nil)
+                })
+            }
+        }
     }
   }
 }

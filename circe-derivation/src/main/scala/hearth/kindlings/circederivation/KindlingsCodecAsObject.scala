@@ -2,7 +2,7 @@ package hearth.kindlings.circederivation
 
 import io.circe.Codec
 
-trait KindlingsCodecAsObject[A] extends Codec.AsObject[A]
+trait KindlingsCodecAsObject[A] extends Codec.AsObject[A] with ExtrasDecoder[A]
 
 object KindlingsCodecAsObject extends KindlingsCodecAsObjectCompanionCompat {
 

@@ -17,7 +17,7 @@ trait DecoderHandleAsLiteralTypeRuleImpl {
         implicit val EitherDFA: Type[Either[DecodingFailure, A]] = DTypes.DecoderResult[A]
         implicit val DFT: Type[DecodingFailure] = DTypes.DecodingFailure
         extractLiteralDecoder[A] match {
-          case Some(decoderExpr) => MIO.pure(Rule.matched(decoderExpr))
+          case Some(decoderExpr) => MIO.pure(Rule.matched(liftEither[A](decoderExpr)))
           case None              => MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a literal type"))
         }
       }

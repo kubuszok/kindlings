@@ -135,8 +135,7 @@ final class CirceScala3Spec extends MacroSuite {
     test("decode parameterized enum case non-object value, accumulating (issue #235)") {
       val result = KindlingsDecoder.derived[Fruit].decodeAccumulating(Json.obj("Apple" -> Json.fromInt(42)).hcursor)
       result.fold(_.toList.map(e => (e.message, e.pathToRootString)), a => fail(s"expected invalid, got $a")) ==> List(
-        ("Got value '42' with wrong type, expecting object", Some(".Apple")),
-        ("Missing required field", Some(".Apple.weight"))
+        ("Got value '42' with wrong type, expecting object", Some(".Apple"))
       )
     }
   }
@@ -406,6 +405,82 @@ final class CirceScala3Spec extends MacroSuite {
         val json = Json.obj("circle" -> Json.obj("radius" -> Json.fromDoubleOrNull(5.0)))
         // If circe's auto-derivation were used, it would look for "Circle" not "circle"
         KindlingsDecoder.decode[Shape](json) ==> Right(Circle(5.0): Shape)
+      }
+    }
+
+    group("an intermediate sealed trait with `derives KindlingsCodecAsObject` is flattened (upstream parity)") {
+
+      test("wrapper mode round-trip") {
+        val value: DerivesGP = DerivesChild(1)
+        val json = KindlingsEncoder.encode[DerivesGP](value)
+        json ==> Json.obj("DerivesChild" -> Json.obj("a" -> Json.fromInt(1)))
+        KindlingsDecoder.decode[DerivesGP](json) ==> Right(value)
+        val codec = KindlingsCodecAsObject.derived[DerivesGP]
+        codec.decodeJson(codec(value)) ==> Right(value)
+        codec.decodeJson(codec(DerivesUncle(2))) ==> Right(DerivesUncle(2))
+      }
+    }
+
+    group("named-argument factories (Scala 3 core ConfiguredCodec.derive(...))") {
+
+      test("KindlingsCodecAsObject.derive / KindlingsEncoder.derive / KindlingsDecoder.derive") {
+        val codec = KindlingsCodecAsObject.derive[CamelCaseFields](transformMemberNames = renaming.snakeCase)
+        val json = Json.obj("first_name" -> Json.fromString("a"), "last_name" -> Json.fromString("b"))
+        codec(CamelCaseFields("a", "b")) ==> json
+        codec.decodeJson(json) ==> Right(CamelCaseFields("a", "b"))
+        val enc = KindlingsEncoder.derive[Shape](discriminator = Some("type"))
+        enc(Circle(1.0)).asObject.flatMap(_("type")) ==> Some(Json.fromString("Circle"))
+        val dec = KindlingsDecoder.derive[PersonWithDefaults](useDefaults = true)
+        dec.decodeJson(Json.obj("name" -> Json.fromString("n"))) ==> Right(PersonWithDefaults("n", 25))
+      }
+    }
+
+    group("enum factories (Scala 3 core ConfiguredEnumCodec.derive(...))") {
+
+      test("KindlingsCodecAsObject.deriveEnum / KindlingsEncoder.deriveEnum / KindlingsDecoder.deriveEnum") {
+        val codec: io.circe.Codec[Color] = KindlingsCodecAsObject.deriveEnum[Color](renaming.kebabCase)
+        codec(Color.Green) ==> Json.fromString("green")
+        codec.decodeJson(Json.fromString("blue")) ==> Right(Color.Blue)
+        assert(codec.decodeJson(Json.fromString("Blue")).isLeft)
+        KindlingsEncoder.deriveEnum[Color]().apply(Color.Red) ==> Json.fromString("Red")
+        KindlingsDecoder.deriveEnum[Color]().decodeJson(Json.fromString("Red")) ==> Right(Color.Red)
+        // a sealed trait of case objects
+        KindlingsCodecAsObject.deriveEnum[CardinalDirection]().apply(North) ==> Json.fromString("North")
+      }
+
+      test("a sum with non-singleton cases is a compile-time error") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{KindlingsCodecAsObject, Shape}
+          KindlingsCodecAsObject.deriveEnum[Shape]()
+          """
+        ).check("enumAsStrings is enabled but")
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{KindlingsEncoder, Shape, renaming}
+          KindlingsEncoder.deriveEnum[Shape](transformConstructorNames = renaming.snakeCase)
+          """
+        ).check("enumAsStrings is enabled but")
+      }
+    }
+
+    group("a compile-time configuration in a local val is evaluated (Scala 3 inline proxies)") {
+
+      test("enumAsStrings with non-singleton cases is a compile-time error") {
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{Configuration, KindlingsEncoder, Shape, Circle}
+          implicit val config: Configuration = Configuration.default.withEnumAsStrings
+          KindlingsEncoder.encode[Shape](Circle(1.0))
+          """
+        ).check("enumAsStrings is enabled but")
+        compileErrors(
+          """
+          import hearth.kindlings.circederivation.{Configuration, KindlingsDecoder, Shape}
+          given Configuration = Configuration(enumAsStrings = true)
+          KindlingsDecoder.derived[Shape]
+          """
+        ).check("enumAsStrings is enabled but")
       }
     }
   }

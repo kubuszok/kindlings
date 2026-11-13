@@ -43,9 +43,7 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
         instanceExpr: Expr[Decoder[A]]
     ): MIO[Rule.Applicability[Expr[Either[DecodingFailure, A]]]] =
       Log.info(s"Found implicit decoder ${instanceExpr.prettyPrint}, using directly") >>
-        MIO.pure(Rule.matched(Expr.quote {
-          Expr.splice(instanceExpr).apply(Expr.splice(dctx.cursor))
-        }))
+        MIO.pure(Rule.matched(runDecoderInstance[A](instanceExpr)))
 
     private def yieldUnsupported[A: DecoderCtx](
         reason: String

@@ -25,7 +25,8 @@ trait SchemaMacrosImpl
     with rules.SchemaHandleAsSingletonRuleImpl
     with rules.SchemaHandleAsCaseClassRuleImpl
     with rules.SchemaHandleAsEnumRuleImpl
-    with rules.SchemaDerivationPolicyRuleImpl {
+    with rules.SchemaDerivationPolicyRuleImpl
+    with SchemaFlattenedEnumImpl {
   this: MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
 
   // $COVERAGE-OFF$
@@ -386,8 +387,12 @@ trait SchemaMacrosImpl
 
   // Case class derivation
 
+  protected def deriveCaseClassSchema[A: SchemaCtx](cc: CaseClass[A]): MIO[Expr[Schema[A]]] =
+    buildCaseClassSchema[A](cc).flatMap(setCachedAndGet[A](sctx.cache, _))
+
+  /** The product schema of a case class (not cached). */
   @scala.annotation.nowarn("msg=is never used")
-  protected def deriveCaseClassSchema[A: SchemaCtx](cc: CaseClass[A]): MIO[Expr[Schema[A]]] = {
+  protected def buildCaseClassSchema[A: SchemaCtx](cc: CaseClass[A]): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
@@ -416,11 +421,9 @@ trait SchemaMacrosImpl
       rawSchemaExpr = Expr.quote {
         TapirSchemaUtils.productSchema[A](Expr.splice(sNameExpr), Expr.splice(fieldsListExpr))
       }
-      schemaExpr = Expr.quote {
-        TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))
-      }
-      result <- setCachedAndGet[A](sctx.cache, schemaExpr)
-    } yield result
+    } yield Expr.quote {
+      TapirSchemaUtils.enrichSchema[A](Expr.splice(rawSchemaExpr), Expr.splice(typeAnnsExpr))
+    }
   }
 
   @scala.annotation.nowarn("msg=is never used")
@@ -613,7 +616,18 @@ trait SchemaMacrosImpl
   }
 
   @scala.annotation.nowarn("msg=is never used")
-  protected def deriveEnumSchema[A: SchemaCtx](e: Enum[A]): MIO[Expr[Schema[A]]] = {
+  protected def deriveEnumSchema[A: SchemaCtx](e: Enum[A]): MIO[Expr[Schema[A]]] =
+    // Intermediate sealed hierarchies with their own JSON-library instance (circe) need the runtime dispatch of the
+    // flattened path; plain leaf flattening, string singletons and value enums are handled by the direct path.
+    if (
+      flattensNestedSubtypesOf[A](sctx.jsonCfg) &&
+      flattenedSubtypes(e, sctx.jsonCfg).exists(_.isInstanceOf[SubtypeEntry.Intermediate])
+    )
+      deriveFlattenedEnumSchema[A](e)(computeSNameExpr[A](sctx.derivedType), typeAnnotationsExpr[A])
+    else deriveEnumSchemaOfDirectChildren[A](e)
+
+  @scala.annotation.nowarn("msg=is never used")
+  private def deriveEnumSchemaOfDirectChildren[A: SchemaCtx](e: Enum[A]): MIO[Expr[Schema[A]]] = {
     implicit val SchemaA: Type[Schema[A]] = TsTypes.TapirSchemaOf[A]
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
@@ -629,6 +643,8 @@ trait SchemaMacrosImpl
         case None         => e.directChildren.toList
       }
       else e.directChildren.toList
+    // circe writes a non-object child as `{"Name": value}` even with a discriminator
+    val wrapNonObjects: Boolean = sctx.jsonCfg.wrapsNonObjectSubtypesWithDiscriminator
     val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
 
     // Build resolved constructor names for discriminator mapping (C3)
@@ -688,7 +704,8 @@ trait SchemaMacrosImpl
           Expr.splice(resolvedNamesListExpr),
           Expr.splice(singletonFlagsExpr),
           Expr.splice(singletonsAsStringsExpr),
-          Expr.splice(wrappedExpr)
+          Expr.splice(wrappedExpr),
+          Expr.splice(Expr(wrapNonObjects))
         )
       }
       rawSchemaExpr = singletonValuesOpt match {
@@ -854,6 +871,6 @@ trait SchemaMacrosImpl
   private def fieldAnnotationsExpr(param: Parameter): Expr[List[Any]] =
     collectAnnotationsExpr(allParamAnnotations(param))
 
-  private def typeAnnotationsExpr[A: Type]: Expr[List[Any]] =
+  protected def typeAnnotationsExpr[A: Type]: Expr[List[Any]] =
     collectAnnotationsExpr(allTypeAnnotations[A])
 }

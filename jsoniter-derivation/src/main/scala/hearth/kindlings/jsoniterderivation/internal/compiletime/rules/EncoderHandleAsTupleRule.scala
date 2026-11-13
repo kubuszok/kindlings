@@ -31,11 +31,9 @@ trait EncoderHandleAsTupleRuleImpl {
             case _                                            =>
               elements.zipWithIndex.map { case (element, index) =>
                 import element.Underlying as E
-                Expr
-                  .quote {
-                    Expr.splice(ectx.value).asInstanceOf[Product].productElement(Expr.splice(Expr(index))).asInstanceOf[E]
-                  }
-                  .as_??
+                Expr.quote {
+                  Expr.splice(ectx.value).asInstanceOf[Product].productElement(Expr.splice(Expr(index))).asInstanceOf[E]
+                }.as_??
               }
           }
           elementExprs

@@ -6,8 +6,8 @@ import sttp.tapir.{Schema, SchemaType, Validator}
 /** Test helper: checks that a JSON value (e.g. written by a JSON library's codec) conforms to a tapir Schema, so that
   * tests can verify that the schemas derived with a JSON library's config describe what that library's codecs produce.
   *
-  * Strict on purpose: objects may not contain keys which the schema does not describe, required fields must be
-  * present, string enums must contain the value, discriminators must select a subtype.
+  * Strict on purpose: objects may not contain keys which the schema does not describe, required fields must be present,
+  * string enums must contain the value, discriminators must select a subtype.
   */
 object SchemaConformance {
 
@@ -16,9 +16,9 @@ object SchemaConformance {
 
   private def collectNamed(schema: Schema[?], acc: Map[Schema.SName, Schema[?]]): Map[Schema.SName, Schema[?]] =
     schema.schemaType match {
-      case _: SchemaType.SRef[?]                                => acc
-      case _ if schema.name.exists(acc.contains)                => acc
-      case st =>
+      case _: SchemaType.SRef[?]                 => acc
+      case _ if schema.name.exists(acc.contains) => acc
+      case st                                    =>
         val withSelf = schema.name.fold(acc)(n => acc + (n -> schema))
         val children: List[Schema[?]] = st match {
           case p: SchemaType.SProduct[?]        => p.fields.map(_.schema)
@@ -70,16 +70,19 @@ object SchemaConformance {
         else fail("an integer")
       case SchemaType.SNumber() =>
         if (json.isNumber || (stringified && json.isString)) Nil else fail("a number")
-      case SchemaType.SBoolean() => if (json.isBoolean) Nil else fail("a boolean")
+      case SchemaType.SBoolean()      => if (json.isBoolean) Nil else fail("a boolean")
       case a: SchemaType.SArray[?, ?] =>
         json.asArray match {
-          case Some(items) => items.toList.zipWithIndex.flatMap { case (j, i) => check(a.element, j, s"$path[$i]", named) }
-          case None        => fail("an array")
+          case Some(items) =>
+            items.toList.zipWithIndex.flatMap { case (j, i) => check(a.element, j, s"$path[$i]", named) }
+          case None => fail("an array")
         }
       case p: SchemaType.SProduct[?] if isTuple(schema) =>
         json.asArray match {
           case Some(items) if items.size == p.fields.size =>
-            p.fields.zip(items.toList).zipWithIndex.flatMap { case ((f, j), i) => check(f.schema, j, s"$path[$i]", named) }
+            p.fields.zip(items.toList).zipWithIndex.flatMap { case ((f, j), i) =>
+              check(f.schema, j, s"$path[$i]", named)
+            }
           case _ => fail(s"an array of ${p.fields.size} elements")
         }
       case p: SchemaType.SProduct[?] =>
@@ -118,7 +121,8 @@ object SchemaConformance {
           case Right(subtypes) =>
             val results = subtypes.map(s => check(s, json, path, named))
             if (results.exists(_.isEmpty)) Nil
-            else fail(s"one of the subtypes of ${schema.name.fold("?")(_.fullName)} (${results.flatten.mkString("; ")})")
+            else
+              fail(s"one of the subtypes of ${schema.name.fold("?")(_.fullName)} (${results.flatten.mkString("; ")})")
         }
       case _ => Nil // binary, dates, etc.
     }

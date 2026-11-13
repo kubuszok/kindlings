@@ -58,7 +58,30 @@ final class JsoniterScalaTypesParitySpec extends MacroSuite {
       }
 
       test("tuples with 22 elements") {
-        type T22 = (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, String)
+        type T22 = (
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            Int,
+            String
+        )
         val codec = KindlingsJsonValueCodec.derived[T22]
         val value: T22 = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, "22")
         val json = """[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,"22"]"""
@@ -66,7 +89,7 @@ final class JsoniterScalaTypesParitySpec extends MacroSuite {
         readFromString[T22](json)(codec) ==> value
       }
     }
-      group("stringified (Spec ~224, ~454, ~1712, ~1732, ~1942, ~2383)") {
+    group("stringified (Spec ~224, ~454, ~1712, ~1732, ~1942, ~2383)") {
 
       test("@stringified on Int, BigInt, Option and List fields stringifies their numbers") {
         val codec = KindlingsJsonValueCodec.derived[ParityStringified]
@@ -88,12 +111,28 @@ final class JsoniterScalaTypesParitySpec extends MacroSuite {
       }
 
       test("isStringified applies down to the first case class only, never to its fields (Spec ~2150)") {
-        val value = ParityAllNumbers(1, 2, 3, 4L, 1.5f, 2.5, true, java.lang.Long.valueOf(5L), BigDecimal("1.1"), Some(6),
-          Map("k" -> 7L), (8, 9.5), 'c', "s")
+        val value = ParityAllNumbers(
+          1,
+          2,
+          3,
+          4L,
+          1.5f,
+          2.5,
+          true,
+          java.lang.Long.valueOf(5L),
+          BigDecimal("1.1"),
+          Some(6),
+          Map("k" -> 7L),
+          (8, 9.5),
+          'c',
+          "s"
+        )
         val json =
           """{"b":1,"s":2,"i":3,"l":4,"f":1.5,"d":2.5,"bool":true,"jl":5,"bd":1.1,"os":6,"m":{"k":7},"t":[8,9.5],"c":"c","str":"s"}"""
         val cRuntime =
-          runtime(StringifiedRuntimeConfigs.stringified) { implicit c => KindlingsJsonValueCodec.derived[ParityAllNumbers] }
+          runtime(StringifiedRuntimeConfigs.stringified) { implicit c =>
+            KindlingsJsonValueCodec.derived[ParityAllNumbers]
+          }
         List[JsonValueCodec[ParityAllNumbers]](OptimizedCodecs.stringifiedAll, cRuntime).foreach { c =>
           writeToString(value)(c) ==> json
           readFromString[ParityAllNumbers](json)(c) ==> value
@@ -101,20 +140,22 @@ final class JsoniterScalaTypesParitySpec extends MacroSuite {
       }
 
       test("isStringified applies to top-level values, options and nested collections") {
-        val intRuntime = runtime(StringifiedRuntimeConfigs.stringified) { implicit c => KindlingsJsonValueCodec.derived[Int] }
+        val intRuntime =
+          runtime(StringifiedRuntimeConfigs.stringified)(implicit c => KindlingsJsonValueCodec.derived[Int])
         List[JsonValueCodec[Int]](OptimizedCodecs.stringifiedInt, intRuntime).foreach { c =>
           writeToString(3)(c) ==> "\"3\""
           readFromString[Int]("\"3\"")(c) ==> 3
         }
         val optRuntime =
-          runtime(StringifiedRuntimeConfigs.stringified) { implicit c => KindlingsJsonValueCodec.derived[Option[BigInt]] }
+          runtime(StringifiedRuntimeConfigs.stringified)(implicit c => KindlingsJsonValueCodec.derived[Option[BigInt]])
         List[JsonValueCodec[Option[BigInt]]](OptimizedCodecs.stringifiedOption, optRuntime).foreach { c =>
           writeToString[Option[BigInt]](Some(BigInt(123)))(c) ==> "\"123\""
           writeToString[Option[BigInt]](None)(c) ==> "null"
           readFromString[Option[BigInt]]("\"123\"")(c) ==> Some(BigInt(123))
         }
         type S = scala.collection.mutable.Set[List[BigDecimal]]
-        val setRuntime = runtime(StringifiedRuntimeConfigs.stringified) { implicit c => KindlingsJsonValueCodec.derived[S] }
+        val setRuntime =
+          runtime(StringifiedRuntimeConfigs.stringified)(implicit c => KindlingsJsonValueCodec.derived[S])
         List[JsonValueCodec[S]](OptimizedCodecs.stringifiedSet, setRuntime).foreach { c =>
           val value: S = scala.collection.mutable.Set(List(BigDecimal("1.1"), BigDecimal("2.2")))
           writeToString(value)(c) ==> "[[\"1.1\",\"2.2\"]]"

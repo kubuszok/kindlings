@@ -82,6 +82,30 @@ object TapirSchemaUtils {
       subtypes: List[Schema[Any]],
       discriminator: Option[String],
       resolvedNames: List[String]
+  ): Schema[T] = coproductSchema[T](name, subtypes, discriminator, resolvedNames, wrapNonObjects = false)
+
+  /** With `wrapNonObjects` (circe), a subtype whose schema is not a product is shown, when there is a discriminator, in
+    * the wrapped form circe writes for it (`{"Name": value}`): a product with a single field named after the subtype,
+    * without the discriminator field and outside the discriminator mapping.
+    */
+  def coproductSchema[T](
+      name: SName,
+      subtypes: List[Schema[Any]],
+      discriminator: Option[String],
+      resolvedNames: List[String],
+      wrapNonObjects: Boolean
+  ): Schema[T] = coproductSchema[T](name, subtypes, discriminator, resolvedNames, wrapNonObjects, wrapped = false)
+
+  /** With `wrapped` (circe), without a discriminator every subtype is shown in the wrapped form the codec writes:
+    * `{"Circle":{"radius":1.0}}`, a product with a single field named after the subtype.
+    */
+  def coproductSchema[T](
+      name: SName,
+      subtypes: List[Schema[Any]],
+      discriminator: Option[String],
+      resolvedNames: List[String],
+      wrapNonObjects: Boolean,
+      wrapped: Boolean
   ): Schema[T] =
     coproductSchemaWithEncoding[T](
       name,
@@ -90,7 +114,8 @@ object TapirSchemaUtils {
       resolvedNames,
       singletons = subtypes.map(_ => false),
       singletonsAsStrings = false,
-      wrapped = false
+      wrapped = wrapped,
+      wrapNonObjects = wrapNonObjects
     )
 
   /** As [[coproductSchema]], also describing how the subtypes are encoded without a discriminator.
@@ -102,6 +127,9 @@ object TapirSchemaUtils {
     * @param wrapped
     *   whether, without a discriminator, the (other) subtypes are wrapped in a single-field object keyed by their
     *   resolved names (`{"Circle":{"radius":1.0}}`)
+    * @param wrapNonObjects
+    *   whether, with a discriminator, subtypes that are not JSON objects are shown in the wrapped form instead of
+    *   carrying the discriminator (circe)
     */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def coproductSchemaWithEncoding[T](
@@ -111,11 +139,20 @@ object TapirSchemaUtils {
       resolvedNames: List[String],
       singletons: List[Boolean],
       singletonsAsStrings: Boolean,
-      wrapped: Boolean
+      wrapped: Boolean,
+      wrapNonObjects: Boolean = false
   ): Schema[T] = {
+    // Objects (products, maps, sums of objects, references to named types) carry the discriminator.
+    def isWrapped(s: Schema[Any]): Boolean = wrapNonObjects && discriminator.isDefined && (s.schemaType match {
+      case _: SchemaType.SProduct[?] | _: SchemaType.SOpenProduct[?, ?] | _: SchemaType.SCoproduct[?] |
+          _: SchemaType.SRef[?] =>
+        false
+      case _ => true
+    })
     val disc: Option[SchemaType.SDiscriminator] = discriminator.map { discFieldName =>
       val mapping: Map[String, SchemaType.SRef[Any]] = subtypes
         .zip(resolvedNames)
+        .filterNot { case (s, _) => isWrapped(s) }
         .flatMap { case (s, resolvedName) =>
           s.name.map { sname =>
             resolvedName -> SchemaType.SRef[Any](sname)
@@ -130,27 +167,40 @@ object TapirSchemaUtils {
     val enrichedSubtypes: List[Schema[Any]] = discriminator match {
       case Some(discFieldName) =>
         subtypes.zip(resolvedNames).map { case (childSchema, resolvedName) =>
-          val withDiscField = childSchema.schemaType match {
-            case p: SchemaType.SProduct[Any @unchecked] =>
-              val alreadyHasField = p.fields.exists(_.name.encodedName == discFieldName)
-              if (alreadyHasField) childSchema
-              else {
-                val discFieldSchema = Schema.string.copy(
-                  validator = Validator.enumeration(List(resolvedName), (v: String) => Some(v))
-                )
-                val discField = SchemaType.SProductField[Any, String](
-                  FieldName(discFieldName, discFieldName),
-                  discFieldSchema,
-                  _ => Some(resolvedName)
-                )
-                childSchema.copy(schemaType = p.copy(fields = discField :: p.fields))
-              }
-            case _ => childSchema
+          if (isWrapped(childSchema)) {
+            val wrapperField = SchemaType.SProductField[Any, Any](
+              FieldName(resolvedName, resolvedName),
+              childSchema,
+              (v: Any) => Some(v)
+            )
+            childSchema.copy(
+              schemaType = SchemaType.SProduct[Any](List(wrapperField)),
+              format = None,
+              validator = Validator.pass
+            )
+          } else {
+            val withDiscField = childSchema.schemaType match {
+              case p: SchemaType.SProduct[Any @unchecked] =>
+                val alreadyHasField = p.fields.exists(_.name.encodedName == discFieldName)
+                if (alreadyHasField) childSchema
+                else {
+                  val discFieldSchema = Schema.string.copy(
+                    validator = Validator.enumeration(List(resolvedName), (v: String) => Some(v))
+                  )
+                  val discField = SchemaType.SProductField[Any, String](
+                    FieldName(discFieldName, discFieldName),
+                    discFieldSchema,
+                    _ => Some(resolvedName)
+                  )
+                  childSchema.copy(schemaType = p.copy(fields = discField :: p.fields))
+                }
+              case _ => childSchema
+            }
+            withDiscField.attribute(
+              Schema.EncodedDiscriminatorValue.Attribute,
+              Schema.EncodedDiscriminatorValue(resolvedName)
+            )
           }
-          withDiscField.attribute(
-            Schema.EncodedDiscriminatorValue.Attribute,
-            Schema.EncodedDiscriminatorValue(resolvedName)
-          )
         }
       case None =>
         subtypes.zip(resolvedNames).zip(singletons).map { case ((childSchema, resolvedName), isSingleton) =>
