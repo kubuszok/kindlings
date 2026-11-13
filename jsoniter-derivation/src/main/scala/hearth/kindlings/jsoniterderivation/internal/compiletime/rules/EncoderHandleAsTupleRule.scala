@@ -24,11 +24,10 @@ trait EncoderHandleAsTupleRuleImpl {
           implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
           implicit val ProductT: Type[Product] = CTypes.Product
           // `TupleN` fields are read with their accessors, generic tuples (Scala 3) with `productElement`.
-          // (Hearth's `caseFieldValuesAt` finds no fields of `Tuple22`, hence the size check.)
           val accessors = CaseClass.parse[A].toOption.map(_.caseFieldValuesAt(ectx.value).toList.map(_._2))
           val elementExprs: List[Expr_??] = accessors match {
-            case Some(fields) if fields.size == elements.size => fields
-            case _                                            =>
+            case Some(fields) => fields
+            case None         =>
               elements.zipWithIndex.map { case (element, index) =>
                 import element.Underlying as E
                 Expr.quote {

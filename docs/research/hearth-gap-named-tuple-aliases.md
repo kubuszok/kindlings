@@ -34,3 +34,10 @@ Scala 3 `tupleElementTypes` hook.
 Also found while adding tuple support: `CaseClass.parse[Tuple22[...]].caseFieldValuesAt(x)` returns no fields (smaller
 tuples are fine). Kindlings' `EncoderHandleAsTupleRule` falls back to `productElement` when the accessor count differs
 from the element count.
+
+Kindlings side (2026-11-13, Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT`): jsoniter-derivation's `EncoderHandleAsTupleRule` no
+longer compares the accessor count with the element count; `TupleN` (including `Tuple22`, `JsoniterScalaTypesParitySpec`
+"tuples with 22 elements") are read with their accessors. Its `productElement` path stays for generic tuples (Scala 3
+`H *: T`, more than 22 elements), which `CaseClass.parse` does not handle. No other module copied the fallback (the
+`productElement` calls of the `*HandleAsNamedTupleRule`s read named tuples). The recursive tuple alias
+(`type R = (Int, Option[R])`) was not investigated.
