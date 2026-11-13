@@ -13,10 +13,10 @@ final class BinaryCompatSpec extends MacroSuite {
 
     test("the old-arity constructor and apply fill the new fields with their defaults") {
       val f: String => String = _.toUpperCase
-      val viaApply = UBJsonConfig(f, f, Some("t"), false, true, false, false, false, false, false, true, 10, 11, 12,
-        13, 14)
-      val viaNew = new UBJsonConfig(f, f, Some("t"), false, true, false, false, false, false, false, true, 10, 11, 12,
-        13, 14)
+      val viaApply =
+        UBJsonConfig(f, f, Some("t"), false, true, false, false, false, false, false, true, 10, 11, 12, 13, 14)
+      val viaNew =
+        new UBJsonConfig(f, f, Some("t"), false, true, false, false, false, false, false, true, 10, 11, 12, 13, 14)
       for (c <- List(viaApply, viaNew)) {
         c.discriminatorFieldName ==> Some("t")
         c.checkFieldDuplication ==> true
@@ -31,15 +31,22 @@ final class BinaryCompatSpec extends MacroSuite {
 
     test("the old-arity copy keeps the new fields") {
       val base = UBJsonConfig.default.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(5)
-      val c = base.copy(identity, identity, None, true, false, false, false, false, false, false, false, 34, 6178, 308,
-        1, 2)
+      val c =
+        base.copy(identity, identity, None, true, false, false, false, false, false, false, false, 34, 6178, 308, 1, 2)
       c.mapMaxInsertNumber ==> 1
       c.requireDiscriminatorFirst ==> false
       c.bigIntDigitsLimit ==> 5
     }
 
     test("named copy still uses the full-arity copy") {
-      UBJsonConfig.default.copy(transientNull = true) ==> UBJsonConfig(transientNull = true)
+      // Compare fields, not whole configs: they hold functions, which are only reference-equal (and on JS/Native
+      // every evaluation of a default creates a new one).
+      val c = UBJsonConfig.default.copy(transientNull = true)
+      c.transientNull ==> true
+      c.discriminatorFieldName ==> UBJsonConfig.default.discriminatorFieldName
+      c.requireDiscriminatorFirst ==> UBJsonConfig.default.requireDiscriminatorFirst
+      c.bigIntDigitsLimit ==> UBJsonConfig.default.bigIntDigitsLimit
+      c.fieldNameMapper("someField") ==> UBJsonConfig.default.fieldNameMapper("someField")
     }
 
     test("the 0.3.2 name mappers forward to the jsoniter-scala ones") {
