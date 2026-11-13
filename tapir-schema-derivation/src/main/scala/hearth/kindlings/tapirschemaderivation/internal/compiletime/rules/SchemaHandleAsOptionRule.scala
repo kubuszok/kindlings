@@ -19,8 +19,14 @@ trait SchemaHandleAsOptionRuleImpl {
         Type[A] match {
           case IsOption(isOption) =>
             import isOption.Underlying as Element
+            // An Option nested in this Option may be encoded differently (e.g. as an ADT by jsoniter-scala)
+            val elementSchemaMIO: MIO[Expr[Schema[Element]]] = (Type[Element], sctx.jsonCfg.nestedOptionsAsAdts) match {
+              case (IsOption(_), Some(encoding)) =>
+                deriveNestedOptionSchema[Element](encoding)(using sctx.nest[Element])
+              case _ => deriveSchemaRecursively[Element](using sctx.nest[Element])
+            }
             Log.info(s"Deriving Schema for Option element: ${Type[Element].prettyPrint}") >>
-              deriveSchemaRecursively[Element](using sctx.nest[Element]).map { elementSchema =>
+              elementSchemaMIO.map { elementSchema =>
                 Rule.matched(Expr.quote {
                   TapirSchemaUtils.optionSchema[Element](Expr.splice(elementSchema)).asInstanceOf[Schema[A]]
                 })

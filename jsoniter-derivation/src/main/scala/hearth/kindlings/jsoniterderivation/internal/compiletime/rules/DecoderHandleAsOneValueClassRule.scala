@@ -16,36 +16,36 @@ trait DecoderHandleAsOneValueClassRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] = {
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
-      val staticInline = dctx.evaluatedConfig.exists(_.inlineOneValueClasses)
-      if (!staticInline)
+      // `Some(flag)` with a compile-time config; `None` when only known at runtime: then both shapes are derived and
+      // the codec checks `config.inlineOneValueClasses` when decoding.
+      val staticInline = dctx.evaluatedConfig.map(_.inlineOneValueClasses)
+      if (staticInline.contains(false))
         MIO.pure(Rule.yielded("inlineOneValueClasses is not enabled"))
       else
-        CaseClass.parse[A].toEither match {
-          case Right(cc) =>
-            val fields = cc.primaryConstructor.totalParameters.flatten.toList.filter { case (_, p) =>
-              !hasAnnotationType[transientField](p)
+        oneValueClassField[A](dctx.evaluatedConfig) match {
+          case Some((cc, fName, param)) =>
+            import param.tpe.Underlying as Field
+            deriveDecoderRecursively[Field](using dctx.nest[Field](dctx.reader)).flatMap { decodedField =>
+              constructOneValueClass[A](cc, fName, decodedField.as_??) match {
+                case Right(inlined) =>
+                  if (staticInline.contains(true)) MIO.pure(Rule.matched(inlined))
+                  else
+                    DecoderHandleAsCaseClassRule[A].map {
+                      case Rule.Applicability.Matched(asObject) =>
+                        Rule.matched(Expr.quote {
+                          if (Expr.splice(dctx.config).inlineOneValueClasses) Expr.splice(inlined)
+                          else Expr.splice(asObject)
+                        })
+                      case yielded => yielded
+                    }
+                case Left(error) =>
+                  val err =
+                    CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                  Log.error(err.message) >> MIO.fail(err)
+              }
             }
-            fields match {
-              case (fName, param) :: Nil if IsValueType.unapply(Type[A]).isEmpty =>
-                import param.tpe.Underlying as Field
-                deriveDecoderRecursively[Field](using dctx.nest[Field](dctx.reader)).flatMap { decodedField =>
-                  foldInstanceFree(cc.primaryConstructor, "Constructor")(
-                    onTypes = _ => Map.empty,
-                    onValues = _ => Map(fName -> decodedField.as_??)
-                  ) match {
-                    case Right(constructExpr) =>
-                      MIO.pure(Rule.matched(constructExpr.value.asInstanceOf[Expr[A]]))
-                    case Left(error) =>
-                      val err =
-                        CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
-                      Log.error(err.message) >> MIO.fail(err)
-                  }
-                }
-              case _ =>
-                MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} does not have exactly one non-transient field"))
-            }
-          case Left(reason) =>
-            MIO.pure(Rule.yielded(reason))
+          case None =>
+            MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} is not a class with exactly one non-transient field"))
         }
     }
   }

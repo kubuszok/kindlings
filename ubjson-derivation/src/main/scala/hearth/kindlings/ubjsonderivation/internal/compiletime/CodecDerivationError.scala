@@ -31,4 +31,9 @@ private[compiletime] object CodecDerivationError {
   final case class UnexpectedParameterInSingleton(tpeName: String, context: String) extends CodecDerivationError {
     override def message: String = s"$context: $tpeName"
   }
+  final case class ParameterWithoutAccessor(paramName: String, tpeName: String) extends CodecDerivationError {
+    override def message: String =
+      s"'$paramName' parameter of '$tpeName' should be defined as 'val' or 'var' in the primary constructor."
+  }
+  final case class Collision(message: String) extends CodecDerivationError
 }

@@ -16,31 +16,35 @@ trait EncoderHandleAsOneValueClassRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] = {
       implicit val transientFieldT: Type[transientField] = CTypes.TransientField
-      val staticInline = ectx.evaluatedConfig.exists(_.inlineOneValueClasses)
-      if (!staticInline)
-        MIO.pure(Rule.yielded("inlineOneValueClasses is not enabled (requires compile-time evaluable config)"))
+      // `Some(flag)` with a compile-time config; `None` when only known at runtime: then both shapes are derived and
+      // the codec checks `config.inlineOneValueClasses` when encoding.
+      val staticInline = ectx.evaluatedConfig.map(_.inlineOneValueClasses)
+      if (staticInline.contains(false))
+        MIO.pure(Rule.yielded("inlineOneValueClasses is not enabled"))
       else
-        CaseClass.parse[A].toEither match {
-          case Right(cc) =>
-            val fields = cc.primaryConstructor.totalParameters.flatten.toList.filter { case (_, p) =>
-              !hasAnnotationType[transientField](p)
-            }
-            fields match {
-              case (fName, param) :: Nil if IsValueType.unapply(Type[A]).isEmpty =>
-                import param.tpe.Underlying as Field
-                val allFields = cc.caseFieldValuesAt(ectx.value).toList
-                allFields.find(_._1 == fName) match {
-                  case Some((_, fieldValue)) =>
-                    val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map(Rule.matched)
-                  case None =>
-                    MIO.pure(Rule.yielded(s"Could not access field $fName"))
+        oneValueClassField[A](ectx.evaluatedConfig) match {
+          case Some((cc, fName, param)) =>
+            import param.tpe.Underlying as Field
+            cc.fieldValuesAt(ectx.value).get(fName) match {
+              case Some(fieldValue) =>
+                val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).flatMap { inlined =>
+                  if (staticInline.contains(true)) MIO.pure(Rule.matched(inlined))
+                  else
+                    EncoderHandleAsCaseClassRule[A].map {
+                      case Rule.Applicability.Matched(asObject) =>
+                        Rule.matched(Expr.quote {
+                          if (Expr.splice(ectx.config).inlineOneValueClasses) Expr.splice(inlined)
+                          else Expr.splice(asObject)
+                        })
+                      case yielded => yielded
+                    }
                 }
-              case _ =>
-                MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} does not have exactly one non-transient field"))
+              case None =>
+                MIO.pure(Rule.yielded(s"Could not access field $fName"))
             }
-          case Left(reason) =>
-            MIO.pure(Rule.yielded(reason))
+          case None =>
+            MIO.pure(Rule.yielded(s"${Type[A].prettyPrint} is not a class with exactly one non-transient field"))
         }
     }
   }

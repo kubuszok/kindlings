@@ -18,6 +18,17 @@ trait EncoderHandleAsLiteralTypeRuleImpl {
         }
       }
 
+    // As in jsoniter-scala: numbers and booleans are JSON strings with `@stringified` / `isStringified`.
+    private def stringifiable[A: EncoderCtx](plain: Expr[Unit], asString: Expr[Unit]): Expr[Unit] = {
+      implicit val UnitT: Type[Unit] = CTypes.Unit
+      ectx.stringifiedMode match {
+        case Some(true)  => asString
+        case Some(false) => plain
+        case None        =>
+          Expr.quote(if (Expr.splice(ectx.config).isStringified) Expr.splice(asString) else Expr.splice(plain))
+      }
+    }
+
     private def extractLiteralEncoder[A: EncoderCtx]: Option[Expr[Unit]] = {
       val writer = ectx.writer
       Type.StringCodec.fromType(Type[A]).map { e =>
@@ -25,28 +36,49 @@ trait EncoderHandleAsLiteralTypeRuleImpl {
         Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
       } orElse Type.IntCodec.fromType(Type[A]).map { e =>
         val v: Int = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.LongCodec.fromType(Type[A]).map { e =>
         val v: Long = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.DoubleCodec.fromType(Type[A]).map { e =>
         val v: Double = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.FloatCodec.fromType(Type[A]).map { e =>
         val v: Float = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.BooleanCodec.fromType(Type[A]).map { e =>
         val v: Boolean = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.ShortCodec.fromType(Type[A]).map { e =>
         val v: Short = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.ByteCodec.fromType(Type[A]).map { e =>
         val v: Byte = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v))))
+        stringifiable(
+          Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)))),
+          Expr.quote(Expr.splice(writer).writeValAsString(Expr.splice(Expr(v))))
+        )
       } orElse Type.CharCodec.fromType(Type[A]).map { e =>
         val v: Char = e.value
-        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v)).toString))
+        Expr.quote(Expr.splice(writer).writeVal(Expr.splice(Expr(v.toString))))
       }
     }
   }

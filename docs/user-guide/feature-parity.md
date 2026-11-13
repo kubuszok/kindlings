@@ -358,29 +358,36 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | jsoniter-scala | Kindlings | Status |
 |---|---|---|---|
-| Field name mapper | Yes | Yes | Parity |
-| ADT leaf class name mapper | Yes | Yes | Parity |
-| Discriminator field | Yes (default `Some("type")`) | Yes | Parity |
+| Field name mapper | Yes (a `PartialFunction`) | Yes (function or partial function) | Parity |
+| ADT leaf class name mapper | Yes (receives the fully-qualified name, default `simpleClassName`) | Yes (same) | Parity |
+| Discriminator field | Yes (default `Some("type")`) | Yes (`withDiscriminator`, `withDiscriminatorFieldName`) | Parity |
 | Skip unexpected fields | Yes (default `true`) | Yes | Parity |
-| Enum as strings | No (controlled per-type/per-codec) | Yes (`withEnumAsStrings`, unified config flag) | Improvement |
+| Case objects / enum values as strings | Yes (without a discriminator; Java enums and `Enumeration`s always) | Yes (same), plus `withEnumAsStrings` for case-object-only ADTs with a discriminator | Parity + Improvement |
+| `requireDiscriminatorFirst` | Yes (default `true`) | Yes (default `true`) | Parity |
 | Map as array | Yes | Yes | Parity |
 | `transientDefault` | Yes | Yes | Parity |
 | `transientEmpty` | Yes | Yes | Parity |
 | `transientNone` | Yes | Yes | Parity |
-| `isStringified` (global) | Yes | Yes | Parity |
+| `isStringified` (global) | Yes (from the root down to the first class/ADT: top level, collections, map values, options, tuples, bit sets; never case class fields) | Yes (same) | Parity |
 | `decodingOnly` / `encodingOnly` | Yes | Yes | Parity |
 | `requireCollectionFields` | Yes | Yes | Parity |
 | `requireDefaultFields` | Yes | Yes | Parity |
 | `circeLikeObjectEncoding` | Yes | Yes (case objects encoded as `{"Name":{}}` matching upstream) | Parity |
 | `checkFieldDuplication` | Yes | Yes | Parity |
 | `bigDecimalPrecision`/`bigDecimalScaleLimit`/`bigDecimalDigitsLimit` | Yes (DoS protection) | Yes | Parity |
-| `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes | Parity |
+| `bigIntDigitsLimit` | Yes (default `308`) | Yes (default `308`) | Parity |
+| `transientNull` | Yes (Scala 3 `T \| Null` fields, which are also optional when absent) | Yes (same; no-op on Scala 2) | Parity |
+| `scalaTransientSupport` | Yes | Yes (compile-time and runtime configs, also `writeToString`/`readFromString`) | Parity |
+| Name mapper helpers (`enforce_snake_case`, `enforce-kebab-case`, `EnforcePascalCase`, `enforceCamelCase`, `simpleClassName`) | Yes | Yes (`JsoniterConfig.*`, same semantics) | Parity |
+| Compile-time config validations (flag conflicts, key and discriminator collisions) | Yes | Yes (compile-time configs; flag conflicts of runtime configs throw `IllegalArgumentException` when the codec is created) | Parity |
+| `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes (`setMaxInsertNumber` limits only sets, as upstream) | Parity |
 | `useScalaEnumValueId` | Yes | Yes | Parity |
 | `javaEnumValueNameMapper` | Yes | Yes (`withJavaEnumValueNameMapper`) | Parity |
-| `inlineOneValueClasses` | Yes | Yes (`withInlineOneValueClasses`) | Parity |
+| `inlineOneValueClasses` | Yes (also map keys) | Yes (`withInlineOneValueClasses`, also map keys and transient parameters) | Parity |
 | `bitSetValueLimit` (DoS protection) | Yes | Yes | Parity |
-| `skipNestedOptionValues` | Yes | Yes | Parity |
+| `skipNestedOptionValues` | Yes (without it, inner `Option`s are the ADT `Option`: `{"type":"Some","value":...}`) | Yes (same) | Parity |
 | `alwaysEmitDiscriminator` | Yes | Yes (`withAlwaysEmitDiscriminator`) | Parity |
+| Convenience factories (`JsonCodecMaker.makeCirceLike`, `makeWithoutDiscriminator`, etc.) | Yes (`makeXxx[A]` entry points) | Yes, as config presets: `KindlingsJsonValueCodec.derived[A](JsoniterConfig.makeCirceLike)` etc. (all `makeXxx` variants, built on upstream's defaults) | Parity |
 
 ### Type classes
 
@@ -388,21 +395,22 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 |---|---|---|---|
 | `JsonValueCodec[A]` | Yes | Yes | Parity |
 | `JsonCodec[A]` | Yes | Yes | Parity |
-| `JsonKeyCodec[A]` | Yes | Yes (`deriveKeyCodec`) | Parity |
+| `JsonKeyCodec[A]` | Yes (user-provided ones take precedence over built-in key types) | Yes (`deriveKeyCodec`; user-provided ones take precedence, also for `String`) | Parity |
 
 ### Annotations
 
 | Feature | jsoniter-scala | Kindlings | Status |
 |---|---|---|---|
-| Per-field rename (`@named` / `@fieldName`) | Yes | Yes | Parity |
+| Per-field rename (`@named` / `@fieldName`) | Yes (`@named`) | Yes (`@fieldName`, and `@named` on fields) | Parity |
+| ADT leaf rename (`@named` on classes, objects, Scala 3 enum cases) | Yes | Yes (`@named`) | Parity |
 | Transient field (`@transient` / `@transientField`) | Yes | Yes (requires default value) | Parity |
-| `@stringified` | Yes | Yes | Parity |
+| `@stringified` | Yes (also on `Option`/collection fields) | Yes (same) | Parity |
 
 ### Type support
 
 | Feature | jsoniter-scala | Kindlings | Status |
 |---|---|---|---|
-| Non-string map keys | Yes (extensive) | Yes (numeric + value types + BigDecimal/BigInt) | Parity |
+| Non-string map keys | Yes (extensive) | Yes (primitives, boxed, `BigInt`/`BigDecimal`, `UUID`, `java.time`, value classes/opaque types, case-object enums, `JsonKeyCodec`); unsupported keys are a compile-time error with a compile-time config | Parity |
 | `IntMap`/`LongMap` specialized maps | Yes | Yes (via Hearth standard collection provider) | Parity |
 | `UUID` | Yes | Yes | Parity |
 | `BitSet` (immutable + mutable) | Yes | Yes | Parity |
@@ -411,6 +419,13 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Value class unwrapping | Yes (+ `inlineOneValueClasses`) | Automatic (always) | Parity |
 | Recursive types | Yes (`allowRecursiveTypes = true`) | Yes (no flag needed) | Improvement |
 | java.time built-in codecs | Yes (ISO-8601) | Yes (ISO-8601: Instant, LocalDate, LocalTime, LocalDateTime, OffsetDateTime, ZonedDateTime, Duration, Period) | Parity |
+| Tuples as JSON arrays (incl. generic tuples and arity > 22 on Scala 3) | Yes | Yes | Parity |
+| Named tuples (JSON objects) | Yes | Yes, except named tuples behind type aliases (Hearth gap) | Partial |
+| Literal types (also as map keys) | Yes | Yes; case class fields of literal types on Scala 2 not yet (Hearth gap) | Partial |
+| Plain (non-case) classes, plain-class/object ADT leaves, non-abstract sealed classes as leaves | Yes | Yes | Parity |
+| Multiple parameter lists (with dependent defaults) | Yes | Yes | Parity |
+| User-provided codecs of ADT leaves with a discriminator | Yes (encode/decode the whole leaf object) | Yes (same) | Parity |
+| `nullValue` / `default` semantics (`None`, empty collections, `null` and `[]`/`{}` of a collection field → field default, user-provided field codecs receive the field default) | Yes | Yes (except: with `checkFieldDuplication = false`, a repeated key's decoder gets the field default, not the value read for the earlier occurrence) | Parity |
 
 ### Cross-compilation
 
@@ -423,14 +438,9 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | Notes |
 |---|---|
-| Convenience factories (`makeCirceLike`, etc.) | Pre-configured codec makers — trivially achievable with `JsoniterConfig.default.withCirceLikeObjectEncoding` |
-| `requireCollectionFields` buffering | Config field exists but full buffering behavior not wired |
-| `bigIntDigitsLimit` (DoS protection) | Upstream has a separate digit cap for `BigInt` (default `308`); Kindlings ships the `BigDecimal` caps but not the `BigInt` counterpart |
-| `scalaTransientSupport` | Upstream can honor `scala.transient`; Kindlings only honors its own `@transientField` |
-| `transientNull` | Upstream can skip `null`-valued fields on encode; not implemented |
+| Recursive tuple aliases | `type R = (Int, Option[R])` is not recognized as a tuple |
 
 **Design decisions** (not gaps):
-- `requireDiscriminatorFirst` — Kindlings always requires discriminator first (strict by design). No config to relax this.
 - `allowRecursiveTypes` — upstream gates recursive types behind a flag (default `false`); Kindlings always allows them, so no flag is needed.
 
 ### Default value differences
@@ -438,12 +448,12 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Config field | Upstream default | Kindlings default | Notes |
 |---|---|---|---|
 | `mapMaxInsertNumber` | `1024` | `Int.MaxValue` | Kindlings: no map-size limit unless set explicitly |
-| `setMaxInsertNumber` | `1024` | `Int.MaxValue` | Kindlings: no collection-size limit unless set explicitly |
+| `setMaxInsertNumber` | `1024` | `Int.MaxValue` | Kindlings: no set-size limit unless set explicitly |
 | `transientDefault` | `true` | `false` | Kindlings requires explicit opt-in |
 | `transientEmpty` | `true` | `false` | Kindlings requires explicit opt-in |
 | `transientNone` | `true` | `false` | Kindlings requires explicit opt-in |
 | `checkFieldDuplication` | `true` | `false` | Kindlings is permissive by default |
-| `discriminatorFieldName` | `Some("type")` | `None` | Kindlings uses single-key wrapper encoding by default |
+| `discriminatorFieldName` | `Some("type")` | `None` | Kindlings uses single-key wrapper encoding by default (case objects as strings) |
 
 `JsoniterConfig.jsoniterScalaDefaults` is a one-shot preset that restores upstream's defaults (1024 insert limits, `transientDefault`/`transientEmpty`/`transientNone = true`, etc.) for users who want byte-for-byte upstream behavior.
 
@@ -832,6 +842,11 @@ Discriminator metadata is fully propagated to child schemas:
 - `encodedDiscriminatorValue` attribute is set on each child schema
 - Matches upstream Tapir's `addDiscriminatorField` behavior
 
+With a jsoniter `JsoniterConfig` the schemas also describe the jsoniter codecs' wrapper-style ADTs (leaves wrapped in a
+single-field object, case objects as strings), flattened nested hierarchies, `@named` leaves and fields, the
+fully-qualified names passed to `adtLeafClassNameMapper`, Java enums / `scala.Enumeration` as strings (or ids), tuples as
+arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schema derivation guide.
+
 ### Not ported
 
 | Feature | Notes |
@@ -872,6 +887,10 @@ Discriminator metadata is fully propagated to child schemas:
 | `bigDecimalDigitsLimit` | `308` | Maximum digits for BigDecimal/BigInt (DoS protection) |
 | `mapMaxInsertNumber` | `Int.MaxValue` | Maximum map entries (DoS protection) |
 | `setMaxInsertNumber` | `Int.MaxValue` | Maximum set entries (DoS protection) |
+| `useScalaEnumValueId` | `false` | `scala.Enumeration` values as their ids |
+| `skipNestedOptionValues` | `false` | `Option[Option[A]]` as a plain `Option` (otherwise the ADT `Option`, as jsoniter-scala) |
+| `scalaTransientSupport` | `false` | `scala.transient` fields are transient |
+| `transientNull` | `false` | Omit `null` fields of Scala 3 `T \| Null` types during encoding |
 
 ### Annotations
 
@@ -879,7 +898,7 @@ Discriminator metadata is fully propagated to child schemas:
 |---|---|
 | `@fieldName(name)` | Rename a field in the UBJson representation |
 | `@transientField` | Exclude a field from encoding/decoding (requires default value) |
-| `@stringified` | Encode a numeric field as a string |
+| `@stringified` | No effect (UBJson numbers are typed binary values, there is no string form) |
 
 ### Type support
 
@@ -888,11 +907,14 @@ Discriminator metadata is fully propagated to child schemas:
 | Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (native UBJson types) |
 | `String` | Yes |
 | `BigDecimal`, `BigInt` | Yes (with configurable DoS protection) |
-| `Option[A]` | Yes (null for `None`) |
+| `Option[A]` | Yes (null for `None`; `Option[Option[A]]` as the ADT `Option`, or plain with `skipNestedOptionValues`) |
 | Collections (`List`, `Vector`, etc.) | Yes (via Hearth `IsCollection`) |
 | `Map[K, V]` (string keys) | Yes (UBJson object) |
 | `Map[K, V]` (non-string keys: `Int`, `Long`, etc.) | Yes (array of key-value pairs) |
-| Case classes | Yes (UBJson object with field names) |
+| Case classes | Yes (UBJson object with field names, all parameter lists) |
+| Plain (non-case) classes | Yes (primary-constructor `val`/`var` parameters) |
+| Scala 3 `T \| Null` | Yes (`null` or a `T`) |
+| Nested sealed hierarchies | Yes (flattened to their leaves) |
 | Value classes | Yes (automatic unwrapping) |
 | Sealed traits (wrapper encoding) | Yes (single-key object wrapping subtype name) |
 | Sealed traits (discriminator encoding) | Yes (via `discriminatorFieldName` config) |

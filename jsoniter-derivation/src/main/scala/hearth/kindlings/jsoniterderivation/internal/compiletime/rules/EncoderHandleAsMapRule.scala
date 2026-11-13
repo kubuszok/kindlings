@@ -37,7 +37,8 @@ trait EncoderHandleAsMapRuleImpl {
       import isMap.{Key, Value}
       @scala.annotation.nowarn("msg=is never used")
       implicit val JsoniterConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-      if (Key <:< Type[String]) {
+      // String keys use the inlined fast path unless a user-provided JsonKeyCodec[String] exists.
+      if (Key =:= Type[String] && CTypes.JsonKeyCodec[Key].summonExprIgnoring().toEither.isLeft) {
         val mapAsArrayStaticallyFalse = ectx.evaluatedConfig.exists(!_.mapAsArray)
         if (mapAsArrayStaticallyFalse)
           deriveStringKeyedMapInline[A, Pair, Key, Value](isMap)
@@ -83,8 +84,11 @@ trait EncoderHandleAsMapRuleImpl {
                     })
                   }
               }
+          case None if ectx.evaluatedConfig.exists(!_.mapAsArray) =>
+            val err = CodecDerivationError.UnsupportedMapKey(Key.prettyPrint)
+            Log.error(err.message) >> MIO.fail(err)
           case None =>
-            // No key encoder — try value-level encoding for mapAsArray-only support
+            // No key encoder — try value-level encoding for mapAsArray-only support (config only known at runtime)
             LambdaBuilder
               .of1[Value]("mapValue")
               .traverse { valueExpr =>
@@ -215,8 +219,110 @@ trait EncoderHandleAsMapRuleImpl {
               }
               .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
 
-          if (Type[K] =:= Type.of[Int])
+          val literal = literalKey[K]
+          if (literal.isDefined) {
+            val keyString = literal.get._1
+            Some(makeKeyEncoder((_, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(Expr(keyString))))))
+          } else if (Type[K] =:= Type.of[Int])
             Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Int]))))
+          else if (Type[K] =:= Type.of[String])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[String]))))
+          else if (Type[K] =:= Type.of[Byte])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Byte]))))
+          else if (Type[K] =:= Type.of[Char])
+            Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Char]))))
+          else if (Type[K] =:= CTypes.UUID)
+            Some(
+              makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.util.UUID])))
+            )
+          else if (Type[K] =:= CTypes.Duration)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.Duration]))
+              )
+            )
+          else if (Type[K] =:= CTypes.Instant)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.Instant]))
+              )
+            )
+          else if (Type[K] =:= CTypes.LocalDate)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.LocalDate]))
+              )
+            )
+          else if (Type[K] =:= CTypes.LocalDateTime)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.LocalDateTime]))
+              )
+            )
+          else if (Type[K] =:= CTypes.LocalTime)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.LocalTime]))
+              )
+            )
+          else if (Type[K] =:= CTypes.MonthDay)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.MonthDay]))
+              )
+            )
+          else if (Type[K] =:= CTypes.OffsetDateTime)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.OffsetDateTime]))
+              )
+            )
+          else if (Type[K] =:= CTypes.OffsetTime)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.OffsetTime]))
+              )
+            )
+          else if (Type[K] =:= CTypes.Period)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.Period]))
+              )
+            )
+          else if (Type[K] =:= CTypes.Year)
+            Some(
+              makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.Year])))
+            )
+          else if (Type[K] =:= CTypes.YearMonth)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.YearMonth]))
+              )
+            )
+          else if (Type[K] =:= CTypes.ZonedDateTime)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.ZonedDateTime]))
+              )
+            )
+          else if (Type[K] =:= CTypes.ZoneId)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.ZoneId]))
+              )
+            )
+          else if (Type[K] =:= CTypes.ZoneOffset)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.time.ZoneOffset]))
+              )
+            )
+          else if (Type[K] =:= CTypes.JavaCharacter)
+            Some(
+              makeKeyEncoder((k, w) =>
+                Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[java.lang.Character].charValue()))
+              )
+            )
           else if (Type[K] =:= Type.of[Long])
             Some(makeKeyEncoder((k, w) => Expr.quote(Expr.splice(w).writeKey(Expr.splice(k).asInstanceOf[Long]))))
           else if (Type[K] =:= Type.of[Double])
@@ -278,7 +384,9 @@ trait EncoderHandleAsMapRuleImpl {
             None
         }
 
-        builtIn.getOrElse {
+        // As in jsoniter-scala, a user-provided JsonKeyCodec takes precedence over the built-in key types.
+        val hasUserKeyCodec = CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither.isRight
+        (if (hasUserKeyCodec) None else builtIn).getOrElse {
           // 2. Try summoning user-provided JsonKeyCodec[K]
           CTypes.JsonKeyCodec[K].summonExprIgnoring().toEither match {
             case Right(keyCodecExpr) =>
@@ -309,28 +417,74 @@ trait EncoderHandleAsMapRuleImpl {
                         .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
                     case None => MIO.pure(None)
                   }
+                case _
+                    if !ctx.evaluatedConfig
+                      .exists(!_.inlineOneValueClasses) && oneValueClassField[K](ctx.evaluatedConfig).isDefined =>
+                  // 3b. inlineOneValueClasses: a one-value class key is its field's key (as jsoniter-scala). With a
+                  // runtime config it is always unwrapped (there is no other key encoding for it).
+                  val (product, fName, param) = oneValueClassField[K](ctx.evaluatedConfig).get
+                  import param.tpe.Underlying as Inner
+                  deriveKeyEncoding[Inner].flatMap {
+                    case Some(innerKeyEncoder) =>
+                      LambdaBuilder
+                        .of2[K, JsonWriter]("key", "writer")
+                        .traverse { case (keyExpr, writerExpr) =>
+                          val inner = product.fieldValuesAt(keyExpr)(fName).value.asInstanceOf[Expr[Inner]]
+                          MIO.pure(Expr.quote {
+                            Expr.splice(innerKeyEncoder).apply(Expr.splice(inner), Expr.splice(writerExpr))
+                          })
+                        }
+                        .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
+                    case None => MIO.pure(None)
+                  }
                 case _ =>
                   // 4. Enum (all case objects) — write case name as key
                   Enum.parse[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = enumm.directChildren.toList
-                      val allCaseObjects = Type[K].isEnumeration || Type[K].isJavaEnum || childrenList.forall {
+                      val allCaseObjects = Type[K].isEnumeration || isJavaEnumType[K] || childrenList.forall {
                         case (_, child) =>
                           SingletonValue.unapply(child.Underlying).isDefined
                       }
                       if (allCaseObjects) {
-                        // Use .toString on case objects — for case objects, .toString returns the simple name.
-                        // Use adtLeafClassNameMapper for custom name mapping.
+                        // The same names as enum values (see enumLeafNameExpr); Enumeration ids with
+                        // useScalaEnumValueId, as in jsoniter-scala.
+                        val cases: List[(Expr[K], Expr[String])] = childrenList.flatMap { case (childName, child) =>
+                          import child.Underlying as ChildType
+                          SingletonValue.unapply(Type[ChildType]).map { sv =>
+                            (
+                              sv.singletonExpr.asInstanceOf[Expr[K]],
+                              enumLeafNameExpr[K, ChildType](childName, ctx.config)
+                            )
+                          }
+                        }
                         LambdaBuilder
                           .of2[K, JsonWriter]("key", "writer")
                           .traverse { case (keyExpr, writerExpr) =>
-                            MIO.pure(Expr.quote {
-                              Expr
-                                .splice(writerExpr)
-                                .writeKey(
-                                  Expr.splice(ctx.config).adtLeafClassNameMapper(Expr.splice(keyExpr).toString)
+                            val byName: Expr[Unit] = cases.foldRight(
+                              Expr.quote(Expr.splice(writerExpr).writeKey(Expr.splice(keyExpr).toString))
+                            ) { case ((value, name), elseExpr) =>
+                              Expr.quote {
+                                if (
+                                  Expr.splice(keyExpr).asInstanceOf[AnyRef] eq Expr.splice(value).asInstanceOf[AnyRef]
                                 )
-                            })
+                                  Expr.splice(writerExpr).writeKey(Expr.splice(name))
+                                else Expr.splice(elseExpr)
+                              }
+                            }
+                            MIO.pure(
+                              if (Type[K].isEnumeration) Expr.quote {
+                                if (Expr.splice(ctx.config).useScalaEnumValueId)
+                                  Expr
+                                    .splice(writerExpr)
+                                    .writeKey(
+                                      hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+                                        .scalaEnumValueId(Expr.splice(keyExpr))
+                                    )
+                                else Expr.splice(byName)
+                              }
+                              else byName
+                            )
                           }
                           .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
                       } else MIO.pure(None)

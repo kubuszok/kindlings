@@ -121,7 +121,62 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       * Circe: always false. Jsoniter: maps to `isStringified`.
       */
     def numericFieldsAsStrings: Expr[Boolean]
+
+    // The members below describe further encoding choices of a JSON library. They have defaults (keeping the schemas
+    // as they were before they were added), so that implementations only override what their library does.
+
+    /** Resolve the encoded name of `Child`, an ADT leaf / enum value of `Parent` (`scalaName` is its short name).
+      *
+      * Unlike [[resolveConstructorName]], an implementation can use the types, e.g. to read the leaf's annotations,
+      * pass its fully-qualified name to the configured name mapper, or name Java enum / `scala.Enumeration` values as
+      * the library does. Defaults to [[resolveConstructorName]].
+      */
+    def resolveSubtypeName[Parent: Type, Child: Type](scalaName: String): Expr[String] =
+      resolveConstructorName(scalaName)
+
+    /** Whether nested sealed hierarchies are flattened to their leaves (the codecs read and write only the leaves, e.g.
+      * `{"type":"Truck"}` rather than an intermediate `MotorVehicle` subtype). Defaults to `false`.
+      */
+    def flattensNestedSubtypes: Boolean = false
+
+    /** Whether Java enum and `scala.Enumeration` values are JSON strings. Defaults to [[enumAsStrings]]. */
+    def valueEnumsAsStrings: Expr[Boolean] = enumAsStrings
+
+    /** Whether `scala.Enumeration` values are encoded as their (integer) `id`s. Defaults to `false`. */
+    def enumerationValuesAsIds: Expr[Boolean] = falseExpr
+
+    /** Whether, without a discriminator, singleton subtypes (case objects) of ADTs which also have other subtypes are
+      * JSON strings (their encoded names). Defaults to `false`.
+      */
+    def singletonSubtypesAsStrings: Expr[Boolean] = falseExpr
+
+    /** Whether, without a discriminator, the subtypes of an ADT are wrapped in a single-field object whose key is the
+      * subtype's encoded name (`{"Circle":{"radius":1.0}}`). Defaults to `false` (the subtypes are not wrapped).
+      */
+    def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = falseExpr
+
+    /** Whether tuples are JSON arrays (`[1,"a"]`) rather than objects with `_1`, `_2`, ... fields. Defaults to `false`.
+      */
+    def tuplesAsArrays: Boolean = false
+
+    /** How an `Option` nested directly in an `Option` is encoded, when the library encodes it as an ADT (`Some` with a
+      * value field, and `None`), so that `Some(None)` and `None` differ. Defaults to `None` (encoded as an `Option`).
+      */
+    def nestedOptionsAsAdts: Option[NestedOptionEncoding] = None
   }
+
+  /** An `Option` nested in an `Option`, encoded (when `enabled`) as an ADT of `Some` (an object with `valueFieldName`)
+    * and `None` (a singleton), named `someName` and `noneName`, using the config's ADT encoding (discriminator,
+    * wrapping, singletons as strings).
+    */
+  final class NestedOptionEncoding(
+      val enabled: Expr[Boolean],
+      val someName: Expr[String],
+      val noneName: Expr[String],
+      val valueFieldName: Expr[String]
+  )
+
+  private def falseExpr: Expr[Boolean] = Expr(false)
 
   object JsonSchemaConfig extends JsonSchemaConfigModule
 

@@ -1172,7 +1172,10 @@ object CirceDiscriminatorDerivation {
 
 object JsoniterDiscriminatorDerivation {
   implicit val config: JsoniterConfig =
-    JsoniterConfig(discriminatorFieldName = Some("type"), adtLeafClassNameMapper = _.toLowerCase)
+    JsoniterConfig(
+      discriminatorFieldName = Some("type"),
+      adtLeafClassNameMapper = JsoniterConfig.simpleClassName.andThen(_.toLowerCase)
+    )
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
   val schema: Schema[Shape] = KindlingsSchema.derived[Shape].schema
 }

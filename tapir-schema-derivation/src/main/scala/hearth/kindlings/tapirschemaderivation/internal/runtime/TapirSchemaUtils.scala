@@ -77,12 +77,41 @@ object TapirSchemaUtils {
     *   constructor names after applying the JSON library's name transform (e.g., `config.transformConstructorNames`).
     *   Used as discriminator mapping keys. Must be the same size and order as `subtypes`.
     */
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def coproductSchema[T](
       name: SName,
       subtypes: List[Schema[Any]],
       discriminator: Option[String],
       resolvedNames: List[String]
+  ): Schema[T] =
+    coproductSchemaWithEncoding[T](
+      name,
+      subtypes,
+      discriminator,
+      resolvedNames,
+      singletons = subtypes.map(_ => false),
+      singletonsAsStrings = false,
+      wrapped = false
+    )
+
+  /** As [[coproductSchema]], also describing how the subtypes are encoded without a discriminator.
+    *
+    * @param singletons
+    *   which subtypes are singletons (case objects). Same size and order as `subtypes`.
+    * @param singletonsAsStrings
+    *   whether, without a discriminator, singleton subtypes are JSON strings (their resolved names)
+    * @param wrapped
+    *   whether, without a discriminator, the (other) subtypes are wrapped in a single-field object keyed by their
+    *   resolved names (`{"Circle":{"radius":1.0}}`)
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def coproductSchemaWithEncoding[T](
+      name: SName,
+      subtypes: List[Schema[Any]],
+      discriminator: Option[String],
+      resolvedNames: List[String],
+      singletons: List[Boolean],
+      singletonsAsStrings: Boolean,
+      wrapped: Boolean
   ): Schema[T] = {
     val disc: Option[SchemaType.SDiscriminator] = discriminator.map { discFieldName =>
       val mapping: Map[String, SchemaType.SRef[Any]] = subtypes
@@ -123,18 +152,90 @@ object TapirSchemaUtils {
             Schema.EncodedDiscriminatorValue(resolvedName)
           )
         }
-      case None => subtypes
+      case None =>
+        subtypes.zip(resolvedNames).zip(singletons).map { case ((childSchema, resolvedName), isSingleton) =>
+          if (isSingleton && singletonsAsStrings) singletonStringSchema(childSchema.name, resolvedName)
+          else if (wrapped) Schema.wrapWithSingleFieldProduct(childSchema, FieldName(resolvedName, resolvedName))
+          else childSchema
+        }
     }
 
+    // Subtypes are matched by the names of the (unwrapped) child schemas.
+    val matchable = subtypes.map(_.name).zip(enrichedSubtypes)
     Schema[T](
       SchemaType.SCoproduct[T](enrichedSubtypes, disc) { (value: T) =>
         val cn = value.getClass.getName
-        enrichedSubtypes.collectFirst {
-          case s if s.name.exists(sn => cn == sn.fullName || cn == (sn.fullName + "$")) =>
+        matchable.collectFirst {
+          case (childName, s) if childName.exists(sn => cn == sn.fullName || cn == (sn.fullName + "$")) =>
             SchemaType.SchemaWithValue(s.asInstanceOf[Schema[Any]], value)
         }
       },
       Some(name)
+    )
+  }
+
+  /** A singleton subtype encoded as a JSON string: its resolved name. */
+  private def singletonStringSchema(name: Option[SName], resolvedName: String): Schema[Any] =
+    Schema
+      .string[Any]
+      .copy(name = name, validator = Validator.enumeration[Any](List(resolvedName), (v: Any) => Some(v)))
+
+  /** A `scala.Enumeration` whose values are encoded as their (integer) `id`s. */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def enumerationIdSchema[T](name: SName, values: List[T]): Schema[T] =
+    Schema[T](SchemaType.SInteger[T](), Some(name), format = Some("int32"))
+      .copy(validator = Validator.enumeration(values, (v: T) => Some(v.asInstanceOf[scala.Enumeration#Value].id)))
+
+  /** A tuple encoded as a JSON array of its elements (positional `_1`, `_2`, ... fields, marked as a tuple, which
+    * OpenAPI renders as an array with `prefixItems`).
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def tupleSchema[T](elements: List[Schema[Any]]): Schema[T] =
+    Schema[T](
+      SchemaType.SProduct[T](elements.zipWithIndex.map { case (elementSchema, index) =>
+        SchemaType.SProductField[T, Any](
+          FieldName(s"_${index + 1}"),
+          elementSchema,
+          t => Some(t.asInstanceOf[Product].productElement(index))
+        )
+      })
+    ).attribute(Schema.Tuple.Attribute, Schema.Tuple(true))
+
+  /** An `Option` nested in an `Option`, encoded as an ADT: `Some` (an object with the value under `valueFieldName`) and
+    * `None` (a singleton), using the given ADT encoding.
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def nestedOptionAdtSchema[V](
+      valueSchema: Schema[V],
+      valueTypeName: String,
+      someName: String,
+      noneName: String,
+      valueFieldName: String,
+      discriminator: Option[String],
+      singletonsAsStrings: Boolean,
+      wrapped: Boolean
+  ): Schema[Any] = {
+    val someSchema = Schema[Any](
+      SchemaType.SProduct[Any](
+        List(
+          SchemaType.SProductField[Any, V](
+            FieldName("value", valueFieldName),
+            valueSchema,
+            o => o.asInstanceOf[Option[V]]
+          )
+        )
+      ),
+      Some(SName("scala.Some", List(valueTypeName)))
+    )
+    val noneSchema = Schema[Any](SchemaType.SProduct[Any](Nil), Some(SName("scala.None")))
+    coproductSchemaWithEncoding[Any](
+      SName("scala.Option", List(valueTypeName)),
+      List(someSchema, noneSchema),
+      discriminator,
+      List(someName, noneName),
+      singletons = List(false, true),
+      singletonsAsStrings = singletonsAsStrings,
+      wrapped = wrapped
     )
   }
 

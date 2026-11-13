@@ -3,7 +3,8 @@ package hearth.kindlings.jsoniterderivation
 import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReaderException, JsonValueCodec}
 import hearth.MacroSuite
 
-class NotAJsonType
+// Abstract: plain non-abstract classes are derived through their primary constructor (as in jsoniter-scala).
+abstract class NotAJsonType
 
 final class InlineMethodsSpec extends MacroSuite {
 
@@ -144,7 +145,7 @@ final class InlineMethodsSpec extends MacroSuite {
       compileErrors(
         """
         import hearth.kindlings.jsoniterderivation.{KindlingsJsonValueCodec, NotAJsonType}
-        KindlingsJsonValueCodec.writeToString(new NotAJsonType)
+        KindlingsJsonValueCodec.writeToString(null.asInstanceOf[NotAJsonType])
         """
       ).check(
         "Macro derivation failed with the following errors:",

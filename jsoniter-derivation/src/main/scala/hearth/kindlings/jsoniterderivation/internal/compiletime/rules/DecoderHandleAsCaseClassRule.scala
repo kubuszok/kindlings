@@ -32,7 +32,9 @@ trait DecoderHandleAsCaseClassRuleImpl {
   private def inlineBuiltInDecode[Field: Type](readerExpr: Expr[JsonReader])(implicit
       JsonReaderT: Type[JsonReader]
   ): Option[Expr[Field]] =
-    if (Type[Field] =:= Type.of[Int]) Some(Expr.quote(Expr.splice(readerExpr).readInt().asInstanceOf[Field]))
+    if (literalKey[Field].isDefined || nullableUnionUnderlying[Field].isDefined)
+      None // nullable unions and literal types are checked by their own rule
+    else if (Type[Field] =:= Type.of[Int]) Some(Expr.quote(Expr.splice(readerExpr).readInt().asInstanceOf[Field]))
     else if (Type[Field] =:= Type.of[Long]) Some(Expr.quote(Expr.splice(readerExpr).readLong().asInstanceOf[Field]))
     else if (Type[Field] =:= Type.of[Double]) Some(Expr.quote(Expr.splice(readerExpr).readDouble().asInstanceOf[Field]))
     else if (Type[Field] =:= Type.of[Float]) Some(Expr.quote(Expr.splice(readerExpr).readFloat().asInstanceOf[Field]))
@@ -57,172 +59,153 @@ trait DecoderHandleAsCaseClassRuleImpl {
     }
   }
 
-  /** Derive decoder function for a single case class field, handling @stringified annotation. */
-  @scala.annotation.nowarn("msg=is never used")
+  /** Derive decoder function for a single case class field. A field is stringified only by its own `@stringified`
+    * (numbers and booleans of its value are JSON strings, also inside options, collections, map values and tuples). The
+    * field's default value is applied by `withFieldDefault`/`withFieldDefaultFn` (DecoderAbsentFieldSupport).
+    */
+  @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   private def deriveFieldDecoderFn[Field: Type](
       fName: String,
       typeName: String,
       hasStringifiedAnnotation: Boolean
   )(implicit ctx: DecoderCtx[?], JsonReaderT: Type[JsonReader]): MIO[Expr[JsonReader => Field]] =
     Log.namedScope(s"fieldDecoderFn:$fName") {
-      if (hasStringifiedAnnotation) {
-        deriveStringifiedDecoder[Field] match {
-          case Some(dec) => MIO.pure(dec)
-          case None      =>
-            val err = CodecDerivationError
-              .StringifiedOnNonNumeric(fName, typeName, Type[Field].prettyPrint)
-            Log.error(err.message) >> MIO.fail(err)
-        }
-      } else {
-        deriveStringifiedDecoder[Field] match {
-          case Some(stringifiedDec) =>
-            deriveFieldDecoder[Field].map { normalDec =>
-              Expr.quote { (r: JsonReader) =>
-                if (Expr.splice(ctx.config).isStringified)
-                  Expr.splice(stringifiedDec).apply(r)
-                else
-                  Expr.splice(normalDec).apply(r)
-              }
-            }
-          case None =>
-            deriveFieldDecoder[Field]
-        }
-      }
+      deriveFieldDecoder[Field](using Type[Field], ctx.copy(stringified = Some(hasStringifiedAnnotation)))
     }
 
-  /** Build transient-init expressions: fill null slots for absent fields with defaults/None/"". */
-  @scala.annotation.nowarn("msg=is never used")
-  private def buildTransientInitExprs(
+  /** Fill expressions for absent fields of the generic (runtime config) decoders. */
+  private def buildAbsentFieldFillExprs[A: DecoderCtx](
       nonTransientWithIndex: List[((String, Parameter), Int)],
       decodedValuesExpr: Expr[Array[Any]],
-      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig]
-  )(implicit AnyT: Type[Any]): List[Expr[Unit]] =
-    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
-      import param.tpe.Underlying as Field
-      val initSteps = List.newBuilder[Expr[Unit]]
-
-      if (param.hasDefault) {
-        param.defaultValue
-          .flatMap { method =>
-            foldInstanceFree(method, "Default value")(
-              onTypes = _ => Map.empty,
-              onValues = _ => Map.empty
-            ).toOption
-              .map { ee => import ee.Underlying; ee.value.upcast[Any] }
-          }
-          .foreach { defaultExpr =>
-            initSteps += Expr.quote {
-              if (
-                Expr.splice(config).transientDefault &&
-                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-              )
-                Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(defaultExpr)
-            }
-          }
-      }
-
-      val isOpt = Type[Field] match {
-        case IsOption(_) => true; case _ => false
-      }
-      if (isOpt) {
-        initSteps += Expr.quote {
-          if (
-            Expr.splice(config).transientNone &&
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-          )
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = (None: Any)
+      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig],
+      reader: Expr[JsonReader],
+      argumentValues: Map[String, Expr_??]
+  )(implicit fieldNameT: Type[fieldNameAnn]): List[Expr[Unit]] =
+    absentFieldFillExprs(
+      nonTransientWithIndex.map { case ((fName, param), idx) =>
+        (fName, param, idx, fieldNameOverride(param))
+      },
+      decodedValuesExpr,
+      config,
+      reader,
+      argumentValues,
+      name =>
+        nonTransientWithIndex.exists { case ((n, p), _) =>
+          n == name && isTransientAtRuntimeOnly[A](p, dctx.evaluatedConfig)
         }
-      }
+    )
 
-      if (Type[Field] =:= CTypes.String) {
-        initSteps += Expr.quote {
-          if (
-            Expr.splice(config).transientEmpty &&
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-          )
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = ("": Any)
-        }
-      }
-
-      initSteps.result()
+  /** Build map of transient field default values for the constructor. Defaults of non-first parameter lists may depend
+    * on the preceding parameters (`nonTransientValues` and the preceding transient defaults).
+    */
+  private def buildTransientDefaults[A: DecoderCtx](
+      fieldsList: List[(String, Parameter)],
+      nonTransientValues: Map[String, Expr_??]
+  ): Map[String, Expr_??] =
+    fieldsList.foldLeft(Map.empty[String, Expr_??]) { case (acc, (fName, param)) =>
+      if (!isTransientParam[A](param, dctx.evaluatedConfig)) acc
+      else
+        parameterDefault(param, nonTransientValues ++ acc).fold(acc)(expr => acc + (fName -> expr))
     }
 
-  /** Build require-check expressions: validate that required fields are present in the decoded array. */
+  /** Constructs a case class without non-transient fields (zero-param or all-`@transientField`) from the transient
+    * defaults.
+    */
   @scala.annotation.nowarn("msg=is never used")
-  private def buildRequireCheckExprs(
-      nonTransientWithIndex: List[((String, Parameter), Int)],
-      decodedValuesExpr: Expr[Array[Any]],
-      config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig]
-  ): List[Expr[Unit]] =
-    nonTransientWithIndex.flatMap { case ((fName, param), idx) =>
-      import param.tpe.Underlying as Field
-      val checks = List.newBuilder[Expr[Unit]]
-
-      if (param.hasDefault) {
-        checks += Expr.quote {
-          if (
-            Expr.splice(config).requireDefaultFields &&
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-          )
-            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
-        }
-      }
-
-      val isCollOrMap = Type[Field] match {
-        case IsMap(_)        => true
-        case IsCollection(_) => true
-        case _               => false
-      }
-      if (isCollOrMap) {
-        checks += Expr.quote {
-          if (
-            Expr.splice(config).requireCollectionFields &&
-            Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) == null
-          )
-            JsoniterDerivationUtils.throwMissingField(Expr.splice(Expr(fName)))
-        }
-      }
-
-      checks.result()
-    }
-
-  /** Build map of transient field default values for the constructor. */
-  private def buildTransientDefaults(
+  private def constructWithoutFields[A: DecoderCtx](
+      caseClass: ProductType[A],
       fieldsList: List[(String, Parameter)]
-  )(implicit transientFieldT: Type[transientField]): Map[String, Expr_??] =
-    fieldsList
-      .filter { case (_, p) => hasAnnotationType[transientField](p) }
-      .flatMap { case (fName, param) =>
-        param.defaultValue.flatMap { method =>
-          foldInstanceFree(method, "Default value")(
-            onTypes = _ => Map.empty,
-            onValues = _ => Map.empty
-          ).toOption
-            .map(expr => (fName, expr))
-        }
+  ): MIO[Expr[A]] =
+    foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+      onTypes = _ => Map.empty,
+      onValues = _ => buildTransientDefaults(fieldsList, Map.empty)
+    ) match {
+      case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
+      case Left(error)          =>
+        val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+        Log.error(err.message) >> MIO.fail(err)
+    }
+
+  @scala.annotation.nowarn("msg=is never used")
+  private def skipUnexpectedExpr[A: DecoderCtx]: Expr[Boolean] = {
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    dctx.evaluatedConfig match {
+      case Some(c) => Expr(c.skipUnexpectedFields)
+      case None    => Expr.quote(Expr.splice(dctx.config).skipUnexpectedFields)
+    }
+  }
+
+  /** Decodes a case class without non-transient fields (zero-param or all-`@transientField`): constructs it from the
+    * transient defaults and reads the object, skipping unknown keys unless `skipUnexpectedFields = false` (as
+    * jsoniter-scala does).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private def decodeObjectWithoutFields[A: DecoderCtx](
+      caseClass: ProductType[A],
+      fieldsList: List[(String, Parameter)]
+  ): MIO[Expr[A]] = {
+    implicit val StringT: Type[String] = CTypes.String
+    constructWithoutFields[A](caseClass, fieldsList).map { constructed =>
+      val allowedKey: Expr[String] =
+        alwaysEmittedDiscriminatorKey[A](dctx.config, dctx.evaluatedConfig).getOrElse(Expr.quote(null: String))
+      Expr.quote {
+        JsoniterDerivationUtils.readObjectWithoutFields(
+          Expr.splice(dctx.reader),
+          Expr.splice(skipUnexpectedExpr[A]),
+          Expr.splice(allowedKey),
+          false
+        )
+        Expr.splice(constructed)
       }
-      .toMap
+    }
+  }
+
+  /** [[decodeObjectWithoutFields]] for an ADT leaf in discriminator mode (see
+    * `JsoniterDerivationUtils.readInlineObjectWithoutFields`).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private def decodeInlineObjectWithoutFields[A: DecoderCtx](
+      caseClass: ProductType[A],
+      fieldsList: List[(String, Parameter)]
+  ): MIO[Expr[Boolean] => Expr[A]] = {
+    implicit val StringT: Type[String] = CTypes.String
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    constructWithoutFields[A](caseClass, fieldsList).map { constructed => (afterOpen: Expr[Boolean]) =>
+      val checkDuplication: Expr[Boolean] = dctx.evaluatedConfig match {
+        case Some(c) => Expr(c.checkFieldDuplication)
+        case None    => Expr.quote(Expr.splice(dctx.config).checkFieldDuplication)
+      }
+      Expr.quote {
+        JsoniterDerivationUtils.readInlineObjectWithoutFields(
+          Expr.splice(dctx.reader),
+          Expr.splice(skipUnexpectedExpr[A]),
+          Expr.splice(dctx.config).discriminatorFieldName.orNull,
+          Expr.splice(checkDuplication),
+          Expr.splice(afterOpen)
+        )
+        Expr.splice(constructed)
+      }
+    }
+  }
 
   object DecoderHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a case class") >> {
-        CaseClass.parse[A].toEither match {
-          case Right(caseClass) =>
-            val useOptimized = dctx.evaluatedConfig.isDefined
-            val decodeMIO =
-              if (useOptimized) decodeCaseClassFieldsOptimized[A](caseClass)
-              else decodeCaseClassFields[A](caseClass)
-            decodeMIO.map(Rule.matched)
-
-          case Left(reason) =>
-            MIO.pure(Rule.yielded(reason))
+        ProductType.parse[A] match {
+          case Right(caseClass) => decodeProduct[A](caseClass).map(Rule.matched)
+          case Left(reason)     => MIO.pure(Rule.yielded(reason))
         }
       }
 
+    /** Decodes a product as a JSON object, with the optimized codegen when the config is known at compile time. */
+    private[compiletime] def decodeProduct[A: DecoderCtx](caseClass: ProductType[A]): MIO[Expr[A]] =
+      if (dctx.evaluatedConfig.isDefined) decodeCaseClassFieldsOptimized[A](caseClass)
+      else decodeCaseClassFields[A](caseClass)
+
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private def decodeCaseClassFields[A: DecoderCtx](
-        caseClass: CaseClass[A]
+        caseClass: ProductType[A]
     ): MIO[Expr[A]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
@@ -236,7 +219,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+          case (name, param) if isTransientParam[A](param, dctx.evaluatedConfig) && !param.hasDefault => name
         }
         .foreach { name =>
           val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
@@ -244,40 +227,16 @@ trait DecoderHandleAsCaseClassRuleImpl {
         }
 
       // Separate transient from non-transient fields
-      val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+      val nonTransientFields = fieldsList.filterNot { case (_, p) => isTransientParam[A](p, dctx.evaluatedConfig) }
 
       NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // Zero non-transient fields (either zero-param or all-transient): construct directly
-          caseClass
-            .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-                val err = CodecDerivationError.CannotConstructType(
-                  Type[A].prettyPrint,
-                  isSingleton = false,
-                  Some("Unexpected parameter in zero-argument case class")
-                )
-                Log.error(err.message) >> MIO.fail(err)
-              }
-            })
-            .flatMap {
-              case Some(expr) =>
-                // Still need to read the empty object from the reader
-                MIO.pure(Expr.quote {
-                  JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
-                  Expr.splice(expr)
-                })
-              case None =>
-                val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
-                Log.error(err.message) >> MIO.fail(err)
-            }
+          // Zero non-transient fields (zero-param or all-@transientField)
+          decodeObjectWithoutFields[A](caseClass, fieldsList)
 
         case Some(fields) =>
           implicit val AnyT: Type[Any] = CTypes.Any
           implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
-
-          // Build transient field default values for the constructor
-          val transientDefaults: Map[String, Expr_??] = buildTransientDefaults(fieldsList)
 
           // Re-index non-transient fields for the array (0, 1, 2, ...)
           val nonTransientWithIndex = nonTransientFields.zipWithIndex
@@ -286,14 +245,24 @@ trait DecoderHandleAsCaseClassRuleImpl {
           fields
             .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
+              val nameOverride = fieldNameOverride(param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
               val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { decodeFn =>
-                  val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
-                    Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
-                  }
+                deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { rawDecodeFn =>
+                  val decodeFn = withFieldDefaultFn[Field](param)(rawDecodeFn)
+                  val decodeFnErased: Expr[JsonReader => Any] =
+                    if (isTransientAtRuntimeOnly[A](param, dctx.evaluatedConfig)) Expr.quote { (r: JsonReader) =>
+                      JsoniterDerivationUtils.readUnlessTransient(
+                        r,
+                        Expr.splice(dctx.config).scalaTransientSupport,
+                        (r2: JsonReader) => Expr.splice(decodeFn).apply(r2).asInstanceOf[Any]
+                      )
+                    }
+                    else
+                      Expr.quote { (r: JsonReader) =>
+                        Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
+                      }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       JsoniterDerivationUtils.unsafeCast(
@@ -314,17 +283,22 @@ trait DecoderHandleAsCaseClassRuleImpl {
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  val requireCheckAll: Expr[Unit] =
-                    foldExprUnits(buildRequireCheckExprs(nonTransientWithIndex, decodedValuesExpr, dctx.config))
-
-                  val transientInitAll: Expr[Unit] =
-                    foldExprUnits(buildTransientInitExprs(nonTransientWithIndex, decodedValuesExpr, dctx.config))
-
                   // Non-transient fields read from the array
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
                   // Merge with transient defaults
-                  val fieldMap = nonTransientFieldMap ++ transientDefaults
+                  val fieldMap = nonTransientFieldMap ++ buildTransientDefaults(fieldsList, nonTransientFieldMap)
+                  // Absent fields are filled in parameter order, so defaults may depend on preceding parameters.
+                  val absentFieldFillAll: Expr[Unit] =
+                    foldExprUnits(
+                      buildAbsentFieldFillExprs(
+                        nonTransientWithIndex,
+                        decodedValuesExpr,
+                        dctx.config,
+                        dctx.reader,
+                        fieldMap
+                      )
+                    )
                   foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
@@ -332,8 +306,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     case Right(constructExpr) =>
                       MIO.pure(
                         Expr.quote {
-                          Expr.splice(requireCheckAll)
-                          Expr.splice(transientInitAll)
+                          Expr.splice(absentFieldFillAll)
                           Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
                         }
                       )
@@ -354,7 +327,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   Expr.quote {
                     val _seen: Array[Boolean] =
                       if (Expr.splice(dctx.config).checkFieldDuplication)
-                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
+                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size + 1)))
                       else null
                     JsoniterDerivationUtils.readObject[A](
                       Expr.splice(dctx.reader),
@@ -362,10 +335,27 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       Expr.splice(constructLambda)
                     ) { case (fieldName, arr, reader) =>
                       Expr.splice {
-                        fieldMappings.foldRight(Expr.quote {
+                        val unexpected: Expr[Unit] = Expr.quote {
                           if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
-                          else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) {
+                          else JsoniterDerivationUtils.unexpectedField(reader, fieldName)
+                        }
+                        // `alwaysEmitDiscriminator`: ADT leaf codecs accept (and skip) the discriminator they write
+                        val fallback: Expr[Unit] =
+                          alwaysEmittedDiscriminatorKey[A](dctx.config, None) match {
+                            case Some(discriminatorKey) =>
+                              Expr.quote {
+                                if (fieldName == Expr.splice(discriminatorKey)) {
+                                  if (_seen != null) {
+                                    if (_seen(Expr.splice(Expr(fieldMappings.size))))
+                                      JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                                    _seen(Expr.splice(Expr(fieldMappings.size))) = true
+                                  }
+                                  reader.skip()
+                                } else Expr.splice(unexpected)
+                              }
+                            case None => unexpected
+                          }
+                        fieldMappings.foldRight(fallback) {
                           case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(Expr(customName))) {
@@ -402,7 +392,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private def decodeCaseClassFieldsOptimized[A: DecoderCtx](
-        caseClass: CaseClass[A]
+        caseClass: ProductType[A]
     ): MIO[Expr[A]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val IntT: Type[Int] = CTypes.Int
@@ -417,53 +407,32 @@ trait DecoderHandleAsCaseClassRuleImpl {
 
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+          case (name, param) if isTransientParam[A](param, dctx.evaluatedConfig) && !param.hasDefault => name
         }
         .foreach { name =>
           val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
           return Log.error(err.message) >> MIO.fail(err)
         }
 
-      val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+      val nonTransientFields = fieldsList.filterNot { case (_, p) => isTransientParam[A](p, dctx.evaluatedConfig) }
 
       NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          caseClass
-            .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-                val err = CodecDerivationError.CannotConstructType(
-                  Type[A].prettyPrint,
-                  isSingleton = false,
-                  Some("Unexpected parameter in zero-argument case class")
-                )
-                Log.error(err.message) >> MIO.fail(err)
-              }
-            })
-            .flatMap {
-              case Some(expr) =>
-                MIO.pure(Expr.quote {
-                  JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
-                  Expr.splice(expr)
-                })
-              case None =>
-                val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
-                Log.error(err.message) >> MIO.fail(err)
-            }
+          // Zero non-transient fields (zero-param or all-@transientField)
+          decodeObjectWithoutFields[A](caseClass, fieldsList)
 
         case Some(fields) =>
-          val transientDefaults: Map[String, Expr_??] = buildTransientDefaults(fieldsList)
-
           implicit val BooleanT: Type[Boolean] = CTypes.Boolean
           implicit val UnitT: Type[Unit] = CTypes.Unit
 
           fields
             .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
+              val nameOverride = fieldNameOverride(param)
               val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               val mappedName = nameOverride.getOrElse(config.fieldNameMapper(fName))
               Log.namedScope(s"Deriving optimized decoder for field $fName: ${Type[Field].prettyPrint}") {
-                val isStringifiedStaticallyFalse = !config.isStringified
+                val isStringifiedStaticallyFalse = true // fields are stringified only by `@stringified`
 
                 val inlinedDecode: Option[Expr[JsonReader] => Expr[Field]] =
                   if (isStringifiedStaticallyFalse && !hasStringifiedAnnotation)
@@ -480,29 +449,68 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   case Some(inlined) => MIO.pure(inlined)
                   case None          =>
                     val decoderMIO: MIO[Expr[JsonReader => Field]] =
-                      if (hasStringifiedAnnotation)
-                        deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation = true)
-                      else if (isStringifiedStaticallyFalse)
-                        deriveFieldDecoder[Field]
-                      else
-                        deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation = false)
+                      deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation)
                     decoderMIO.map(fn => (r: Expr[JsonReader]) => Expr.quote(Expr.splice(fn).apply(Expr.splice(r))))
                 }
 
-                deriveMIO.map { decodeField =>
-                  val defaultExpr: Expr[Field] = deriveZeroValue[Field]
-                  val fieldVar = ValDefs.createVar[Field](defaultExpr, s"_$fName")
-                  fieldVar.map { case (getter, setter) =>
-                    val setFromReader: Expr[JsonReader] => Expr[Unit] = { readerExpr =>
-                      setter(decodeField(readerExpr))
+                deriveMIO.map { rawDecodeField =>
+                  val decodeField = withFieldDefault[Field](param)(rawDecodeField)
+                  // Absent-field handling (see DecoderAbsentFieldSupport), resolved at compile time: an `Option`
+                  // without an applicable default starts as `None`; every other field gets a presence flag checked
+                  // after the read loop (fill with default/empty, or fail as required). The flag also detects
+                  // duplicated keys when `checkFieldDuplication` is on.
+                  val readerExpr = dctx.reader
+                  val fallbacks = absentFieldFallbacks[Field](param)
+                  val startsAsNone = absentIsAlwaysNone(fallbacks, config)
+                  val initExpr: Expr[Field] =
+                    if (startsAsNone) staticAbsentFallback(fallbacks, config).get else deriveZeroValue[Field]
+                  val fieldVar = ValDefs.createVar[Field](initExpr, s"_$fName")
+                  if (startsAsNone && !config.checkFieldDuplication)
+                    fieldVar.map { case (getter, setter) =>
+                      val setFromReader: Expr[JsonReader] => Expr[Unit] = { r => setter(decodeField(r)) }
+                      val afterLoop: Map[String, Expr_??] => Expr[Unit] = _ => Expr.quote(())
+                      (fName, mappedName, getter.as_??, setFromReader, afterLoop)
                     }
-                    (fName, mappedName, getter.as_??, setFromReader)
-                  }
+                  else
+                    fieldVar.map2(ValDefs.createVar[Boolean](Expr(false), s"_${fName}_present")) {
+                      case ((getter, setter), (isPresent, setPresent)) =>
+                        val setFromReader: Expr[JsonReader] => Expr[Unit] = { r =>
+                          val markPresent: Expr[Unit] =
+                            if (config.checkFieldDuplication) Expr.quote {
+                              if (Expr.splice(isPresent))
+                                JsoniterDerivationUtils.throwDuplicateField(
+                                  Expr.splice(r),
+                                  Expr.splice(Expr(mappedName))
+                                )
+                              Expr.splice(setPresent(Expr(true)))
+                            }
+                            else setPresent(Expr(true))
+                          Expr.quote {
+                            Expr.splice(markPresent)
+                            Expr.splice(setter(decodeField(r)))
+                          }
+                        }
+                        // Built once all field variables exist: defaults may depend on preceding parameters.
+                        val afterLoop: Map[String, Expr_??] => Expr[Unit] = values =>
+                          if (startsAsNone) Expr.quote(())
+                          else {
+                            val fallbacksWithArgs = absentFieldFallbacks[Field](param, values)
+                            val fill: Expr[Unit] = staticAbsentFallback(fallbacksWithArgs, config) match {
+                              case Some(fallback) => setter(fallback)
+                              case None           =>
+                                setter(missingRequiredFieldOf[Field](readerExpr, Expr(mappedName)))
+                            }
+                            Expr.quote(if (!Expr.splice(isPresent)) Expr.splice(fill))
+                          }
+                        (fName, mappedName, getter.as_??, setFromReader, afterLoop)
+                    }
                 }
               }
             }
             .flatMap { fieldVarDefs =>
-              val emptyVarDefs: ValDefs[List[(String, String, Expr_??, Expr[JsonReader] => Expr[Unit])]] =
+              val emptyVarDefs: ValDefs[
+                List[(String, String, Expr_??, Expr[JsonReader] => Expr[Unit], Map[String, Expr_??] => Expr[Unit])]
+              ] =
                 ValDefsTraverse.pure(List.empty)
 
               val allFieldVars = fieldVarDefs.toList.foldLeft(emptyVarDefs) { (acc, varDef) =>
@@ -510,13 +518,23 @@ trait DecoderHandleAsCaseClassRuleImpl {
               }
 
               val lenVar = ValDefs.createVar[Int](Expr(-1), "_l")
-              val combined = allFieldVars.map2(lenVar) { case (fieldInfos, (lenGet, lenSet)) =>
-                (fieldInfos, lenGet, lenSet)
+              // `alwaysEmitDiscriminator`: ADT leaf codecs accept (and skip) the discriminator they write
+              val discriminatorKey: Option[String] =
+                if (config.alwaysEmitDiscriminator && hasSealedParent[A]) config.discriminatorFieldName else None
+              val discriminatorPresentVar: ValDefs[Option[(Expr[Boolean], Expr[Boolean] => Expr[Unit])]] =
+                if (discriminatorKey.isDefined && config.checkFieldDuplication)
+                  ValDefs.createVar[Boolean](Expr(false), "_discriminator_present").map(Some(_))
+                else ValDefsTraverse.pure(None)
+              val combined = allFieldVars.map2(lenVar.map2(discriminatorPresentVar)((l, d) => (l, d))) {
+                case (fieldInfos, ((lenGet, lenSet), discriminatorPresent)) =>
+                  (fieldInfos, lenGet, lenSet, discriminatorPresent)
               }
 
-              MIO.pure(combined.use { case (fieldInfos, lenGetter, lenSetter) =>
+              MIO.pure(combined.use { case (fieldInfos, lenGetter, lenSetter, discriminatorPresent) =>
+                val nonTransientValues: Map[String, Expr_??] =
+                  fieldInfos.map { case (name, _, getter, _, _) => (name, getter) }.toMap
                 val fieldMap: Map[String, Expr_??] =
-                  fieldInfos.map { case (name, _, getter, _) => (name, getter) }.toMap ++ transientDefaults
+                  nonTransientValues ++ buildTransientDefaults(fieldsList, nonTransientValues)
                 val constructExpr: Expr[A] = foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                   onTypes = _ => Map.empty,
                   onValues = _ => fieldMap
@@ -527,17 +545,41 @@ trait DecoderHandleAsCaseClassRuleImpl {
 
                 val readerExpr = dctx.reader
 
-                val dispatch: Expr[Unit] = fieldInfos.foldRight(
-                  Expr.quote(Expr.splice(readerExpr).skip()): Expr[Unit]
-                ) { case ((_, mappedName, _, setFromReader), elseExpr) =>
-                  Expr.quote {
-                    if (
-                      Expr.splice(readerExpr).isCharBufEqualsTo(Expr.splice(lenGetter), Expr.splice(Expr(mappedName)))
-                    )
-                      Expr.splice(setFromReader(readerExpr))
-                    else Expr.splice(elseExpr)
-                  }
+                val unexpectedKey: Expr[Unit] =
+                  if (config.skipUnexpectedFields) Expr.quote(Expr.splice(readerExpr).skip())
+                  else Expr.quote(Expr.splice(readerExpr).unexpectedKeyError(Expr.splice(lenGetter)))
+                val unexpectedField: Expr[Unit] = discriminatorKey match {
+                  case Some(key) =>
+                    val markPresent: Expr[Unit] = discriminatorPresent match {
+                      case Some((isPresent, setPresent)) =>
+                        Expr.quote {
+                          if (Expr.splice(isPresent))
+                            JsoniterDerivationUtils.throwDuplicateField(Expr.splice(readerExpr), Expr.splice(Expr(key)))
+                          Expr.splice(setPresent(Expr(true)))
+                        }
+                      case None => Expr.quote(())
+                    }
+                    Expr.quote {
+                      if (Expr.splice(readerExpr).isCharBufEqualsTo(Expr.splice(lenGetter), Expr.splice(Expr(key)))) {
+                        Expr.splice(markPresent)
+                        Expr.splice(readerExpr).skip()
+                      } else Expr.splice(unexpectedKey)
+                    }
+                  case None => unexpectedKey
                 }
+
+                val dispatch: Expr[Unit] =
+                  fieldInfos.foldRight(unexpectedField) { case ((_, mappedName, _, setFromReader, _), elseExpr) =>
+                    Expr.quote {
+                      if (
+                        Expr.splice(readerExpr).isCharBufEqualsTo(Expr.splice(lenGetter), Expr.splice(Expr(mappedName)))
+                      )
+                        Expr.splice(setFromReader(readerExpr))
+                      else Expr.splice(elseExpr)
+                    }
+                  }
+
+                val afterLoopAll: Expr[Unit] = foldExprUnits(fieldInfos.map(_._5(fieldMap)))
 
                 Expr.quote {
                   if (!Expr.splice(readerExpr).isNextToken('{'.toByte))
@@ -551,6 +593,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     if (!Expr.splice(readerExpr).isCurrentToken('}'.toByte))
                       Expr.splice(readerExpr).objectEndOrCommaError()
                   }
+                  Expr.splice(afterLoopAll)
                   Expr.splice(constructExpr)
                 }
               })
@@ -564,8 +607,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter|Non local returns")
     private[compiletime] def decodeCaseClassFieldsInline[A: DecoderCtx](
-        caseClass: CaseClass[A]
-    ): MIO[Expr[A]] = {
+        caseClass: ProductType[A]
+    ): MIO[Expr[Boolean] => Expr[A]] = {
       implicit val StringT: Type[String] = CTypes.String
       implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
       implicit val fieldNameT: Type[fieldNameAnn] = CTypes.FieldName
@@ -578,71 +621,47 @@ trait DecoderHandleAsCaseClassRuleImpl {
       // Validate: @transientField on fields without defaults
       fieldsList
         .collectFirst {
-          case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+          case (name, param) if isTransientParam[A](param, dctx.evaluatedConfig) && !param.hasDefault => name
         }
         .foreach { name =>
           val err = CodecDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
           return Log.error(err.message) >> MIO.fail(err)
         }
 
-      val nonTransientFields = fieldsList.filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+      val nonTransientFields = fieldsList.filterNot { case (_, p) => isTransientParam[A](p, dctx.evaluatedConfig) }
 
       NonEmptyList.fromList(nonTransientFields) match {
         case None =>
-          // Zero non-transient fields: just read closing `}`
-          caseClass
-            .construct[MIO](new CaseClass.ConstructField[MIO] {
-              def apply(field: Parameter): MIO[Expr[field.tpe.Underlying]] = {
-                val err = CodecDerivationError.CannotConstructType(
-                  Type[A].prettyPrint,
-                  isSingleton = false,
-                  Some("Unexpected field in zero-arg case class")
-                )
-                Log.error(err.message) >> MIO.fail(err)
-              }
-            })
-            .flatMap {
-              case Some(expr) =>
-                MIO.pure(
-                  Expr.quote {
-                    val reader = Expr.splice(dctx.reader)
-                    if (!reader.isNextToken('}'.toByte)) {
-                      if (reader.isCurrentToken(','.toByte)) {
-                        reader.rollbackToken()
-                        while (reader.isNextToken(','.toByte)) {
-                          val _ = reader.readKeyAsString()
-                          reader.skip()
-                        }
-                      }
-                    }
-                    Expr.splice(expr)
-                  }
-                )
-              case None =>
-                val err = CodecDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
-                Log.error(err.message) >> MIO.fail(err)
-            }
+          // Zero non-transient fields (zero-param or all-@transientField)
+          decodeInlineObjectWithoutFields[A](caseClass, fieldsList)
 
         case Some(fields) =>
           implicit val AnyT: Type[Any] = CTypes.Any
           implicit val ArrayAnyT: Type[Array[Any]] = CTypes.ArrayAny
-
-          // Build transient field default values
-          val transientDefaults: Map[String, Expr_??] = buildTransientDefaults(fieldsList)
 
           val nonTransientWithIndex = nonTransientFields.zipWithIndex
 
           fields
             .parTraverse { case (fName, param) =>
               import param.tpe.Underlying as Field
-              val nameOverride = getAnnotationStringArg[fieldNameAnn](param)
+              val nameOverride = fieldNameOverride(param)
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
               val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { decodeFn =>
-                  val decodeFnErased: Expr[JsonReader => Any] = Expr.quote { (r: JsonReader) =>
-                    Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
-                  }
+                deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { rawDecodeFn =>
+                  val decodeFn = withFieldDefaultFn[Field](param)(rawDecodeFn)
+                  val decodeFnErased: Expr[JsonReader => Any] =
+                    if (isTransientAtRuntimeOnly[A](param, dctx.evaluatedConfig)) Expr.quote { (r: JsonReader) =>
+                      JsoniterDerivationUtils.readUnlessTransient(
+                        r,
+                        Expr.splice(dctx.config).scalaTransientSupport,
+                        (r2: JsonReader) => Expr.splice(decodeFn).apply(r2).asInstanceOf[Any]
+                      )
+                    }
+                    else
+                      Expr.quote { (r: JsonReader) =>
+                        Expr.splice(decodeFn).apply(r).asInstanceOf[Any]
+                      }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       JsoniterDerivationUtils.unsafeCast(
@@ -662,15 +681,20 @@ trait DecoderHandleAsCaseClassRuleImpl {
               LambdaBuilder
                 .of1[Array[Any]]("decodedValues")
                 .traverse { decodedValuesExpr =>
-                  val requireCheckAll0: Expr[Unit] =
-                    foldExprUnits(buildRequireCheckExprs(nonTransientWithIndex, decodedValuesExpr, dctx.config))
-
-                  val transientInitAll: Expr[Unit] =
-                    foldExprUnits(buildTransientInitExprs(nonTransientWithIndex, decodedValuesExpr, dctx.config))
-
                   val nonTransientFieldMap: Map[String, Expr_??] =
                     fieldDataList.map(_._4(decodedValuesExpr)).toMap
-                  val fieldMap = nonTransientFieldMap ++ transientDefaults
+                  val fieldMap = nonTransientFieldMap ++ buildTransientDefaults(fieldsList, nonTransientFieldMap)
+                  // Absent fields are filled in parameter order, so defaults may depend on preceding parameters.
+                  val absentFieldFillAll: Expr[Unit] =
+                    foldExprUnits(
+                      buildAbsentFieldFillExprs(
+                        nonTransientWithIndex,
+                        decodedValuesExpr,
+                        dctx.config,
+                        dctx.reader,
+                        fieldMap
+                      )
+                    )
                   foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
                     onTypes = _ => Map.empty,
                     onValues = _ => fieldMap
@@ -678,8 +702,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     case Right(constructExpr) =>
                       MIO.pure(
                         Expr.quote {
-                          Expr.splice(requireCheckAll0)
-                          Expr.splice(transientInitAll)
+                          Expr.splice(absentFieldFillAll)
                           Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
                         }
                       )
@@ -689,7 +712,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       Log.error(err.message) >> MIO.fail(err)
                   }
                 }
-                .map { builder =>
+                .map { builder => (afterOpen: Expr[Boolean]) =>
                   val constructLambda = builder.build[A]
 
                   val fieldMappings = fieldDataList.map { case (name, index, decodeFnErased, _, nameOverride) =>
@@ -699,18 +722,26 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   Expr.quote {
                     val _seen: Array[Boolean] =
                       if (Expr.splice(dctx.config).checkFieldDuplication)
-                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size)))
+                        new Array[Boolean](Expr.splice(Expr(fieldMappings.size + 1)))
                       else null
                     JsoniterDerivationUtils.readObjectInline[A](
                       Expr.splice(dctx.reader),
                       Expr.splice(Expr(fieldMappings.size)),
-                      Expr.splice(constructLambda)
+                      Expr.splice(constructLambda),
+                      Expr.splice(afterOpen),
+                      Expr.splice(dctx.config).discriminatorFieldName.orNull
                     ) { case (fieldName, arr, reader) =>
                       Expr.splice {
-                        fieldMappings.foldRight(Expr.quote {
-                          if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
-                          else reader.decodeError("unexpected field: " + fieldName)
-                        }: Expr[Unit]) {
+                        // The first discriminator was consumed already: a second one is a duplicate (with
+                        // checkFieldDuplication) or skipped, as in jsoniter-scala.
+                        val fallback: Expr[Unit] = Expr.quote {
+                          if (Expr.splice(dctx.config).discriminatorFieldName.contains(fieldName)) {
+                            if (_seen != null) JsoniterDerivationUtils.throwDuplicateField(reader, fieldName)
+                            else reader.skip()
+                          } else if (Expr.splice(dctx.config).skipUnexpectedFields) reader.skip()
+                          else JsoniterDerivationUtils.unexpectedField(reader, fieldName)
+                        }
+                        fieldMappings.foldRight(fallback) {
                           case ((name, index, decodeFnErased, Some(customName)), elseExpr) =>
                             Expr.quote {
                               if (fieldName == Expr.splice(Expr(customName))) {
@@ -773,9 +804,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
           )
         case Left(_) =>
           Log.info(s"Building decoder for ${Type[Field].prettyPrint} via cached def") >> {
-            val cacheKey = s"jsoniter-field-decode:${Type[Field].prettyPrint}"
-            val defBuilder =
-              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, Field](s"decode_field_${Type[Field].shortName}")
+            val stringifiedSuffix = stringifiedKeySuffix(ctx.stringified)
+            val cacheKey = s"jsoniter-field-decode:${Type[Field].prettyPrint}$stringifiedSuffix"
+            val defBuilder = ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, Field](
+              s"decode_field_${stringifiedNamePrefix(ctx.stringified)}${Type[Field].shortName}"
+            )
             for {
               // Memoize: case classes can have multiple fields of the same type, and the
               // case-class rule iterates them sequentially. Without this guard, the second
@@ -791,13 +824,15 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       rs(ctx.cache.buildCachedWith(cacheKey, defBuilder) { case (_, (readerExpr, configExpr)) =>
                         rs(
                           deriveDecoderRecursively[Field](using
-                            DecoderCtx.from(
-                              readerExpr,
-                              configExpr,
-                              ctx.cache,
-                              ctx.derivedType,
-                              evaluatedConfig = ctx.evaluatedConfig
-                            )
+                            DecoderCtx
+                              .from[Field](
+                                readerExpr,
+                                configExpr,
+                                ctx.cache,
+                                ctx.derivedType,
+                                evaluatedConfig = ctx.evaluatedConfig
+                              )
+                              .copy(stringified = ctx.stringified)
                           )
                         )
                       })
@@ -815,43 +850,5 @@ trait DecoderHandleAsCaseClassRuleImpl {
       }
     }
   }
-
-  @scala.annotation.nowarn("msg=is never used")
-  private def deriveStringifiedDecoder[F: Type](implicit
-      JsonReaderT: Type[JsonReader]
-  ): Option[Expr[JsonReader => F]] =
-    if (Type[F] =:= CTypes.Int)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsInt().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.Long)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsLong().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.Double)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsDouble().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.Float)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsFloat().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.Short)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsShort().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.Byte)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsByte().asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.BigDecimal)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsBigDecimal(null).asInstanceOf[F]
-      })
-    else if (Type[F] =:= CTypes.BigInt)
-      Some(Expr.quote { (r: JsonReader) =>
-        r.readStringAsBigInt(null).asInstanceOf[F]
-      })
-    else None
 
 }
