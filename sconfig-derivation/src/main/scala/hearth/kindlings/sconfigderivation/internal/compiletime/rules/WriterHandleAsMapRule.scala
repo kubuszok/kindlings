@@ -16,7 +16,7 @@ trait WriterHandleAsMapRuleImpl {
   object WriterHandleAsMapRule extends WriterDerivationRule("handle as map when possible") {
     implicit val ConfigValueT: Type[ConfigValue] = WTypes.ConfigValue
     implicit val StringT: Type[String] = WTypes.String
-    implicit val StringValuePairT: Type[(String, ConfigValue)] = Type.of[(String, ConfigValue)]
+    implicit val StringValuePairT: Type[(String, ConfigValue)] = WTypes.StringValuePair
 
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Expr[ConfigValue]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {

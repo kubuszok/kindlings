@@ -401,7 +401,11 @@ final class CatsCollectionAndMapProviders extends StandardMacroExtension { loade
     IsCollection.registerProvider(new IsCollection.Provider {
       override def name: String = s"${loader.getClass.getName}#NonEmptyLazyList"
 
-      private lazy val NELLCtor = Type.Ctor1.of[cats.data.NonEmptyLazyList]
+      // The newtype itself, not cats' alias `cats.data.NonEmptyLazyList` (declared in the trait
+      // `ScalaVersionSpecificPackage` that the `cats.data` package object extends): on Scala 2 Hearth's
+      // `Type.CtorN.unapply` compares the alias' prefix with the dealiased type's prefix and never matches
+      // (docs/research/hearth-gap-ctor-unapply-alias-in-trait.md).
+      private lazy val NELLCtor = Type.Ctor1.of[cats.data.NonEmptyLazyList.Type]
 
       @scala.annotation.nowarn("msg=is never used")
       override def parse[A](tpe: Type[A]): ProviderResult[IsCollection[A]] =

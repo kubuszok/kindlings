@@ -649,7 +649,7 @@ private[dicats] trait ResourceWiringMacrosImpl
           at.apply(Map(at.typeParams.flatten.head -> fArg))
       }
       .map { applied =>
-        // One `ListMap` per source clause (Scala 2 groups all clauses into a single `NeedsValues`).
+        // Hearth merges the explicit value clauses into one `NeedsValues`; implicit/`using` clauses stay separate.
         val clauses = applied.expectations.collect { case MethodExpectation.NeedsValues(ps) => ps }.flatten
         CompanionResource(applied, clauses.map(_.toList))
       }
@@ -789,14 +789,9 @@ private[dicats] trait ResourceWiringMacrosImpl
 
   private def applyArguments(method: Method, arguments: Map[String, Expr_??]): Either[String, Expr_??] =
     method match {
-      case av: Method.ApplyValues =>
-        av.apply(arguments) match {
-          case r: Method.Result[?] =>
-            import r.Returned
-            r.build().map(_.as_??)
-          case other => Left(s"Unexpected step after applying arguments: ${other.getClass.getSimpleName}")
-        }
-      case r: Method.Result[?] =>
+      // implicit/`using` parameter lists are separate `ApplyValues` steps, each taking its arguments from `arguments`
+      case av: Method.ApplyValues => applyArguments(av.apply(arguments), arguments)
+      case r: Method.Result[?]    =>
         import r.Returned
         r.build().map(_.as_??)
       case other => Left(s"Not callable: ${other.getClass.getSimpleName}")

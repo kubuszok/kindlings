@@ -457,17 +457,13 @@ private[di] trait WiringMacrosImpl
       name -> runSafe(resolveParameter(scopes, recursive, breadcrumb)(parameter))
     }.toMap
 
-  /** Apply resolved arguments to a callable [[Method]] step (constructor or `apply`) and build the result. */
+  /** Apply resolved arguments to a callable [[Method]] step (constructor or `apply`) and build the result. Implicit
+    * (`using`) parameter lists are separate [[Method.ApplyValues]] steps, each taking its arguments from `arguments`.
+    */
   private def applyArguments(method: Method, arguments: Map[String, Expr_??]): Either[String, Expr_??] =
     method match {
-      case av: Method.ApplyValues =>
-        av.apply(arguments) match {
-          case r: Method.Result[?] =>
-            import r.Returned
-            r.build().map(_.as_??)
-          case other => Left(s"Unexpected step after applying arguments: ${other.getClass.getSimpleName}")
-        }
-      case r: Method.Result[?] =>
+      case av: Method.ApplyValues => applyArguments(av.apply(arguments), arguments)
+      case r: Method.Result[?]    =>
         import r.Returned
         r.build().map(_.as_??)
       case other => Left(s"Not callable: ${other.getClass.getSimpleName}")

@@ -463,6 +463,7 @@ trait EncoderMacrosImpl
     val EncoderLogDerivation: Type[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation] =
       Type.of[hearth.kindlings.circederivation.KindlingsEncoder.LogDerivation]
     val Json: Type.Lazy[Json] = Type.Lazy(Type.of[Json])
+    val StringJsonPair: Type.Lazy[(String, Json)] = Type.Lazy(Type.of[(String, Json)])
     val JsonObject: Type.Lazy[JsonObject] = Type.Lazy(Type.of[JsonObject])
     val Configuration: Type.Lazy[Configuration] = Type.Lazy(Type.of[Configuration])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])

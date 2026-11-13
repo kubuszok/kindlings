@@ -3,68 +3,38 @@ package internal.compiletime
 
 import hearth.MacroCommonsScala3
 
-/** Hearth's `semiEval` cannot resolve references to local `val`s, and Scala 3 binds every non-inline argument of an
-  * inline method (`derived[A](using Configuration.default.withDefaults)`) to such a local proxy `val`: without this
-  * only stable module references (e.g. `Configuration.default`) would be evaluated at compile time. Follow immutable
-  * local `val`s (never `var`s) to their right-hand side. Same as jsoniter-derivation's `CodecMacros.semiEvalConfig`,
-  * see `docs/research/hearth-gap-semieval-named-args.md`.
+/** Hearth's `semiEval` follows immutable local `val`s (including the proxies Scala 3 binds the non-inline arguments of
+  * an inline method to, also inside an argument and in `Inlined` bindings), unwraps named arguments and refuses `var`s
+  * and members of classes compiled together with the macro call. One case is still refused here: the default argument
+  * of another (inline) method (`KindlingsEncoder.derive[A](discriminator = Some("type"))` builds
+  * `Configuration(derive$default$1[A], ...)`). Evaluating it broke the compilation of the enclosing class
+  * (`CirceScala3Spec is already defined`), see `docs/research/hearth-gap-semieval-named-args.md`. And Hearth does not
+  * follow lazy local vals (a local `given Configuration = ...`), which is done here.
   */
 trait SemiEvalConfigScala3 extends SealedHierarchyFlattening { this: MacroCommonsScala3 =>
 
   override protected def semiEvalConfig(configExpr: Expr[Configuration]): Option[Configuration] = {
     import quotes.reflect.*
-    def unwrap(t: Term): Term = t match {
-      case Inlined(_, _, inner) => unwrap(inner)
-      case Typed(inner, _)      => unwrap(inner)
-      case other                => other
-    }
-    // `semiEval` reads `var`s by reflection, from classes compiled earlier (e.g. by a previous incremental run): the
-    // value it sees is not the runtime value. Configurations referencing a `var` are only known at runtime.
-    def readsVar(term: Term): Boolean =
-      new TreeAccumulator[Boolean] {
-        def foldTree(found: Boolean, tree: Tree)(owner: Symbol): Boolean =
-          found || (tree match {
-            case ref: Ref if ref.symbol.flags.is(Flags.Mutable) => true
-            case _                                              => foldOverTree(found, tree)(owner)
-          })
-      }.foldTree(false, term)(Symbol.spliceOwner)
-    // `semiEval` does not look through named arguments (`Configuration(useDefaults = true)` keeps `NamedArg` wrappers
-    // around the arguments, already in positional order): strip them. See docs/research/hearth-gap-semieval-named-args.md.
-    val stripNamedArgs: TreeMap = new TreeMap {
+    // The references Hearth follows: immutable local vals, replaced by their right-hand sides (only to inspect the
+    // result, which is never spliced).
+    def followLocalVals(depth: Int): TreeMap = new TreeMap {
       override def transformTerm(tree: Term)(owner: Symbol): Term = tree match {
-        case NamedArg(_, arg) => transformTerm(arg)(owner)
-        case _                => super.transformTerm(tree)(owner)
-      }
-    }
-    // The arguments of a configuration built inside an inline method (`KindlingsEncoder.deriveEnum(renaming.kebabCase)`
-    // builds `Configuration(transformConstructorNames = <proxy>, ...)`) are references to the local proxy `val`s Scala 3
-    // binds the inline method's arguments to: replace such references to (immutable) proxy `val`s by their
-    // right-hand sides. The result is only evaluated, never spliced: a block of such `val`s is replaced by its result
-    // expression, and other blocks (e.g. lambdas) are kept as they are (copying them would check their owners).
-    def inlineLocalVals(depth: Int): TreeMap = new TreeMap {
-      override def transformTerm(tree: Term)(owner: Symbol): Term = tree match {
-        case Block(stats, expr) if stats.forall { case _: ValDef => true; case _ => false } =>
-          transformTerm(expr)(owner)
-        case _: Block => tree
         case ident: Ident
-            if depth > 0 && ident.symbol.isValDef && ident.symbol.name.contains("$proxy") &&
-              !ident.symbol.owner.isClassDef &&
-              !ident.symbol.flags.is(Flags.Mutable) && !ident.symbol.flags.is(Flags.Lazy) =>
+            if depth > 0 && ident.symbol.isValDef && !ident.symbol.owner.isClassDef &&
+              !ident.symbol.flags.is(Flags.Mutable) && !ident.symbol.flags.is(Flags.Lazy) &&
+              !ident.symbol.flags.is(Flags.Param) =>
           scala.util.Try(ident.symbol.tree).toOption.collect { case ValDef(_, _, Some(rhs)) => rhs } match {
-            case Some(rhs) => inlineLocalVals(depth - 1).transformTerm(rhs)(owner)
+            case Some(rhs) => followLocalVals(depth - 1).transformTerm(rhs)(owner)
             case None      => ident
           }
         case _ => super.transformTerm(tree)(owner)
       }
     }
-    // Lambdas (or other blocks) of the call site, and the default arguments of other (inline) methods, are not evaluated
-    // (evaluating the latter breaks the compilation of the enclosing class).
     val configurationModule = Symbol.requiredModule("hearth.kindlings.circederivation.Configuration")
-    def notEvaluable(term: Term): Boolean =
+    def callsOtherDefaultGetter(term: Term): Boolean =
       new TreeAccumulator[Boolean] {
         def foldTree(found: Boolean, tree: Tree)(owner: Symbol): Boolean =
           found || (tree match {
-            case _: Block => true
             case ref: Ref
                 if ref.symbol.name.contains("$default$") &&
                   ref.symbol.owner != configurationModule.moduleClass =>
@@ -72,29 +42,22 @@ trait SemiEvalConfigScala3 extends SealedHierarchyFlattening { this: MacroCommon
             case _ => foldOverTree(found, tree)(owner)
           })
       }.foldTree(false, term)(Symbol.spliceOwner)
-    def evaluate(expr: Expr[Configuration]): Option[Configuration] =
-      super
-        .semiEvalConfig(expr)
-        .orElse {
-          val stripped = stripNamedArgs.transformTerm(expr.asTerm)(Symbol.spliceOwner)
-          if stripped eq expr.asTerm then None
-          else super.semiEvalConfig(stripped.asExpr.asInstanceOf[Expr[Configuration]])
-        }
-        .orElse {
-          scala.util
-            .Try {
-              val inlined = inlineLocalVals(depth = 3).transformTerm(unwrap(expr.asTerm))(Symbol.spliceOwner)
-              val stripped = stripNamedArgs.transformTerm(inlined)(Symbol.spliceOwner)
-              if readsVar(stripped) || notEvaluable(stripped) then None
-              else super.semiEvalConfig(stripped.asExpr.asInstanceOf[Expr[Configuration]])
-            }
-            .toOption
-            .flatten
-        }
+    def evaluate(expr: Expr[Configuration]): Option[Configuration] = {
+      val followed = scala.util.Try(followLocalVals(depth = 5).transformTerm(expr.asTerm)(Symbol.spliceOwner))
+      if followed.toOption.forall(callsOtherDefaultGetter) then None
+      else super.semiEvalConfig(expr)
+    }
+    def unwrap(t: Term): Term = t match {
+      case Inlined(_, _, inner) => unwrap(inner)
+      case Typed(inner, _)      => unwrap(inner)
+      case other                => other
+    }
+    // Hearth does not follow lazy local vals, and a local `given Configuration = Configuration(...)` is one: follow a
+    // reference to an immutable local val (lazy included) to its right-hand side.
     def loop(expr: Expr[Configuration], depth: Int): Option[Configuration] =
-      (if readsVar(expr.asTerm) then None else evaluate(expr)).orElse {
+      evaluate(expr).orElse {
         unwrap(expr.asTerm) match {
-          case ident: Ident if depth > 0 && !ident.symbol.flags.is(Flags.Mutable) =>
+          case ident: Ident if depth > 0 && !ident.symbol.owner.isClassDef && !ident.symbol.flags.is(Flags.Mutable) =>
             scala.util.Try(ident.symbol.tree).toOption.collect { case ValDef(_, _, Some(rhs)) => rhs }.flatMap { rhs =>
               loop(rhs.asExpr.asInstanceOf[Expr[Configuration]], depth - 1)
             }
