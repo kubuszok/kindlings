@@ -111,16 +111,24 @@ object ServiceResourceGenPlugin extends AutoPlugin {
       }
     },
 
-    // wire it into resources
+    // Wire it into resources. That alone puts the SPI files on downstream sbt classpaths: in sbt 2
+    // `Compile / products` is `classDirectory +: resourceDirectories` (which contains `resourceManaged`) and
+    // runs `resources` (and so the generators), and dependsOn modules get the packageBin jar (exportJars :=
+    // true, the sbt 2 default), whose mappings include `resourceManaged`.
     Compile / resourceGenerators += generateServiceFile.taskValue,
-    // Ensure SPI files are available on the classpath for downstream modules.
-    // compile alone doesn't trigger copyResources, so exported products
-    // (used by dependsOn) won't include SPI files unless we add this.
-    // sbt 2.0 caches task results and would require a sjsonnew.HashWriter for
-    // Classpath; opt out of caching for this passthrough via Def.uncached.
-    Compile / exportedProducts := Def.uncached {
+    // Also copy them into `classDirectory`, for the IDE: BSP reports a dependency's `classDirectory` (not its
+    // jar or `resourceManaged`) as the classpath for the presentation compiler, and macros in dependent modules
+    // load the extensions via ServiceLoader.
+    //
+    // The copy MUST run inside `products`, never as a sibling of packaging (e.g. from `exportedProducts`):
+    // `copyResources` writes into `classDirectory` through `IO.copyFile`'s staging file `<name>.<8 hex>.tmp` +
+    // atomic move, and `packageBin / mappings` lists `classDirectory` via `products`. Unordered, packaging can
+    // list the staging file and then fail hashing it with "file referenced by the build does not exist".
+    // Every task that lists `classDirectory` for packaging/classpaths reads `products`, so it now runs after
+    // the copy has finished. See docs/research/sbt2-service-resource-packaging-race.md.
+    Compile / products := Def.uncached {
       (Compile / copyResources).value
-      (Compile / exportedProducts).value
+      (Compile / products).value
     }
   )
 }
