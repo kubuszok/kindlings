@@ -62,8 +62,10 @@ trait CodecMacrosImpl
   override protected def derivationSettingsNamespace: String = "jsoniterDerivation"
 
   /** Evaluates the config at compile time when possible; `Some` enables the optimized codegen (no runtime config
-    * checks). Overridden on Scala 3 to also follow immutable local `val`s (including the proxies Scala 3 creates for
-    * non-inline arguments of inline methods, like `derived[A](using JsoniterConfig.default.withX)`).
+    * checks). `semiEval` follows immutable local `val`s on Scala 3 (including the proxies Scala 3 creates for
+    * non-inline arguments of inline methods, like `derived[A](using JsoniterConfig.default.withX)`) and refuses `var`s
+    * and members of the module being compiled (so that clean and incremental builds agree). Overridden on Scala 2 for
+    * the configs bound by `withConfigBound`.
     */
   protected def semiEvalConfig(configExpr: Expr[JsoniterConfig]): Option[JsoniterConfig] =
     configExpr.semiEval.toOption

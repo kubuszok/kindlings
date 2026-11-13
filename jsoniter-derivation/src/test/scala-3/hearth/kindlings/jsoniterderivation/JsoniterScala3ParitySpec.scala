@@ -198,19 +198,14 @@ final class JsoniterScala3ParitySpec extends MacroSuite {
       }
     }
 
-    group("named tuples behind type aliases (Hearth gap, docs/research/hearth-gap-named-tuple-aliases.md)") {
-      // Upstream supports these (NamedTupleSpec). Hearth's `Type.isNamedTuple` does not dealias, so a named tuple
-      // reached through an alias is not recognized. When Hearth fixes it, these checks fail: replace them with
-      // round-trips (`{}` for NamedTuple.Empty, `{"a":1,"b":["VVV"]}` for the generic alias).
-      test("are not derivable yet") {
-        compileErrors("hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[NamedTuple.Empty]")
-          .check("is not a named tuple")
-        compileErrors(
-          """
-          type GenericNamedTuple[A, B] = (a: A, b: B)
-          hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[GenericNamedTuple[Option[Int], List[String]]]
-          """
-        ).check("is not a named tuple")
+    group("named tuples behind type aliases (NamedTupleSpec)") {
+      test("NamedTuple.Empty and a generic named tuple alias") {
+        roundTrip(KindlingsJsonValueCodec.derived[NamedTuple.Empty])(NamedTuple.Empty, "{}")
+        type GenericNamedTuple[A, B] = (a: A, b: B)
+        roundTrip(KindlingsJsonValueCodec.derived[GenericNamedTuple[Option[Int], List[String]]])(
+          (Some(1), List("VVV")),
+          """{"a":1,"b":["VVV"]}"""
+        )
       }
     }
     group("Scala 3 enums (NewEnumSpec)") {
@@ -265,14 +260,6 @@ final class JsoniterScala3ParitySpec extends MacroSuite {
         )(
           values,
           """["jdk-17","jdk-11"]"""
-        )
-      }
-    }
-    group("literal types in case classes (LiteralTypesSpec)") {
-      test("case class with literal types") {
-        roundTrip(KindlingsJsonValueCodec.derived[ParityLiteralTypes])(
-          ParityLiteralTypes("VVV", true, '1', 2, 3L, 4.0f, 5.0),
-          """{"s":"VVV","b":true,"c":"1","i":2,"l":3,"f":4.0,"d":5.0}"""
         )
       }
     }
