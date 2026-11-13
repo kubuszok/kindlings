@@ -23,10 +23,64 @@ final class BinaryCompatSpec extends MacroSuite {
 
     test("the old-arity constructor and apply fill the new fields with their defaults") {
       val f: String => String = _.toUpperCase
-      val viaApply = JsoniterConfig(f, f, Some("t"), false, true, false, false, false, false, false, false, false,
-        false, false, false, false, true, 10, 11, 12, 13, 14, 15, f, true, false, false)
-      val viaNew = new JsoniterConfig(f, f, Some("t"), false, true, false, false, false, false, false, false, false,
-        false, false, false, false, true, 10, 11, 12, 13, 14, 15, f, true, false, false)
+      val viaApply = JsoniterConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        f,
+        true,
+        false,
+        false
+      )
+      val viaNew = new JsoniterConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        f,
+        true,
+        false,
+        false
+      )
       for (c <- List(viaApply, viaNew)) {
         c.discriminatorFieldName ==> Some("t")
         c.checkFieldDuplication ==> true
@@ -41,8 +95,35 @@ final class BinaryCompatSpec extends MacroSuite {
 
     test("the old-arity copy keeps the new fields") {
       val base = JsoniterConfig.default.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(5)
-      val c = base.copy(identity, identity, None, true, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, 34, 6178, 308, 1, 2, 1024, identity, false, false, false)
+      val c = base.copy(
+        identity,
+        identity,
+        None,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        34,
+        6178,
+        308,
+        1,
+        2,
+        1024,
+        identity,
+        false,
+        false,
+        false
+      )
       c.mapMaxInsertNumber ==> 1
       c.requireDiscriminatorFirst ==> false
       c.bigIntDigitsLimit ==> 5
@@ -58,7 +139,8 @@ final class BinaryCompatSpec extends MacroSuite {
   group("JsoniterDerivationFactories / JsoniterDerivationUtils of 0.3.2") {
 
     test("codecInstance / jsonCodecInstance take a strict null value") {
-      JsoniterDerivationFactories.codecInstance[Int](7, (in, _) => in.readInt(), (x, out) => out.writeVal(x))
+      JsoniterDerivationFactories
+        .codecInstance[Int](7, (in, _) => in.readInt(), (x, out) => out.writeVal(x))
         .nullValue ==> 7
       val codec = JsoniterDerivationFactories.jsonCodecInstance[Int](
         7,
@@ -104,7 +186,9 @@ final class BinaryCompatSpec extends MacroSuite {
     test("validation helpers") {
       intercept[IllegalArgumentException](JsoniterDerivationUtils.throwMissingField("a")).getMessage ==>
         "missing required field: a"
-      decodeWith("1.5")(in => JsoniterDerivationUtils.validateBigDecimal(in, in.readBigDecimal(null), 34, 6178, 308)) ==>
+      decodeWith("1.5")(in =>
+        JsoniterDerivationUtils.validateBigDecimal(in, in.readBigDecimal(null), 34, 6178, 308)
+      ) ==>
         BigDecimal("1.5")
       intercept[JsonReaderException](
         decodeWith("123456")(in => JsoniterDerivationUtils.validateBigInt(in, in.readBigInt(null), 3))

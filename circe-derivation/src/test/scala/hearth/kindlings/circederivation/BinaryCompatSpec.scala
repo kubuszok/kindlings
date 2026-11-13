@@ -11,8 +11,8 @@ import scala.annotation.nowarn
 final class BinaryCompatSpec extends MacroSuite {
 
   private case class Point(x: Int, y: Int)
-  private implicit val pointDecoder: Decoder[Point] = Decoder.forProduct2("x", "y")(Point.apply)
-  private implicit val pointEncoder: Encoder[Point] = Encoder.forProduct2("x", "y")((p: Point) => (p.x, p.y))
+  implicit private val pointDecoder: Decoder[Point] = Decoder.forProduct2("x", "y")(Point.apply)
+  implicit private val pointEncoder: Encoder[Point] = Encoder.forProduct2("x", "y")((p: Point) => (p.x, p.y))
 
   group("Configuration of 0.3.2") {
 
@@ -36,7 +36,15 @@ final class BinaryCompatSpec extends MacroSuite {
 
     test("named copy still uses the full-arity copy") {
       Configuration.default.copy(unwrapValueClasses = false).unwrapValueClasses ==> false
-      Configuration.default.copy(useDefaults = true) ==> Configuration(useDefaults = true)
+      // Compare fields, not whole configs: they hold functions, which are only reference-equal (and on JS/Native
+      // every evaluation of the default creates a new one).
+      val c = Configuration.default.copy(useDefaults = true)
+      c.useDefaults ==> true
+      c.discriminator ==> Configuration.default.discriminator
+      c.strictDecoding ==> Configuration.default.strictDecoding
+      c.enumAsStrings ==> Configuration.default.enumAsStrings
+      c.unwrapValueClasses ==> Configuration.default.unwrapValueClasses
+      c.transformMemberNames("someField") ==> Configuration.default.transformMemberNames("someField")
     }
   }
 

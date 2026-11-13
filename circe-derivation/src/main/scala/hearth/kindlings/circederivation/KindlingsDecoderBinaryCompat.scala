@@ -4,8 +4,8 @@ import io.circe.{Decoder, Encoder}
 
 /** Members of the `KindlingsDecoder` companion kept for binary compatibility of code compiled against Kindlings 0.3.x.
   *
-  * A parent of `KindlingsDecoderCompanionCompat`, so that its `patch` (the macro) is defined in a subclass and wins
-  * the overload resolution of `KindlingsDecoder.patch[A]` on both Scala 2 and Scala 3.
+  * A parent of `KindlingsDecoderCompanionCompat`, so that its `patch` (the macro) is defined in a subclass and wins the
+  * overload resolution of `KindlingsDecoder.patch[A]` on both Scala 2 and Scala 3.
   */
 private[circederivation] trait KindlingsDecoderBinaryCompat {
 
