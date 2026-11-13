@@ -139,20 +139,37 @@ The `.asInstanceOf[Type[A]]` cast is needed because `Type[Nothing]` has no `=:=`
 Cross-quotes `Type.of[A]` resolves the implicit `Type[A]` lazily. When defining that very
 implicit, you get a stack overflow.
 
-**Scala 2 bypass:**
+**Scala 2 bypass** (in a `scala-2` source; match the platform commons with Hearth's extractor, since Hearth 0.4.4,
+instead of `isInstanceOf`/`asInstanceOf` on `MacroCommons`):
 ```scala
-val sc2 = ctx.asInstanceOf[MacroCommonsScala2]
-implicit val ConfigT: Type[Configuration] =
-  UntypedType.toTyped[Configuration](sc2.c.universe.typeOf[Configuration].asInstanceOf[UntypedType])
+ctx match {
+  case MacroCommonsScala2(sc2) =>
+    implicit val ConfigT: Type[Configuration] =
+      UntypedType.toTyped[Configuration](sc2.c.universe.typeOf[Configuration].asInstanceOf[UntypedType])
+    ...
+  case _ => ...
+}
 ```
 
-**Scala 3 bypass:**
+**Scala 3 bypass** (in a `scala-3` source):
 ```scala
-val sc3 = ctx.asInstanceOf[MacroCommonsScala3]
-given scala.quoted.Quotes = sc3.quotes
-implicit val ConfigT: Type[Configuration] =
-  scala.quoted.Type.of[Configuration].asInstanceOf[Type[Configuration]]
+ctx match {
+  case MacroCommonsScala3(sc3) =>
+    given scala.quoted.Quotes = sc3.quotes
+    implicit val ConfigT: Type[Configuration] =
+      scala.quoted.Type.of[Configuration].asInstanceOf[Type[Configuration]]
+    ...
+  case _ => ...
+}
 ```
+
+(`MacroTypedCommonsScala2/3` and `MacroUntypedCommonsScala2/3` have the same extractor. Kindlings' example:
+`derivation-commons/src/main/scala-3/.../EnumCaseAnnotations.scala`.)
+
+**Scala 2, Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT`:** an object member
+`implicit val PairT: Type[(String, Json)] = Type.of[(String, Json)]` reads ITSELF (it is `null` at runtime, "Cannot
+invoke ...WeakTypeTag.tpe() because the return value of ...Type$.apply(Object) is null"), see
+`docs/research/hearth-gap-scala2-type-of-self-reference.md`. Build such types in a helper object (below).
 
 **For shared code**, move `Type.of` calls into a helper object where the self-referential
 implicit is not in scope:
