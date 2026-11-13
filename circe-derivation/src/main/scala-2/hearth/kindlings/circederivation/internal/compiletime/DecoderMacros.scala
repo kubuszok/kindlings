@@ -9,7 +9,6 @@ final private[circederivation] class DecoderMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
     with AnnotationSupport
     with LoadStandardExtensionsOnce
-    with SemiEvalConfigScala2
     with DecoderMacrosImpl {
 
   def deriveDecoderImpl[A: c.WeakTypeTag](

@@ -158,9 +158,10 @@ trait SealedHierarchyFlattening { this: MacroCommons =>
     else None
 
   /** Evaluates the configuration at compile time when possible (`Some` enables the compile-time checks and the
-    * optimized codegen). Overridden per Scala version to follow immutable local `val`s (including the proxies Scala 3
-    * creates for the non-inline arguments of inline methods, like `derived[A](using Configuration.default.withX)`) and
-    * to refuse expressions reading a `var`, see `docs/research/hearth-gap-semieval-named-args.md`.
+    * optimized codegen). `semiEval` follows immutable local `val`s on Scala 3 (including the proxies Scala 3 creates
+    * for the non-inline arguments of inline methods, like `derived[A](using Configuration.default.withX)`) and refuses
+    * `var`s and members of the module being compiled. Overridden on Scala 3 (`SemiEvalConfigScala3`), see
+    * `docs/research/hearth-gap-semieval-named-args.md`.
     */
   protected def semiEvalConfig(
       configExpr: Expr[hearth.kindlings.circederivation.Configuration]
