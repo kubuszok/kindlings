@@ -71,6 +71,11 @@ more module/wrapper combinations.
 | jsoniter | `decodingOnly + encodingOnly compile error` in `compileErrors()` context | Works in real usage. |
 | tapir | Scala 2 tapir-schema tests broken | Pre-existing Hearth issue with Scala 2 type identity. |
 | di-cats | No Hearth `Ctor` for mixed kinds (`Resource[F[_], A]`) — Hearth feedback item 11 | Open in Hearth (no ETA); `isResource`/`resourceUnderlying` recognise `Resource` by FQCN + `decompose2`. |
+| circe, yaml, sconfig, pureconfig, avro | Scala 2: object-member `implicit val T: Type[(A, B)] = Type.of[(A, B)]` reads itself (`null`) — regression in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` | Open in Hearth; pair types built in the `Types` holders — see `hearth-gap-scala2-type-of-self-reference.md`. |
+| cats-integration | Scala 2: `Type.Ctor1.of[cats.data.NonEmptyLazyList].unapply` never matches (alias declared in a trait; prefix check of hearth#396) | Open in Hearth; ctor built from `NonEmptyLazyList.Type` — see `hearth-gap-ctor-unapply-alias-in-trait.md`. |
+| jsoniter, tapir (all via `AnnotationSupport`) | Scala 3: `Type#annotations` of an enum case singleton type misses the case's annotations (hearth#395 made cases singleton types) | Open in Hearth; `EnumCaseAnnotations` reads the term symbol — see `hearth-gap-enum-case-annotations.md`. |
+| circe | Scala 3: `semiEval` of an inline method's default getter breaks the enclosing class ("already defined"); lazy local vals (`given`) not followed | Open in Hearth; `SemiEvalConfigScala3` refuses / follows them — see `hearth-gap-semieval-named-args.md`. |
+| circe | Scala 3 lambda owner in a `val` splice; Scala 2 splice into a by-name parameter | Still open (re-checked with `0.4.3-79`); workarounds kept — see `hearth-gap-lambda-owner-in-val-splice.md`, `hearth-gap-scala2-splice-into-by-name-param.md`. |
 
 ### Resolved
 
@@ -87,6 +92,7 @@ more module/wrapper combinations.
 | Path-dependent type prefix / type members (feedback item 9) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4, `Type.pseudoCompanionObject`); newtype/neotype integrations use it — see `hearth-gap-type-prefix-and-members.md`. |
 | `Ctor2.of[Function1].unapply` on subtypes, Scala 3 (feedback item 7) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); cats-derivation uses plain `Type.Ctor2.of[Function1]`. |
 | `decompose1/2`/`typeArguments` on singleton types (feedback item 3) | **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (0.4.4); no Kindlings workaround existed (di-cats widens dependencies through `DestructuredExpr`). |
+| `semiEval` named arguments, local vals/proxies, `var`s, same-module members, unrunnable lambdas; Scala 2 literal types in lambdas; named tuples behind aliases | **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (0.4.4, kubuszok/hearth#396/#401); jsoniter/ubjson `semiEvalConfig` overrides, `SemiEvalConfigScala2` and `Scala2LiteralFieldsGapSpec` removed — see `hearth-gap-semieval-*.md`, `hearth-gap-scala2-literal-parameter-types.md`, `hearth-gap-named-tuple-aliases.md`. |
 | Splice isolation: `Option[SealedTrait]` on Scala 3 | Fixed in Hearth 0.4.0. |
 | Default values for generic case classes on Scala 3 | Fixed in Hearth 0.3.0-94. |
 | Scala 2 anonymous instance scope | Fixed in Hearth 0.3.0-96. |
