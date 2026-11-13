@@ -39,6 +39,13 @@ final class JsoniterScalaLiteralParitySpec extends MacroSuite {
       }
     }
 
+    test("case class with literal types (LiteralTypesSpec)") {
+      roundTrip(KindlingsJsonValueCodec.derived[ParityLiteralTypes])(
+        ParityLiteralTypes("VVV", true, '1', 2, 3L, 4.0f, 5.0),
+        """{"s":"VVV","b":true,"c":"1","i":2,"l":3,"f":4.0,"d":5.0}"""
+      )
+    }
+
     test("literal types as map keys") {
       roundTrip(KindlingsJsonValueCodec.derived[Map["VVV", Int]])(Map[("VVV"), Int](("VVV", 0)), "{\"VVV\":0}")
       roundTrip(KindlingsJsonValueCodec.derived[Map[true, Int]])(Map[true, Int]((true, 0)), "{\"true\":0}")

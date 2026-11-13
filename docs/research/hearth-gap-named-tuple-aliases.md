@@ -1,5 +1,10 @@
 # Hearth gap: named tuples behind type aliases
 
+Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (to be released as 0.4.4): `isNamedTuple` dealiases, so
+`NamedTuple.Empty` and named tuples behind type aliases are recognized. `JsoniterScala3ParitySpec` "named tuples behind
+type aliases" round-trips them now. The `Tuple22.caseFieldValuesAt` side note below was not reproducible in Hearth (all
+22 fields come back on both Scala versions); see the end of this document for the Kindlings side.
+
 Found while porting jsoniter-scala's `JsonCodecMakerNamedTupleSpec` to jsoniter-derivation.
 
 `Type.isNamedTuple` (`hearth/src/main/scala-3/hearth/untyped/UntypedTypesScala3.scala`) compares

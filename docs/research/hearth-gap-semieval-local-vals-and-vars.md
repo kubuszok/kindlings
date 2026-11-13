@@ -1,5 +1,13 @@
 # Hearth gap: `semiEval` and local `val`s / `var`s
 
+Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, to be released as 0.4.4), items 1-4:
+`semiEval` follows immutable local vals on Scala 3 (including inline-method proxies), refuses `var`s, refuses members
+of classes/objects compiled together with the macro call (also when an earlier incremental run left their class files,
+so clean and incremental builds agree), and returns `Left` for lambdas it cannot run (bodies using `match`, `if`,
+loops, `try`, `return`, assignments or local definitions). Scala 2 still cannot read a local val (a Scala 2 macro has
+no right-hand side for it). jsoniter- and ubjson-derivation's `semiEvalConfig` overrides are removed; the workarounds
+described below are history.
+
 Found while making the jsoniter-derivation tests drive the optimized (compile-time config) codegen.
 
 ## 1. Local `val`s are not followed (Scala 3 inline proxies included)

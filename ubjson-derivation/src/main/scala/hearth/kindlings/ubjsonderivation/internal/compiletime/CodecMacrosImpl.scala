@@ -45,16 +45,16 @@ trait CodecMacrosImpl
 
   override protected def derivationSettingsNamespace: String = "ubjsonDerivation"
 
-  /** Evaluates the config at compile time when possible; `Some` enables the optimized codegen. Overridden per Scala
-    * version to follow immutable local `val`s (Scala 3 inline-argument proxies) and to refuse `var`s, as in
-    * jsoniter-derivation (see docs/research/hearth-gap-semieval-local-vals-and-vars.md).
+  /** Evaluates the config at compile time when possible; `Some` enables the optimized codegen. `semiEval` follows
+    * immutable local `val`s on Scala 3 (inline-argument proxies) and refuses `var`s and members of the module being
+    * compiled, as in jsoniter-derivation. Overridden on Scala 2 for the configs bound by `withConfigBound`.
     */
   protected def semiEvalConfig(configExpr: Expr[UBJsonConfig]): Option[UBJsonConfig] =
     configExpr.semiEval.toOption.filter(usableAtCompileTime)
 
-  /** `semiEval` may return a config whose function-valued fields (user lambdas, e.g. a `PartialFunction` name mapper)
-    * cannot be called at compile time (they throw `UndeclaredThrowableException`, see
-    * docs/research/hearth-gap-semieval-local-vals-and-vars.md section 4): such configs are runtime configs.
+  /** The name mappers of a config evaluated at compile time are called at compile time. `semiEval` refuses user lambdas
+    * it cannot run (e.g. a `PartialFunction` name mapper, docs/research/hearth-gap-semieval-local-vals-and-vars.md
+    * section 4), but a lambda it can run may still throw when called: such configs are runtime configs.
     */
   private def usableAtCompileTime(config: UBJsonConfig): Boolean =
     scala.util.Try {
