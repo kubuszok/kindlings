@@ -291,6 +291,7 @@ trait WriterMacrosImpl
     val WriterLogDerivation: Type[hearth.kindlings.pureconfigderivation.KindlingsConfigWriter.LogDerivation] =
       Type.of[hearth.kindlings.pureconfigderivation.KindlingsConfigWriter.LogDerivation]
     val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
+    val StringValuePair: Type.Lazy[(String, ConfigValue)] = Type.Lazy(Type.of[(String, ConfigValue)])
     val PureConfig: Type.Lazy[PureConfig] = Type.Lazy(Type.of[PureConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val StringToString: Type.Lazy[String => String] = Type.Lazy(Type.of[String => String])

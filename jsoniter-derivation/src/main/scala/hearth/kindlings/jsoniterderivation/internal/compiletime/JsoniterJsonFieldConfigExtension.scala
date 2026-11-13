@@ -3,6 +3,7 @@ package internal.compiletime
 
 import hearth.MacroCommons
 import hearth.std.StdExtensions
+import hearth.kindlings.derivation.compiletime.EnumCaseAnnotations
 import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 
 final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
@@ -113,13 +114,20 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
                 case Some(sv) => Expr.quote(Expr.splice(sv.singletonExpr).toString)
                 case None     => mkStringExpr(scalaName)
               }
-            else
-              stringArg(Type[Child].annotationsOfType[annotations.named]) match {
+            else {
+              // (+ the annotations of a Scala 3 enum case, see docs/research/hearth-gap-enum-case-annotations.md)
+              val enumCaseNamed = Annotations.filterOfType[annotations.named](
+                EnumCaseAnnotations.of(ctx)(UntypedType.fromTyped[Child]).map { case (expr, tpe) =>
+                  UntypedExpr.as_??(expr, tpe)
+                }
+              )
+              stringArg(Type[Child].annotationsOfType[annotations.named] ++ enumCaseNamed) match {
                 case Some(name) => mkStringExpr(name)
                 case None       =>
                   val fullName = mkStringExpr(adtLeafFullName[Parent, Child](scalaName))
                   Expr.quote(Expr.splice(configExpr).adtLeafClassNameMapper(Expr.splice(fullName)))
               }
+            }
 
           override def flattensNestedSubtypes: Boolean = true
 

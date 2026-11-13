@@ -16,7 +16,7 @@ trait EncoderHandleAsMapRuleImpl {
   object EncoderHandleAsMapRule extends EncoderDerivationRule("handle as map when possible") {
     implicit val JsonT: Type[Json] = Types.Json
     implicit val StringT: Type[String] = Types.String
-    implicit val StringJsonPairT: Type[(String, Json)] = Type.of[(String, Json)]
+    implicit val StringJsonPairT: Type[(String, Json)] = Types.StringJsonPair
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Json]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {

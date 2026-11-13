@@ -12,7 +12,7 @@ trait AvroEncoderHandleAsMapRuleImpl {
   object AvroEncoderHandleAsMapRule extends EncoderDerivationRule("handle as map when possible") {
     implicit val AnyT: Type[Any] = EncTypes.Any
     implicit val StringT: Type[String] = EncTypes.String
-    implicit val StringAnyPairT: Type[(String, Any)] = Type.of[(String, Any)]
+    implicit val StringAnyPairT: Type[(String, Any)] = EncTypes.StringAnyPair
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Any]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {

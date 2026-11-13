@@ -322,6 +322,7 @@ trait EncoderMacrosImpl
     val EncoderLogDerivation: Type[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation] =
       Type.of[hearth.kindlings.yamlderivation.KindlingsYamlEncoder.LogDerivation]
     val Node: Type.Lazy[Node] = Type.Lazy(Type.of[Node])
+    val StringNodePair: Type.Lazy[(String, Node)] = Type.Lazy(Type.of[(String, Node)])
     val YamlConfig: Type.Lazy[YamlConfig] = Type.Lazy(Type.of[YamlConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])

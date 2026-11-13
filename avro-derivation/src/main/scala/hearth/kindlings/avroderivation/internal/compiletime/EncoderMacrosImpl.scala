@@ -433,6 +433,7 @@ trait EncoderMacrosImpl
     val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
+    val StringAnyPair: Type.Lazy[(String, Any)] = Type.Lazy(Type.of[(String, Any)])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
     val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
