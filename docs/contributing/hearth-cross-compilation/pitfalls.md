@@ -163,13 +163,13 @@ ctx match {
 }
 ```
 
-(`MacroTypedCommonsScala2/3` and `MacroUntypedCommonsScala2/3` have the same extractor. Kindlings' example:
-`derivation-commons/src/main/scala-3/.../EnumCaseAnnotations.scala`.)
+(`MacroTypedCommonsScala2/3` and `MacroUntypedCommonsScala2/3` have the same extractor.)
 
-**Scala 2, Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT`:** an object member
-`implicit val PairT: Type[(String, Json)] = Type.of[(String, Json)]` reads ITSELF (it is `null` at runtime, "Cannot
-invoke ...WeakTypeTag.tpe() because the return value of ...Type$.apply(Object) is null"), see
-`docs/research/hearth-gap-scala2-type-of-self-reference.md`. Build such types in a helper object (below).
+**Scala 2, Hearth before `0.4.3-90-gc3f9223-SNAPSHOT`:** a member of an `object` nested in a macro bundle,
+`implicit val PairT: Type[(String, Json)] = Type.of[(String, Json)]` (any type, not only applied ones), read ITSELF
+(`null` at runtime, "Cannot invoke ...WeakTypeTag.tpe() because the return value of ...Type$.apply(Object) is null").
+Hearth now shadows the field being defined there too, so the plain form works; see
+`docs/research/hearth-gap-scala2-type-of-self-reference.md`.
 
 **For shared code**, move `Type.of` calls into a helper object where the self-referential
 implicit is not in scope:
