@@ -843,8 +843,10 @@ object CirceDerivationUtils {
     }
   }
 
-  /** A field decoder that, when `enabled` (`useDefaults`), falls back to `default` like `decodeFieldUsingDefault`. */
-  def defaultingDecoder[A](decoder: Decoder[A], default: Any, enabled: Boolean): Decoder[Any] =
+  /** A field decoder that, when `enabled` (`useDefaults`), falls back to `default` like `decodeFieldUsingDefault`
+    * (`default` is by-name: evaluated on every use, like the defaults of the generated decoders).
+    */
+  def defaultingDecoder[A](decoder: Decoder[A], default: => Any, enabled: Boolean): Decoder[Any] =
     if (!enabled) decoder.asInstanceOf[Decoder[Any]]
     else
       new Decoder[Any] {
