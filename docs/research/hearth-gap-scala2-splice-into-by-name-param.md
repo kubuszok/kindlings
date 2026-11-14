@@ -1,6 +1,6 @@
 # Scala 2 cross-quotes: splicing a default-value expression into a by-name parameter
 
-Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, to be released as 0.4.4): Hearth now
+Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, released in 0.4.4): Hearth now
 builds a default value from the constructor's `<init>$default$N`, and splicing it into a by-name parameter no longer
 crashes the Scala 2 backend. `CirceDerivationUtils.defaultingDecoder` takes its default by-name again. See the last
 section.

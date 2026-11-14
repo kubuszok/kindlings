@@ -1,6 +1,6 @@
 # Hearth gap: literal-typed constructor parameters on Scala 2
 
-Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, to be released as 0.4.4). The cause was
+Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, released in 0.4.4). The cause was
 not `Parameter.tpe`: quoted lambdas (`Expr.quote { (r: R) => ... }`) and `LambdaBuilder.build` widened a literal
 result type (`"VVV"` to `String`), and types read from class files made a `var` of a literal type unassignable
 ("assignment to non variable", only in incremental builds). `Scala2LiteralFieldsGapSpec` is deleted; the

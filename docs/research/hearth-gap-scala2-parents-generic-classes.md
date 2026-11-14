@@ -1,6 +1,6 @@
 # Hearth gap: `UntypedType.parents` is empty for applied generic classes on Scala 2
 
-Status: **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (to be released as 0.4.4): Scala 2's `parents` now
+Status: **RESOLVED** in Hearth `0.4.3-24-gc0c6e43-SNAPSHOT` (released in 0.4.4): Scala 2's `parents` now
 unwraps the `PolyType` of a generic class, and `baseClasses` resolves the type arguments of generic base classes
 (`instanceTpe.baseType`). The Kindlings workaround below is removed: di and di-cats use
 `!parents.exists(_.isFunction)` again, and the tests listed below pass on 2.13 and 3.

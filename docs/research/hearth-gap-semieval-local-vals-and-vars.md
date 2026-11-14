@@ -1,6 +1,6 @@
 # Hearth gap: `semiEval` and local `val`s / `var`s
 
-Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, to be released as 0.4.4), items 1-4:
+Status: **RESOLVED** in Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT` (kubuszok/hearth#401, released in 0.4.4), items 1-4:
 `semiEval` follows immutable local vals on Scala 3 (including inline-method proxies), refuses `var`s, refuses members
 of classes/objects compiled together with the macro call (also when an earlier incremental run left their class files,
 so clean and incremental builds agree), and returns `Left` for lambdas it cannot run (bodies using `match`, `if`,

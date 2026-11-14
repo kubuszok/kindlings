@@ -4,7 +4,7 @@ Status: **RESOLVED**. Named arguments and inline proxies: Hearth `0.4.3-79-gc2c1
 `semiEval` evaluates named arguments on Scala 3 and follows the `$proxy` vals of inline methods itself, as the whole
 argument and inside an argument (`Configuration(.., f$proxy1, ..)`), including `Inlined` bindings. The
 "already defined" failure that followed: Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402). A `LinkageError`
-from reflection is now a `Left` on both Scala versions. Both are to be released as 0.4.4. The only thing still done in
+from reflection is now a `Left` on both Scala versions. Both are released in 0.4.4. The only thing still done in
 Kindlings is following a lazy local val (a local `given Configuration = ...`), which Hearth skips by design. See the
 last two sections.
 
