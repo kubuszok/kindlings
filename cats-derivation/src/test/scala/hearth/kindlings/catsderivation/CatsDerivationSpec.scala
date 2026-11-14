@@ -1127,6 +1127,154 @@ final class CatsDerivationSpec extends MacroSuite {
         "not handled"
       )
     }
+
+    test("Show.derived on a case class with a field without Show reports the field type") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.Show.derived[hearth.kindlings.catsderivation.examples.WithNoInstances]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.NoInstances",
+        "not handled by any",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("ShowPretty.derived on a case class with a field without Show reports the field type") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        hearth.kindlings.catsderivation.ShowPretty.derived[hearth.kindlings.catsderivation.examples.WithNoInstances]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.NoInstances",
+        "not handled by any",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Eq.derived on a case class with a field without Eq reports the field type") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.kernel.Eq.derived[hearth.kindlings.catsderivation.examples.WithNoInstances]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.NoInstances",
+        "not handled by any",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Order.derived on a case class with a field without Order reports the field type") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.kernel.Order.derived[hearth.kindlings.catsderivation.examples.WithNoInstances]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.NoInstances",
+        "not handled by any",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Hash.derived on a case class with a field without Hash reports the field type") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.kernel.Hash.derived[hearth.kindlings.catsderivation.examples.WithNoInstances]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.NoInstances",
+        "not handled by any",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Monoid.derived on sealed trait") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.kernel.Monoid.derived[hearth.kindlings.catsderivation.examples.Animal]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.Animal is not a case class",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Empty.derived on sealed trait without an Empty variant") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        alleycats.Empty.derived[hearth.kindlings.catsderivation.examples.Animal]
+        """
+      ).check(
+        "Macro derivation failed",
+        "hearth.kindlings.catsderivation.examples.Animal: no variant has an Empty instance",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("Pure.derived on a sealed trait type constructor") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        alleycats.Pure.derived[hearth.kindlings.catsderivation.examples.IList]
+        """
+      ).check(
+        "Macro derivation failed",
+        "Cannot parse F[Int] as a case class",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("EmptyK.derived when the type parameter is a bare field") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        alleycats.EmptyK.derived[hearth.kindlings.catsderivation.examples.Box]
+        """
+      ).check(
+        "Macro derivation failed",
+        "Cannot find or derive Empty for field value",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("SemigroupK.derived when the type parameter is a bare field") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.SemigroupK.derived[hearth.kindlings.catsderivation.examples.Box]
+        """
+      ).check(
+        "Macro derivation failed",
+        "Cannot find or derive Semigroup for field value",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
+
+    test("MonoidK.derived when the type parameter is a bare field") {
+      compileErrors(
+        """
+        import hearth.kindlings.catsderivation.extensions.*
+        cats.MonoidK.derived[hearth.kindlings.catsderivation.examples.Box]
+        """
+      ).check(
+        "Macro derivation failed",
+        "Cannot find or derive Monoid for field value",
+        "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
+      )
+    }
   }
 
   group("PartialOrder") {

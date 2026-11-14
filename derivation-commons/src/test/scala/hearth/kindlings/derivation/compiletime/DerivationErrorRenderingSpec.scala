@@ -37,6 +37,10 @@ final class DerivationErrorRenderingSpec extends hearth.MacroSuite {
     test("renders an empty message as an empty bullet") {
       DerivationErrorRendering.renderError(new RuntimeException("")) ==> "  - "
     }
+
+    test("renders a message made only of line breaks (which splits into no lines) as a bullet") {
+      DerivationErrorRendering.renderError(new RuntimeException("\n\n")) ==> "  - \n\n"
+    }
   }
 
   group("DerivationErrorRendering.renderErrors") {
