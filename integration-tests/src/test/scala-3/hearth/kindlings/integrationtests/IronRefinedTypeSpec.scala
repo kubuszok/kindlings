@@ -28,6 +28,14 @@ type RtCount = RtCount.T
 object RtSubName extends RefinedSubtype[String, Not[Blank]]
 type RtSubName = RtSubName.T
 
+// NOT a refined type: an opaque type whose same-named companion is a `RefinedType`, i.e. whose `either` returns the
+// companion's own `RtMismatch.T`, not `RtMismatch` (validating through it would mistype the result)
+object RtMismatchDefs {
+  opaque type RtMismatch = String
+  object RtMismatch extends RefinedType[String, Pure]
+  final case class RtMismatchField(k: RtMismatch)
+}
+
 final case class RtCounts(byKey: Map[RtKey, Int])
 final case class RtPlainField(k: RtKey)
 final case class RtFields(name: RtName, count: RtCount, sub: RtSubName)
@@ -143,6 +151,22 @@ final class IronRefinedTypeSpec extends MacroSuite {
       val k = fields(RtJsoniter.keyedSchema)
       assertEquals(openProductKeys(k("byName"), Map(RtName("a") -> 1)), Set("a"))
       assertEquals(openProductKeys(k("byCount"), Map(RtCount(7) -> "x")), Set("7"))
+    }
+  }
+
+  group("an opaque type whose companion is a RefinedType of another type member") {
+
+    test("is not treated as the refined type: no value type, so derivation fails") {
+      compileErrors(
+        """
+        import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
+        given JsoniterConfig = JsoniterConfig()
+        KindlingsJsonValueCodec.derived[hearth.kindlings.integrationtests.RtMismatchDefs.RtMismatchField]
+        """
+      ).check(
+        "Macro derivation failed",
+        "The type hearth.kindlings.integrationtests.RtMismatchDefs.RtMismatch is not a value type"
+      )
     }
   }
 

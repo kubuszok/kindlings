@@ -399,6 +399,10 @@ object examples {
 
   case class WithStrings(a: String, b: String)
 
+  // A plain class with no cats instances (not a case class, not a value type): nothing can be derived for it
+  final class NoInstances(val x: Int)
+  case class WithNoInstances(field: NoInstances)
+
   // Bi-variant Result type
   sealed trait Result[+A, +E]
   case class Success[+A](value: A) extends Result[A, Nothing]
