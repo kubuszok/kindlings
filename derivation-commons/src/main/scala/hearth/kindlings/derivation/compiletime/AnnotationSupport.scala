@@ -13,25 +13,19 @@ import hearth.std.*
   */
 trait AnnotationSupport { this: MacroCommons & StdExtensions =>
 
-  /** The annotations of a Scala 3 enum case singleton type, which Hearth's `Type#annotations` does not return (see
-    * [[EnumCaseAnnotations]]).
-    */
-  protected def enumCaseAnnotations[A: Type]: List[Expr_??] =
-    EnumCaseAnnotations.of(this)(UntypedType.fromTyped[A]).map { case (expr, tpe) => UntypedExpr.as_??(expr, tpe) }
-
   // ----- Lookup (was abstract / platform-specific; now shared via Hearth's typed annotation API) -----
 
   protected def findAnnotationOfType[Ann: Type](param: Parameter): Option[Expr[Ann]] =
     param.annotationsOfType[Ann].headOption
 
   protected def findTypeAnnotationOfType[Ann: Type, A: Type]: Option[Expr[Ann]] =
-    findAllTypeAnnotationsOfType[Ann, A].headOption
+    Type[A].annotationsOfType[Ann].headOption
 
   protected def findAllAnnotationsOfType[Ann: Type](param: Parameter): List[Expr[Ann]] =
     param.annotationsOfType[Ann]
 
   protected def findAllTypeAnnotationsOfType[Ann: Type, A: Type]: List[Expr[Ann]] =
-    Type[A].annotationsOfType[Ann] ++ Annotations.filterOfType[Ann](enumCaseAnnotations[A])
+    Type[A].annotationsOfType[Ann]
 
   /** Collect ALL annotations on a parameter (regardless of type), as untyped spliceable expressions.
     *
@@ -47,7 +41,7 @@ trait AnnotationSupport { this: MacroCommons & StdExtensions =>
     * lowered to an [[UntypedExpr]] so callers can re-type it (e.g. `asTyped[Any]`) and splice it into generated code.
     */
   protected def allTypeAnnotations[A: Type]: List[UntypedExpr] =
-    (Type[A].annotations ++ enumCaseAnnotations[A]).map(_.asUntyped)
+    Type[A].annotations.map(_.asUntyped)
 
   // ----- Literal extraction from annotation constructor arguments (shared) -----
 
