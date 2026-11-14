@@ -183,8 +183,7 @@ objects), `illegal value of discriminator field "type"`, `illegal enum value "X"
 unexpected keys with `unexpected field "x"` (with any config).
 
 Literal types (`"VVV"`, `true`, `'1'`, `2`, `3L`, `4.0f`, `5.0`) are written as their value and checked when read
-(`expected value: 2`), also as map keys (`expected key: "2"`). On Scala 2 a case class field of a literal type is not
-supported yet (Hearth gap, see `docs/research/hearth-gap-scala2-literal-parameter-types.md`).
+(`expected value: 2`), also as map keys (`expected key: "2"`), and as case class fields, on Scala 2 and Scala 3.
 
 ## Missing fields
 
