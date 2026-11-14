@@ -181,6 +181,15 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       */
     def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = falseExpr
 
+    /** How the library writes a map key of type `K` as a JSON object key, when it has its own conversion for it (e.g. a
+      * user-provided key encoder). `None` (the default): the schema derivation converts keys itself - `String`s as they
+      * are, value types (`AnyVal`, opaque types, ...) as their underlying value, primitives, `UUID`, `BigInt`,
+      * `BigDecimal` and `java.time` values with `toString`.
+      *
+      * Circe: an implicit `KeyEncoder[K]`.
+      */
+    def mapKeyToString[K: Type]: Option[Expr[K => String]] = None
+
     /** Whether a Scala 3 nullable field (`T | Null`) is never required by the decoder (an absent field is `null`) and
       * is written as `T` or `null`. When true, its schema is the optional, nullable schema of `T`. Defaults to `false`
       * (the field is treated as any other field of its type).

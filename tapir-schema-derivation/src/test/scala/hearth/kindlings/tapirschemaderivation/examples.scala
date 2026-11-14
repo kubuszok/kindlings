@@ -39,6 +39,9 @@ final case class StringKey(value: String) extends AnyVal
 case class WithStringKeyMap(counts: Map[StringKey, Int])
 // Map keys which are value types NOT wrapping a String
 case class WithWrappedIdKeyMap(counts: Map[WrappedId, Int])
+// Map keys which no JSON library writes as object keys
+case class ProductKey(a: Int, b: Int)
+case class WithProductKeyMap(counts: Map[ProductKey, Int])
 
 // Types for which tapir provides structural implicits (ignored by KindlingsSchema)
 case class WithSets(primitives: Set[Int], caseClasses: Set[SimplePerson])
