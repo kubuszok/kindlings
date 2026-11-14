@@ -312,6 +312,17 @@ object TapirSchemaUtils {
   def optionSchema[E](elementSchema: Schema[E]): Schema[Any] =
     elementSchema.asOption.asInstanceOf[Schema[Any]]
 
+  /** The schema of a Scala 3 nullable field (`E | Null`): optional, and `null` or a value described by `elementSchema`.
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null"))
+  def nullableSchema[E](elementSchema: Schema[E]): Schema[Any] =
+    Schema[Any](
+      SchemaType.SOption[Any, E](elementSchema)(v => Option(v.asInstanceOf[E])),
+      isOptional = true,
+      format = elementSchema.format,
+      deprecated = elementSchema.deprecated
+    )
+
   /** Wrap an element schema as a collection (List, Vector, Set, etc.). */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def collectionSchema[E](elementSchema: Schema[E]): Schema[Any] =
@@ -364,6 +375,11 @@ object TapirSchemaUtils {
   /** Conditionally mark a schema as optional at runtime. */
   def markFieldOptional(schema: Schema[Any], optional: Boolean): Schema[Any] =
     if (optional) schema.copy(isOptional = true) else schema
+
+  /** Mark a schema as optional or required at runtime (a field is optional exactly when the decoder accepts it absent).
+    */
+  def setFieldOptional(schema: Schema[Any], optional: Boolean): Schema[Any] =
+    if (schema.isOptional == optional) schema else schema.copy(isOptional = optional)
 
   /** Conditionally add "string" format to a schema at runtime. */
   def markFieldStringFormat(schema: Schema[Any], stringified: Boolean): Schema[Any] =

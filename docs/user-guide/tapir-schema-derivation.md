@@ -71,6 +71,23 @@ When `kindlings-circe-derivation` or `kindlings-jsoniter-derivation` is on the c
 
 For example, if your Circe `Configuration` uses `withSnakeCaseMemberNames`, the generated Tapir schema will also use `snake_case` field names — no additional configuration needed, no risk of drift.
 
+#### Required and optional fields
+
+A field is optional in the schema exactly when the decoder derived with the same configuration accepts it missing
+from the JSON object:
+
+| Field | jsoniter `JsoniterConfig` | circe `Configuration` |
+|-------|---------------------------|-----------------------|
+| `Option[A]` | optional | optional |
+| has a default value | optional unless `requireDefaultFields` | optional with `useDefaults` |
+| collection or map that can be empty (no default) | optional unless `requireCollectionFields` | required |
+| non-empty collection (`NonEmptyList`, ... from `kindlings-cats-integration`) | required (unless it has a default value, see above) | required (likewise) |
+| Scala 3 nullable type `T \| Null` | optional (and nullable) | like any other field of its type |
+| anything else | required | required |
+
+The `transient*` settings of a `JsoniterConfig` only change what the encoder writes, so they do not make fields
+optional.
+
 #### What a `JsoniterConfig` changes
 
 With a jsoniter `JsoniterConfig` the schemas describe what the jsoniter codecs (derived with the same config) write:

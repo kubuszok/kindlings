@@ -88,21 +88,23 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       */
     def useDefaults: Expr[Boolean]
 
-    /** Whether fields with default values should be marked as optional in the schema.
+    /** Whether the decoder accepts a field with a default value missing from the JSON object (filling in the default).
       *
-      * When true, fields that have Scala default values are treated as optional in the generated schema, because the
-      * JSON decoder will fill in defaults for missing fields.
+      * The schema marks such fields optional exactly when this is true (and required otherwise, unless
+      * [[emptyFieldsAreOptional]] applies to them), so that it describes what the decoder accepts.
       *
-      * Circe: maps to `useDefaults`. Jsoniter: maps to `transientDefault`.
+      * Circe: maps to `useDefaults`. Jsoniter: maps to `!requireDefaultFields`.
       */
     def fieldsWithDefaultsAreOptional: Expr[Boolean]
 
-    /** Whether empty collection/map fields should be marked as optional in the schema.
+    /** Whether the decoder accepts a collection/map field missing from the JSON object (decoding it as empty).
       *
-      * When true, fields typed as `Iterable[_]`, `Map[_,_]`, or `String` are treated as optional, because the JSON
-      * encoder may omit them when empty.
+      * Applies only to collections and maps that can be empty (not `String`, not `::`, not collections built with a
+      * smart constructor that can fail, like cats' `NonEmptyList`, which are always required unless they have a default
+      * value). The schema marks such fields optional exactly when this is true (or when they have a default value and
+      * [[fieldsWithDefaultsAreOptional]] is true), and required otherwise.
       *
-      * Circe: always false. Jsoniter: maps to `transientEmpty`.
+      * Circe: always false. Jsoniter: maps to `!requireCollectionFields`.
       */
     def emptyFieldsAreOptional: Expr[Boolean]
 
@@ -178,6 +180,14 @@ trait JsonSchemaConfigs { this: MacroCommons & StdExtensions =>
       * subtype's encoded name (`{"Circle":{"radius":1.0}}`). Defaults to `false` (the subtypes are not wrapped).
       */
     def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = falseExpr
+
+    /** Whether a Scala 3 nullable field (`T | Null`) is never required by the decoder (an absent field is `null`) and
+      * is written as `T` or `null`. When true, its schema is the optional, nullable schema of `T`. Defaults to `false`
+      * (the field is treated as any other field of its type).
+      *
+      * Jsoniter: true (as in jsoniter-scala).
+      */
+    def nullableFieldsAreOptional: Boolean = false
 
     /** Whether tuples are JSON arrays (`[1,"a"]`) rather than objects with `_1`, `_2`, ... fields. Defaults to `false`.
       */
