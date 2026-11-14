@@ -337,10 +337,6 @@ object TapirSchemaUtils {
   def collectionSchemaVia[E](elementSchema: Schema[E], toIterable: Any => Iterable[E]): Schema[Any] =
     Schema[Any](SchemaType.SArray[Any, E](elementSchema)(toIterable), isOptional = true)
 
-  /** [[setSchema]] of a set that is not an `Iterable`, see [[collectionSchemaVia]]. */
-  def setSchemaVia[E](elementSchema: Schema[E], toIterable: Any => Iterable[E]): Schema[Any] =
-    collectionSchemaVia[E](elementSchema, toIterable).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))
-
   /** The schema of a collection (or map) that cannot be empty (e.g. cats' `NonEmptyList`), as in tapir-cats: required,
     * with `Validator.minSize(1)` (`minItems: 1`) checked on the elements returned by `toIterable`.
     */
