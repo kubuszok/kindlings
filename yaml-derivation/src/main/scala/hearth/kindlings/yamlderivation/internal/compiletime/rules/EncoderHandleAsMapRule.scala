@@ -16,7 +16,7 @@ trait EncoderHandleAsMapRuleImpl {
   object EncoderHandleAsMapRule extends EncoderDerivationRule("handle as map when possible") {
     implicit val NodeT: Type[Node] = Types.Node
     implicit val StringT: Type[String] = Types.String
-    implicit val StringNodePairT: Type[(String, Node)] = Types.StringNodePair
+    implicit val StringNodePairT: Type[(String, Node)] = Type.of[(String, Node)]
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Node]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a map") >> {
