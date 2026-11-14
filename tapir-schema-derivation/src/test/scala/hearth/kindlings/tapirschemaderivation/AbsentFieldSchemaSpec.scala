@@ -30,14 +30,17 @@ final class AbsentFieldSchemaSpec extends MacroSuite {
     case other                     => fail(s"Expected SProduct, got: $other")
   }
 
-  private def optionalFields(schema: Schema[?]): Set[String] = productFields(schema).collect { case (n, true) => n }.toSet
+  private def optionalFields(schema: Schema[?]): Set[String] = productFields(schema).collect { case (n, true) =>
+    n
+  }.toSet
 
   private def required(schema: Schema[?]): Set[String] = schema.schemaType match {
     case p: SchemaType.SProduct[?] => p.required.map(_.encodedName).toSet
     case other                     => fail(s"Expected SProduct, got: $other")
   }
 
-  private def parse(json: String): Json = io.circe.parser.parse(json).fold(e => fail(s"Invalid JSON $json: $e"), identity)
+  private def parse(json: String): Json =
+    io.circe.parser.parse(json).fold(e => fail(s"Invalid JSON $json: $e"), identity)
 
   private def withoutField(json: Json, field: String): Json =
     json.asObject.fold(fail(s"Expected an object, got $json"))(obj => Json.fromJsonObject(obj.remove(field)))

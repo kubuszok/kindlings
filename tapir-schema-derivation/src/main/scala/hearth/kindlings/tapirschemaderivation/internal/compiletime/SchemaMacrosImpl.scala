@@ -501,12 +501,12 @@ trait SchemaMacrosImpl
       case IsOption(_) => true
       case _           => false
     }
-    val canBeEmpty = collectionCanBeEmpty[F]
-    if (isOption || (!hasDefault && canBeEmpty.isEmpty)) None
+    val emptiable = collectionCanBeEmpty[F]
+    if (isOption || (!hasDefault && emptiable.isEmpty)) None
     else {
       val conditions: List[Expr[Boolean]] =
         (if (hasDefault) List(jsonCfg.fieldsWithDefaultsAreOptional) else Nil) ++
-          (if (canBeEmpty.contains(true)) List(jsonCfg.emptyFieldsAreOptional) else Nil)
+          (if (emptiable.contains(true)) List(jsonCfg.emptyFieldsAreOptional) else Nil)
       conditions match {
         case Nil           => Some(Expr(false))
         case single :: Nil => Some(single)
@@ -524,14 +524,43 @@ trait SchemaMacrosImpl
     if (Type[F] =:= TsTypes.StringType.asInstanceOf[Type[F]]) None
     else
       Type[F] match {
-        case IsCollection(isCollection) =>
-          val plainCtor = isCollection.value.build match {
-            case _: CtorLikeOf.PlainValue[?, ?] => true
-            case _                              => false
-          }
-          Some(plainCtor && !(Type[F] <:< Type.of[scala.collection.immutable.::[Any]]))
-        case _ => None
+        case IsCollection(isCollection) => Some(canBeEmpty[F, isCollection.Underlying](isCollection.value))
+        case _                          => None
       }
+
+  /** Whether the collection (or map) `C` has an empty value: it is not `::` and it is built with a plain constructor
+    * (not one returning an `Either`, which signals that construction can fail, like cats' `NonEmptyList`'s).
+    */
+  protected def canBeEmpty[C: Type, Item](isCollection: IsCollectionOf[C, Item]): Boolean = {
+    val plainCtor = isCollection.build match {
+      case _: CtorLikeOf.PlainValue[?, ?] => true
+      case _                              => false
+    }
+    plainCtor && !(Type[C] <:< Type.of[scala.collection.immutable.::[Any]])
+  }
+
+  /** For a collection (or map) `C` that cannot be empty (see [[canBeEmpty]]): `schema` made required, with
+    * `Validator.minSize(1)` (`minItems: 1`), as in tapir-cats. Otherwise `schema` unchanged.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def nonEmptyIfNeeded[C: Type, Item: Type](
+      isCollection: IsCollectionOf[C, Item],
+      schema: Expr[Schema[C]]
+  ): Expr[Schema[C]] =
+    if (canBeEmpty[C, Item](isCollection)) schema
+    else {
+      implicit val anyT: Type[Any] = TsTypes.AnyType
+      implicit val SchemaC: Type[Schema[C]] = TsTypes.TapirSchemaOf[C]
+      implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+      val toIterable: Expr[Any => Iterable[Any]] = Expr.quote { (value: Any) =>
+        Expr.splice(isCollection.asIterable(Expr.quote(value.asInstanceOf[C]))).asInstanceOf[Iterable[Any]]
+      }
+      Expr.quote {
+        TapirSchemaUtils
+          .nonEmptyCollectionSchema(Expr.splice(schema).asInstanceOf[Schema[Any]], Expr.splice(toIterable))
+          .asInstanceOf[Schema[C]]
+      }
+    }
 
   /** Check if a type is a numeric primitive or BigDecimal/BigInt at compile time. Uses `plainPrint` (not `prettyPrint`)
     * to avoid ANSI color codes on Scala 2.

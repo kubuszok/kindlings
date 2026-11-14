@@ -331,6 +331,22 @@ object TapirSchemaUtils {
       isOptional = true
     )
 
+  /** [[collectionSchema]] of a collection that is not an `Iterable` (e.g. cats' `NonEmptyList`), whose elements are
+    * returned by `toIterable` (so that e.g. `Schema.applyValidation` can reach them).
+    */
+  def collectionSchemaVia[E](elementSchema: Schema[E], toIterable: Any => Iterable[E]): Schema[Any] =
+    Schema[Any](SchemaType.SArray[Any, E](elementSchema)(toIterable), isOptional = true)
+
+  /** [[setSchema]] of a set that is not an `Iterable`, see [[collectionSchemaVia]]. */
+  def setSchemaVia[E](elementSchema: Schema[E], toIterable: Any => Iterable[E]): Schema[Any] =
+    collectionSchemaVia[E](elementSchema, toIterable).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))
+
+  /** The schema of a collection (or map) that cannot be empty (e.g. cats' `NonEmptyList`), as in tapir-cats: required,
+    * with `Validator.minSize(1)` (`minItems: 1`) checked on the elements returned by `toIterable`.
+    */
+  def nonEmptyCollectionSchema(schema: Schema[Any], toIterable: Any => Iterable[Any]): Schema[Any] =
+    schema.copy(isOptional = false).validate(sttp.tapir.Validator.minSize[Any, Iterable](1).contramap(toIterable))
+
   /** Wrap an element schema as a Set (collection with unique items, same as tapir's `Schema.schemaForSet`). */
   def setSchema[E](elementSchema: Schema[E]): Schema[Any] =
     collectionSchema[E](elementSchema).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))

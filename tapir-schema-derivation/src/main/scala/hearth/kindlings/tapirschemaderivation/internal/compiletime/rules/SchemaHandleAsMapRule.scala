@@ -19,7 +19,11 @@ trait SchemaHandleAsMapRuleImpl {
         Type[A] match {
           case IsMap(isMap) =>
             import isMap.Underlying as Pair
-            deriveMapSchema[A, Pair](isMap.value)
+            deriveMapSchema[A, Pair](isMap.value).map {
+              // Non-empty maps (e.g. cats' NonEmptyMap): required, with minItems/minProperties: 1
+              case Rule.Applicability.Matched(schema) => Rule.matched(nonEmptyIfNeeded[A, Pair](isMap.value, schema))
+              case yielded                            => yielded
+            }
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a map"))
         }

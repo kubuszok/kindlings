@@ -285,6 +285,9 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
 `derivedEnumerationValue`. The result is the same whether or not the element types have an implicit `Schema`:
 
 - `Set`s are marked with unique items (as Tapir does),
+- collections and maps that cannot be empty (cats' `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `NonEmptySet`,
+  `NonEmptyMap`, ... with `kindlings-cats-integration`) are required and validated with `Validator.minSize(1)`
+  (`minItems: 1` in OpenAPI / JSON Schema), as in tapir-cats,
 - `Either` and `scala.Enumeration` values are derived like the sealed hierarchies the JSON libraries encode them as,
 - `Map` keys can be a `String`, or a value type wrapping one: `AnyVal` classes, opaque types, and — with the
   corresponding integration module — refined, Iron, neotype and scala-newtype types. The keys are unwrapped to
