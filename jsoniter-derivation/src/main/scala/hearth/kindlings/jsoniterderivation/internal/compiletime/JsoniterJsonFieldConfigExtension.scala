@@ -90,11 +90,14 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           def useDefaults: Expr[Boolean] =
             Expr.quote(false)
 
+          // The decoder fills in an absent field's default unless requireDefaultFields, and an empty collection/map for an
+          // absent collection/map field unless requireCollectionFields (see DecoderAbsentFieldSupport); the transient*
+          // settings only affect what the encoder writes.
           def fieldsWithDefaultsAreOptional: Expr[Boolean] =
-            Expr.quote(Expr.splice(configExpr).transientDefault)
+            Expr.quote(!Expr.splice(configExpr).requireDefaultFields)
 
           def emptyFieldsAreOptional: Expr[Boolean] =
-            Expr.quote(Expr.splice(configExpr).transientEmpty)
+            Expr.quote(!Expr.splice(configExpr).requireCollectionFields)
 
           def mapsAreArrays: Expr[Boolean] =
             Expr.quote(Expr.splice(configExpr).mapAsArray)
@@ -140,6 +143,10 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           override def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = Expr.quote(true)
 
           override def tuplesAsArrays: Boolean = true
+
+          // `T | Null` fields: absent is `null` (never required), `null` is written as `null` (see
+          // DecoderAbsentFieldSupport)
+          override def nullableFieldsAreOptional: Boolean = true
 
           // See JsoniterDerivationUtils.writeNestedOptionAsAdt
           override def nestedOptionsAsAdts: Option[NestedOptionEncoding] = Some(

@@ -51,6 +51,9 @@ trait SchemaMacrosImpl
     lazy val BooleanType: Type[Boolean] = Type.of[Boolean]
   }
 
+  /** `T | Null` (a Scala 3 nullable type): `T` without the `Null` member(s). `None` on Scala 2 and for other types. */
+  protected def nullableUnionUnderlying[A: Type]: Option[??] = None
+
   // Methods to ignore during implicit search — prevents triggering expensive auto-derivation, and makes sure that
   // types which we derive structurally are handled consistently by our rules
 
@@ -433,33 +436,36 @@ trait SchemaMacrosImpl
     val annsExpr: Expr[List[Any]] = fieldAnnotationsExpr(param)
 
     // Compile-time type checks for field enrichment (C5, C6, C8)
-    val hasDefault: Boolean = param.hasDefault
-    val isCollectionOrMap: Boolean = Type[Field] match {
-      case IsMap(_)        => true
-      case IsCollection(_) => true
-      case _               => false
-    }
     val isNumeric: Boolean = isNumericFieldType[Field]
+    // `T | Null` (Scala 3), when the JSON library never requires it: the optional, nullable schema of `T`
+    val nullableUnderlying: Option[??] =
+      if (sctx.jsonCfg.nullableFieldsAreOptional) nullableUnionUnderlying[Field] else None
+    val mayBeAbsentExpr: Option[Expr[Boolean]] =
+      if (nullableUnderlying.isDefined) None else fieldMayBeAbsent[Field](sctx.jsonCfg, param.hasDefault)
+
+    val fieldSchemaMIO: MIO[Expr[Schema[Any]]] = nullableUnderlying match {
+      case Some(underlying) =>
+        import underlying.Underlying as NonNull
+        deriveSchemaRecursively[NonNull](using sctx.nest[NonNull]).map { nonNullSchema =>
+          Expr.quote(TapirSchemaUtils.nullableSchema[NonNull](Expr.splice(nonNullSchema)))
+        }
+      case None =>
+        deriveSchemaRecursively[Field](using sctx.nest[Field]).map { fieldSchema =>
+          Expr.quote(Expr.splice(fieldSchema).asInstanceOf[Schema[Any]])
+        }
+    }
 
     for {
-      fieldSchema <- deriveSchemaRecursively[Field](using sctx.nest[Field])
-    } yield {
       // Start with the field schema as Schema[Any]
-      val baseSchemaExpr: Expr[Schema[Any]] = Expr.quote {
-        Expr.splice(fieldSchema).asInstanceOf[Schema[Any]]
+      baseSchemaExpr <- fieldSchemaMIO
+    } yield {
+
+      // C5 + C6: a field is optional exactly when the JSON library's decoder accepts it missing (see fieldMayBeAbsent)
+      val afterEmpty = mayBeAbsentExpr match {
+        case Some(flag) =>
+          Expr.quote(TapirSchemaUtils.setFieldOptional(Expr.splice(baseSchemaExpr), Expr.splice(flag)))
+        case None => baseSchemaExpr
       }
-
-      // C5: fieldsWithDefaultsAreOptional — mark fields with defaults as optional
-      val afterDefault = if (hasDefault) {
-        val flag = sctx.jsonCfg.fieldsWithDefaultsAreOptional
-        Expr.quote(TapirSchemaUtils.markFieldOptional(Expr.splice(baseSchemaExpr), Expr.splice(flag)))
-      } else baseSchemaExpr
-
-      // C6: emptyFieldsAreOptional — mark collection/map fields as optional
-      val afterEmpty = if (isCollectionOrMap) {
-        val flag = sctx.jsonCfg.emptyFieldsAreOptional
-        Expr.quote(TapirSchemaUtils.markFieldOptional(Expr.splice(afterDefault), Expr.splice(flag)))
-      } else afterDefault
 
       // C8: numericFieldsAsStrings — add "string" format to numeric fields
       val enrichedSchemaExpr = if (isNumeric) {
@@ -478,6 +484,54 @@ trait SchemaMacrosImpl
       }
     }
   }
+
+  /** Whether the JSON library's decoder accepts a field of type `F` missing from the JSON object, when the field's
+    * schema should follow the config rather than its own `isOptional`:
+    *
+    *   - `Option`s: `None` - their schema is always optional (every decoder reads an absent `Option` as `None`);
+    *   - fields with a default value: [[JsonSchemaConfig.fieldsWithDefaultsAreOptional]], or, for a collection/map that
+    *     can be empty, also [[JsonSchemaConfig.emptyFieldsAreOptional]];
+    *   - collections/maps that can be empty (not `String`, not `::`, not one built with a smart constructor, like cats'
+    *     `NonEmptyList`): [[JsonSchemaConfig.emptyFieldsAreOptional]];
+    *   - collections that cannot be empty: required (`false`), unless they have a default value (see above);
+    *   - any other field: `None` (its schema decides, e.g. a user-provided one).
+    */
+  private def fieldMayBeAbsent[F: Type](jsonCfg: JsonSchemaConfig, hasDefault: Boolean): Option[Expr[Boolean]] = {
+    val isOption = Type[F] match {
+      case IsOption(_) => true
+      case _           => false
+    }
+    val canBeEmpty = collectionCanBeEmpty[F]
+    if (isOption || (!hasDefault && canBeEmpty.isEmpty)) None
+    else {
+      val conditions: List[Expr[Boolean]] =
+        (if (hasDefault) List(jsonCfg.fieldsWithDefaultsAreOptional) else Nil) ++
+          (if (canBeEmpty.contains(true)) List(jsonCfg.emptyFieldsAreOptional) else Nil)
+      conditions match {
+        case Nil           => Some(Expr(false))
+        case single :: Nil => Some(single)
+        case first :: rest =>
+          Some(rest.foldLeft(first)((acc, next) => Expr.quote(Expr.splice(acc) || Expr.splice(next))))
+      }
+    }
+  }
+
+  /** For a collection or map type (not `String`): whether it has an empty value, i.e. whether a decoder can read it
+    * from `[]`/`{}` (or fill it in for an absent field). Collections built with a smart constructor that can fail
+    * (Hearth's `CtorLikeOf.Either*`, e.g. cats' `NonEmptyList`) and `::` cannot be empty. `None` for other types.
+    */
+  protected def collectionCanBeEmpty[F: Type]: Option[Boolean] =
+    if (Type[F] =:= TsTypes.StringType.asInstanceOf[Type[F]]) None
+    else
+      Type[F] match {
+        case IsCollection(isCollection) =>
+          val plainCtor = isCollection.value.build match {
+            case _: CtorLikeOf.PlainValue[?, ?] => true
+            case _                              => false
+          }
+          Some(plainCtor && !(Type[F] <:< Type.of[scala.collection.immutable.::[Any]]))
+        case _ => None
+      }
 
   /** Check if a type is a numeric primitive or BigDecimal/BigInt at compile time. Uses `plainPrint` (not `prettyPrint`)
     * to avoid ANSI color codes on Scala 2.
