@@ -136,6 +136,129 @@ final class BinaryCompatSpec extends MacroSuite {
     }
   }
 
+  group("JsoniterConfig of 0.3.4") {
+
+    // The 31 fields of 0.3.4, in order (emptyCollectionsAsDefault was added after it).
+    val f: String => String = _.toUpperCase
+
+    test("the old-arity constructor and apply fill the new fields with their defaults") {
+      val viaApply = JsoniterConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        f,
+        true,
+        false,
+        false,
+        false,
+        99,
+        true,
+        true
+      )
+      val viaNew = new JsoniterConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        f,
+        true,
+        false,
+        false,
+        false,
+        99,
+        true,
+        true
+      )
+      for (c <- List(viaApply, viaNew)) {
+        c.discriminatorFieldName ==> Some("t")
+        c.requireDiscriminatorFirst ==> false
+        c.bigIntDigitsLimit ==> 99
+        c.scalaTransientSupport ==> true
+        c.transientNull ==> true
+        c.emptyCollectionsAsDefault ==> true
+      }
+    }
+
+    test("the old-arity copy keeps the new fields") {
+      val base = JsoniterConfig.default.withEmptyCollectionsAsEmpty
+      val c = base.copy(
+        identity,
+        identity,
+        None,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        34,
+        6178,
+        308,
+        1,
+        2,
+        1024,
+        identity,
+        false,
+        false,
+        false,
+        true,
+        308,
+        false,
+        true
+      )
+      c.mapMaxInsertNumber ==> 1
+      c.transientNull ==> true
+      c.emptyCollectionsAsDefault ==> false
+    }
+  }
+
   group("JsoniterDerivationFactories / JsoniterDerivationUtils of 0.3.2") {
 
     test("codecInstance / jsonCodecInstance take a strict null value") {

@@ -195,11 +195,21 @@ trait DecoderAbsentFieldSupport {
     *   - a user-provided codec receives the field's default value (else its `nullValue`) as the `default` argument of
     *     `decodeValue`, and decides itself what a JSON `null` is (Spec ~674);
     *   - an empty JSON array/object for a collection/map field with a default value decodes as that default, as a JSON
-    *     `null` does (Defaults2, Spec ~2530: `"l":[]` with `l: List[Int] = List(0)` is `List(0)`);
+    *     `null` does (Defaults2, Spec ~2530: `"l":[]` with `l: List[Int] = List(0)` is `List(0)`), unless
+    *     `emptyCollectionsAsDefault` is off (a Kindlings superset: then it stays empty);
     *   - otherwise [[withNullAsDefault]].
+    *
+    * @param config
+    *   the config (for `emptyCollectionsAsDefault` when it is only known at runtime)
+    * @param evaluatedConfig
+    *   the config, when it is known at compile time
     */
   @scala.annotation.nowarn("msg=is never used")
-  protected def withFieldDefault[Field: Type](param: Parameter)(
+  protected def withFieldDefault[Field: Type](
+      param: Parameter,
+      config: Expr[JsoniterConfig],
+      evaluatedConfig: Option[JsoniterConfig]
+  )(
       decode: Expr[JsonReader] => Expr[Field]
   ): Expr[JsonReader] => Expr[Field] = {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
@@ -215,8 +225,22 @@ trait DecoderAbsentFieldSupport {
       case Left(_) =>
         val emptyAsDefault: Expr[JsonReader] => Expr[Field] = default match {
           case Some(d) if isCollectionField[Field] =>
-            (reader: Expr[JsonReader]) =>
-              Expr.quote(JsoniterDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d)))
+            evaluatedConfig.map(_.emptyCollectionsAsDefault) match {
+              case Some(true) =>
+                (reader: Expr[JsonReader]) =>
+                  Expr.quote(
+                    JsoniterDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d))
+                  )
+              case Some(false) => decode
+              case None        =>
+                (reader: Expr[JsonReader]) =>
+                  Expr.quote {
+                    val decoded = Expr.splice(decode(reader))
+                    if (Expr.splice(config).emptyCollectionsAsDefault)
+                      JsoniterDerivationUtils.emptyAsDefault[Field](decoded, Expr.splice(d))
+                    else decoded
+                  }
+            }
           case _ => decode
         }
         withNullAsDefault[Field](param)(emptyAsDefault)
@@ -225,14 +249,20 @@ trait DecoderAbsentFieldSupport {
 
   /** [[withFieldDefault]] for decode functions. */
   @scala.annotation.nowarn("msg=is never used")
-  protected def withFieldDefaultFn[Field: Type](param: Parameter)(
+  protected def withFieldDefaultFn[Field: Type](
+      param: Parameter,
+      config: Expr[JsoniterConfig],
+      evaluatedConfig: Option[JsoniterConfig]
+  )(
       decodeFn: Expr[JsonReader => Field]
   ): Expr[JsonReader => Field] = {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
     val unchanged = independentDefault[Field](param).isEmpty && nullAsDefaultValue[Field](param).isEmpty
     if (unchanged) decodeFn
     else {
-      val wrapped = withFieldDefault[Field](param)(r => Expr.quote(Expr.splice(decodeFn).apply(Expr.splice(r))))
+      val wrapped = withFieldDefault[Field](param, config, evaluatedConfig)(r =>
+        Expr.quote(Expr.splice(decodeFn).apply(Expr.splice(r)))
+      )
       Expr.quote((r: JsonReader) => Expr.splice(wrapped(Expr.quote(r))))
     }
   }

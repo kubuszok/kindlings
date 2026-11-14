@@ -183,6 +183,10 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[Map[ParityUserKey, Int]](using JsoniterConfig.default.withInlineOneValueClasses)
   val inlineTagged: KindlingsJsonValueCodec[List[ParityTaggedId]] =
     KindlingsJsonValueCodec.derived[List[ParityTaggedId]](using JsoniterConfig.default.withInlineOneValueClasses)
+  val emptyCollAsDefault: KindlingsJsonValueCodec[EmptyCollDefaults] =
+    KindlingsJsonValueCodec.derived[EmptyCollDefaults](using JsoniterConfig.default)
+  val emptyCollAsEmpty: KindlingsJsonValueCodec[EmptyCollDefaults] =
+    KindlingsJsonValueCodec.derived[EmptyCollDefaults](using JsoniterConfig.default.withEmptyCollectionsAsEmpty)
   val circeLikePreset: KindlingsJsonValueCodec[List[ParityAdt]] =
     KindlingsJsonValueCodec.derived[List[ParityAdt]](using JsoniterConfig.makeCirceLike)
   val openapiPreset: KindlingsJsonValueCodec[ParityPresetRecord] =

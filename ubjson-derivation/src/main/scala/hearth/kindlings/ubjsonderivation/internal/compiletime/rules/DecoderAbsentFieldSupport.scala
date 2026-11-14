@@ -139,12 +139,17 @@ trait DecoderAbsentFieldSupport {
     *
     *   - a JSON `null` decodes as the default for reference-typed fields (also `Option`s with a default; not nullable
     *     `T | Null` fields, nested options, primitives and value classes);
-    *   - an empty array/object for a collection/map field decodes as the default;
+    *   - an empty array/object for a collection/map field decodes as the default (unless `emptyCollectionsAsDefault` is
+    *     off: a Kindlings superset, then it stays empty);
     *   - a field with a user-provided codec is decoded by that codec alone (jsoniter-scala passes the default to the
     *     codec, which decides; a `UBJsonValueCodec` has no default argument).
     */
   @scala.annotation.nowarn("msg=is never used")
-  protected def withFieldDefault[Field: Type](param: Parameter)(
+  protected def withFieldDefault[Field: Type](
+      param: Parameter,
+      config: Expr[UBJsonConfig],
+      evaluatedConfig: Option[UBJsonConfig]
+  )(
       decode: Expr[UBJsonReader] => Expr[Field]
   ): Expr[UBJsonReader] => Expr[Field] = {
     implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
@@ -174,9 +179,20 @@ trait DecoderAbsentFieldSupport {
         val nullAsDefault =
           !isNestedOption && nullableUnionUnderlying[Field].isEmpty && Type[Field] <:< Type.of[AnyRef]
         val emptyAsDefault: Expr[UBJsonReader] => Expr[Field] =
-          if (isCollection)
-            reader =>
-              Expr.quote(UBJsonDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d)))
+          if (isCollection) evaluatedConfig.map(_.emptyCollectionsAsDefault) match {
+            case Some(true) =>
+              reader =>
+                Expr.quote(UBJsonDerivationUtils.emptyAsDefault[Field](Expr.splice(decode(reader)), Expr.splice(d)))
+            case Some(false) => decode
+            case None        =>
+              reader =>
+                Expr.quote {
+                  val decoded = Expr.splice(decode(reader))
+                  if (Expr.splice(config).emptyCollectionsAsDefault)
+                    UBJsonDerivationUtils.emptyAsDefault[Field](decoded, Expr.splice(d))
+                  else decoded
+                }
+          }
           else decode
         if (!nullAsDefault) emptyAsDefault
         else

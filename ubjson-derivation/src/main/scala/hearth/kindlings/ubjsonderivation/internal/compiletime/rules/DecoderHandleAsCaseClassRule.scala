@@ -157,7 +157,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { rawDecodeFn =>
-                  val decodeFn = withFieldDefault[Field](param)(rawDecodeFn)
+                  val decodeFn = withFieldDefault[Field](param, dctx.config, dctx.evaluatedConfig)(rawDecodeFn)
                   val decodeFnErased: Expr[UBJsonReader => Any] = erasedFieldDecodeFn[A, Field](param, decodeFn)
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = mkFieldAccessExpr[Field](arrExpr, arrayIndex)
@@ -353,7 +353,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val arrayIndex = nonTransientWithIndex.find(_._1._1 == fName).map(_._2).getOrElse(param.index)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoder[Field].map { rawDecodeFn =>
-                  val decodeFn = withFieldDefault[Field](param)(rawDecodeFn)
+                  val decodeFn = withFieldDefault[Field](param, dctx.config, dctx.evaluatedConfig)(rawDecodeFn)
                   val decodeFnErased: Expr[UBJsonReader => Any] = erasedFieldDecodeFn[A, Field](param, decodeFn)
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = mkFieldAccessExpr[Field](arrExpr, arrayIndex)

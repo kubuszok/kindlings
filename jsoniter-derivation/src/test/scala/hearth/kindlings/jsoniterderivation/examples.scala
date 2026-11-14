@@ -250,6 +250,21 @@ case class AbsentGeneric[A](value: A, opt: Option[A], xs: List[A], n: Int = 5)
 sealed trait AbsentAdt
 case class AbsentLeaf(name: String, opt: Option[Int], n: Int = 3, xs: List[Int]) extends AbsentAdt
 
+// Collections/maps with non-empty defaults (see EmptyCollectionsSpec)
+case class EmptyCollDefaults(
+    xs: List[Int] = List(1),
+    m: Map[String, Int] = Map("a" -> 1),
+    v: Vector[String] = Vector("v"),
+    s: Set[Int] = Set(1),
+    noDefault: List[Int]
+)
+
+/** Configs read from mutable fields so that the macro cannot evaluate them at compile time (forces generic codegen). */
+object EmptyCollectionsRuntimeConfigs {
+  @volatile var asDefault: JsoniterConfig = JsoniterConfig.default
+  @volatile var asEmpty: JsoniterConfig = JsoniterConfig.default.withEmptyCollectionsAsEmpty
+}
+
 /** Configs read from mutable fields so that the macro cannot evaluate them at compile time (forces generic codegen). */
 object AbsentFieldsRuntimeConfigs {
   @volatile var default: JsoniterConfig = JsoniterConfig.default

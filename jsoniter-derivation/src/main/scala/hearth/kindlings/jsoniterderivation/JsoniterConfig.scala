@@ -72,7 +72,11 @@ final case class JsoniterConfig(
     // at compile time (a runtime config cannot change which fields a codec has).
     scalaTransientSupport: Boolean = false,
     // As in jsoniter-scala: fields with `null` values are not written.
-    transientNull: Boolean = false
+    transientNull: Boolean = false,
+    // As in jsoniter-scala (`true`): an empty JSON array/object (`[]`/`{}`) for a collection/map field with a default
+    // value decodes as that default. Kindlings-only `false` (`withEmptyCollectionsAsEmpty`): it decodes as an empty
+    // collection/map, so that values with empty collections round-trip with Kindlings' write-everything defaults.
+    emptyCollectionsAsDefault: Boolean = true
 ) {
 
   // As in jsoniter-scala, the name mappers may be partial functions: names they are not defined at stay unchanged
@@ -131,6 +135,18 @@ final case class JsoniterConfig(
   def withScalaTransientSupport: JsoniterConfig = copy(scalaTransientSupport = true)
   def withTransientNull: JsoniterConfig = copy(transientNull = true)
 
+  /** Whether an empty JSON array/object (`[]`/`{}`) for a collection/map field with a default value decodes as that
+    * default (`true`, the default, as in jsoniter-scala) or as an empty collection/map (`false`).
+    */
+  def withEmptyCollectionsAsDefault(asDefault: Boolean): JsoniterConfig = copy(emptyCollectionsAsDefault = asDefault)
+
+  /** An empty JSON array/object (`[]`/`{}`) for a collection/map field with a default value decodes as an empty
+    * collection/map, not as the default (a Kindlings superset of jsoniter-scala). Recommended with Kindlings'
+    * write-everything defaults (`transientDefault`/`transientEmpty` off), under which a value with an empty collection
+    * is written as `[]` and would otherwise be read back as the field's default.
+    */
+  def withEmptyCollectionsAsEmpty: JsoniterConfig = copy(emptyCollectionsAsDefault = false)
+
   // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
   // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
   def copy(
@@ -164,7 +180,8 @@ final case class JsoniterConfig(
       requireDiscriminatorFirst: Boolean = this.requireDiscriminatorFirst,
       bigIntDigitsLimit: Int = this.bigIntDigitsLimit,
       scalaTransientSupport: Boolean = this.scalaTransientSupport,
-      transientNull: Boolean = this.transientNull
+      transientNull: Boolean = this.transientNull,
+      emptyCollectionsAsDefault: Boolean = this.emptyCollectionsAsDefault
   ): JsoniterConfig = new JsoniterConfig(
     fieldNameMapper,
     adtLeafClassNameMapper,
@@ -196,7 +213,152 @@ final case class JsoniterConfig(
     requireDiscriminatorFirst,
     bigIntDigitsLimit,
     scalaTransientSupport,
-    transientNull
+    transientNull,
+    emptyCollectionsAsDefault
+  )
+
+  /** The `copy` of Kindlings 0.3.4 (without the fields added since); the other fields keep their values. */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.4; use copy with named arguments",
+    "0.3.5"
+  )
+  def copy(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      mapAsArray: Boolean,
+      isStringified: Boolean,
+      decodingOnly: Boolean,
+      encodingOnly: Boolean,
+      circeLikeObjectEncoding: Boolean,
+      useScalaEnumValueId: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int,
+      bitSetValueLimit: Int,
+      javaEnumValueNameMapper: String => String,
+      skipNestedOptionValues: Boolean,
+      alwaysEmitDiscriminator: Boolean,
+      inlineOneValueClasses: Boolean,
+      requireDiscriminatorFirst: Boolean,
+      bigIntDigitsLimit: Int,
+      scalaTransientSupport: Boolean,
+      transientNull: Boolean
+  ): JsoniterConfig = new JsoniterConfig(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    mapAsArray,
+    isStringified,
+    decodingOnly,
+    encodingOnly,
+    circeLikeObjectEncoding,
+    useScalaEnumValueId,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    bitSetValueLimit,
+    javaEnumValueNameMapper,
+    skipNestedOptionValues,
+    alwaysEmitDiscriminator,
+    inlineOneValueClasses,
+    requireDiscriminatorFirst,
+    bigIntDigitsLimit,
+    scalaTransientSupport,
+    transientNull,
+    this.emptyCollectionsAsDefault
+  )
+
+  /** The constructor of Kindlings 0.3.4 (without the fields added since, which get their defaults). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.4; use the primary constructor",
+    "0.3.5"
+  )
+  def this(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      mapAsArray: Boolean,
+      isStringified: Boolean,
+      decodingOnly: Boolean,
+      encodingOnly: Boolean,
+      circeLikeObjectEncoding: Boolean,
+      useScalaEnumValueId: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int,
+      bitSetValueLimit: Int,
+      javaEnumValueNameMapper: String => String,
+      skipNestedOptionValues: Boolean,
+      alwaysEmitDiscriminator: Boolean,
+      inlineOneValueClasses: Boolean,
+      requireDiscriminatorFirst: Boolean,
+      bigIntDigitsLimit: Int,
+      scalaTransientSupport: Boolean,
+      transientNull: Boolean
+  ) = this(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    mapAsArray,
+    isStringified,
+    decodingOnly,
+    encodingOnly,
+    circeLikeObjectEncoding,
+    useScalaEnumValueId,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    bitSetValueLimit,
+    javaEnumValueNameMapper,
+    skipNestedOptionValues,
+    alwaysEmitDiscriminator,
+    inlineOneValueClasses,
+    requireDiscriminatorFirst,
+    bigIntDigitsLimit,
+    scalaTransientSupport,
+    transientNull,
+    true
   )
 
   /** The `copy` of Kindlings 0.3.2 (without the fields added since); the other fields keep their values. */
@@ -263,7 +425,8 @@ final case class JsoniterConfig(
     this.requireDiscriminatorFirst,
     this.bigIntDigitsLimit,
     this.scalaTransientSupport,
-    this.transientNull
+    this.transientNull,
+    this.emptyCollectionsAsDefault
   )
 
   /** The constructor of Kindlings 0.3.2 (without the fields added since, which get their defaults). */
@@ -330,7 +493,8 @@ final case class JsoniterConfig(
     true,
     308,
     false,
-    false
+    false,
+    true
   )
 }
 object JsoniterConfig {
@@ -398,6 +562,78 @@ object JsoniterConfig {
     skipNestedOptionValues,
     alwaysEmitDiscriminator,
     inlineOneValueClasses
+  )
+
+  /** The `apply` of Kindlings 0.3.4 (without the fields added since, which get their defaults). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.4; use apply with named arguments",
+    "0.3.5"
+  )
+  def apply(
+      fieldNameMapper: String => String,
+      adtLeafClassNameMapper: String => String,
+      discriminatorFieldName: Option[String],
+      skipUnexpectedFields: Boolean,
+      enumAsStrings: Boolean,
+      mapAsArray: Boolean,
+      isStringified: Boolean,
+      decodingOnly: Boolean,
+      encodingOnly: Boolean,
+      circeLikeObjectEncoding: Boolean,
+      useScalaEnumValueId: Boolean,
+      transientDefault: Boolean,
+      transientEmpty: Boolean,
+      transientNone: Boolean,
+      requireCollectionFields: Boolean,
+      requireDefaultFields: Boolean,
+      checkFieldDuplication: Boolean,
+      bigDecimalPrecision: Int,
+      bigDecimalScaleLimit: Int,
+      bigDecimalDigitsLimit: Int,
+      mapMaxInsertNumber: Int,
+      setMaxInsertNumber: Int,
+      bitSetValueLimit: Int,
+      javaEnumValueNameMapper: String => String,
+      skipNestedOptionValues: Boolean,
+      alwaysEmitDiscriminator: Boolean,
+      inlineOneValueClasses: Boolean,
+      requireDiscriminatorFirst: Boolean,
+      bigIntDigitsLimit: Int,
+      scalaTransientSupport: Boolean,
+      transientNull: Boolean
+  ): JsoniterConfig = new JsoniterConfig(
+    fieldNameMapper,
+    adtLeafClassNameMapper,
+    discriminatorFieldName,
+    skipUnexpectedFields,
+    enumAsStrings,
+    mapAsArray,
+    isStringified,
+    decodingOnly,
+    encodingOnly,
+    circeLikeObjectEncoding,
+    useScalaEnumValueId,
+    transientDefault,
+    transientEmpty,
+    transientNone,
+    requireCollectionFields,
+    requireDefaultFields,
+    checkFieldDuplication,
+    bigDecimalPrecision,
+    bigDecimalScaleLimit,
+    bigDecimalDigitsLimit,
+    mapMaxInsertNumber,
+    setMaxInsertNumber,
+    bitSetValueLimit,
+    javaEnumValueNameMapper,
+    skipNestedOptionValues,
+    alwaysEmitDiscriminator,
+    inlineOneValueClasses,
+    requireDiscriminatorFirst,
+    bigIntDigitsLimit,
+    scalaTransientSupport,
+    transientNull,
+    true
   )
 
   // The name mappers of Kindlings 0.3.2: package-private, but public (with static forwarders) in the bytecode.
