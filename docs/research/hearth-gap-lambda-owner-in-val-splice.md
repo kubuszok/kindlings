@@ -82,3 +82,9 @@ inside `ValDefsCache` derivation, and spliced through `Expr.splice` of a `fromCt
 (3) the element is a value class (`R4Plate <: AnyVal`) whose encoding is a cached def call. A reproducer should start
 from `KindlingsEncoder.derived[R4OnlyOpt]` with `case class R4OnlyOpt(maybePlate: Option[R4Plate])`, derived in an
 `object` with an implicit `Configuration`, and remove ingredients one at a time.
+
+## Re-checked with Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (2026-11-14)
+
+Status: **still OPEN** (kubuszok/hearth#402 did not address it), and the workaround stays. Restoring the `val json`
+shape above still fails to compile `CirceParityRound4Spec` (lines 23 and 25) on Scala 3 with
+"Found definitions 2 distinct owners: val json, val macro".
