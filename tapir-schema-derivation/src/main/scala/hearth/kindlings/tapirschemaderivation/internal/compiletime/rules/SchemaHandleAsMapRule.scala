@@ -19,11 +19,10 @@ trait SchemaHandleAsMapRuleImpl {
         Type[A] match {
           case IsMap(isMap) =>
             import isMap.Underlying as Pair
-            deriveMapSchema[A, Pair](isMap.value).map {
-              // Non-empty maps (e.g. cats' NonEmptyMap): required, with minItems/minProperties: 1
-              case Rule.Applicability.Matched(schema) => Rule.matched(nonEmptyIfNeeded[A, Pair](isMap.value, schema))
-              case yielded                            => yielded
-            }
+            // Non-empty maps (e.g. cats' NonEmptyMap): required, with minItems/minProperties: 1
+            deriveMapSchema[A, Pair](isMap.value).map(schema =>
+              Rule.matched(nonEmptyIfNeeded[A, Pair](isMap.value, schema))
+            )
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a map"))
         }
@@ -31,33 +30,33 @@ trait SchemaHandleAsMapRuleImpl {
 
     private def deriveMapSchema[A: SchemaCtx, Pair: Type](
         isMap: IsMapOf[A, Pair]
-    ): MIO[Rule.Applicability[Expr[Schema[A]]]] = {
+    ): MIO[Expr[Schema[A]]] = {
       import isMap.{Key, Value}
       implicit val stringT: Type[String] = TsTypes.StringType
       val mapsAreArraysExpr: Expr[Boolean] = sctx.jsonCfg.mapsAreArrays
       if (Key <:< Type[String]) {
         Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint}") >>
           deriveSchemaRecursively[Value](using sctx.nest[Value]).map { valueSchema =>
-            Rule.matched(Expr.quote {
+            Expr.quote {
               if (Expr.splice(mapsAreArraysExpr))
                 TapirSchemaUtils.mapAsArraySchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
               else
                 TapirSchemaUtils.mapSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
-            })
+            }
           }
       } else
         keyToString[A, Key] match {
           case Some(keyToStringExpr) =>
             Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint} (key: ${Key.prettyPrint})") >>
               deriveSchemaRecursively[Value](using sctx.nest[Value]).map { valueSchema =>
-                Rule.matched(Expr.quote {
+                Expr.quote {
                   if (Expr.splice(mapsAreArraysExpr))
                     TapirSchemaUtils.mapAsArraySchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
                   else
                     TapirSchemaUtils
                       .mapSchemaWithKeys[Key, Value](Expr.splice(valueSchema), Expr.splice(keyToStringExpr))
                       .asInstanceOf[Schema[A]]
-                })
+                }
               }
           case None =>
             MIO.fail(
