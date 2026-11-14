@@ -50,7 +50,12 @@ object AbsJsoniterDefault {
   implicit val config: JsoniterConfig = JsoniterConfig.default
   implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
   val derived: AbsJsoniterDerived =
-    AbsJsoniterDerived("default", config, KindlingsSchema.derived[AbsAll].schema, KindlingsJsonValueCodec.derived[AbsAll])
+    AbsJsoniterDerived(
+      "default",
+      config,
+      KindlingsSchema.derived[AbsAll].schema,
+      KindlingsJsonValueCodec.derived[AbsAll]
+    )
 }
 
 object AbsJsoniterRequireDefaults {
