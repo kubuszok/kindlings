@@ -52,8 +52,9 @@ final class NonStringMapKeySchemaSpec extends MacroSuite {
       case p: SchemaType.SProduct[?] =>
         p.fields.map { f =>
           (f.schema.schemaType: SchemaType[?]) match {
-            case op: SchemaType.SOpenProduct[?, ?] => f.name.encodedName -> op.asInstanceOf[SchemaType.SOpenProduct[Any, Any]]
-            case other                             => fail(s"${f.name.encodedName}: expected SOpenProduct, got: $other")
+            case op: SchemaType.SOpenProduct[?, ?] =>
+              f.name.encodedName -> op.asInstanceOf[SchemaType.SOpenProduct[Any, Any]]
+            case other => fail(s"${f.name.encodedName}: expected SOpenProduct, got: $other")
           }
         }.toMap
       case other => fail(s"Expected SProduct, got: $other")

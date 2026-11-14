@@ -51,6 +51,12 @@ Any `A :| C` (i.e. `IronType[A, C]`) where:
 
 This includes all standard Iron constraints: `Positive`, `StrictlyNegative`, `Not[Empty]`, `MinLength[N]`, `Match[R]`, and user-defined constraints.
 
+Iron's "new types" are supported too: `Key.T` (and an alias like `type Key = Key.T`) where
+`object Key extends RefinedType[A, C]` or `object Key extends RefinedSubtype[A, C]`. They are unwrapped to `A` like
+`A :| C`, and validated on decoding with the companion's `either` (which checks the companion's
+`RuntimeConstraint[A, C]`). Both kinds work as case class fields and as map keys (e.g. `Map[Key, Int]` is a JSON object
+keyed by the underlying `String`, and its tapir schema an open product).
+
 ## Example
 
 ??? example "Case class with Iron-constrained fields (Circe)"
