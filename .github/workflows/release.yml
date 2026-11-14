@@ -25,6 +25,12 @@ jobs:
         with:
           jvm: "temurin:1.17.0.15"
           apps: sbt
+      # `ci-release` builds, documents and signs every module/platform/Scala-version cell in one sbt JVM before
+      # uploading; with the local default (.jvmopts -Xmx3G) Scaladoc ran out of heap there (0.3.4). The runner has
+      # 16 GB, so give the release build more; local builds keep .jvmopts as it is.
+      - name: Give the release build more heap
+        # assume-unchanged keeps the edit out of `git status` (the version is derived from git)
+        run: sed -i 's/^-Xmx.*/-Xmx8G/' .jvmopts && git update-index --assume-unchanged .jvmopts && cat .jvmopts
       - name: Publish all projects
         run: sbt ci-release
         env:
