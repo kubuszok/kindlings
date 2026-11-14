@@ -179,14 +179,8 @@ trait DecoderMacrosImpl
         errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.xmlderivation.debug.logDerivationForKindlingsXmlDecoder or scalac option -Xmacro-settings:xmlDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)
@@ -240,14 +234,8 @@ trait DecoderMacrosImpl
         errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            e.getMessage.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + e.getMessage
-            }
-          }
-          .mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.xmlderivation.debug.logDerivationForKindlingsXmlDecoder or scalac option -Xmacro-settings:xmlDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)

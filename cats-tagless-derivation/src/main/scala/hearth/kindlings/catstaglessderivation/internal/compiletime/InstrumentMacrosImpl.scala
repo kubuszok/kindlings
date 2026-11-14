@@ -69,7 +69,8 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
         errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.catstaglessderivation.debug.logDerivationForCatsTaglessDerivation"
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
@@ -375,7 +376,7 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
                           throw CatsTaglessDerivationError.MethodForwardingFailed(
                             methodName,
                             s"fold crashed (${sm.getClass.getSimpleName}, " +
-                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${e.getMessage}"
+                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf(e)}"
                           )
                       }
                     case None =>

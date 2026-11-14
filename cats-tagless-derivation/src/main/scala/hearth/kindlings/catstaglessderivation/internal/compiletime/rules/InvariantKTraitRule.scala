@@ -219,7 +219,7 @@ trait InvariantKTraitRuleImpl {
                           throw CatsTaglessDerivationError.MethodForwardingFailed(
                             methodName,
                             s"fold crashed (${sm.getClass.getSimpleName}, " +
-                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${e.getMessage}"
+                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf(e)}"
                           )
                       }
                     case None =>

@@ -355,15 +355,8 @@ trait CodecMacrosImpl
         errorRendering = if (shouldWeLogCodecDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            val msg = Option(e.getMessage).getOrElse(e.toString)
-            msg.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + msg
-            }
-          }
-          .mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.ubjsonderivation.debug.logDerivationForUBJsonValueCodec or scalac option -Xmacro-settings:ubjsonDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)
