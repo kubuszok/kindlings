@@ -46,7 +46,7 @@ trait SchemaHandleAsMapRuleImpl {
             })
           }
       } else
-        keyToString[Key] match {
+        keyToString[A, Key] match {
           case Some(keyToStringExpr) =>
             Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint} (key: ${Key.prettyPrint})") >>
               deriveSchemaRecursively[Value](using sctx.nest[Value]).map { valueSchema =>
@@ -62,26 +62,78 @@ trait SchemaHandleAsMapRuleImpl {
           case None =>
             MIO.fail(
               new Exception(
-                s"Cannot derive tapir Schema for Map with key type ${Key.prettyPrint}: the key must be a String " +
-                  s"(sub)type or a value type wrapping one. Provide an implicit Schema[${Type[A].prettyPrint}] " +
+                s"Cannot derive tapir Schema for Map with key type ${Key.prettyPrint}: the key must be a String, a " +
+                  s"primitive, UUID, BigInt, BigDecimal or java.time type, or a value type (AnyVal, opaque type, " +
+                  s"...) wrapping one of them. Provide an implicit Schema[${Type[A].prettyPrint}] " +
                   s"(e.g. using Schema.schemaForMap[K, V](keyToString)) for other key types"
               )
             )
         }
     }
 
-    /** Builds a `K => String` for map keys which are value types (AnyVal, opaque types, newtypes, ...) wrapping a
-      * String (sub)type, possibly through several layers of value types.
+    /** Builds a `K => String` producing the JSON object key the JSON library writes for a map key:
+      *
+      *   - the library's own conversion, if it has one for `K` (e.g. circe's `KeyEncoder`, also a user-provided one),
+      *   - `String` (sub)types as they are,
+      *   - value types (AnyVal, opaque types, newtypes, ...), possibly through several layers, as their underlying
+      *     value's key,
+      *   - primitives (and their boxes), `UUID`, `BigInt`, `BigDecimal` and `java.time` values with `toString`, as the
+      *     JSON libraries write them.
       */
-    private def keyToString[K: Type](implicit stringT: Type[String]): Option[Expr[K => String]] =
-      if (Type[K] <:< Type[String]) Some(Expr.quote((k: K) => k.asInstanceOf[String]))
-      else
-        Type[K] match {
-          case IsValueType(isValueType) =>
-            import isValueType.Underlying as Inner
-            keyToString[Inner].map(innerToString => unwrapKeyToString[K, Inner](isValueType.value, innerToString))
-          case _ => None
-        }
+    private def keyToString[A: SchemaCtx, K: Type](implicit stringT: Type[String]): Option[Expr[K => String]] =
+      sctx[A].jsonCfg.mapKeyToString[K].orElse {
+        if (Type[K] <:< Type[String]) Some(Expr.quote((k: K) => k.asInstanceOf[String]))
+        else
+          Type[K] match {
+            case IsValueType(isValueType) =>
+              import isValueType.Underlying as Inner
+              keyToString[A, Inner]
+                .map(innerToString => unwrapKeyToString[K, Inner](isValueType.value, innerToString))
+            case _ if isScalarKey[K] => Some(Expr.quote((k: K) => k.toString))
+            case _                   => None
+          }
+      }
+
+    /** Key types which the JSON libraries write as their `toString`. */
+    private def isScalarKey[K: Type]: Boolean = scalarKeyTypes.exists(t => Type[K] <:< t.Underlying)
+
+    private lazy val scalarKeyTypes: List[??] = List(
+      Type.of[Int].as_??,
+      Type.of[Long].as_??,
+      Type.of[Short].as_??,
+      Type.of[Byte].as_??,
+      Type.of[Char].as_??,
+      Type.of[Boolean].as_??,
+      Type.of[Double].as_??,
+      Type.of[Float].as_??,
+      Type.of[java.lang.Integer].as_??,
+      Type.of[java.lang.Long].as_??,
+      Type.of[java.lang.Short].as_??,
+      Type.of[java.lang.Byte].as_??,
+      Type.of[java.lang.Character].as_??,
+      Type.of[java.lang.Boolean].as_??,
+      Type.of[java.lang.Double].as_??,
+      Type.of[java.lang.Float].as_??,
+      Type.of[BigInt].as_??,
+      Type.of[BigDecimal].as_??,
+      Type.of[java.math.BigInteger].as_??,
+      Type.of[java.math.BigDecimal].as_??,
+      Type.of[java.util.UUID].as_??,
+      Type.of[java.time.Instant].as_??,
+      Type.of[java.time.LocalDate].as_??,
+      Type.of[java.time.LocalDateTime].as_??,
+      Type.of[java.time.LocalTime].as_??,
+      Type.of[java.time.OffsetDateTime].as_??,
+      Type.of[java.time.OffsetTime].as_??,
+      Type.of[java.time.ZonedDateTime].as_??,
+      Type.of[java.time.Duration].as_??,
+      Type.of[java.time.Period].as_??,
+      Type.of[java.time.Year].as_??,
+      Type.of[java.time.YearMonth].as_??,
+      Type.of[java.time.MonthDay].as_??,
+      Type.of[java.time.ZoneId].as_??,
+      Type.of[java.time.ZoneOffset].as_??
+    )
 
     /** Extracted as a helper because the unwrap closure captures path-dependent state from the [[IsValueType]]
       * instance.

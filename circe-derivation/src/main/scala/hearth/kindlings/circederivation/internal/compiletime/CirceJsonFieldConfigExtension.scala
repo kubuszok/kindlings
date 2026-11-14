@@ -22,6 +22,7 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
 
     val EncoderCtor: Type.Ctor1[io.circe.Encoder] = Type.Ctor1.of[io.circe.Encoder]
+    val KeyEncoderCtor: Type.Ctor1[io.circe.KeyEncoder] = Type.Ctor1.of[io.circe.KeyEncoder]
     // The same implicits as the encoder derivation ignores (Kindlings' and circe's own auto-derivation).
     lazy val ignoredEncoderImplicits: Seq[UntypedMethod] =
       Type.of[KindlingsEncoder.type].unsortedMethods.collect {
@@ -91,6 +92,14 @@ final class CirceJsonFieldConfigExtension extends JsonSchemaConfigExtension {
           // Nested sealed hierarchies are flattened (like circe's ConfiguredEncoder), except for an intermediate with a
           // user-provided Encoder, which writes it (as is, when it is a Kindlings-derived sum encoder).
           override def flattensNestedSubtypes: Boolean = true
+
+          // Map keys are written with circe's KeyEncoder (also a user-provided one)
+          override def mapKeyToString[K: Type]: Option[Expr[K => String]] = {
+            implicit val KeyEncoderK: Type[io.circe.KeyEncoder[K]] = KeyEncoderCtor[K]
+            Expr.summonImplicit[io.circe.KeyEncoder[K]].toOption.map { keyEncoder =>
+              Expr.quote((key: K) => Expr.splice(keyEncoder).apply(key))
+            }
+          }
 
           override def nestedSubtypeInstance(subtype: ??): Option[Expr[Boolean]] = {
             import subtype.Underlying as Sub

@@ -84,10 +84,13 @@ final class RefinedTapirSchemaSpec extends MacroSuite {
       assertCustomMapSchema(KindlingsSchema.derived[WithRefinedIntKeyMap].schema)
     }
 
-    test("map keyed by refined Int without Schema[Map[K, V]] fails to compile") {
-      compileErrors(
-        "hearth.kindlings.tapirschemaderivation.KindlingsSchema.derived[hearth.kindlings.integrationtests.WithRefinedIntKeyMap]"
-      ).check("Cannot derive tapir Schema for Map with key type")
+    test("map keyed by refined Int without Schema[Map[K, V]] derives a map schema keyed by the Int's string form") {
+      val key = refineV[Positive](7).toOption.get
+      assertStringKeyedMapSchema(
+        KindlingsSchema.derived[WithRefinedIntKeyMap].schema,
+        Map(key -> 1),
+        Map[String, Any]("7" -> 1)
+      )
     }
   }
 }

@@ -289,9 +289,12 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
   `NonEmptyMap`, ... with `kindlings-cats-integration`) are required and validated with `Validator.minSize(1)`
   (`minItems: 1` in OpenAPI / JSON Schema), as in tapir-cats,
 - `Either` and `scala.Enumeration` values are derived like the sealed hierarchies the JSON libraries encode them as,
-- `Map` keys can be a `String`, or a value type wrapping one: `AnyVal` classes, opaque types, and — with the
-  corresponding integration module — refined, Iron, neotype and scala-newtype types. The keys are unwrapped to
-  `String`s. For any other key type, provide a `Schema[Map[K, V]]`, e.g. with Tapir's `Schema.schemaForMap[K, V](keyToString)`.
+- `Map`s are open products (`additionalProperties`) keyed by the strings the JSON codecs write as object keys: `String`
+  keys as they are; primitives (and their boxes), `UUID`, `BigInt`, `BigDecimal` and `java.time` keys as their
+  `toString` (with circe, through its `KeyEncoder`, also a user-provided one); and value types wrapping any of those —
+  `AnyVal` classes, opaque types (e.g. `opaque type Counter = Int`, written as `{"7":...}`), and — with the
+  corresponding integration module — refined, Iron, neotype and scala-newtype types — as their underlying value. For
+  any other key type, provide a `Schema[Map[K, V]]`, e.g. with Tapir's `Schema.schemaForMap[K, V](keyToString)`.
 
 Your own implicit `Schema` for any of these types (e.g. `Schema[Map[UserId, Int]]`, `Schema[Option[Int]]`) always
 takes precedence. Tapir's schemas for primitive and other leaf types (`String`, `Int`, `UUID`, `Instant`, ...) are
@@ -323,7 +326,7 @@ This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the de
 | Automatic JSON config discovery | No | Yes |
 | Tapir annotation support | Yes | Yes |
 | Value types (`AnyVal`) | Yes | Yes |
-| Map keys wrapping `String` (value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes |
+| Non-`String` map keys (`Int`, `UUID`, value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes |
 | `Char` | No | Yes (as `String`) |
 
 ### Benchmarks

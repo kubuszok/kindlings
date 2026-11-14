@@ -388,8 +388,26 @@ final class KindlingsSchemaSpec extends MacroSuite {
         }
       }
 
-      test("map field keyed by a non-String value type without Schema[Map[K, V]] fails to compile") {
-        compileErrors("KindlingsSchema.derived[hearth.kindlings.tapirschemaderivation.WithWrappedIdKeyMap]").check(
+      test("map field keyed by a non-String value type without Schema[Map[K, V]] is an SOpenProduct") {
+        val schema = KindlingsSchema.derived[WithWrappedIdKeyMap].schema
+        schema.schemaType match {
+          case p: SchemaType.SProduct[WithWrappedIdKeyMap] =>
+            val field = p.fields.find(_.name.name == "counts").get
+            (field.schema.schemaType: SchemaType[?]) match {
+              case op: SchemaType.SOpenProduct[?, ?] =>
+                assertEquals(
+                  op.asInstanceOf[SchemaType.SOpenProduct[Any, Any]].mapFieldValues(Map(WrappedId(7) -> 1)),
+                  Map[String, Any]("7" -> 1)
+                )
+              case other => fail(s"Expected SOpenProduct, got: $other")
+            }
+          case other =>
+            fail(s"Expected SProduct, got: $other")
+        }
+      }
+
+      test("map field keyed by a type no JSON library writes as an object key fails to compile") {
+        compileErrors("KindlingsSchema.derived[hearth.kindlings.tapirschemaderivation.WithProductKeyMap]").check(
           "Cannot derive tapir Schema for Map with key type"
         )
       }
