@@ -152,15 +152,8 @@ trait SchemaMacrosImpl
         errorRendering = if (shouldWeLogSchemaDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors
-          .map { e =>
-            val msg = Option(e.getMessage).getOrElse(e.getClass.getName)
-            msg.split("\n").toList match {
-              case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-              case _            => "  - " + msg
-            }
-          }
-          .mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.tapirschemaderivation.debug.logDerivationForKindlingsSchema or scalac option -Xmacro-settings:tapirSchemaDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)

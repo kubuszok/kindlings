@@ -98,7 +98,8 @@ trait FunctorKMacrosImpl
         errorRendering = if (shouldWeLogDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
       ) { (errorLogs, errors) =>
-        val errorsRendered = errors.map(e => "  - " + e.getMessage).mkString("\n")
+        val errorsRendered =
+          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.catstaglessderivation.debug.logDerivationForCatsTaglessDerivation"
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"

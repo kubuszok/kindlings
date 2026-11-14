@@ -994,14 +994,7 @@ trait CodecMacrosImpl
   }
 
   private def renderDerivationErrorMessage(errorLogs: String, errors: NonEmptyVector[Throwable]): String = {
-    val errorsRendered = errors
-      .map { e =>
-        e.getMessage.split("\n").toList match {
-          case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
-          case _            => "  - " + e.getMessage
-        }
-      }
-      .mkString("\n")
+    val errorsRendered = hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
     val hint =
       "Enable debug logging with: import hearth.kindlings.jsoniterderivation.debug.logDerivationForKindlingsJsonValueCodec or scalac option -Xmacro-settings:jsoniterDerivation.logDerivation=true"
     if (errorLogs.nonEmpty)

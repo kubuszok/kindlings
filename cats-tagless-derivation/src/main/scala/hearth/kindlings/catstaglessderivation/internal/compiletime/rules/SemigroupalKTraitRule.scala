@@ -196,7 +196,7 @@ trait SemigroupalKTraitRuleImpl {
                       case scala.util.control.NonFatal(e) =>
                         throw CatsTaglessDerivationError.MethodForwardingFailed(
                           methodName,
-                          s"fold crashed: ${e.getMessage}"
+                          s"fold crashed: ${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf(e)}"
                         )
                     }
 
