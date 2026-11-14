@@ -250,7 +250,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { rawDecodeFn =>
-                  val decodeFn = withFieldDefaultFn[Field](param)(rawDecodeFn)
+                  val decodeFn = withFieldDefaultFn[Field](param, dctx.config, dctx.evaluatedConfig)(rawDecodeFn)
                   val decodeFnErased: Expr[JsonReader => Any] =
                     if (isTransientAtRuntimeOnly[A](param, dctx.evaluatedConfig)) Expr.quote { (r: JsonReader) =>
                       JsoniterDerivationUtils.readUnlessTransient(
@@ -454,7 +454,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 }
 
                 deriveMIO.map { rawDecodeField =>
-                  val decodeField = withFieldDefault[Field](param)(rawDecodeField)
+                  val decodeField = withFieldDefault[Field](param, dctx.config, dctx.evaluatedConfig)(rawDecodeField)
                   // Absent-field handling (see DecoderAbsentFieldSupport), resolved at compile time: an `Option`
                   // without an applicable default starts as `None`; every other field gets a presence flag checked
                   // after the read loop (fill with default/empty, or fail as required). The flag also detects
@@ -649,7 +649,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val hasStringifiedAnnotation = hasAnnotationType[stringified](param)
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldDecoderFn[Field](fName, Type[A].prettyPrint, hasStringifiedAnnotation).map { rawDecodeFn =>
-                  val decodeFn = withFieldDefaultFn[Field](param)(rawDecodeFn)
+                  val decodeFn = withFieldDefaultFn[Field](param, dctx.config, dctx.evaluatedConfig)(rawDecodeFn)
                   val decodeFnErased: Expr[JsonReader => Any] =
                     if (isTransientAtRuntimeOnly[A](param, dctx.evaluatedConfig)) Expr.quote { (r: JsonReader) =>
                       JsoniterDerivationUtils.readUnlessTransient(

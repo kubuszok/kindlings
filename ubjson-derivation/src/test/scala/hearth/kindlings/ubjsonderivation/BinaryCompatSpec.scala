@@ -9,6 +9,106 @@ import scala.annotation.nowarn
 @nowarn("cat=deprecation")
 final class BinaryCompatSpec extends MacroSuite {
 
+  group("UBJsonConfig of 0.3.4") {
+
+    // The 24 fields of 0.3.4, in order (emptyCollectionsAsDefault was added after it).
+    val f: String => String = _.toUpperCase
+
+    test("the old-arity constructor and apply fill the new fields with their defaults") {
+      val viaApply = UBJsonConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        true,
+        f,
+        99,
+        false,
+        true,
+        true,
+        true,
+        true
+      )
+      val viaNew = new UBJsonConfig(
+        f,
+        f,
+        Some("t"),
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        10,
+        11,
+        12,
+        13,
+        14,
+        true,
+        f,
+        99,
+        false,
+        true,
+        true,
+        true,
+        true
+      )
+      for (c <- List(viaApply, viaNew)) {
+        c.discriminatorFieldName ==> Some("t")
+        c.bigIntDigitsLimit ==> 99
+        c.requireDiscriminatorFirst ==> false
+        c.transientNull ==> true
+        c.emptyCollectionsAsDefault ==> true
+      }
+    }
+
+    test("the old-arity copy keeps the new fields") {
+      val c = UBJsonConfig().withEmptyCollectionsAsEmpty.copy(
+        identity,
+        identity,
+        None,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        34,
+        6178,
+        308,
+        1,
+        2,
+        false,
+        identity,
+        308,
+        true,
+        false,
+        false,
+        false,
+        true
+      )
+      c.mapMaxInsertNumber ==> 1
+      c.transientNull ==> true
+      c.emptyCollectionsAsDefault ==> false
+    }
+  }
+
   group("UBJsonConfig of 0.3.2") {
 
     test("the old-arity constructor and apply fill the new fields with their defaults") {

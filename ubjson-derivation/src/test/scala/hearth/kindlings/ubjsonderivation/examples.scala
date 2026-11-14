@@ -215,7 +215,16 @@ case class UbAbsentLeaf(name: String, opt: Option[Int], n: Int = 3, xs: List[Int
 object UbAbsentRuntimeConfigs {
   @volatile var default: UBJsonConfig = UBJsonConfig()
   @volatile var requireDefault: UBJsonConfig = UBJsonConfig().withRequireDefaultFields
+  @volatile var emptyAsEmpty: UBJsonConfig = UBJsonConfig().withEmptyCollectionsAsEmpty
 }
+
+// Collections/maps with non-empty defaults (see UBJsonEmptyCollectionsSpec)
+case class UbEmptyCollDefaults(
+    xs: List[Int] = List(1),
+    m: Map[String, Int] = Map("a" -> 1),
+    v: Vector[String] = Vector("v"),
+    noDefault: List[Int]
+)
 
 // jsoniter-scala parity test types (see UBJsonParitySpec)
 case class UbZeroFields()

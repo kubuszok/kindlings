@@ -117,13 +117,14 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
 | `withBigDecimalDigitsLimit(n)` | Decoded `BigDecimal` digits limit (exclusive, as in jsoniter-scala's reader) |
 | `withBigIntDigitsLimit(n)` | Decoded `BigInt` digits limit (default `308`, as in jsoniter-scala) |
 | `withMapMaxInsertNumber(n)` | Max map entries |
-| `withSetMaxInsertNumber(n)` | Max number of elements of decoded sets, checked after every insert (`0` rejects any element; other collections and bit sets are not limited) |
+| `withSetMaxInsertNumber(n)` | Max number of elements of decoded sets, checked after every insert (`0` rejects any element; other collections and bit sets are not limited). As in jsoniter-scala, it no longer caps `List`/`Vector`/... sizes (Kindlings 0.3.3 applied it to every collection), and its error is jsoniter-scala's `too many set inserts` |
 | `withBitSetValueLimit(n)` | Max value allowed in a `BitSet` (DoS protection, default `1024`) |
 | `withUseScalaEnumValueId` | Use enum value id for Scala enumerations |
 | `withJavaEnumValueNameMapper(f)` | Custom transform for Java enum value names (may be a partial function) |
 | `withSkipNestedOptionValues` | For `Option[Option[A]]`: `null` decodes as `Some(None)` (and `Some(None)` is written as `null`), so with `withTransientNone` an absent field (`None`) and `null` (`Some(None)`) round-trip. Without it, as in jsoniter-scala, an `Option` nested in an `Option` is encoded as the ADT `Option` (see below) |
 | `withAlwaysEmitDiscriminator` | Codecs of ADT leaf classes / case objects (e.g. `derived[Leaf]`) also write the discriminator configured with `withDiscriminator`; their decoders accept it but do not require it |
 | `withInlineOneValueClasses` | Inline classes with one (non-transient) field to their wrapped value, also as map keys; transient parameters get their defaults (also with a config only known at runtime, where one-value-class map keys are always inlined) |
+| `withEmptyCollectionsAsEmpty` | An explicit empty array/object (`[]`/`{}`) for a collection/map field with a default value decodes as an empty collection/map instead of the default (see [Missing fields](#missing-fields)). Kindlings-only; `withEmptyCollectionsAsDefault(true)` restores jsoniter-scala's behaviour, the default |
 | `withTransientNull` | Skip fields of nullable types (Scala 3 `T \| Null`) holding `null` during encoding, as in jsoniter-scala. No effect on other fields (a `null` `String` field still fails to encode) and on Scala 2 |
 | `withScalaTransientSupport` | Treat `scala.transient` like `@transientField` (also with a config only known at runtime: then the codec checks the flag) |
 | `withDecodingOnly` / `withEncodingOnly` | The other direction throws `NotImplementedError` ("an implementation is missing"), as in jsoniter-scala |
@@ -215,10 +216,23 @@ collection and map codecs and an error for case classes.
 A field with a default value is decoded as jsoniter-scala does, with that default as the `default` argument of its
 decoder: an empty JSON array/object (`[]`/`{}`) for a collection or map field with a default value is that default
 (`"l":[]` decodes `l: List[Int] = List(0)` as `List(0)`, also with `withRequireDefaultFields`, which only rejects absent
-fields), and a user-provided `JsonValueCodec` of a field receives the field's default value (its `nullValue` for a field
+fields; see below for `withEmptyCollectionsAsEmpty`), and a user-provided `JsonValueCodec` of a field receives the field's default value (its `nullValue` for a field
 without one) as `default` and decides itself what a JSON `null` is. Defaults that depend on preceding parameter lists
 are not passed (the codec's `nullValue` is). One difference: with `checkFieldDuplication = false`, jsoniter-scala passes
 the value read for an earlier duplicate of the key instead of the default.
+
+| Collection or map field with a non-empty default value | `[]` / `{}` | JSON `null` | absent |
+|--------------------------------------------------------|-------------|-------------|--------|
+| default config (as jsoniter-scala) | the default value | the default value | the default value |
+| `withEmptyCollectionsAsEmpty` | an empty collection/map | the default value | the default value |
+
+!!! warning "Round-trips under Kindlings' write-everything defaults"
+
+    Kindlings writes every field by default (`transientDefault` and `transientEmpty` are off, unlike jsoniter-scala's
+    `make`), so `case class C(xs: List[Int] = List(1))` encodes `C(Nil)` as `{"xs":[]}` - which the default config
+    decodes as `C(List(1))`, as jsoniter-scala does. If you write every field (or come from circe, where `[]` is always
+    an empty collection) and need such values to round-trip, use `withEmptyCollectionsAsEmpty`. (`withTransientEmpty`
+    does not help: it omits the empty collection, and an absent field is decoded as the default too.)
 
 A case class without fields (or with only `@transientField` fields) skips unknown keys like any other case class (and
 rejects them with `withSkipUnexpectedFields(false)`). Case objects skip the content of their JSON object.

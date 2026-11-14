@@ -121,6 +121,7 @@ implicit val config: UBJsonConfig = UBJsonConfig.default
 | `withSkipNestedOptionValues` | An `Option` nested in an `Option` is encoded as a plain `Option` (`Some(None)` is `null`, decoded back as `Some(None)`) |
 | `withScalaTransientSupport` | `scala.transient` fields are treated as `@transientField` (also with a runtime config) |
 | `withTransientNull` | Skip `null` fields of nullable types (Scala 3 `T \| Null`) during encoding |
+| `withEmptyCollectionsAsEmpty` | An empty array/object for a collection/map field with a default value decodes as an empty collection/map instead of the default (jsoniter-scala's behaviour, kept by default). Recommended with the write-everything defaults, under which `C(xs = Nil)` would otherwise be read back with the default `xs` |
 
 A field absent from the decoded object gets its default value, `None` for an `Option`, `null` for a Scala 3 `T | Null`,
 or an empty collection/map; any other missing field fails with `UBJsonReaderException` (`missing required field
