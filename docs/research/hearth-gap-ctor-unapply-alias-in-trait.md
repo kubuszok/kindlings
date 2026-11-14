@@ -1,6 +1,6 @@
 # Hearth gap: `Type.CtorN.unapply` with an alias declared in a trait (Scala 2, regression)
 
-Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, to be released as 0.4.4). Kindlings'
+Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, released in 0.4.4). Kindlings'
 workaround is removed. Scala 2.13 only.
 
 Found 2026-11-13 while bumping Kindlings to Hearth `0.4.3-79-gc2c1ffe-SNAPSHOT`, which added the prefix comparison of

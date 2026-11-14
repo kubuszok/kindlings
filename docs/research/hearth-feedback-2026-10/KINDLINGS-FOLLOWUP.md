@@ -20,7 +20,7 @@ not fixed and has no ETA**: keep its workaround (`isResource`/`resourceUnderlyin
 If any of 1–10 turns out not to work against the snapshot, keep that item's workaround and report it back with the
 failing test.
 
-**Done (2026-10-26, branch `di-hearth-api-cleanup`, Hearth `0.4.3-24-gc0c6e43-SNAPSHOT`, to be released as 0.4.4):**
+**Done (2026-10-26, branch `di-hearth-api-cleanup`, Hearth `0.4.3-24-gc0c6e43-SNAPSHOT`, released in 0.4.4):**
 every item 1–10 works against the snapshot and its workaround is removed (item 3 had none; item 6 needed nothing).
 Item 4 is implemented: `DI.wire`/`wireRec`/`wireWith`/`wireSet`/`wireList` use the closest enclosing method's
 parameters as the innermost scope (together with its Scala 2 local vals), as macwire does - a parameter shadows a member

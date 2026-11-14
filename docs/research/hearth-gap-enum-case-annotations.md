@@ -1,6 +1,6 @@
 # Hearth gap: annotations of Scala 3 parameterless enum cases (regression)
 
-Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, to be released as 0.4.4):
+Status: **RESOLVED** in Hearth `0.4.3-90-gc3f9223-SNAPSHOT` (kubuszok/hearth#402, released in 0.4.4):
 `annotations` / `annotationTypes` of a parameterless enum case read the case's own (term) symbol. Kindlings' workaround
 is removed. Scala 3 only.
 
