@@ -15,9 +15,8 @@ object TimestampPrecision {
 /** Derivation configuration.
   *
   * Defaults match avro4s except where `docs/user-guide/feature-parity.md` documents a difference: `BigDecimal` is a
-  * STRING (avro4s: `decimal(8, 2)`), `OffsetDateTime` is a `timestamp-millis` long (avro4s: an ISO-8601 string), and
-  * Scala default values do not become schema defaults (avro4s: they do). [[AvroConfig.avro4sDefaults]] switches all
-  * three to avro4s' behaviour.
+  * STRING (avro4s: `decimal(8, 2)`) and `OffsetDateTime` is a `timestamp-millis` long (avro4s: an ISO-8601 string).
+  * [[AvroConfig.avro4sDefaults]] switches both to avro4s' behaviour.
   *
   * @param instantPrecision
   *   precision of `java.time.Instant` and `java.sql.Timestamp` (as avro4s: `Millis`)
@@ -27,8 +26,8 @@ object TimestampPrecision {
   *   encode `java.time.OffsetDateTime` as avro4s does: an ISO-8601 string with the `datetime-with-offset` logical type
   *   (default: a UTC `timestamp-millis` long, which drops the offset)
   * @param scalaDefaultsInSchema
-  *   turn case class fields' Scala default values into Avro schema defaults, as avro4s does (`@avroDefault` and
-  *   `@avroNoDefault` take precedence)
+  *   turn case class fields' Scala default values into Avro schema defaults, as avro4s does (default: on;
+  *   `@avroDefault` and `@avroNoDefault` take precedence; [[withoutScalaDefaultsInSchema]] turns it off)
   */
 final case class AvroConfig(
     namespace: Option[String] = None,
@@ -38,7 +37,7 @@ final case class AvroConfig(
     instantPrecision: TimestampPrecision = TimestampPrecision.Millis,
     localDateTimePrecision: TimestampPrecision = TimestampPrecision.Nanos,
     offsetDateTimeAsIsoString: Boolean = false,
-    scalaDefaultsInSchema: Boolean = false
+    scalaDefaultsInSchema: Boolean = true
 ) {
 
   def withNamespace(ns: String): AvroConfig = copy(namespace = Some(ns))
@@ -61,6 +60,9 @@ final case class AvroConfig(
 
   /** Turn Scala default values of case class fields into Avro schema defaults, as avro4s does. */
   def withScalaDefaultsInSchema: AvroConfig = copy(scalaDefaultsInSchema = true)
+
+  /** Only `@avroDefault` becomes a schema default; Scala default values are used only when decoding. */
+  def withoutScalaDefaultsInSchema: AvroConfig = copy(scalaDefaultsInSchema = false)
 
   // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
   // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
@@ -123,7 +125,7 @@ final case class AvroConfig(
     TimestampPrecision.Millis,
     TimestampPrecision.Nanos,
     false,
-    false
+    true
   )
 }
 object AvroConfig {
@@ -131,12 +133,11 @@ object AvroConfig {
   implicit val default: AvroConfig = AvroConfig()
 
   /** avro4s' behaviour where Kindlings' defaults differ (see the class documentation): `BigDecimal` as
-    * `decimal(precision = 8, scale = 2)`, `OffsetDateTime` as an ISO-8601 string, Scala defaults as schema defaults.
+    * `decimal(precision = 8, scale = 2)` and `OffsetDateTime` as an ISO-8601 string.
     */
   def avro4sDefaults: AvroConfig = AvroConfig(
     decimalConfig = Some(DecimalConfig(precision = 8, scale = 2)),
-    offsetDateTimeAsIsoString = true,
-    scalaDefaultsInSchema = true
+    offsetDateTimeAsIsoString = true
   )
 
   /** The `apply` of Kindlings 0.3.x (without the fields added since, which get their defaults). */

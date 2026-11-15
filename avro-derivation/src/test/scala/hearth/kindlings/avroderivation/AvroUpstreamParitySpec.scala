@@ -173,13 +173,13 @@ final class AvroUpstreamParitySpec extends MacroSuite {
 
   group("Scala defaults as schema defaults") {
 
-    test("off by default: only @avroDefault becomes a schema default") {
+    test("withoutScalaDefaultsInSchema: only @avroDefault becomes a schema default") {
+      implicit val config: AvroConfig = AvroConfig.default.withoutScalaDefaultsInSchema
       val schema = AvroSchemaFor.schemaOf[ParWithDefaults]
       schema.getFields.asScala.filter(_.hasDefaultValue).map(_.name).toList ==> List("annotated")
     }
 
-    test("withScalaDefaultsInSchema: as avro4s, with the default's union branch first") {
-      implicit val config: AvroConfig = AvroConfig.default.withScalaDefaultsInSchema
+    test("default (as avro4s): Scala defaults are schema defaults, with the default's union branch first") {
       val schema = AvroSchemaFor.schemaOf[ParWithDefaults]
       def default(name: String): Any = schema.getField(name).defaultVal()
       schema.getField("name").hasDefaultValue ==> false
@@ -204,7 +204,6 @@ final class AvroUpstreamParitySpec extends MacroSuite {
     }
 
     test("schema evolution: old data reads with the reader schema's defaults") {
-      implicit val config: AvroConfig = AvroConfig.default.withScalaDefaultsInSchema
       val writer = new Schema.Parser().parse(
         """{"type":"record","name":"ParWithDefaults","namespace":"hearth.kindlings.avroderivation","fields":[{"name":"name","type":"string"},{"name":"suppressed","type":"int"}]}"""
       )
