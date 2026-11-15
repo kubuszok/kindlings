@@ -49,44 +49,28 @@ trait ArbitraryMacrosImpl
 
           // Step 1: Run derivation once to populate cache
           val ctx = ArbitraryCtx.from[A](derivedType = selfType)
-          runSafe {
+          val derived = runSafe {
             for {
               _ <- ensureStandardExtensionsLoaded()
-              _ <- deriveArbitraryRecursively[A](using ctx)
-            } yield ()
+              result <- deriveArbitraryRecursively[A](using ctx)
+            } yield result
           }
 
           // Step 2: Get the cached helper reference and cache
           val helperOpt = runSafe(ctx.getHelper[A])
           val cache = runSafe(ctx.cache.get)
 
-          // Step 3: Build the Arbitrary instance
-          val directGenOpt: Option[Expr[Gen[A]]] =
-            if (helperOpt.isDefined) None
-            else {
-              // For types handled without a cached helper (options, collections),
-              // build a direct Gen[A] that we can use in the Arbitrary body
-              Some(
-                runSafe {
-                  val freshCtx = ArbitraryCtx.from[A](derivedType = selfType)
-                  for {
-                    _ <- ensureStandardExtensionsLoaded()
-                    result <- deriveArbitraryRecursively[A](using freshCtx)
-                    freshCache <- freshCtx.cache.get
-                  } yield freshCache.toValDefs.use(_ => result)
-                }
-              )
-            }
-
-          // Step 4: Wrap cached defs around the Arbitrary instance
+          // Step 3: Wrap cached defs around the Arbitrary instance
           cache.toValDefs.use { _ =>
             val genExpr: Expr[Gen[A]] = helperOpt match {
               case Some(helper) =>
                 // Call the cached helper method
                 helper(Expr.quote(()))
               case None =>
-                // Use the direct Gen[A]
-                directGenOpt.get
+                // Types handled without a cached helper for `A` itself (options, collections, sealed traits) use the
+                // derived expression as is: deriving it again in a fresh context emitted every cached def twice
+                // (unused duplicates, an error on Scala 2).
+                derived
             }
 
             Expr.quote {

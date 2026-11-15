@@ -44,38 +44,68 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
               }
             }
             .map { caseGens =>
-              val firstGen = caseGens.head
-              val oneOfExpr: Expr[_root_.org.scalacheck.Gen[A]] = caseGens.tail match {
-                case Nil =>
-                  firstGen
-                case secondGen :: rest =>
-                  if (rest.isEmpty) {
-                    Expr.quote {
-                      _root_.org.scalacheck.Gen.oneOf(Expr.splice(firstGen), Expr.splice(secondGen))
-                    }
-                  } else {
-                    val reversedRest = rest.reverse
-                    val restGens: Expr[_root_.scala.List[_root_.org.scalacheck.Gen[A]]] =
-                      reversedRest.tail.foldLeft(Expr.quote(_root_.scala.List(Expr.splice(reversedRest.head)))) {
-                        (accExpr, genExpr) =>
-                          Expr.quote(Expr.splice(genExpr) :: Expr.splice(accExpr))
-                      }
-
-                    Expr.quote {
-                      _root_.org.scalacheck.Gen
-                        .oneOf(Expr.splice(firstGen), Expr.splice(secondGen), Expr.splice(restGens)*)
-                    }
-                  }
+              val oneOfExpr = oneOf[A](caseGens.toList)
+              // At size 0 only the cases that cannot reach `A` again are generated, so recursive types terminate
+              // without a `Recursive`/`RecursionFallback` marker (when every case recurses, all of them are used).
+              val nonRecursive = caseGens.toList.zip(childrenList).collect {
+                case (gen, (_, child)) if !mentionsType(child.Underlying.as_??, Type[A].as_??, Set.empty, 0) => gen
               }
+              val atZeroExpr =
+                if (nonRecursive.isEmpty || nonRecursive.size == caseGens.toList.size) oneOfExpr
+                else oneOf[A](nonRecursive)
               Expr.quote {
                 _root_.org.scalacheck.Gen.sized { n =>
-                  _root_.org.scalacheck.Gen.resize(
-                    _root_.java.lang.Math.max(n - 1, 0),
-                    Expr.splice(oneOfExpr)
-                  )
+                  if (n <= 0) Expr.splice(atZeroExpr)
+                  else _root_.org.scalacheck.Gen.resize(n - 1, Expr.splice(oneOfExpr))
                 }
               }
             }
+      }
+    }
+
+    private def oneOf[A: Type](gens: List[Expr[Gen[A]]]): Expr[Gen[A]] = {
+      implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
+      gens match {
+        case Nil                    => Expr.quote(_root_.org.scalacheck.Gen.fail[A])
+        case single :: Nil          => single
+        case first :: second :: Nil =>
+          Expr.quote(_root_.org.scalacheck.Gen.oneOf(Expr.splice(first), Expr.splice(second)))
+        case first :: second :: rest =>
+          val restGens: Expr[_root_.scala.List[_root_.org.scalacheck.Gen[A]]] =
+            rest.foldRight(Expr.quote(_root_.scala.List.empty[_root_.org.scalacheck.Gen[A]])) { (genExpr, accExpr) =>
+              Expr.quote(Expr.splice(genExpr) :: Expr.splice(accExpr))
+            }
+          Expr.quote {
+            _root_.org.scalacheck.Gen.oneOf(Expr.splice(first), Expr.splice(second), Expr.splice(restGens)*)
+          }
+      }
+    }
+
+    /** Whether `tpe` can contain a value of `target`: it is `target`, one of its type arguments can, or (for case
+      * classes and sealed hierarchies, up to a bounded depth) one of its fields / subtypes can.
+      */
+    private def mentionsType(tpe: ??, target: ??, visited: Set[String], depth: Int): Boolean = {
+      import tpe.Underlying as T
+      import target.Underlying as Target
+      val key = Type[T].plainPrint
+      if (Type[T] =:= Type[Target]) true
+      else if (visited(key) || depth > 8) false
+      else {
+        val seen = visited + key
+        Type.typeArguments[T].exists(mentionsType(_, target, seen, depth + 1)) ||
+        (CaseClass.parse[T].toOption match {
+          case Some(caseClass) =>
+            caseClass.primaryConstructor.totalParameters.flatten.exists { case (_, param) =>
+              mentionsType(param.tpe, target, seen, depth + 1)
+            }
+          case None =>
+            Enum
+              .parse[T]
+              .toOption
+              .exists(_.directChildren.toList.exists { case (_, child) =>
+                mentionsType(child.Underlying.as_??, target, seen, depth + 1)
+              })
+        })
       }
     }
   }

@@ -131,17 +131,28 @@ object ShrinkUtils {
 
   // --- Internal helpers ---
 
-  /** Remove chunks of elements from a list (halving strategy from ScalaCheck). */
-  private def removeChunks[A](xs: List[A]): Stream[List[A]] = {
-    val n = xs.length
-    if (n == 0) Stream.empty
-    else if (n == 1) Stream(Nil)
+  /** Remove chunks of elements from a list - ScalaCheck's own halving strategy (`Shrink.shrinkContainer`), so derived
+    * shrinkers produce the same candidates, in the same order, as ScalaCheck's instances.
+    */
+  private def removeChunks[A](xs: List[A]): Stream[List[A]] = removeChunks(xs.length, xs.toStream).map(_.toList)
+
+  private def removeChunks[A](n: Int, xs: Stream[A]): Stream[Stream[A]] =
+    if (xs.isEmpty) Stream.empty
+    else if (xs.tail.isEmpty) Stream(Stream.empty)
     else {
-      val half = n / 2
-      val (left, right) = xs.splitAt(half)
-      right #:: left #:: removeChunks(left).map(_ ++ right) #::: removeChunks(right).map(left ++ _)
+      val n1 = n / 2
+      val n2 = n - n1
+      lazy val xs1 = xs.take(n1)
+      lazy val xs2 = xs.drop(n1)
+      lazy val xs3 = for (ys1 <- removeChunks(n1, xs1) if ys1.nonEmpty) yield ys1 #::: xs2
+      lazy val xs4 = for (ys2 <- removeChunks(n2, xs2) if ys2.nonEmpty) yield xs1 #::: ys2
+      xs1 #:: xs2 #:: interleave(xs3, xs4)
     }
-  }
+
+  private def interleave[A](xs: Stream[A], ys: Stream[A]): Stream[A] =
+    if (xs.isEmpty) ys
+    else if (ys.isEmpty) xs
+    else xs.head #:: ys.head #:: interleave(xs.tail, ys.tail)
 
   /** Shrink one element at a time in a list. */
   private def shrinkOne[A](xs: List[A], shrink: Shrink[A]): Stream[List[A]] = xs match {

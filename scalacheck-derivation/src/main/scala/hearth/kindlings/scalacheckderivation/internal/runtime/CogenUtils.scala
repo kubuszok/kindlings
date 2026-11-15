@@ -9,20 +9,24 @@ object CogenUtils {
   def cogenIdentity[A]: Cogen[A] =
     Cogen((seed, _) => seed)
 
+  /** Perturbs the seed like a case class without fields does in scalacheck-shapeless and scalacheck-derived: with
+    * `Cogen[Unit]`. Used for singletons (case objects, parameterless enum cases) and case classes without fields.
+    */
+  def cogenNoFields[A]: Cogen[A] =
+    Cogen((seed, _) => Cogen.cogenUnit.perturb(seed, ()))
+
+  /** Like ScalaCheck's `Cogen.cogenOption`. */
   def cogenOption[A](innerCogen: Cogen[A]): Cogen[Option[A]] =
-    Cogen { (seed, opt) =>
-      opt match {
-        case None    => seed.next
-        case Some(a) => innerCogen.perturb(seed.next, a)
-      }
-    }
+    Cogen((seed, opt) => opt.fold(seed)(a => innerCogen.perturb(seed.next, a)))
 
   /** Perturbs the seed with every element, reading the value through the provider's `asIterable` (so containers that
     * are not Scala `Iterable`s, e.g. `cats.data.NonEmptyList`, work).
     */
   def cogenCollectionWithIterable[Item, A](elemCogen: Cogen[Item], toIterable: A => Iterable[Item]): Cogen[A] =
+    // Like ScalaCheck's `Cogen.it`: the final `next` marks the end of the collection, so nested collections with the
+    // same elements in different groupings (`List(List(1), Nil)` vs `List(Nil, List(1))`) perturb differently.
     Cogen { (seed, value) =>
-      toIterable(value).foldLeft(seed)((s, elem) => elemCogen.perturb(s, elem))
+      toIterable(value).foldLeft(seed)((s, elem) => elemCogen.perturb(s, elem)).next
     }
 
   /** Cogen for a map entry: perturbs the seed with the key, then the value. Pair access is provided by the macro. */
@@ -38,6 +42,16 @@ object CogenUtils {
       val coll = value.asInstanceOf[Iterable[Any]]
       coll.foldLeft(seed)((s, elem) => elemCogen.perturb(s, elem))
     }
+
+  /** Perturbs the seed with every field in order and then - when `terminate` - with `Cogen[Unit]`, like
+    * scalacheck-shapeless and scalacheck-derived do for case classes (tuples, like ScalaCheck's `Cogen.tupleN`, do
+    * not).
+    */
+  def cogenCaseClass[A](fieldCogens: List[Cogen[Any]], numFields: Int, terminate: Boolean): Cogen[A] = {
+    val fields = cogenCaseClass[A](fieldCogens, numFields)
+    if (terminate) Cogen((seed, value) => Cogen.cogenUnit.perturb(fields.perturb(seed, value), ()))
+    else fields
+  }
 
   def cogenCaseClass[A](fieldCogens: List[Cogen[Any]], numFields: Int): Cogen[A] =
     Cogen { (seed, value) =>
@@ -102,17 +116,18 @@ object CogenUtils {
       innerCogen.perturb(seed, unwrap(value))
     }
 
-  /** Cogen for an enum/sealed trait: perturbs the seed with the index of the value's case (from the macro-generated
-    * `ordinal`, a real pattern match) and then with the matching case's Cogen. Unlike [[cogenEnum]] it uses neither
-    * `hashCode` (identity-based for Java enums and function fields, so not reproducible across runs) nor try-each-case
-    * dispatch.
+  /** Cogen for an enum/sealed trait: perturbs the seed with the matching case's Cogen and then with the index of the
+    * value's case (from the macro-generated `ordinal`, a real pattern match), like scalacheck-derived. Unlike
+    * [[cogenEnum]] it uses neither `hashCode` (identity-based for Java enums and function fields, so not reproducible
+    * across runs) nor try-each-case dispatch.
     */
   def cogenEnumByOrdinal[A](caseCogens: List[Cogen[A]], ordinal: A => Int): Cogen[A] = {
     lazy val cogens = caseCogens.toArray
     Cogen { (seed, value) =>
       val index = ordinal(value)
       if (index < 0 || index >= cogens.length) seed
-      else cogens(index).perturb(Cogen.cogenInt.perturb(seed, index), value)
+      // Like scalacheck-derived: the case's Cogen first, then the case's index.
+      else Cogen.cogenInt.perturb(cogens(index).perturb(seed, value), index)
     }
   }
 

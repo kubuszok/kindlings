@@ -42,34 +42,21 @@ trait CogenMacrosImpl
         MIO.scoped { runSafe =>
           val selfType: Option[??] = Some(Type[A].as_??)
           val ctx = CogenCtx.from[A](derivedType = selfType)
-          runSafe {
+          val derived = runSafe {
             for {
               _ <- ensureStandardExtensionsLoaded()
-              _ <- deriveCogenRecursively[A](using ctx)
-            } yield ()
+              result <- deriveCogenRecursively[A](using ctx)
+            } yield result
           }
           val helperOpt = runSafe(ctx.getHelper[A])
           val cache = runSafe(ctx.cache.get)
 
-          val directCogenOpt: Option[Expr[Cogen[A]]] =
-            if (helperOpt.isDefined) None
-            else {
-              Some(
-                runSafe {
-                  val freshCtx = CogenCtx.from[A](derivedType = selfType)
-                  for {
-                    _ <- ensureStandardExtensionsLoaded()
-                    result <- deriveCogenRecursively[A](using freshCtx)
-                    freshCache <- freshCtx.cache.get
-                  } yield freshCache.toValDefs.use(_ => result)
-                }
-              )
-            }
-
+          // Without a helper for `A` itself (e.g. a sealed trait), the derived expression is used as is: deriving it
+          // again in a fresh context emitted every cached def twice (unused duplicates, an error on Scala 2).
           cache.toValDefs.use { _ =>
             helperOpt match {
               case Some(helper) => helper(Expr.quote(()))
-              case None         => directCogenOpt.get
+              case None         => derived
             }
           }
         }

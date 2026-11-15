@@ -48,42 +48,25 @@ trait ShrinkMacrosImpl
 
           // Step 1: Run derivation once to populate cache
           val ctx = ShrinkCtx.from[A](derivedType = selfType)
-          runSafe {
+          val derived = runSafe {
             for {
               _ <- ensureStandardExtensionsLoaded()
-              _ <- deriveShrinkRecursively[A](using ctx)
-            } yield ()
+              result <- deriveShrinkRecursively[A](using ctx)
+            } yield result
           }
 
           // Step 2: Get the cached helper reference and cache
           val helperOpt = runSafe(ctx.getHelper[A])
           val cache = runSafe(ctx.cache.get)
 
-          // Step 3: Build the Shrink instance
-          val directShrinkOpt: Option[Expr[Shrink[A]]] =
-            if (helperOpt.isDefined) None
-            else {
-              Some(
-                runSafe {
-                  val freshCtx = ShrinkCtx.from[A](derivedType = selfType)
-                  for {
-                    _ <- ensureStandardExtensionsLoaded()
-                    result <- deriveShrinkRecursively[A](using freshCtx)
-                    freshCache <- freshCtx.cache.get
-                  } yield freshCache.toValDefs.use(_ => result)
-                }
-              )
-            }
-
-          // Step 4: Wrap cached defs around the Shrink instance
+          // Step 3: Wrap cached defs around the Shrink instance. Without a helper for `A` itself (e.g. a sealed trait)
+          // the derived expression is used as is: deriving it again in a fresh context emitted every cached def twice
+          // (unused duplicates, an error on Scala 2).
           cache.toValDefs.use { _ =>
-            val shrinkExpr: Expr[Shrink[A]] = helperOpt match {
-              case Some(helper) =>
-                helper(Expr.quote(()))
-              case None =>
-                directShrinkOpt.get
+            helperOpt match {
+              case Some(helper) => helper(Expr.quote(()))
+              case None         => derived
             }
-            shrinkExpr
           }
         }
       }
