@@ -763,7 +763,22 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 
 **Original type class** — no replacement target. PureConfig's underlying parser, `com.typesafe:config`, is JVM-only, which locks PureConfig out of Scala.js and Scala Native projects. `sconfig-derivation` fills that gap by deriving config readers/writers/codecs against [`org.ekrich:sconfig`](https://github.com/ekrich/sconfig) — a Scala port of typesafe-config that runs on JVM, Scala.js, and Scala Native — while sharing the same HOCON syntax, the same `Config` / `ConfigValue` shape, and the same derivation knobs as `kindlings-pureconfig-derivation` (so users can mentally swap between the two depending on their target platform).
 
-Because no upstream library does derivation against sconfig today, this module is "exceeds upstream" by definition: there is nothing else to compare against. The tables below describe the surface area we ship.
+Because no upstream library does derivation against sconfig today, this module is "exceeds upstream" by definition: there is no upstream oracle to compare against. Its **behaviour follows upstream PureConfig's**, as matched by `kindlings-pureconfig-derivation` (which is checked against PureConfig by `PureConfigOracleSpec`). The regression net is `UpstreamSemanticsSpec` in sconfig-derivation's shared tests: it runs the scenarios of pureconfig-derivation's `UpstreamSemanticsSpec` and asserts the same outcomes (values read, failure kinds and paths, written output), with sconfig's own failure types. The tables below describe the surface area we ship.
+
+### Semantics shared with PureConfig
+
+| Behaviour | Description |
+|---|---|
+| Failure accumulation | Every failing field of a case class is reported, then each unknown key of a strict one; every failing item of a collection and value of a map |
+| Missing keys | `KeyNotFound` at the object that lacks the key, with upstream's candidate keys (`KeyNotFound.forKeys`); readers of missing keys (`Option` fields, `ReadsMissingKeys` readers) read the missing key instead (an `Option` reads it as `None`) |
+| Failure paths | A missing key at the object, any other failure at the offending value (`path` lists keys / list indices from the value the reader was called with — sconfig readers read a `ConfigValue`, not a cursor) |
+| Value that is not an object | Fails once (`WrongType`), not once per field |
+| Discriminator (`CoproductHint.Field`, default `type`) | The value must be an object; the subtype is read without the discriminator key (strict subtypes don't see it as unknown); an unknown value fails with `UnexpectedValueForFieldCoproductHint` at the discriminator; writing a subtype that has a field named like the discriminator throws `CoproductHintException(CollidingKeys)` |
+| No discriminator | A family of case objects is read only from strings (like `deriveEnumerationReader`; an unknown string fails with `CannotConvert`), other families from single-key objects |
+| `CoproductHint.FirstSuccess` | Subtypes are attempted in the alphabetical order of their names (upstream's order), the first success wins; when none succeeds, `NoValidCoproductOptionFound` lists every attempt; written without disambiguation |
+| Empty `Option` fields | Omitted when writing (upstream's `WritesMissingKeys`), not written as `null` |
+
+The unknown-string failure of a case-object family differs between PureConfig's Scala versions (`NoValidCoproductOptionFound` on 2.13, `CannotConvert` on 3); sconfig-derivation reports `CannotConvert` on both.
 
 ### Type classes
 
@@ -782,11 +797,16 @@ Owned by the kindlings module — no extending of any third-party type, just a c
 | Feature | Description |
 |---|---|
 | `ConfigDecodingError` | Sealed trait with structured variants and a `path: List[String]` for nested-field error attribution |
-| `ConfigDecodingError.Missing(path, key)` | Required key absent on a HOCON object |
-| `ConfigDecodingError.WrongType(path, expected, actual)` | Value present but the wrong `ConfigValueType` |
-| `ConfigDecodingError.CannotConvert(path, message, cause)` | Catch-all for `String => A` conversion failures (parse errors, refined-type validation, …) |
-| `ConfigDecodingError.Multiple(errors)` | Aggregates multiple errors so one decode reports every problem at once |
-| `withParentPath(parent)` | Extends the path on the way up the call stack so nested-field errors look like `Missing("parent.child")` |
+| `ConfigDecodingError.KeyNotFound(path, key, candidates)` | Required key absent on a HOCON object (upstream `KeyNotFound`, with its candidate keys) |
+| `ConfigDecodingError.Missing(path, key)` | Required key absent; kept for hand-written readers, derived readers report `KeyNotFound` |
+| `ConfigDecodingError.WrongType(path, expected, actual)` | Value present but the wrong `ConfigValueType` (upstream `WrongType`) |
+| `ConfigDecodingError.CannotConvert(path, message, cause)` | Catch-all for `String => A` conversion failures (parse errors, refined-type validation, unknown enumeration strings, …) |
+| `ConfigDecodingError.UnknownKey(path, key)` | Unknown key of a strict case class, at the key (upstream `UnknownKey`) |
+| `ConfigDecodingError.UnexpectedValueForFieldCoproductHint(path, value)` | Discriminator value naming no subtype, at the discriminator (upstream's failure of the same name) |
+| `ConfigDecodingError.NoValidCoproductOptionFound(path, value, optionFailures)` | No subtype of a `FirstSuccess` family could be read (upstream's failure of the same name) |
+| `ConfigDecodingError.CollidingKeys(path, key, existingValue)` | Thrown by writers inside `CoproductHintException` when a subtype's field collides with the discriminator (upstream `CollidingKeys`) |
+| `ConfigDecodingError.Multiple(errors)` | Aggregates multiple errors so one decode reports every problem at once (`ConfigDecodingError.flatten` lists them) |
+| `withParentPath(parent)` | Extends the path on the way up the call stack so nested-field errors carry paths like `parent.child` |
 
 ### Derivation API
 
@@ -827,7 +847,7 @@ The global `SConfig` is the default; per-type configuration is expressed via imp
 | `ProductHint[A]` | `transformMemberNames` / `useDefaults` / `allowUnknownKeys` | upstream `pureconfig.ProductHint[A]` |
 | `CoproductHint.Field[A]` | `fieldName` (default `"type"`) / `transformConstructorNames` | upstream `pureconfig.FieldCoproductHint[A]` |
 | `CoproductHint.Wrapped[A]` | `transformConstructorNames` | upstream single-key-wrapping `CoproductHint` |
-| `CoproductHint.FirstSuccess[A]` | (no parameters) | upstream `pureconfig.FirstSuccessCoproductHint[A]` — type is reserved in the ADT, currently treated as discriminator-based at the macro level |
+| `CoproductHint.FirstSuccess[A]` | (no parameters) | upstream `pureconfig.FirstSuccessCoproductHint[A]` — subtypes attempted in alphabetical order of their names, first success wins; written as is |
 
 The macro looks for an implicit hint at every case class / sealed family and falls back to the global `SConfig` when no hint is in scope. Annotations (`@configKey`, `@transientField`) always win over both layers.
 
@@ -850,7 +870,7 @@ Defined directly in the `ConfigReader` and `ConfigWriter` companion bodies (not 
 | `Float` / `Double` | Yes | Yes | |
 | `Char` | Yes | Yes | Single-character string |
 | `BigDecimal` / `BigInt` | Yes | Yes | Reader accepts both `NUMBER` and `STRING` upstream values |
-| `Option[A]` | Yes | Yes | `null` / `ConfigValueType.NULL` ↔ `None`; otherwise recurses into `inner` |
+| `Option[A]` | Yes | Yes | `null` / `ConfigValueType.NULL` ↔ `None`; otherwise recurses into `inner`. The reader is a `ReadsMissingKeys` (a missing key reads as `None`) |
 
 Collection (`List`, `Vector`, `Seq`, `Set`) and `Map[String, A]` readers / writers are deliberately **not** exposed as companion-level implicits because generic `def iterableReader[A, Coll](implicit …): ConfigReader[Coll]` would cause Scala 2's implicit search to diverge whenever it tries to resolve any unrelated `ConfigReader[T]`. Instead, the macro's `HandleAsCollectionRule` and `HandleAsMapRule` synthesise collection codecs directly from the structural pattern, which works for all standard collection types (and any user-defined `IsCollection` / `IsMap` provider) without needing companion-level implicits.
 
@@ -870,7 +890,7 @@ Collection (`List`, `Vector`, `Seq`, `Set`) and `Map[String, A]` readers / write
 | scala-newtype (`@newtype`/`@newsubtype`) | Not supported | Automatic via `kindlings-newtype-integration` | JVM only |
 | Sealed traits with discriminator | Manual dispatch | Macro `HandleAsEnumRule` (`SConfig.discriminator`) | Default `"type"` |
 | Sealed traits with single-key wrapping | Manual dispatch | Macro `HandleAsEnumRule` (`SConfig.withWrappedSubtypes`) | |
-| Case-object enums → string | Manual | Auto-detected when all subtypes are `case object`s and no discriminator is set | |
+| Case-object enums → string | Manual | Auto-detected when all subtypes are `case object`s and no discriminator is set | Read only from strings; with a discriminator they are objects `{ type = name }` |
 | Scala 3 named tuples | Not supported | Yes | |
 | Recursive types | Yes (manual) | Yes (no wrappers needed) | |
 | Singletons (`case object`) | Yes | Yes | |
@@ -901,6 +921,8 @@ The two modules are deliberately built to be drop-in equivalents at the API surf
 | Default sealed-trait encoding | Discriminator `"type"` | Discriminator `"type"` |
 | Per-type `ProductHint[A]` | `KindlingsProductHint[A]` (reuses upstream `pureconfig.ConfigFieldMapping`) | `ProductHint[A]` (reuses sconfig's local `ConfigFieldMapping`) |
 | Per-type `CoproductHint[A]` | `KindlingsCoproductHint.Field[A]` / `Wrapped[A]` / `FirstSuccess[A]` | `CoproductHint.Field[A]` / `Wrapped[A]` / `FirstSuccess[A]` |
+| Reading / writing semantics | Upstream PureConfig's (checked by `PureConfigOracleSpec`) | The same (checked against pureconfig-derivation's scenarios by `UpstreamSemanticsSpec`) |
+| Failure types | Upstream's `ConfigReaderFailures` / `FailureReason`s | Own `ConfigDecodingError` ADT with the corresponding cases |
 | Strict mode (reject unknown keys) | `PureConfig.withStrictDecoding` global / `KindlingsProductHint(allowUnknownKeys = false)` per type | `SConfig.withStrictDecoding` global / `ProductHint(allowUnknownKeys = false)` per type |
 | Built-in primitive instances | Inherited from PureConfig | Defined directly in the companion |
 | Collection / map handling | Inherited from PureConfig | Synthesised by the macro |

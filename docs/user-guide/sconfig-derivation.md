@@ -150,11 +150,23 @@ implicit val myTypeHint: ProductHint[MyType] =
 
 `CoproductHint` controls sealed trait encoding strategy:
 
-| Hint | Description |
-|------|-------------|
-| `CoproductHint.Field[A](fieldName, transform)` | Discriminator-based (default) |
-| `CoproductHint.Wrapped[A](transform)` | Single-key wrapping: `{"variant-name": {...}}` |
-| `CoproductHint.FirstSuccess[A]()` | Try every subtype reader in order |
+| Hint | Upstream PureConfig equivalent | Description |
+|------|------|-------------|
+| `CoproductHint.Field[A](fieldName, transform)` | `FieldCoproductHint[A]` | Discriminator-based (default): the value must be an object; the subtype is read without the discriminator key |
+| `CoproductHint.Wrapped[A](transform)` | (custom `CoproductHint`) | Single-key wrapping: `{"variant-name": {...}}` |
+| `CoproductHint.FirstSuccess[A]()` | `FirstSuccessCoproductHint[A]` | No disambiguation: subtypes are attempted in the alphabetical order of their names, the first one read successfully wins; written as is |
+
+Declare a coproduct hint with its concrete variant as the type (`implicit val hint: CoproductHint.FirstSuccess[Source] = CoproductHint.FirstSuccess()`).
+
+Without a discriminator (`withWrappedSubtypes` or a `Wrapped` hint), a sealed family of case objects is read from strings (`north`), like PureConfig's `deriveEnumerationReader`; with a discriminator its values are objects (`{ type = north }`). Writing a subtype that has a field named like the discriminator throws `CoproductHintException`.
+
+### Behaviour follows PureConfig
+
+sconfig has no derivation of its own; derived instances behave like upstream PureConfig's derivation (as `kindlings-pureconfig-derivation` does), with sconfig's own failure types. A test in the module runs the same scenarios as pureconfig-derivation's and asserts the same outcomes. In particular:
+
+- readers report **every** failure: each failing field of a case class (then each unknown key of a strict one), each failing item of a collection, each failing value of a map;
+- a missing key fails with `KeyNotFound`, which lists the object's keys that look like the expected key under a different naming (e.g. `firstName` for `first-name`); readers of missing keys (`Option` fields, readers extending `ReadsMissingKeys`, which are called with `null`) read it instead;
+- an empty `Option` field is omitted when writing, not written as `null`.
 
 ## Annotations
 
@@ -295,21 +307,26 @@ import hearth.kindlings.sconfigderivation.debug._
 
 `ConfigReader` returns `Either[ConfigDecodingError, A]` with structured errors:
 
-| Error type | Description |
-|-----------|-------------|
-| `ConfigDecodingError.Missing` | Required key is missing |
-| `ConfigDecodingError.WrongType` | Value has unexpected HOCON type |
-| `ConfigDecodingError.CannotConvert` | Value cannot be converted to target type |
-| `ConfigDecodingError.UnknownKey` | Unexpected key when `withStrictDecoding` is active |
-| `ConfigDecodingError.Multiple` | Aggregation of multiple errors |
+| Error type | Upstream PureConfig equivalent | Description |
+|-----------|------|-------------|
+| `ConfigDecodingError.KeyNotFound` | `KeyNotFound` | Required key is missing (with candidate keys) |
+| `ConfigDecodingError.WrongType` | `WrongType` | Value has unexpected HOCON type |
+| `ConfigDecodingError.CannotConvert` | `CannotConvert` | Value cannot be converted to target type |
+| `ConfigDecodingError.UnknownKey` | `UnknownKey` | Unexpected key when `withStrictDecoding` is active |
+| `ConfigDecodingError.UnexpectedValueForFieldCoproductHint` | `UnexpectedValueForFieldCoproductHint` | The discriminator names no subtype |
+| `ConfigDecodingError.NoValidCoproductOptionFound` | `NoValidCoproductOptionFound` | No subtype of a `FirstSuccess` family could be read (lists every attempt) |
+| `ConfigDecodingError.Multiple` | `ConfigReaderFailures` | Aggregation of multiple errors (`ConfigDecodingError.flatten` lists them) |
+| `ConfigDecodingError.Missing` | | Required key is missing; not reported by derived readers (kept for hand-written ones) |
 
-All errors carry a `path` for pinpointing the offending field:
+All errors carry a `path` for pinpointing the offending value, relative to the value the reader was called with. As in PureConfig, a missing key is reported at the object that lacks it, any other failure at the offending value (a field's key, a list index, a map key):
 
 ```scala
 val error: ConfigDecodingError = result.left.get
 println(error.getMessage)
-// Missing required key 'host' (at db.host)
+// Key not found: 'host'. (at db)
 ```
+
+Writers throw `CoproductHintException` (with `ConfigDecodingError.CollidingKeys`) when a subtype written with a discriminator has a field named like the discriminator.
 
 ## Comparison with PureConfig
 
@@ -322,7 +339,8 @@ println(error.getMessage)
 | Kebab-case field names by default | Yes | Yes |
 | Discriminator-based ADTs | Yes | Yes (default: `"type"` field) |
 | Wrapped subtypes | Yes | Yes (`withWrappedSubtypes`) |
-| First-success coproduct hint | Yes | Yes (`CoproductHint.FirstSuccess`) |
+| First-success coproduct hint | Yes | Yes (`CoproductHint.FirstSuccess`, same attempt order) |
+| Failure accumulation, candidate keys for missing keys | Yes | Yes (own `ConfigDecodingError` types) |
 | Per-type `ProductHint` / `CoproductHint` | Yes | Yes |
 | Strict decoding | Yes | Yes (`withStrictDecoding`) |
 | Default values | Yes | Yes (enabled by default) |
