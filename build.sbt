@@ -287,7 +287,7 @@ lazy val aliases = new Aliases(
     parserCatsEffect,
     parserFs2
   ),
-  testOnly = Seq(integrationTests, derivationPolicyTests),
+  testOnly = Seq(integrationTests, derivationPolicyTests, upstreamOracleTests),
   compileOnly = Seq(benchmarks)
 ) {
   // Run MiMa as part of CI on JVM only (some published modules are JVM-only; MiMa is scoped to JVM accordingly).
@@ -371,6 +371,7 @@ lazy val root = project
   .aggregate(tapirOpenapiJsoniter.projectRefs *)
   .aggregate(integrationTests.projectRefs *)
   .aggregate(derivationPolicyTests.projectRefs *)
+  .aggregate(upstreamOracleTests.projectRefs *)
   .aggregate(benchmarks.projectRefs *)
   .settings(
     moduleName := "kindlings",
@@ -1079,6 +1080,12 @@ val ironDepForScala3 = List(
   }
 )
 
+val ironDepForUpstreamOracleTests = List(
+  MatrixAction.ForScala(_.isScala3).Configure { project =>
+    project.dependsOn(LocalProject(s"ironIntegration${project.id.stripPrefix("upstreamOracleTests")}"))
+  }
+)
+
 lazy val integrationTests = projectMatrix
   .in(file("integration-tests"))
   .someVariations(versions.scalas, versions.platforms)(
@@ -1117,6 +1124,48 @@ lazy val integrationTests = projectMatrix
       for3 = Seq(
         "io.github.iltotore" %% "iron" % versions.iron,
         "io.github.kitlangton" %% "neotype" % versions.neotype
+      ),
+      for2_13 = Seq.empty
+    )
+  )
+
+// Differential ("oracle") tests: the upstream libraries Kindlings mirrors are test-only dependencies here, and the
+// suites assert that Kindlings-derived instances behave like upstream's on shared fixtures (tapir's own `Schema.derived`,
+// tapir-cats, tapir-iron, iron-circe, iron-jsoniter, ...). Every difference must be listed as an explicit, documented
+// exception in the suite. JVM-only: they check behaviour, not platform support, and keep CI cost flat.
+lazy val upstreamOracleTests = projectMatrix
+  .in(file("upstream-oracle-tests"))
+  .someVariations(versions.scalas, List(VirtualAxis.jvm))(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForUpstreamOracleTests) *
+  )
+  .dependsOn(circeDerivation, jsoniterDerivation, tapirSchemaDerivation, catsIntegration)
+  .settings(noPublishSettings *)
+  .settings(settings *)
+  .settings(dependencies *)
+  .settings(
+    moduleName := "kindlings-upstream-oracle-tests",
+    name := "kindlings-upstream-oracle-tests",
+    description := "Differential tests comparing Kindlings-derived instances with the upstream libraries they mirror",
+    Test / scalacOptions += "-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe",
+    // Upstream macros (tapir's Scala 3 derivation with annotations) fail -Xcheck-macros; Kindlings' own macros are
+    // checked with it in their modules' tests.
+    scalacOptions --= Seq("-Xcheck-macros"),
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-core" % versions.circe % Test,
+      "io.circe" %% "circe-parser" % versions.circe % Test,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % versions.jsoniterScala % Test,
+      "com.softwaremill.sttp.tapir" %% "tapir-core" % versions.tapir % Test,
+      "com.softwaremill.sttp.tapir" %% "tapir-cats" % versions.tapir % Test,
+      "com.softwaremill.sttp.tapir" %% "tapir-apispec-docs" % versions.tapir % Test,
+      "org.typelevel" %% "cats-core" % versions.cats % Test,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Test
+    ),
+    libraryDependencies ++= foldVersion(scalaVersion.value)(
+      for3 = Seq(
+        "io.github.iltotore" %% "iron" % versions.iron % Test,
+        "io.github.iltotore" %% "iron-circe" % versions.iron % Test,
+        "io.github.iltotore" %% "iron-jsoniter" % versions.iron % Test,
+        "com.softwaremill.sttp.tapir" %% "tapir-iron" % versions.tapir % Test
       ),
       for2_13 = Seq.empty
     )

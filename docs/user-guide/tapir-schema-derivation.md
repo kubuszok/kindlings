@@ -285,6 +285,8 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
 `derivedEnumerationValue`. The result is the same whether or not the element types have an implicit `Schema`:
 
 - `Set`s are marked with unique items (as Tapir does),
+- `Map`s with `String` keys are named like Tapir's `Schema.schemaForMap` (`Map_V`, e.g. a `Map_Double` component in
+  OpenAPI), and those with other keys like `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`),
 - collections and maps that cannot be empty (cats' `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `NonEmptySet`,
   `NonEmptyMap`, ... with `kindlings-cats-integration`) are required and validated with `Validator.minSize(1)`
   (`minItems: 1` in OpenAPI / JSON Schema), as in tapir-cats,
@@ -295,6 +297,13 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
   `AnyVal` classes, opaque types (e.g. `opaque type Counter = Int`, written as `{"7":...}`), and — with the
   corresponding integration module — refined, Iron, neotype and scala-newtype types — as their underlying value. For
   any other key type, provide a `Schema[Map[K, V]]`, e.g. with Tapir's `Schema.schemaForMap[K, V](keyToString)`.
+
+A value type wrapping a collection or map (an `AnyVal` class, an opaque type, an Iron `List[A] :| MinLength[1]`, ...)
+is coded as that collection, but the decoders do not fill it in when it is absent, so — unlike a plain collection — it is
+a required field (unless it has a default value).
+
+With a discriminator, each subtype's schema gets the discriminator field appended (unless the subtype already has it),
+carrying the subtype's value (`"const": "Circle"` in OpenAPI / JSON Schema), as Tapir's own derivation does.
 
 Your own implicit `Schema` for any of these types (e.g. `Schema[Map[UserId, Int]]`, `Schema[Option[Int]]`) always
 takes precedence. Tapir's schemas for primitive and other leaf types (`String`, `Int`, `UUID`, `Instant`, ...) are
@@ -316,18 +325,26 @@ This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the de
 
 | Feature | Tapir built-in (`Schema.derived`) | Kindlings |
 |---------|----------------------------------|-----------|
-| Scala 2.13 support | No (Scala 3 Mirrors only) | Yes |
-| Same API on Scala 2.13 and 3 | No | Yes |
+| Scala 2.13 support | Yes (Magnolia) | Yes |
+| Same API on Scala 2.13 and 3 | No (Magnolia on 2.13, Mirrors on 3) | Yes |
 | Sanely-automatic derivation | No | Yes |
-| Recursive types | Manual `implicit lazy val` | Just works |
+| Recursive types | Manual (`implicit lazy val` on 2.13, `implicit def` on 3) | Just works |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |
 | Java enums | Partial | Yes |
 | Automatic JSON config discovery | No | Yes |
 | Tapir annotation support | Yes | Yes |
-| Value types (`AnyVal`) | Yes | Yes |
+| Value types (`AnyVal`) | Scala 2.13 only (on Scala 3 a hand-written schema is needed) | Yes |
 | Non-`String` map keys (`Int`, `UUID`, value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes |
 | `Char` | No | Yes (as `String`) |
+
+### Checked against Tapir
+
+The `upstream-oracle-tests` module derives the same types with Kindlings and with Tapir's own derivation (and with
+tapir-cats and tapir-iron) and compares the JSON Schemas Tapir's docs interpreter renders for them, on Scala 2.13 and 3.
+The only differences are the documented ones: required and optional fields follow the decoder (see "Required and
+optional fields" above; e.g. with circe, collections are required, while Tapir marks every collection optional), and
+Iron constraints become validators only with tapir-iron's schemas imported (see the Iron integration guide).
 
 ### Benchmarks
 

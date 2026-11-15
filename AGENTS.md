@@ -182,6 +182,7 @@ See `docs/contributing/hearth-documentation/SKILL.md` § "Hearth source as refer
 - `docs/contributing/kindlings-new-module/SKILL.md` — bootstrapping a new module, requirements checklist
 - `docs/contributing/kindlings-debugging/SKILL.md` — debugging derivation, logging, error hierarchy
 - `docs/contributing/kindlings-derivation-policy/SKILL.md` — wiring the per-library derivation policy (issue #85): `AllowDerivation` marker, `policy` package object, gating the structural rules
+- `docs/contributing/kindlings-upstream-oracles/SKILL.md` — differential tests against upstream libraries (`upstream-oracle-tests`): exact expected differences, and testing downstream reports at the owning layer (no cross-project canaries)
 
 Reference implementations:
 - `FastShowPrettyMacrosImpl.scala` — **encoder-style** derivation (reading fields)
