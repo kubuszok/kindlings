@@ -44,6 +44,51 @@ final class InlineMethodsSpec extends MacroSuite {
     }
   }
 
+  group("toYamlString of empty collections") {
+
+    val empties = WithEmpties(Nil, Map.empty, List(Nil, List(1)), Map("k" -> Nil), "x")
+    val lines = (yaml: String) => yaml.linesIterator.map(_.trim).toSet
+
+    test("default: printed as an empty value, as scala-yaml (does not decode back)") {
+      val yaml = KindlingsYamlEncoder.toYamlString(empties)
+      assert(lines(yaml).contains("list:"), yaml)
+      assert(lines(yaml).contains("map:"), yaml)
+      assert(!yaml.contains("[]") && !yaml.contains("{}"), yaml)
+      assert(KindlingsYamlDecoder.fromYamlString[WithEmpties](yaml).isLeft)
+    }
+
+    test("withEmptyCollectionsAsFlow: printed as [] and {} (also nested) and decodes back") {
+      implicit val config: YamlConfig = YamlConfig.default.withEmptyCollectionsAsFlow
+      val yaml = KindlingsYamlEncoder.toYamlString(empties)
+      val printed = lines(yaml)
+      assert(printed.contains("list: []"), yaml)
+      assert(printed.contains("map: {}"), yaml)
+      assert(printed.contains("- []"), yaml) // the empty list nested in `nested`
+      assert(printed.contains("k: []"), yaml) // the empty list nested in `mapOfLists`
+      KindlingsYamlDecoder.fromYamlString[WithEmpties](yaml) ==> Right(empties)
+    }
+
+    test("withEmptyCollectionsAsFlow: a top-level empty collection and non-empty ones") {
+      implicit val config: YamlConfig = YamlConfig.default.withEmptyCollectionsAsFlow
+      KindlingsYamlEncoder.toYamlString(List.empty[Int]).trim ==> "[]"
+      KindlingsYamlEncoder.toYamlString(Map.empty[String, Int]).trim ==> "{}"
+      val full = WithEmpties(List(1), Map("a" -> 1), List(List(2)), Map("k" -> List(3)), "x")
+      KindlingsYamlDecoder.fromYamlString[WithEmpties](KindlingsYamlEncoder.toYamlString(full)) ==> Right(full)
+    }
+
+    test("withoutEmptyCollectionsAsFlow restores the default") {
+      implicit val config: YamlConfig = YamlConfig.default.withEmptyCollectionsAsFlow.withoutEmptyCollectionsAsFlow
+      config.emptyCollectionsAsFlow ==> false
+      assert(!KindlingsYamlEncoder.toYamlString(empties).contains("[]"))
+    }
+
+    test("syntax.toYamlString honours withEmptyCollectionsAsFlow") {
+      import syntax.*
+      implicit val config: YamlConfig = YamlConfig.default.withEmptyCollectionsAsFlow
+      KindlingsYamlDecoder.fromYamlString[WithEmpties](empties.toYamlString) ==> Right(empties)
+    }
+  }
+
   group("syntax.toYamlString") {
 
     test("simple case class") {

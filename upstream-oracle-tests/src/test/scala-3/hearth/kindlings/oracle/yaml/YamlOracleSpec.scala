@@ -260,6 +260,22 @@ final class YamlOracleSpec extends MacroSuite {
       )
     }
 
+    test("withEmptyCollectionsAsFlow (opt-in): empty collections printed as [] / {} decode back") {
+      // Opt-in difference (feature-parity.md, yaml-derivation): only the printing differs, the nodes are the same
+      given YamlConfig = YamlConfig.default.withEmptyCollectionsAsFlow
+      val values = List(
+        YmEmpties(Nil, Map.empty, Nil, Map.empty, "x"),
+        YmEmpties(Nil, Map.empty, List(Nil, List(1)), Map("k" -> Nil), "x")
+      )
+      values.foreach { value =>
+        val kindlingsYaml = KindlingsYamlEncoder.toYamlString(value)
+        assertNotEquals(kindlingsYaml, U.empties.asNode(value).asYaml)
+        // decoded back by both Kindlings' and scala-yaml's decoders
+        assertEquals(decode(K.empties, kindlingsYaml), s"Right($value)")
+        assertEquals(decode(U.empties, kindlingsYaml), s"Right($value)")
+      }
+    }
+
     test("withWrappedSubtypes (opt-in): Kindlings' single-key mapping") {
       // Opt-in difference (feature-parity.md, yaml-derivation): each subtype is wrapped in a single-key mapping
       val str = "CoreSchemaTag(tag:yaml.org,2002:str)"
