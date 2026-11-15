@@ -34,6 +34,11 @@ object CatsDerivationFactories {
     def eqv(x: A, y: A): Boolean = eqvFn(x, y)
   }
 
+  /** The `partialCompare` result of incomparable values (a method, not a constant: Scala 2 macros cannot splice a `NaN`
+    * literal).
+    */
+  def incomparable: Double = Double.NaN
+
   def partialOrderInstance[A](partialCompareFn: (A, A) => Double): cats.kernel.PartialOrder[A] =
     new cats.kernel.PartialOrder[A] {
       def partialCompare(x: A, y: A): Double = partialCompareFn(x, y)

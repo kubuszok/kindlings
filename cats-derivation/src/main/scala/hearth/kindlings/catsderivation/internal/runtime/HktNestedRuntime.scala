@@ -30,4 +30,24 @@ object HktNestedRuntime {
     outerFunctor
       .asInstanceOf[cats.Functor[AnyF]]
       .map(fa)((inner: Any) => selfFunctor.asInstanceOf[cats.Functor[AnyF]].map(inner)(f.asInstanceOf[Any => Any]))
+
+  /** `outer.compose(inner)`: the instance for a field nesting two type constructors around the type parameter (e.g.
+    * `List[Option[A]]`), like kittens' nested instances.
+    */
+  def composeFunctor(outer: Any, inner: Any): Any =
+    outer.asInstanceOf[cats.Functor[AnyF]].compose(inner.asInstanceOf[cats.Functor[AnyF]])
+
+  def composeFoldable(outer: Any, inner: Any): Any =
+    outer.asInstanceOf[cats.Foldable[AnyF]].compose(inner.asInstanceOf[cats.Foldable[AnyF]])
+
+  def composeTraverse(outer: Any, inner: Any): Any =
+    outer.asInstanceOf[cats.Traverse[AnyF]].compose(inner.asInstanceOf[cats.Traverse[AnyF]])
+
+  /** `SemigroupK[G].algebra`, `MonoidK[G].algebra` and `EmptyK[G].synthesize`: the kernel instances of a field `G[A]`.
+    */
+  def semigroupKAlgebra(semigroupK: Any): Any = semigroupK.asInstanceOf[cats.SemigroupK[AnyF]].algebra[Any]
+
+  def monoidKAlgebra(monoidK: Any): Any = monoidK.asInstanceOf[cats.MonoidK[AnyF]].algebra[Any]
+
+  def emptyKSynthesize(emptyK: Any): Any = emptyK.asInstanceOf[alleycats.EmptyK[AnyF]].synthesize[Any]
 }

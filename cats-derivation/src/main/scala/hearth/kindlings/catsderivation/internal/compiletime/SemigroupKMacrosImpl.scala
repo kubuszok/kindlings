@@ -9,7 +9,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** SemigroupK derivation: combines F[A] values field-wise by summoning Semigroup for each field type in F[Any]. */
-trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -91,7 +91,9 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+        semigroupFromSemigroupK[Field]
+          .map(Right(_))
+          .getOrElse(SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

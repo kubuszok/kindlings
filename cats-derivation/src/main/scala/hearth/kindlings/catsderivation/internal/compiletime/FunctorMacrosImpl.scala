@@ -25,6 +25,28 @@ trait FunctorMacrosImpl
     *
     * Replaces the former platform-specific `summonFunctorForFieldType` (Issue #284: HKT ctor primitives).
     */
+  final protected def summonComposedFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
+    // A field nesting several type constructors around the type parameter (e.g. `List[Option[A]]`, probed as
+    // `List[Option[Int]]`) gets the composed instance, like kittens; it used to get the outer instance only, which
+    // applied the function to the inner containers (ClassCastException).
+    Type.decompose1(using fieldType).flatMap { case (_, arg) =>
+      summonFunctorForFieldType(fieldType).map { outer =>
+        val inner = arg.Underlying.asInstanceOf[Type[Any]]
+        implicit val AnyType: Type[Any] = FunctorTypes.Any
+        val IntType: Type[Int] = FunctorTypes.Int
+        if (inner =:= IntType) outer
+        else
+          summonComposedFunctorForFieldType(inner) match {
+            case Some(innerInstance) =>
+              Expr.quote {
+                hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                  .composeFunctor(Expr.splice(outer), Expr.splice(innerInstance))
+              }
+            case None => outer
+          }
+      }
+    }
+
   final protected def summonFunctorForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
     Type.decompose1(using fieldType).flatMap { case (gCtor, _) =>
       implicit val FunctorOfG: Type[cats.Functor[AnyK]] =
@@ -345,13 +367,13 @@ trait FunctorMacrosImpl
                         } else {
                           val param = fieldsI.find(_._1 == name).get._2
                           import param.tpe.Underlying as FieldType
-                          summonFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                          summonComposedFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
                             case Some(functorExpr) =>
                               nestedFunctors += (name -> functorExpr)
                               MIO.void
                             case None =>
                               mkCtor1FromType(Type[FieldType].asInstanceOf[Type[Any]]) match {
-                                case Some((_, nestedUntyped)) if nestedUntyped == parentCtor =>
+                                case Some((_, nestedUntyped)) if nestedUntyped.sameTypeConstructorAs(parentCtor) =>
                                   selfRecursive += name
                                   MIO.void
                                 case _ =>

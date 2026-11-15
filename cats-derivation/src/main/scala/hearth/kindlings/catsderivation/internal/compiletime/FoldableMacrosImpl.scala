@@ -30,10 +30,27 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     * Replaces the former platform-specific `summonFoldableForFieldType` (Issue #284: HKT ctor primitives).
     */
   protected def summonFoldableForFieldType(fieldType: Type[Any]): Option[Expr[Any]] =
-    Type.decompose1(using fieldType).flatMap { case (gCtor, _) =>
+    // A field nesting several type constructors around the type parameter (e.g. `List[Option[A]]`, probed as
+    // `List[Option[Int]]`) gets the composed instance, like kittens; it used to get the outer instance only, which
+    // applied the function to the inner containers (ClassCastException).
+    Type.decompose1(using fieldType).flatMap { case (gCtor, arg) =>
       implicit val FoldableOfG: Type[cats.Foldable[AnyK]] =
         CatsFoldableCtor.apply(using gCtor).asInstanceOf[Type[cats.Foldable[AnyK]]]
-      Expr.summonImplicit[cats.Foldable[AnyK]].toOption.map(_.asInstanceOf[Expr[Any]])
+      Expr.summonImplicit[cats.Foldable[AnyK]].toOption.map { outer =>
+        val inner = arg.Underlying.asInstanceOf[Type[Any]]
+        implicit val AnyType: Type[Any] = FoldableTypes.Any
+        val IntType: Type[Int] = FoldableTypes.Int
+        if (inner =:= IntType) outer.asInstanceOf[Expr[Any]]
+        else
+          summonFoldableForFieldType(inner) match {
+            case Some(innerInstance) =>
+              Expr.quote {
+                hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                  .composeFoldable(Expr.splice(outer.asInstanceOf[Expr[Any]]), Expr.splice(innerInstance))
+              }
+            case None => outer.asInstanceOf[Expr[Any]]
+          }
+      }
     }
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -166,14 +183,14 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                   val result = foldableFields.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
                     foldableOpt match {
                       case None =>
-                        Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                        Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
                       case Some(foldableExpr) =>
                         Expr.quote {
                           hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
                             .foldRightNested(
                               Expr.splice(foldableExpr),
                               Expr.splice(fieldExpr),
-                              Expr.splice(acc),
+                              _root_.cats.Eval.defer(Expr.splice(acc)),
                               Expr.splice(fExpr)
                             )
                         }
@@ -238,7 +255,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
   }
 
   /** Decompose an applied field type `G[X]` and return its (live) type constructor `G` in untyped form for
-    * self-recursion comparison (`== parentCtor`). Returns None for non-applied types.
+    * self-recursion comparison (`sameTypeConstructorAs(parentCtor)`). Returns None for non-applied types.
     *
     * Replaces the former platform-specific `mkCtor1FromTypeFoldable` (Issue #284).
     */
@@ -305,7 +322,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                               MIO.void
                             case None =>
                               mkCtor1FromTypeFoldable(Type[FT].asInstanceOf[Type[Any]]) match {
-                                case Some(ut) if ut == parentCtor =>
+                                case Some(ut) if ut.sameTypeConstructorAs(parentCtor) =>
                                   selfRec += name
                                   MIO.void
                                 case _ =>
@@ -431,14 +448,16 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                           foldableOpts.flatten.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
                             foldableOpt match {
                               case None =>
-                                Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                                Expr.quote(
+                                  Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc)))
+                                )
                               case Some(foldableE) =>
                                 Expr.quote {
                                   hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
                                     .foldRightNested(
                                       Expr.splice(foldableE),
                                       Expr.splice(fieldExpr),
-                                      Expr.splice(acc),
+                                      _root_.cats.Eval.defer(Expr.splice(acc)),
                                       Expr.splice(fExpr)
                                     )
                                 }

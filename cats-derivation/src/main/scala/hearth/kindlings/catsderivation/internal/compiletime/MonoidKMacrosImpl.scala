@@ -9,7 +9,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** MonoidK derivation: combines EmptyK + SemigroupK by summoning Monoid for each field type in F[Any]. */
-trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -96,7 +96,7 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
     val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither match {
+      monoidFromMonoidK[Field].map(Right(_)).getOrElse(MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither) match {
         case Right(monoidExpr) =>
           val value: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
           MIO.pure((fieldName, value.as_??))
@@ -133,7 +133,9 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+        monoidFromMonoidK[Field]
+          .map(monoid => Right(monoid.asInstanceOf[Expr[cats.kernel.Semigroup[Field]]]))
+          .getOrElse(MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

@@ -124,9 +124,9 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
                 val last = directFieldExprs.last
                 val init = directFieldExprs.init
                 val seed: Expr[cats.Eval[Any]] =
-                  Expr.quote(cats.Eval.now(Expr.splice(fExpr)(Expr.splice(last)): Any))
+                  Expr.quote(cats.Eval.later(Expr.splice(fExpr)(Expr.splice(last)): Any))
                 val result = init.foldRight(seed) { (fieldExpr, acc) =>
-                  Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                  Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
                 }
                 MIO.pure(result)
               }
@@ -158,7 +158,7 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
                     fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
                 }
                 val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
-                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
                 }
                 MIO.pure(result)
               }
