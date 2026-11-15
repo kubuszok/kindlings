@@ -57,6 +57,24 @@ Iron's "new types" are supported too: `Key.T` (and an alias like `type Key = Key
 `RuntimeConstraint[A, C]`). Both kinds work as case class fields and as map keys (e.g. `Map[Key, Int]` is a JSON object
 keyed by the underlying `String`, and its tapir schema an open product).
 
+## Tapir schemas
+
+`kindlings-tapir-schema-derivation` derives the schema of an Iron type as the schema of its underlying type (Tapir on its
+own cannot derive schemas for Iron types at all), without validators for the constraints. To have the constraints
+documented as validators (`minimum`, `maxLength`, `pattern`, `minItems`, ... in OpenAPI), add
+[tapir-iron](https://tapir.softwaremill.com/en/latest/endpoint/integrations.html#iron-integration) and import its schemas
+where the schema is derived — Kindlings uses them like any other implicit `Schema`, and the result is the same as
+Tapir's:
+
+```scala
+import sttp.tapir.codec.iron.given
+
+val schema = KindlingsSchema.derived[Account].schema
+```
+
+Decoding with `kindlings-jsoniter-derivation` reports a missing refined field (e.g. `List[String] :| MinLength[1]`) as a
+missing required field, where jsoniter-scala's `JsonCodecMaker` with iron-jsoniter decodes it as `null`.
+
 ## Example
 
 ??? example "Case class with Iron-constrained fields (Circe)"

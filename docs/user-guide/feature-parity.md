@@ -847,6 +847,14 @@ The two modules are deliberately built to be drop-in equivalents at the API surf
 
 **Replaces:** Tapir's built-in `Schema.derived` + `sttp.tapir.generic.auto.*`
 
+Checked against Tapir's own derivation, tapir-cats and tapir-iron by the `upstream-oracle-tests` module (the JSON Schemas
+rendered by Tapir's docs interpreter are compared on Scala 2.13 and 3). The only differences:
+
+| Difference | Tapir | Kindlings | Status |
+|---|---|---|---|
+| Required and optional fields | Optional: `Option`s and collections | Optional exactly when the decoder derived with the same JSON config accepts the field missing (e.g. with circe, collections are required) | Design decision |
+| Iron constraints | tapir-iron turns them into validators | The underlying type's schema; tapir-iron's schemas (with validators) are used when imported | Parity with tapir-iron imported |
+
 ### Annotations
 
 | Feature | Tapir built-in | Kindlings | Status |
