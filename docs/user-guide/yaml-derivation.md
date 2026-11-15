@@ -230,7 +230,9 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Sealed trait / ADT support | Yes, but no discriminator (ordinal encode drops type info, brute-force decode — [#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Yes (discriminator-based) |
 | Configuration (naming, discriminator) | No | Yes (`YamlConfig`) |
 | Field name annotations | No | Yes (`@fieldName`) |
-| Default values | Always on, not configurable | Configurable (`withUseDefaults`) |
+| Default values | Always on, not configurable | Configurable (`withUseDefaults`, off by default) |
+| Absent `Option` field | `None` | `None` |
+| Failure messages of derived products | `Key x doesn't exist in parsed document`, `Expected MappingNode, got ...` | Same |
 | Enum handling | Broken in some cases | Correct |
 | Option decoding | Broken in some cases | Correct |
 | Inline encoding/decoding | No | Yes (`toYamlString`, `fromYamlString`) |

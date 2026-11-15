@@ -76,7 +76,7 @@ object YamlDerivationUtils {
   def checkIsMapping(node: Node): Either[ConstructError, Unit] =
     node match {
       case _: MappingNode => Right(())
-      case other => Left(ConstructError.from(s"Expected mapping node but got ${other.getClass.getSimpleName}", other))
+      case other => Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
     }
 
   def getField(node: Node, fieldName: String): Either[ConstructError, Node] =
@@ -86,10 +86,19 @@ object YamlDerivationUtils {
           case (ScalarNode(key, _), value) if key == fieldName => value
         } match {
           case Some(value) => Right(value)
-          case None        => Left(ConstructError.from(s"Missing field: $fieldName", node))
+          // scala-yaml's derived decoders' message
+          case None => Left(ConstructError.from(s"Key $fieldName doesn't exist in parsed document", node))
         }
       case other =>
-        Left(ConstructError.from(s"Expected mapping node but got ${other.getClass.getSimpleName}", other))
+        Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
+    }
+
+  /** Decode an `Option` field: an absent key is `None` (as scala-yaml's derived decoders). */
+  def decodeOptionalField(node: Node, fieldName: String, decoder: YamlDecoder[?]): Either[ConstructError, Any] =
+    getOptionalField(node, fieldName).flatMap {
+      case Some(fieldNode) =>
+        decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+      case None => Right(None)
     }
 
   def getOptionalField(node: Node, fieldName: String): Either[ConstructError, Option[Node]] =
@@ -99,7 +108,7 @@ object YamlDerivationUtils {
           case (ScalarNode(key, _), value) if key == fieldName => value
         })
       case other =>
-        Left(ConstructError.from(s"Expected mapping node but got ${other.getClass.getSimpleName}", other))
+        Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
     }
 
   def decodeOptionFromFn[A](
