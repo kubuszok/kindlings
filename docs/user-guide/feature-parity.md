@@ -31,11 +31,11 @@ The only differences are the ones documented below ("Design decisions" and "Defa
 |---|---|---|---|
 | `BigDecimal` | BYTES + `decimal(precision = 8, scale = 2)` | STRING | `withDecimalConfig(8, 2)` or `avro4sDefaults` |
 | `OffsetDateTime` | ISO-8601 STRING with the `datetime-with-offset` logical type | `timestamp-millis` LONG (UTC; the offset is dropped) | `withOffsetDateTimeAsIsoString` or `avro4sDefaults` |
-| Scala default values | Become schema defaults (the default's union branch moved first) | Only `@avroDefault` becomes a schema default | `withScalaDefaultsInSchema` or `avro4sDefaults` |
 
-Without schema defaults, Avro's schema resolution rejects old data read with a newer reader schema that adds fields with
-Scala defaults (`missing required field`); decoding a `GenericRecord` directly still falls back to the Scala defaults,
-as avro4s does.
+Scala default values become schema defaults, as in avro4s (the default's union branch moved first). The opt-out
+`withoutScalaDefaultsInSchema` keeps only `@avroDefault` defaults; Avro's schema resolution then rejects old data read
+with a newer reader schema that adds fields with Scala defaults (`missing required field`), while decoding a
+`GenericRecord` directly still falls back to the Scala defaults.
 
 ### Configuration
 
@@ -67,7 +67,7 @@ as avro4s does.
 | Fixed size (`@AvroFixed` / `@avroFixed`) | Yes | Yes | Parity |
 | Error type (`@AvroError` / `@avroError`) | v5 only (no v4 equivalent) | Yes (both Scala 2+3) | Improvement (we add it on Scala 2) |
 | Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
-| Default values | From constructor defaults (automatic; no `@AvroDefault` annotation exists upstream) | `@avroDefault(json)`, or constructor defaults with `withScalaDefaultsInSchema` | Default value difference (see above) |
+| Default values | From constructor defaults (automatic; no `@AvroDefault` annotation exists upstream) | From constructor defaults (opt out: `withoutScalaDefaultsInSchema`), overridable with `@avroDefault(json)` | Parity |
 | Subtype ordering (`@AvroSortPriority` / `@avroSortPriority`) | Yes | Yes | Parity |
 | `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
 | `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |

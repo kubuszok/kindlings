@@ -124,8 +124,11 @@ final class AvroOracleSpec extends MacroSuite {
     implicit val config: AvroConfig = AvroConfig.avro4sDefaults
     lazy val money = AvroSide.kindlings(AvroEncoder.derived[AvMoney], AvroDecoder.derived[AvMoney])
     lazy val offset = AvroSide.kindlings(AvroEncoder.derived[AvOffset], AvroDecoder.derived[AvOffset])
-    lazy val defaults = AvroSide.kindlings(AvroEncoder.derived[AvDefaults], AvroDecoder.derived[AvDefaults])
-    lazy val noDefault = AvroSide.kindlings(AvroEncoder.derived[AvNoDefault], AvroDecoder.derived[AvNoDefault])
+  }
+
+  /** The opt-out `withoutScalaDefaultsInSchema` (a Kindlings extension). */
+  private object KNoSchemaDefaults {
+    implicit val config: AvroConfig = AvroConfig.default.withoutScalaDefaultsInSchema
     lazy val evolV1 = AvroSide.kindlings(AvroEncoder.derived[AvEvolV1], AvroDecoder.derived[AvEvolV1])
     lazy val evolV2 = AvroSide.kindlings(AvroEncoder.derived[AvEvolV2], AvroDecoder.derived[AvEvolV2])
   }
@@ -378,26 +381,10 @@ final class AvroOracleSpec extends MacroSuite {
   }
 
   group("avro4s oracle: default values") {
-    test("default: Scala defaults are not schema defaults") {
-      // Documented difference (feature-parity.md, "Default values"): avro4s turns every Scala default into a schema
-      // default (moving the default's branch of a union first); Kindlings uses only @avroDefault unless
-      // withScalaDefaultsInSchema / avro4sDefaults is set.
-      compareSchemas(K.defaults, U.defaults)(
-        "schema $[fields][0][default]: only in upstream: x",
-        "schema $[fields][1][default]: only in upstream: 7",
-        "schema $[fields][2][default]: only in upstream: null",
-        "schema $[fields][3][type][0]: kindlings=null upstream=int",
-        "schema $[fields][3][type][1]: kindlings=int upstream=null",
-        "schema $[fields][3][default]: only in upstream: 3",
-        "schema $[fields][4][default]: only in upstream: List(1, 2)",
-        "schema $[fields][5][default]: only in upstream: ListMap(name -> n, age -> 1)"
-      )
-      compareSchemas(K.noDefault, U.noDefault)("schema $[fields][1][default]: only in upstream: a")
-    }
-    test("AvroConfig.avro4sDefaults") {
-      compare(KAvro4s.defaults, U.defaults, AvDefaults(), AvDefaults("y", 1, Some("o"), None, Nil))()
-      compare(KAvro4s.noDefault, U.noDefault, AvNoDefault(1, "b"))()
-    }
+    test("Scala defaults are schema defaults (the default's union branch first)")(
+      compare(K.defaults, U.defaults, AvDefaults(), AvDefaults("y", 1, Some("o"), None, Nil))()
+    )
+    test("@avroNoDefault")(compare(K.noDefault, U.noDefault, AvNoDefault(1, "b"))())
   }
 
   /** Decodes the same Avro value with both decoders and compares the outcomes (the value, or a failure). */
@@ -476,10 +463,10 @@ final class AvroOracleSpec extends MacroSuite {
         AvroOracle.decodeBinary(v2, v1.schema, AvroOracle.encodeBinary(v1, AvEvolV1("a")).get)
       val upstream = evolve(U.evolV1, U.evolV2)
       assertEquals(upstream, Success(AvEvolV2("a")))
-      // Documented difference ("Default values"): without schema defaults Avro's schema resolution rejects the data
-      // (the fields are required in the reader schema); avro4sDefaults/withScalaDefaultsInSchema behave as avro4s.
-      assert(evolve(K.evolV1, K.evolV2).isFailure)
-      assertEquals(evolve(KAvro4s.evolV1, KAvro4s.evolV2), upstream)
+      assertEquals(evolve(K.evolV1, K.evolV2), upstream)
+      // The opt-out (withoutScalaDefaultsInSchema): without schema defaults Avro's schema resolution rejects the data,
+      // since the added fields are required in the reader schema.
+      assert(evolve(KNoSchemaDefaults.evolV1, KNoSchemaDefaults.evolV2).isFailure)
     }
   }
 }
