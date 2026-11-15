@@ -307,7 +307,7 @@ object YamlDerivationUtils {
     node.asYaml
   }
 
-  /** [[nodeToYaml]], with empty sequences printed as `[]` and empty mappings as `{}` when `emptyCollectionsAsFlow`
+  /** `nodeToYaml`, with empty sequences printed as `[]` and empty mappings as `{}` when `emptyCollectionsAsFlow`
     * (scala-yaml's printer writes them as an empty value, which reads back as `null`).
     */
   def nodeToYaml(node: Node, emptyCollectionsAsFlow: Boolean): String =
