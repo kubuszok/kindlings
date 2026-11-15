@@ -25,7 +25,7 @@ final class DiffNamesSpec extends hearth.MacroSuite {
         case DiffResult.OptionalContent.BothPresent(d) => allNodes(d)
         case DiffResult.OptionalContent.LeftOnly(d)    => allNodes(d)
         case DiffResult.OptionalContent.RightOnly(d)   => allNodes(d)
-        case _                              => Nil
+        case _                                         => Nil
       }
     case _ => Nil
   })
