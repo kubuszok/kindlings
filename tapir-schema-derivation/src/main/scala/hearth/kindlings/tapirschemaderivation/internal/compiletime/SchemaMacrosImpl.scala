@@ -9,6 +9,7 @@ import hearth.kindlings.tapirschemaderivation.{KindlingsSchema, PreferSchemaConf
 import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
 import sttp.tapir.{Schema, SchemaType}
 import sttp.tapir.Schema.SName
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait SchemaMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
@@ -617,7 +618,7 @@ trait SchemaMacrosImpl
         )
     }
 
-    val children = e.directChildren.toList
+    val children = StableChildrenOrder.directChildren(SchemaMacrosImpl.this)(e)
 
     // Verify all children are singletons
     val nonSingletons = children.collect { case (childName, child) =>
@@ -714,11 +715,11 @@ trait SchemaMacrosImpl
     val enumAsStringsExpr: Expr[Boolean] = sctx.jsonCfg.enumAsStrings
     // Nested sealed hierarchies are flattened to their leaves when the JSON library encodes only the leaves.
     val children: List[(String, ??<:[A])] =
-      if (sctx.jsonCfg.flattensNestedSubtypes) e.exhaustiveChildren match {
-        case Some(leaves) => leaves.toList
-        case None         => e.directChildren.toList
-      }
-      else e.directChildren.toList
+      if (sctx.jsonCfg.flattensNestedSubtypes)
+        StableChildrenOrder
+          .exhaustiveChildren(SchemaMacrosImpl.this)(e)
+          .getOrElse(StableChildrenOrder.directChildren(SchemaMacrosImpl.this)(e))
+      else StableChildrenOrder.directChildren(SchemaMacrosImpl.this)(e)
     // circe writes a non-object child as `{"Name": value}` even with a discriminator
     val wrapNonObjects: Boolean = sctx.jsonCfg.wrapsNonObjectSubtypesWithDiscriminator
     val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]

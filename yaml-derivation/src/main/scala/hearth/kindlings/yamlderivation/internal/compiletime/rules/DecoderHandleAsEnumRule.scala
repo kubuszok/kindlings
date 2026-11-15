@@ -9,6 +9,7 @@ import hearth.std.*
 
 import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{ConstructError, Node}
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait DecoderHandleAsEnumRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -36,7 +37,7 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val TupleT: Type[(String, Node)] = DTypes.StringNodeTuple
       implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
 
-      val childrenList = enumm.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(DecoderHandleAsEnumRuleImpl.this)(enumm)
 
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>

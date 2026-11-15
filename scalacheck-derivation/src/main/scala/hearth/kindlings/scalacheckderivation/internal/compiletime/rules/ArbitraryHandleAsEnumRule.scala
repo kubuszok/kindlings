@@ -8,6 +8,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import org.scalacheck.Gen
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -26,7 +27,7 @@ trait ArbitraryHandleAsEnumRuleImpl { this: ArbitraryMacrosImpl & MacroCommons &
       implicit val GenA: Type[Gen[A]] = ArbitraryTypes.Gen[A]
 
       // Get all direct children
-      val childrenList = enumData.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(ArbitraryHandleAsEnumRuleImpl.this)(enumData)
 
       childrenList match {
         case Nil =>

@@ -3,6 +3,7 @@ package hearth.kindlings.scalacheckderivation.internal.compiletime
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 /** Shared by the Arbitrary/Shrink/Cogen collection and map rules (issue kubuszok/kindlings#218).
   *
@@ -96,10 +97,11 @@ trait ScalacheckCollectionSupport { this: MacroCommons & StdExtensions =>
   protected def enumOrdinalFn[A: Type](enumData: Enum[A]): MIO[Expr[A => Int]] = {
     implicit val IntT: Type[Int] = Type.of[Int]
     implicit val OrdinalFnT: Type[A => Int] = Type.of[A => Int]
-    val cases: List[??] = enumData.directChildren.toList.map { case (_, child) =>
-      import child.Underlying as Child
-      Type[Child].as_??
-    }
+    val cases: List[??] =
+      StableChildrenOrder.directChildren(ScalacheckCollectionSupport.this)(enumData).map { case (_, child) =>
+        import child.Underlying as Child
+        Type[Child].as_??
+      }
     MIO.scoped { runSafe =>
       // Keep the pattern-match construction out of the splice itself: on Scala 2 cross-quotes re-emit the splice's
       // source, which must not contain macro-level lambdas typed with this trait's path-dependent types.

@@ -8,6 +8,7 @@ import hearth.std.*
 import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
 import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
 import sttp.tapir.Schema
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait SchemaHandleAsMapRuleImpl {
   this: SchemaMacrosImpl & MacroCommons & StdExtensions & JsonSchemaConfigs & AnnotationSupport =>
@@ -118,11 +119,11 @@ trait SchemaHandleAsMapRuleImpl {
     private def enumKeyToString[A: SchemaCtx, K: Type](implicit stringT: Type[String]): Option[Expr[K => String]] =
       Enum.parse[K].toOption.flatMap { enumm =>
         val children: List[(String, ??<:[K])] =
-          if (sctx[A].jsonCfg.flattensNestedSubtypes) enumm.exhaustiveChildren match {
-            case Some(leaves) => leaves.toList
-            case None         => enumm.directChildren.toList
-          }
-          else enumm.directChildren.toList
+          if (sctx[A].jsonCfg.flattensNestedSubtypes)
+            StableChildrenOrder
+              .exhaustiveChildren(SchemaHandleAsMapRuleImpl.this)(enumm)
+              .getOrElse(StableChildrenOrder.directChildren(SchemaHandleAsMapRuleImpl.this)(enumm))
+          else StableChildrenOrder.directChildren(SchemaHandleAsMapRuleImpl.this)(enumm)
         val cases: List[Option[(Expr[K], Expr[String])]] = children.map { case (childName, child) =>
           import child.Underlying as Child
           SingletonValue.parse[Child].toEither.toOption.map { sv =>

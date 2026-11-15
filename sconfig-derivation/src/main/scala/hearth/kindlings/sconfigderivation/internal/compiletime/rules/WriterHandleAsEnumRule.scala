@@ -8,6 +8,7 @@ import hearth.std.*
 import hearth.kindlings.sconfigderivation.CoproductHint
 import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
 import org.ekrich.config.ConfigValue
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait WriterHandleAsEnumRuleImpl {
   this: WriterMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -63,7 +64,7 @@ trait WriterHandleAsEnumRuleImpl {
           }
       }
 
-      val childrenList = enumm.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(WriterHandleAsEnumRuleImpl.this)(enumm)
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
         SingletonValue.unapply(child.Underlying).isDefined

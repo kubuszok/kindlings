@@ -4,6 +4,15 @@ This document tracks feature parity between Kindlings derivation modules and the
 
 Legend: **Parity** = feature matches original, **Improvement** = Kindlings does it better, **Gap** = feature not yet implemented.
 
+**Order of the subtypes of a sealed hierarchy** (wherever it is observable: schema symbols and subtypes, the order
+subtypes are tried in, generators, `Order` across subtypes, names listed in errors): on Scala 3 the declaration order
+(the order `Mirror.SumOf` uses, as upstream's Scala 3 derivations); on Scala 2 the subtypes sorted by name (Hearth's
+`ChildrenOrder.ByName`: the simple name in natural order, then the full name), the same in every build - Scala 2 class
+files do not record the declaration order, so it is unknown for a sealed type from another module or one an incremental
+build did not recompile. Upstream Scala 2 derivations (shapeless, Magnolia) sort by the full name; the two orders agree
+except for numbered names (`Item2` before `Item10` vs after it) and subtypes declared in different scopes. Java enum
+constants keep their declaration order.
+
 ---
 
 ## avro-derivation
@@ -87,7 +96,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | `OffsetDateTime` | ISO-8601 string (`datetime-with-offset`) | `timestamp-millis` long by default; avro4s' string with `withOffsetDateTimeAsIsoString` | Default value difference (see above) |
 | Value classes | Unwrapped | Unwrapped | Parity |
 | Case classes → RECORD | Yes | Yes | Parity |
-| Sealed case objects → ENUM | Symbols by name (v4) / in declaration order (v5) | Same per Scala version | Parity |
+| Sealed case objects → ENUM | Symbols by full name (v4) / in declaration order (v5) | By name (Scala 2, see the subtype order note at the top) / in declaration order (Scala 3) | Parity |
 | Sealed traits → UNION | Members by `@AvroSortPriority`, then full name | Same | Parity |
 | `Either[A,B]` → UNION | Yes | Yes | Parity |
 | `Option[T]` → UNION(null,T) | Yes | Yes | Parity |
@@ -379,9 +388,9 @@ discriminators, member and constructor name transforms) the encoded JSON (key or
 set to a wrong type, renamed, plus unknown keys and wrapper/discriminator edge cases. On Scala 3 failure messages and
 cursor histories are compared too; on Scala 2 only outcomes and decoded values (Kindlings uses Scala 3 core's wording
 on both versions, see "Error messages and cursor history"). The differences found are the ones listed below as
-"Difference"; one more is a Hearth bug: on Scala 3, for a sealed type compiled in another module (or an earlier
-incremental compilation), the strict wrapper failure lists the constructor names alphabetically instead of in
-declaration order (`docs/research/hearth-bug-children-order-from-classpath.md`).
+"Difference". The fixtures are compiled in another module than the tests (as for users deriving instances for types
+of a dependency), which keeps covering a since-fixed Hearth bug (`docs/research/hearth-bug-children-order-from-classpath.md`):
+the strict wrapper failure lists the constructor names in declaration order on Scala 3, like circe.
 
 ### Configuration
 

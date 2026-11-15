@@ -7,6 +7,7 @@ import hearth.std.*
 
 import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.Node
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait EncoderHandleAsEnumRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -28,7 +29,7 @@ trait EncoderHandleAsEnumRuleImpl {
     ): MIO[Expr[Node]] = {
       implicit val NodeT: Type[Node] = Types.Node
 
-      val childrenList = enumm.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(EncoderHandleAsEnumRuleImpl.this)(enumm)
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
       // Union types have no scala-yaml counterpart: their members stay wrapped (untagged members would be ambiguous)
       val alwaysWrapped: Boolean = Type[A].isUnionType

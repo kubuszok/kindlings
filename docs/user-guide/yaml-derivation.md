@@ -104,7 +104,8 @@ implicit val config: YamlConfig = YamlConfig.default
 
 The defaults match scala-yaml's own derivation (`derives YamlCodec`): absent fields with a constructor default use it,
 and the subtypes of sealed traits / enums are written **untagged** (a case class as its fields, a case object as `{}`)
-and decoded by trying every subtype in declaration order (the first that decodes wins; when none does, the failure is
+and decoded by trying every subtype in declaration order (on Scala 2, which has no scala-yaml derivation, in the order of
+the subtypes' names, see the subtype order note in `feature-parity.md`; the first that decodes wins; when none does, the failure is
 scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are always wrapped, and Java enum /
 `scala.Enumeration` values are written as their names.
 

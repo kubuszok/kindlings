@@ -11,6 +11,7 @@ import hearth.kindlings.pureconfigderivation.KindlingsCoproductHint
 import hearth.kindlings.pureconfigderivation.internal.runtime.{EnumerationFailures, PureConfigDerivationUtils}
 import pureconfig.{ConfigCursor, ConfigReader}
 import pureconfig.error.ConfigReaderFailures
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait ReaderHandleAsEnumRuleImpl {
   this: ReaderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -86,7 +87,7 @@ trait ReaderHandleAsEnumRuleImpl {
           }
       }
 
-      val childrenList = enumm.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(ReaderHandleAsEnumRuleImpl.this)(enumm)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
           SingletonValue.unapply(child.Underlying).isDefined

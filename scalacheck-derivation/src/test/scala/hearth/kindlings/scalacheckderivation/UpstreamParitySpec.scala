@@ -89,9 +89,11 @@ final class UpstreamParitySpec extends munit.FunSuite {
       nested.perturb(seed, UpNested(List(Nil, List(1))))
     )
 
-    // Sealed traits: the case's Cogen, then the case's index (scalacheck-derived).
+    // Sealed traits: the case's Cogen, then the case's index (scalacheck-derived) - in declaration order on Scala 3,
+    // by name on Scala 2 (UpCircle, UpOrigin, UpRect: the same in every build, see feature-parity.md).
+    val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
     val shape = DeriveCogen.derived[UpShape]
     assertEquals(shape.perturb(seed, UpCircle(3)), Cogen.perturb(Cogen.perturb(Cogen.perturb(seed, 3), ()), 0))
-    assertEquals(shape.perturb(seed, UpOrigin), Cogen.perturb(Cogen.perturb(seed, ()), 2))
+    assertEquals(shape.perturb(seed, UpOrigin), Cogen.perturb(Cogen.perturb(seed, ()), if (isScala3) 2 else 1))
   }
 }

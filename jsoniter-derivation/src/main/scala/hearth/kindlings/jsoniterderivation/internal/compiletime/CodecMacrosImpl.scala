@@ -7,6 +7,7 @@ import hearth.std.*
 
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 import hearth.kindlings.jsoniterderivation.{annotations, JsoniterConfig, KindlingsJsonCodec, KindlingsJsonValueCodec}
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 import com.github.plokhotnyuk.jsoniter_scala.core.{
   readFromString,
   writeToString,
@@ -253,10 +254,9 @@ trait CodecMacrosImpl
     * so that its subtypes match first) when it is a non-abstract sealed class.
     */
   private[compiletime] def adtLeaves[A: Type](enumm: Enum[A]): List[(String, ??<:[A])] = {
-    val children: List[(String, ??<:[A])] = enumm.exhaustiveChildren match {
-      case Some(ec) => ec.toList
-      case None     => enumm.directChildren.toList
-    }
+    val children: List[(String, ??<:[A])] = StableChildrenOrder
+      .exhaustiveChildren(CodecMacrosImpl.this)(enumm)
+      .getOrElse(StableChildrenOrder.directChildren(CodecMacrosImpl.this)(enumm))
     val isBaseALeaf = !Type[A].isAbstract && !Type[A].isTrait && !Type[A].isEnumeration && !isJavaEnumType[A] &&
       !children.exists(_._2.Underlying =:= Type[A]) && ProductType.asLeaf[A].isDefined
     if (isBaseALeaf) children :+ (Type[A].shortName -> Type[A].as_??<:[A]) else children

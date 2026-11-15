@@ -28,23 +28,6 @@ object CiExpected {
 
   def onScala2(expected: CiExpected*): List[CiExpected] = if (CiVersionSpecific.isScala3) Nil else expected.toList
   def onScala3(expected: CiExpected*): List[CiExpected] = if (CiVersionSpecific.isScala3) expected.toList else Nil
-
-  // Hearth bug (docs/research/hearth-bug-children-order-from-classpath.md): on Scala 3 Hearth lists the subtypes of a
-  // sealed type from the classpath alphabetically, so the strict wrapper failure lists circe's `constructorNames` in
-  // another order than circe (declaration order). Remove once Hearth is fixed.
-  val hearthChildrenOrder: CiExpected =
-    CiExpected("Hearth bug: subtypes of a sealed type from the classpath listed alphabetically on Scala 3") { d =>
-      val marker = "expected a single key json object with one of: "
-      def names(s: String): Option[List[String]] =
-        if (!s.contains(marker)) None
-        else Some(s.substring(s.indexOf(marker) + marker.length).takeWhile(_ != '.').split(", ").toList)
-      (names(d.kindlings), names(d.upstream)) match {
-        case (Some(k), Some(u)) =>
-          k != u && k.sorted == u.sorted && d.kindlings.replace(k.mkString(", "), "") ==
-            d.upstream.replace(u.mkString(", "), "")
-        case _ => false
-      }
-    }
 }
 
 /** Differential checks of circe codecs: encoded JSON (key order included) and decoding (`decodeJson` and

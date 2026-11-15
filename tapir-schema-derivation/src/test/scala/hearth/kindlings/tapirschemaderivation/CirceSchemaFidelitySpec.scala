@@ -226,11 +226,18 @@ final class CirceSchemaFidelitySpec extends MacroSuite {
     case other => fail(s"Expected SCoproduct, got: $other")
   }
 
+  // Subtypes in declaration order on Scala 3, by name on Scala 2 (the same in every build, see feature-parity.md).
+  private val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
+  private def onScala3Else(scala3: List[String], scala2: List[String]): List[String] = if (isScala3) scala3 else scala2
+
   group("tapir schemas describe what the circe codec writes") {
 
     test("default configuration (wrapped subtypes, flattened nested hierarchy, unwrapped value classes)") {
       assertDescribes(FidelityDefault.garageSchema, FidelityDefault.garageEncoder, garages)
-      assertEquals(subtypeNames(FidelityDefault.vehicleSchema), List("FCar", "FTruck", "FScooter", "FBadge"))
+      assertEquals(
+        subtypeNames(FidelityDefault.vehicleSchema),
+        onScala3Else(List("FCar", "FTruck", "FScooter", "FBadge"), List("FBadge", "FCar", "FScooter", "FTruck"))
+      )
     }
 
     test("discriminator, member and constructor name transforms") {
@@ -258,14 +265,20 @@ final class CirceSchemaFidelitySpec extends MacroSuite {
     test("a Kindlings-derived intermediate is flattened") {
       val pets: List[FPet] = List(FDog("Rex"), FCat(9), FLion(3))
       assertDescribes(FidelityPetDiscriminator.petSchema, FidelityPetDiscriminator.petEncoder, pets)
-      assertEquals(subtypeNames(FidelityPetDiscriminator.petSchema), List("FDog", "FCat", "FLion"))
+      assertEquals(
+        subtypeNames(FidelityPetDiscriminator.petSchema),
+        onScala3Else(List("FDog", "FCat", "FLion"), List("FCat", "FLion", "FDog"))
+      )
     }
 
     test("a hand-written intermediate is kept as one subtype (wrapped and discriminator)") {
       val shapes: List[FShape] = List(FSquare(2), FCircle(1))
       assertDescribes(FidelityDefault.shapeSchema, FidelityDefault.shapeEncoder, shapes)
       assertDescribes(FidelityDiscriminator.shapeSchema, FidelityDiscriminator.shapeEncoder, shapes)
-      assertEquals(subtypeNames(FidelityDiscriminator.shapeSchema), List("FSquare", "FRound"))
+      assertEquals(
+        subtypeNames(FidelityDiscriminator.shapeSchema),
+        onScala3Else(List("FSquare", "FRound"), List("FRound", "FSquare"))
+      )
       FidelityDiscriminator.shapeSchema.schemaType match {
         case c: SchemaType.SCoproduct[?] =>
           assertEquals(c.discriminator.map(_.mapping.keySet), Some(Set("f-square", "f-round")))
