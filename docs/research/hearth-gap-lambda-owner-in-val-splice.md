@@ -88,3 +88,87 @@ from `KindlingsEncoder.derived[R4OnlyOpt]` with `case class R4OnlyOpt(maybePlate
 Status: **still OPEN** (kubuszok/hearth#402 did not address it), and the workaround stays. Restoring the `val json`
 shape above still fails to compile `CirceParityRound4Spec` (lines 23 and 25) on Scala 3 with
 "Found definitions 2 distinct owners: val json, val macro".
+
+## Same root cause: `ValDefs` vals inside a `LambdaBuilder` body (pureconfig-derivation, 2026-11-15)
+
+Status: **OPEN**, worked around. Hearth `0.4.4-6-gb8ae5aa-SNAPSHOT`, Scala 3.8.4 only (Scala 2.13 compiles).
+
+Definitions created with `ValDefs.createVal(...).use` while the code being built ends up inside a `LambdaBuilder`
+lambda are owned by `val macro` (the expansion's root), so a block that also holds definitions with the right owner
+(`$anonfun` of the lambda) is rejected. Two shapes hit it in `ReaderHandleAsCaseClassRule` /
+`ReaderHandleAsEnumRule`, both reached when the type is derived inside the field-reader `LambdaBuilder` of an
+enclosing type (e.g. a named tuple `(person: SimplePerson, score: Int)` whose field `person` is a case class).
+
+### Shape 1: `ValDefs` vals next to vals the quote itself defines
+
+```scala
+def bindAll(remaining: List[Expr[Either[E, Any]]], bound: List[Expr[Either[E, Any]]]): Expr[Either[E, A]] =
+  remaining match {
+    case r :: rest => ValDefs.createVal[Either[E, Any]](r).use(ref => bindAll(rest, ref :: bound))
+    case Nil =>
+      val results = bound.reverse.foldRight(Expr.quote(List.empty[Either[E, Any]])) { (r, acc) =>
+        Expr.quote(Expr.splice(r) :: Expr.splice(acc)) // Scala 3 desugars `x :: xs` into `val elem$1 = x; xs.::(elem$1)`
+      }
+      Expr.quote {
+        val constructed = Expr.splice(buildEitherFailFast(bound.reverse)(construct)) // holds `ValDefs` vals too
+        if (constructed.isRight) constructed else Left(combine(Expr.splice(results)))
+      }
+  }
+```
+
+```
+assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: val macro, method $anonfun
+Block: {
+  val either$macro$5: Either[ConfigReaderFailures, SimplePerson] = { val either$macro$3 = either$macro$1; ... }
+  if (either$macro$5.isRight) either$macro$5 else Left(combineFieldFailures({
+    val elem$1: Either[ConfigReaderFailures, Any] = either$macro$1
+    { val elem$1₂ = either$macro$2; List.empty[...].::(elem$1₂) }.::(elem$1)
+  }, None))
+}
+Definitions owned by val macro: val either$macro$5 ...
+Definitions owned by method $anonfun: val elem$1, val elem$1
+```
+
+(The first attempt, with `val constructed` written in the quote, failed the same way with `val constructed` owned by
+`$anonfun` and the `ValDefs` vals inside it owned by `val macro`.)
+
+### Shape 2: nested `ValDefs.createVal` inside a quote's splice
+
+```scala
+def attempt(remaining: List[Child], failed: List[Expr[Result[A]]]): Expr[Result[A]] = remaining match {
+  case child :: rest =>
+    ValDefs.createVal[Result[A]](child.read(cur)).use { result =>
+      Expr.quote(if (Expr.splice(result).isRight) Expr.splice(result) else Expr.splice(attempt(rest, result :: failed)))
+    }
+  case Nil => Expr.quote(Left(noValidOption(...)))
+}
+```
+
+```
+assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: val macro, method $anonfun
+Block: {
+  val either$macro$62: Either[ConfigReaderFailures, UsSource] = readObjectAs[UsSource](configcursor$macro$39, UsNoSource)
+  if (either$macro$62.isRight) either$macro$62 else {
+    val either$macro$63: Either[ConfigReaderFailures, UsSource] = read_UsUrlSource$macro$1(configcursor$macro$39, ...)
+    ...
+  }
+}
+Definitions owned by val macro: val either$macro$62
+Definitions owned by method $anonfun: val either$macro$63
+```
+
+(The outer val is owned by `val macro`, the one created while expanding the `else` splice by the lambda.)
+
+### Workarounds in Kindlings
+
+- Shape 1 (`pureconfig-derivation` `ReaderHandleAsCaseClassRule`, `decodeCaseClassFields`): every val is created with
+  `ValDefs` (`constructedResult`, `unknownKeys`), none in the quote, and lists are built as `acc.::(r)` instead of
+  `r :: acc` (no desugared `elem$` vals).
+- Shape 2 (`ReaderHandleAsEnumRule.firstSuccess`): no val per attempt; a runtime accumulator
+  (`PureConfigDerivationUtils.FirstSuccessAttempts`, one quote-level `val attempts`) records the attempts in an
+  `if (attempts.succeeded(read(cur))) attempts.result else ...` chain.
+- Reproducers: `PureconfigScala3Spec` (named tuple with a case-class field) and `UpstreamSemanticsSpec`
+  ("FirstSuccessCoproductHint" group) in pureconfig-derivation; restoring either shape fails their compilation on
+  Scala 3.
