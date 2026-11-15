@@ -37,7 +37,13 @@ final class UpstreamParitySpec extends munit.FunSuite {
     val shrink = DeriveShrink.derived[UpShape]
     val cogen = DeriveCogen.derived[UpShape]
     val samples = (0 until 200).flatMap(i => arb.arbitrary(Gen.Parameters.default.withSize(10), Seed(i.toLong)))
-    assertEquals(samples.map(_.getClass.getSimpleName).toSet, Set("UpCircle", "UpRect", "UpOrigin$"))
+    // By pattern match: `getSimpleName` of an object differs per platform (`UpOrigin$` on the JVM, `UpOrigin` on Native).
+    val subtypes = samples.map {
+      case _: UpCircle => "UpCircle"
+      case _: UpRect   => "UpRect"
+      case UpOrigin    => "UpOrigin"
+    }.toSet
+    assertEquals(subtypes, Set("UpCircle", "UpRect", "UpOrigin"))
     assertEquals(shrink.shrink(UpCircle(2)).toList, List(UpCircle(1), UpCircle(-1), UpCircle(0)))
     assertNotEquals(cogen.perturb(seed, UpCircle(1)), cogen.perturb(seed, UpOrigin))
   }
