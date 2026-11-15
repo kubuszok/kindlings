@@ -20,6 +20,10 @@ Each project is tested in isolation: no downstream project (Chimney, application
   every differing path) and `Oracle.jsonSchema(schema)` (tapir's docs interpreter, i.e. what users see in OpenAPI).
 - Suites: `TapirSchemaOracleSpec` (tapir's `generic.auto` with the equivalent tapir `Configuration`),
   `TapirCatsOracleSpec` (tapir-cats), `scala-3/IronOracleSpec` (tapir-iron, iron-circe, iron-jsoniter).
+- `avro/AvroOracleSpec` (+ `scala-3/avro/AvroScala3OracleSpec`): avro4s 4 on Scala 2.13 and avro4s 5 on Scala 3 —
+  upstreams whose major versions differ per Scala version get a per-version shim (`scala-2/.../AvroUpstream.scala`,
+  `scala-3/.../AvroUpstream.scala`) exposing the same API to the shared suite; cases upstream cannot derive on one
+  version (e.g. avro4s 5 has no recursive types) are `Option`s there.
 - `-Xcheck-macros` is off in this module (upstream macros fail it); Kindlings' macros are checked in their own modules.
 
 ## Rules
