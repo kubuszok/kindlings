@@ -45,6 +45,7 @@ For higher-level rules around extension loading and `LambdaBuilder` scope, see
 | 11 | ~~[`Type.Ctor2.of[Function1].unapply` wrong](pitfalls.md#11-typector2offunction1unapply-wrong)~~ (fixed in kubuszok/hearth#389) | — | Scala 3 |
 | 12 | [`primaryConstructor` strict type checking](pitfalls.md#12-primaryconstructor-strict-type-checking) | HIGH | Both |
 | 13 | [`Array` needs `ClassTag`](pitfalls.md#13-array-needs-classtag) | MEDIUM | Both |
+| 41 | [Never key caches/recursion detection by `prettyPrint` (use `plainPrint` or `Type` keys)](pitfalls.md#41-never-key-caches-or-recursion-detection-by-prettyprint) | HIGH | Both |
 
 ### Implicit summoning
 

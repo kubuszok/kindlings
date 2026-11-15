@@ -115,7 +115,7 @@ trait HashMacrosImpl
             if (hashRuleBuilt) {
               runSafe(sharedCache.get1Ary[A, Int]("cached-hash-method")).get
             } else {
-              val key = s"entry-hash:${Type[A].prettyPrint}"
+              val key = s"entry-hash:${Type[A].plainPrint}"
               val builder = ValDefBuilder.ofDef1[A, Int](s"hash_${Type[A].shortName}")
               runSafe {
                 MIO.scoped { rs =>
@@ -131,7 +131,7 @@ trait HashMacrosImpl
             if (eqRuleBuilt) {
               runSafe(sharedCache.get2Ary[A, A, Boolean]("cached-eq-method")).get
             } else {
-              val key = s"entry-eq:${Type[A].prettyPrint}"
+              val key = s"entry-eq:${Type[A].plainPrint}"
               val builder = ValDefBuilder.ofDef2[A, A, Boolean](s"eqv_${Type[A].shortName}")
               runSafe {
                 MIO.scoped { rs =>

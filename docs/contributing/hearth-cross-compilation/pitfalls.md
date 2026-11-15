@@ -666,6 +666,24 @@ Scala 2 has no context functions, so this is Scala-3-only; the Scala 2 markers s
 
 ---
 
+## 41. Never key caches or recursion detection by `prettyPrint`
+
+`Type[A].prettyPrint` contains ANSI colors, and the colors depend on how the type was written or read, not only on
+the type: the type written at the macro call site (`RecTree`, `sm.RecTree`) and the same type met as a field type of a
+class read from the classpath (TASTy) print the same text with different escape codes (on Scala 2 as well, e.g. when the
+call site uses another prefix). A string key built from `prettyPrint` (a `ValDefsCache` key name, an "in progress" set)
+then misses the recursion on the first level: tapir emitted the recursive product once more before the `SRef`, codecs
+generated a duplicated helper for the type.
+
+- Use `Type[A].plainPrint` in string keys (it is `prettyPrint` with the colors removed), or better let the
+  `ValDefsCache` compare the types: its keys hold the argument/returned `Type`s compared with `=:=`, so a constant name
+  is enough when the returned type is `F[A]`.
+- Keep `prettyPrint` for logs and error messages only.
+- Regression test: `integration-tests` `CrossModuleRecursionSpec` (recursive fixtures in `src/main`, read from the
+  classpath by the tests).
+
+---
+
 ## Resolved Hearth issues (for context only)
 
 These are kept only so old PR descriptions referencing them are not confusing.

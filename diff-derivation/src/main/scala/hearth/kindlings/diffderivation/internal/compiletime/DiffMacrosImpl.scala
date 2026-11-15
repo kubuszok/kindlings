@@ -401,8 +401,8 @@ trait DiffMacrosImpl
         cache.get0Ary[Diff[Inner]]("cached-diff-instance").flatMap {
           case Some(cached) => MIO.pure(Some(cached))
           case None         =>
-            val diffKey = s"inner-diff:${Type[Inner].prettyPrint}"
-            val snapKey = s"inner-snap:${Type[Inner].prettyPrint}"
+            val diffKey = s"inner-diff:${Type[Inner].plainPrint}"
+            val snapKey = s"inner-snap:${Type[Inner].plainPrint}"
             val diffDefBuilder = ValDefBuilder.ofDef2[Inner, Inner, DiffResult](s"innerDiff_${Type[Inner].shortName}")
             val snapDefBuilder = ValDefBuilder.ofDef1[Inner, DiffResult](s"innerSnap_${Type[Inner].shortName}")
             val pn = Expr(Type.prettyPrint[Inner])
@@ -531,7 +531,7 @@ trait DiffMacrosImpl
             if (diffBuilt) {
               runSafe(sharedCache.get2Ary[A, A, DiffResult]("cached-diff-method")).get
             } else {
-              val key = s"entry-diff:${Type[A].prettyPrint}"
+              val key = s"entry-diff:${Type[A].plainPrint}"
               val builder = ValDefBuilder.ofDef2[A, A, DiffResult](s"diff_${Type[A].shortName}")
               runSafe {
                 MIO.scoped { rs =>
@@ -547,7 +547,7 @@ trait DiffMacrosImpl
             if (snapBuilt) {
               runSafe(sharedCache.get1Ary[A, DiffResult]("cached-snapshot-method")).get
             } else {
-              val key = s"entry-snap:${Type[A].prettyPrint}"
+              val key = s"entry-snap:${Type[A].plainPrint}"
               val builder = ValDefBuilder.ofDef1[A, DiffResult](s"snapshot_${Type[A].shortName}")
               runSafe {
                 MIO.scoped { rs =>

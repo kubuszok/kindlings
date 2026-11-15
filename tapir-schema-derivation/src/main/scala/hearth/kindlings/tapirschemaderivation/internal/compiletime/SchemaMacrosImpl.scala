@@ -255,7 +255,9 @@ trait SchemaMacrosImpl
       inProgress: MLocal[Set[String]],
       derivedType: Option[??]
   ) {
-    def cacheKey: String = s"tapir-schema-for-${tpe.prettyPrint}"
+    // `plainPrint`, never `prettyPrint`: the ANSI colors of `prettyPrint` depend on how the type was written/read (e.g.
+    // the macro call site vs a field of a type read from the classpath), so the recursion would not be detected.
+    def cacheKey: String = s"tapir-schema-for-${tpe.plainPrint}"
 
     def nest[B: Type]: SchemaCtx[B] = SchemaCtx(
       tpe = Type[B],
@@ -341,7 +343,7 @@ trait SchemaMacrosImpl
   // Cache operations
 
   protected def cacheKey[A: Type]: String =
-    s"tapir-schema-for-${Type[A].prettyPrint}"
+    s"tapir-schema-for-${Type[A].plainPrint}"
 
   private def cacheName[A: Type]: String =
     s"tapirSchema_${Type[A].shortName}"
