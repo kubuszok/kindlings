@@ -58,16 +58,20 @@ trait ReaderHandleAsMapRuleImpl {
               val cursor = Expr.splice(rctx.cursor)
               cursor.asMap match {
                 case Right(map) =>
+                  // Every value is read and all failures are reported, as upstream's `mapObject` does.
+                  val failures = new PureConfigDerivationUtils.FailureAccumulator
                   map.foreach { case (key, valueCursor) =>
                     reader.from(valueCursor) match {
                       case Right(v) =>
-                        mapBuilder += Expr.splice(
-                          isMap.pair(Expr.quote(key.asInstanceOf[Key]), Expr.quote(v))
-                        )
+                        if (failures.isEmpty)
+                          mapBuilder += Expr.splice(
+                            isMap.pair(Expr.quote(key.asInstanceOf[Key]), Expr.quote(v))
+                          )
                       case Left(e) =>
-                        throw new PureConfigDerivationUtils.CollectionBuildException(e)
+                        failures.add(e)
                     }
                   }
+                  failures.throwIfAny()
                 case Left(e) =>
                   throw new PureConfigDerivationUtils.CollectionBuildException(e)
               }
