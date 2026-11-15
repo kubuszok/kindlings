@@ -9,8 +9,10 @@ package hearth.kindlings.sconfigderivation
   *
   *   - [[Field]] — discriminator-based encoding (matches upstream `FieldCoproductHint`)
   *   - [[Wrapped]] — single-key wrapping
-  *   - [[FirstSuccess]] — reserved to mirror upstream `FirstSuccessCoproductHint`; not yet wired up at the macro level
-  *     (currently treated as discriminator-based)
+  *   - [[FirstSuccess]] — no disambiguation information (matches upstream `FirstSuccessCoproductHint`)
+  *
+  * Declare a hint with its concrete variant as the type (`implicit val hint: CoproductHint.FirstSuccess[Source] =
+  * CoproductHint.FirstSuccess()`), so that the macro finds it.
   */
 sealed trait CoproductHint[A] {
   def transformConstructorNames: String => String
@@ -30,7 +32,15 @@ object CoproductHint {
       transformConstructorNames: String => String = ConfigFieldMapping(PascalCase, KebabCase)
   ) extends CoproductHint[A]
 
-  /** Try every subtype reader in order until one succeeds. */
+  /** Matches upstream PureConfig's `FirstSuccessCoproductHint`: no disambiguation information. Reading attempts every
+    * subtype on the same value, in the alphabetical order of the subtypes' names (the order upstream's derivation
+    * passes them to the hint, not the declaration order), and the first one read successfully wins; when none can be
+    * read, the failure is [[ConfigDecodingError.NoValidCoproductOptionFound]] listing every attempt's failure. Writing
+    * writes the subtype's value as is.
+    *
+    * Every attempt reads the value, so the cost grows with the number of subtypes, and a subtype that accepts the input
+    * (e.g. a case object, which reads any object) shadows the subtypes after it.
+    */
   final case class FirstSuccess[A]() extends CoproductHint[A] {
     override def transformConstructorNames: String => String = identity
   }

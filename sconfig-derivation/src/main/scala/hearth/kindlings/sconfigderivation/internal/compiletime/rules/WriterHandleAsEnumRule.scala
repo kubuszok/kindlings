@@ -39,6 +39,11 @@ trait WriterHandleAsEnumRuleImpl {
         Expr.summonImplicit[CoproductHint.Field[A]].toOption
       val maybeWrappedHint: Option[Expr[CoproductHint.Wrapped[A]]] =
         Expr.summonImplicit[CoproductHint.Wrapped[A]].toOption
+      // Upstream `FirstSuccessCoproductHint.to` writes the subtype's value as is, with no disambiguation information.
+      val isFirstSuccess: Boolean = {
+        implicit val FirstSuccessHintT: Type[CoproductHint.FirstSuccess[A]] = WTypes.firstSuccessCoproductHintType[A]
+        Expr.summonImplicit[CoproductHint.FirstSuccess[A]].toOption.isDefined
+      }
 
       val transformConstructorNamesExpr: Expr[String => String] = maybeFieldHint match {
         case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
@@ -80,12 +85,13 @@ trait WriterHandleAsEnumRuleImpl {
                 }
                 .map(_._1)
                 .getOrElse(Type[EnumCase].shortName)
-              if (allCaseObjects) {
+              if (isFirstSuccess) caseValue
+              else if (allCaseObjects) {
                 Expr.quote {
                   val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
-                      SConfigDerivationUtils.addDiscriminator(
+                      SConfigDerivationUtils.addDiscriminatorField(
                         discriminatorField,
                         name,
                         Expr.splice(caseValue)
@@ -99,7 +105,7 @@ trait WriterHandleAsEnumRuleImpl {
                   val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
-                      SConfigDerivationUtils.addDiscriminator(
+                      SConfigDerivationUtils.addDiscriminatorField(
                         discriminatorField,
                         name,
                         Expr.splice(caseValue)

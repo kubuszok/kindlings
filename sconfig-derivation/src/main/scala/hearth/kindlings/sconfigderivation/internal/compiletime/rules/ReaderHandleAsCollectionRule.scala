@@ -50,12 +50,19 @@ trait ReaderHandleAsCollectionRuleImpl {
                         case Right(l) => l
                         case Left(e)  => throw new SConfigDerivationUtils.CollectionBuildException(e)
                       }
+                      // Every item is read and all failures are reported (each under its index), as upstream
+                      // PureConfig's `mapList` does.
+                      val failures = new SConfigDerivationUtils.FailureAccumulator
                       val iter = list.iterator()
-                      while (iter.hasNext)
+                      var index = 0
+                      while (iter.hasNext) {
                         reader.from(iter.next()) match {
-                          case Right(item) => collBuilder += item
-                          case Left(e)     => throw new SConfigDerivationUtils.CollectionBuildException(e)
+                          case Right(item) => if (failures.isEmpty) collBuilder += item
+                          case Left(e)     => failures.add(e.withParentPath(index.toString))
                         }
+                        index += 1
+                      }
+                      failures.throwIfAny()
                       collBuilder
                     }
                     val buildResultExpr = buildStep.ctor(readLoop)

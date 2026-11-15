@@ -170,6 +170,129 @@ object SConfigDerivationUtils {
         }
       }
 
+  // --- Upstream PureConfig semantics (failure accumulation, paths, coproduct hints) ---
+
+  /** Collects the failures of every item of a collection / value of a map, so that (like upstream PureConfig's
+    * `mapList` / `mapObject`) all of them are reported, not only the first one.
+    */
+  final class FailureAccumulator {
+    private var failures: ConfigDecodingError = null
+    def add(e: ConfigDecodingError): Unit = failures =
+      if (failures == null) e else ConfigDecodingError.merge(failures, e)
+    def isEmpty: Boolean = failures == null
+    def throwIfAny(): Unit = if (failures != null) throw new CollectionBuildException(failures)
+  }
+
+  /** Read the field `key` of `obj` the way upstream PureConfig does: the value's failures are reported under `key`; a
+    * missing key is passed (as `null`) to readers that read missing keys (`readsMissingKeys`, e.g. `Option` fields, or
+    * a [[hearth.kindlings.sconfigderivation.ReadsMissingKeys]] reader), and reported as `KeyNotFound` (with upstream's
+    * candidate keys) at `obj` otherwise.
+    */
+  def readField[A](
+      obj: ConfigObject,
+      key: String,
+      reader: ConfigReader[A],
+      readsMissingKeys: Boolean
+  ): Either[ConfigDecodingError, A] = {
+    val v = obj.get(key)
+    if (v != null || readsMissingKeys || reader.isInstanceOf[hearth.kindlings.sconfigderivation.ReadsMissingKeys])
+      reader.from(v) match {
+        case Left(e) => Left(e.withParentPath(key))
+        case right   => right
+      }
+    else Left(ConfigDecodingError.KeyNotFound.forKeys(key, obj.keySet().asScala))
+  }
+
+  /** The `UnknownKey` failures (each at its key) upstream PureConfig's `ProductHint.bottom` reports for the keys of
+    * `obj` that are not `usedKeys`, combined after the field failures of `result`.
+    */
+  def withUnknownKeys[A](
+      obj: ConfigObject,
+      result: Either[ConfigDecodingError, A],
+      usedKeys: Set[String]
+  ): Either[ConfigDecodingError, A] = {
+    val unknown = obj.keySet().iterator().asScala.filterNot(usedKeys.contains).toList
+    unknown match {
+      case Nil  => result
+      case keys =>
+        val unknownFailures: ConfigDecodingError =
+          keys
+            .map(k => ConfigDecodingError.UnknownKey(List(k), k): ConfigDecodingError)
+            .reduce(ConfigDecodingError.merge)
+        result match {
+          case Left(e) => Left(ConfigDecodingError.merge(e, unknownFailures))
+          case _       => Left(unknownFailures)
+        }
+    }
+  }
+
+  /** Read the discriminator field of `obj` (upstream `FieldCoproductHint`): `KeyNotFound` when missing, the value's
+    * failure under the field when it is not a string.
+    */
+  def readDiscriminatorField(obj: ConfigObject, field: String): Either[ConfigDecodingError, String] = {
+    val v = obj.get(field)
+    if (v == null) Left(ConfigDecodingError.KeyNotFound.forKeys(field, obj.keySet().asScala))
+    else asString(v).left.map(_.withParentPath(field))
+  }
+
+  /** The failure upstream PureConfig's `FieldCoproductHint` reports for a discriminator value that names no subtype. */
+  def unexpectedDiscriminatorValue(obj: ConfigObject, field: String): ConfigDecodingError =
+    ConfigDecodingError.UnexpectedValueForFieldCoproductHint(List(field), obj.get(field))
+
+  /** The failure for a string that names no case object of an enumeration (a sealed family of case objects read as
+    * strings without a discriminator), like upstream's `EnumConfigReader`.
+    */
+  def invalidEnumValue(value: String, typeName: String): ConfigDecodingError =
+    ConfigDecodingError.CannotConvert(
+      Nil,
+      s"Cannot convert '$value' to $typeName: The value is not a valid enum option."
+    )
+
+  /** `value` when `config` is an object (how upstream's derived reader of a case object reads), its failure otherwise.
+    */
+  def readObjectAs[A](config: ConfigValue, value: A): Either[ConfigDecodingError, A] = asObject(config).map(_ => value)
+
+  /** The attempts of upstream `FirstSuccessCoproductHint` semantics: each subtype's result is passed to [[succeeded]]
+    * in the order attempted; the first success is the [[result]], and when none succeeds, [[failed]] reports every
+    * attempt in `NoValidCoproductOptionFound`.
+    */
+  final class FirstSuccessAttempts(val value: ConfigValue, options: List[String]) {
+    private var failures: List[ConfigDecodingError] = Nil
+    private var success: Either[ConfigDecodingError, Any] = null
+    def succeeded(attempt: Either[ConfigDecodingError, Any]): Boolean = attempt match {
+      case Right(_) => success = attempt; true
+      case Left(f)  => failures = f :: failures; false
+    }
+    def result[A]: Either[ConfigDecodingError, A] = success.asInstanceOf[Either[ConfigDecodingError, A]]
+    def failed[A]: Either[ConfigDecodingError, A] =
+      Left(ConfigDecodingError.NoValidCoproductOptionFound(Nil, value, options.zip(failures.reverse)))
+  }
+
+  /** Write a sealed-trait subtype with a discriminator field, the way upstream PureConfig's `FieldCoproductHint.to`
+    * does: the discriminator comes first; a subtype value that already has the key, or is not an object, is rejected
+    * with a `CoproductHintException`.
+    */
+  def addDiscriminatorField(discriminator: String, typeName: String, inner: ConfigValue): ConfigValue = inner match {
+    case obj: ConfigObject if obj.containsKey(discriminator) =>
+      throw hearth.kindlings.sconfigderivation.CoproductHintException(
+        ConfigDecodingError.CollidingKeys(Nil, discriminator, obj.get(discriminator))
+      )
+    case _: ConfigObject => addDiscriminator(discriminator, typeName, inner)
+    case other           =>
+      throw hearth.kindlings.sconfigderivation.CoproductHintException(
+        ConfigDecodingError.WrongType(Nil, ConfigValueType.OBJECT.toString, other.valueType.toString)
+      )
+  }
+
+  /** Like [[writeFields]], but omits the fields whose value is `null` (the macro's marker for an empty `Option`, which
+    * upstream PureConfig omits via `WritesMissingKeys`).
+    */
+  def writeFieldsOmittingMissing(fields: List[(String, ConfigValue)]): ConfigValue = {
+    val map = new java.util.LinkedHashMap[String, ConfigValue]()
+    fields.foreach { case (k, v) => if (v != null) { val _ = map.put(k, v) } }
+    ConfigValueFactory.fromMap(map)
+  }
+
   // --- Writer helpers ---
 
   def writeFields(fields: List[(String, ConfigValue)]): ConfigValue = {

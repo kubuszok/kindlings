@@ -63,16 +63,21 @@ trait ReaderHandleAsMapRuleImpl {
                 import scala.jdk.CollectionConverters.*
                 obj.entrySet().iterator().asScala
               }
+              // Every value is read and all failures are reported (each under its key), as upstream PureConfig's
+              // `mapObject` does.
+              val failures = new SConfigDerivationUtils.FailureAccumulator
               while (iter.hasNext) {
                 val entry = iter.next()
                 reader.from(entry.getValue) match {
                   case Right(v) =>
-                    mapBuilder += Expr.splice(
-                      isMap.pair(Expr.quote(entry.getKey.asInstanceOf[Key]), Expr.quote(v))
-                    )
-                  case Left(e) => throw new SConfigDerivationUtils.CollectionBuildException(e)
+                    if (failures.isEmpty)
+                      mapBuilder += Expr.splice(
+                        isMap.pair(Expr.quote(entry.getKey.asInstanceOf[Key]), Expr.quote(v))
+                      )
+                  case Left(e) => failures.add(e.withParentPath(entry.getKey))
                 }
               }
+              failures.throwIfAny()
               mapBuilder
             }
             val buildResultExpr = buildStep.ctor(readLoop)

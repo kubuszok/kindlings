@@ -286,12 +286,16 @@ trait WriterMacrosImpl
     val BigDecimal: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
     val BigInt: Type.Lazy[BigInt] = Type.Lazy(Type.of[BigInt])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
+    val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
 
     def productHintType[A: Type]: Type[ProductHint[A]] =
       Type.of[ProductHint[A]]
 
     def fieldCoproductHintType[A: Type]: Type[CoproductHint.Field[A]] =
       Type.of[CoproductHint.Field[A]]
+
+    def firstSuccessCoproductHintType[A: Type]: Type[CoproductHint.FirstSuccess[A]] =
+      Type.of[CoproductHint.FirstSuccess[A]]
 
     def wrappedCoproductHintType[A: Type]: Type[CoproductHint.Wrapped[A]] =
       Type.of[CoproductHint.Wrapped[A]]

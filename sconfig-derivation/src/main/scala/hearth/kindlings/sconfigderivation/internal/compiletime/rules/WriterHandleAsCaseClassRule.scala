@@ -80,31 +80,41 @@ trait WriterHandleAsCaseClassRuleImpl {
                     deriveWriterRecursively[Field](using wctx.nest(fieldExpr)).map { fieldValueExpr =>
                       val nameOverride =
                         paramsByName.get(fName).flatMap(p => getAnnotationStringArg[configKey](p))
-                      (fName, fieldValueExpr, nameOverride)
+                      // Like upstream PureConfig (`WritesMissingKeys`), an empty `Option` field is omitted, not
+                      // written as null.
+                      val emptyOption: Option[Expr[Boolean]] = Type[Field] match {
+                        case IsOption(_) =>
+                          implicit val AnyT: Type[Any] = WTypes.Any
+                          Some(Expr.quote(Expr.splice(fieldExpr.upcast[Any]).asInstanceOf[Option[Any]].isEmpty))
+                        case _ => None
+                      }
+                      (fName, fieldValueExpr, nameOverride, emptyOption)
                     }
                   }
                 }
                 .map { fieldData =>
                   fieldData.toList.foldRight(Expr.quote(List.empty[(String, ConfigValue)])) {
-                    case ((fName, fieldValueExpr, Some(customName)), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(Expr(customName)),
-                          Expr.splice(fieldValueExpr)
-                        ) ::
-                          Expr.splice(acc)
-                      }
-                    case ((fName, fieldValueExpr, None), acc) =>
+                    case ((fName, fieldValueExpr, nameOverride, emptyOption), acc) =>
                       // When the config was evaluable at compile time, pre-compute the
                       // mapped name as a constant string.
-                      val keyExpr: Expr[String] = preComputedTransform match {
-                        case Some(transform) => Expr(transform(fName))
-                        case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                      val keyExpr: Expr[String] = nameOverride match {
+                        case Some(customName) => Expr(customName)
+                        case None             =>
+                          preComputedTransform match {
+                            case Some(transform) => Expr(transform(fName))
+                            case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                          }
+                      }
+                      // A `null` (not `ConfigNull`) value marks a field to omit (see `writeFieldsOmittingMissing`).
+                      val valueExpr: Expr[ConfigValue] = emptyOption match {
+                        case Some(isEmpty) =>
+                          Expr.quote(if (Expr.splice(isEmpty)) (null: ConfigValue) else Expr.splice(fieldValueExpr))
+                        case None => fieldValueExpr
                       }
                       Expr.quote {
                         (
                           Expr.splice(keyExpr),
-                          Expr.splice(fieldValueExpr)
+                          Expr.splice(valueExpr)
                         ) ::
                           Expr.splice(acc)
                       }
@@ -112,7 +122,7 @@ trait WriterHandleAsCaseClassRuleImpl {
                 }
                 .map { fieldsListExpr =>
                   Expr.quote {
-                    SConfigDerivationUtils.writeFields(Expr.splice(fieldsListExpr))
+                    SConfigDerivationUtils.writeFieldsOmittingMissing(Expr.splice(fieldsListExpr))
                   }
                 }
             case None =>

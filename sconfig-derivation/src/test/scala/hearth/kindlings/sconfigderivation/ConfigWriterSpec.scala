@@ -43,11 +43,11 @@ final class ConfigWriterSpec extends MacroSuite {
 
     group("options") {
 
-      test("None encodes as null field") {
+      test("None field is omitted (as upstream's WritesMissingKeys)") {
         val w = ConfigWriter.derived[WithOption]
         val rendered = renderConcise(w.to(WithOption("Alice", None)))
         assert(rendered.contains("\"name\":\"Alice\""))
-        assert(rendered.contains("\"nickname\":null"))
+        assert(!rendered.contains("nickname"))
       }
 
       test("Some encodes as field value") {
@@ -156,9 +156,9 @@ final class ConfigWriterSpec extends MacroSuite {
             )
           )
         )
-        assert(rendered.contains("\"opt-primitive\":null"))
-        assert(rendered.contains("\"opt-case-class\":null"))
-        assert(rendered.contains("\"opt-sealed-trait\":null"))
+        assert(!rendered.contains("opt-primitive"))
+        assert(!rendered.contains("opt-case-class"))
+        assert(!rendered.contains("opt-sealed-trait"))
         assert(rendered.contains("\"list-case-class\":[]"))
         assert(rendered.contains("\"map-case-class\":{}"))
       }

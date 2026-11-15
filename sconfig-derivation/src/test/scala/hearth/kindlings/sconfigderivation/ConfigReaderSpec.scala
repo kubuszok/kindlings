@@ -244,6 +244,9 @@ final class ConfigReaderSpec extends MacroSuite {
       }
 
       test("case-object enum (as string field of a wrapping object)") {
+        // Case objects are read from strings without a discriminator (upstream's `deriveEnumerationReader`); with
+        // the default discriminator they are objects.
+        implicit val config: SConfig = SConfig.default.withWrappedSubtypes
         val r = ConfigReader.derived[CardinalDirection]
         val rootObj = value("{ direction = north }").asInstanceOf[org.ekrich.config.ConfigObject]
         val innerVal = rootObj.get("direction")
