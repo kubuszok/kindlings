@@ -32,10 +32,9 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
               result <- alreadyCached match {
                 case Some(_) => MIO.pure(Rule.matched(schemaExpr))
                 case None    =>
-                  sfctx.setCachedSchema[A](schemaExpr) >> sfctx.getCachedSchema[A].flatMap {
-                    case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
-                    case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
-                  }
+                  // just cached, so present (as in the case class rule)
+                  sfctx
+                    .setCachedSchema[A](schemaExpr) >> sfctx.getCachedSchema[A].map(cached => Rule.matched(cached.get))
               }
             } yield result
           case Left(reason) =>

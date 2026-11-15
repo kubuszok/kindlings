@@ -4,6 +4,38 @@ final class DiffSpec extends hearth.MacroSuite {
 
   group("Diff.derived") {
 
+    // Neither a case class nor an enum: the entry point builds the diff/snapshot helpers itself (no rule caches them)
+    group("top-level collections, options and built-ins") {
+
+      test("List of case classes") {
+        val d = Diff.derived[List[Person]]
+        assert(d.diff(List(Person("a", 1)), List(Person("a", 1))).isIdentical)
+        d.diff(List(Person("a", 1)), List(Person("a", 2))) match {
+          case s: DiffResult.SeqDiff => assert(!s.isIdentical, s.toString)
+          case other                 => fail(s"expected SeqDiff, got $other")
+        }
+        d.snapshot(List(Person("a", 1))).isIdentical ==> true
+      }
+
+      test("Option of a case class") {
+        val d = Diff.derived[Option[Person]]
+        assert(d.diff(Some(Person("a", 1)), Some(Person("a", 1))).isIdentical)
+        assert(!d.diff(Some(Person("a", 1)), None).isIdentical)
+      }
+
+      test("Int") {
+        val d = Diff.derived[Int]
+        d.diff(1, 2) match {
+          case DiffResult.ValueChanged(l, r) => (l, r) ==> (("1", "2"))
+          case other                         => fail(s"expected ValueChanged, got $other")
+        }
+        d.snapshot(1) match {
+          case DiffResult.Identical(display) => display ==> "1"
+          case other                         => fail(s"expected Identical, got $other")
+        }
+      }
+    }
+
     group("case classes") {
 
       test("identical case classes") {
