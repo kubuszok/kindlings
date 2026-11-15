@@ -132,3 +132,12 @@ case class WithKeywordFields(`type`: String, `class`: Int, `val`: Boolean)
 
 // Recursive through Option
 case class RecursiveOption(value: String, child: Option[RecursiveOption])
+
+// Empty collections printed by toYamlString
+case class WithEmpties(
+    list: List[Int],
+    map: Map[String, Int],
+    nested: List[List[Int]],
+    mapOfLists: Map[String, List[Int]],
+    after: String
+)

@@ -68,7 +68,8 @@ trait EncoderMacrosImpl
             // fields) while they belong to the enclosing method - Scala 3 -Xcheck-macros rejects that ("Block contains
             // definition with different owners") for recursive types reached through an Option.
             YamlDerivationUtils.nodeToYaml(
-              Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
+              Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig))),
+              Expr.splice(configVal).emptyCollectionsAsFlow
             )
           }
         }

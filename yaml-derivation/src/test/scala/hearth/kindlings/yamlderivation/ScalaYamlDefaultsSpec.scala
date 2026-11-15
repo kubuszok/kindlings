@@ -86,8 +86,14 @@ final class ScalaYamlDefaultsSpec extends MacroSuite {
       configs.foreach { config =>
         config.wrappedSubtypes ==> true
         config.useDefaults ==> false
+        config.emptyCollectionsAsFlow ==> false
       }
       YamlConfig.default.copy(useDefaults = false).wrappedSubtypes ==> false
+      // the 0.3.x copy keeps the fields it does not take
+      @scala.annotation.nowarn("cat=deprecation")
+      val copied =
+        YamlConfig.default.withEmptyCollectionsAsFlow.copy(identity[String], identity[String], None, false, true)
+      copied.emptyCollectionsAsFlow ==> true
     }
 
     test("kindlings03Defaults restores both previous defaults") {

@@ -15,6 +15,9 @@ package hearth.kindlings.yamlderivation
   * @param wrappedSubtypes
   *   without a discriminator, wrap each subtype in a single-key mapping `{ SubtypeName: ... }` (instead of scala-yaml's
   *   untagged encoding); the behaviour of Kindlings 0.3.x
+  * @param emptyCollectionsAsFlow
+  *   `toYamlString` prints empty sequences as `[]` and empty mappings as `{}` (also nested), so that the printed YAML
+  *   decodes back (default: off - as scala-yaml's printer, an empty value, which reads back as `null`)
   */
 final case class YamlConfig(
     transformMemberNames: String => String = identity,
@@ -22,7 +25,8 @@ final case class YamlConfig(
     discriminator: Option[String] = None,
     enumAsStrings: Boolean = false,
     useDefaults: Boolean = true,
-    wrappedSubtypes: Boolean = false
+    wrappedSubtypes: Boolean = false,
+    emptyCollectionsAsFlow: Boolean = false
 ) {
 
   def withTransformMemberNames(f: String => String): YamlConfig = copy(transformMemberNames = f)
@@ -52,6 +56,13 @@ final case class YamlConfig(
     */
   def withUntaggedSubtypes: YamlConfig = copy(wrappedSubtypes = false)
 
+  /** `toYamlString` prints empty sequences as `[]` and empty mappings as `{}`, so that the printed YAML decodes back.
+    */
+  def withEmptyCollectionsAsFlow: YamlConfig = copy(emptyCollectionsAsFlow = true)
+
+  /** `toYamlString` prints empty sequences and mappings as an empty value (the default, as scala-yaml's printer). */
+  def withoutEmptyCollectionsAsFlow: YamlConfig = copy(emptyCollectionsAsFlow = false)
+
   // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
   // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
   def copy(
@@ -60,17 +71,19 @@ final case class YamlConfig(
       discriminator: Option[String] = this.discriminator,
       enumAsStrings: Boolean = this.enumAsStrings,
       useDefaults: Boolean = this.useDefaults,
-      wrappedSubtypes: Boolean = this.wrappedSubtypes
+      wrappedSubtypes: Boolean = this.wrappedSubtypes,
+      emptyCollectionsAsFlow: Boolean = this.emptyCollectionsAsFlow
   ): YamlConfig = new YamlConfig(
     transformMemberNames,
     transformConstructorNames,
     discriminator,
     enumAsStrings,
     useDefaults,
-    wrappedSubtypes
+    wrappedSubtypes,
+    emptyCollectionsAsFlow
   )
 
-  /** The `copy` of Kindlings 0.3.x (`wrappedSubtypes` is kept). */
+  /** The `copy` of Kindlings 0.3.x (`wrappedSubtypes` and `emptyCollectionsAsFlow` are kept). */
   @deprecated(
     "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
     "0.3.5"
@@ -87,7 +100,8 @@ final case class YamlConfig(
     discriminator,
     enumAsStrings,
     useDefaults,
-    wrappedSubtypes
+    wrappedSubtypes,
+    emptyCollectionsAsFlow
   )
 
   /** The constructor of Kindlings 0.3.x: without a discriminator, its subtypes were wrapped. */
@@ -101,7 +115,7 @@ final case class YamlConfig(
       discriminator: Option[String],
       enumAsStrings: Boolean,
       useDefaults: Boolean
-  ) = this(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true)
+  ) = this(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true, false)
 }
 object YamlConfig {
 
@@ -124,7 +138,15 @@ object YamlConfig {
       enumAsStrings: Boolean,
       useDefaults: Boolean
   ): YamlConfig =
-    new YamlConfig(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true)
+    new YamlConfig(
+      transformMemberNames,
+      transformConstructorNames,
+      discriminator,
+      enumAsStrings,
+      useDefaults,
+      true,
+      false
+    )
 
   private[yamlderivation] val snakeCase: String => String = { s =>
     val sb = new StringBuilder

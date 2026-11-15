@@ -1250,6 +1250,7 @@ differences**. The suite also checks that the opt-ins differ as intended:
 | `withoutUseDefaults` | Absent field with a constructor default uses it | Fails (`Key x doesn't exist in parsed document`) |
 | `withWrappedSubtypes` | Subtype written untagged; decoding tries every subtype | Single-key mapping `{ Subtype: { ... } }` |
 | `withDiscriminator(field)` | (as above) | The subtype's name in `field` |
+| `withEmptyCollectionsAsFlow` | `toYamlString`: an empty collection printed as an empty value, which does not decode back | Printed as `[]` / `{}` (also nested), decodes back |
 
 Kindlings additions without a scala-yaml counterpart: union types are always wrapped; Java enum / `scala.Enumeration`
 values are written as their names.
@@ -1259,7 +1260,7 @@ same, including one upstream limitation the oracle pins: an empty sequence or ma
 (`children: ` instead of `children: []`), which reads back as `null`, so YAML printed from a value with an empty
 collection field does not decode back (`Could't construct scala.collection.immutable.List from null`). Decoding from the
 encoded `Node` (`KindlingsYamlDecoder.decode(KindlingsYamlEncoder.encode(value))`) round-trips, as does YAML using the
-flow style `[]` / `{}`.
+flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toYamlString` print.
 
 ### Cross-compilation
 

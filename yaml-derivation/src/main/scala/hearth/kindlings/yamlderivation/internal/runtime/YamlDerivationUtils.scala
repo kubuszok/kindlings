@@ -307,6 +307,24 @@ object YamlDerivationUtils {
     node.asYaml
   }
 
+  /** [[nodeToYaml]], with empty sequences printed as `[]` and empty mappings as `{}` when `emptyCollectionsAsFlow`
+    * (scala-yaml's printer writes them as an empty value, which reads back as `null`).
+    */
+  def nodeToYaml(node: Node, emptyCollectionsAsFlow: Boolean): String =
+    if (emptyCollectionsAsFlow) nodeToYaml(withEmptyCollectionsAsFlow(node)) else nodeToYaml(node)
+
+  // scala-yaml's printer writes a scalar's value as it is, so a `[]`/`{}` scalar prints as the flow-style empty
+  // collection (the node is used for printing only)
+  private def withEmptyCollectionsAsFlow(node: Node): Node = node match {
+    case seq: Node.SequenceNode =>
+      if (seq.nodes.isEmpty) Node.ScalarNode("[]")
+      else Node.SequenceNode(seq.nodes.map(withEmptyCollectionsAsFlow)*)
+    case map: Node.MappingNode =>
+      if (map.mappings.isEmpty) Node.ScalarNode("{}")
+      else Node.MappingNode(map.mappings.map { case (k, v) => k -> withEmptyCollectionsAsFlow(v) })
+    case other => other
+  }
+
   def parseAndDecode[A](
       yaml: String,
       decode: Node => Either[ConstructError, A]

@@ -70,15 +70,15 @@ Drop-in replacement for scala-yaml's built-in `derives` — derives `YamlEncoder
 | `KindlingsYamlDecoder.decode[A](node)` | `Either[ConstructError, A]` | Inline decoding from a YAML node |
 | `KindlingsYamlDecoder.fromYamlString[A](yaml)` | `Either[YamlError, A]` | Inline decoding from a YAML string |
 | `KindlingsYamlDecoder.derived[A]` | `KindlingsYamlDecoder[A]` | Sanely-automatic (given/implicit) |
-
-`toYamlString` prints with scala-yaml's own printer, which writes an empty sequence or mapping as an empty value
-(`tags: ` rather than `tags: []`); that reads back as `null`, so such a string does not decode back into an empty
-collection, exactly as with scala-yaml. Keep the `Node` (`encode`/`decode`) when you need a round trip of values with
-empty collections (see [feature parity](feature-parity.md#yaml-derivation)).
 | `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Semi-automatic codec (encoder + decoder) |
 | `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Sanely-automatic codec |
 
 All methods take an implicit/using `YamlConfig` parameter (defaults to `YamlConfig.default`).
+
+`toYamlString` prints with scala-yaml's own printer, which by default writes an empty sequence or mapping as an empty
+value (`tags: ` rather than `tags: []`), exactly as scala-yaml; that reads back as `null`, so such a string does not
+decode back into an empty collection. `YamlConfig.default.withEmptyCollectionsAsFlow` prints them as `[]` / `{}` (also
+nested), so the printed YAML decodes back (see [feature parity](feature-parity.md#yaml-derivation)).
 
 ### Type hierarchy
 
@@ -130,6 +130,8 @@ scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are al
 | `withUntaggedSubtypes` | Untagged subtypes, decoded by trying each one (the default, as scala-yaml) |
 | `withUseDefaults` | Use case class default values for missing fields (the default, as scala-yaml) |
 | `withoutUseDefaults` | Missing fields fail even when they have a default (Kindlings 0.3.x's default) |
+| `withEmptyCollectionsAsFlow` | `toYamlString` prints empty sequences as `[]` and empty mappings as `{}` (also nested), so the printed YAML decodes back (default: an empty value, as scala-yaml's printer) |
+| `withoutEmptyCollectionsAsFlow` | Empty collections printed as an empty value (the default, as scala-yaml) |
 
 `YamlConfig.kindlings03Defaults` restores both defaults of Kindlings 0.3.x (`withoutUseDefaults.withWrappedSubtypes`).
 
