@@ -20,6 +20,14 @@ final class InlineMethodsSpec extends MacroSuite {
       yaml.contains("first_name") ==> true
       yaml.contains("last_name") ==> true
     }
+
+    // the derived body used to be spliced as a local val's right-hand side: Scala 3 -Xcheck-macros rejected the
+    // Option lambda it creates ("Block contains definition with different owners")
+    test("recursive type reached through an Option") {
+      val value = RecursiveOption("a", Some(RecursiveOption("b", None)))
+      val yaml = KindlingsYamlEncoder.toYamlString(value)
+      KindlingsYamlDecoder.fromYamlString[RecursiveOption](yaml) ==> Right(value)
+    }
   }
 
   group("KindlingsYamlDecoder.fromYamlString") {
@@ -43,6 +51,12 @@ final class InlineMethodsSpec extends MacroSuite {
       val yaml = SimplePerson("Alice", 30).toYamlString
       yaml.contains("Alice") ==> true
       yaml.contains("30") ==> true
+    }
+
+    test("recursive type reached through an Option") {
+      import syntax.*
+      val value = RecursiveOption("a", Some(RecursiveOption("b", None)))
+      KindlingsYamlDecoder.fromYamlString[RecursiveOption](value.toYamlString) ==> Right(value)
     }
 
     test("with custom config") {

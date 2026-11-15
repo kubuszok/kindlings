@@ -342,3 +342,8 @@ final case class UpdRecord(field: Updatable[UpdContent])
 
 // Unhandled type for compile-time error tests
 class NotAnAvroType
+
+// Recursive sealed trait: the subtypes refer to the sealed trait itself
+sealed trait RecExpr
+case class RecAdd(left: RecExpr, right: RecExpr) extends RecExpr
+case class RecLit(value: Int) extends RecExpr
