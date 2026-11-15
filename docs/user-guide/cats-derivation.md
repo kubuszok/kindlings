@@ -81,7 +81,11 @@ Derived for case classes and sealed traits.
 
 ### Polymorphic (kind `* → *`)
 
-Derived for type constructors (case classes with one type parameter).
+Derived for type constructors (case classes with one type parameter, and sealed traits where noted in
+[feature parity](feature-parity.md#cats-derivation)). Fields may be the type parameter itself, constant, or wrapped in
+other type constructors: `G[A]` for Functor, Foldable, Traverse, SemigroupK, MonoidK and EmptyK (using `G`'s instance),
+and also deeper nestings such as `List[Option[A]]` for Functor, Foldable and Traverse (composed instances). Apply,
+Applicative, Pure, Reducible, NonEmptyTraverse, NonEmptyAlternative and Alternative do not support wrapped fields yet.
 
 | Type class | Package |
 |-----------|---------|

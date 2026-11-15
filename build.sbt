@@ -1144,6 +1144,7 @@ lazy val upstreamOracleTests = projectMatrix
   .dependsOn(circeDerivation, jsoniterDerivation, tapirSchemaDerivation, catsIntegration, jsoniterJson)
   .dependsOn(avroDerivation)
   .dependsOn(pureconfigDerivation, yamlDerivation, optics)
+  .dependsOn(catsDerivation, catsTaglessDerivation, scalacheckDerivation)
   .settings(noPublishSettings *)
   .settings(settings *)
   .settings(dependencies *)
@@ -1152,6 +1153,8 @@ lazy val upstreamOracleTests = projectMatrix
     name := "kindlings-upstream-oracle-tests",
     description := "Differential tests comparing Kindlings-derived instances with the upstream libraries they mirror",
     Test / scalacOptions += "-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe",
+    // cats-tagless' Scala 3 `Derive.*` macros are `@experimental`.
+    Test / scalacOptions ++= foldVersion(scalaVersion.value)(for3 = Seq("-experimental"), for2_13 = Seq.empty),
     // Upstream macros (tapir's Scala 3 derivation with annotations) fail -Xcheck-macros; Kindlings' own macros are
     // checked with it in their modules' tests.
     scalacOptions --= Seq("-Xcheck-macros"),
@@ -1179,6 +1182,20 @@ lazy val upstreamOracleTests = projectMatrix
     libraryDependencies += "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3")
                                                                        versions.avro4s3
                                                                      else versions.avro4s213) % Test,
+    // cats-derivation vs kittens, cats-tagless-derivation vs cats-tagless, scalacheck-derivation vs
+    // scalacheck-shapeless (2.13) / scalacheck-derived (3).
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "kittens" % versions.kittens % Test,
+      "org.typelevel" %% "cats-tagless-core" % versions.catsTagless % Test,
+      "org.scalacheck" %% "scalacheck" % versions.scalacheck % Test
+    ),
+    libraryDependencies ++= foldVersion(scalaVersion.value)(
+      for3 = Seq("io.github.martinhh" %% "scalacheck-derived" % versions.scalacheckDerived % Test),
+      for2_13 = Seq(
+        "org.typelevel" %% "cats-tagless-macros" % versions.catsTagless % Test,
+        "com.github.alexarchambault" %% "scalacheck-shapeless_1.18" % versions.scalacheckShapeless % Test
+      )
+    ),
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq(
         // pureconfig oracle: pureconfig's hint-aware Scala 3 derivation (`pureconfig.generic.semiauto`)

@@ -162,19 +162,19 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.Functor` | Yes | Yes | Yes | Parity |
 | `cats.Contravariant` | Yes | Yes | Yes | Parity |
 | `cats.Invariant` | Yes | Yes | Yes | Parity |
-| `cats.Apply` | Yes | Yes | Yes | Parity |
-| `cats.Applicative` | Yes | Yes | Yes | Parity |
+| `cats.Apply` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.Applicative` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
 | `cats.Foldable` | Yes | Yes | Yes | Parity |
 | `cats.Traverse` | Yes | Yes | Yes | Parity |
-| `cats.Reducible` | Yes | Yes | Yes | Parity |
-| `cats.NonEmptyTraverse` | Yes | Yes | Yes | Parity |
+| `cats.Reducible` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.NonEmptyTraverse` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
 | `cats.SemigroupK` | Yes | Yes | Yes | Parity |
 | `cats.MonoidK` | Yes | Yes | Yes | Parity |
-| `alleycats.Pure` | Yes | Yes | Yes | Parity |
+| `alleycats.Pure` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
 | `alleycats.EmptyK` | Yes | Yes | Yes | Parity |
-| `cats.NonEmptyAlternative` | No | Yes | Yes | Parity+ |
-| `cats.Alternative` | No | Yes | Yes | Parity+ |
-| `alleycats.ConsK` | Yes | No ([#489](https://github.com/typelevel/kittens/issues/489)) | Yes | Improvement |
+| `cats.NonEmptyAlternative` | No | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.Alternative` | No | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `alleycats.ConsK` | Yes (list-like sealed traits) | No ([#489](https://github.com/typelevel/kittens/issues/489)) | Yes (case classes: head + nested tail) | Different shapes — kittens' list-like sealed traits not supported (Gap); case classes (Improvement) |
 
 ### Type classes — bi-variant (kind `(*, *) -> *`)
 
@@ -200,6 +200,11 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Sealed traits (coproducts) — Functor, Foldable, Traverse (e.g., `IList[A]`) | Yes (both, via Shapeless on 2 / Mirrors on 3) | Yes (both Scala 2+3) | Parity |
 | Sealed traits (coproducts) — Bifunctor, Bifoldable, Bitraverse (e.g., `Result[A, E]`) | No | Yes | Improvement |
 | Sealed trait with case objects only | Yes | Yes | Parity |
+| Fields nesting several type constructors (e.g. `List[Option[A]]`) for Functor/Foldable/Traverse | Yes (composed instances) | Yes (composed instances) | Parity |
+| Recursive sealed traits for Functor/Foldable/Traverse without an instance in scope | Yes | Yes | Parity |
+| PartialOrder: fields with only a `PartialOrder` (e.g. `Set`); different subtypes incomparable (`NaN`) | Yes | Yes | Parity |
+| Empty for sealed traits: the single subtype forming an `Empty` (case object or derivable case class) | Yes | Yes (a single subtype with an implicit `Empty` is preferred) | Parity+ |
+| SemigroupK/MonoidK/EmptyK: fields `G[A]` combined with `SemigroupK[G]`/`MonoidK[G]`/`EmptyK[G]` | Yes | Yes | Parity |
 | Nested container fields (e.g., `Vector[A]`, `Option[A]` in `F[A]`) for Functor/Foldable/Traverse | Scala 2 only (Shapeless) | Yes (both Scala 2+3) | Improvement |
 | Nested container fields (e.g., `List[A]` in `F[A]`) for ConsK | Scala 2 only (Shapeless) | Yes (both Scala 2+3) | Improvement |
 | Head+tail shift pattern for ConsK (e.g., `NEL[A](head: A, tail: List[A])`) | Scala 2 only | Yes (both Scala 2+3) | Improvement |
@@ -237,6 +242,25 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
 | `cats.sequence` / `cats.lift` / `cats.replicateH` | kittens Scala-2/Shapeless utilities (sequencing over HLists/records, lifting functions, heterogeneous replicate); out of scope for type-class derivation |
 | `Iterable` derivation (`MkIterable`) | kittens Scala-2-only helper; not ported |
+| Fields nesting a type constructor in Apply / Applicative / Pure / Reducible / NonEmptyTraverse / NonEmptyAlternative / Alternative | kittens derives e.g. `NonEmptyList`-like `Nel(head: A, tail: List[A])`; Kindlings supports only fields of type `A` (and constant fields) there (Gap) |
+| `ConsK` for list-like sealed traits | kittens 2 derives `ConsK` for `sealed trait IList[A]` with a `Cons(head: A, tail: IList[A])` case; Kindlings derives it for case classes only (Gap) |
+
+### Upstream oracle
+
+`upstream-oracle-tests` (`CatsDerivationOracleSpec`, plus `CatsDerivationScala3OracleSpec` / `CatsDerivationScala2OracleSpec`
+for what kittens derives on one Scala version only) derives the same fixtures with Kindlings' `TypeClass.derived` and with
+kittens' `cats.derived.semiauto` and compares: `show`/`showLines` strings, `eqv`/`compare`/`partialCompare` on every pair
+of values (subtype ordering included), hash consistency with `eqv`, `combine`/`empty`/`inverse`/`remove`, `map`/`fold`/
+`traverse`/`reduce`/`bimap`/`bitraverse` results, the order effects run in (`State` logs) and how lazy `foldRight` /
+`reduceRightTo` are, `contramap`/`imap`, `map2`/`ap`/`pure`, `combineK`/`empty`, `cons`. Documented differences:
+
+- **Zero-field types in `Show`**: Kindlings renders a case class without fields and a case object as `Name()` on both
+  Scala versions; kittens 3's `Show` renders `Name` (its `ShowPretty` keeps `Name()`), kittens 2 renders a case object by
+  its runtime class (`Name$()`), and kittens 2's `ShowPretty` puts the parentheses on two lines.
+- **`reduceRightTo` laziness**: same results, but when the function short-circuits on an earlier field Kindlings never
+  evaluates the later ones; kittens evaluates the function on the later fields first.
+- **Hash values** are not compared (only consistency with `eqv`); kittens does not specify them.
+- The gaps listed under "Not ported" are asserted too (Kindlings fails to derive them while kittens derives them).
 
 ---
 
@@ -265,6 +289,9 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `F[_]` in argument position (`InvariantK`) | Yes | Yes | Parity |
 | Nested algebras | Yes | Yes | Parity |
 | Recursive derivation of nested algebra without explicit instance | Partial | Yes | Improvement |
+| Polymorphic methods (`def m[A](a: A): F[List[A]]`) in trait algebras | Yes | Yes | Parity |
+| Multiple parameter lists, by-name and default arguments, varargs | Yes | Yes | Parity |
+| SemigroupalK/ApplyK: members without `F` combined with their `Semigroup` (else the first algebra's result) | Yes | Yes (trait algebras) | Parity |
 
 ### Derivation API
 
@@ -284,6 +311,16 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `aop.Aspect` (general AOP) beyond `Instrument` | Only `Instrument` is derived; the more general `Aspect[Alg, Dom, Cod]` is not ported |
 | `Derive.const` / `Derive.void` / `Derive.readerT` algebra constructors | Not ported — out of scope (constant / `Unit` / `ReaderT`-forwarding algebra implementations) |
 | `Derive.semigroupK` / `Derive.monoidK` | Out of scope — these derive plain cats `SemigroupK`/`MonoidK` for `F[_]`, not `(* -> *) -> *` algebra type classes |
+
+### Upstream oracle
+
+`upstream-oracle-tests` (`CatsTaglessOracleSpec`) derives FunctorK, InvariantK, ContravariantK, SemigroupalK, ApplyK and
+Instrument with Kindlings and with cats-tagless' `Derive.*` (Scala 2 macros / Scala 3 `@experimental` macros) for trait
+algebras with one method shape each (plain, nullary, multiple parameter lists, by-name, polymorphic, default arguments,
+varargs, `F` in parameter position, members without `F`) and compares the results of every method of the transformed
+algebra, when the natural transformation runs, how often by-name arguments are evaluated, and `Instrument`'s algebra and
+method names. No differences. Case-class algebras are not compared (cats-tagless' `Derive.*` is trait-only); for them
+Kindlings' SemigroupalK/ApplyK still keep the first algebra's members without `F`.
 
 ---
 
@@ -744,7 +781,7 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 
 ## scalacheck-derivation
 
-**Replaces:** manual `Arbitrary` instance writing, [`scalacheck-shapeless`](https://github.com/alexarchambault/scalacheck-shapeless) (Scala 2 only, Shapeless-based; cross-publishes JVM/JS/Native on Scala 2)
+**Replaces:** manual `Arbitrary` instance writing, [`scalacheck-shapeless`](https://github.com/alexarchambault/scalacheck-shapeless) (Scala 2 only, Shapeless-based; cross-publishes JVM/JS/Native on Scala 2), [`scalacheck-derived`](https://github.com/martinhh/scalacheck-derived) (Scala 3)
 
 ### Type classes
 
@@ -790,8 +827,26 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 | Iron types (Scala 3) | Manual only | Yes (via `kindlings-iron-integration` + `IsValueType`) | Improvement |
 | Java enums | Manual only | Yes (via Hearth `Enum.parse`; JVM-only, both Scala 2.13 & 3) | Improvement |
 | Scala `Enumeration` | Manual only | Yes | Improvement |
-| Recursive types | scalacheck-shapeless: needs an explicit `Recursive[T]` to bound recursion (else `StackOverflowError`) | Yes (no wrappers needed, automatic size-based termination) | Improvement |
+| Recursive types | scalacheck-shapeless: needs an explicit `Recursive[T]` to bound recursion (else `StackOverflowError`) | Yes (no wrappers needed: sizes shrink with depth and at size 0 only non-recursive cases are generated) | Improvement |
+| `Shrink` for collections | ScalaCheck's `shrinkContainer` | Same algorithm (same candidates, same order) | Parity |
+| `Cogen` for products, `Option`, collections | ScalaCheck's instances; case classes: every field, then `Cogen[Unit]` | Same perturbation (same seeds) | Parity |
 | User-provided implicits | Implicit search | Yes (checked before derivation) | Parity |
+
+### Upstream oracle
+
+`upstream-oracle-tests` (`ScalaCheckOracleSpec`) compares Kindlings with scalacheck-shapeless on Scala 2.13 and with
+[scalacheck-derived](https://github.com/martinhh/scalacheck-derived) (the Scala 3 equivalent) on Scala 3, each used as
+documented (`Recursive` / `RecursionFallback` for the recursive type). Generators are random, so it compares properties:
+subtype coverage, collection/string sizes within `Gen.size`, generation at every size including 0, termination of
+recursive types; `Shrink` streams and `Cogen` seeds are deterministic and compared exactly for fixed values. Where the
+two upstreams disagree Kindlings follows scalacheck-derived. Documented differences:
+
+- **Size 0** (Scala 3): scalacheck-derived returns `Gen.fail` for some sealed-trait-based types once the size is
+  exhausted (even with a `RecursionFallback`); Kindlings still generates a value.
+- **Shrinking sealed traits** (Scala 2): scalacheck-shapeless also shrinks a value into the other subtypes (e.g. a
+  `Circle` into a case object); Kindlings, like scalacheck-derived, shrinks only within the value's subtype.
+- **`Cogen` for sealed traits** (Scala 2): scalacheck-shapeless advances the seed once per preceding subtype; Kindlings,
+  like scalacheck-derived, perturbs with the subtype's `Cogen` and then with its index.
 
 ### Not supported
 

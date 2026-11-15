@@ -77,7 +77,8 @@ No configuration class is needed -- derivation is fully automatic based on the t
 - **Sealed traits / enums** -- randomly selects a subtype
 - **Scala 3 enums** -- randomly selects an enum value
 - **Java enums** -- randomly selects an enum constant
-- **Recursive types** -- handled automatically, no `Lazy` wrappers needed
+- **Recursive types** -- handled automatically, no `Lazy` / `Recursive` / `RecursionFallback` markers needed: the size
+  shrinks with depth, and at size 0 only the cases of a sealed trait that cannot recurse are generated
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
 - **Everything ScalaCheck supports out of the box** -- primitives, `String`, `BigInt`/`BigDecimal`, `UUID`, `Symbol`,
@@ -92,6 +93,11 @@ No configuration class is needed -- derivation is fully automatic based on the t
   `NonEmptyList`, `NonEmptyMap`, `Chain` from `kindlings-cats-integration`) is built through the provider's smart
   constructor: `Arbitrary` regenerates a rejected (e.g. empty) candidate with at least one element, and `Shrink` drops
   candidates the constructor rejects, so a non-empty container never shrinks to an empty one
+- **Same results as ScalaCheck and the upstream derivations** -- collections shrink with ScalaCheck's own algorithm, and
+  `Cogen` perturbs seeds like ScalaCheck's instances and like scalacheck-shapeless / scalacheck-derived do for case
+  classes (every field, then `Cogen[Unit]`); a sealed-trait value shrinks only within its own subtype and its `Cogen`
+  perturbs with the subtype's `Cogen` and then its index (like scalacheck-derived). See
+  [feature parity](feature-parity.md#scalacheck-derivation) for what the upstream oracle checks
 
 !!! note "Shrink and nested types"
 
