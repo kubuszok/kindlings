@@ -1,6 +1,6 @@
 # Hearth gap: Scala 2 `Expr.quote` output is not hygienic (unrooted package paths)
 
-**Status:** open in Hearth (found 2026-11-15 by `upstream-oracle-tests`). Scala 2.13 only; Scala 3 quotes are hygienic.
+**Status:** fixed in Hearth `b8ae5aaf` ("Root package paths in Scala 2 Expr.quote output", first in `0.4.4-6-gb8ae5aa-SNAPSHOT`); found 2026-11-15 by `upstream-oracle-tests`. Scala 2.13 only; Scala 3 quotes are hygienic. Regression test: `integration-tests/.../MacroHygieneSpec.scala`.
 
 ## Symptom
 
@@ -34,7 +34,8 @@ A Hearth-only reproducer (`CrossQuotesHygieneSpec`, enclosing `def scala`, `java
 a fix (root package paths in `qualifyStaticModuleRefs`, visit `TypeTree.original`, print with `printRootPkg = true`,
 root top-level packages in `printTypePrefix`) were handed to Hearth; Hearth's Scala 2.13 suite passes with the fix.
 
-## Kindlings follow-up
+## Kindlings regression test
 
-When a Hearth release contains the fix: add a shared regression test (Scala 2.13 + 3) deriving circe, jsoniter and
-tapir instances inside an object with members named `scala`, `java`, `hearth`, `io`, `cats`, `sttp`.
+`MacroHygieneSpec` (shared, Scala 2.13 + 3, all platforms) derives circe, jsoniter and tapir instances inside an object
+with members named `scala`, `java`, `hearth`, `io`, `com`, `cats`, `sttp` and `math`. Against Hearth 0.4.4 it fails to
+compile on Scala 2.13 for all three libraries.
