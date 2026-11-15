@@ -63,7 +63,18 @@ trait DecoderHandleAsEnumRuleImpl {
                 deriveChildDecoder[A, ChildType](childName)
               }
             }
-            .flatMap { childDispatchers =>
+            .flatMap { childDecoders =>
+              val childDispatchers = childDecoders.toList.map(_.dispatch)
+              val isValueEnum = Type[A].isEnumeration || Type[A].isJavaEnum
+              // Union types have no scala-yaml counterpart: their members stay wrapped
+              val alwaysWrapped: Boolean = Type[A].isUnionType
+              // scala-yaml's sum decoder: every subtype is attempted on the node, in order; the first success wins
+              def untagged(nodeExpr: Expr[Node]): Expr[Either[ConstructError, A]] =
+                childDecoders.toList.foldRight(Expr.quote {
+                  Left(YamlDerivationUtils.cannotParse(Expr.splice(nodeExpr))): Either[ConstructError, A]
+                }) { (child, elseExpr) =>
+                  Expr.quote(Expr.splice(child.untagged(nodeExpr)).orElse(Expr.splice(elseExpr)))
+                }
               LambdaBuilder
                 .of1[(String, Node)]("readResult")
                 .traverse { readResultExpr =>
@@ -80,7 +91,7 @@ trait DecoderHandleAsEnumRuleImpl {
                     ): Either[ConstructError, A]
                   }
 
-                  MIO.pure(childDispatchers.toList.foldRight(errorExpr) { case (dispatcher, elseExpr) =>
+                  MIO.pure(childDispatchers.foldRight(errorExpr) { case (dispatcher, elseExpr) =>
                     dispatcher(typeNameExpr, innerNodeExpr, elseExpr)
                   })
                 }
@@ -94,12 +105,19 @@ trait DecoderHandleAsEnumRuleImpl {
                         Expr.splice(dispatchFn)((typeName, node))
                       }
                     } else {
-                      val readResult: Either[ConstructError, (String, Node)] =
-                        config.discriminator match {
-                          case Some(field) => YamlDerivationUtils.decodeDiscriminator(node, field)
-                          case None        => YamlDerivationUtils.decodeWrapped(node)
-                        }
-                      readResult.flatMap(Expr.splice(dispatchFn))
+                      config.discriminator match {
+                        case Some(field) =>
+                          YamlDerivationUtils.decodeDiscriminator(node, field).flatMap(Expr.splice(dispatchFn))
+                        case None =>
+                          if (config.wrappedSubtypes || Expr.splice(Expr(alwaysWrapped)))
+                            YamlDerivationUtils.decodeWrapped(node).flatMap(Expr.splice(dispatchFn))
+                          // Java enum / Enumeration values (not supported by scala-yaml) are their names
+                          else if (Expr.splice(Expr(isValueEnum)))
+                            YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) {
+                              typeName => Expr.splice(dispatchFn)((typeName, node))
+                            }
+                          else Expr.splice(untagged(Expr.quote(node)))
+                      }
                     }
                   }
                 }
@@ -107,10 +125,18 @@ trait DecoderHandleAsEnumRuleImpl {
       }
     }
 
+    /** How to decode one subtype: `dispatch` decodes it when the type name matches (else the `else` branch), `untagged`
+      * decodes it from the node as scala-yaml's sum decoder attempts it.
+      */
+    final private case class ChildDecoder[A](
+        dispatch: (Expr[String], Expr[Node], Expr[Either[ConstructError, A]]) => Expr[Either[ConstructError, A]],
+        untagged: Expr[Node] => Expr[Either[ConstructError, A]]
+    )
+
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildDecoder[A: DecoderCtx, ChildType: Type](
         childName: String
-    ): MIO[(Expr[String], Expr[Node], Expr[Either[ConstructError, A]]) => Expr[Either[ConstructError, A]]] = {
+    ): MIO[ChildDecoder[A]] = {
       implicit val NodeT: Type[Node] = DTypes.Node
       implicit val ConstructErrorT: Type[ConstructError] = DTypes.ConstructError
       implicit val StringT: Type[String] = DTypes.String
@@ -122,23 +148,32 @@ trait DecoderHandleAsEnumRuleImpl {
         case Right(decoderExpr) =>
           Log.info(s"Found implicit YamlDecoder[$childName], using it") >>
             MIO.pure {
-              (
-                  typeNameExpr: Expr[String],
-                  innerNodeExpr: Expr[Node],
-                  elseExpr: Expr[Either[ConstructError, A]]
-              ) =>
-                Expr.quote {
-                  if (
-                    Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                      .splice(typeNameExpr)
-                  )
+              ChildDecoder[A](
+                (
+                    typeNameExpr: Expr[String],
+                    innerNodeExpr: Expr[Node],
+                    elseExpr: Expr[Either[ConstructError, A]]
+                ) =>
+                  Expr.quote {
+                    if (
+                      Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                        .splice(typeNameExpr)
+                    )
+                      Expr
+                        .splice(decoderExpr)
+                        .construct(Expr.splice(innerNodeExpr))(org.virtuslab.yaml.LoadSettings.empty)
+                        .asInstanceOf[Either[ConstructError, A]]
+                    else
+                      Expr.splice(elseExpr)
+                  },
+                (nodeExpr: Expr[Node]) =>
+                  Expr.quote {
                     Expr
                       .splice(decoderExpr)
-                      .construct(Expr.splice(innerNodeExpr))(org.virtuslab.yaml.LoadSettings.empty)
+                      .construct(Expr.splice(nodeExpr))(org.virtuslab.yaml.LoadSettings.empty)
                       .asInstanceOf[Either[ConstructError, A]]
-                  else
-                    Expr.splice(elseExpr)
-                }
+                  }
+              )
             }
 
         case Left(_) =>
@@ -146,48 +181,65 @@ trait DecoderHandleAsEnumRuleImpl {
             case Some(singleton) =>
               Log.info(s"Using singleton for $childName") >>
                 MIO.pure {
-                  (
-                      typeNameExpr: Expr[String],
-                      _: Expr[Node],
-                      elseExpr: Expr[Either[ConstructError, A]]
-                  ) =>
-                    Expr.quote {
-                      if (
-                        Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                          .splice(typeNameExpr)
-                      )
-                        Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConstructError, A]
-                      else
-                        Expr.splice(elseExpr)
-                    }
-                }
-            case None =>
-              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.node)).flatMap { _ =>
-                dctx.getHelper[ChildType].map {
-                  case Some(helper) =>
+                  ChildDecoder[A](
                     (
                         typeNameExpr: Expr[String],
-                        innerNodeExpr: Expr[Node],
+                        _: Expr[Node],
                         elseExpr: Expr[Either[ConstructError, A]]
-                    ) => {
-                      val helperCallExpr = helper(innerNodeExpr, dctx.config)
+                    ) =>
                       Expr.quote {
                         if (
                           Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
                             .splice(typeNameExpr)
                         )
-                          Expr.splice(helperCallExpr).asInstanceOf[Either[ConstructError, A]]
+                          Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConstructError, A]
                         else
                           Expr.splice(elseExpr)
+                      },
+                    // as scala-yaml's decoder of a product without fields: any mapping
+                    (nodeExpr: Expr[Node]) =>
+                      Expr.quote {
+                        YamlDerivationUtils
+                          .decodeAsEmptyProduct(Expr.splice(nodeExpr), Expr.splice(singleton).asInstanceOf[A])
                       }
-                    }
+                  )
+                }
+            case None =>
+              deriveDecoderRecursively[ChildType](using dctx.nest[ChildType](dctx.node)).flatMap { _ =>
+                dctx.getHelper[ChildType].flatMap {
+                  case Some(helper) =>
+                    MIO.pure(
+                      ChildDecoder[A](
+                        (
+                            typeNameExpr: Expr[String],
+                            innerNodeExpr: Expr[Node],
+                            elseExpr: Expr[Either[ConstructError, A]]
+                        ) => {
+                          val helperCallExpr = helper(innerNodeExpr, dctx.config)
+                          Expr.quote {
+                            if (
+                              Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
+                                .splice(typeNameExpr)
+                            )
+                              Expr.splice(helperCallExpr).asInstanceOf[Either[ConstructError, A]]
+                            else
+                              Expr.splice(elseExpr)
+                          }
+                        },
+                        (nodeExpr: Expr[Node]) => {
+                          val helperCallExpr = helper(nodeExpr, dctx.config)
+                          Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConstructError, A]])
+                        }
+                      )
+                    )
 
                   case None =>
-                    (
-                        _: Expr[String],
-                        _: Expr[Node],
-                        elseExpr: Expr[Either[ConstructError, A]]
-                    ) => elseExpr
+                    val err = DecoderDerivationError.CannotConstructType(
+                      Type[ChildType].prettyPrint,
+                      isSingleton = false,
+                      Some("no cached decoder for the subtype")
+                    )
+                    Log.error(err.message) >> MIO.fail(err)
                 }
               }
           }

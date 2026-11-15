@@ -30,6 +30,8 @@ trait EncoderHandleAsEnumRuleImpl {
 
       val childrenList = enumm.directChildren.toList
       val isEnumerationOrJavaEnum = Type[A].isEnumeration || Type[A].isJavaEnum
+      // Union types have no scala-yaml counterpart: their members stay wrapped (untagged members would be ambiguous)
+      val alwaysWrapped: Boolean = Type[A].isUnionType
       val allCaseObjects = isEnumerationOrJavaEnum || childrenList.forall { case (_, child) =>
         SingletonValue.unapply(child.Underlying).isDefined
       }
@@ -61,7 +63,13 @@ trait EncoderHandleAsEnumRuleImpl {
                       case Some(discriminatorField) =>
                         YamlDerivationUtils.addDiscriminator(discriminatorField, name, node)
                       case None =>
-                        YamlDerivationUtils.wrapWithTypeName(name, node)
+                        if (config.wrappedSubtypes || Expr.splice(Expr(alwaysWrapped)))
+                          YamlDerivationUtils.wrapWithTypeName(name, node)
+                        // scala-yaml's untagged encoding (a case object is `{}`); Java enum / Enumeration values,
+                        // which scala-yaml does not support, are written as their names
+                        else if (Expr.splice(Expr(isEnumerationOrJavaEnum)))
+                          YamlDerivationUtils.encodeEnumAsString(name)
+                        else node
                     }
                   }
                 }
@@ -73,7 +81,10 @@ trait EncoderHandleAsEnumRuleImpl {
                     case Some(discriminatorField) =>
                       YamlDerivationUtils.addDiscriminator(discriminatorField, name, node)
                     case None =>
-                      YamlDerivationUtils.wrapWithTypeName(name, node)
+                      // scala-yaml's untagged encoding unless subtypes are wrapped
+                      if (Expr.splice(ectx.config).wrappedSubtypes || Expr.splice(Expr(alwaysWrapped)))
+                        YamlDerivationUtils.wrapWithTypeName(name, node)
+                      else node
                   }
                 }
               }

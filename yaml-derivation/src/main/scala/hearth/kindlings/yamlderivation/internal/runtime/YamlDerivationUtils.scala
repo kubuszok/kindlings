@@ -165,6 +165,22 @@ object YamlDerivationUtils {
         Left(ConstructError.from(s"Expected mapping node but got ${other.getClass.getSimpleName}", other))
     }
 
+  /** The failure of scala-yaml's sum decoder when no subtype could decode `node`. */
+  def cannotParse(node: Node): ConstructError = ConstructError.from(s"Cannot parse $node", node)
+
+  /** How scala-yaml's decoder of a product without fields (e.g. a case object) decodes: any mapping with scalar keys.
+    */
+  def decodeAsEmptyProduct[A](node: Node, value: A): Either[ConstructError, A] =
+    node match {
+      case MappingNode(mappings, _) =>
+        mappings.keys.collectFirst { case key if !key.isInstanceOf[ScalarNode] => key } match {
+          case Some(key) => Left(ConstructError.from("Parameter of a class must be a scalar value", key))
+          case None      => Right(value)
+        }
+      case other =>
+        Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
+    }
+
   def decodeWrapped(node: Node): Either[ConstructError, (String, Node)] =
     node match {
       case MappingNode(mappings, _) =>

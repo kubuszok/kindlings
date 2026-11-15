@@ -203,12 +203,14 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
     group("sealed traits") {
 
-      test("wrapper-style encoding (default)") {
+      test("wrapper-style encoding (withWrappedSubtypes)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
         node ==> mappingOf("Circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
       }
 
       test("wrapper-style encoding for second case") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[Shape](Rectangle(3.0, 4.0))
         node ==> mappingOf(
           "Rectangle" -> mappingOf(
@@ -261,7 +263,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
 
       test("enumAsStrings=false still uses wrapper-style") {
-        implicit val config: YamlConfig = YamlConfig(enumAsStrings = false)
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = false, wrappedSubtypes = true)
         KindlingsYamlEncoder.encode[CardinalDirection](North) match {
           case MappingNode(mappings, _) =>
             mappings.exists {
@@ -332,7 +334,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
 
       test("custom constructor name transform") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
         node ==> mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
       }
@@ -603,18 +605,20 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
     group("mixed sealed traits (case objects + case classes)") {
 
       test("encode case class child of mixed sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[MixedPet](Budgie("Polly", true))
         node ==> mappingOf("Budgie" -> mappingOf("name" -> scalarNode("Polly"), "canTalk" -> scalarNode("true")))
       }
 
       test("encode case object child of mixed sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[MixedPet](Goldfish)
         node ==> mappingOf("Goldfish" -> mappingOf())
       }
 
       test("encode mixed sealed trait with enumAsStrings still uses wrapper for non-enum-only traits") {
         // enumAsStrings only applies to sealed traits with ALL case objects — mixed traits use wrapper
-        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true)
+        implicit val config: YamlConfig = YamlConfig(enumAsStrings = true, wrappedSubtypes = true)
         val node = KindlingsYamlEncoder.encode[MixedPet](Goldfish)
         node ==> mappingOf("Goldfish" -> mappingOf())
       }
@@ -632,6 +636,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
 
       test("encode direct child of base sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[YamlVehicle](YamlBicycle(21))
         node ==> mappingOf("YamlBicycle" -> mappingOf("gears" -> scalarNode("21")))
       }
@@ -640,6 +645,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
     group("@transientField on sealed trait subtype fields") {
 
       test("@transientField field is absent from encoded sealed trait subtype (CombTransientA)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[CombTransientST](CombTransientA("Alice", "cached-value"))
         val inner = node match {
           case MappingNode(mappings, _) =>
@@ -652,6 +658,7 @@ final class KindlingsYamlEncoderSpec extends MacroSuite {
       }
 
       test("@transientField field is absent from encoded sealed trait subtype (CombTransientB)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[CombTransientST](CombTransientB(42, Some("memo-value")))
         val inner = node match {
           case MappingNode(mappings, _) =>
