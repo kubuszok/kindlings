@@ -332,7 +332,8 @@ The codec is hand-written against jsoniter-scala's streaming `JsonReader`/`JsonW
 
 `Json`, `JsonNumber` and `JsonObject` mirror circe's API, and `JsonCodec` behaves like jsoniter-scala-circe's codec
 for circe's `Json` (checked by the `upstream-oracle-tests` module, `JsoniterJsonOracleSpec`): the same inputs are
-accepted, numbers keep their text (a negative zero keeps its sign: `-0`, `-0.0`) and are written as it, strings are
+accepted, numbers keep their text (a negative zero keeps its sign: `-0`, `-0.0`; numbers from a `Double`/`Float` get the
+text jsoniter-scala writes for them, on every platform) and are written as it, strings are
 escaped the same way, and arrays and objects nested deeper than 128 levels are rejected, when reading and when writing
 (`JsonCodec.withMaxDepth(n)` gives another limit). `toInt`/`toLong`/`toBigInt`/`toBigDecimal` give the same results as
 circe's for every number. The intentional differences:
@@ -343,6 +344,7 @@ circe's for every number. The intentional differences:
 | Equality | Numbers by value (`1 == 1.0`), objects as maps (key order ignored) | Structural: numbers by text, objects by their ordered fields |
 | `toDouble` / `toFloat` | `Double` / `Float` (an infinity for out-of-range values) | `Option` (`None` for out-of-range values) |
 | `JsonNumber.fromString` | Also accepts leading zeros (`01`) and a leading `.` (`.5`), then writes them as they are (invalid JSON) | JSON numbers only |
+| `toBigDecimal` of a number from a `Double` | The decimal of `Double.toString` (`4.9E-324`) | The decimal of the text jsoniter-scala writes (the shortest that reads back as the same `Double`: `5E-324`), the same on the JVM, Scala.js and Scala Native |
 | Negative zero from `Float` | `Json.fromFloat(-0.0f)` converts to `0.0` with `toDouble` | `-0.0` |
 
 ## Comparison with alternatives
