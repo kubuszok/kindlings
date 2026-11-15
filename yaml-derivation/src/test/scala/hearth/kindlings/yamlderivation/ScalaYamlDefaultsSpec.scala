@@ -49,7 +49,9 @@ final class ScalaYamlDefaultsSpec extends MacroSuite {
 
     test("withWrappedSubtypes: Kindlings 0.3.x single-key mappings") {
       implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
-      KindlingsYamlEncoder.encode[Shape](Circle(5.0)) ==> mappingOf("Circle" -> mappingOf("radius" -> ScalarNode("5.0")))
+      KindlingsYamlEncoder.encode[Shape](Circle(5.0)) ==> mappingOf(
+        "Circle" -> mappingOf("radius" -> ScalarNode("5.0"))
+      )
       KindlingsYamlDecoder.decode[Shape](mappingOf("Circle" -> mappingOf("radius" -> ScalarNode("5.0")))) ==>
         Right(Circle(5.0): Shape)
     }
