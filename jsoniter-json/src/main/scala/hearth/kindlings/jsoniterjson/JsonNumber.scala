@@ -86,8 +86,37 @@ object JsonNumber {
     if (n.isNaN || n.isInfinite) None else Some(new JsonNumber(n.toString))
   def fromBigDecimal(n: BigDecimal): JsonNumber = new JsonNumber(n.toString)
   def fromBigInt(n: BigInt): JsonNumber = new JsonNumber(n.toString)
-  def fromString(s: String): Option[JsonNumber] = try {
-    val _ = BigDecimal(s) // validate
-    Some(new JsonNumber(s))
-  } catch { case _: NumberFormatException => None }
+
+  /** `Some` if `s` is a JSON number (`-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`), like circe's
+    * `JsonNumber.fromString`: e.g. `+1`, `1.`, `.5`, `01`, `NaN` and surrounding whitespace are rejected. The text is
+    * kept as is (and written as is), also when its exponent is too large for a `BigDecimal` (then `toBigDecimal` is
+    * `None` and `toDouble` is `0.0` or `None`).
+    */
+  def fromString(s: String): Option[JsonNumber] =
+    if (isJsonNumber(s)) Some(new JsonNumber(s)) else None
+
+  private def isJsonNumber(s: String): Boolean = {
+    val len = s.length
+    var i = 0
+    def isDigit(at: Int): Boolean = at < len && s.charAt(at) >= '0' && s.charAt(at) <= '9'
+    def digits(): Boolean = // at least one digit
+      if (!isDigit(i)) false
+      else {
+        while (isDigit(i)) i += 1
+        true
+      }
+    if (i < len && s.charAt(i) == '-') i += 1
+    if (i < len && s.charAt(i) == '0') i += 1
+    else if (!digits()) return false
+    if (i < len && s.charAt(i) == '.') {
+      i += 1
+      if (!digits()) return false
+    }
+    if (i < len && (s.charAt(i) == 'e' || s.charAt(i) == 'E')) {
+      i += 1
+      if (i < len && (s.charAt(i) == '+' || s.charAt(i) == '-')) i += 1
+      if (!digits()) return false
+    }
+    i == len
+  }
 }
