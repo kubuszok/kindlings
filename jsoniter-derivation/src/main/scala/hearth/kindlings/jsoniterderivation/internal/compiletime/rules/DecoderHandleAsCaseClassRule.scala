@@ -807,7 +807,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
         case Left(_) =>
           Log.info(s"Building decoder for ${Type[Field].prettyPrint} via cached def") >> {
             val stringifiedSuffix = stringifiedKeySuffix(ctx.stringified)
-            val cacheKey = s"jsoniter-field-decode:${Type[Field].prettyPrint}$stringifiedSuffix"
+            val cacheKey = s"jsoniter-field-decode:${Type[Field].plainPrint}$stringifiedSuffix"
             val defBuilder = ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, Field](
               s"decode_field_${stringifiedNamePrefix(ctx.stringified)}${Type[Field].shortName}"
             )

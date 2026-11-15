@@ -848,10 +848,10 @@ trait DecoderMacrosImpl
     // match types would be very difficult — even without Scala 2.13 support. So we use `Any`
     // as the return type and cast at each call site where the actual type is known.
     //
-    // The cache key includes Type[B].prettyPrint to prevent collisions: ValDefsCache keys by
+    // The cache key includes Type[B].plainPrint to prevent collisions: ValDefsCache keys by
     // (String, arg types, return type), and since the return type is always `Any`, the string
     // must disambiguate different types.
-    private def helperCacheKey[B: Type]: String = s"cached-decode-method:${Type[B].prettyPrint}"
+    private def helperCacheKey[B: Type]: String = s"cached-decode-method:${Type[B].plainPrint}"
 
     def getHelper[B: Type]: MIO[Option[(Expr[HCursor], Expr[Configuration], Expr[Boolean]) => Expr[Any]]] = {
       implicit val AnyT: Type[Any] = DTypes.Any

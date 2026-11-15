@@ -720,6 +720,26 @@ final class KindlingsSchemaSpec extends MacroSuite {
       }
     }
 
+    // The type written at the call site (`ts.RecursiveTree`) prints with other colors than the field's type
+    // (`RecursiveTree`), as do types read from the classpath on Scala 3 (see CrossModuleRecursionSpec in
+    // integration-tests): the recursion must be detected by the type, not by its colored `prettyPrint`.
+    test("recursive field emits SRef when the type is referred to with another prefix") {
+      import hearth.kindlings.tapirschemaderivation as ts
+      val schema = KindlingsSchema.derived[ts.RecursiveTree].schema
+      schema.schemaType match {
+        case p: SchemaType.SProduct[?] =>
+          p.fields.find(_.name.name == "children").map(_.schema.schemaType) match {
+            case Some(arr: SchemaType.SArray[?, ?]) =>
+              arr.element.schemaType match {
+                case _: SchemaType.SRef[?] => ()
+                case other                 => fail(s"Expected SRef inside array, got: $other")
+              }
+            case other => fail(s"Expected SArray for children field, got: $other")
+          }
+        case other => fail(s"Expected SProduct, got: $other")
+      }
+    }
+
     test("indirect recursive type uses SRef") {
       val schema = KindlingsSchema.derived[RecursiveParent].schema
       schema.schemaType match {
