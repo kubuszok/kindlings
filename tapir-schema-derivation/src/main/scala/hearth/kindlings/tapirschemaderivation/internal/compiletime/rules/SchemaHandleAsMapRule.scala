@@ -79,8 +79,9 @@ trait SchemaHandleAsMapRuleImpl {
             MIO.fail(
               new Exception(
                 s"Cannot derive tapir Schema for Map with key type ${Key.prettyPrint}: the key must be a String, a " +
-                  s"primitive, UUID, BigInt, BigDecimal or java.time type, or a value type (AnyVal, opaque type, " +
-                  s"...) wrapping one of them. Provide an implicit Schema[${Type[A].prettyPrint}] " +
+                  s"primitive, UUID, BigInt, BigDecimal or java.time type, a family of case objects, a type with the " +
+                  s"JSON library's key codec, or a value type (AnyVal, opaque type, ...) wrapping one of them. " +
+                  s"Provide an implicit Schema[${Type[A].prettyPrint}] " +
                   s"(e.g. using Schema.schemaForMap[K, V](keyToString)) for other key types"
               )
             )
@@ -106,8 +107,37 @@ trait SchemaHandleAsMapRuleImpl {
               keyToString[A, Inner]
                 .map(innerToString => unwrapKeyToString[K, Inner](isValueType.value, innerToString))
             case _ if isScalarKey[K] => Some(Expr.quote((k: K) => k.toString))
-            case _                   => None
+            case _                   => enumKeyToString[A, K]
           }
+      }
+
+    /** A family of case objects (sealed trait, Scala 3 `enum`, Java enum) is written as the name of the case, the same
+      * name the JSON library uses for the case as a value (e.g. circe's `transformConstructorNames`, jsoniter-scala's
+      * `adtLeafClassNameMapper`).
+      */
+    private def enumKeyToString[A: SchemaCtx, K: Type](implicit stringT: Type[String]): Option[Expr[K => String]] =
+      Enum.parse[K].toOption.flatMap { enumm =>
+        val children: List[(String, ??<:[K])] =
+          if (sctx[A].jsonCfg.flattensNestedSubtypes) enumm.exhaustiveChildren match {
+            case Some(leaves) => leaves.toList
+            case None         => enumm.directChildren.toList
+          }
+          else enumm.directChildren.toList
+        val cases: List[Option[(Expr[K], Expr[String])]] = children.map { case (childName, child) =>
+          import child.Underlying as Child
+          SingletonValue.parse[Child].toEither.toOption.map { sv =>
+            (sv.singletonExpr.asInstanceOf[Expr[K]], sctx[A].jsonCfg.resolveSubtypeName[K, Child](childName))
+          }
+        }
+        if (cases.isEmpty || cases.exists(_.isEmpty)) None
+        else
+          Some(Expr.quote { (k: K) =>
+            Expr.splice {
+              cases.flatten.foldRight(Expr.quote(k.toString): Expr[String]) { case ((singleton, name), elseExpr) =>
+                Expr.quote(if (k == Expr.splice(singleton)) Expr.splice(name) else Expr.splice(elseExpr))
+              }
+            }
+          })
       }
 
     /** Key types which the JSON libraries write as their `toString`. */

@@ -1,10 +1,10 @@
 package hearth.kindlings.tapirschemaderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{writeToString, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{writeToString, JsonKeyCodec, JsonReader, JsonValueCodec, JsonWriter}
 import hearth.MacroSuite
 import hearth.kindlings.circederivation.{Configuration, KindlingsEncoder}
 import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
-import io.circe.Encoder
+import io.circe.{Encoder, KeyEncoder}
 import sttp.tapir.{Schema, SchemaType}
 
 import java.util.UUID
@@ -40,6 +40,59 @@ object NonStringKeysCirce {
   implicit val config: Configuration = Configuration.default
   val schema: Schema[NonStringKeys] = KindlingsSchema.derived[NonStringKeys].schema
   val encoder: Encoder[NonStringKeys] = KindlingsEncoder.derived[NonStringKeys]
+}
+
+sealed trait KeyColor
+case object KeyRed extends KeyColor
+case object KeyDarkBlue extends KeyColor
+
+/** A key type the JSON libraries can only write with a user-provided key codec. */
+final class KeyCustom(val id: Int) {
+  override def equals(other: Any): Boolean = other match {
+    case k: KeyCustom => k.id == id
+    case _            => false
+  }
+  override def hashCode: Int = id
+}
+object KeyCustom {
+  implicit val keyEncoder: KeyEncoder[KeyCustom] = KeyEncoder.instance(k => s"custom-${k.id}")
+  implicit val keyCodec: JsonKeyCodec[KeyCustom] = new JsonKeyCodec[KeyCustom] {
+    def decodeKey(in: JsonReader): KeyCustom = new KeyCustom(in.readKeyAsString().stripPrefix("custom-").toInt)
+    def encodeKey(x: KeyCustom, out: JsonWriter): Unit = out.writeKey(s"custom-${x.id}")
+  }
+}
+
+final case class EnumAndCustomKeys(colors: Map[KeyColor, Int], custom: Map[KeyCustom, String])
+object EnumAndCustomKeys {
+  val sample: EnumAndCustomKeys =
+    EnumAndCustomKeys(Map(KeyRed -> 1, KeyDarkBlue -> 2), Map(new KeyCustom(1) -> "a", new KeyCustom(2) -> "b"))
+}
+
+object EnumAndCustomKeysJsoniter {
+  implicit val config: JsoniterConfig = JsoniterConfig.default
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[EnumAndCustomKeys] = KindlingsSchema.derived[EnumAndCustomKeys].schema
+  val codec: JsonValueCodec[EnumAndCustomKeys] = KindlingsJsonValueCodec.derived[EnumAndCustomKeys]
+}
+
+object EnumAndCustomKeysJsoniterRenamed {
+  implicit val config: JsoniterConfig =
+    JsoniterConfig.default.withAdtLeafClassNameMapper((n: String) => n.split('.').last.toLowerCase)
+  implicit val prefer: PreferSchemaConfig[JsoniterConfig] = PreferSchemaConfig[JsoniterConfig]
+  val schema: Schema[EnumAndCustomKeys] = KindlingsSchema.derived[EnumAndCustomKeys].schema
+  val codec: JsonValueCodec[EnumAndCustomKeys] = KindlingsJsonValueCodec.derived[EnumAndCustomKeys]
+}
+
+object EnumAndCustomKeysCirce {
+  implicit val config: Configuration = Configuration.default
+  val schema: Schema[EnumAndCustomKeys] = KindlingsSchema.derived[EnumAndCustomKeys].schema
+  val encoder: Encoder[EnumAndCustomKeys] = KindlingsEncoder.derived[EnumAndCustomKeys]
+}
+
+object EnumAndCustomKeysCirceSnake {
+  implicit val config: Configuration = Configuration.default.withSnakeCaseConstructorNames
+  val schema: Schema[EnumAndCustomKeys] = KindlingsSchema.derived[EnumAndCustomKeys].schema
+  val encoder: Encoder[EnumAndCustomKeys] = KindlingsEncoder.derived[EnumAndCustomKeys]
 }
 
 /** Maps keyed by any type the JSON library writes as an object key (primitives, `UUID`, value types over them, ...) are
@@ -83,6 +136,31 @@ final class NonStringMapKeySchemaSpec extends MacroSuite {
     }
     val errors = SchemaConformance.errors(schema, json)
     assert(errors.isEmpty, s"${json.noSpaces} does not conform to the schema:\n${errors.mkString("\n")}")
+  }
+
+  private def checkEnumAndCustom(schema: Schema[EnumAndCustomKeys], json: io.circe.Json): Unit = {
+    val products = openProducts(schema)
+    val written = writtenKeys(json)
+    val s = EnumAndCustomKeys.sample
+    assertEquals(products("colors").mapFieldValues(s.colors).keySet, written("colors"), "keys of colors")
+    assertEquals(products("custom").mapFieldValues(s.custom).keySet, written("custom"), "keys of custom")
+    val errors = SchemaConformance.errors(schema, json)
+    assert(errors.isEmpty, s"${json.noSpaces} does not conform to the schema:\n${errors.mkString("\n")}")
+  }
+
+  test("jsoniter: maps keyed by case-object enums and by types with a JsonKeyCodec") {
+    def json(codec: JsonValueCodec[EnumAndCustomKeys]) =
+      io.circe.parser.parse(writeToString(EnumAndCustomKeys.sample)(codec)).toOption.get
+    checkEnumAndCustom(EnumAndCustomKeysJsoniter.schema, json(EnumAndCustomKeysJsoniter.codec))
+    checkEnumAndCustom(EnumAndCustomKeysJsoniterRenamed.schema, json(EnumAndCustomKeysJsoniterRenamed.codec))
+  }
+
+  test("circe: maps keyed by case-object enums and by types with a KeyEncoder") {
+    checkEnumAndCustom(EnumAndCustomKeysCirce.schema, EnumAndCustomKeysCirce.encoder(EnumAndCustomKeys.sample))
+    checkEnumAndCustom(
+      EnumAndCustomKeysCirceSnake.schema,
+      EnumAndCustomKeysCirceSnake.encoder(EnumAndCustomKeys.sample)
+    )
   }
 
   test("jsoniter: the schema's keys are the keys the codec writes") {

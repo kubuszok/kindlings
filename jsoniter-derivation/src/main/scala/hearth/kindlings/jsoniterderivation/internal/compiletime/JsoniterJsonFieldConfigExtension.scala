@@ -21,6 +21,8 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
     implicit val FieldNameT: Type[annotations.fieldName] = Type.of[annotations.fieldName]
     implicit val TransientFieldT: Type[annotations.transientField] = Type.of[annotations.transientField]
     implicit val NamedT: Type[annotations.named] = Type.of[annotations.named]
+    val JsonKeyCodecCtor: Type.Ctor1[com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec] =
+      Type.Ctor1.of[com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec]
 
     def stringArg[Ann](anns: List[Expr[Ann]]): Option[String] =
       anns.headOption
@@ -141,6 +143,18 @@ final class JsoniterJsonFieldConfigExtension extends JsonSchemaConfigExtension {
 
           // Without a discriminator, leaves are `{"Leaf":{...}}`
           override def wrapsSubtypesWithoutDiscriminator: Expr[Boolean] = Expr.quote(true)
+
+          // Map keys of a type with a JsonKeyCodec (also a user-provided one) are written by it (as jsoniter-scala)
+          override def mapKeyToString[K: Type]: Option[Expr[K => String]] = {
+            implicit val JsonKeyCodecK: Type[com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[K]] =
+              JsonKeyCodecCtor[K]
+            Expr.summonImplicit[com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec[K]].toOption.map { keyCodec =>
+              Expr.quote { (key: K) =>
+                hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+                  .keyToString(Expr.splice(keyCodec), key)
+              }
+            }
+          }
 
           override def tuplesAsArrays: Boolean = true
 
