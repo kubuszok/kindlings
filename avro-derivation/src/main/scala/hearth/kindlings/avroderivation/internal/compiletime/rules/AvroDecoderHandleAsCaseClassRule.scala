@@ -168,8 +168,32 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                         Expr.splice(aliasesExpr)
                       )
                     }
+                    // As avro4s: a field with a Scala default decodes to the default when the record has no such field
+                    // (data written with an older schema) or when its value cannot be decoded.
+                    val defaultExpr: Option[Expr[Field]] = param.defaultValue.flatMap { method =>
+                      foldInstanceFree(method, "Default value")(
+                        onTypes = _ => Map.empty,
+                        onValues = _ => Map.empty
+                      ).toOption.map(_.value.asInstanceOf[Expr[Field]])
+                    }
                     deriveDecoderRecursively[Field](using dctx.nest[Field](fieldAvroValue)).map { decoded =>
-                      (fName, decoded.as_??)
+                      defaultExpr match {
+                        case Some(default) =>
+                          val withDefault: Expr[Field] = Expr.quote {
+                            if (
+                              AvroDerivationUtils.hasFieldOrAlias(
+                                Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord],
+                                Expr.splice(avroFieldNameExpr),
+                                Expr.splice(aliasesExpr)
+                              )
+                            )
+                              try Expr.splice(decoded)
+                              catch { case scala.util.control.NonFatal(_) => Expr.splice(default) }
+                            else Expr.splice(default)
+                          }
+                          (fName, withDefault.as_??)
+                        case None => (fName, decoded.as_??)
+                      }
                     }
                 }
               }

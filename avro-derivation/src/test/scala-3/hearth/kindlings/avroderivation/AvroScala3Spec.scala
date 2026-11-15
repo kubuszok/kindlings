@@ -48,8 +48,8 @@ final class AvroScala3Spec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[Vehicle]
         schema.getType ==> Schema.Type.UNION
         schema.getTypes.size() ==> 2
-        schema.getTypes.get(0).getName ==> "Car"
-        schema.getTypes.get(1).getName ==> "Bike"
+        schema.getTypes.get(1).getName ==> "Car"
+        schema.getTypes.get(0).getName ==> "Bike"
       }
 
       test("encode Car") {
@@ -63,7 +63,7 @@ final class AvroScala3Spec extends MacroSuite {
 
       test("decode Car") {
         val schema = AvroSchemaFor.schemaOf[Vehicle]
-        val carSchema = schema.getTypes.get(0)
+        val carSchema = schema.getTypes.get(1)
         val record = new GenericData.Record(carSchema)
         record.put("make", "Honda")
         record.put("year", 2023)
@@ -316,8 +316,8 @@ final class AvroScala3Spec extends MacroSuite {
       fieldSchema.getType ==> Schema.Type.UNION
       fieldSchema.getTypes.size() ==> 3
       fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
-      fieldSchema.getTypes.get(1).getName ==> "Car"
-      fieldSchema.getTypes.get(2).getName ==> "Bike"
+      fieldSchema.getTypes.get(2).getName ==> "Car"
+      fieldSchema.getTypes.get(1).getName ==> "Bike"
     }
   }
 
@@ -327,8 +327,8 @@ final class AvroScala3Spec extends MacroSuite {
       val schema = AvroSchemaFor.schemaOf[ParrotOrHamster]
       schema.getType ==> Schema.Type.UNION
       schema.getTypes.size() ==> 2
-      schema.getTypes.get(0).getName ==> "Parrot"
-      schema.getTypes.get(1).getName ==> "Hamster"
+      schema.getTypes.get(1).getName ==> "Parrot"
+      schema.getTypes.get(0).getName ==> "Hamster"
     }
 
     test("encode Parrot member of union") {
@@ -342,7 +342,7 @@ final class AvroScala3Spec extends MacroSuite {
 
     test("decode Parrot member of union") {
       val schema = AvroSchemaFor.schemaOf[ParrotOrHamster]
-      val parrotSchema = schema.getTypes.get(0)
+      val parrotSchema = schema.getTypes.get(1)
       val record = new GenericData.Record(parrotSchema)
       record.put("name", "Polly")
       record.put("vocabulary", 100)

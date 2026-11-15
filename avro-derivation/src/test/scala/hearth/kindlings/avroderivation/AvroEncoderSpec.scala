@@ -254,7 +254,14 @@ final class AvroEncoderSpec extends MacroSuite {
         result ==> (time.toNanoOfDay / 1000)
       }
 
-      test("LocalDateTime encodes to Long (epoch millis UTC)") {
+      test("LocalDateTime encodes to Long (epoch nanos UTC, as avro4s)") {
+        val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0, 123456789)
+        val result = AvroEncoder.encode(dt)
+        result ==> dt.toEpochSecond(java.time.ZoneOffset.UTC) * 1000000000L + dt.getNano
+      }
+
+      test("LocalDateTime encodes to Long (epoch millis UTC) with withLocalDateTimePrecision(Millis)") {
+        implicit val config: AvroConfig = AvroConfig.default.withLocalDateTimePrecision(TimestampPrecision.Millis)
         val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
         val result = AvroEncoder.encode(dt)
         result ==> dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli

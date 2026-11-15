@@ -69,7 +69,17 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
           if (allCaseObjects) {
             // Pure enum of case objects → Avro ENUM schema
             // Sort by @avroSortPriority
-            val symbolsWithPriority = children.toList.map { case (name, child) =>
+            // Sealed traits' case objects: on Scala 3 in declaration order (as avro4s 5); on Scala 2 by full name (as
+            // avro4s 4 - Magnolia sorts subtypes by name there - and because Scala 2 does not reliably preserve the
+            // declaration order: it is lost when the sealed trait comes from a class file, e.g. an incremental build).
+            val childrenInOrder =
+              if (Environment.isScala3 || Type[A].isEnumeration || Type[A].isJavaEnum) children.toList
+              else
+                children.toList.sortBy { case (_, child) =>
+                  import child.Underlying as ChildType
+                  Type[ChildType].plainPrint
+                }
+            val symbolsWithPriority = childrenInOrder.map { case (name, child) =>
               import child.Underlying as ChildType
               val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
               (name, priority.getOrElse(0))
@@ -117,26 +127,29 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
               val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
               (name, child, priority.getOrElse(0))
             }
-            val sortedList = childrenWithPriority.sortBy(-_._3).map(t => (t._1, t._2))
-            val sortedChildren = NonEmptyList(sortedList.head, sortedList.tail)
-            sortedChildren
-              .parTraverse { case (_, child) =>
+            val childrenNel = NonEmptyList(childrenWithPriority.head, childrenWithPriority.tail)
+            childrenNel
+              .parTraverse { case (_, child, priority) =>
                 import child.Underlying as ChildType
                 Log.namedScope(s"Deriving schema for enum case ${Type[ChildType].prettyPrint}") {
-                  deriveSchemaRecursively[ChildType](using cleanCtx.nest[ChildType])
+                  deriveSchemaRecursively[ChildType](using cleanCtx.nest[ChildType]).map(_ -> priority)
                 }
               }
               .map { childSchemas =>
                 val schemasListExpr = childSchemas.toList.foldRight(
                   Expr.quote(List.empty[Schema])
-                ) { (childSchema, acc) =>
+                ) { case ((childSchema, _), acc) =>
                   Expr.quote(Expr.splice(childSchema) :: Expr.splice(acc))
                 }
+                val prioritiesListExpr = childSchemas.toList.foldRight(
+                  Expr.quote(List.empty[Int])
+                ) { case ((_, priority), acc) =>
+                  Expr.quote(Expr.splice(Expr(priority)) :: Expr.splice(acc))
+                }
+                // as avro4s: by descending @avroSortPriority, then by the subtypes' full names (known only at runtime,
+                // since they depend on the config's namespace and on @avroName/@avroNamespace)
                 Expr.quote {
-                  val schemas = Expr.splice(schemasListExpr)
-                  val javaSchemas = new java.util.ArrayList[Schema](schemas.size)
-                  schemas.foreach(javaSchemas.add)
-                  Schema.createUnion(javaSchemas)
+                  AvroDerivationUtils.createSortedUnion(Expr.splice(schemasListExpr), Expr.splice(prioritiesListExpr))
                 }
               }
           }

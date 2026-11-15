@@ -263,7 +263,15 @@ final class AvroDecoderSpec extends MacroSuite {
         result ==> time
       }
 
-      test("LocalDateTime from Long (epoch millis)") {
+      test("LocalDateTime from Long (epoch nanos, as avro4s)") {
+        val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0, 123456789)
+        val nanos = dt.toEpochSecond(java.time.ZoneOffset.UTC) * 1000000000L + dt.getNano
+        val result = AvroDecoder.decode[java.time.LocalDateTime](nanos: Any)
+        result ==> dt
+      }
+
+      test("LocalDateTime from Long (epoch millis) with withLocalDateTimePrecision(Millis)") {
+        implicit val config: AvroConfig = AvroConfig.default.withLocalDateTimePrecision(TimestampPrecision.Millis)
         val dt = java.time.LocalDateTime.of(2024, 1, 15, 14, 30, 0)
         val millis = dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
         val result = AvroDecoder.decode[java.time.LocalDateTime](millis: Any)
@@ -491,7 +499,8 @@ final class AvroDecoderSpec extends MacroSuite {
         // Construct a GenericRecord whose schema name is the @avroName value ("FooRenamed"),
         // NOT the Scala class name ("RenamedFoo"). The decoder must resolve by avro name.
         val unionSchema = AvroSchemaFor.schemaOf[RenamedInner]
-        val fooSchema = unionSchema.getTypes.get(0) // "FooRenamed"
+        // union members are sorted by full name (as avro4s): BarRenamed, FooRenamed
+        val fooSchema = unionSchema.getTypes.get(1) // "FooRenamed"
         fooSchema.getName ==> "FooRenamed"
         val record = new GenericData.Record(fooSchema)
         record.put("a", "hello")
@@ -501,7 +510,7 @@ final class AvroDecoderSpec extends MacroSuite {
 
       test("decode second renamed subtype by avro name") {
         val unionSchema = AvroSchemaFor.schemaOf[RenamedInner]
-        val barSchema = unionSchema.getTypes.get(1) // "BarRenamed"
+        val barSchema = unionSchema.getTypes.get(0) // "BarRenamed"
         barSchema.getName ==> "BarRenamed"
         val record = new GenericData.Record(barSchema)
         record.put("b", "world")
@@ -512,7 +521,7 @@ final class AvroDecoderSpec extends MacroSuite {
       test("decode renamed subtype inside parent record") {
         val outerSchema = AvroSchemaFor.schemaOf[OuterWithRenamedInner]
         val innerUnionSchema = outerSchema.getField("inner").schema()
-        val fooSchema = innerUnionSchema.getTypes.get(0)
+        val fooSchema = innerUnionSchema.getTypes.get(1)
         fooSchema.getName ==> "FooRenamed"
         val innerRecord = new GenericData.Record(fooSchema)
         innerRecord.put("a", "decoded")

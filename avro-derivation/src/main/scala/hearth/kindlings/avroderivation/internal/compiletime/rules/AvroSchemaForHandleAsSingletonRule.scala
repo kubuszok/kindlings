@@ -25,11 +25,8 @@ trait AvroSchemaForHandleAsSingletonRuleImpl {
             implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
             implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
             val typeNameExpr = computeAvroNameExpr[A]
-            val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
-            val namespaceExpr: Expr[String] = classNamespace match {
-              case Some(ns) => Expr(ns)
-              case None     => Expr.quote(Expr.splice(sfctx.config).namespace.getOrElse(""))
-            }
+            // as for case classes (and avro4s): annotation > config > the object's package
+            val namespaceExpr: Expr[String] = computeNamespaceExpr[A]
             val schemaExpr = Expr.quote {
               AvroDerivationUtils.createRecord(
                 Expr.splice(typeNameExpr),

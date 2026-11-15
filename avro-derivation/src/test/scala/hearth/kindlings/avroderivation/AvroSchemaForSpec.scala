@@ -275,10 +275,10 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getLogicalType.getName ==> "time-micros"
       }
 
-      test("LocalDateTime schema is LONG with timestamp-millis logical type") {
+      test("LocalDateTime schema is LONG with timestamp-nanos logical type (as avro4s)") {
         val schema = AvroSchemaFor.schemaOf[java.time.LocalDateTime]
         schema.getType ==> Schema.Type.LONG
-        schema.getLogicalType.getName ==> "timestamp-millis"
+        schema.getLogicalType.getName ==> "timestamp-nanos"
       }
 
       test("case class with logical type fields") {
@@ -288,7 +288,7 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getField("timestamp").schema().getLogicalType.getName ==> "timestamp-millis"
         schema.getField("date").schema().getLogicalType.getName ==> "date"
         schema.getField("time").schema().getLogicalType.getName ==> "time-micros"
-        schema.getField("localTimestamp").schema().getLogicalType.getName ==> "timestamp-millis"
+        schema.getField("localTimestamp").schema().getLogicalType.getName ==> "timestamp-nanos"
       }
     }
 
@@ -766,11 +766,11 @@ final class AvroSchemaForSpec extends MacroSuite {
         val schema = AvroSchemaFor.schemaOf[WithOptionalAnimal]
         val fieldSchema = schema.getField("animal").schema()
         fieldSchema.getType ==> Schema.Type.UNION
-        // Should be [null, Dog, Cat], not [null, [Dog, Cat]]
+        // Should be [null, Cat, Dog] (subtypes sorted by full name, as avro4s), not [null, [Cat, Dog]]
         fieldSchema.getTypes.size() ==> 3
         fieldSchema.getTypes.get(0).getType ==> Schema.Type.NULL
-        fieldSchema.getTypes.get(1).getName ==> "Dog"
-        fieldSchema.getTypes.get(2).getName ==> "Cat"
+        fieldSchema.getTypes.get(1).getName ==> "Cat"
+        fieldSchema.getTypes.get(2).getName ==> "Dog"
       }
 
       test("Option[sealed trait with case objects] wraps to UNION(null, ENUM)") {
@@ -949,7 +949,8 @@ final class AvroSchemaForSpec extends MacroSuite {
 
       test("Pair[String, Int] schema name includes both type parameters") {
         val schema = AvroSchemaFor.schemaOf[Pair[String, Int]]
-        schema.getName ==> "Pair__String__Int"
+        // as avro4s: a double underscore after the name, single underscores between the type arguments
+        schema.getName ==> "Pair__String_Int"
       }
 
       test("two instantiations of same generic produce distinct schemas") {
