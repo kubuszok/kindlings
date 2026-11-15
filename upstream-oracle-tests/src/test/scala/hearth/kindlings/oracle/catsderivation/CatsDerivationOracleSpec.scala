@@ -64,6 +64,24 @@ trait CtInstances {
   def applyTriple: Apply[CtTriple]
   def applicativeTriple: Applicative[CtTriple]
   def pureTriple: Pure[CtTriple]
+  // Fields wrapping the type parameter.
+  def reducibleNel: Reducible[CtNel]
+  def reducibleNelPlus: Reducible[CtNelPlus]
+  def reducibleRose: Reducible[CtRose]
+  def reducibleDeep: Reducible[CtDeep]
+  def nonEmptyTraverseNel: NonEmptyTraverse[CtNel]
+  def nonEmptyTraverseNelPlus: NonEmptyTraverse[CtNelPlus]
+  def nonEmptyTraverseRose: NonEmptyTraverse[CtRose]
+  def nonEmptyTraverseDeep: NonEmptyTraverse[CtDeep]
+  def applyProd: Apply[CtProd]
+  def applyWrapPair: Apply[CtWrapPair]
+  def applyDeep: Apply[CtDeep]
+  def applicativeProd: Applicative[CtProd]
+  def applicativeWrapPair: Applicative[CtWrapPair]
+  def applicativeDeep: Applicative[CtDeep]
+  def pureProd: Pure[CtProd]
+  def pureWrapPair: Pure[CtWrapPair]
+  def pureDeep: Pure[CtDeep]
   def semigroupKLists: SemigroupK[CtLists]
   def monoidKLists: MonoidK[CtLists]
   def emptyKLists: EmptyK[CtLists]
@@ -88,7 +106,7 @@ final class CatsDerivationOracleSpec extends MacroSuite {
   private def compare[R](label: String)(observe: CtInstances => R): List[String] = {
     def run(i: CtInstances): Any =
       try observe(i)
-      catch { case e: Exception => s"threw ${e.getClass.getSimpleName}" }
+      catch { case e @ (_: Exception | _: StackOverflowError) => s"threw ${e.getClass.getSimpleName}" }
     val kr = run(k)
     val ur = run(u)
     Oracle.diff(kr, ur).map(d => s"$label ${d.stripPrefix("$")}".replace("upstream=", "kittens="))
@@ -260,33 +278,64 @@ final class CatsDerivationOracleSpec extends MacroSuite {
     )
   }
 
-  test("documented gaps: fields nesting a type constructor in Reducible/NonEmptyTraverse/Apply/Applicative/Pure") {
-    // kittens derives these (e.g. `NonEmptyList`-like `CtNel(head: A, tail: List[A])`); Kindlings supports only fields
-    // of type `A` and constant fields there. Documented as Gap in docs/user-guide/feature-parity.md (cats-derivation).
-    // When one is implemented, its line fails: move the type class into the comparisons above and update the docs.
-    def kindlingsFails(code: String): Boolean = code.contains("Macro derivation failed")
-    assert(kindlingsFails(compileErrors("""
+  test("Reducible and NonEmptyTraverse with fields wrapping the type parameter") {
+    def observe[F[_]](r: Reducible[F], t: NonEmptyTraverse[F], values: List[F[Int]]) = values.map { v =>
+      (
+        r.reduceLeft(v)((a, b) => a * 10 + b),
+        r.reduceRightTo(v)(_.toString)((a, eb) => eb.map(a.toString + _)).value,
+        r.foldLeft(v, List.empty[Int])(_ :+ _),
+        lazyReduceRight(r, v),
+        lazyFoldRight(r, v),
+        r.size(v),
+        logNonEmptyTraverse(t, v),
+        logTraverse(t, v),
+        t.nonEmptyTraverse(v)(a => if (a > 3) None else Some(a * 2))
+      )
+    }
+    check(
+      compare("nel")(i => observe(i.reducibleNel, i.nonEmptyTraverseNel, nelValues)) ++
+        compare("nelPlus")(i => observe(i.reducibleNelPlus, i.nonEmptyTraverseNelPlus, nelPlusValues)) ++
+        compare("rose")(i => observe(i.reducibleRose, i.nonEmptyTraverseRose, roseValues)) ++
+        compare("deep")(i => observe(i.reducibleDeep, i.nonEmptyTraverseDeep, deepValues))
+    )
+  }
+
+  test("Apply, Applicative, Pure with fields wrapping the type parameter") {
+    def observe[F[_]](ap: Apply[F], app: Applicative[F], values: List[F[Int]]) = (
+      pairs(values).map { case (x, y) => ap.map2(x, y)(_ * 100 + _) },
+      pairs(values).map { case (x, y) => ap.ap(ap.map(x)(a => (b: Int) => a - b))(y) },
+      pairs(values).map { case (x, y) => app.map2(x, y)(_ * 100 + _) },
+      app.pure(5),
+      app.unit
+    )
+    check(
+      compare("prod")(i => (observe(i.applyProd, i.applicativeProd, prodValues), i.pureProd.pure("x"))) ++
+        // Not compared for the recursive `CtRose`: kittens' derived Apply/Applicative overflow the stack there
+        // (Kindlings' work - see KittensParitySpec in cats-derivation).
+        compare("wrapPair")(i =>
+          (observe(i.applyWrapPair, i.applicativeWrapPair, wrapPairValues), i.pureWrapPair.pure("x"))
+        ) ++
+        compare("deep")(i => (observe(i.applyDeep, i.applicativeDeep, deepValues), i.pureDeep.pure("x")))
+    )
+  }
+
+  test("shapes kittens rejects are rejected") {
+    // No field guarantees an element (Option and Vector are not Reducible).
+    assert(compileErrors("""
       import hearth.kindlings.catsderivation.extensions.*
-      cats.Reducible.derived[hearth.kindlings.oracle.catsderivation.CtNel]
-    """)))
-    assert(kindlingsFails(compileErrors("""
+      cats.Reducible.derived[hearth.kindlings.oracle.catsderivation.CtWrapPair]
+    """).contains("no field guarantees an element"))
+    assert(compileErrors("""
+      cats.derived.semiauto.reducible[hearth.kindlings.oracle.catsderivation.CtWrapPair]
+    """).nonEmpty)
+    // A wrapping type without the instance (Set has no Apply).
+    assert(compileErrors("""
       import hearth.kindlings.catsderivation.extensions.*
-      cats.NonEmptyTraverse.derived[hearth.kindlings.oracle.catsderivation.CtNel]
-    """)))
-    assert(kindlingsFails(compileErrors("""
-      import hearth.kindlings.catsderivation.extensions.*
-      cats.Apply.derived[hearth.kindlings.oracle.catsderivation.CtProd]
-    """)))
-    assert(kindlingsFails(compileErrors("""
-      import hearth.kindlings.catsderivation.extensions.*
-      cats.Applicative.derived[hearth.kindlings.oracle.catsderivation.CtProd]
-    """)))
-    assert(kindlingsFails(compileErrors("""
-      import hearth.kindlings.catsderivation.extensions.*
-      alleycats.Pure.derived[hearth.kindlings.oracle.catsderivation.CtProd]
-    """)))
-    // ...while kittens derives them:
-    assert(CtKittensSide.nelGaps.nonEmpty)
+      cats.Apply.derived[hearth.kindlings.oracle.catsderivation.CtSetField]
+    """).contains("no Apply"))
+    assert(compileErrors("""
+      cats.derived.semiauto.apply[hearth.kindlings.oracle.catsderivation.CtSetField]
+    """).nonEmpty)
   }
 
   test("SemigroupK, MonoidK, EmptyK") {
@@ -337,6 +386,22 @@ object CatsDerivationOracleSpec {
   val ilistValues: List[CtIList[Int]] =
     List(CtINil[Int](), CtICons(1, CtINil()), CtICons(1, CtICons(2, CtICons(3, CtICons(4, CtINil())))))
   val tripleValues: List[CtTriple[Int]] = List(CtTriple(1, 2, 3), CtTriple(3, 1, 2), CtTriple(0, 0, 5))
+  val nelValues: List[CtNel[Int]] = List(CtNel(1, Nil), CtNel(1, List(2, 3)), CtNel(4, List(1)))
+  val nelPlusValues: List[CtNelPlus[Int]] = List(
+    CtNelPlus(None, CtNel(1, Nil), Nil),
+    CtNelPlus(Some(1), CtNel(2, List(3)), List(4, 5)),
+    CtNelPlus(None, CtNel(7, List(8)), List(9))
+  )
+  val roseValues: List[CtRose[Int]] = List(
+    CtRose(1, Nil),
+    CtRose(1, List(CtRose(2, Nil), CtRose(3, List(CtRose(4, Nil))))),
+    CtRose(5, List(CtRose(1, Nil)))
+  )
+  val wrapPairValues: List[CtWrapPair[Int]] =
+    List(CtWrapPair(Some(1), Vector(2, 3)), CtWrapPair(None, Vector.empty), CtWrapPair(Some(4), Vector(5)))
+  val deepValues: List[CtDeep[Int]] =
+    List(CtDeep(List(Some(1), None, Some(2)), 3, "x"), CtDeep(Nil, 1, ""), CtDeep(List(Some(5)), 2, "y"))
+  val prodValues: List[CtProd[Int]] = List(CtProd(1, List(1, 2)), CtProd(10, List(10, 20)), CtProd(0, Nil))
 
   def pairs[A](values: List[A]): List[(A, A)] = for { x <- values; y <- values } yield (x, y)
 

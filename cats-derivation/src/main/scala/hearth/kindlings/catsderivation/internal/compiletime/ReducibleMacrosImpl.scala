@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Requires at least one direct field (non-empty guarantee).
   */
-trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -23,6 +23,12 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
     val ReducibleFType: Type[cats.Reducible[F]] = Type.CtorK1.of[cats.Reducible].apply[F](using FCtor0)
     val macroName = "Reducible.derived"
     enforceDerivationPolicyOrAbort(ReducibleFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.Reducible[F]](WrappedTC.Reducible, "Reducible.derived")(using
+        ReducibleFType,
+        FCtor0
+      )
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ReducibleFT: Type[cats.Reducible[F]] = ReducibleFType

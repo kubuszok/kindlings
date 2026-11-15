@@ -15,7 +15,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   * For nonEmptyTraverse, instead of seeding with G.pure (which requires Applicative), we seed with the first field
   * mapped through f (giving G[B]), then combine remaining fields using G.map2.
   */
-trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait NonEmptyTraverseMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -24,6 +27,12 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivati
     val NETFType: Type[cats.NonEmptyTraverse[F]] = Type.CtorK1.of[cats.NonEmptyTraverse].apply[F](using FCtor0)
     val macroName = "NonEmptyTraverse.derived"
     enforceDerivationPolicyOrAbort(NETFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.NonEmptyTraverse[F]](
+        WrappedTC.NonEmptyTraverse,
+        "NonEmptyTraverse.derived"
+      )(using NETFType, FCtor0)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val NETFT: Type[cats.NonEmptyTraverse[F]] = NETFType

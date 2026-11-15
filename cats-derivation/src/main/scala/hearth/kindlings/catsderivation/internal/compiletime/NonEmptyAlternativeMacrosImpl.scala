@@ -17,7 +17,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   *   - ap[A, B]: needs F[Any] erasure because ff: F[A => B] and fa: F[A] have different type parameters
   *   - combineK[A]: summons Semigroup for field types at macro time, needs concrete types
   */
-trait NonEmptyAlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait NonEmptyAlternativeMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -26,6 +29,12 @@ trait NonEmptyAlternativeMacrosImpl extends CatsDerivationTimeout with CatsDeriv
     val NEAFType: Type[cats.NonEmptyAlternative[F]] = Type.CtorK1.of[cats.NonEmptyAlternative].apply[F](using FCtor0)
     val macroName = "NonEmptyAlternative.derived"
     enforceDerivationPolicyOrAbort(NEAFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.NonEmptyAlternative[F]](
+        WrappedTC.NonEmptyAlternative,
+        "NonEmptyAlternative.derived"
+      )(using NEAFType, FCtor0)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val NEAFT: Type[cats.NonEmptyAlternative[F]] = NEAFType

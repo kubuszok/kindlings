@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * support for method-level type parameters inside Expr.quote/Expr.splice. For ap, uses an erased approach since both
   * ff: F[A => B] and fa: F[A] must be treated as F[Any] for field extraction.
   */
-trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -23,6 +23,9 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
     val ApplyFType: Type[cats.Apply[F]] = Type.CtorK1.of[cats.Apply].apply[F](using FCtor0)
     val macroName = "Apply.derived"
     enforceDerivationPolicyOrAbort(ApplyFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.Apply[F]](WrappedTC.Apply, "Apply.derived")(using ApplyFType, FCtor0)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ApplyFT: Type[cats.Apply[F]] = ApplyFType

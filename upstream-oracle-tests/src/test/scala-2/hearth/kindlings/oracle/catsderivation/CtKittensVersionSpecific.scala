@@ -1,6 +1,6 @@
 package hearth.kindlings.oracle.catsderivation
 
-import _root_.cats.{Foldable, Functor, Traverse}
+import _root_.cats.{Foldable, Functor, NonEmptyTraverse, Reducible, Traverse}
 import _root_.cats.derived.semiauto
 import _root_.cats.kernel.Hash
 
@@ -15,10 +15,14 @@ trait CtKittensVersionSpecific {
   def functorIList: Functor[CtIList] = CtKittensScala2Recursive.functorIList
   def foldableIList: Foldable[CtIList] = CtKittensScala2Recursive.foldableIList
   def traverseIList: Traverse[CtIList] = CtKittensScala2Recursive.traverseIList
+  def reducibleRose: Reducible[CtRose] = CtKittensScala2Recursive.reducibleRose
+  def nonEmptyTraverseRose: NonEmptyTraverse[CtRose] = CtKittensScala2Recursive.nonEmptyTraverseRose
 }
 
 object CtKittensScala2Recursive {
   implicit val functorIList: Functor[CtIList] = semiauto.functor[CtIList]
   implicit val foldableIList: Foldable[CtIList] = semiauto.foldable[CtIList]
   implicit val traverseIList: Traverse[CtIList] = semiauto.traverse[CtIList]
+  implicit val reducibleRose: Reducible[CtRose] = semiauto.reducible[CtRose]
+  implicit val nonEmptyTraverseRose: NonEmptyTraverse[CtRose] = semiauto.nonEmptyTraverse[CtRose]
 }
