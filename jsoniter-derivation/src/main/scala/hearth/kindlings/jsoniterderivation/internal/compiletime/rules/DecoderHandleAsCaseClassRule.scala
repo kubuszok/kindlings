@@ -179,7 +179,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
         JsoniterDerivationUtils.readInlineObjectWithoutFields(
           Expr.splice(dctx.reader),
           Expr.splice(skipUnexpectedExpr[A]),
-          Expr.splice(dctx.config).discriminatorFieldName.orNull,
+          (Expr.splice(dctx.config).discriminatorFieldName match { case Some(name) => name; case _ => null }),
           Expr.splice(checkDuplication),
           Expr.splice(afterOpen)
         )
@@ -729,7 +729,9 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       Expr.splice(Expr(fieldMappings.size)),
                       Expr.splice(constructLambda),
                       Expr.splice(afterOpen),
-                      Expr.splice(dctx.config).discriminatorFieldName.orNull
+                      (Expr.splice(dctx.config).discriminatorFieldName match {
+                        case Some(name) => name; case _ => null
+                      })
                     ) { case (fieldName, arr, reader) =>
                       Expr.splice {
                         // The first discriminator was consumed already: a second one is a duplicate (with

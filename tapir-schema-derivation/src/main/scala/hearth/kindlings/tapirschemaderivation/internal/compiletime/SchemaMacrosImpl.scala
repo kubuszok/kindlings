@@ -4,6 +4,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
 import hearth.kindlings.jsonschemaconfigs.{JsonSchemaConfigExtension, JsonSchemaConfigs}
 import hearth.kindlings.tapirschemaderivation.{KindlingsSchema, PreferSchemaConfig}
 import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
@@ -329,7 +330,8 @@ trait SchemaMacrosImpl
           MIO.fail(
             new Exception(
               s"Cannot derive tapir Schema for ${Type[A].prettyPrint}: " +
-                s"no implicit Schema[T] found and type is not a singleton, case class, sealed trait/enum, Option, collection, or map.\n" +
+                s"no implicit Schema[T] found and type is not a singleton, case class, sealed trait/enum, Option, collection, or map" +
+                ValueTypeIntegrationHints.hint(this)(Type[A]) + ".\n" +
                 reasonsStrings.mkString("\n")
             )
           )
@@ -908,17 +910,18 @@ trait SchemaMacrosImpl
   protected def computeFullNameExpr[A: Type](derivedType: Option[??]): Expr[String] =
     Type[A].runtimePlainPrint { tpe =>
       import tpe.Underlying
+      val objectName = typeMemberOfObjectName[tpe.Underlying]
       // Guard against self-summoning:
       // 1. SName for type A can never depend on Schema[A] (we're building it)
       // 2. Don't summon Schema for the top-level derived type (prevents circular dependency
       //    when `given Schema[X] = KindlingsSchema.derived[X]` summons itself)
-      if (tpe.Underlying =:= Type[A]) None
-      else if (derivedType.exists(_.Underlying =:= tpe.Underlying)) None
+      if (tpe.Underlying =:= Type[A]) objectName.map(Expr(_))
+      else if (derivedType.exists(_.Underlying =:= tpe.Underlying)) objectName.map(Expr(_))
       else {
         implicit val SchemaUnderlying: Type[Schema[tpe.Underlying]] = TsTypes.TapirSchemaOf[tpe.Underlying]
+        val fallback = Expr(objectName.getOrElse(Type.plainPrint[tpe.Underlying]))
         Type[Schema[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
           case Right(schemaExpr) =>
-            val fallback = Expr(Type.plainPrint[tpe.Underlying])
             Some(Expr.quote {
               Expr.splice(schemaExpr).name.map(_.show).getOrElse(Expr.splice(fallback))
             })
@@ -926,12 +929,29 @@ trait SchemaMacrosImpl
             implicit val KindlingsSchemaUnderlying: Type[KindlingsSchema[tpe.Underlying]] =
               TsTypes.KindlingsSchemaOf[tpe.Underlying]
             implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
-            Type[KindlingsSchema[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toOption.map { ksExpr =>
-              val fallback = Expr(Type.plainPrint[tpe.Underlying])
-              Expr.quote(TapirSchemaUtils.typeNameOf(Expr.splice(ksExpr), Expr.splice(fallback)))
-            }
+            Type[KindlingsSchema[tpe.Underlying]]
+              .summonExprIgnoring(ignoredImplicits*)
+              .toOption
+              .map { ksExpr =>
+                Expr.quote(TapirSchemaUtils.typeNameOf(Expr.splice(ksExpr), Expr.splice(fallback)))
+              }
+              .orElse(objectName.map(Expr(_)))
         }
       }
+    }
+
+  /** The name of the object declaring `B`, when `B` is an abstract or opaque type member of that object: the encoding
+    * of Iron's `RefinedType`/`RefinedSubtype` (`object Key extends RefinedType[String, C]; type Key = Key.T`), of
+    * neotype's (and monix-newtypes', zio-prelude's) `Newtype`/`Subtype` and of scala-newtype (`Name.Type`). Such a type
+    * is named after its object (`pkg.Key`) rather than after the member (`pkg.Key.T`), whose short name (`T`, `Type`)
+    * all of them share - otherwise two different maps would both be documented as `Map_T_T`.
+    */
+  protected def typeMemberOfObjectName[B: Type]: Option[String] =
+    Type.pseudoCompanionObject[B].flatMap { companion =>
+      val objectName = Type.plainPrint(using companion.Underlying).stripSuffix(".type")
+      val name = Type.plainPrint[B]
+      val member = if (name.startsWith(objectName + ".")) name.substring(objectName.length + 1) else ""
+      if (member.nonEmpty && !member.exists(c => c == '.' || c == '[' || c == ' ')) Some(objectName) else None
     }
 
   // Annotation helpers

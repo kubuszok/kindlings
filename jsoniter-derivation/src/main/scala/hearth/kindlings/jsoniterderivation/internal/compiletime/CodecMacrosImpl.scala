@@ -305,7 +305,8 @@ trait CodecMacrosImpl
         case None =>
           Some(Expr.quote {
             val c = Expr.splice(config)
-            if (c.alwaysEmitDiscriminator) c.discriminatorFieldName.orNull else null
+            if (c.alwaysEmitDiscriminator) (c.discriminatorFieldName match { case Some(name) => name; case _ => null })
+            else null
           })
       }
   }
@@ -1341,7 +1342,12 @@ trait CodecMacrosImpl
               else
                 s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
             }.toList
-            val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            val err = CodecDerivationError.UnsupportedType(
+              Type[A].prettyPrint,
+              reasonsStrings ++ hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .sentence(this)(Type[A])
+                .map(" - Hint: " + _)
+            )
             Log.error(err.message) >> MIO.fail(err)
         }
       }
@@ -1550,7 +1556,12 @@ trait CodecMacrosImpl
               else
                 s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
             }.toList
-            val err = CodecDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            val err = CodecDerivationError.UnsupportedType(
+              Type[A].prettyPrint,
+              reasonsStrings ++ hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .sentence(this)(Type[A])
+                .map(" - Hint: " + _)
+            )
             Log.error(err.message) >> MIO.fail(err)
         }
       }

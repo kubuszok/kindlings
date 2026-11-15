@@ -38,9 +38,9 @@ private[compiletime] object CodecDerivationError {
       s"'$paramName' parameter of '$tpeName' should be defined as 'val' or 'var' in the primary constructor."
   }
   final case class Collision(override val message: String) extends CodecDerivationError
-  final case class UnsupportedMapKey(keyTypeName: String) extends CodecDerivationError {
+  final case class UnsupportedMapKey(keyTypeName: String, hint: String = "") extends CodecDerivationError {
     override def message: String =
-      s"Map key type $keyTypeName cannot be used as a JSON object key: provide an implicit JsonKeyCodec[$keyTypeName] " +
+      s"Map key type $keyTypeName cannot be used as a JSON object key$hint: provide an implicit JsonKeyCodec[$keyTypeName] " +
         "or enable mapAsArray"
   }
 }
