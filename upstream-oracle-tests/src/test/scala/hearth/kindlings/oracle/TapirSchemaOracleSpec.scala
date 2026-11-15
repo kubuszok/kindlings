@@ -90,6 +90,23 @@ final class TapirSchemaOracleSpec extends MacroSuite {
     def event: Schema[OEvent] = implicitly[Schema[OEvent]]
   }
 
+  private object MapKeys {
+    implicit val circe: CirceConfig = CirceConfig.default
+    def mapKeys: Schema[OMapKeys] = KindlingsSchema.derived[OMapKeys].schema
+  }
+
+  private object MapKeysUpstream {
+    implicit val tapir: TapirConfig = TapirConfig.default
+    import sttp.tapir.generic.auto.*
+    implicit val colorsSchema: Schema[Map[OKeyColor, Int]] = Schema.schemaForMap[OKeyColor, Int] {
+      case OKeyRed  => "OKeyRed"
+      case OKeyBlue => "OKeyBlue"
+    }
+    implicit val customSchema: Schema[Map[OKeyCustom, String]] =
+      Schema.schemaForMap[OKeyCustom, String](k => s"custom-${k.id}")
+    def mapKeys: Schema[OMapKeys] = implicitly[Schema[OMapKeys]]
+  }
+
   group("tapir Schema.derived oracle: products") {
     import Default.kindlings
     import DefaultUpstream.upstream
@@ -128,6 +145,10 @@ final class TapirSchemaOracleSpec extends MacroSuite {
 
     test("tapir annotations") {
       compare(kindlings.annotated, upstream.annotated)
+    }
+
+    test("maps keyed by case objects and by types with a key encoder (upstream: Schema.schemaForMap)") {
+      compare(MapKeys.mapKeys, MapKeysUpstream.mapKeys)
     }
 
     test("generic case classes") {
