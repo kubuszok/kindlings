@@ -12,7 +12,7 @@ object DiffFactories {
       diffFn: (A, A) => DiffResult,
       snapshotFn: A => DiffResult
   ): Diff[A] = new Diff[A] {
-    lazy val prettyName: String = _prettyName
+    lazy val prettyName: String = DiffRuntime.prettyTypeName(_prettyName)
     lazy val plainName: String = _plainName
     lazy val simpleName: String = _simpleName
     lazy val shortName: String = _shortName

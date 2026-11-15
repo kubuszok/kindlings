@@ -14,7 +14,7 @@ trait DiffSingletonRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtension
         case Right(_) =>
           implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
           val sn = Expr(Type.shortName[A])
-          val pn = Expr(Type.prettyPrint[A])
+          val pn = Expr(Type.plainPrint[A])
           val fn = Expr(Type.plainPrint[A])
           MIO.pure(Rule.matched(Expr.quote {
             DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), Expr.splice(sn))

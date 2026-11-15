@@ -15,7 +15,7 @@ trait DiffBuiltInRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions 
     def apply[A: DiffCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] = MIO {
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       implicit val ST: Type[String] = DiffTypes.StringType
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
 

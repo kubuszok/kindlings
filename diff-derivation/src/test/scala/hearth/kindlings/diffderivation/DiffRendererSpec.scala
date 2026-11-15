@@ -399,11 +399,18 @@ final class DiffRendererSpec extends hearth.MacroSuite {
         assert(rendered.contains("FBB"), s"expected short name in: $rendered")
       }
 
-      test("render with Pretty name style") {
-        val fields = Vector("x" -> DiffResult.ValueChanged("Pretty[Int]", fn, "Int", "Int", "1", "2"))
-        val result = DiffResult.Record("Pretty[Foo]", fn, "Foo", "Foo", fields)
+      test("render with Pretty name style and plain colors uses the plain fully-qualified name") {
+        val fields = Vector("x" -> DiffResult.ValueChanged("test.Pretty[Int]", fn, "Int", "Int", "1", "2"))
+        val result = DiffResult.Record("test.Pretty[Foo]", "test.Pretty[Foo]", "Foo", "Foo", fields)
         val rendered = DiffRenderer.render(result, RenderConfig(NameStyle.Pretty, ColorMode.Plain, Indent.Spaces(2)))
-        assert(rendered.contains("Pretty[Foo]"), s"expected pretty name in: $rendered")
+        assert(rendered.contains("test.Pretty[Foo]"), s"expected the plain name in: $rendered")
+        assert(!rendered.contains("\u001b"), s"expected no escape codes in: $rendered")
+      }
+
+      test("render with Pretty name style and ANSI colors colors the name") {
+        val result = DiffResult.Record("test.Pretty[Foo]", "test.Pretty[Foo]", "Foo", "Foo", Vector.empty)
+        val rendered = DiffRenderer.render(result, RenderConfig(NameStyle.Pretty, ColorMode.Ansi, Indent.Spaces(2)))
+        assert(rendered.contains(internal.runtime.DiffRuntime.prettyTypeName("test.Pretty[Foo]")), rendered)
       }
     }
 

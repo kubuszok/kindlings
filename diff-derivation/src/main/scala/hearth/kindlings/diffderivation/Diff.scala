@@ -19,19 +19,19 @@ object Diff extends DiffCompanionCompat {
   def apply[A](implicit ev: Diff[A]): Diff[A] = ev
 
   def approximate[T](epsilon: T)(implicit num: Numeric[T]): Diff[T] = new Diff[T] {
-    def prettyName: String = num.zero.getClass.getSimpleName
-    def plainName: String = prettyName
-    def simpleName: String = prettyName
-    def shortName: String = prettyName
+    def plainName: String = num.zero.getClass.getSimpleName
+    def prettyName: String = internal.runtime.DiffRuntime.prettyTypeName(plainName)
+    def simpleName: String = plainName
+    def shortName: String = plainName
     def diff(left: T, right: T): DiffResult = {
       val delta = num.abs(num.minus(left, right))
       if (num.lteq(delta, epsilon))
-        DiffResult.Identical(prettyName, plainName, simpleName, shortName, left.toString)
+        DiffResult.Identical(plainName, plainName, simpleName, shortName, left.toString)
       else
-        DiffResult.ValueChanged(prettyName, plainName, simpleName, shortName, left.toString, right.toString)
+        DiffResult.ValueChanged(plainName, plainName, simpleName, shortName, left.toString, right.toString)
     }
     def snapshot(value: T): DiffResult =
-      DiffResult.Identical(prettyName, plainName, simpleName, shortName, value.toString)
+      DiffResult.Identical(plainName, plainName, simpleName, shortName, value.toString)
   }
 
   class FieldModifier[A](underlying: Diff[A], fieldName: String) {

@@ -192,7 +192,7 @@ trait DiffMacrosImpl
     def apply[A: SnapshotCtx]: MIO[Rule.Applicability[Expr[DiffResult]]] = MIO {
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       implicit val ST: Type[String] = DiffTypes.StringType
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
       if (Type[A] <:< DiffTypes.StringType) {
@@ -233,7 +233,7 @@ trait DiffMacrosImpl
         case Right(_) =>
           implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
           val sn = Expr(Type.shortName[A])
-          val pn = Expr(Type.prettyPrint[A])
+          val pn = Expr(Type.plainPrint[A])
           val fn = Expr(Type.plainPrint[A])
           MIO.pure(Rule.matched(Expr.quote {
             DiffResult.Identical(Expr.splice(pn), Expr.splice(fn), Expr.splice(sn), Expr.splice(sn), Expr.splice(sn))
@@ -270,7 +270,7 @@ trait DiffMacrosImpl
     ): MIO[Expr[DiffResult]] = {
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       val fields = caseClass.caseFieldValuesAt(value, AtCallSite).toList
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
 
@@ -350,7 +350,7 @@ trait DiffMacrosImpl
           case Some(result) => MIO.pure(result)
           case None         =>
             val sn = Expr(Type.shortName[A])
-            val pn = Expr(Type.prettyPrint[A])
+            val pn = Expr(Type.plainPrint[A])
             val fn = Expr(Type.plainPrint[A])
             MIO.pure(Expr.quote {
               DiffResult.Identical(
@@ -371,7 +371,7 @@ trait DiffMacrosImpl
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       implicit val ST: Type[String] = DiffTypes.StringType
       val sn = Expr(Type.shortName[A])
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       MIO.pure(Rule.matched(Expr.quote {
         DiffResult.Identical(
@@ -405,7 +405,7 @@ trait DiffMacrosImpl
             val snapKey = s"inner-snap:${Type[Inner].plainPrint}"
             val diffDefBuilder = ValDefBuilder.ofDef2[Inner, Inner, DiffResult](s"innerDiff_${Type[Inner].shortName}")
             val snapDefBuilder = ValDefBuilder.ofDef1[Inner, DiffResult](s"innerSnap_${Type[Inner].shortName}")
-            val pn = Expr(Type.prettyPrint[Inner])
+            val pn = Expr(Type.plainPrint[Inner])
             val fn = Expr(Type.plainPrint[Inner])
             val sn = Expr(Type.shortName[Inner])
             val derivation: MIO[Option[Expr[Diff[Inner]]]] = for {
@@ -561,15 +561,6 @@ trait DiffMacrosImpl
 
           nameCache = ValDefsCache.empty
 
-          val prettyNameExpr: Expr[String] = Type.runtimePrettyPrint[A] { tpe =>
-            import tpe.Underlying
-            if (tpe.Underlying =:= Type[A]) None
-            else
-              summonCachedDiffForName[tpe.Underlying].map { d =>
-                Expr.quote(Expr.splice(d).prettyName)
-              }
-          }
-
           val plainNameExpr: Expr[String] = Type.runtimePlainPrint[A] { tpe =>
             import tpe.Underlying
             if (tpe.Underlying =:= Type[A]) None
@@ -600,7 +591,10 @@ trait DiffMacrosImpl
               Expr
                 .quote {
                   DiffFactories.instance[A](
-                    Expr.splice(prettyNameExpr),
+                    // the pretty name is the plain one: `prettyName` colors it at runtime, deterministically (the
+                    // colors of `Type.prettyPrint` depend on how the type was written/read, so they differ between
+                    // builds, and they ended up in the rendered diffs)
+                    Expr.splice(plainNameExpr),
                     Expr.splice(plainNameExpr),
                     Expr.splice(simpleNameExpr),
                     Expr.splice(shortNameExpr),

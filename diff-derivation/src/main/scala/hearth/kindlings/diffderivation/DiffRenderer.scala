@@ -20,7 +20,12 @@ object DiffRenderer {
     case NameStyle.Simple         => node.simpleName
     case NameStyle.Short          => node.shortName
     case NameStyle.FullyQualified => node.plainName
-    case NameStyle.Pretty         => node.prettyName
+    // colored only with ANSI colors enabled: `ColorMode.Plain` output contains no escape codes
+    case NameStyle.Pretty =>
+      config.colorMode match {
+        case ColorMode.Ansi  => node.prettyName
+        case ColorMode.Plain => node.plainName
+      }
   }
 
   private def indentStr(config: RenderConfig): String = config.indent match {

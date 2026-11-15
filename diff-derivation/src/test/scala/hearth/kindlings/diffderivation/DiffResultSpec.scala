@@ -66,7 +66,9 @@ final class DiffResultSpec extends hearth.MacroSuite {
 
       test("name accessors") {
         val r = DiffResult.Identical("pretty", "plain", "simple", "short", "v")
-        assertEquals(r.prettyName, "pretty")
+        // the pretty name is the given name colored (at runtime, deterministically)
+        assertEquals(r.prettyName, internal.runtime.DiffRuntime.prettyTypeName("pretty"))
+        assertEquals(internal.runtime.DiffRuntime.plainTypeName(r.prettyName), "pretty")
         assertEquals(r.plainName, "plain")
         assertEquals(r.simpleName, "simple")
         assertEquals(r.shortName, "short")
