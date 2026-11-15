@@ -535,13 +535,11 @@ object AvroDerivationUtils {
   }
 
   def encodeInstant(instant: java.time.Instant, precision: TimestampPrecision): Any =
-    if (precision eq TimestampPrecision.Millis) instant.toEpochMilli
-    else epochToLong(instant.getEpochSecond, instant.getNano, precision)
+    epochToLong(instant.getEpochSecond, instant.getNano, precision)
   def decodeInstant(value: Any, precision: TimestampPrecision): java.time.Instant = longToInstant(value, precision)
 
   def encodeLocalDateTime(dt: java.time.LocalDateTime, precision: TimestampPrecision): Any =
-    if (precision eq TimestampPrecision.Millis) dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
-    else epochToLong(dt.toEpochSecond(java.time.ZoneOffset.UTC), dt.getNano, precision)
+    epochToLong(dt.toEpochSecond(java.time.ZoneOffset.UTC), dt.getNano, precision)
   def decodeLocalDateTime(value: Any, precision: TimestampPrecision): java.time.LocalDateTime =
     java.time.LocalDateTime.ofInstant(longToInstant(value, precision), java.time.ZoneOffset.UTC)
 
@@ -592,10 +590,8 @@ object AvroDerivationUtils {
     */
   def createFieldWithScalaDefault(name: String, schema: Schema, doc: String, default: Any): Schema.Field =
     AvroScalaDefaults.resolve(default, schema) match {
-      case Some((resolvedSchema, value)) =>
-        try new Schema.Field(name, resolvedSchema, doc, value)
-        catch { case _: org.apache.avro.AvroRuntimeException => new Schema.Field(name, schema, doc) }
-      case None => new Schema.Field(name, schema, doc)
+      case Some((resolvedSchema, value)) => new Schema.Field(name, resolvedSchema, doc, value)
+      case None                          => new Schema.Field(name, schema, doc)
     }
 
   // --- Type name helpers ---
