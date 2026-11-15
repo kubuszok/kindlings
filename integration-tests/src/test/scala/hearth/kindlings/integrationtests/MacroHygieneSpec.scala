@@ -24,9 +24,9 @@ final case class HygieneAll(
     nel: NonEmptyList[Int]
 )
 
-/** Derivations expanded where members named like the top-level packages that generated code refers to (`scala`,
-  * `java`, `hearth`, `io` (circe), `com` (jsoniter-scala), `cats`, `sttp`, `math`) shadow those packages. Generated code
-  * must refer to them through `_root_` (on Scala 2, Hearth's cross-quotes print and re-parse the quoted code, see
+/** Derivations expanded where members named like the top-level packages that generated code refers to (`scala`, `java`,
+  * `hearth`, `io` (circe), `com` (jsoniter-scala), `cats`, `sttp`, `math`) shadow those packages. Generated code must
+  * refer to them through `_root_` (on Scala 2, Hearth's cross-quotes print and re-parse the quoted code, see
   * docs/research/hearth-gap-scala2-quote-hygiene.md).
   */
 object HygieneDerivations {
