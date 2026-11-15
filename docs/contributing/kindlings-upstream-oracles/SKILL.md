@@ -26,6 +26,14 @@ Each project is tested in isolation: no downstream project (Chimney, application
   upstreams whose major versions differ per Scala version get a per-version shim (`scala-2/.../AvroUpstream.scala`,
   `scala-3/.../AvroUpstream.scala`) exposing the same API to the shared suite; cases upstream cannot derive on one
   version (e.g. avro4s 5 has no recursive types) are `Option`s there.
+- circe suites (`circe/`): `CirceGenericOracleSpec` (circe-generic, generic-extras), `scala-2/CirceExtrasScala2OracleSpec`
+  (`@JsonKey`, `decodeStrict`, patch/incomplete), `scala-3/CirceCoreOracleSpec` (circe-core `Configured*`, Scala 3
+  enums). `CirceOracle.compare` encodes values and decodes systematically mutated inputs (every key removed, `null`,
+  wrong type, renamed; unknown keys) with both sides; with that many inputs, expected differences are `CiExpected`
+  predicates (each with its documented reason) and `CirceOracle.unexplained` reports both unexplained differences and
+  expected ones that matched nothing. Their fixtures live in `src/main/scala` so the tests always read them from the
+  classpath, as users deriving for another module's types do (Hearth orders subtypes differently otherwise).
+- `jsoniterjson/JsoniterJsonOracleSpec`: `kindlings-jsoniter-json` vs circe's `Json` with jsoniter-scala-circe.
 - `-Xcheck-macros` is off in this module (upstream macros fail it); Kindlings' macros are checked in their own modules.
 
 ## Rules

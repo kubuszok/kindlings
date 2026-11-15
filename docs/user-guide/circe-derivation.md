@@ -274,15 +274,19 @@ Scala 2):
 - **Patch decoders** (`KindlingsDecoder.patch[A]`): each field is decoded as `Option[V]` (circe's
   `Decoder.decodeOption`), so an absent or `null` key keeps the original value, a value of the wrong type fails at decode
   time, a non-object patch fails, and nested values are replaced (not deep-merged). Member names follow the
-  configuration; defaults are not used (an absent key always keeps the original value).
+  configuration; defaults are not used (an absent key always keeps the original value; generic-extras' patch decoder
+  with `useDefaults` throws a `ClassCastException`).
 - **Wrapper objects with superfluous keys** (non-strict): the first key (in JSON order) naming a known constructor is
-  used, so `{"extra":true,"Circle":{"radius":1.0}}` decodes as `Circle` (Scala 3 core; generic-extras picks the first
-  constructor in declaration order found among the keys, which differs only for objects naming several constructors).
+  used, so `{"extra":true,"Circle":{"radius":1.0}}` decodes as `Circle` (Scala 3 core; Scala 2's circe-generic and
+  generic-extras pick the first constructor in alphabetical order found among the keys, which differs only for objects
+  naming several constructors). With strict decoding such objects are rejected, like Scala 3 core (Scala 2's
+  generic-extras is strict only inside case classes and accepts them).
 - **Errors inside collection elements** keep their cursor history (`DecodingFailure#pathToRootString` gives e.g.
   `.members[1].age`).
 - **Value classes: Kindlings default vs upstream.** By default, `AnyVal` case classes are coded as their field's value
-  (`UserId(5)` → `5`, also when the field's type is derived), a documented improvement over upstream circe, where every
-  derivation (Scala 3 core, circe-generic, generic-extras) codes them as products. `withoutValueClassUnwrapping`
+  (`UserId(5)` → `5`, also when the field's type is derived), a documented improvement over upstream circe, where
+  circe-generic and generic-extras (Scala 2) code them as products and Scala 3 derivations do not support them (no
+  `Mirror`, so their instances are written by hand). `withoutValueClassUnwrapping`
   (`unwrapValueClasses = false`) restores the upstream format for encoding and decoding: `{"value":5}`, and for
   value-class sum children `{"IntId":{"v":5}}` (or `{"v":5,"type":"IntId"}` with a discriminator). Other value types
   (opaque types, refined/newtype integrations) are always unwrapped; `deriveUnwrapped` unwraps explicitly.

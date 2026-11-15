@@ -329,6 +329,19 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 **Replaces:** `circe-generic-extras` (community-maintained; Scala 2 via Shapeless, Scala 3 via Mirrors — cross-published JVM/JS/Native since 0.14.5) + circe's Scala 3 `ConfiguredEncoder`/`ConfiguredDecoder`/`ConfiguredCodec` + circe-generic's semiauto helpers
 
+Checked against circe-generic (`deriveCodec`), circe-generic-extras (`deriveConfiguredCodec`, `deriveEnumerationCodec`,
+`deriveUnwrappedCodec`, `deriveExtrasCodec`, `deriveConfiguredFor[..].patch`/`.incomplete`, `@JsonKey`) and, on Scala 3,
+circe-core's `ConfiguredCodec`/`ConfiguredEnumCodec` by the `upstream-oracle-tests` module (`CirceGenericOracleSpec`,
+`CirceExtrasScala2OracleSpec`, `CirceCoreOracleSpec`): for each configuration (defaults, strict decoding,
+discriminators, member and constructor name transforms) the encoded JSON (key order included) and the results of
+`decodeJson` and `decodeAccumulating` are compared, on valid inputs and on inputs with every key removed, set to `null`,
+set to a wrong type, renamed, plus unknown keys and wrapper/discriminator edge cases. On Scala 3 failure messages and
+cursor histories are compared too; on Scala 2 only outcomes and decoded values (Kindlings uses Scala 3 core's wording
+on both versions, see "Error messages and cursor history"). The differences found are the ones listed below as
+"Difference"; one more is a Hearth bug: on Scala 3, for a sealed type compiled in another module (or an earlier
+incremental compilation), the strict wrapper failure lists the constructor names alphabetically instead of in
+declaration order (`docs/research/hearth-bug-children-order-from-classpath.md`).
+
 ### Configuration
 
 | Feature | circe | Kindlings | Status |
@@ -340,7 +353,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Discriminator field | Yes | Yes | Parity |
 | Strict decoding | Yes (discriminator key is an expected field; `decodeAccumulating` reports the strict failure and the field errors; multi-key wrapper objects rejected) | Yes (same rules) | Parity |
 | `enumAsStrings` config flag | Scala 2: `deriveEnumeration*`; Scala 3: `ConfiguredEnumEncoder`/`ConfiguredEnumDecoder`/`ConfiguredEnumCodec` (parameterless cases only) | Yes (unified config flag, both Scala 2+3, full enums) | Improvement |
-| Value classes (`AnyVal` case classes) | Encoded as products (`{"value":5}`) by every derivation (Scala 3 core, circe-generic, generic-extras); unwrapping only via explicit `deriveUnwrapped*` | Unwrapped by default (`5`); `withoutValueClassUnwrapping` (`unwrapValueClasses = false`) restores the upstream product format, also for value-class sum children | Difference (default) / Parity (`withoutValueClassUnwrapping`) |
+| Value classes (`AnyVal` case classes) | Scala 2 (circe-generic, generic-extras): encoded as products (`{"value":5}`); Scala 3: not derivable (no `Mirror` for value classes), instances are written by hand; unwrapping via explicit `deriveUnwrapped*` | Unwrapped by default (`5`); `withoutValueClassUnwrapping` (`unwrapValueClasses = false`) restores the upstream product format, also for value-class sum children | Difference (default) / Parity (`withoutValueClassUnwrapping`) |
 | Named-argument factories | Scala 3 core `ConfiguredCodec.derive(transformMemberNames = ..., ...)` (also `ConfiguredEncoder`/`ConfiguredDecoder`) | Scala 3: `KindlingsCodecAsObject.derive(...)`, `KindlingsEncoder.derive(...)`, `KindlingsDecoder.derive(...)`; both versions: `Configuration(...)` with named arguments | Parity |
 | Enum factories | Scala 3 core `ConfiguredEnumCodec.derive(transformConstructorNames = ...)` (also `ConfiguredEnumEncoder`/`ConfiguredEnumDecoder`) | Scala 3: `KindlingsCodecAsObject.deriveEnum(...)` (a plain `Codec`), `KindlingsEncoder.deriveEnum(...)`, `KindlingsDecoder.deriveEnum(...)`; a sum with non-singleton cases is a compile-time error | Parity |
 | Compile-time configuration | n/a (Scala 3 core: inline `Configuration` givens) | Evaluated at compile time when possible (inline expressions, named arguments, and on Scala 3 local `val`s/givens): enables compile-time checks | Improvement |
@@ -354,7 +367,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `Decoder[A]` | Yes | Yes | Parity |
 | `Codec.AsObject[A]` | Yes (circe-generic `deriveCodec`, generic-extras `deriveConfiguredCodec`, Scala 3 `ConfiguredCodec`) | Yes (`KindlingsCodecAsObject`, keeps `decodeAccumulating`) | Parity |
 | `ExtrasDecoder` (`isStrict`, `decodeStrict` with the extraneous fields) | generic-extras | `hearth.kindlings.circederivation.ExtrasDecoder`, implemented by `KindlingsDecoder` and `KindlingsCodecAsObject` (derived case-class decoders are strict with `strictDecoding`) | Parity |
-| Patch decoders | circe-generic `deriveFor[A].patch` / generic-extras `deriveConfiguredFor[A].patch` | `KindlingsDecoder.patch[A]` (absent/`null` keeps the value, wrong type fails, no deep merge) | Parity |
+| Patch decoders | circe-generic `deriveFor[A].patch` / generic-extras `deriveConfiguredFor[A].patch` (with `useDefaults`, generic-extras' patch decoder throws a `ClassCastException`) | `KindlingsDecoder.patch[A]` (absent/`null` keeps the value, wrong type fails, no deep merge, `useDefaults` ignored) | Parity |
 | Incomplete decoders | circe-generic `deriveFor[F].incomplete` / generic-extras `deriveConfiguredFor[F].incomplete` (`F = (P1, ..) => C`) | `KindlingsDecoder.incomplete[F]` (each `Pi` supplies the first remaining field of that type, like shapeless' `RemoveAll`; the configuration's names and defaults apply) | Parity |
 | Labelled incomplete decoders | circe-generic (Scala 2): shapeless `FieldType[Witness.`'j`.T, Int] => C` selects the field `j` | `Labelled["j", Int] => C` (a `String` literal type, both Scala 2+3); labelled and by-type parameters can be mixed | Parity |
 
@@ -385,7 +398,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Nested sealed hierarchies (hand-written intermediate instances) | Scala 3 core: the instance is used under the intermediate's name; generic-extras (Scala 2, shapeless flattens to the leaves): the instance is ignored | The instance is used under the intermediate's name, on Scala 2 and 3 | Parity (Scala 3 core) / Difference (generic-extras) |
 | A leaf reachable through several intermediates (diamond) | Written once under its own name; with an intermediate instance, the first intermediate (declaration order) containing it | Same | Parity |
 | Nested hierarchy of case objects with string encoding | Flattened (`ConfiguredEnumCodec` recurses into intermediates and ignores their instances) | Flattened (`enumAsStrings`), also when an intermediate has a user-provided instance | Parity |
-| Wrapper object with superfluous keys | Scala 3 core: the first key (JSON order) naming a known constructor is used; generic-extras: the first constructor (declaration order) found among the keys; rejected with strict decoding | Scala 3 core behaviour | Parity (Scala 3 core) / Difference (generic-extras key choice) |
+| Wrapper object with superfluous keys | Scala 3 core: the first key (JSON order) naming a known constructor is used, rejected with strict decoding; Scala 2 (circe-generic, generic-extras): the first constructor in coproduct (alphabetical) order found among the keys, accepted also with strict decoding (strict only inside case classes) | Scala 3 core behaviour on both versions | Parity (Scala 3 core) / Difference (Scala 2: key choice, strict wrappers) |
 | Strict wrapper failure | Lists the direct constructor names (`constructorNames`) | Same | Parity |
 | Errors inside collection elements | Keep the cursor history (`.members[1].age`) | Same | Parity |
 | Missing `Option[A]` field (any `A`, with or without a default, `useDefaults = false`) | `None` | `None` | Parity |
@@ -394,7 +407,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Enum map keys | Manual `KeyEncoder`/`KeyDecoder` | Constructor name (with `transformConstructorNames`) on both sides | Improvement |
 | User-provided `KeyEncoder`/`KeyDecoder` for `Int`/`Long`/... | Used | Used on both sides (take precedence over the built-in key codecs), also when the map's value type is derived | Parity |
 | Accumulating decoding | Accumulates in nested derived types, `Option`s, collections and maps | Same (also for top-level derived non-products) | Parity |
-| Error messages and cursor history | Scala 3 core wording (`type X has no class/object/case named 'n'.`, `Strict decoding X - unexpected fields: ...`, ...) | Same wording and history | Parity |
+| Error messages and cursor history | Scala 3 core wording (`type X has no class/object/case named 'n'.`, `Strict decoding X - unexpected fields: ...`, ...); Scala 2 shapeless derivations word them differently (`JSON decoding to CNil should never happen`, a missing first field for a non-object input, ...) | Scala 3 core wording and history on both versions | Parity (Scala 3) / Difference (Scala 2 wording) |
 | Discriminator position | Appended after the fields | Appended after the fields | Parity |
 | Strict decoding of case objects | Extra keys rejected (in sums, at the top level, as fields) | Same | Parity |
 | `Encoder.AsObject` from semiauto / `derives` | Products and sums | `KindlingsEncoder.derived` returns an `Encoder.AsObject` instance for products and sums; `deriveAsObject` on a non-object type is a compile-time error | Parity |
@@ -1174,3 +1187,23 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 |---|---|---|
 | `@sensitiveData` | Field or type | Replaces the rendered value with `[redacted]` |
 | `@sensitiveData("reason")` | Field or type | Replaces the rendered value with `[redacted: reason]` |
+
+---
+
+## jsoniter-json
+
+**Replaces:** jsoniter-scala-circe's `JsoniterScalaCodec.jsonC3c` with circe's `Json` / `JsonNumber` / `JsonObject`
+
+Checked against jsoniter-scala-circe and circe's JSON model by the `upstream-oracle-tests` module
+(`JsoniterJsonOracleSpec`): parsing (accepted inputs, structure, key order, number text, nesting depth), printing
+(escaping, number formatting), numeric conversions of parsed and constructed numbers, `JsonNumber.fromString`,
+equality, and the `Json`/`JsonObject` API.
+
+| Feature | circe + jsoniter-scala-circe | Kindlings | Status |
+|---|---|---|---|
+| Parsing and printing | Numbers keep their text (also `-0`), max depth 128 | Same (`JsonCodec.withMaxDepth(n)` for another limit) | Parity |
+| `toInt` / `toLong` / `toBigInt` / `toBigDecimal` | Exact, for integral values however written | Same | Parity |
+| `toDouble` / `toFloat` | Plain values (infinity when out of range) | `Option` | Difference (API) |
+| Duplicate keys | One value per key (last wins) | Kept (ordered fields; `apply` returns the last value; `add` appends) | Difference (design) |
+| Equality | Numbers by value, objects as maps | Structural (number text, ordered fields) | Difference (design) |
+| `JsonNumber.fromString` | Also accepts `01`, `.5` (and writes them as invalid JSON) | JSON numbers only | Difference (stricter) |

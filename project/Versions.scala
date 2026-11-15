@@ -26,6 +26,9 @@ object versions {
   val avro4s3 = "5.0.15"
   val cats = "2.13.0"
   val circe = "0.14.17"
+  // circe-generic-extras (upstream oracle only): the last releases per Scala version.
+  val circeGenericExtras213 = "0.14.4"
+  val circeGenericExtras3 = "0.14.5-RC1"
   val iron = "3.3.2"
   val jsoniterScala = "2.42.3"
   val kittens = "3.5.0"
