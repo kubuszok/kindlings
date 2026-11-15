@@ -120,9 +120,11 @@ println(team.modify(_.members.each).using(_.toUpperCase).members.toList.mkString
 
 ## Indexed access — `.at`, `.index`, `.atOrElse`
 
-`.at(i)` focuses the element at index `i` (throwing if absent); `.index(i)` is a no-op when absent; `.atOrElse(i, d)`
-inserts the default when absent. The same three names also work on a `Map` (keyed by the map key) and on an `Option`
-(with no index argument: `.at` / `.index` / `.atOrElse(default)`).
+`.at(i)` focuses the element at index `i` (throwing `IndexOutOfBoundsException` if absent); `.index(i)` is a no-op when
+absent; `.atOrElse(i, d)` appends `f(d)` at the end when `i` is absent (whatever `i` is), as quicklens does. The same
+three names also work on a `Map` (keyed by the map key: `.at` throws `NoSuchElementException`, `.atOrElse` inserts
+`key -> f(d)`) and on an `Option` (with no index argument: `.at` / `.index` / `.atOrElse(default)`; `.at` on `None`
+throws `NoSuchElementException`).
 
 ```scala
 //> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
@@ -295,8 +297,8 @@ message naming the unsupported step.
 - Documentation snippets here mirror the module's passing test suite (`ModifyFieldSpec`, `EachSpec`, `AtIndexSpec`,
   `EitherSpec`, `WhenSpec`, `SealedFieldSpec`, `ModifyAllSpec`, `LensCompositionSpec`); their full snippet-test
   execution runs in CI.
-</content>
-</invoke>
+- Behaviour is checked against quicklens itself by `OpticsOracleSpec` in `upstream-oracle-tests` (see
+  [Feature parity](feature-parity.md#optics)).
 
 ## Debugging
 
