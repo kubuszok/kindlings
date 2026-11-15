@@ -1108,7 +1108,9 @@ lazy val integrationTests = projectMatrix
     tapirSchemaDerivation,
     parser,
     refinedIntegration,
-    catsIntegration
+    catsIntegration,
+    catsDerivation,
+    scalacheckDerivation
   )
   .settings(noPublishSettings *)
   .settings(settings *)
