@@ -59,6 +59,23 @@ Any `Refined[A, P]` where:
 
 This includes all standard refined predicates: `Positive`, `NonEmpty`, `Size[...]`, `MatchesRegex[...]`, `Interval.Closed[...]`, and user-defined predicates.
 
+## Tapir schemas
+
+`kindlings-tapir-schema-derivation` derives the schema of a refined type as the schema of its underlying type, without
+validators for the predicate. To have the predicates documented as validators (`minLength`, `maximum`, `pattern`, ... in
+OpenAPI), add [tapir-refined](https://tapir.softwaremill.com/en/latest/endpoint/integrations.html#refined-integration)
+(`"com.softwaremill.sttp.tapir" %% "tapir-refined"`) and import its schemas where the schema is derived — Kindlings uses
+them like any other implicit `Schema`, and the result is the same as Tapir's:
+
+```scala
+import sttp.tapir.codec.refined._
+
+val schema = KindlingsSchema.derived[Account].schema
+```
+
+Decoding with `kindlings-circe-derivation` accepts and rejects the same inputs as circe-refined (both checked by the
+`upstream-oracle-tests` module).
+
 ## Example
 
 ??? example "Case class with refined fields (Circe)"

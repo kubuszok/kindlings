@@ -60,6 +60,23 @@ Any `Foo.Type` where:
 
 A neotype wrapping another neotype is unwrapped one level at a time, so the validation of both is preserved.
 
+## Tapir schemas
+
+`kindlings-tapir-schema-derivation` derives the schema of a neotype as the schema of its underlying type, without the
+newtype's `validate` as a validator. To have it validated by the schema (`Schema#applyValidation`, as Tapir's server
+interpreters do), add neotype-tapir (`"io.github.kitlangton" %% "neotype-tapir"`) and import its schemas where the schema
+is derived — Kindlings uses them like any other implicit `Schema`, and the result is the same as neotype-tapir's:
+
+```scala
+import neotype.interop.tapir.given
+
+val schema = KindlingsSchema.derived[Account].schema
+```
+
+neotype-tapir's validator is a custom one, which OpenAPI / JSON Schema cannot express, so the documentation is the same
+with or without it. Decoding with `kindlings-circe-derivation` and `kindlings-jsoniter-derivation` accepts and rejects
+the same inputs as neotype-circe and neotype-jsoniter (all checked by the `upstream-oracle-tests` module).
+
 ## Example
 
 ??? example "Case class with neotype fields (Circe)"

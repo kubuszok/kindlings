@@ -4,6 +4,12 @@ Automatic support for [Iron](https://github.com/Iltotore/iron) constrained types
 
 **Scala 3 only** — Iron is a Scala 3-only library.
 
+!!! tip "Constraints as validators in Tapir schemas / OpenAPI"
+    Kindlings' Tapir schemas of Iron types have no validators of their own: import tapir-iron's schemas
+    (`import sttp.tapir.codec.iron.given`) where the schema is derived, and the constraints are documented exactly as
+    Tapir documents them — see [Tapir schemas](#tapir-schemas) and the Tapir guide's
+    [validators section](tapir-schema-derivation.md#validators-for-refined-iron-neotype-and-scala-newtype-types).
+
 ## Installation
 
 !!! example "sbt"
@@ -71,6 +77,9 @@ import sttp.tapir.codec.iron.given
 
 val schema = KindlingsSchema.derived[Account].schema
 ```
+
+A map keyed or valued by a `RefinedType` is named after the companion (e.g. `Map_UserName_Int` in OpenAPI, as tapir's
+`Schema.schemaForMap[K, V]` names it), not after its opaque `T` (which would give every such map the name `Map_T_...`).
 
 Decoding with `kindlings-jsoniter-derivation` reports a missing refined field (e.g. `List[String] :| MinLength[1]`) as a
 missing required field, where jsoniter-scala's `JsonCodecMaker` with iron-jsoniter decodes it as `null`.

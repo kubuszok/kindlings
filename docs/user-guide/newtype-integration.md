@@ -67,6 +67,14 @@ Like all Kindlings integration modules, the jar's presence on the classpath is s
 
 where the wrapped type is one that the derivation module already knows how to handle.
 
+## Tapir schemas
+
+`kindlings-tapir-schema-derivation` derives the schema of a newtype as the schema of its wrapped type — the same schema
+[tapir-newtype](https://tapir.softwaremill.com/en/latest/endpoint/integrations.html#newtype-integration)
+(`"com.softwaremill.sttp.tapir" %% "tapir-newtype"`, Scala 2.13 only) gives it, so the integration is not needed for
+schemas. If it is imported (`import sttp.tapir.codec.newtype._`), Kindlings uses its schemas like any other implicit
+`Schema`, with the same result (both checked by the `upstream-oracle-tests` module on Scala 2.13).
+
 ## Example
 
 ??? example "Case class with newtype fields (Circe)"

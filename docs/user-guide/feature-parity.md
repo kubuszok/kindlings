@@ -1055,13 +1055,19 @@ The two modules are deliberately built to be drop-in equivalents at the API surf
 
 **Replaces:** Tapir's built-in `Schema.derived` + `sttp.tapir.generic.auto.*`
 
-Checked against Tapir's own derivation, tapir-cats and tapir-iron by the `upstream-oracle-tests` module (the JSON Schemas
-rendered by Tapir's docs interpreter are compared on Scala 2.13 and 3). The only differences:
+Checked against Tapir's own derivation, tapir-cats, tapir-iron, tapir-refined, neotype-tapir and tapir-newtype by the
+`upstream-oracle-tests` module (the JSON Schemas rendered by Tapir's docs interpreter are compared on Scala 2.13 and 3;
+also field descriptions on shared named map schemas, which Tapir's docs interpreter moves next to each `$ref` for both).
+The only differences:
 
 | Difference | Tapir | Kindlings | Status |
 |---|---|---|---|
 | Required and optional fields | Optional: `Option`s and collections | Optional exactly when the decoder derived with the same JSON config accepts the field missing (e.g. with circe, collections are required) | Design decision |
 | Iron constraints | tapir-iron turns them into validators | The underlying type's schema; tapir-iron's schemas (with validators) are used when imported | Parity with tapir-iron imported |
+| refined predicates | tapir-refined turns them into validators | The underlying type's schema; tapir-refined's schemas are used when imported | Parity with tapir-refined imported |
+| neotype `validate` | neotype-tapir adds a custom validator (not rendered in JSON Schema) | The underlying type's schema; neotype-tapir's schemas are used when imported | Parity with neotype-tapir imported |
+| Names of maps keyed by scala-newtype types (Scala 2.13) | `Schema.schemaForMap[K, V]` names the key after the type member (`Name.Type`: `Map_Type_Int` for every newtype) | Named after the companion (`Map_Name_Int`), as Iron `RefinedType` and neotype keys are on both sides | Improvement (tapir guide, "Maps, collections and other built-in types") |
+| Type aliases among type arguments of names (e.g. refined's `NonEmpty`) | The alias' name | Dealiased (`Not[Empty]`) | Documented (tapir guide) |
 
 ### Annotations
 
