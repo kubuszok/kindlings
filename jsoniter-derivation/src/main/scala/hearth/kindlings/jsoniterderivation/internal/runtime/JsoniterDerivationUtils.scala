@@ -591,7 +591,7 @@ object JsoniterDerivationUtils {
 
   def readWrapped[A](in: JsonReader)(dispatch: String => A): A = readWrapped[A](in, "expected '{'")(dispatch)
 
-  /** [[readWrapped]] failing with `notObjectError` (jsoniter-scala's `expected '"' or '{'` / `expected '"'`) when the
+  /** `readWrapped` failing with `notObjectError` (jsoniter-scala's `expected '"' or '{'` / `expected '"'`) when the
     * value is not a JSON object.
     */
   def readWrapped[A](in: JsonReader, notObjectError: String)(dispatch: String => A): A = {

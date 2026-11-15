@@ -1090,7 +1090,7 @@ trait CodecMacrosImpl
   // (lazy: it inspects IsCollection & co., which must run after the standard extensions are loaded)
   def deriveNullValue[A: Type]: MIO[Expr[A]] = MIO.pure(()).map(_ => nullValueOf[A])
 
-  /** [[deriveNullValue]] of a codec derived with `configExpr`: as in jsoniter-scala, with `inlineOneValueClasses` a
+  /** `deriveNullValue` of a codec derived with `configExpr`: as in jsoniter-scala, with `inlineOneValueClasses` a
     * one-value class (see [[oneValueClassField]]) wraps its field's `nullValue`, as a value class does.
     */
   @scala.annotation.nowarn("msg=is never used")
