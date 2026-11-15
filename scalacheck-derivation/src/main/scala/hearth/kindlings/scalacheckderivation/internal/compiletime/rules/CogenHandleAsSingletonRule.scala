@@ -13,9 +13,9 @@ trait CogenHandleAsSingletonRuleImpl { this: CogenMacrosImpl & MacroCommons & St
     def apply[A: CogenCtx]: MIO[Rule.Applicability[Expr[Cogen[A]]]] =
       SingletonValue.parse[A].toEither match {
         case Right(_) =>
-          Log.info(s"Handling ${Type[A].prettyPrint} as singleton (identity cogen)") >>
+          Log.info(s"Handling ${Type[A].prettyPrint} as singleton (perturbs like a case class without fields)") >>
             MIO.pure(Rule.matched(Expr.quote {
-              hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenIdentity[A]
+              hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenNoFields[A]
             }))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason))

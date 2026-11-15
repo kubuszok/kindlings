@@ -42,9 +42,9 @@ trait CogenHandleAsCaseClassRuleImpl { this: CogenMacrosImpl & MacroCommons & St
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
-          // No fields — identity cogen (return seed unchanged)
+          // No fields — like scalacheck-shapeless / scalacheck-derived, which perturb with `Cogen[Unit]`.
           MIO.pure[Expr[Cogen[A]]](Expr.quote {
-            hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenIdentity[A]
+            hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenNoFields[A]
           })
 
         case Some(fields) =>
@@ -70,10 +70,14 @@ trait CogenHandleAsCaseClassRuleImpl { this: CogenMacrosImpl & MacroCommons & St
                   Expr.quote(Expr.splice(cogenExpr) :: Expr.splice(acc))
                 }
 
+              // Tuples perturb like ScalaCheck's `Cogen.tupleN` (fields only); case classes like scalacheck-shapeless and
+              // scalacheck-derived (fields, then `Cogen[Unit]`).
+              val terminate = Expr(!Type[A].plainPrint.startsWith("scala.Tuple"))
               Expr.quote {
                 hearth.kindlings.scalacheckderivation.internal.runtime.CogenUtils.cogenCaseClass[A](
                   Expr.splice(cogensListExpr),
-                  Expr.splice(numFieldsExpr)
+                  Expr.splice(numFieldsExpr),
+                  Expr.splice(terminate)
                 )
               }
             }
