@@ -16,8 +16,24 @@ sealed trait YmShape
 final case class YmCircle(radius: Double) extends YmShape
 final case class YmRectangle(width: Double, height: Double) extends YmShape
 
-/** Kindlings' YAML codecs (default `YamlConfig`) vs scala-yaml's own derivation (`YamlCodec.derived`, Scala 3 only),
-  * compared on the YAML nodes encoded and on the values decoded (valid and invalid inputs).
+// Overlapping subtypes, declared out of alphabetical order: the order in which they are attempted decides the result.
+sealed trait YmSource
+final case class YmUrl(url: String) extends YmSource
+final case class YmFile(path: String) extends YmSource
+final case class YmAny(url: String, path: Option[String]) extends YmSource
+case object YmNoSource extends YmSource
+
+enum YmFruit {
+  case Apple(weight: Double)
+  case Banana(length: Double)
+  case Unknown
+}
+
+final case class YmBasket(fruits: List[YmFruit], source: YmSource)
+
+/** Kindlings' YAML codecs (default `YamlConfig`, which matches scala-yaml) vs scala-yaml's own derivation
+  * (`YamlCodec.derived`, Scala 3 only), compared on the YAML nodes encoded and on the values decoded (valid and invalid
+  * inputs).
   *
   * Each case lists the *exact* differences it expects; each one must be documented (see
   * `docs/user-guide/feature-parity.md`, yaml-derivation). A difference that appears or disappears fails the test.
@@ -38,12 +54,21 @@ final class YamlOracleSpec extends MacroSuite {
       YamlCodec.make(KindlingsYamlDecoder.derived[YmPrimitives], KindlingsYamlEncoder.derived[YmPrimitives])
     val shape: YamlCodec[YmShape] =
       YamlCodec.make(KindlingsYamlDecoder.derived[YmShape], KindlingsYamlEncoder.derived[YmShape])
+    val source: YamlCodec[YmSource] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmSource], KindlingsYamlEncoder.derived[YmSource])
+    val fruit: YamlCodec[YmFruit] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmFruit], KindlingsYamlEncoder.derived[YmFruit])
+    val basket: YamlCodec[YmBasket] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmBasket], KindlingsYamlEncoder.derived[YmBasket])
   }
 
-  private object KindlingsWithDefaults {
-    given YamlConfig = YamlConfig.default.withUseDefaults
+  /** Kindlings' opt-ins that intentionally differ from scala-yaml (the defaults of Kindlings 0.3.x). */
+  private object KindlingsOptIns {
+    given YamlConfig = YamlConfig.default.withoutUseDefaults.withWrappedSubtypes
     val defaults: YamlCodec[YmDefaults] =
       YamlCodec.make(KindlingsYamlDecoder.derived[YmDefaults], KindlingsYamlEncoder.derived[YmDefaults])
+    val shape: YamlCodec[YmShape] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmShape], KindlingsYamlEncoder.derived[YmShape])
   }
 
   private object Upstream {
@@ -53,6 +78,10 @@ final class YamlOracleSpec extends MacroSuite {
     val nested: YamlCodec[YmNested] = YamlCodec.derived
     val primitives: YamlCodec[YmPrimitives] = YamlCodec.derived
     val shape: YamlCodec[YmShape] = YamlCodec.derived
+    val source: YamlCodec[YmSource] = YamlCodec.derived
+    given fruit: YamlCodec[YmFruit] = YamlCodec.derived
+    given sourceGiven: YamlCodec[YmSource] = source
+    val basket: YamlCodec[YmBasket] = YamlCodec.derived
   }
 
   // --- helpers -------------------------------------------------------------------------------------------------------
@@ -130,13 +159,12 @@ final class YamlOracleSpec extends MacroSuite {
 
     test("default values") {
       compareEncoded(K.defaults, U.defaults)(YmDefaults(), YmDefaults("h", 1, List("a")))()
-      // Documented difference (feature-parity.md, yaml-derivation "Default value differences"): scala-yaml always uses
-      // the constructor defaults of absent fields; Kindlings only with `withUseDefaults` (compared below: no difference).
-      compareDecoded(K.defaults, U.defaults)("host: h\nport: 1\ntags: [a]", "host: h", "{}")(
+      compareDecoded(K.defaults, U.defaults)("host: h\nport: 1\ntags: [a]", "host: h", "{}")()
+      // Opt-in difference (feature-parity.md, yaml-derivation): `withoutUseDefaults` rejects absent fields
+      compareDecoded(KindlingsOptIns.defaults, U.defaults)("host: h\nport: 1\ntags: [a]", "host: h", "{}")(
         "host: h: kindlings=Left(Key port doesn't exist in parsed document) upstream=Right(YmDefaults(h,8080,List()))",
         "{}: kindlings=Left(Key host doesn't exist in parsed document) upstream=Right(YmDefaults(localhost,8080,List()))"
       )
-      compareDecoded(KindlingsWithDefaults.defaults, U.defaults)("host: h\nport: 1\ntags: [a]", "host: h", "{}")()
     }
 
     test("collections and maps") {
@@ -161,14 +189,46 @@ final class YamlOracleSpec extends MacroSuite {
       )()
     }
 
-    test("sealed traits") {
-      // Documented difference (feature-parity.md, yaml-derivation "Sealed trait handling"): scala-yaml writes a subtype
-      // without any type information and decodes by trying every subtype; Kindlings wraps the subtype in a single-key
-      // mapping (or adds a discriminator with `withDiscriminator`).
+    test("sealed traits: untagged, decoded by trying each subtype") {
+      compareEncoded(K.shape, U.shape)(YmCircle(1.5), YmRectangle(1, 2))()
+      compareDecoded(K.shape, U.shape)(
+        "radius: 1.5",
+        "width: 1\nheight: 2",
+        "YmCircle:\n  radius: 1.5",
+        "side: 1",
+        "- 1",
+        "text"
+      )()
+    }
+
+    test("sealed traits: overlapping subtypes and case objects are attempted in declaration order") {
+      compareEncoded(K.source, U.source)(YmUrl("u"), YmFile("p"), YmAny("u", Some("p")), YmNoSource)()
+      compareDecoded(K.source, U.source)(
+        "url: u",
+        "path: p",
+        "url: u\npath: p",
+        "{}",
+        "other: 1",
+        "- 1"
+      )()
+    }
+
+    test("Scala 3 enums with fields and singleton cases, nested in a product") {
+      compareEncoded(K.fruit, U.fruit)(YmFruit.Apple(1), YmFruit.Banana(2), YmFruit.Unknown)()
+      compareDecoded(K.fruit, U.fruit)("weight: 1", "length: 2", "{}", "color: red", "Apple: {weight: 1}")()
+      compareEncoded(K.basket, U.basket)(YmBasket(List(YmFruit.Apple(1), YmFruit.Unknown), YmFile("p")))()
+      compareDecoded(K.basket, U.basket)(
+        "fruits: [{weight: 1}, {}]\nsource: {path: p}",
+        "fruits: [1]\nsource: {path: p}"
+      )()
+    }
+
+    test("withWrappedSubtypes (opt-in): Kindlings' single-key mapping") {
+      // Opt-in difference (feature-parity.md, yaml-derivation): each subtype is wrapped in a single-key mapping
       val str = "CoreSchemaTag(tag:yaml.org,2002:str)"
       val float = "CoreSchemaTag(tag:yaml.org,2002:float)"
       val map = "CoreSchemaTag(tag:yaml.org,2002:map)"
-      compareEncoded(K.shape, U.shape)(YmCircle(1.5), YmRectangle(1, 2))(
+      compareEncoded(KindlingsOptIns.shape, U.shape)(YmCircle(1.5), YmRectangle(1, 2))(
         s"YmCircle(1.5): $$._2[YmCircle ($str)]: only in kindlings: ($map,TreeMap(radius ($str) -> 1.5 ($float)))",
         s"YmCircle(1.5): $$._2[radius ($str)]: only in upstream: 1.5 ($float)",
         s"YmRectangle(1.0,2.0): $$._2[YmRectangle ($str)]: only in kindlings: " +
@@ -180,8 +240,8 @@ final class YamlOracleSpec extends MacroSuite {
       def outcome(decoder: YamlDecoder[YmShape], yaml: String): String =
         if decode(decoder, yaml).startsWith("Left") then "Left" else decode(decoder, yaml)
       val differences = List("radius: 1.5", "width: 1\nheight: 2", "YmCircle:\n  radius: 1.5", "side: 1").collect {
-        case yaml if outcome(K.shape, yaml) != outcome(U.shape, yaml) =>
-          s"$yaml: kindlings=${outcome(K.shape, yaml)} upstream=${outcome(U.shape, yaml)}"
+        case yaml if outcome(KindlingsOptIns.shape, yaml) != outcome(U.shape, yaml) =>
+          s"$yaml: kindlings=${outcome(KindlingsOptIns.shape, yaml)} upstream=${outcome(U.shape, yaml)}"
       }
       assertEquals(
         differences,
