@@ -470,7 +470,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       test("decode scalar as EmptyClass fails with Expected mapping node") {
         val node = scalarNode("42")
         val Left(error) = KindlingsYamlDecoder.decode[EmptyClass](node): @unchecked
-        assert(error.getMessage.contains("Expected mapping node"))
+        assert(error.getMessage.contains("Expected MappingNode"))
       }
 
       test("decode empty mapping as EmptyClass succeeds") {
@@ -484,7 +484,12 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       test("missing required field") {
         val node = mappingOf("name" -> scalarNode("Alice"))
         val Left(error) = KindlingsYamlDecoder.decode[SimplePerson](node): @unchecked
-        assert(error.getMessage.contains("Missing field: age"))
+        assert(error.getMessage.contains("Key age doesn't exist in parsed document"))
+      }
+
+      test("absent Option field decodes to None (as scala-yaml)") {
+        val node = mappingOf("value" -> scalarNode("1"))
+        KindlingsYamlDecoder.decode[MutRecA](node) ==> Right(MutRecA(1, None))
       }
 
       test("wrong type for field") {
@@ -538,13 +543,13 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
         val node = mappingOf("age" -> scalarNode("30"))
         val Left(error) = KindlingsYamlDecoder.decode[WithDefaults](node): @unchecked
-        assert(error.getMessage.contains("Missing field: name"))
+        assert(error.getMessage.contains("Key name doesn't exist in parsed document"))
       }
 
       test("without useDefaults, missing defaulted field is an error") {
         val node = mappingOf("name" -> scalarNode("Alice"))
         val Left(error) = KindlingsYamlDecoder.decode[WithDefaults](node): @unchecked
-        assert(error.getMessage.contains("Missing field: age"))
+        assert(error.getMessage.contains("Key age doesn't exist in parsed document"))
       }
 
       test("all defaults used when only required fields provided") {

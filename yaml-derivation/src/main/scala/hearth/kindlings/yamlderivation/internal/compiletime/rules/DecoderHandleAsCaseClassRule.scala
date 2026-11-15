@@ -133,9 +133,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   val useDefaultsStaticallyFalse: Boolean =
                     dctx.evaluatedConfig.exists(!_.useDefaults)
 
-                  val decodeExpr: Expr[Either[ConstructError, Any]] = defaultAsAnyOpt match {
-                    case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
-                      // useDefaults is statically false: skip the default branch entirely
+                  // As scala-yaml's derived decoders, an absent `Option` field is `None` (unless its default is used).
+                  val isOptionField: Boolean = Type[Field] match {
+                    case IsOption(_) => true
+                    case _           => false
+                  }
+                  val requiredFieldExpr: Expr[Either[ConstructError, Any]] =
+                    if (isOptionField)
+                      Expr.quote {
+                        YamlDerivationUtils.decodeOptionalField(
+                          Expr.splice(dctx.node),
+                          Expr.splice(fieldNameExpr),
+                          Expr.splice(decoderExpr)
+                        )
+                      }
+                    else
                       Expr.quote {
                         YamlDerivationUtils
                           .getField(
@@ -149,6 +161,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           )
                           .asInstanceOf[Either[ConstructError, Any]]
                       }
+
+                  val decodeExpr: Expr[Either[ConstructError, Any]] = defaultAsAnyOpt match {
+                    case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
+                      // useDefaults is statically false: skip the default branch entirely
+                      requiredFieldExpr
                     case Some(defaultAnyExpr) =>
                       dctx.evaluatedConfig match {
                         case Some(evConfig) if evConfig.useDefaults =>
@@ -172,34 +189,10 @@ trait DecoderHandleAsCaseClassRuleImpl {
                                 Expr.splice(decoderExpr),
                                 Expr.splice(defaultAnyExpr)
                               )
-                            else
-                              YamlDerivationUtils
-                                .getField(
-                                  Expr.splice(dctx.node),
-                                  Expr.splice(fieldNameExpr)
-                                )
-                                .flatMap(fieldNode =>
-                                  Expr
-                                    .splice(decoderExpr)
-                                    .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                                )
-                                .asInstanceOf[Either[ConstructError, Any]]
+                            else Expr.splice(requiredFieldExpr)
                           }
                       }
-                    case None =>
-                      Expr.quote {
-                        YamlDerivationUtils
-                          .getField(
-                            Expr.splice(dctx.node),
-                            Expr.splice(fieldNameExpr)
-                          )
-                          .flatMap(fieldNode =>
-                            Expr
-                              .splice(decoderExpr)
-                              .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                          )
-                          .asInstanceOf[Either[ConstructError, Any]]
-                      }
+                    case None => requiredFieldExpr
                   }
                   // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
                   // intermediate `Array[Any]`.
