@@ -62,3 +62,16 @@ final case class OCamelCased(firstName: String, lastNameOfPerson: String, httpUR
 sealed trait OEvent
 final case class OUserCreated(userName: String) extends OEvent
 final case class OUserDeleted(userId: Long) extends OEvent
+
+// Maps keyed by a family of case objects / by a type with a circe KeyEncoder: tapir has no derivation for them, its
+// users declare `Schema.schemaForMap[K, V](keyToString)`.
+sealed trait OKeyColor
+case object OKeyRed extends OKeyColor
+case object OKeyBlue extends OKeyColor
+
+final case class OKeyCustom(id: Int)
+object OKeyCustom {
+  implicit val keyEncoder: io.circe.KeyEncoder[OKeyCustom] = io.circe.KeyEncoder.instance(k => s"custom-${k.id}")
+}
+
+final case class OMapKeys(colors: Map[OKeyColor, Int], custom: Map[OKeyCustom, String])

@@ -26,7 +26,8 @@ final class YamlOracleSpec extends MacroSuite {
 
   private object KindlingsDefault {
     given YamlConfig = YamlConfig.default
-    val person: YamlCodec[YmPerson] = YamlCodec.make(KindlingsYamlDecoder.derived[YmPerson], KindlingsYamlEncoder.derived[YmPerson])
+    val person: YamlCodec[YmPerson] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmPerson], KindlingsYamlEncoder.derived[YmPerson])
     val defaults: YamlCodec[YmDefaults] =
       YamlCodec.make(KindlingsYamlDecoder.derived[YmDefaults], KindlingsYamlEncoder.derived[YmDefaults])
     val collections: YamlCodec[YmCollections] =
@@ -72,7 +73,11 @@ final class YamlOracleSpec extends MacroSuite {
     val differences = values.toList.flatMap { a =>
       Oracle.diff(toScala(kindlings.asNode(a)), toScala(upstream.asNode(a))).map(d => s"$a: $d")
     }
-    assertEquals(differences, expectedDifferences.toList, differences.mkString("Kindlings vs scala-yaml encoding:\n", "\n", ""))
+    assertEquals(
+      differences,
+      expectedDifferences.toList,
+      differences.mkString("Kindlings vs scala-yaml encoding:\n", "\n", "")
+    )
   }
 
   private def decode[A](decoder: YamlDecoder[A], yaml: String): String =
@@ -87,9 +92,13 @@ final class YamlOracleSpec extends MacroSuite {
     val differences = inputs.toList.flatMap { yaml =>
       val k = decode(kindlings, yaml)
       val u = decode(upstream, yaml)
-      if (k == u) Nil else List(s"${yaml.replace("\n", "\\n")}: kindlings=$k upstream=$u")
+      if k == u then Nil else List(s"${yaml.replace("\n", "\\n")}: kindlings=$k upstream=$u")
     }
-    assertEquals(differences, expectedDifferences.toList, differences.mkString("Kindlings vs scala-yaml decoding:\n", "\n", ""))
+    assertEquals(
+      differences,
+      expectedDifferences.toList,
+      differences.mkString("Kindlings vs scala-yaml decoding:\n", "\n", "")
+    )
   }
 
   private val K = KindlingsDefault
@@ -169,7 +178,7 @@ final class YamlOracleSpec extends MacroSuite {
       )
       // (failures compared as failures only: the messages of these two different strategies are unrelated)
       def outcome(decoder: YamlDecoder[YmShape], yaml: String): String =
-        if (decode(decoder, yaml).startsWith("Left")) "Left" else decode(decoder, yaml)
+        if decode(decoder, yaml).startsWith("Left") then "Left" else decode(decoder, yaml)
       val differences = List("radius: 1.5", "width: 1\nheight: 2", "YmCircle:\n  radius: 1.5", "side: 1").collect {
         case yaml if outcome(K.shape, yaml) != outcome(U.shape, yaml) =>
           s"$yaml: kindlings=${outcome(K.shape, yaml)} upstream=${outcome(U.shape, yaml)}"
