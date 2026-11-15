@@ -57,6 +57,18 @@ final class CatsDerivationSpec extends MacroSuite {
       examples.Point.hashPoint.eqv(examples.Point(1, 2), examples.Point(1, 2)) ==> true
       examples.Point.hashPoint.eqv(examples.Point(1, 2), examples.Point(3, 4)) ==> false
     }
+
+    // Neither a case class nor an enum: the entry point builds the hash/eqv helpers itself (no rule caches them)
+    test("Hash.derived of a case object and of a built-in type") {
+      import hearth.kindlings.catsderivation.extensions.*
+      val red = cats.kernel.Hash.derived[examples.Red.type]
+      red.eqv(examples.Red, examples.Red) ==> true
+      red.hash(examples.Red) ==> red.hash(examples.Red)
+      val int = cats.kernel.Hash.derived[Int]
+      int.eqv(1, 1) ==> true
+      int.eqv(1, 2) ==> false
+      int.hash(1) ==> cats.kernel.Hash[Int].hash(1)
+    }
   }
 
   group("Semigroup") {
