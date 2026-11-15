@@ -302,6 +302,21 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
   `Schema.schemaForMap[K, V](keyToString)`. For any other key type, provide a `Schema[Map[K, V]]`, e.g. with that
   method.
 
+Named schemas mention their type parameters by full name, as Tapir's do; OpenAPI component names are made of the short
+names (`Map_UserId_Int`). A type which is an abstract or opaque type member of an object — an Iron
+`object Key extends RefinedType[String, C]` (`Key.T`), a neotype `object Name extends Newtype[String]` (`Name.Type`),
+a scala-newtype `@newtype` (`Name.Type`) — is named after that object (`Map_Key_Int`), not after the member (whose short
+name `T`/`Type` all of them share, so that two different maps would be documented as `Map_T_Int` and `Map_T_Int1`).
+This is the name Tapir's `Schema.schemaForMap[K, V]` gives on Scala 3 when the key is written through its alias
+(`type Key = Key.T`); for a scala-newtype key on Scala 2.13 Tapir uses the member (`Name.Type`, so `Map_Type_Int` for
+every newtype). Type aliases among the type arguments are printed dealiased (e.g. refined's `NonEmpty` as `Not[Empty]`,
+`Map_Refined_String_Not_Empty_Int`), where Tapir keeps the alias' name.
+
+Since maps are named, two fields of the same map type share one component in OpenAPI (e.g. `Map_String`). Field-level
+customisations (a `@description` on the field, or `.modify(_.field)(_.description(...))`) stay on the field: when they
+differ between usages, Tapir's docs interpreter keeps the shared component without them and puts each one next to the
+field's `$ref` — exactly as with Tapir's own derivation (checked by the oracle tests).
+
 A value type wrapping a collection or map (an `AnyVal` class, an opaque type, an Iron `List[A] :| MinLength[1]`, ...)
 is coded as that collection, but the decoders do not fill it in when it is absent, so — unlike a plain collection — it is
 a required field (unless it has a default value).
@@ -312,6 +327,30 @@ carrying the subtype's value (`"const": "Circle"` in OpenAPI / JSON Schema), as 
 Your own implicit `Schema` for any of these types (e.g. `Schema[Map[UserId, Int]]`, `Schema[Option[Int]]`) always
 takes precedence. Tapir's schemas for primitive and other leaf types (`String`, `Int`, `UUID`, `Instant`, ...) are
 used as-is, and `Char` is treated as a `String`.
+
+## Validators for refined, Iron, neotype and scala-newtype types
+
+With the corresponding Kindlings integration module (`kindlings-iron-integration`, `kindlings-refined-integration`,
+`kindlings-neotype-integration`, `kindlings-newtype-integration`), a refined/newtype type is a value type: its schema
+is the schema of the underlying type, **without validators** for its constraints. Kindlings does not translate the
+constraints itself — the Tapir integration of each library does, and Kindlings uses its schemas like any other implicit
+`Schema` when they are imported where the schema is derived:
+
+| Library | Tapir integration (add it as a dependency) | Import |
+|---------|--------------------------------------------|--------|
+| [Iron](iron-integration.md#tapir-schemas) | `"com.softwaremill.sttp.tapir" %% "tapir-iron"` | `import sttp.tapir.codec.iron.given` |
+| [refined](refined-integration.md#tapir-schemas) | `"com.softwaremill.sttp.tapir" %% "tapir-refined"` | `import sttp.tapir.codec.refined._` |
+| [neotype](neotype-integration.md#tapir-schemas) | `"io.github.kitlangton" %% "neotype-tapir"` | `import neotype.interop.tapir.given` |
+| [scala-newtype](newtype-integration.md#tapir-schemas) | `"com.softwaremill.sttp.tapir" %% "tapir-newtype"` (Scala 2.13 only) | `import sttp.tapir.codec.newtype._` |
+
+```scala
+import sttp.tapir.codec.iron.given // constraints become validators (minLength, pattern, minimum, ...)
+
+val schema = KindlingsSchema.derived[Account].schema
+```
+
+The `upstream-oracle-tests` check that, with the import, the schema is identical to the one Tapir derives with the
+integration (see each integration guide for what differs without it).
 
 ## Debugging
 
@@ -345,10 +384,12 @@ This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the de
 ### Checked against Tapir
 
 The `upstream-oracle-tests` module derives the same types with Kindlings and with Tapir's own derivation (and with
-tapir-cats and tapir-iron) and compares the JSON Schemas Tapir's docs interpreter renders for them, on Scala 2.13 and 3.
-The only differences are the documented ones: required and optional fields follow the decoder (see "Required and
-optional fields" above; e.g. with circe, collections are required, while Tapir marks every collection optional), and
-Iron constraints become validators only with tapir-iron's schemas imported (see the Iron integration guide).
+tapir-cats, tapir-iron, tapir-refined, neotype-tapir and tapir-newtype) and compares the JSON Schemas Tapir's docs
+interpreter renders for them, on Scala 2.13 and 3. The only differences are the documented ones: required and optional
+fields follow the decoder (see "Required and optional fields" above; e.g. with circe, collections are required, while
+Tapir marks every collection optional), refined/Iron constraints become validators only with the library's Tapir
+integration imported (see "Validators for refined, Iron, neotype and scala-newtype types" above), and maps keyed by type
+members of objects are named after the object (see "Maps, collections and other built-in types").
 
 ### Benchmarks
 
