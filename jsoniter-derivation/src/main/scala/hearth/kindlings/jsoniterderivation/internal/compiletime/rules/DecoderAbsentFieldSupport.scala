@@ -185,10 +185,11 @@ trait DecoderAbsentFieldSupport {
   /** Whether the field's type is a collection or a map (decoded as a JSON array/object), not a `String`. */
   @scala.annotation.nowarn("msg=is never used")
   private def isCollectionField[Field: Type]: Boolean =
-    !(Type[Field] =:= CTypes.String) && (Type[Field] match {
-      case IsCollection(_) => true
-      case _               => false
-    })
+    !(Type[Field] =:= CTypes.String) && !(Type[Field] <:< Type.of[scala.collection.immutable.::[Any]]) &&
+      (Type[Field] match {
+        case IsCollection(_) => true
+        case _               => false
+      })
 
   /** jsoniter-scala's `genReadVal(fieldType, default = <field variable>)` for a field of a class:
     *
@@ -269,7 +270,7 @@ trait DecoderAbsentFieldSupport {
                     else decoded
                   }
             }
-          // `::` (no empty value, so not a collection field above): `[]` decodes as the default, as in jsoniter-scala.
+          // `::` (no empty value, so not treated as a collection field above): `[]` decodes as the default, as in jsoniter-scala.
           case Some(d) if Type[Field] <:< Type.of[scala.collection.immutable.::[Any]] =>
             (reader: Expr[JsonReader]) =>
               Expr.quote {

@@ -31,23 +31,10 @@ trait EncoderHandleAsCollectionRuleImpl {
                 else encodeCollectionViaHelper[A, Item](isCollection.value)
             }
 
-          case NonEmptyList(item) =>
-            // `::` has no `Factory`, so it is not an `IsCollection`: it is written as the `List` it is.
-            import item.Underlying as Item
-            implicit val ListItem: Type[List[Item]] = ListType[Item]
-            deriveEncoderRecursively[List[Item]](using ectx.nest[List[Item]](ectx.value.upcast[List[Item]]))
-              .map(Rule.matched(_))
-
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
-
-    /** `scala.collection.immutable.::` (a non-empty `List`), which has no `Factory`, so it is not an `IsCollection`. */
-    private lazy val NonEmptyList = Type.Ctor1.of[scala.collection.immutable.::]
-
-    @scala.annotation.nowarn("msg=is never used")
-    private def ListType[Item: Type]: Type[List[Item]] = Type.of[List[Item]]
 
     @scala.annotation.nowarn("msg=is never used")
     private def encodeCollectionInline[A: EncoderCtx, Item: Type](

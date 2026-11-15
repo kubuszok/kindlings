@@ -25,27 +25,28 @@ trait DecoderHandleAsCollectionRuleImpl {
             isCollection.value.asMap match {
               case Some(isMapOf) =>
                 DecoderHandleAsMapRule.decodeMapEntries[A, Item](isMapOf)
+              case None if isNonEmptyList[A] =>
+                decodeNonEmptyList[A, Item]
               case None =>
                 implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
                 if (dctx.evaluatedConfig.isDefined) decodeCollectionInline[A, Item](isCollection.value)
                 else decodeCollectionViaHelper[A, Item](isCollection.value)
             }
 
-          case NonEmptyList(item) =>
-            import item.Underlying as Item
-            decodeNonEmptyList[A, Item]
-
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
 
-    /** `scala.collection.immutable.::` (a non-empty `List`), which has no `Factory`, so it is not an `IsCollection`. */
-    private lazy val NonEmptyList = Type.Ctor1.of[scala.collection.immutable.::]
+    /** `scala.collection.immutable.::` (a non-empty `List`): an `IsCollection` (Hearth's provider builds it from a
+      * `List`, failing for an empty one), decoded as jsoniter-scala does (see [[decodeNonEmptyList]]).
+      */
+    private def isNonEmptyList[A: Type]: Boolean = Type[A] <:< Type.of[scala.collection.immutable.::[Any]]
 
     /** As in jsoniter-scala: a non-empty JSON array; `[]` and anything else (also `null`: the `nullValue` of `::` is
-      * `null`) fail with `expected non-empty JSON array`. (`[]` and `null` of a field with a default value decode as
-      * the default, see `withFieldDefault`.)
+      * `null`) fail with `expected non-empty JSON array` - at the opening token, not after reading the array as the
+      * generic collection decoding would. (`[]` and `null` of a field with a default value decode as the default, see
+      * `withFieldDefault`.)
       */
     @scala.annotation.nowarn("msg=is never used")
     private def decodeNonEmptyList[A: DecoderCtx, Item: Type]: MIO[Rule.Applicability[Expr[A]]] = {
