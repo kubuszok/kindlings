@@ -106,7 +106,7 @@ trait DecoderHandleAsEnumRuleImpl {
               val inlineError: Expr[A] = Expr.quote {
                 JsoniterDerivationUtils.unknownDiscriminator[A](
                   Expr.splice(dctx.reader),
-                  Expr.splice(dctx.config).discriminatorFieldName.orNull
+                  (Expr.splice(dctx.config).discriminatorFieldName match { case Some(name) => name; case _ => null })
                 )
               }
 

@@ -99,7 +99,10 @@ trait DecoderHandleAsMapRuleImpl {
             }
         case None =>
           MIO.pure(
-            Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived")
+            Rule.yielded(
+              s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived" + hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .hint(DecoderHandleAsMapRuleImpl.this)(Key)
+            )
           )
       }
     }
@@ -209,11 +212,14 @@ trait DecoderHandleAsMapRuleImpl {
                                 val lookupMapExpr: Expr[Map[String, K]] = casesNel.toList.foldRight(
                                   Expr.quote(Map.empty[String, K])
                                 ) { case ((caseName, caseExpr), acc) =>
+                                  // no `k -> v` in generated code: Predef.ArrowAssoc is deprecated since Scala 3.10
                                   Expr.quote {
-                                    Expr.splice(acc) + (
-                                      Expr.splice(ctx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
-                                        -> Expr.splice(caseExpr)
-                                    )
+                                    Expr
+                                      .splice(acc)
+                                      .updated(
+                                        Expr.splice(ctx.config).transformConstructorNames(Expr.splice(Expr(caseName))),
+                                        Expr.splice(caseExpr)
+                                      )
                                   }
                                 }
                                 MIO.pure(

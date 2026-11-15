@@ -85,7 +85,11 @@ trait EncoderHandleAsMapRuleImpl {
                   }
               }
           case None if ectx.evaluatedConfig.exists(!_.mapAsArray) =>
-            val err = CodecDerivationError.UnsupportedMapKey(Key.prettyPrint)
+            val err = CodecDerivationError.UnsupportedMapKey(
+              Key.prettyPrint,
+              hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .hint(EncoderHandleAsMapRuleImpl.this)(Key)
+            )
             Log.error(err.message) >> MIO.fail(err)
           case None =>
             // No key encoder — try value-level encoding for mapAsArray-only support (config only known at runtime)
@@ -124,7 +128,8 @@ trait EncoderHandleAsMapRuleImpl {
               .recoverWith { _ =>
                 MIO.pure(
                   Rule.yielded(
-                    s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived"
+                    s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived" + hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                      .hint(EncoderHandleAsMapRuleImpl.this)(Key)
                   )
                 )
               }

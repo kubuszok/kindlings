@@ -88,7 +88,12 @@ trait EncoderHandleAsMapRuleImpl {
                 })
               }
           case None =>
-            MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived"))
+            MIO.pure(
+              Rule.yielded(
+                s"Map key type ${Key.prettyPrint} is not String and no key encoder could be derived" + hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                  .hint(EncoderHandleAsMapRuleImpl.this)(Key)
+              )
+            )
         }
       }
     }

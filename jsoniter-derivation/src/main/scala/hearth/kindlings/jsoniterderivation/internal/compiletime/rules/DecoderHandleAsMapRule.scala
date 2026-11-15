@@ -201,7 +201,11 @@ trait DecoderHandleAsMapRuleImpl {
                   }
               }
           case None if dctx.evaluatedConfig.exists(!_.mapAsArray) =>
-            val err = CodecDerivationError.UnsupportedMapKey(Key.prettyPrint)
+            val err = CodecDerivationError.UnsupportedMapKey(
+              Key.prettyPrint,
+              hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .hint(DecoderHandleAsMapRuleImpl.this)(Key)
+            )
             Log.error(err.message) >> MIO.fail(err)
           case None =>
             // No key decoder — mapAsArray-only support (the config is only known at runtime)
@@ -327,7 +331,8 @@ trait DecoderHandleAsMapRuleImpl {
               .recoverWith { _ =>
                 MIO.pure(
                   Rule.yielded(
-                    s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived"
+                    s"Map key type ${Key.prettyPrint} is not String and no key decoder could be derived" + hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                      .hint(DecoderHandleAsMapRuleImpl.this)(Key)
                   )
                 )
               }

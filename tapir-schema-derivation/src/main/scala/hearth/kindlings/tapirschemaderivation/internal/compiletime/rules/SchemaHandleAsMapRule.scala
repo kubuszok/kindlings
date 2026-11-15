@@ -5,6 +5,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
+import hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
 import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
 import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
 import sttp.tapir.Schema
@@ -80,7 +81,8 @@ trait SchemaHandleAsMapRuleImpl {
               new Exception(
                 s"Cannot derive tapir Schema for Map with key type ${Key.prettyPrint}: the key must be a String, a " +
                   s"primitive, UUID, BigInt, BigDecimal or java.time type, a family of case objects, a type with the " +
-                  s"JSON library's key codec, or a value type (AnyVal, opaque type, ...) wrapping one of them. " +
+                  s"JSON library's key codec, or a value type (AnyVal, opaque type, ...) wrapping one of them" +
+                  ValueTypeIntegrationHints.hint(SchemaHandleAsMapRuleImpl.this)(Key) + ". " +
                   s"Provide an implicit Schema[${Type[A].prettyPrint}] " +
                   s"(e.g. using Schema.schemaForMap[K, V](keyToString)) for other key types"
               )

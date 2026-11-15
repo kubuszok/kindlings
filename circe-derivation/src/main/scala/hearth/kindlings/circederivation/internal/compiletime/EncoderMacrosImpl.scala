@@ -441,7 +441,12 @@ trait EncoderMacrosImpl
                 else
                   s" - The rule ${rule.name} was not applicable, for the following reasons: ${reasons.mkString(", ")}"
               }.toList
-            val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
+            val err = EncoderDerivationError.UnsupportedType(
+              Type[A].prettyPrint,
+              reasonsStrings ++ hearth.kindlings.derivation.compiletime.ValueTypeIntegrationHints
+                .sentence(this)(Type[A])
+                .map(" - Hint: " + _)
+            )
             Log.error(err.message) >> MIO.fail(err)
         }
       }
