@@ -982,7 +982,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
 
   /** `.at(i)` / `.index(i)` / `.atOrElse(i, default)` over a `Seq` via `IsCollection`: iterate with an index counter,
     * transform the element at `i`, and rebuild. `.at` throws if `i` is out of range; `.index` is a no-op if absent;
-    * `.atOrElse` appends `f(default)` when `i` is exactly one past the end.
+    * `.atOrElse` appends `f(default)` when `i` is absent (as quicklens: at the end, whatever `i` is).
     */
   private def buildAtSeq[S: Type, Item: Type](
       sExpr: Expr[S],
@@ -1026,7 +1026,9 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
             else { val _ = builder += x }
             i += 1
           }
-          if (!found) throw new NoSuchElementException("Index " + target + " not found")
+          // As quicklens (`Seq#apply`): a missing index is an `IndexOutOfBoundsException`.
+          if (!found)
+            throw new IndexOutOfBoundsException(target.toString + " is out of bounds (min 0, max " + (i - 1) + ")")
           builder
         }
       case AtKind.AtOrElse =>
@@ -1044,10 +1046,8 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
             else { val _ = builder += x }
             i += 1
           }
-          if (!found) {
-            if (target == i) { val _ = builder += Expr.splice(tx(defaultExpr)) }
-            else throw new IndexOutOfBoundsException("Index " + target + " out of range for atOrElse")
-          }
+          // As quicklens: when the index is absent, `f(default)` is appended (whatever the index).
+          if (!found) { val _ = builder += Expr.splice(tx(defaultExpr)) }
           builder
         }
     }

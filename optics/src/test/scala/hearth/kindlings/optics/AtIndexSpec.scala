@@ -15,10 +15,13 @@ final class AtIndexSpec extends MacroSuite {
         ListBox(List(Person("ann", 1), Person("BOB", 2)))
     }
 
-    test("absent: throws") {
+    test("absent: throws IndexOutOfBoundsException (as quicklens)") {
       val box = ListBox(List(Person("ann", 1)))
-      val _ = intercept[NoSuchElementException] {
+      val _ = intercept[IndexOutOfBoundsException] {
         box.modify(_.people.at(5).name).using(_.toUpperCase)
+      }
+      val _ = intercept[IndexOutOfBoundsException] {
+        box.modify(_.people.at(-1).name).using(_.toUpperCase)
       }
     }
   }
@@ -76,6 +79,12 @@ final class AtIndexSpec extends MacroSuite {
     test("Seq absent: inserts default (grows the seq)") {
       val box = ListInts(List(1, 2))
       box.modify(_.xs.atOrElse(2, 99)).using(_ + 1).xs ==> List(1, 2, 100)
+    }
+
+    test("Seq absent: appends default whatever the index (as quicklens)") {
+      val box = ListInts(List(1, 2))
+      box.modify(_.xs.atOrElse(5, 99)).using(_ + 1).xs ==> List(1, 2, 100)
+      box.modify(_.xs.atOrElse(-1, 99)).using(_ + 1).xs ==> List(1, 2, 100)
     }
   }
 
