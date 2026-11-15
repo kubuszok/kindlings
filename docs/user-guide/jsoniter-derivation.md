@@ -110,7 +110,7 @@ implicit val config: JsoniterConfig = JsoniterConfig.default
 | `withTransientEmpty` | Skip empty collections, maps and arrays (also `IArray`) during encoding; empty strings are still written |
 | `withTransientNone` | Skip `None` fields during encoding |
 | `withRequireCollectionFields` | Fail if a collection/map field without a default value is missing (instead of decoding it as empty) |
-| `withRequireDefaultFields` | Fail if field with default is missing (`Option` fields still decode as `None`) |
+| `withRequireDefaultFields` | Fail if field with default is missing (`Option` fields still decode as `None`). As in jsoniter-scala, a field's decoder then gets its type's `nullValue` instead of the field's default value: `null` and `[]`/`{}` decode as for a field without a default |
 | `withCheckFieldDuplication` | Fail on duplicate JSON field names |
 | `withBigDecimalPrecision(n)` | Precision decoded `BigDecimal`s are rounded to (`HALF_EVEN`, default `34` = decimal128) |
 | `withBigDecimalScaleLimit(n)` | Decoded `BigDecimal` scale limit (exclusive, as in jsoniter-scala's reader) |
@@ -215,11 +215,14 @@ collection and map codecs and an error for case classes.
 
 A field with a default value is decoded as jsoniter-scala does, with that default as the `default` argument of its
 decoder: an empty JSON array/object (`[]`/`{}`) for a collection or map field with a default value is that default
-(`"l":[]` decodes `l: List[Int] = List(0)` as `List(0)`, also with `withRequireDefaultFields`, which only rejects absent
-fields; see below for `withEmptyCollectionsAsEmpty`), and a user-provided `JsonValueCodec` of a field receives the field's default value (its `nullValue` for a field
-without one) as `default` and decides itself what a JSON `null` is. Defaults that depend on preceding parameter lists
-are not passed (the codec's `nullValue` is). One difference: with `checkFieldDuplication = false`, jsoniter-scala passes
-the value read for an earlier duplicate of the key instead of the default.
+(`"l":[]` decodes `l: List[Int] = List(0)` as `List(0)`; see below for `withEmptyCollectionsAsEmpty`), and a
+user-provided `JsonValueCodec` of a field receives the field's default value (its `nullValue` for a field without one) as
+`default` and decides itself what a JSON `null` is. Defaults that depend on preceding parameter lists are not passed (the
+codec's `nullValue` is), and neither are defaults with `withRequireDefaultFields` (as in jsoniter-scala: then `"l":[]`
+is `Nil`, and `"s":null` for `s: String = "x"` is rejected). Two differences: with `checkFieldDuplication = false`,
+jsoniter-scala passes the value read for an earlier duplicate of the key instead of the default; and jsoniter-scala's
+error for a value of another JSON type in a field with a default value says `or null` (`expected '{' or null`), which
+Kindlings' does not (`expected '{'`).
 
 | Collection or map field with a non-empty default value | `[]` / `{}` | JSON `null` | absent |
 |--------------------------------------------------------|-------------|-------------|--------|
@@ -270,6 +273,16 @@ always treated as runtime configs, whether their classes are compiled in the sam
   (`'a' parameter of 'C' should be defined as 'val' or 'var' in the primary constructor.`): the codec could not write
   what it requires when reading. Make them public `val`s/`var`s or mark them `@transientField` (with a default value).
 - With `withTransientEmpty`, `Iterator` fields are checked with `hasNext` (not consumed).
+- `scala.collection.immutable.::` (a non-empty `List`) is a JSON array that must not be empty (`expected non-empty JSON
+  array`); its fields are always required (an empty one does not exist), and `[]`/`null` of one with a default value is
+  the default, as in jsoniter-scala.
+- Recursive tuples and named tuples behind local type aliases (`type R = (value: Int, next: Option[R])`) are supported,
+  as in jsoniter-scala (where they need `allowRecursiveTypes`); `transientNone`/`transientEmpty` apply to the fields of
+  named tuples as to those of case classes.
+- A Scala 3 `T | Null` field holding `null` is written as `null` without `withTransientNull` (jsoniter-scala's codec
+  throws a `NullPointerException` then).
+- With `withEncodingOnly`, the codec's `nullValue` throws `NotImplementedError` too (it is a part of decoding), as in
+  jsoniter-scala.
 - A user-provided implicit `JsonKeyCodec` takes precedence over the built-in key types, also for `String` keys.
 
 ## Annotations

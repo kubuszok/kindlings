@@ -16,7 +16,12 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
   override protected def tupleElementTypes[A: Type]: Option[List[??]] = {
     import q.reflect.*
     val consSym = Symbol.requiredClass("scala.*:")
-    def loop(t: TypeRepr): Option[List[TypeRepr]] = t.dealias.simplified.dealias match {
+    // A recursive type alias (`type R = (Int, Option[R])`) is not unfolded by `dealias`.
+    def unfold(t: TypeRepr): TypeRepr = t.dealias.simplified.dealias match {
+      case tr: TypeRef if tr.typeSymbol.isAliasType => tr.translucentSuperType
+      case other                                    => other
+    }
+    def loop(t: TypeRepr): Option[List[TypeRepr]] = unfold(t) match {
       case AppliedType(tycon, List(h, tl)) if tycon.typeSymbol == consSym  => loop(tl).map(h :: _)
       case AppliedType(tycon, args) if defn.isTupleClass(tycon.typeSymbol) => Some(args)
       case other if other =:= TypeRepr.of[EmptyTuple]                      => Some(Nil)
@@ -32,6 +37,15 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
       '{ ${ v.asInstanceOf[Expr[E]] }.asInstanceOf[Object] }
     }
     Some('{ scala.Tuple.fromArray(scala.Array[Object](${ Varargs(boxed) }*)).asInstanceOf[A] })
+  }
+
+  override protected def unfoldRecursiveAlias[A: Type]: Option[??] = {
+    import q.reflect.*
+    TypeRepr.of[A].dealias match {
+      case tr: TypeRef if tr.typeSymbol.isAliasType =>
+        Some(UntypedType.as_??(tr.translucentSuperType.asInstanceOf[UntypedType]))
+      case _ => None
+    }
   }
 
   /** `T | Null` (jsoniter-scala's "nullable" types): `T` without the `Null` member(s). */

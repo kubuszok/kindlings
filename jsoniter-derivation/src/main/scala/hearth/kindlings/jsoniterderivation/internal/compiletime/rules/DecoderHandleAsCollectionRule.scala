@@ -31,10 +31,41 @@ trait DecoderHandleAsCollectionRuleImpl {
                 else decodeCollectionViaHelper[A, Item](isCollection.value)
             }
 
+          case NonEmptyList(item) =>
+            import item.Underlying as Item
+            decodeNonEmptyList[A, Item]
+
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
+
+    /** `scala.collection.immutable.::` (a non-empty `List`), which has no `Factory`, so it is not an `IsCollection`. */
+    private lazy val NonEmptyList = Type.Ctor1.of[scala.collection.immutable.::]
+
+    /** As in jsoniter-scala: a non-empty JSON array; `[]` and anything else (also `null`: the `nullValue` of `::` is
+      * `null`) fail with `expected non-empty JSON array`. (`[]` and `null` of a field with a default value decode as
+      * the default, see `withFieldDefault`.)
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def decodeNonEmptyList[A: DecoderCtx, Item: Type]: MIO[Rule.Applicability[Expr[A]]] = {
+      implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+      deriveDecoderRecursively[Item](using dctx.nest[Item](dctx.reader)).map { decodeItemExpr =>
+        Rule.matched(Expr.quote {
+          val reader = Expr.splice(dctx.reader)
+          if (!reader.isNextToken('['.toByte) || reader.isNextToken(']'.toByte))
+            reader.decodeError("expected non-empty JSON array")
+          else {
+            reader.rollbackToken()
+            val buffer = new scala.collection.mutable.ListBuffer[Item]
+            buffer += Expr.splice(decodeItemExpr)
+            while (reader.isNextToken(','.toByte)) buffer += Expr.splice(decodeItemExpr)
+            if (!reader.isCurrentToken(']'.toByte)) reader.arrayEndOrCommaError()
+            buffer.toList.asInstanceOf[A]
+          }
+        })
+      }
+    }
 
     /** As in jsoniter-scala, `setMaxInsertNumber` limits only sets (not other collections, nor bit sets). */
     @scala.annotation.nowarn("msg=is never used")

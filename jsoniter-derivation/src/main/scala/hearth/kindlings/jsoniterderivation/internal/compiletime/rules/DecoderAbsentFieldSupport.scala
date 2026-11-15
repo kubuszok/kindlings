@@ -213,6 +213,34 @@ trait DecoderAbsentFieldSupport {
       decode: Expr[JsonReader] => Expr[Field]
   ): Expr[JsonReader] => Expr[Field] = {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    // As in jsoniter-scala, with `requireDefaultFields` the decoder of a field gets the field type's `nullValue` as
+    // `default`, not the field's default value (`null` and `[]` decode as for a field without a default).
+    val unchanged = independentDefault[Field](param).isEmpty && nullAsDefaultValue[Field](param).isEmpty
+    if (unchanged) decode
+    else
+      evaluatedConfig.map(_.requireDefaultFields) match {
+        case Some(true)  => decode
+        case Some(false) => withFieldDefaultValue[Field](param, config, evaluatedConfig)(decode)
+        case None        =>
+          val withDefault = withFieldDefaultValue[Field](param, config, evaluatedConfig)(decode)
+          (reader: Expr[JsonReader]) =>
+            Expr.quote {
+              if (Expr.splice(config).requireDefaultFields) Expr.splice(decode(reader))
+              else Expr.splice(withDefault(reader))
+            }
+      }
+  }
+
+  /** [[withFieldDefault]] when the field's default value is used (`requireDefaultFields` is off). */
+  @scala.annotation.nowarn("msg=is never used")
+  private def withFieldDefaultValue[Field: Type](
+      param: Parameter,
+      config: Expr[JsoniterConfig],
+      evaluatedConfig: Option[JsoniterConfig]
+  )(
+      decode: Expr[JsonReader] => Expr[Field]
+  ): Expr[JsonReader] => Expr[Field] = {
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
     val default = independentDefault[Field](param)
     summonJsonValueCodecCached[Field] match {
       case Right(codec) =>
@@ -241,6 +269,14 @@ trait DecoderAbsentFieldSupport {
                     else decoded
                   }
             }
+          // `::` (no empty value, so not a collection field above): `[]` decodes as the default, as in jsoniter-scala.
+          case Some(d) if Type[Field] <:< Type.of[scala.collection.immutable.::[Any]] =>
+            (reader: Expr[JsonReader]) =>
+              Expr.quote {
+                JsoniterDerivationUtils.readEmptyArrayAsDefault[Field](Expr.splice(reader), Expr.splice(d)) {
+                  (r: JsonReader) => Expr.splice(decode(Expr.quote(r)))
+                }
+              }
           case _ => decode
         }
         withNullAsDefault[Field](param)(emptyAsDefault)

@@ -31,7 +31,15 @@ trait DecoderHandleAsNamedTupleRuleImpl {
               }
             } yield result
           case Left(reason) =>
-            MIO.pure(Rule.yielded(reason))
+            // A named tuple behind a recursive type alias: decoded as the named tuple the alias stands for.
+            unfoldRecursiveAlias[A].filter(_.Underlying.isNamedTuple) match {
+              case Some(unfolded) =>
+                import unfolded.Underlying as Unfolded
+                deriveDecoderRecursively[Unfolded](using dctx.nest[Unfolded](dctx.reader)).map { decoded =>
+                  Rule.matched(Expr.quote(Expr.splice(decoded).asInstanceOf[A]))
+                }
+              case None => MIO.pure(Rule.yielded(reason))
+            }
         }
       }
 

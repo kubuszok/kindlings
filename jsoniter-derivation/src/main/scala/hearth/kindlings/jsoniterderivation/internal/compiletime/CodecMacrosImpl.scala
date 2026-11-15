@@ -84,6 +84,11 @@ trait CodecMacrosImpl
     */
   protected def nullableUnionUnderlying[A: Type]: Option[??] = None
 
+  /** The type a recursive type alias stands for (Scala 3 `type R = (value: Int, next: Option[R])`, which `dealias` does
+    * not unfold), or `None` (always on Scala 2).
+    */
+  protected def unfoldRecursiveAlias[A: Type]: Option[??] = None
+
   /** Builds a tuple which is not a `TupleN` case class (Scala 3 generic tuples) from its elements. */
   protected def constructGenericTuple[A: Type](elements: List[Expr_??]): Option[Expr[A]] = {
     val _ = elements
@@ -666,7 +671,7 @@ trait CodecMacrosImpl
             } yield fn.get
           }
 
-          val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+          val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
           // Key codec parts
           val keyEncMIO: MIO[Option[Expr[(A, JsonWriter) => Unit]]] = {
@@ -852,7 +857,7 @@ trait CodecMacrosImpl
             } yield fn.get
           }
 
-          val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+          val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
           val (decFn, nullVal) = runSafe {
             for {
@@ -954,7 +959,7 @@ trait CodecMacrosImpl
           }
 
           // Null value
-          val nullMIO: MIO[Expr[A]] = deriveNullValue[A]
+          val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
           // Combine with parTuple (parallel error aggregation)
           val ((encFn, decFn), nullVal) = runSafe {
@@ -1084,6 +1089,40 @@ trait CodecMacrosImpl
   @scala.annotation.nowarn("msg=is never used")
   // (lazy: it inspects IsCollection & co., which must run after the standard extensions are loaded)
   def deriveNullValue[A: Type]: MIO[Expr[A]] = MIO.pure(()).map(_ => nullValueOf[A])
+
+  /** [[deriveNullValue]] of a codec derived with `configExpr`: as in jsoniter-scala, with `inlineOneValueClasses` a
+    * one-value class (see [[oneValueClassField]]) wraps its field's `nullValue`, as a value class does.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveNullValue[A: Type](configExpr: Expr[JsoniterConfig], evConfig: Option[JsoniterConfig]): MIO[Expr[A]] =
+    MIO.pure(()).map { _ =>
+      implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+      val plain = nullValueOf[A]
+      val nullValue =
+        if (evConfig.exists(!_.inlineOneValueClasses)) plain
+        else
+          oneValueClassField[A](evConfig).flatMap { case (product, fieldName, param) =>
+            import param.tpe.Underlying as Field
+            constructOneValueClass[A](product, fieldName, nullValueOf[Field].as_??).toOption
+          } match {
+            case Some(inlined) if evConfig.isDefined => inlined
+            case Some(inlined)                       =>
+              Expr.quote(
+                if (Expr.splice(configExpr).inlineOneValueClasses) Expr.splice(inlined) else Expr.splice(plain)
+              )
+            case None => plain
+          }
+      // As in jsoniter-scala, `nullValue` is a part of decoding: `encodingOnly` codecs throw `NotImplementedError`.
+      evConfig.map(_.encodingOnly) match {
+        case Some(false) => nullValue
+        case Some(true)  => Expr.quote(JsoniterDerivationUtils.notImplemented[A])
+        case None        =>
+          Expr.quote {
+            if (Expr.splice(configExpr).encodingOnly) JsoniterDerivationUtils.notImplemented[A]
+            else Expr.splice(nullValue)
+          }
+      }
+    }
 
   @scala.annotation.nowarn("msg=is never used")
   private def nullValueOf[A: Type]: Expr[A] =

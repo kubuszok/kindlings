@@ -153,6 +153,34 @@ trait DecoderAbsentFieldSupport {
       decode: Expr[UBJsonReader] => Expr[Field]
   ): Expr[UBJsonReader] => Expr[Field] = {
     implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
+    // As in jsoniter-scala (and jsoniter-derivation), with `requireDefaultFields` the decoder of a field gets the field
+    // type's `nullValue` as `default`, not the field's default value (`null` and an empty collection decode as for a
+    // field without a default).
+    if (parameterDefault(param, Map.empty).isEmpty) decode
+    else
+      evaluatedConfig.map(_.requireDefaultFields) match {
+        case Some(true)  => decode
+        case Some(false) => withFieldDefaultValue[Field](param, config, evaluatedConfig)(decode)
+        case None        =>
+          val withDefault = withFieldDefaultValue[Field](param, config, evaluatedConfig)(decode)
+          (reader: Expr[UBJsonReader]) =>
+            Expr.quote {
+              if (Expr.splice(config).requireDefaultFields) Expr.splice(decode(reader))
+              else Expr.splice(withDefault(reader))
+            }
+      }
+  }
+
+  /** [[withFieldDefault]] when the field's default value is used (`requireDefaultFields` is off). */
+  @scala.annotation.nowarn("msg=is never used")
+  private def withFieldDefaultValue[Field: Type](
+      param: Parameter,
+      config: Expr[UBJsonConfig],
+      evaluatedConfig: Option[UBJsonConfig]
+  )(
+      decode: Expr[UBJsonReader] => Expr[Field]
+  ): Expr[UBJsonReader] => Expr[Field] = {
+    implicit val UBJsonReaderT: Type[UBJsonReader] = CTypes.UBJsonReader
     val default: Option[Expr[Field]] = parameterDefault(param, Map.empty).map(_.value.asInstanceOf[Expr[Field]])
     def hasUserCodec: Boolean = CTypes
       .UBJsonValueCodec[Field]

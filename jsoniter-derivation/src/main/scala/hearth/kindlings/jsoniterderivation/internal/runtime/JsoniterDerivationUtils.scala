@@ -69,7 +69,19 @@ object JsoniterDerivationUtils {
   }
 
   def readScalaEnumValueId[A](in: JsonReader, asString: Boolean)(dispatch: Int => A): A =
-    dispatch(if (asString) in.readStringAsInt() else in.readInt())
+    // as jsoniter-scala: `expected '"'` / `expected digit` for other tokens
+    if (asString) {
+      if (in.isNextToken('"'.toByte)) {
+        in.rollbackToken()
+        dispatch(in.readStringAsInt())
+      } else in.decodeError("expected '\"'")
+    } else {
+      val t = in.nextToken()
+      if ((t >= '0' && t <= '9') || t == '-') {
+        in.rollbackToken()
+        dispatch(in.readInt())
+      } else in.decodeError("expected digit")
+    }
 
   def scalaEnumValueId(value: Any): Int =
     value.asInstanceOf[scala.Enumeration#Value].id
@@ -281,12 +293,14 @@ object JsoniterDerivationUtils {
     val builder = factory.newBuilder
     if (openArray(in, nullAsEmpty = true) && !in.isNextToken(']'.toByte)) {
       in.rollbackToken()
+      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first element)
       var count = 1
       builder += decodeItem(in)
+      if (count > maxInserts) in.decodeError("too many set inserts")
       while (in.isNextToken(','.toByte)) {
+        builder += decodeItem(in)
         count += 1
         if (count > maxInserts) in.decodeError("too many set inserts")
-        builder += decodeItem(in)
       }
       if (!in.isCurrentToken(']'.toByte)) in.decodeError("expected ']' or ','")
     }
@@ -302,14 +316,16 @@ object JsoniterDerivationUtils {
     val builder = factory.newBuilder
     if (openObject(in, nullAsEmpty = true) && !in.isNextToken('}'.toByte)) {
       in.rollbackToken()
+      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
       var count = 1
       val key = in.readKeyAsString()
       builder += ((key, decodeValue(in)))
+      if (count > maxInserts) in.decodeError("too many map inserts")
       while (in.isNextToken(','.toByte)) {
-        count += 1
-        if (count > maxInserts) in.decodeError("too many map inserts")
         val k = in.readKeyAsString()
         builder += ((k, decodeValue(in)))
+        count += 1
+        if (count > maxInserts) in.decodeError("too many map inserts")
       }
       if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
     }
@@ -386,6 +402,29 @@ object JsoniterDerivationUtils {
     if (in.isNextToken('{'.toByte)) true
     else if (nullAsEmpty) in.readNullOrTokenError(false, '{'.toByte)
     else in.decodeError("expected '{'")
+
+  /** jsoniter-scala's `???` of the missing direction (`decodingOnly`/`encodingOnly`): "an implementation is missing".
+    */
+  def notImplemented[A]: A = throw new NotImplementedError()
+
+  /** Decodes a field of type `::` that has a default value: an empty JSON array decodes as the default (as in
+    * jsoniter-scala, `::` having no empty value), anything else with `decode`.
+    */
+  def readEmptyArrayAsDefault[A](in: JsonReader, default: A)(decode: JsonReader => A): A = {
+    in.setMark()
+    if (in.isNextToken('['.toByte)) {
+      if (in.isNextToken(']'.toByte)) {
+        in.resetMark()
+        default
+      } else {
+        in.rollbackToMark()
+        decode(in)
+      }
+    } else {
+      in.resetMark()
+      in.readNullOrTokenError(default, '['.toByte)
+    }
+  }
 
   /** Decodes a field that has a default value: a JSON `null` decodes as the default (as in jsoniter-scala, which passes
     * the field's current value as `default` to the field's decoder).
@@ -550,8 +589,13 @@ object JsoniterDerivationUtils {
     construct(arr)
   }
 
-  def readWrapped[A](in: JsonReader)(dispatch: String => A): A = {
-    if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{'")
+  def readWrapped[A](in: JsonReader)(dispatch: String => A): A = readWrapped[A](in, "expected '{'")(dispatch)
+
+  /** [[readWrapped]] failing with `notObjectError` (jsoniter-scala's `expected '"' or '{'` / `expected '"'`) when the
+    * value is not a JSON object.
+    */
+  def readWrapped[A](in: JsonReader, notObjectError: String)(dispatch: String => A): A = {
+    if (!in.isNextToken('{'.toByte)) in.decodeError(notObjectError)
     val typeName = in.readKeyAsString()
     val result = dispatch(typeName)
     if (!in.isNextToken('}'.toByte)) in.objectEndOrCommaError()
@@ -578,6 +622,19 @@ object JsoniterDerivationUtils {
       markObjectStart: Boolean
   )(
       dispatch: (String, Boolean) => A
+  ): A = readWithDiscriminator[A](in, discriminatorField, requireFirst, markObjectStart, null)(dispatch)
+
+  /** With `isLeafName` (if not `null`), an unknown discriminator value found when the discriminator is not the first
+    * key is reported where it was read (as jsoniter-scala does), not after re-reading the object from its start.
+    */
+  def readWithDiscriminator[A](
+      in: JsonReader,
+      discriminatorField: String,
+      requireFirst: Boolean,
+      markObjectStart: Boolean,
+      isLeafName: String => Boolean
+  )(
+      dispatch: (String, Boolean) => A
   ): A =
     if (requireFirst) {
       if (markObjectStart) in.setMark()
@@ -592,6 +649,10 @@ object JsoniterDerivationUtils {
       if (in.isNextToken('{'.toByte)) {
         if (in.skipToKey(discriminatorField)) {
           val typeName = in.readString(null)
+          if ((isLeafName ne null) && !isLeafName(typeName)) {
+            in.resetMark()
+            in.discriminatorValueError(discriminatorField)
+          }
           in.rollbackToMark()
           if (markObjectStart) in.setMark()
           val _ = in.isNextToken('{'.toByte)
@@ -652,14 +713,16 @@ object JsoniterDerivationUtils {
     val builder = factory.newBuilder
     if (openObject(in, nullAsEmpty = true) && !in.isNextToken('}'.toByte)) {
       in.rollbackToken()
+      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
       var count = 1
       val key = decodeKey(in)
       builder += ((key, decodeValue(in)))
+      if (count > maxInserts) in.decodeError("too many map inserts")
       while (in.isNextToken(','.toByte)) {
-        count += 1
-        if (count > maxInserts) in.decodeError("too many map inserts")
         val k = decodeKey(in)
         builder += ((k, decodeValue(in)))
+        count += 1
+        if (count > maxInserts) in.decodeError("too many map inserts")
       }
       if (!in.isCurrentToken('}'.toByte)) in.decodeError("expected '}' or ','")
     }
@@ -696,20 +759,22 @@ object JsoniterDerivationUtils {
     val builder = factory.newBuilder
     if (openArray(in, nullAsEmpty = true) && !in.isNextToken(']'.toByte)) {
       in.rollbackToken()
+      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
       var count = 1
       if (!in.isNextToken('['.toByte)) in.decodeError("expected '['")
       val k = decodeKey(in)
       if (!in.isNextToken(','.toByte)) in.commaError()
       val v = decodeValue(in)
+      if (count > maxInserts) in.decodeError("too many map inserts")
       if (!in.isNextToken(']'.toByte)) in.arrayEndError()
       builder += ((k, v))
       while (in.isNextToken(','.toByte)) {
-        count += 1
-        if (count > maxInserts) in.decodeError("too many map inserts")
         if (!in.isNextToken('['.toByte)) in.decodeError("expected '['")
         val k = decodeKey(in)
         if (!in.isNextToken(','.toByte)) in.commaError()
         val v = decodeValue(in)
+        count += 1
+        if (count > maxInserts) in.decodeError("too many map inserts")
         if (!in.isNextToken(']'.toByte)) in.arrayEndError()
         builder += ((k, v))
       }

@@ -89,13 +89,13 @@ trait DecoderHandleAsMapRuleImpl {
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
-                            count += 1
-                            if (count > maxInserts)
-                              reader.decodeError("too many map inserts")
                             JsoniterDerivationUtils.openPair(reader)
                             val key = keyDecodeFnVal(reader)
                             JsoniterDerivationUtils.pairSeparator(reader)
                             val value = decodeFnVal(reader)
+                            // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
+                            count += 1
+                            if (count > maxInserts) reader.decodeError("too many map inserts")
                             JsoniterDerivationUtils.closePair(reader)
                             mapBuilder += Expr.splice(
                               isMap.pair(
@@ -116,11 +116,11 @@ trait DecoderHandleAsMapRuleImpl {
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
-                            count += 1
-                            if (count > maxInserts)
-                              reader.decodeError("too many map inserts")
                             val key = keyDecoderVal(reader)
                             val value = decodeFnVal(reader)
+                            // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
+                            count += 1
+                            if (count > maxInserts) reader.decodeError("too many map inserts")
                             mapBuilder += Expr.splice(
                               isMap.pair(
                                 Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
@@ -237,13 +237,13 @@ trait DecoderHandleAsMapRuleImpl {
                           var count = 0
                           var continueLoop = true
                           while (continueLoop) {
-                            count += 1
-                            if (count > maxInserts)
-                              reader.decodeError("too many map inserts")
                             JsoniterDerivationUtils.openPair(reader)
                             val key = keyDecodeFnVal(reader)
                             JsoniterDerivationUtils.pairSeparator(reader)
                             val value = decodeFnVal(reader)
+                            // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
+                            count += 1
+                            if (count > maxInserts) reader.decodeError("too many map inserts")
                             JsoniterDerivationUtils.closePair(reader)
                             mapBuilder += Expr.splice(
                               isMap.pair(
@@ -362,6 +362,7 @@ trait DecoderHandleAsMapRuleImpl {
               .openObject(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader.isNextToken('}'.toByte)
           ) {
             reader.rollbackToken()
+            // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
             var count: Int = 1
             val key = reader.readKeyAsString()
             mapBuilder += Expr.splice(
@@ -370,10 +371,8 @@ trait DecoderHandleAsMapRuleImpl {
                 decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
               )
             )
+            if (count > Expr.splice(Expr(maxInserts))) reader.decodeError("too many map inserts")
             while (reader.isNextToken(','.toByte)) {
-              count += 1
-              if (count > Expr.splice(Expr(maxInserts)))
-                reader.decodeError("too many map inserts")
               val k = reader.readKeyAsString()
               mapBuilder += Expr.splice(
                 isMap.pair(
@@ -381,6 +380,8 @@ trait DecoderHandleAsMapRuleImpl {
                   decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
                 )
               )
+              count += 1
+              if (count > Expr.splice(Expr(maxInserts))) reader.decodeError("too many map inserts")
             }
             if (!reader.isCurrentToken('}'.toByte)) reader.decodeError("expected '}' or ','")
           }
@@ -457,6 +458,7 @@ trait DecoderHandleAsMapRuleImpl {
               .openArray(reader, Expr.splice(Expr(nullAsEmptyMap))) && !reader.isNextToken(']'.toByte)
           ) {
             reader.rollbackToken()
+            // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
             var count: Int = 1
             JsoniterDerivationUtils.openPair(reader)
             val key = reader.readString(null)
@@ -467,11 +469,9 @@ trait DecoderHandleAsMapRuleImpl {
                 decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
               )
             )
+            if (count > Expr.splice(Expr(maxInserts))) reader.decodeError("too many map inserts")
             JsoniterDerivationUtils.closePair(reader)
             while (reader.isNextToken(','.toByte)) {
-              count += 1
-              if (count > Expr.splice(Expr(maxInserts)))
-                reader.decodeError("too many map inserts")
               JsoniterDerivationUtils.openPair(reader)
               val k = reader.readString(null)
               JsoniterDerivationUtils.pairSeparator(reader)
@@ -481,6 +481,8 @@ trait DecoderHandleAsMapRuleImpl {
                   decodeValueExpr.asInstanceOf[Expr[isMap.Value]]
                 )
               )
+              count += 1
+              if (count > Expr.splice(Expr(maxInserts))) reader.decodeError("too many map inserts")
               JsoniterDerivationUtils.closePair(reader)
             }
             if (!reader.isCurrentToken(']'.toByte)) reader.decodeError("expected ']' or ','")
@@ -577,12 +579,13 @@ trait DecoderHandleAsMapRuleImpl {
                     var count = 0
                     var continueLoop = true
                     while (continueLoop) {
-                      count += 1
-                      if (count > maxInserts) reader.decodeError("too many map inserts")
                       JsoniterDerivationUtils.openPair(reader)
                       val key = keyDecodeFnVal(reader)
                       JsoniterDerivationUtils.pairSeparator(reader)
                       val value = decodeFnVal(reader)
+                      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
+                      count += 1
+                      if (count > maxInserts) reader.decodeError("too many map inserts")
                       JsoniterDerivationUtils.closePair(reader)
                       mapBuilder += Expr.splice(
                         isMap.pair(
@@ -603,8 +606,6 @@ trait DecoderHandleAsMapRuleImpl {
                     var count = 0
                     var continueLoop = true
                     while (continueLoop) {
-                      count += 1
-                      if (count > maxInserts) reader.decodeError("too many map inserts")
                       val key = reader.readKeyAsString()
                       mapBuilder += Expr.splice(
                         isMap.pair(
@@ -612,6 +613,9 @@ trait DecoderHandleAsMapRuleImpl {
                           Expr.quote(decodeFnVal(reader)).asInstanceOf[Expr[isMap.Value]]
                         )
                       )
+                      // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
+                      count += 1
+                      if (count > maxInserts) reader.decodeError("too many map inserts")
                       continueLoop = reader.isNextToken(','.toByte)
                     }
                     if (!reader.isCurrentToken('}'.toByte)) reader.decodeError("expected '}' or ','")

@@ -172,15 +172,48 @@ trait DecoderHandleAsEnumRuleImpl {
                     ) // as jsoniter-scala: `illegal discriminator` (Java enums / Enumeration: `illegal enum value`)
                 val enumAsStringsApplies: Expr[Boolean] =
                   if (allCaseObjects) Expr.quote(Expr.splice(dctx.config).enumAsStrings) else Expr(false)
+                // jsoniter-scala's error for a token that is neither a string nor an object without a discriminator:
+                // `expected '"'` for ADTs of case objects only, `expected '"' or '{'` for ADTs of case objects and
+                // classes; when strings are not accepted (no case objects, or circeLikeObjectEncoding) its Scala 2 macro
+                // says `expected '{'` and its Scala 3 one `expected '"' or '{'`.
+                val objectOnlyError: String = if (Environment.isScala3) "expected '\"' or '{'" else "expected '{'"
+                val notStringOrObjectError: Expr[String] =
+                  if (stringFn.isEmpty) Expr(objectOnlyError)
+                  else {
+                    val withStrings = if (allCaseObjects) "expected '\"'" else "expected '\"' or '{'"
+                    Expr.quote {
+                      if (Expr.splice(dctx.config).circeLikeObjectEncoding) Expr.splice(Expr(objectOnlyError))
+                      else Expr.splice(Expr(withStrings))
+                    }
+                  }
+                // As in jsoniter-scala, an unknown discriminator value is reported where it was read, also when the
+                // discriminator is not the first key (before the object is re-read from its start).
+                val leafNameChecks: List[Expr[String] => Expr[Boolean]] = childrenList.map { case (childName, child) =>
+                  import child.Underlying as ChildType
+                  val leafName = enumLeafNameExpr[A, ChildType](childName, dctx.config)
+                  (typeName: Expr[String]) => Expr.quote(Expr.splice(leafName) == Expr.splice(typeName))
+                }
+                def anyLeafName(typeName: Expr[String]): Expr[Boolean] =
+                  leafNameChecks.foldRight(Expr(false)) { (check, acc) =>
+                    Expr.quote(Expr.splice(check(typeName)) || Expr.splice(acc))
+                  }
+                val isLeafName: Expr[String => Boolean] = Expr.quote { (typeName: String) =>
+                  Expr.splice(anyLeafName(Expr.quote(typeName)))
+                }
                 stringFn match {
                   case Some(strings) =>
                     Expr.quote {
                       val config = Expr.splice(dctx.config)
                       val reader = Expr.splice(dctx.reader)
                       if (reader.isNextToken('"'.toByte)) {
-                        reader.rollbackToken()
-                        if (config.discriminatorFieldName.isEmpty || Expr.splice(enumAsStringsApplies))
+                        if (
+                          (config.discriminatorFieldName.isEmpty && !config.circeLikeObjectEncoding) ||
+                          Expr.splice(enumAsStringsApplies)
+                        ) {
+                          reader.rollbackToken()
                           JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(strings))
+                        } else if (config.discriminatorFieldName.isEmpty)
+                          reader.decodeError(Expr.splice(Expr(objectOnlyError)))
                         else reader.decodeError("expected '{'")
                       } else {
                         reader.rollbackToken()
@@ -191,11 +224,15 @@ trait DecoderHandleAsEnumRuleImpl {
                                 reader,
                                 field,
                                 config.requireDiscriminatorFirst,
-                                Expr.splice(markLeaves)
+                                Expr.splice(markLeaves),
+                                Expr.splice(isLeafName)
                               )(
                                 Expr.splice(inlineFn)
                               )
-                          case None => JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperFn))
+                          case None =>
+                            JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
+                              Expr.splice(wrapperFn)
+                            )
                         }
                       }
                     }
@@ -210,11 +247,15 @@ trait DecoderHandleAsEnumRuleImpl {
                               reader,
                               field,
                               config.requireDiscriminatorFirst,
-                              Expr.splice(markLeaves)
+                              Expr.splice(markLeaves),
+                              Expr.splice(isLeafName)
                             )(
                               Expr.splice(inlineFn)
                             )
-                        case None => JsoniterDerivationUtils.readWrapped[A](reader)(Expr.splice(wrapperFn))
+                        case None =>
+                          JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
+                            Expr.splice(wrapperFn)
+                          )
                       }
                     }
                 }
