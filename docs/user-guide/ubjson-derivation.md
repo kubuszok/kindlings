@@ -127,7 +127,8 @@ A field absent from the decoded object gets its default value, `None` for an `Op
 or an empty collection/map; any other missing field fails with `UBJsonReaderException` (`missing required field
 "<name>"`). As in jsoniter-scala, a `null` for a reference-typed field with a default value (also an `Option` with a
 default) and an empty array/object for a collection/map field with a default value decode as that default (so `None` in
-a field whose default is a `Some` decodes as the default). The `transient*` options only affect encoding.
+a field whose default is a `Some` decodes as the default), except with `withRequireDefaultFields`, under which they
+decode as for a field without a default (as in jsoniter-scala). The `transient*` options only affect encoding.
 
 The config is evaluated at compile time when possible (`UBJsonConfig.default`, a config passed explicitly, and on
 Scala 3 an `implicit val`/`given` initialized with such an expression), and the codec then has no runtime config

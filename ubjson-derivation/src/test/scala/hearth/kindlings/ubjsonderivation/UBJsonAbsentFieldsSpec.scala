@@ -23,6 +23,10 @@ final class UBJsonAbsentFieldsSpec extends MacroSuite {
     assert(error.getMessage.contains(s"""missing required field "$name""""), error.getMessage)
   }
 
+  private def rejected(thunk: => Any): Unit = {
+    val _ = intercept[UBJsonReaderException](thunk)
+  }
+
   group("UBJson absent fields") {
     val codec = UBJsonValueCodec.derived[UbAbsentRecord]
     val codecRuntime = {
@@ -66,6 +70,37 @@ final class UBJsonAbsentFieldsSpec extends MacroSuite {
         UBJsonValueCodec.derived[UbAbsentOptionWithNoneDefault]
       }
       read()(cOpt) ==> UbAbsentOptionWithNoneDefault(None)
+    }
+
+    test("requireDefaultFields: null and an empty collection of a defaulted field decode as without a default") {
+      // As in jsoniter-scala: with requireDefaultFields the decoder of a field gets its type's `nullValue`, not the
+      // field's default value.
+      val inputCodec = UBJsonValueCodec.derived[UbRequireDefaultsInput]
+      def input(s: Option[String], l: Option[List[Int]]): Array[Byte] =
+        UBJsonDerivationUtils.writeToBytes(UbRequireDefaultsInput(s, l))(inputCodec)
+      val c = {
+        implicit val config: UBJsonConfig = UBJsonConfig().withRequireDefaultFields
+        UBJsonValueCodec.derived[UbRequireDefaults]
+      }
+      val cRuntime = {
+        implicit val config: UBJsonConfig = UbAbsentRuntimeConfigs.requireDefault
+        UBJsonValueCodec.derived[UbRequireDefaults]
+      }
+      List(c, cRuntime).foreach { codec =>
+        UBJsonDerivationUtils.readFromBytes(input(Some("x"), Some(Nil)))(codec) ==> UbRequireDefaults("x", Nil)
+        // (as for collection and String fields without a default, `null` is rejected)
+        rejected(UBJsonDerivationUtils.readFromBytes(input(Some("x"), None))(codec))
+        rejected(UBJsonDerivationUtils.readFromBytes(input(None, Some(Nil)))(codec))
+      }
+      List(
+        UBJsonValueCodec.derived[UbRequireDefaults], {
+          implicit val config: UBJsonConfig = UbAbsentRuntimeConfigs.default
+          UBJsonValueCodec.derived[UbRequireDefaults]
+        }
+      ).foreach { codec =>
+        UBJsonDerivationUtils.readFromBytes(input(None, Some(Nil)))(codec) ==> UbRequireDefaults()
+        UBJsonDerivationUtils.readFromBytes(input(Some("x"), None))(codec) ==> UbRequireDefaults("x")
+      }
     }
 
     test("requireCollectionFields") {

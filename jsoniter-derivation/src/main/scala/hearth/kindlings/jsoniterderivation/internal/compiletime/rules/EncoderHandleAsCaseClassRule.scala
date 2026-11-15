@@ -15,7 +15,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
 
   /** Build transient skip conditions for a single encoder field. Returns empty list when no conditions apply. */
   @scala.annotation.nowarn("msg=is never used")
-  private def buildFieldSkipConditions[Field: Type](
+  protected def buildFieldSkipConditions[Field: Type](
       fieldExpr: Expr[Field],
       param: Option[Parameter],
       config: Expr[hearth.kindlings.jsoniterderivation.JsoniterConfig],
@@ -92,7 +92,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
 
   /** Wrap an unconditional write with skip conditions, or return it as-is if no conditions apply. */
   @scala.annotation.nowarn("msg=is never used")
-  private def applySkipConditions(
+  protected def applySkipConditions(
       unconditionalWrite: Expr[Unit],
       condList: List[Expr[Boolean]]
   ): Expr[Unit] = {

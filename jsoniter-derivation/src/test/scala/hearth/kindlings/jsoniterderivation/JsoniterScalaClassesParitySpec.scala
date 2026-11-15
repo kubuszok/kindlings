@@ -459,11 +459,27 @@ final class JsoniterScalaClassesParitySpec extends MacroSuite {
           readFromString[ParityDefaults2]("""{"l":[1],"m":{"2":false},"v":[3]}""")(c) ==>
             ParityDefaults2(l = List(1), m = Map(2 -> false), v = Vector(3))
         }
-        // requireDefaultFields only rejects missing fields: an empty collection is still the default
+        // As in jsoniter-scala, with requireDefaultFields a field's decoder gets its type's `nullValue` as `default`,
+        // not the field's default value: an empty collection (or `null`) is an empty collection, and a `null` for a
+        // reference type without a `nullValue` is rejected (checked against `JsonCodecMaker.make` by the
+        // upstream-oracle-tests' `JsoniterOracleSpec` "requireDefaults")
         List[JsonValueCodec[ParityDefaults2]](OptimizedCodecs.defaults2RequireDefaults, cRuntimeRequire).foreach { c =>
+          val empty = ParityDefaults2(
+            l = Nil,
+            ab = scala.collection.mutable.ArrayBuffer.empty,
+            m = Map.empty,
+            s = Set.empty,
+            v = Vector.empty
+          )
           readFromString[ParityDefaults2](
             """{"st":"VVV","bi":-1,"oc":"X","l":[],"ab":[],"m":{},"s":[],"v":[]}"""
-          )(c) ==> ParityDefaults2()
+          )(c) ==> empty
+          readFromString[ParityDefaults2](
+            """{"st":"VVV","bi":-1,"oc":null,"l":null,"ab":null,"m":null,"s":null,"v":null}"""
+          )(c) ==> empty.copy(oc = None)
+          decodeError("""expected '"'""")(
+            readFromString[ParityDefaults2]("""{"st":null,"bi":-1,"oc":"X","l":[],"ab":[],"m":{},"s":[],"v":[]}""")(c)
+          )
           decodeError("""missing required field "st"""")(readFromString[ParityDefaults2]("""{"l":[]}""")(c))
         }
         val adtRuntime =

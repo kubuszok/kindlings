@@ -195,6 +195,24 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[List[ParityAdt]](using
       JsoniterConfig.makeOpenapiLike("kind", OptimizedCodecsHelpers.aaaMapper)
     )
+  // UpstreamOracleFindingsSpec
+  val uofMapLimit0: KindlingsJsonValueCodec[Map[String, Int]] =
+    KindlingsJsonValueCodec.derived[Map[String, Int]](using JsoniterConfig.default.withMapMaxInsertNumber(0))
+  val uofMapLimit1: KindlingsJsonValueCodec[Map[String, Int]] =
+    KindlingsJsonValueCodec.derived[Map[String, Int]](using JsoniterConfig.default.withMapMaxInsertNumber(1))
+  val uofInlineNameMap: KindlingsJsonValueCodec[UofNameMap] =
+    KindlingsJsonValueCodec.derived[UofNameMap](using JsoniterConfig.default.withInlineOneValueClasses)
+  val uofEncodingOnly: KindlingsJsonValueCodec[UofPerson] =
+    KindlingsJsonValueCodec.derived[UofPerson](using JsoniterConfig.default.withEncodingOnly)
+  val uofShapeDiscriminator: KindlingsJsonValueCodec[UofShape] =
+    KindlingsJsonValueCodec.derived[UofShape](using JsoniterConfig.default.withDiscriminator("type"))
+  val uofShapeDiscriminatorAnywhere: KindlingsJsonValueCodec[UofShape] = KindlingsJsonValueCodec.derived[UofShape](using
+    JsoniterConfig.default.withDiscriminator("type").withRequireDiscriminatorFirst(false)
+  )
+  val uofShapeCirceLike: KindlingsJsonValueCodec[UofShape] =
+    KindlingsJsonValueCodec.derived[UofShape](using JsoniterConfig.default.withCirceLikeObjectEncoding)
+  val uofScalaEnumValueId: KindlingsJsonValueCodec[UofLevelHolder] =
+    KindlingsJsonValueCodec.derived[UofLevelHolder](using JsoniterConfig.default.withUseScalaEnumValueId)
 }
 object OptimizedCodecsHelpers {
   // (a partial-function literal inside the config argument is duplicated by the Scala 2 macro expansion: keep it in a

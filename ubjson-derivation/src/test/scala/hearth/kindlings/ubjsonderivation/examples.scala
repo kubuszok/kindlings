@@ -212,6 +212,10 @@ sealed trait UbAbsentAdt
 case class UbAbsentLeaf(name: String, opt: Option[Int], n: Int = 3, xs: List[Int]) extends UbAbsentAdt
 
 /** Configs read from mutable fields so that the macro cannot evaluate them at compile time. */
+// requireDefaultFields: `null` / an empty collection of a defaulted field (see UBJsonAbsentFieldsSpec)
+final case class UbRequireDefaults(s: String = "d", l: List[Int] = List(1))
+final case class UbRequireDefaultsInput(s: Option[String], l: Option[List[Int]])
+
 object UbAbsentRuntimeConfigs {
   @volatile var default: UBJsonConfig = UBJsonConfig()
   @volatile var requireDefault: UBJsonConfig = UBJsonConfig().withRequireDefaultFields

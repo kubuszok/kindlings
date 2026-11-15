@@ -198,6 +198,30 @@ final class JsoniterScala3ParitySpec extends MacroSuite {
       }
     }
 
+    group("transient* settings apply to the fields of named tuples") {
+      test("transientNone / transientEmpty") {
+        val codec = KindlingsJsonValueCodec.derived[(x: Option[Int], y: List[Int], z: Int)](using
+          JsoniterConfig.jsoniterScalaDefaults
+        )
+        writeToString[(x: Option[Int], y: List[Int], z: Int)]((None, Nil, 1))(codec) ==> """{"z":1}"""
+        writeToString[(x: Option[Int], y: List[Int], z: Int)]((Some(2), List(3), 1))(codec) ==>
+          """{"x":2,"y":[3],"z":1}"""
+        readFromString[(x: Option[Int], y: List[Int], z: Int)]("""{"z":1}""")(codec) ==> ((None, Nil, 1))
+      }
+    }
+
+    group("recursive regular and named tuples (NamedTupleSpec)") {
+      test("behind local recursive type aliases") {
+        type RecursiveTuple = (Int, Option[RecursiveTuple])
+        type RecursiveNamedTuple = (value: Int, next: Option[RecursiveNamedTuple])
+        roundTrip(KindlingsJsonValueCodec.derived[RecursiveTuple])((1, Some((2, None))), "[1,[2,null]]")
+        roundTrip(KindlingsJsonValueCodec.derived[RecursiveNamedTuple](using JsoniterConfig.jsoniterScalaDefaults))(
+          (1, Some((2, None))),
+          """{"value":1,"next":{"value":2}}"""
+        )
+      }
+    }
+
     group("named tuples behind type aliases (NamedTupleSpec)") {
       test("NamedTuple.Empty and a generic named tuple alias") {
         roundTrip(KindlingsJsonValueCodec.derived[NamedTuple.Empty])(NamedTuple.Empty, "{}")
