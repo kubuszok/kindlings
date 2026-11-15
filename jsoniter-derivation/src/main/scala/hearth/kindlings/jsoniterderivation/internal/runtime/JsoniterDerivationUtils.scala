@@ -16,6 +16,34 @@ object JsoniterDerivationUtils {
     def encodeKey(x: A, out: JsonWriter): Unit = keyCodec.encodeKey(x, out)
   }
 
+  /** The JSON object key `keyCodec` writes for `key` (for schemas of maps keyed by a type with a `JsonKeyCodec`). */
+  def keyToString[K](keyCodec: JsonKeyCodec[K], key: K): String =
+    com.github.plokhotnyuk.jsoniter_scala.core.readFromString(
+      com.github.plokhotnyuk.jsoniter_scala.core.writeToString(key)(new JsonValueCodec[K] {
+        def nullValue: K = null.asInstanceOf[K]
+        def decodeValue(in: JsonReader, default: K): K = in.decodeError("write-only codec")
+        def encodeValue(x: K, out: JsonWriter): Unit = {
+          out.writeObjectStart()
+          keyCodec.encodeKey(x, out)
+          out.writeNull()
+          out.writeObjectEnd()
+        }
+      })
+    )(KeyAsStringCodec)
+
+  /** Reads the first key of a JSON object (see [[keyToString]]). */
+  private object KeyAsStringCodec extends JsonValueCodec[String] {
+    def nullValue: String = null
+    def decodeValue(in: JsonReader, default: String): String = {
+      if (!in.isNextToken('{')) in.decodeError("expected '{'")
+      val key = in.readKeyAsString()
+      in.skip()
+      if (!in.isNextToken('}')) in.decodeError("expected '}'")
+      key
+    }
+    def encodeValue(x: String, out: JsonWriter): Unit = out.writeVal(x)
+  }
+
   // --- Encoder helpers ---
 
   def writeArray[A](out: JsonWriter, items: Iterable[A], encodeItem: A => Unit): Unit = {

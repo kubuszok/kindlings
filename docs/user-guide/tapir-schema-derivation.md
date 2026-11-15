@@ -293,10 +293,14 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
 - `Either` and `scala.Enumeration` values are derived like the sealed hierarchies the JSON libraries encode them as,
 - `Map`s are open products (`additionalProperties`) keyed by the strings the JSON codecs write as object keys: `String`
   keys as they are; primitives (and their boxes), `UUID`, `BigInt`, `BigDecimal` and `java.time` keys as their
-  `toString` (with circe, through its `KeyEncoder`, also a user-provided one); and value types wrapping any of those —
-  `AnyVal` classes, opaque types (e.g. `opaque type Counter = Int`, written as `{"7":...}`), and — with the
-  corresponding integration module — refined, Iron, neotype and scala-newtype types — as their underlying value. For
-  any other key type, provide a `Schema[Map[K, V]]`, e.g. with Tapir's `Schema.schemaForMap[K, V](keyToString)`.
+  `toString`; families of case objects (sealed traits, Scala 3 `enum`s, Java enums) as the name the codec writes
+  for the case (circe's `transformConstructorNames`, jsoniter-scala's `adtLeafClassNameMapper` / `@named`); any type
+  with the library's own key codec (circe's `KeyEncoder`, jsoniter-scala's `JsonKeyCodec`, also user-provided ones,
+  which take precedence) as that codec writes it; and value types wrapping any of those — `AnyVal` classes, opaque
+  types (e.g. `opaque type Counter = Int`, written as `{"7":...}`), and — with the corresponding integration module —
+  refined, Iron, neotype and scala-newtype types — as their underlying value. The schema is the one tapir builds with
+  `Schema.schemaForMap[K, V](keyToString)`. For any other key type, provide a `Schema[Map[K, V]]`, e.g. with that
+  method.
 
 A value type wrapping a collection or map (an `AnyVal` class, an opaque type, an Iron `List[A] :| MinLength[1]`, ...)
 is coded as that collection, but the decoders do not fill it in when it is absent, so — unlike a plain collection — it is
@@ -335,7 +339,7 @@ This enables the `LogDerivation` implicit for `KindlingsSchema`, printing the de
 | Automatic JSON config discovery | No | Yes |
 | Tapir annotation support | Yes | Yes |
 | Value types (`AnyVal`) | Scala 2.13 only (on Scala 3 a hand-written schema is needed) | Yes |
-| Non-`String` map keys (`Int`, `UUID`, value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes |
+| Non-`String` map keys (`Int`, `UUID`, case-object enums, types with a key codec, value types, opaque types, refined, ...) | No (needs `Schema.schemaForMap`) | Yes (the same schema) |
 | `Char` | No | Yes (as `String`) |
 
 ### Checked against Tapir
