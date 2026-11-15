@@ -392,6 +392,19 @@ APIs have a cross-compiled counterpart, e.g. `Labelled` for `FieldType`).
 
 **Replaces:** `com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker`
 
+**Checked against upstream** by `JsoniterOracleSpec` and `JsoniterScala3OracleSpec` (upstream-oracle-tests): the same
+fixtures derived with `KindlingsJsonValueCodec.derived` (with the config known at compile time and only at runtime) and
+with `JsonCodecMaker.make` (with the equivalent `CodecMakerConfig` / `makeXxx` entry point) are compared on encoded JSON,
+accepted and rejected inputs (decoded values and error messages with offsets) and `nullValue`, for upstream's defaults
+(`JsoniterConfig.jsoniterScalaDefaults`), Kindlings' defaults (exactly the differences listed below) and every config
+option with an upstream counterpart (field/leaf/Java-enum name mappers, discriminators, `skipUnexpectedFields`,
+`transient*`, `require*`, `checkFieldDuplication`, `isStringified`, `mapAsArray`, number and insert limits,
+`useScalaEnumValueId`, `alwaysEmitDiscriminator`, `skipNestedOptionValues`, `inlineOneValueClasses`,
+`circeLikeObjectEncoding`, `requireDiscriminatorFirst`, `scalaTransientSupport`, `transientNull`, `decodingOnly` /
+`encodingOnly`, all `makeXxx` presets), on case classes, defaults, nested options, collections and maps (non-`String`
+keys), `::`, ADTs, Scala 3 enums, Java enums, `Enumeration`s, value classes, tuples (generic, named, recursive),
+recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Either`.
+
 ### Configuration
 
 | Feature | jsoniter-scala | Kindlings | Status |
@@ -458,8 +471,10 @@ APIs have a cross-compiled counterpart, e.g. `Labelled` for `FieldType`).
 | Recursive types | Yes (`allowRecursiveTypes = true`) | Yes (no flag needed) | Improvement |
 | java.time built-in codecs | Yes (ISO-8601) | Yes (ISO-8601: Instant, LocalDate, LocalTime, LocalDateTime, OffsetDateTime, ZonedDateTime, Duration, Period) | Parity |
 | Tuples as JSON arrays (incl. generic tuples and arity > 22 on Scala 3) | Yes | Yes | Parity |
-| Named tuples (JSON objects) | Yes | Yes, except named tuples behind type aliases (Hearth gap) | Partial |
-| Literal types (also as map keys) | Yes | Yes; case class fields of literal types on Scala 2 not yet (Hearth gap) | Partial |
+| Named tuples (JSON objects) | Yes | Yes (also behind type aliases, and recursive ones behind local type aliases) | Parity |
+| Recursive tuples behind local type aliases (`type R = (Int, Option[R])`) | Yes (`allowRecursiveTypes`) | Yes | Parity |
+| `scala.collection.immutable.::` (non-empty JSON arrays, required fields) | Yes | Yes | Parity |
+| Literal types (also as map keys and case class fields) | Yes | Yes | Parity |
 | Plain (non-case) classes, plain-class/object ADT leaves, non-abstract sealed classes as leaves | Yes | Yes | Parity |
 | Multiple parameter lists (with dependent defaults) | Yes | Yes | Parity |
 | User-provided codecs of ADT leaves with a discriminator | Yes (encode/decode the whole leaf object) | Yes (same) | Parity |
@@ -472,14 +487,19 @@ APIs have a cross-compiled counterpart, e.g. `Labelled` for `FieldType`).
 | Unified Scala 2+3 API | Separate macro implementations | Unified API | Improvement |
 | Cross-platform | JVM + JS + Native | JVM + JS + Native | Parity |
 
-### Not ported
-
-| Feature | Notes |
-|---|---|
-| Recursive tuple aliases | `type R = (Int, Option[R])` is not recognized as a tuple |
-
-**Design decisions** (not gaps):
+**Design decisions** (not gaps; each one is an expected difference of the oracle suites):
 - `allowRecursiveTypes` — upstream gates recursive types behind a flag (default `false`); Kindlings always allows them, so no flag is needed.
+- Without a discriminator, a case object is also read from `{"Leaf":{}}` (a superset; errors for objects given where
+  upstream expects a string of an ADT of case objects only are Kindlings' then).
+- A Scala 3 `T | Null` field holding `null` is written as `null` without `transientNull` (upstream throws a
+  `NullPointerException`).
+- With `checkFieldDuplication = false`, a repeated key's decoder gets the field's default (upstream: the value read for
+  the earlier occurrence).
+- Error messages for a value of another JSON type in a field with a default value do not say `or null`
+  (`expected '{'`; upstream: `expected '{' or null`).
+- Where upstream's Scala 2 and Scala 3 macros report different errors (ADTs without case objects, or with
+  `circeLikeObjectEncoding`, given something else than an object: `expected '{'` / `expected '"' or '{'`), Kindlings
+  reports what upstream reports on the same Scala version.
 
 ### Default value differences
 
