@@ -1254,6 +1254,13 @@ differences**. The suite also checks that the opt-ins differ as intended:
 Kindlings additions without a scala-yaml counterpart: union types are always wrapped; Java enum / `scala.Enumeration`
 values are written as their names.
 
+Printing is scala-yaml's (`toYamlString` prints the encoded node with scala-yaml's `Node#asYaml`), so it behaves the
+same, including one upstream limitation the oracle pins: an empty sequence or mapping is printed as an empty value
+(`children: ` instead of `children: []`), which reads back as `null`, so YAML printed from a value with an empty
+collection field does not decode back (`Could't construct scala.collection.immutable.List from null`). Decoding from the
+encoded `Node` (`KindlingsYamlDecoder.decode(KindlingsYamlEncoder.encode(value))`) round-trips, as does YAML using the
+flow style `[]` / `{}`.
+
 ### Cross-compilation
 
 | Feature | scala-yaml | Kindlings | Status |

@@ -70,6 +70,11 @@ Drop-in replacement for scala-yaml's built-in `derives` — derives `YamlEncoder
 | `KindlingsYamlDecoder.decode[A](node)` | `Either[ConstructError, A]` | Inline decoding from a YAML node |
 | `KindlingsYamlDecoder.fromYamlString[A](yaml)` | `Either[YamlError, A]` | Inline decoding from a YAML string |
 | `KindlingsYamlDecoder.derived[A]` | `KindlingsYamlDecoder[A]` | Sanely-automatic (given/implicit) |
+
+`toYamlString` prints with scala-yaml's own printer, which writes an empty sequence or mapping as an empty value
+(`tags: ` rather than `tags: []`); that reads back as `null`, so such a string does not decode back into an empty
+collection, exactly as with scala-yaml. Keep the `Node` (`encode`/`decode`) when you need a round trip of values with
+empty collections (see [feature parity](feature-parity.md#yaml-derivation)).
 | `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Semi-automatic codec (encoder + decoder) |
 | `KindlingsYamlCodec.derived[A]` | `KindlingsYamlCodec[A]` | Sanely-automatic codec |
 

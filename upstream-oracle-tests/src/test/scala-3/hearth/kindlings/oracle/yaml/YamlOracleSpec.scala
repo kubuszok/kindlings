@@ -31,6 +31,14 @@ enum YmFruit {
 
 final case class YmBasket(fruits: List[YmFruit], source: YmSource)
 
+final case class YmEmpties(
+    list: List[Int],
+    map: Map[String, Int],
+    nested: List[List[Int]],
+    mapOfLists: Map[String, List[Int]],
+    after: String
+)
+
 /** Kindlings' YAML codecs (default `YamlConfig`, which matches scala-yaml) vs scala-yaml's own derivation
   * (`YamlCodec.derived`, Scala 3 only), compared on the YAML nodes encoded and on the values decoded (valid and invalid
   * inputs).
@@ -60,6 +68,8 @@ final class YamlOracleSpec extends MacroSuite {
       YamlCodec.make(KindlingsYamlDecoder.derived[YmFruit], KindlingsYamlEncoder.derived[YmFruit])
     val basket: YamlCodec[YmBasket] =
       YamlCodec.make(KindlingsYamlDecoder.derived[YmBasket], KindlingsYamlEncoder.derived[YmBasket])
+    val empties: YamlCodec[YmEmpties] =
+      YamlCodec.make(KindlingsYamlDecoder.derived[YmEmpties], KindlingsYamlEncoder.derived[YmEmpties])
   }
 
   /** Kindlings' opt-ins that intentionally differ from scala-yaml (the defaults of Kindlings 0.3.x). */
@@ -82,6 +92,7 @@ final class YamlOracleSpec extends MacroSuite {
     given fruit: YamlCodec[YmFruit] = YamlCodec.derived
     given sourceGiven: YamlCodec[YmSource] = source
     val basket: YamlCodec[YmBasket] = YamlCodec.derived
+    val empties: YamlCodec[YmEmpties] = YamlCodec.derived
   }
 
   // --- helpers -------------------------------------------------------------------------------------------------------
@@ -221,6 +232,32 @@ final class YamlOracleSpec extends MacroSuite {
         "fruits: [{weight: 1}, {}]\nsource: {path: p}",
         "fruits: [1]\nsource: {path: p}"
       )()
+    }
+
+    test("empty collections and maps: printed YAML and print-then-decode") {
+      val values = List(
+        YmEmpties(Nil, Map.empty, Nil, Map.empty, "x"),
+        YmEmpties(Nil, Map.empty, List(Nil, List(1)), Map("k" -> Nil), "x")
+      )
+      compareEncoded(K.empties, U.empties)(values*)()
+      // Printed with scala-yaml's own printer (`Node#asYaml`) in both cases, from the same nodes: an empty sequence or
+      // mapping is printed as an empty value (`list: `), which reads back as null, so the printed YAML does not decode
+      // back - in scala-yaml just as in Kindlings (documented in feature-parity.md, yaml-derivation).
+      val nullList = "Left(Could't construct scala.collection.immutable.List from null (tag:yaml.org,2002:null))"
+      values.foreach { value =>
+        val kindlingsYaml = KindlingsYamlEncoder.toYamlString(value)
+        val upstreamYaml = U.empties.asNode(value).asYaml
+        assertEquals(kindlingsYaml, upstreamYaml)
+        assert(!upstreamYaml.contains("[]") && !upstreamYaml.contains("{}"), upstreamYaml)
+        assertEquals(decode(K.empties, kindlingsYaml), nullList)
+        assertEquals(decode(U.empties, upstreamYaml), nullList)
+      }
+      // the flow style `[]` / `{}` (e.g. written by hand) decodes in both
+      compareDecoded(K.empties, U.empties)("list: []\nmap: {}\nnested: [[], [1]]\nmapOfLists: {k: []}\nafter: x")()
+      assertEquals(
+        decode(K.empties, "list: []\nmap: {}\nnested: [[], [1]]\nmapOfLists: {k: []}\nafter: x"),
+        "Right(YmEmpties(List(),Map(),List(List(), List(1)),Map(k -> List()),x))"
+      )
     }
 
     test("withWrappedSubtypes (opt-in): Kindlings' single-key mapping") {
