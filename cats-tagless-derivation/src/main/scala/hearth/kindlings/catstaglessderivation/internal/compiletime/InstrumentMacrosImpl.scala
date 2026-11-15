@@ -327,7 +327,7 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
 
               val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
                 case (Some(om), Some(lm)) =>
-                  (om.method.knownReturning, lm.method.knownReturning) match {
+                  (knownReturningOfProbe(om.method), knownReturningOfProbe(lm.method)) match {
                     case (Some(or), Some(lr)) =>
                       (
                         OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
@@ -335,7 +335,8 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
                       ) match {
                         case (Some(io), Some(il)) =>
                           import io.Underlying as IO; import il.Underlying as IL
-                          IO =:= IL
+                          // `plainPrint`: a polymorphic method's type parameters are distinct symbols per instance
+                          IO =:= IL || IO.plainPrint == IL.plainPrint
                         case _ => false
                       }
                     case _ => false
@@ -357,7 +358,7 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
                       try
                         sm.fold(
                           onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                          onTypes = _ => Map.empty,
+                          onTypes = at => at.typeParams.flatten.zip(octx.typeParameters).toMap,
                           onValues = av => {
                             val paramNames = av.totalParameters.flatten.toList.map(_._1)
                             paramNames.zip(octx.parameters).toMap

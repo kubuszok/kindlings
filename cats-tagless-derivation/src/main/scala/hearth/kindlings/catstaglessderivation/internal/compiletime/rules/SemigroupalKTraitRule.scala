@@ -154,7 +154,7 @@ trait SemigroupalKTraitRuleImpl {
 
               val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
                 case (Some(om), Some(lm)) =>
-                  (om.method.knownReturning, lm.method.knownReturning) match {
+                  (knownReturningOfProbe(om.method), knownReturningOfProbe(lm.method)) match {
                     case (Some(or), Some(lr)) =>
                       (
                         OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
@@ -162,7 +162,8 @@ trait SemigroupalKTraitRuleImpl {
                       ) match {
                         case (Some(io), Some(il)) =>
                           import io.Underlying as IO; import il.Underlying as IL
-                          IO =:= IL
+                          // `plainPrint`: a polymorphic method's type parameters are distinct symbols per instance
+                          IO =:= IL || IO.plainPrint == IL.plainPrint
                         case _ => false
                       }
                     case _ => false
@@ -181,7 +182,8 @@ trait SemigroupalKTraitRuleImpl {
                     try
                       sm.fold(
                         onInstance = oi => srcExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                        onTypes = _ => Map.empty,
+                        onTypes = at =>
+                          at.typeParams.flatten.zip(octx.typeParameters).toMap, // forward the override's type params
                         onValues = av => {
                           val paramNames = av.totalParameters.flatten.toList.map(_._1)
                           paramNames.zip(octx.parameters).toMap
@@ -216,14 +218,29 @@ trait SemigroupalKTraitRuleImpl {
                     import returnT.Underlying as RT
                     mkTuple2K[RT](sourceCallF, sourceCallG)(returnT.Underlying).as_??(returnT.Underlying)
                   } else {
-                    // Invariant — take from af
+                    // Invariant (no F in the result): like cats-tagless, combine both results with the result type's
+                    // `Semigroup` when there is one, otherwise take af's result.
                     val smF =
                       sourceMethodOptF.getOrElse(
                         throw CatsTaglessDerivationError.SourceMethodNotFound(methodName, " (F)")
                       )
                     val sourceCallF = foldSourceMethod(smF.method, afExpr)
                     import returnT.Underlying as RT
-                    sourceCallF.asInstanceOf[Expr[RT]].as_??(returnT.Underlying)
+                    val callF: Expr[RT] = Expr.quote(Expr.splice(sourceCallF).asInstanceOf[RT])
+                    implicit val SemigroupRT: Type[cats.kernel.Semigroup[RT]] =
+                      Type.Ctor1.of[cats.kernel.Semigroup].apply[RT]
+                    val result: Expr[RT] = Expr.summonImplicit[cats.kernel.Semigroup[RT]].toOption match {
+                      case Some(semigroup) =>
+                        val smG =
+                          sourceMethodOptG.getOrElse(
+                            throw CatsTaglessDerivationError.SourceMethodNotFound(methodName, " (G)")
+                          )
+                        val sourceCallG = foldSourceMethod(smG.method, agExpr)
+                        val callG: Expr[RT] = Expr.quote(Expr.splice(sourceCallG).asInstanceOf[RT])
+                        Expr.quote(Expr.splice(semigroup).combine(Expr.splice(callF), Expr.splice(callG)))
+                      case None => callF
+                    }
+                    result.as_??(returnT.Underlying)
                   }
                 }
               }
