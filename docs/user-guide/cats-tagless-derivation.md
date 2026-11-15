@@ -78,7 +78,8 @@ Each entry point is an `inline def derived` on Scala 3 and a `def derived` macro
 |-------|---------|
 | `trait Alg[F[_]]` with `F[_]`-returning methods (`def get(id: Int): F[String]`) | Yes |
 | `case class Alg[F[_]]` with `F[_]` fields (`a: F[Int]`, `b: F[String]`) | Yes |
-| Mixed members — some `F[_]`, some plain (`def version: String`) | Yes (plain members preserved, only `F[_]` ones transformed) |
+| Mixed members — some `F[_]`, some plain (`def version: String`) | Yes (plain members preserved, only `F[_]` ones transformed; in a trait algebra `SemigroupalK`/`ApplyK` combine both algebras' plain results with their `Semigroup` when there is one, like cats-tagless, else keep the first's) |
+| Polymorphic methods (`def m[A](a: A): F[List[A]]`), multiple parameter lists, by-name / default arguments, varargs | Yes |
 | `F[_]` in argument position (`def transform(in: F[Int]): F[String]`) | Yes via `InvariantK` |
 | Nested algebras (`inner: InnerAlg[F]`) | Yes |
 | Recursive / nested algebra without an explicit instance for the inner type | Yes (the inner instance is derived recursively) |

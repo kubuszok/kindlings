@@ -40,6 +40,15 @@ Each project is tested in isolation: no downstream project (Chimney, application
 - When upstream itself behaves differently on Scala 2 and 3 (pureconfig's enumeration failures, quicklens' negative
   `.index`), match each version (version-specific runtime helpers in the module) or keep the version-specific
   expectation in a small `scala-2`/`scala-3` object of the suite (e.g. `optics/QuicklensVersion`).
+- `catsderivation/CatsDerivationOracleSpec` (+ `scala-2`/`scala-3` specs for what kittens derives on one version only;
+  kittens' `semiauto`), `catstagless/CatsTaglessOracleSpec` (cats-tagless' `Derive.*`; Scala 3 test sources compile with
+  `-experimental` for it), `scalacheck/ScalaCheckOracleSpec` (scalacheck-shapeless on 2.13, scalacheck-derived on 3;
+  per-version expectations in `ScPlatformExpectations`).
+- Behaviour, not values, when upstream is random (generators: coverage, size bounds, termination) or unspecified (hash
+  values: consistency with `eqv` only); deterministic results (shrink streams, cogen seeds, evaluation order via `State`
+  logs, laziness via counters) are compared exactly.
+- A gap (Kindlings cannot derive what upstream derives) is asserted with munit's `compileErrors`, so implementing it fails
+  the test and forces the docs update.
 - `-Xcheck-macros` is off in this module (upstream macros fail it); Kindlings' macros are checked in their own modules.
 
 ## Rules

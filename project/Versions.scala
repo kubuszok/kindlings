@@ -53,5 +53,8 @@ object versions {
   val scalaYaml = "0.3.3"
   val scalaXml = "2.5.0"
   val catsTagless = "0.16.5"
+  // upstream oracles for scalacheck-derivation (test-only)
+  val scalacheckShapeless = "1.3.2"
+  val scalacheckDerived = "0.11.0"
   val sconfig = "2.0.0"
 }
