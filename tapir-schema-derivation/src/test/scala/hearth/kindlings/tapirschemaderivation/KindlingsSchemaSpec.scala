@@ -992,7 +992,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
       schema.validator match {
         case v: sttp.tapir.Validator.Enumeration[Color @unchecked] =>
           // declaration order on Scala 3, by name on Scala 2 (the same in every build, see feature-parity.md)
-          val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
+          val isScala3 = ScalaVersionSpecific.isScala3
           assertEquals(v.possibleValues, if (isScala3) List(Red, Green, Blue) else List(Blue, Green, Red))
         case other =>
           fail(s"Expected Validator.Enumeration, got: $other")

@@ -330,7 +330,7 @@ final class CatsDerivationSpec extends MacroSuite {
     }
 
     test("subtypes are ordered by declaration on Scala 3 (like kittens), by name on Scala 2 (in every build)") {
-      val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
+      val isScala3 = ScalaVersionSpecific.isScala3
       val colors: List[examples.Color] = List(examples.Green, examples.Blue, examples.Red)
       val expected: List[examples.Color] =
         if (isScala3) List(examples.Red, examples.Green, examples.Blue)

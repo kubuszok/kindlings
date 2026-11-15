@@ -227,7 +227,7 @@ final class CirceSchemaFidelitySpec extends MacroSuite {
   }
 
   // Subtypes in declaration order on Scala 3, by name on Scala 2 (the same in every build, see feature-parity.md).
-  private val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
+  private val isScala3 = ScalaVersionSpecific.isScala3
   private def onScala3Else(scala3: List[String], scala2: List[String]): List[String] = if (isScala3) scala3 else scala2
 
   group("tapir schemas describe what the circe codec writes") {
