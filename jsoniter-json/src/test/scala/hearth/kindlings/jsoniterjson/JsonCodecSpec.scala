@@ -185,4 +185,24 @@ final class JsonCodecSpec extends Suite {
     val codec = JsonCodec.withMaxDepth(1000)
     writeToString(readFromString[Json](nested(1000))(codec))(codec) ==> nested(1000)
   }
+
+  test("numbers from doubles can be created while jsoniter-scala is writing or reading (reentrant)") {
+    import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
+    val codec: JsonValueCodec[Json] = new JsonValueCodec[Json] {
+      def nullValue: Json = Json.Null
+      def decodeValue(in: JsonReader, default: Json): Json = {
+        val d = in.readDouble()
+        Json.fromDouble(d).get
+      }
+      def encodeValue(x: Json, out: JsonWriter): Unit = {
+        out.writeArrayStart()
+        out.writeVal(1)
+        out.writeVal(Json.fromDouble(2.5).get.asNumber.get.toString)
+        out.writeVal(Json.fromFloat(3.5f).get.asNumber.get.toString)
+        out.writeArrayEnd()
+      }
+    }
+    writeToString[Json](Json.Null)(codec) ==> "[1,\"2.5\",\"3.5\"]"
+    writeToString(readFromString[Json]("1.0E10")(codec)) ==> "1.0E10"
+  }
 }

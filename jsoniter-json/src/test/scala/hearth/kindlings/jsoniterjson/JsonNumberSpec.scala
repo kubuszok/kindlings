@@ -140,6 +140,15 @@ final class JsonNumberSpec extends Suite {
       }
     }
 
+    test("toBigDecimal of exponents java.math.BigDecimal may reject is the same on every JDK (like circe)") {
+      JsonNumber.fromString("1e2147483648").flatMap(_.toBigDecimal) ==>
+        Some(BigDecimal(new java.math.BigDecimal(java.math.BigInteger.ONE, Int.MinValue)))
+      JsonNumber.fromString("1.500e2147483649").flatMap(_.toBigDecimal) ==>
+        Some(BigDecimal(new java.math.BigDecimal(java.math.BigInteger.valueOf(15), Int.MinValue)))
+      JsonNumber.fromString("-0e99999999999").flatMap(_.toBigDecimal) ==> Some(BigDecimal(0))
+      JsonNumber.fromString("1e2147483649").flatMap(_.toBigDecimal) ==> None
+    }
+
     test("an exponent too large for BigDecimal is accepted, like circe") {
       val n = JsonNumber.fromString("1e-2147483649").get
       n.toBigDecimal ==> None

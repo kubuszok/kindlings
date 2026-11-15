@@ -192,6 +192,7 @@ final class JsoniterJsonOracleSpec extends MacroSuite {
       DoubleN(1e10),
       DoubleN(1e-7),
       DoubleN(1.0e300),
+      DoubleN(Double.MinPositiveValue),
       DoubleN(Double.NaN),
       FloatN(1.1f),
       FloatN(3.0e38f),
@@ -324,6 +325,10 @@ final class JsoniterJsonOracleSpec extends MacroSuite {
       // Documented (jsoniter-json guide "Differences from circe"): the number keeps the text `-0.0`, so `toDouble` is
       // `-0.0`; circe's `JsonFloat` converts a negative zero to `0.0` (but its `JsonDouble` keeps `-0.0`).
       List(
+        // Documented (jsoniter-json guide "Differences from circe"): a number from a `Double` keeps the text
+        // jsoniter-scala writes for it (the shortest that reads back as the same `Double`, also what
+        // jsoniter-scala-circe prints for circe), so `toBigDecimal` is that decimal; circe's is `Double.toString`'s.
+        "fromDouble 4.9E-324: kindlings=Some(int=None long=None bigInt=None bigDecimal=Some(5E-324) double=Some(4.9E-324) float=Some(0.0)) upstream=Some(int=None long=None bigInt=None bigDecimal=Some(4.9E-324) double=Some(4.9E-324) float=Some(0.0))",
         "fromFloat -0.0: kindlings=Some(int=Some(0) long=Some(0) bigInt=Some(0) bigDecimal=Some(0) double=Some(-0.0) float=Some(-0.0)) upstream=Some(int=Some(0) long=Some(0) bigInt=Some(0) bigDecimal=Some(0) double=Some(0.0) float=Some(-0.0))"
       )
     )
