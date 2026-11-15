@@ -172,3 +172,117 @@ Definitions owned by method $anonfun: val either$macro$63
 - Reproducers: `PureconfigScala3Spec` (named tuple with a case-class field) and `UpstreamSemanticsSpec`
   ("FirstSuccessCoproductHint" group) in pureconfig-derivation; restoring either shape fails their compilation on
   Scala 3.
+
+## Re-checked with Hearth `0.4.4-10-ga030def-SNAPSHOT` (2026-11-15)
+
+Status: **still OPEN**, the workarounds stay. Hearth `b9454a46` ("Test owners of ValDefs vals created inside a
+LambdaBuilder body") only adds tests (`ExprsSpec`: `testNestedValDefsInsideLambdaBuilder` for shape 2,
+`testValDefsNextToQuotedValsInsideLambdaBuilder` for shape 1, each built directly inside a `LambdaBuilder.of1(...).map`)
+and no change to Hearth itself: those minimal shapes already passed, so they do not cover the Kindlings case.
+
+Restoring shape 2 in `ReaderHandleAsEnumRule.firstSuccess` (a `ValDefs.createVal` per attempt, the next attempt in the
+`else` splice, the attempts' results collected with `acc.::(r)` for `noValidCoproductOptionFromResults`) still fails
+`pureconfigDerivation/Test/compile` on Scala 3 (`UpstreamSemanticsSpec`, `KindlingsConfigReader.derived[UsSource]`,
+lines 122 and 130):
+
+```
+assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: method $anonfun, val macro
+Block: {
+  val either$macro$62: Either[ConfigReaderFailures, UsSource] = PureConfigDerivationUtils.readObjectAs[UsSource](configcursor$macro$32, UsNoSource)
+  if (either$macro$62.isRight) either$macro$62 else {
+    val either$macro$63: Either[ConfigReaderFailures, UsSource] = read_UsUrlSource$macro$1(configcursor$macro$32, pureconfig$macro$53)
+    if (either$macro$63.isRight) either$macro$63 else Left(noValidCoproductOptionFromResults(...))
+  }
+}
+Definitions owned by method $anonfun: val either$macro$63
+Definitions owned by val macro: val either$macro$62
+```
+
+The difference from Hearth's test: here the chain is built while deriving a cached `def` through `ValDefsCache`
+(`read_UsUrlSource` and the enum's own reader) inside `MIO.scoped` - the "fuller structure" the Hearth test's comment
+mentions. Shape 1 and the circe
+`val json` shape were not retried: with no change in Hearth they cannot have changed either. A Hearth reproducer
+should start from `KindlingsConfigReader.derived[UsSource]` with the shape-2 code above.
+
+## Minimal Hearth-only reproducer (2026-11-15, Hearth `0.4.4-10-ga030def-SNAPSHOT`, Scala 3.8.4)
+
+`docs/research/hearth-lambda-owner-repro/` - two scala-cli projects (`macro/Repro.scala`: the macro written with
+Hearth's API; `usage/Usage.scala`: the expansions), compiled with `-Xcheck-macros`. Run `./run.sh` from that directory
+(it packages `macro` into `macro.jar`, then compiles `usage` against it). No ValDefsCache, MIO or recursive derivation
+is needed: it is enough to create the `ValDefs` vals **inside the `Expr.splice` of a quoted lambda**
+(`Expr.quote((i: Int) => ... Expr.splice(...))`). Building the same code *outside* the quoted lambda and splicing the
+finished `Expr` in (variant `builtOutsideQuotedLambda`) compiles, and so does building it directly in a
+`LambdaBuilder.map` body (Hearth's own `b9454a46` tests).
+
+Shape 2 (nested `ValDefs.createVal` inside a quote's splice):
+
+```scala
+def chain(remaining: List[Int])(implicit IntT: Type[Int]): Expr[Int] = remaining match {
+  case n :: rest =>
+    ValDefs.createVal[Int](Expr(n), "attempt").use { r =>
+      Expr.quote(if (Expr.splice(r) > 100) Expr.splice(r) else Expr.splice(chain(rest)))
+    }
+  case Nil => Expr(0)
+}
+
+Expr.quote((i: Int) => i + Expr.splice(chain(List(1, 2, 3))))   // fails
+```
+
+```
+java.lang.AssertionError: assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: method $anonfun, val macro
+
+Block: {
+  val attempt$macro$5: scala.Int = 2
+  if (attempt$macro$5.>(100)) attempt$macro$5 else {
+    val attempt$macro$6: scala.Int = 3
+    if (attempt$macro$6.>(100)) attempt$macro$6 else 0
+  }
+}
+
+Definitions owned by method $anonfun:
+val attempt$macro$6: scala.Int = 3
+
+Definitions owned by val macro:
+val attempt$macro$5: scala.Int = 2
+```
+
+Shape 1 (`ValDefs` vals next to vals the quote defines - `r :: acc` desugars to `{ val elem$1 = r; acc.::(elem$1) }`):
+
+```scala
+def bindAll(remaining: List[Expr[Int]], bound: List[Expr[Int]]): Expr[List[Int]] = remaining match {
+  case r :: rest => ValDefs.createVal[Int](r, "bound").use(ref => bindAll(rest, ref :: bound))
+  case Nil       => bound.reverse.foldRight(Expr.quote(List.empty[Int]))((r, acc) => Expr.quote(Expr.splice(r) :: Expr.splice(acc)))
+}
+
+Expr.quote((i: Int) => Expr.splice(bindAll(List(Expr.quote(i), Expr.quote(i + 1)), Nil)))   // fails
+```
+
+```
+java.lang.AssertionError: assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: val macro, method $anonfun
+
+Block: {
+  val bound$macro$2: scala.Int = i.+(1)
+  val elem$1: scala.Int = bound$macro$1
+  {
+    val `elem$1₂`: scala.Int = bound$macro$2
+    scala.List.empty[scala.Int].::[scala.Int](`elem$1₂`)
+  }.::[scala.Int](elem$1)
+}
+
+Definitions owned by val macro:
+val bound$macro$2: scala.Int = i.+(1)
+
+Definitions owned by method $anonfun:
+val elem$1: scala.Int = bound$macro$2
+val elem$1: scala.Int = bound$macro$1
+```
+
+The same shape-2 chain also fails inside a quoted lambda nested in a `LambdaBuilder` body
+(`quotedLambdaInsideLambdaBuilder`) and inside a `LambdaBuilder` body built in the splice of a quoted lambda
+(`lambdaBuilderInsideQuotedLambda`). In every failing case the `ValDefs` vals created directly in the lambda's splice
+are owned by `val macro` (the expansion's root) while the definitions created in the nested splices (or by the quote
+itself) are owned by the lambda (`$anonfun`) - i.e. `ValDefs.createVal` does not use the splice owner of the quoted
+lambda it is created in.
