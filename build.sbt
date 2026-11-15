@@ -1139,6 +1139,7 @@ lazy val upstreamOracleTests = projectMatrix
     (useCrossQuotes ++ dev.only1VersionInIDE ++ ironDepForUpstreamOracleTests) *
   )
   .dependsOn(circeDerivation, jsoniterDerivation, tapirSchemaDerivation, catsIntegration)
+  .dependsOn(avroDerivation)
   .settings(noPublishSettings *)
   .settings(settings *)
   .settings(dependencies *)
@@ -1160,6 +1161,10 @@ lazy val upstreamOracleTests = projectMatrix
       "org.typelevel" %% "cats-core" % versions.cats % Test,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % versions.jsoniterScala % Test
     ),
+    // avro-derivation's oracle: avro4s v4 on Scala 2.13, v5 on Scala 3 (separate, incompatible major versions)
+    libraryDependencies += "com.sksamuel.avro4s" %% "avro4s-core" % (if (scalaBinaryVersion.value == "3")
+                                                                       versions.avro4s3
+                                                                     else versions.avro4s213) % Test,
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq(
         "io.github.iltotore" %% "iron" % versions.iron % Test,
