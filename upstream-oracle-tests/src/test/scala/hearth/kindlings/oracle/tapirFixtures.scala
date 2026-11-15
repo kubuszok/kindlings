@@ -75,3 +75,12 @@ object OKeyCustom {
 }
 
 final case class OMapKeys(colors: Map[OKeyColor, Int], custom: Map[OKeyCustom, String])
+
+// Two fields of the same named map type (`Map_String`) with different field descriptions: tapir's docs interpreter keeps
+// the shared definition without a description and puts each description next to the field's `$ref` (#1203).
+final case class OMapDescriptions(
+    @description("the first map") first: Map[String, String],
+    @description("the second map") second: Map[String, String],
+    plain: Map[String, String]
+)
+final case class OMapFields(first: Map[String, String], second: Map[String, String], plain: Map[String, String])

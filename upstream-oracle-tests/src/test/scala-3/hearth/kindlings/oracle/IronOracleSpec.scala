@@ -28,6 +28,11 @@ final case class IAccount(
     nickname: Option[String :| MinLength[1]]
 )
 
+type IGroupName = IGroupName.T
+object IGroupName extends RefinedType[String, MinLength[2]]
+
+final case class IKeyed(byUser: Map[IUserName, Int], byGroup: Map[IGroupName, IUserName])
+
 /** Kindlings with `kindlings-iron-integration` vs Iron's own integrations: tapir-iron (schemas with validators),
   * iron-circe and iron-jsoniter (codecs that refine on decoding).
   */
@@ -64,6 +69,7 @@ final class IronOracleSpec extends MacroSuite {
     given circe: CirceConfig = CirceConfig.default
     given jsoniter: JsoniterConfig = JsoniterConfig.default
     def schema: Schema[IAccount] = KindlingsSchema.derived[IAccount].schema
+    def keyed: Schema[IKeyed] = KindlingsSchema.derived[IKeyed].schema
     val encoder: Encoder[IAccount] = KindlingsEncoder.derived[IAccount]
     val decoder: Decoder[IAccount] = KindlingsDecoder.derived[IAccount]
     val codec: JsonValueCodec[IAccount] = KindlingsJsonValueCodec.derived[IAccount]
@@ -97,6 +103,20 @@ final class IronOracleSpec extends MacroSuite {
   private def outcome(result: Option[IAccount]): String = result.fold("rejected")(a => s"accepted $a")
 
   group("Iron oracle") {
+
+    test("the names of maps keyed by RefinedTypes vs tapir's Schema.schemaForMap") {
+      val names = KindlingsSide.keyed.schemaType match {
+        case p: sttp.tapir.SchemaType.SProduct[?] => p.fields.map(f => f.name.name -> f.schema.name).toMap
+        case other                                => fail(s"Expected SProduct, got: $other")
+      }
+      import sttp.tapir.codec.iron.given
+      val upstreamByUser = Schema.schemaForMap[IUserName, Int](_.toString).name
+      val upstreamByGroup = Schema.schemaForMap[IGroupName, IUserName](_.toString).name
+      // Named after the companions (`Map_IUserName_Int`, not `Map_T_Int`), as tapir names them through the aliases
+      assertEquals(names("byUser"), upstreamByUser)
+      assertEquals(names("byGroup"), upstreamByGroup)
+      assertNotEquals(names("byUser"), names("byGroup"))
+    }
 
     test("tapir schema without tapir-iron: same shape, constraints become validators only with tapir-iron") {
       // Documented (Iron integration guide): tapir alone cannot derive schemas for Iron types at all; Kindlings derives
