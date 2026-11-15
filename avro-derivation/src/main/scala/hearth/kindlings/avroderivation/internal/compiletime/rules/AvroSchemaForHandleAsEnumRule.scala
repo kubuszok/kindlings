@@ -24,10 +24,18 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
           case Right(enumm) =>
             for {
               schemaExpr <- deriveEnumSchema[A](enumm)
-              _ <- sfctx.setCachedSchema[A](schemaExpr)
-              result <- sfctx.getCachedSchema[A].flatMap {
-                case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
-                case None               => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+              // A recursive sealed trait (`Branch(left: Node, ...) extends Node`) is met again while deriving its
+              // subtypes: a union cannot be referenced by name, so that inner occurrence was derived (and cached) as
+              // a union of the subtypes' (self-)records. The outer union - built from the completed subtype schemas -
+              // is then returned as it is: caching it again would define the same key twice.
+              alreadyCached <- sfctx.getCachedSchema[A]
+              result <- alreadyCached match {
+                case Some(_) => MIO.pure(Rule.matched(schemaExpr))
+                case None    =>
+                  sfctx.setCachedSchema[A](schemaExpr) >> sfctx.getCachedSchema[A].flatMap {
+                    case Some(cachedSchema) => MIO.pure(Rule.matched(cachedSchema))
+                    case None => MIO.pure(Rule.yielded(s"Failed to build helper for ${Type[A].prettyPrint}"))
+                  }
               }
             } yield result
           case Left(reason) =>
