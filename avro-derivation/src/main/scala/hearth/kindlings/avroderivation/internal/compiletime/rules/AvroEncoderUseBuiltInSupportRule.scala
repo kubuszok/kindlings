@@ -71,7 +71,14 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.encodeUUID(Expr.splice(value).asInstanceOf[java.util.UUID]): Any))
       else if (tpe =:= Type.of[java.time.Instant])
-        Some(Expr.quote(AvroDerivationUtils.encodeInstant(Expr.splice(value).asInstanceOf[java.time.Instant]): Any))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.encodeInstant(
+              Expr.splice(value).asInstanceOf[java.time.Instant],
+              Expr.splice(ectx.config).instantPrecision
+            ): Any
+          )
+        )
       else if (tpe =:= Type.of[java.time.LocalDate])
         Some(Expr.quote(AvroDerivationUtils.encodeLocalDate(Expr.splice(value).asInstanceOf[java.time.LocalDate]): Any))
       else if (tpe =:= Type.of[java.time.LocalTime])
@@ -79,15 +86,32 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[java.time.LocalDateTime])
         Some(
           Expr.quote(
-            AvroDerivationUtils.encodeLocalDateTime(Expr.splice(value).asInstanceOf[java.time.LocalDateTime]): Any
+            AvroDerivationUtils.encodeLocalDateTime(
+              Expr.splice(value).asInstanceOf[java.time.LocalDateTime],
+              Expr.splice(ectx.config).localDateTimePrecision
+            ): Any
           )
         )
       else if (tpe =:= Type.of[java.time.OffsetDateTime])
         Some(
           Expr.quote(
-            AvroDerivationUtils.encodeOffsetDateTime(Expr.splice(value).asInstanceOf[java.time.OffsetDateTime]): Any
+            AvroDerivationUtils.encodeOffsetDateTime(
+              Expr.splice(value).asInstanceOf[java.time.OffsetDateTime],
+              Expr.splice(ectx.config).offsetDateTimeAsIsoString
+            ): Any
           )
         )
+      else if (tpe =:= Type.of[java.sql.Timestamp])
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.encodeSqlTimestamp(
+              Expr.splice(value).asInstanceOf[java.sql.Timestamp],
+              Expr.splice(ectx.config).instantPrecision
+            ): Any
+          )
+        )
+      else if (tpe =:= Type.of[java.sql.Date])
+        Some(Expr.quote(AvroDerivationUtils.encodeSqlDate(Expr.splice(value).asInstanceOf[java.sql.Date]): Any))
       else if (tpe =:= Type.of[None.type])
         Some(Expr.quote(null: Any))
       else

@@ -31,21 +31,21 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
       val tpe = Type[A]
       val value = dctx.avroValue
       if (tpe =:= Type.of[Boolean])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Boolean].asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeBoolean(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Int])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Int].asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeInt(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Long])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Long].asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeLong(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Float])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Float].asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeFloat(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Double])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Double].asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeDouble(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[String])
         Some(Expr.quote(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Byte])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Int].toByte.asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeByte(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Short])
-        Some(Expr.quote(Expr.splice(value).asInstanceOf[Int].toShort.asInstanceOf[A]))
+        Some(Expr.quote(AvroDerivationUtils.decodeShort(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[Char])
         Some(Expr.quote(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)).charAt(0).asInstanceOf[A]))
       else if (tpe =:= Type.of[Array[Byte]])
@@ -68,15 +68,43 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.decodeUUID(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.time.Instant])
-        Some(Expr.quote(AvroDerivationUtils.decodeInstant(Expr.splice(value)).asInstanceOf[A]))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils
+              .decodeInstant(Expr.splice(value), Expr.splice(dctx.config).instantPrecision)
+              .asInstanceOf[A]
+          )
+        )
       else if (tpe =:= Type.of[java.time.LocalDate])
         Some(Expr.quote(AvroDerivationUtils.decodeLocalDate(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.time.LocalTime])
         Some(Expr.quote(AvroDerivationUtils.decodeLocalTime(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[java.time.LocalDateTime])
-        Some(Expr.quote(AvroDerivationUtils.decodeLocalDateTime(Expr.splice(value)).asInstanceOf[A]))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils
+              .decodeLocalDateTime(Expr.splice(value), Expr.splice(dctx.config).localDateTimePrecision)
+              .asInstanceOf[A]
+          )
+        )
       else if (tpe =:= Type.of[java.time.OffsetDateTime])
-        Some(Expr.quote(AvroDerivationUtils.decodeOffsetDateTime(Expr.splice(value)).asInstanceOf[A]))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils
+              .decodeOffsetDateTime(Expr.splice(value), Expr.splice(dctx.config).offsetDateTimeAsIsoString)
+              .asInstanceOf[A]
+          )
+        )
+      else if (tpe =:= Type.of[java.sql.Timestamp])
+        Some(
+          Expr.quote(
+            AvroDerivationUtils
+              .decodeSqlTimestamp(Expr.splice(value), Expr.splice(dctx.config).instantPrecision)
+              .asInstanceOf[A]
+          )
+        )
+      else if (tpe =:= Type.of[java.sql.Date])
+        Some(Expr.quote(AvroDerivationUtils.decodeSqlDate(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[None.type])
         Some(Expr.quote(None.asInstanceOf[A]))
       else

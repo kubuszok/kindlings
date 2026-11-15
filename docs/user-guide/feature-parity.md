@@ -10,14 +10,42 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 
 **Replaces:** `com.sksamuel.avro4s` (v4 for Scala 2, v5 for Scala 3 — separate incompatible versions)
 
+Checked against avro4s by the `upstream-oracle-tests` module (`AvroOracleSpec`, `scala-3/AvroScala3OracleSpec`): each
+Scala version is compared with its own avro4s line (4.x on Scala 2.13, 5.x on Scala 3) — the schemas, the binary
+encoding of sample values, each side decoding the other's bytes, hand-built and invalid inputs, and schema evolution.
+The only differences are the ones documented below ("Design decisions" and "Default value differences"); the
+`AvroConfig.avro4sDefaults` preset switches every default value difference to avro4s' behaviour.
+
+### Design decisions
+
+| Difference | avro4s | Kindlings | Why |
+|---|---|---|---|
+| Tuple record names | `scala.Tuple2` for every `(A, B)` | `scala.Tuple2__A_B` (the type arguments, as for any generic type) | With avro4s two different tuple types in one schema get the same name, so the schema's JSON describes the second one wrongly |
+| `@AvroEnumDefault` on avro4s 5 | Ignored (never implemented in 5.x) | `@avroEnumDefault` sets the ENUM default (as avro4s 4) on both Scala versions | Superset |
+| `@AvroScalePrecision` on avro4s 5 | Declared but ignored (the implicit `ScalePrecision` applies) | `@avroScalePrecision(precision, scale)` is honoured on both Scala versions | Superset |
+| avro4s 5 gaps | No recursive types, value classes, `scala.Enumeration`, working `FieldMapper` | All supported (compared with avro4s 4 on Scala 2.13) | Superset |
+
+### Default value differences
+
+| Setting | avro4s | Kindlings default | Opt in to avro4s' behaviour |
+|---|---|---|---|
+| `BigDecimal` | BYTES + `decimal(precision = 8, scale = 2)` | STRING | `withDecimalConfig(8, 2)` or `avro4sDefaults` |
+| `OffsetDateTime` | ISO-8601 STRING with the `datetime-with-offset` logical type | `timestamp-millis` LONG (UTC; the offset is dropped) | `withOffsetDateTimeAsIsoString` or `avro4sDefaults` |
+| Scala default values | Become schema defaults (the default's union branch moved first) | Only `@avroDefault` becomes a schema default | `withScalaDefaultsInSchema` or `avro4sDefaults` |
+
+Without schema defaults, Avro's schema resolution rejects old data read with a newer reader schema that adds fields with
+Scala defaults (`missing required field`); decoding a `GenericRecord` directly still falls back to the Scala defaults,
+as avro4s does.
+
 ### Configuration
 
 | Feature | avro4s | Kindlings | Status |
 |---|---|---|---|
-| Namespace config | Yes | Yes | Parity |
-| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom) | Yes (4 built-in strategies) | Parity |
+| Namespace config | `@AvroNamespace` only | `@avroNamespace` + `AvroConfig.namespace` | Improvement |
+| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (4 built-in strategies) | Parity |
 | Constructor name transforms | Not built-in | Yes | Improvement |
-| Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig` | Parity (different API) |
+| Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig`, `@avroScalePrecision` | Parity (different API) |
+| Timestamp precision | A `SchemaFor` with the `timestamp-micros`/`-nanos` logical type | `withInstantPrecision`, `withLocalDateTimePrecision` | Parity (different API) |
 
 ### Type classes
 
@@ -39,34 +67,46 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Fixed size (`@AvroFixed` / `@avroFixed`) | Yes | Yes | Parity |
 | Error type (`@AvroError` / `@avroError`) | v5 only (no v4 equivalent) | Yes (both Scala 2+3) | Improvement (we add it on Scala 2) |
 | Transient field (`@AvroTransient` / `@transientField`) | Yes | Yes | Parity |
-| Default values | From constructor defaults (automatic; no `@AvroDefault` annotation exists upstream) | `@avroDefault(json)` (explicit JSON string) | Different API |
-| Subtype ordering (`@AvroUnionPosition` / `@avroSortPriority`) | Yes | Yes | Parity |
+| Default values | From constructor defaults (automatic; no `@AvroDefault` annotation exists upstream) | `@avroDefault(json)`, or constructor defaults with `withScalaDefaultsInSchema` | Default value difference (see above) |
+| Subtype ordering (`@AvroSortPriority` / `@avroSortPriority`) | Yes | Yes | Parity |
 | `@AvroNoDefault` (suppress defaults) | Yes | Yes (`@avroNoDefault`) | Parity |
 | `@AvroErasedName` (disable generic name encoding) | Yes | Yes (`@avroErasedName`) | Parity |
-| `@AvroEnumDefault` | Yes | Yes (`@avroEnumDefault`) | Parity |
+| `@AvroEnumDefault` | Yes (v4; ignored by v5) | Yes (`@avroEnumDefault`) | Parity (superset on Scala 3) |
 
 ### Type support
 
 | Feature | avro4s | Kindlings | Status |
 |---|---|---|---|
 | UUID | Yes | Yes | Parity |
-| Instant | Yes | Yes | Parity |
+| Instant | `timestamp-millis` | `timestamp-millis` (configurable precision) | Parity |
 | LocalDate | Yes | Yes | Parity |
-| LocalTime | Yes | Yes | Parity |
-| LocalDateTime | Yes | Yes | Parity |
-| BigDecimal | BYTES + decimal logical type **by default** (`ScalePrecision(scale=2, precision=8)`) | STRING **by default**; BYTES + decimal logical type when `DecimalConfig` is provided | Parity (opposite default) |
+| LocalTime | `time-micros` | `time-micros` | Parity |
+| LocalDateTime | `timestamp-nanos` | `timestamp-nanos` (configurable precision) | Parity |
+| `java.sql.Date` / `java.sql.Timestamp` | `date` / `timestamp-millis` | `date` / `timestamp-millis` | Parity |
+| BigDecimal | BYTES + decimal logical type **by default** (`ScalePrecision(scale=2, precision=8)`) | STRING **by default**; BYTES + decimal logical type when `DecimalConfig` is provided | Default value difference (see above) |
+| `OffsetDateTime` | ISO-8601 string (`datetime-with-offset`) | `timestamp-millis` long by default; avro4s' string with `withOffsetDateTimeAsIsoString` | Default value difference (see above) |
 | Value classes | Unwrapped | Unwrapped | Parity |
 | Case classes → RECORD | Yes | Yes | Parity |
-| Sealed case objects → ENUM | Yes | Yes | Parity |
-| Sealed traits → UNION | Yes | Yes | Parity |
+| Sealed case objects → ENUM | Symbols by name (v4) / in declaration order (v5) | Same per Scala version | Parity |
+| Sealed traits → UNION | Members by `@AvroSortPriority`, then full name | Same | Parity |
 | `Either[A,B]` → UNION | Yes | Yes | Parity |
 | `Option[T]` → UNION(null,T) | Yes | Yes | Parity |
-| Recursive types | Yes (with caveats) | Yes | Parity |
-| Tuples (`Tuple2`..) → RECORD | Yes | Yes | Parity |
+| Recursive types | v4 only | Yes | Parity (superset on Scala 3) |
+| Tuples (`Tuple2`..) → RECORD | Named `scala.TupleN` | Named `scala.TupleN__A_B` | Design decision (see above) |
+| Generic record names | `Name__A_B` | `Name__A_B` | Parity |
 | `Array[Byte]` / `Seq[Byte]` / `ByteBuffer` → BYTES | Yes | Yes | Parity |
-| `OffsetDateTime` | Yes (string + custom logical type) | Yes (as `timestamp-millis` long — different encoding) | Parity (different encoding) |
-| Scala `Enumeration` | Yes | No | Gap |
-| Shapeless Coproduct → UNION | Yes | No | Gap |
+| Scala `Enumeration` → ENUM (named after the enumeration object) | v4 only | Yes | Parity (superset on Scala 3) |
+| Shapeless Coproduct → UNION | Yes | No | Not ported |
+
+### Decoding
+
+| Feature | avro4s | Kindlings | Status |
+|---|---|---|---|
+| Integral widening (`Int`/`Short`/`Byte` → `Long`, `Byte`/`Short` → `Int`) | Yes | Yes | Parity |
+| Floating-point widening (`Float` → `Double`) | No | No | Parity |
+| Missing field with a Scala default | Decodes to the default | Decodes to the default | Parity |
+| Field with a Scala default that fails to decode | Decodes to the default | Decodes to the default | Parity |
+| Missing field without a default / `null` for a primitive | Rejected | Rejected | Parity |
 
 ### Cross-compilation
 
@@ -83,11 +123,6 @@ Legend: **Parity** = feature matches original, **Improvement** = Kindlings does 
 | Cats integration | `avro4s-cats` module for `NonEmptyList`, etc. — external ecosystem |
 | Refined types | `avro4s-refined` module — external ecosystem |
 | Kafka `GenericSerde` | `avro4s-kafka` module — external ecosystem |
-| `java.sql.Date`, `java.sql.Timestamp` | Upstream supports additional temporal types (we do support `OffsetDateTime`, though with a different encoding — see type-support table) |
-| Scala `Enumeration` | Upstream maps `scala.Enumeration#Value` to an Avro ENUM; Kindlings does not |
-| Timestamp precision variants (`TimestampMicros`, `TimestampNanos`) | Upstream supports micros/nanos; Kindlings uses millis |
-| Decoder type widening | Upstream widens `Int` → `Long`, `Float` → `Double` during decoding |
-| Byte-identical generic schema names | Both encode generic type params in the schema name, but Kindlings joins multiple type args with `__` (`Pair__String__Int`) where upstream uses a single `_` (`Pair__String_Int`) — names are not byte-identical for multi-arg generics |
 
 ### `@avroSortPriority` note
 

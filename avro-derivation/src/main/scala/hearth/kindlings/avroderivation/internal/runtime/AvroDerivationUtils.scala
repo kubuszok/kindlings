@@ -3,6 +3,8 @@ package hearth.kindlings.avroderivation.internal.runtime
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord}
 
+import hearth.kindlings.avroderivation.TimestampPrecision
+
 import java.nio.ByteBuffer
 import java.util
 
@@ -444,6 +446,158 @@ object AvroDerivationUtils {
       s"Unknown Avro record type: $name. Expected one of: ${knownSubtypes.mkString(", ")}"
     )
 
+  // --- Strict primitive decoders (avro4s' integral widening; `null` and other types are rejected) ---
+
+  private def cannotDecode(value: Any, avroType: String): Nothing =
+    throw new org.apache.avro.AvroTypeException(
+      s"Cannot decode ${if (value == null) "null" else s"$value (${value.getClass.getName})"} as $avroType"
+    )
+
+  def decodeBoolean(value: Any): Boolean = value match {
+    case b: java.lang.Boolean => b.booleanValue
+    case other                => cannotDecode(other, "BOOLEAN")
+  }
+
+  def decodeInt(value: Any): Int = value match {
+    case i: java.lang.Integer => i.intValue
+    case s: java.lang.Short   => s.intValue
+    case b: java.lang.Byte    => b.intValue
+    case other                => cannotDecode(other, "INT")
+  }
+
+  def decodeLong(value: Any): Long = value match {
+    case l: java.lang.Long    => l.longValue
+    case i: java.lang.Integer => i.longValue
+    case s: java.lang.Short   => s.longValue
+    case b: java.lang.Byte    => b.longValue
+    case other                => cannotDecode(other, "LONG")
+  }
+
+  def decodeFloat(value: Any): Float = value match {
+    case f: java.lang.Float => f.floatValue
+    case other              => cannotDecode(other, "FLOAT")
+  }
+
+  def decodeDouble(value: Any): Double = value match {
+    case d: java.lang.Double => d.doubleValue
+    case other               => cannotDecode(other, "DOUBLE")
+  }
+
+  def decodeByte(value: Any): Byte = value match {
+    case b: java.lang.Byte    => b.byteValue
+    case i: java.lang.Integer => i.byteValue
+    case other                => cannotDecode(other, "INT (Byte)")
+  }
+
+  def decodeShort(value: Any): Short = value match {
+    case s: java.lang.Short   => s.shortValue
+    case b: java.lang.Byte    => b.shortValue
+    case i: java.lang.Integer => i.shortValue
+    case other                => cannotDecode(other, "INT (Short)")
+  }
+
+  // --- Record field lookup (schema evolution) ---
+
+  /** Whether `record`'s schema has a field called `name` or one of `aliases`. */
+  def hasFieldOrAlias(record: GenericRecord, name: String, aliases: List[String]): Boolean = {
+    val schema = record.getSchema
+    if (schema.getField(name) != null) true
+    else aliases.exists(a => schema.getField(a) != null)
+  }
+
+  // --- Timestamps with configurable precision ---
+
+  def timestampSchema(precision: TimestampPrecision): Schema = {
+    val schema = Schema.create(Schema.Type.LONG)
+    (precision match {
+      case TimestampPrecision.Millis => org.apache.avro.LogicalTypes.timestampMillis()
+      case TimestampPrecision.Micros => org.apache.avro.LogicalTypes.timestampMicros()
+      case TimestampPrecision.Nanos  => org.apache.avro.LogicalTypes.timestampNanos()
+    }).addToSchema(schema)
+    schema
+  }
+
+  private def epochToLong(epochSecond: Long, nano: Int, precision: TimestampPrecision): Long = precision match {
+    case TimestampPrecision.Millis => epochSecond * 1000L + nano / 1000000
+    case TimestampPrecision.Micros => epochSecond * 1000000L + nano / 1000
+    case TimestampPrecision.Nanos  => epochSecond * 1000000000L + nano
+  }
+
+  private def longToInstant(value: Any, precision: TimestampPrecision): java.time.Instant = {
+    val l = decodeLong(value)
+    precision match {
+      case TimestampPrecision.Millis => java.time.Instant.ofEpochMilli(l)
+      case TimestampPrecision.Micros =>
+        java.time.Instant.ofEpochSecond(Math.floorDiv(l, 1000000L), Math.floorMod(l, 1000000L) * 1000L)
+      case TimestampPrecision.Nanos =>
+        java.time.Instant.ofEpochSecond(Math.floorDiv(l, 1000000000L), Math.floorMod(l, 1000000000L))
+    }
+  }
+
+  def encodeInstant(instant: java.time.Instant, precision: TimestampPrecision): Any =
+    if (precision eq TimestampPrecision.Millis) instant.toEpochMilli
+    else epochToLong(instant.getEpochSecond, instant.getNano, precision)
+  def decodeInstant(value: Any, precision: TimestampPrecision): java.time.Instant = longToInstant(value, precision)
+
+  def encodeLocalDateTime(dt: java.time.LocalDateTime, precision: TimestampPrecision): Any =
+    if (precision eq TimestampPrecision.Millis) dt.toInstant(java.time.ZoneOffset.UTC).toEpochMilli
+    else epochToLong(dt.toEpochSecond(java.time.ZoneOffset.UTC), dt.getNano, precision)
+  def decodeLocalDateTime(value: Any, precision: TimestampPrecision): java.time.LocalDateTime =
+    java.time.LocalDateTime.ofInstant(longToInstant(value, precision), java.time.ZoneOffset.UTC)
+
+  def encodeSqlTimestamp(ts: java.sql.Timestamp, precision: TimestampPrecision): Any =
+    encodeInstant(ts.toInstant, precision)
+  def decodeSqlTimestamp(value: Any, precision: TimestampPrecision): java.sql.Timestamp =
+    java.sql.Timestamp.from(longToInstant(value, precision))
+
+  def encodeSqlDate(date: java.sql.Date): Any = date.toLocalDate.toEpochDay.toInt
+  def decodeSqlDate(value: Any): java.sql.Date =
+    java.sql.Date.valueOf(java.time.LocalDate.ofEpochDay(decodeInt(value).toLong))
+
+  // --- OffsetDateTime: UTC timestamp-millis (default) or avro4s' ISO-8601 string ---
+
+  def offsetDateTimeSchema(asIsoString: Boolean): Schema =
+    if (asIsoString) {
+      val schema = Schema.create(Schema.Type.STRING)
+      // avro4s' custom logical type (not registered with Avro, so it is only a schema property)
+      schema.addProp(org.apache.avro.LogicalType.LOGICAL_TYPE_PROP, "datetime-with-offset")
+      schema
+    } else timestampMillisSchema
+
+  def encodeOffsetDateTime(dt: java.time.OffsetDateTime, asIsoString: Boolean): Any =
+    if (asIsoString) dt.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    else dt.toInstant.toEpochMilli
+
+  def decodeOffsetDateTime(value: Any, asIsoString: Boolean): java.time.OffsetDateTime =
+    if (asIsoString)
+      java.time.OffsetDateTime.parse(value.toString, java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    else
+      java.time.OffsetDateTime.ofInstant(java.time.Instant.ofEpochMilli(decodeLong(value)), java.time.ZoneOffset.UTC)
+
+  // --- Unions ordered as avro4s orders sealed traits' subtypes ---
+
+  /** A union of `schemas` sorted by descending priority (`@avroSortPriority`), then by full name, as avro4s does. */
+  def createSortedUnion(schemas: List[Schema], priorities: List[Int]): Schema = {
+    val sorted = schemas.zip(priorities).sortBy { case (s, p) => (-p, s.getFullName) }.map(_._1)
+    val javaSchemas = new util.ArrayList[Schema](sorted.size)
+    sorted.foreach(javaSchemas.add)
+    Schema.createUnion(javaSchemas)
+  }
+
+  // --- Scala default values as schema defaults (AvroConfig.scalaDefaultsInSchema) ---
+
+  /** A field whose default is the Scala default value `default`, converted to the JSON-like value Avro expects for
+    * `schema` (a union is reordered so that the default's branch comes first, as Avro requires and avro4s does). When
+    * the value cannot be represented for this schema, the field gets no default.
+    */
+  def createFieldWithScalaDefault(name: String, schema: Schema, doc: String, default: Any): Schema.Field =
+    AvroScalaDefaults.resolve(default, schema) match {
+      case Some((resolvedSchema, value)) =>
+        try new Schema.Field(name, resolvedSchema, doc, value)
+        catch { case _: org.apache.avro.AvroRuntimeException => new Schema.Field(name, schema, doc) }
+      case None => new Schema.Field(name, schema, doc)
+    }
+
   // --- Type name helpers ---
 
   def parseAvroName(fullTypeName: String): String = {
@@ -453,7 +607,8 @@ object AvroDerivationUtils {
       val baseName = shortenToAvroName(fullTypeName.substring(0, bracketIdx))
       val paramsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)
       val params = splitTopLevelTypeParams(paramsStr).map(parseAvroName)
-      if (params.isEmpty) baseName else (baseName :: params).mkString("__")
+      // as avro4s: `Name__Arg1_Arg2` (a double underscore after the name, single underscores between the arguments)
+      if (params.isEmpty) baseName else baseName + "__" + params.mkString("_")
     }
   }
 

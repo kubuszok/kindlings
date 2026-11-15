@@ -43,7 +43,8 @@ trait SchemaForMacrosImpl
     with rules.AvroSchemaForHandleAsSingletonRuleImpl
     with rules.AvroSchemaForHandleAsCaseClassRuleImpl
     with rules.AvroSchemaForHandleAsEnumRuleImpl
-    with rules.AvroSchemaForDerivationPolicyRuleImpl {
+    with rules.AvroSchemaForDerivationPolicyRuleImpl
+    with hearth.kindlings.derivation.compiletime.MethodFolds {
   this: MacroCommons & StdExtensions & AnnotationSupport & LoadStandardExtensionsOnce =>
 
   // $COVERAGE-OFF$
@@ -332,10 +333,21 @@ trait SchemaForMacrosImpl
     * top-level type with no package (e.g. `Foo`) this returns `""`.
     */
   protected def extractPackageNamespace[A: Type]: String = {
-    val fqcn = Type[A].plainPrint.takeWhile(_ != '[')
+    val fqcn = enumerationObjectFqn[A].getOrElse(Type[A].plainPrint.takeWhile(_ != '[').stripSuffix(".type"))
     val lastDot = fqcn.lastIndexOf('.')
-    if (lastDot < 0) "" else fqcn.substring(0, lastDot)
+    if (lastDot < 0) "" else fqcn.substring(0, lastDot).stripSuffix(".package")
   }
+
+  /** For a `scala.Enumeration` value type (`Weekday.Value`), the fully qualified name of the enumeration object: avro4s
+    * names the ENUM after the object (`Weekday`) in the object's package.
+    */
+  protected def enumerationObjectFqn[A: Type]: Option[String] =
+    if (!Type[A].isEnumeration) None
+    else {
+      val fqcn = Type[A].plainPrint.takeWhile(_ != '[')
+      val lastDot = fqcn.lastIndexOf('.')
+      if (fqcn.endsWith(".type") || lastDot < 0) None else Some(fqcn.substring(0, lastDot))
+    }
 
   /** Computes the namespace expression for a record or enum type with the following priority:
     *   1. Field-level `@avroNamespace` override from the parent context (highest priority)
@@ -375,7 +387,9 @@ trait SchemaForMacrosImpl
     implicit val avroNameT: Type[avroName] = SfTypes.AvroName
     implicit val avroErasedNameT: Type[avroErasedName] = SfTypes.AvroErasedName
     getTypeAnnotationStringArg[avroName, A] match {
-      case Some(explicitName)                           => Expr(explicitName)
+      case Some(explicitName)                        => Expr(explicitName)
+      case None if enumerationObjectFqn[A].isDefined =>
+        Expr(enumerationObjectFqn[A].get.split('.').last)
       case None if hasTypeAnnotation[avroErasedName, A] => Expr(Type[A].shortName)
       case None                                         =>
         implicit val SchemaT: Type[Schema] = SfTypes.Schema

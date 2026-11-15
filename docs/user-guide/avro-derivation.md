@@ -102,7 +102,15 @@ implicit val config: AvroConfig = AvroConfig.default
 | `withKebabCaseFieldNames` | `fieldName` -> `field-name` |
 | `withPascalCaseFieldNames` | `fieldName` -> `FieldName` |
 | `withTransformConstructorNames(f)` | Custom constructor name transform for sealed traits |
-| `withDecimalConfig(precision, scale)` | Global `BigDecimal` precision and scale |
+| `withDecimalConfig(precision, scale)` | Global `BigDecimal` precision and scale (BYTES + `decimal` logical type; without it `BigDecimal` is a STRING) |
+| `withInstantPrecision(p)` | `Instant` / `java.sql.Timestamp` precision: `TimestampPrecision.Millis` (default), `Micros` or `Nanos` |
+| `withLocalDateTimePrecision(p)` | `LocalDateTime` precision: `TimestampPrecision.Nanos` (default, as avro4s), `Micros` or `Millis` |
+| `withOffsetDateTimeAsIsoString` | Encode `OffsetDateTime` as avro4s does: an ISO-8601 string (default: a UTC `timestamp-millis` long) |
+| `withScalaDefaultsInSchema` | Turn case class fields' Scala default values into schema defaults, as avro4s does |
+
+`AvroConfig.avro4sDefaults` is a preset with avro4s' behaviour where Kindlings' defaults differ: `BigDecimal` as
+`decimal(8, 2)`, `OffsetDateTime` as an ISO-8601 string and Scala default values as schema defaults (see
+[Feature parity](feature-parity.md#avro-derivation)).
 
 ## Annotations
 
@@ -144,9 +152,15 @@ import hearth.kindlings.avroderivation.annotations._
 | Annotation | Target | Description |
 |-----------|--------|-------------|
 | `@avroDefault("json")` | Field | Default value as a JSON string literal |
-| `@avroNoDefault` | Field | Suppress default value even if field has a Scala default |
+| `@avroNoDefault` | Field | Suppress the schema default (`@avroDefault`, or the Scala default with `withScalaDefaultsInSchema`) |
 | `@avroEnumDefault("value")` | Type (sealed trait) | Set the default value for an enum schema |
 | `@transientField` | Field | Exclude field from schema entirely (must have a default value) |
+
+Scala default values become schema defaults only with `withScalaDefaultsInSchema` (or `avro4sDefaults`), which avro4s
+does by default. Avro's schema resolution needs them to read old data with a reader schema that adds fields. When a
+`GenericRecord` is decoded directly, a field with a Scala default decodes to the default if the record has no such
+field or its value cannot be decoded (as avro4s does); a missing field without a default is rejected (an `Option` field
+decodes to `None`).
 
 ## Usage examples
 
@@ -289,7 +303,8 @@ import hearth.kindlings.avroderivation.annotations._
     // - Instant -> long with logicalType "timestamp-millis"
     // - LocalDate -> int with logicalType "date"
     // - LocalTime -> long with logicalType "time-micros"
-    // - LocalDateTime -> long with logicalType "timestamp-millis"
+    // - LocalDateTime -> long with logicalType "timestamp-nanos"
+    // - java.sql.Date -> int with logicalType "date", java.sql.Timestamp -> long with logicalType "timestamp-millis"
     val encoder = AvroEncoder.derived[EventRecord]
     val decoder = AvroDecoder.derived[EventRecord]
 
@@ -317,8 +332,8 @@ import hearth.kindlings.avroderivation.annotations._
     case class Audited[T](data: T, createdBy: String)
     case class User(name: String)
 
-    // Generic types encode type parameters in the schema name by default:
-    // Audited[User] -> "Audited__User" (type parameters joined with "__")
+    // Generic types encode type parameters in the schema name by default, as avro4s does:
+    // Audited[User] -> "Audited__User", Pair[String, Int] -> "Pair__String_Int"
     val encoder = AvroEncoder.derived[Audited[User]]
     val decoder = AvroDecoder.derived[Audited[User]]
 
@@ -347,7 +362,7 @@ This enables `LogDerivation` implicits for `AvroSchemaFor`, `AvroEncoder`, and `
 | Same API on Scala 2.13 and 3 | No | No | Yes |
 | Sanely-automatic derivation | No | No | Yes |
 | Inline schema/encode/decode | No | No | Yes |
-| Recursive types | Needs workarounds | Yes | Just works |
+| Recursive types | Yes | No (auto-derivation does not recurse) | Just works |
 | Named tuples | No | No | Yes |
 | Scala 3 enums | No | Yes | Yes |
 | Java enums | Yes | Yes | Yes |
@@ -355,8 +370,20 @@ This enables `LogDerivation` implicits for `AvroSchemaFor`, `AvroEncoder`, and `
 | Union types (Scala 3) | No | No | Yes |
 | Literal types (Scala 3) | No | No | Yes |
 | `@avroName` type renaming | Yes | Yes | Yes |
-| `@avroScalePrecision` per-field | No (v4: implicit `ScalePrecision` only) | Yes (param order `(scale, precision)`) | Yes (param order `(precision, scale)`) |
+| `@avroScalePrecision` per-field | No (v4: implicit `ScalePrecision` only) | Declared (param order `(scale, precision)`) but ignored | Yes (param order `(precision, scale)`) |
 | `@avroFqnParamNames` | No | No | Yes |
+| Value classes, `scala.Enumeration` | Yes | No | Yes |
+| Timestamp precision | Custom `SchemaFor` | Custom `SchemaFor` | `withInstantPrecision` / `withLocalDateTimePrecision` |
+
+### Checked against avro4s
+
+The `upstream-oracle-tests` module derives the same types with Kindlings and with avro4s (4.x on Scala 2.13, 5.x on
+Scala 3) and compares the schemas, the binary encodings, each side decoding the other's bytes, hand-built and invalid
+`GenericRecord`s and schema evolution. The differences are documented in
+[Feature parity](feature-parity.md#avro-derivation): tuple record names (Kindlings encodes the type arguments, so
+different tuple types can share a schema), and three defaults — `BigDecimal` as a STRING, `OffsetDateTime` as a
+`timestamp-millis` long, Scala defaults not in the schema — which `AvroConfig.avro4sDefaults` switches to avro4s'
+behaviour.
 
 ### Benchmarks
 

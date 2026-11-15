@@ -151,6 +151,20 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                 val fieldProps = getAllAnnotationTwoStringArgs[avroProp](param)
                 val fieldAliases = getAllAnnotationStringArgs[avroAlias](param)
                 val fieldNamespaceOverride = getAnnotationStringArg[avroNamespace](param)
+                // The Scala default value, used as the schema default when `AvroConfig.scalaDefaultsInSchema` is on
+                // (unless `@avroDefault`/`@avroNoDefault` decide the default).
+                val scalaDefault: Option[Expr[Any]] =
+                  if (fieldDefault.isDefined || hasAnnotationType[avroNoDefault](param)) None
+                  else
+                    param.defaultValue.flatMap { method =>
+                      foldInstanceFree(method, "Default value")(
+                        onTypes = _ => Map.empty,
+                        onValues = _ => Map.empty
+                      ).toOption.map { defaultExpr =>
+                        import defaultExpr.Underlying as Default
+                        Expr.quote(Expr.splice(defaultExpr.value): Any)
+                      }
+                    }
                 Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
                   (avroFixedSize, decimalOverride) match {
                     case (Some(_), _) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
@@ -162,15 +176,29 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                       Log.error(err.message) >> MIO.fail(err)
                     case (Some(size), _) =>
                       val fixedName = nameOverride.getOrElse(fName)
+                      // as avro4s: the fixed type lives in the field's `@avroNamespace` or the enclosing record's
+                      val fixedNamespaceExpr: Expr[String] = fieldNamespaceOverride match {
+                        case Some(ns) => Expr(ns)
+                        case None     => namespaceExpr
+                      }
                       MIO.pure {
                         val fieldSchema = Expr.quote {
                           AvroDerivationUtils.createFixed(
                             Expr.splice(Expr(fixedName)),
-                            Expr.splice(sfctx.config).namespace.getOrElse(""),
+                            Expr.splice(fixedNamespaceExpr),
                             Expr.splice(Expr(size))
                           )
                         }
-                        (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
+                        (
+                          fName,
+                          fieldSchema,
+                          nameOverride,
+                          fieldDoc,
+                          fieldDefault,
+                          fieldProps,
+                          fieldAliases,
+                          scalaDefault
+                        )
                       }
                     case (_, Some((precision, scale))) =>
                       MIO.pure {
@@ -180,7 +208,16 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                             Expr.splice(Expr(scale))
                           )
                         }
-                        (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
+                        (
+                          fName,
+                          fieldSchema,
+                          nameOverride,
+                          fieldDoc,
+                          fieldDefault,
+                          fieldProps,
+                          fieldAliases,
+                          scalaDefault
+                        )
                       }
                     case _ =>
                       val nestedCtx: SchemaForCtx[Field] = fieldNamespaceOverride match {
@@ -188,7 +225,16 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                         case None     => cleanCtx.nest[Field]
                       }
                       deriveSchemaRecursively[Field](using nestedCtx).map { fieldSchema =>
-                        (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases)
+                        (
+                          fName,
+                          fieldSchema,
+                          nameOverride,
+                          fieldDoc,
+                          fieldDefault,
+                          fieldProps,
+                          fieldAliases,
+                          scalaDefault
+                        )
                       }
                   }
                 }
@@ -217,14 +263,23 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
 
     private def buildFieldsExpr[A: SchemaForCtx](
         fieldPairs: List[
-          (String, Expr[Schema], Option[String], Option[String], Option[String], List[(String, String)], List[String])
+          (
+              String,
+              Expr[Schema],
+              Option[String],
+              Option[String],
+              Option[String],
+              List[(String, String)],
+              List[String],
+              Option[Expr[Any]]
+          )
         ]
     )(implicit SchemaT: Type[Schema], StringT: Type[String], AvroConfigT: Type[AvroConfig]): Expr[List[Schema.Field]] =
       fieldPairs.foldRight(
         Expr.quote(List.empty[Schema.Field])
       ) {
         case (
-              (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases),
+              (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases, scalaDefault),
               acc
             ) =>
           val nameExpr: Expr[String] = nameOverride match {
@@ -240,7 +295,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                   }
               }
           }
-          val baseFieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
+          val annotatedFieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
             case (Some(doc), Some(default)) =>
               Expr.quote {
                 AvroDerivationUtils.createFieldWithDocAndDefault(
@@ -273,6 +328,24 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                   Expr.splice(fieldSchema)
                 )
               }
+          }
+          val baseFieldExpr: Expr[Schema.Field] = scalaDefault match {
+            case Some(default) =>
+              val docExpr: Expr[String] = fieldDoc match {
+                case Some(doc) => Expr(doc)
+                case None      => Expr.quote(null: String)
+              }
+              Expr.quote {
+                if (Expr.splice(sfctx.config).scalaDefaultsInSchema)
+                  AvroDerivationUtils.createFieldWithScalaDefault(
+                    Expr.splice(nameExpr),
+                    Expr.splice(fieldSchema),
+                    Expr.splice(docExpr),
+                    Expr.splice(default)
+                  )
+                else Expr.splice(annotatedFieldExpr)
+              }
+            case None => annotatedFieldExpr
           }
           // Apply field-level @avroProp annotations
           val fieldWithPropsExpr: Expr[Schema.Field] =
