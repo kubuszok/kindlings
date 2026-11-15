@@ -233,13 +233,8 @@ trait DecoderHandleAsEnumRuleImpl {
                       )
                     )
 
-                  case None =>
-                    val err = DecoderDerivationError.CannotConstructType(
-                      Type[ChildType].prettyPrint,
-                      isSingleton = false,
-                      Some("no cached decoder for the subtype")
-                    )
-                    Log.error(err.message) >> MIO.fail(err)
+                  // unreachable: deriveDecoderRecursively has just cached the subtype's decoder
+                  case None => MIO.fail(DecoderDerivationError.CannotConstructType(Type[ChildType].prettyPrint, false))
                 }
               }
           }
