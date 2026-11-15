@@ -148,7 +148,9 @@ final class OpticsOracleSpec extends MacroSuite {
     assertEquals(
       differences.map(_._1),
       expectedDifferences.toList,
-      differences.map { case (n, k, q) => s"$n: kindlings=$k quicklens=$q" }.mkString("Kindlings vs quicklens differences:\n", "\n", "")
+      differences
+        .map { case (n, k, q) => s"$n: kindlings=$k quicklens=$q" }
+        .mkString("Kindlings vs quicklens differences:\n", "\n", "")
     )
   }
 
