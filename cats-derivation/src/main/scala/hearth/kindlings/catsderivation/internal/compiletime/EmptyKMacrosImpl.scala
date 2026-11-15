@@ -9,7 +9,7 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** EmptyK derivation: constructs empty F[A] by summoning Empty for each field type in F[Any]. */
-trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -77,7 +77,7 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
     val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      EmptyKTypes.Empty[Field].summonExprIgnoring().toEither match {
+      emptyFromEmptyK[Field].map(Right(_)).getOrElse(EmptyKTypes.Empty[Field].summonExprIgnoring().toEither) match {
         case Right(emptyExpr) =>
           val value: Expr[Field] = Expr.quote(Expr.splice(emptyExpr).empty)
           MIO.pure((fieldName, value.as_??))

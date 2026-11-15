@@ -342,7 +342,7 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivati
         fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
     }
     val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
-      Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+      Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
     }
     MIO.pure(result)
   }
@@ -391,9 +391,9 @@ trait NonEmptyTraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivati
     }
     val last = directFieldExprs.last
     val init = directFieldExprs.init
-    val seed: Expr[cats.Eval[Any]] = Expr.quote(cats.Eval.now(Expr.splice(fExpr)(Expr.splice(last)): Any))
+    val seed: Expr[cats.Eval[Any]] = Expr.quote(cats.Eval.later(Expr.splice(fExpr)(Expr.splice(last)): Any))
     val result = init.foldRight(seed) { (fieldExpr, acc) =>
-      Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+      Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
     }
     MIO.pure(result)
   }

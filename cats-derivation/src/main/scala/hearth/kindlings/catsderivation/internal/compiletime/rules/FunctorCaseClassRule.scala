@@ -67,12 +67,12 @@ trait FunctorCaseClassRuleImpl {
                 unsupported += name
             }
           } else {
-            summonFunctorForFieldType(fieldType) match {
+            summonComposedFunctorForFieldType(fieldType) match {
               case Some(functorExpr) => nestedFieldFunctors += (name -> functorExpr)
               case None              =>
                 // Also check for direct self-recursion (e.g. IList[Int] where F = IList)
                 mkCtor1FromType(fieldType) match {
-                  case Some((_, nestedUntyped)) if nestedUntyped == parentCtor =>
+                  case Some((_, nestedUntyped)) if nestedUntyped.sameTypeConstructorAs(parentCtor) =>
                     selfRecursive += name
                   case _ =>
                     unsupported += name

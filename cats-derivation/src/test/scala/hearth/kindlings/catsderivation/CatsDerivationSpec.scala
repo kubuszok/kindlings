@@ -1211,7 +1211,8 @@ final class CatsDerivationSpec extends MacroSuite {
       )
     }
 
-    test("Empty.derived on sealed trait without an Empty variant") {
+    test("Empty.derived on sealed trait with several Empty variants") {
+      // Like kittens, every subtype that can form an Empty counts (Dog and Cat both derive one).
       compileErrors(
         """
         import hearth.kindlings.catsderivation.extensions.*
@@ -1219,7 +1220,7 @@ final class CatsDerivationSpec extends MacroSuite {
         """
       ).check(
         "Macro derivation failed",
-        "hearth.kindlings.catsderivation.examples.Animal: no variant has an Empty instance",
+        "Cannot derive Empty for hearth.kindlings.catsderivation.examples.Animal: multiple variants have Empty instances (need exactly one)",
         "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
       )
     }
