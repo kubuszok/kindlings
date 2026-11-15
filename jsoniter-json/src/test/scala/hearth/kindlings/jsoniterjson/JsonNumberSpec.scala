@@ -125,4 +125,27 @@ final class JsonNumberSpec extends Suite {
       JsonNumber.fromDouble(1.0e20).get.toBigInt ==> Some(BigInt("100000000000000000000"))
     }
   }
+
+  group("fromString accepts JSON numbers only") {
+
+    test("valid JSON numbers keep their text") {
+      List("0", "-0", "-0.0", "12", "-1.50", "1e3", "1E+3", "1.5e-3", "1e2147483648").foreach { s =>
+        JsonNumber.fromString(s).map(_.toString) ==> Some(s)
+      }
+    }
+
+    test("texts BigDecimal accepts but JSON does not are rejected") {
+      List("+1", "1.", ".5", "01", "-01", "1e", "1e+", "0x10", "NaN", "Infinity", " 1", "1 ", "", "-", "1_000").foreach {
+        s => JsonNumber.fromString(s) ==> None
+      }
+    }
+
+    test("an exponent too large for BigDecimal is accepted, like circe") {
+      val n = JsonNumber.fromString("1e-2147483649").get
+      n.toBigDecimal ==> None
+      n.toDouble ==> Some(0.0)
+      n.toLong ==> None
+      n.toBigInt ==> None
+    }
+  }
 }

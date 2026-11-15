@@ -1,6 +1,7 @@
 package hearth.kindlings.jsoniterjson
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
+import hearth.kindlings.jsoniterjson.codec.JsonCodec
 import hearth.kindlings.jsoniterjson.codec.JsonCodec.*
 import hearth.Suite
 
@@ -153,5 +154,35 @@ final class JsonCodecSpec extends Suite {
   test("JsonNumber: precision preservation") {
     val n = JsonNumber.fromBigDecimal(BigDecimal("12345678901234567890.12345678901234567890"))
     n.toBigDecimal ==> Some(BigDecimal("12345678901234567890.12345678901234567890"))
+  }
+
+  test("numbers are written as their text (like jsoniter-scala-circe)") {
+    writeToString(Json.fromDouble(1.0e10).get) ==> "1.0E10"
+    writeToString(Json.fromDouble(-0.0).get) ==> "-0.0"
+    writeToString(Json.fromFloat(3.0e38f).get) ==> "3.0E38"
+    writeToString[Json](Json.Num(JsonNumber.fromString("1e3").get)) ==> "1e3"
+    writeToString(Json.fromBigDecimal(BigDecimal("1.50"))) ==> "1.50"
+  }
+
+  test("a negative zero keeps its sign") {
+    writeToString(readFromString[Json]("-0")) ==> "-0"
+    writeToString(readFromString[Json]("-0.0")) ==> "-0.0"
+    readFromString[Json]("-0").asNumber.flatMap(_.toDouble).map(d => 1 / d) ==> Some(Double.NegativeInfinity)
+  }
+
+  test("arrays and objects nested deeper than 128 levels are rejected (like jsoniter-scala-circe)") {
+    def nested(depth: Int): String = ("[" * depth) + ("]" * depth)
+    writeToString(readFromString[Json](nested(128))) ==> nested(128)
+    def rejected(json: => Any): Boolean =
+      try { val _ = json; false }
+      catch { case e: Exception => e.getMessage.contains("depth limit exceeded") }
+    rejected(readFromString[Json](nested(129))) ==> true
+    rejected(readFromString[Json](nested(100000))) ==> true
+    rejected(readFromString[Json]("{\"a\":" * 129 + "1" + "}" * 129)) ==> true
+    val deep = (1 to 129).foldLeft(Json.Null: Json)((acc, _) => Json.arr(acc))
+    rejected(writeToString(deep)) ==> true
+    // another limit
+    val codec = JsonCodec.withMaxDepth(1000)
+    writeToString(readFromString[Json](nested(1000))(codec))(codec) ==> nested(1000)
   }
 }

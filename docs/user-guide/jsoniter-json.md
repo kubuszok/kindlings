@@ -104,13 +104,17 @@ json.fold(
 
 ### `JsonNumber` -- precision-preserving numbers
 
-Numbers are stored as strings internally to avoid precision loss from `Double`/`Float` conversions. Conversion methods return `Option` to signal when the value doesn't fit:
+Numbers are stored as strings internally to avoid precision loss from `Double`/`Float` conversions, and written as
+they are. `JsonNumber.fromString` accepts only JSON numbers (`-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`).
+Conversion methods return `Option` to signal when the value doesn't fit (`toInt`/`toLong`/`toBigInt` accept any integral
+value, also written with a fraction or an exponent, like `1.0` or `1e3`):
 
 | Method | Returns |
 |--------|---------|
 | `toInt` | `Option[Int]` |
 | `toLong` | `Option[Long]` |
 | `toDouble` | `Option[Double]` (rejects NaN/Infinity) |
+| `toFloat` | `Option[Float]` (rejects NaN/Infinity) |
 | `toBigDecimal` | `Option[BigDecimal]` |
 | `toBigInt` | `Option[BigInt]` |
 
@@ -323,6 +327,23 @@ The codec is hand-written against jsoniter-scala's streaming `JsonReader`/`JsonW
     // expected output:
     // Some(8080)
     ```
+
+## Differences from circe
+
+`Json`, `JsonNumber` and `JsonObject` mirror circe's API, and `JsonCodec` behaves like jsoniter-scala-circe's codec
+for circe's `Json` (checked by the `upstream-oracle-tests` module, `JsoniterJsonOracleSpec`): the same inputs are
+accepted, numbers keep their text (a negative zero keeps its sign: `-0`, `-0.0`) and are written as it, strings are
+escaped the same way, and arrays and objects nested deeper than 128 levels are rejected, when reading and when writing
+(`JsonCodec.withMaxDepth(n)` gives another limit). `toInt`/`toLong`/`toBigInt`/`toBigDecimal` give the same results as
+circe's for every number. The intentional differences:
+
+| | circe | kindlings-jsoniter-json |
+|---|---|---|
+| Duplicate keys | One value per key (the last, at the first key's position), also for `JsonObject.add`, `fromIterable` and parsing | Kept: `JsonObject` is an ordered list of fields; `apply` returns the last value, `add` appends, parsing and writing keep every field |
+| Equality | Numbers by value (`1 == 1.0`), objects as maps (key order ignored) | Structural: numbers by text, objects by their ordered fields |
+| `toDouble` / `toFloat` | `Double` / `Float` (an infinity for out-of-range values) | `Option` (`None` for out-of-range values) |
+| `JsonNumber.fromString` | Also accepts leading zeros (`01`) and a leading `.` (`.5`), then writes them as they are (invalid JSON) | JSON numbers only |
+| Negative zero from `Float` | `Json.fromFloat(-0.0f)` converts to `0.0` with `toDouble` | `-0.0` |
 
 ## Comparison with alternatives
 
