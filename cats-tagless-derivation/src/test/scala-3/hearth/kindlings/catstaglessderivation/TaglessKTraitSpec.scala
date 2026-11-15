@@ -97,7 +97,8 @@ final class TaglessKTraitSpec extends MacroSuite {
       val result = traitExamples.MixedTraitAlg.semigroupalK.productK(optService, listService)
       result.fetch(1).first ==> Some("data-1")
       result.fetch(1).second ==> List("data-1")
-      result.version ==> "v1"
+      // Like cats-tagless: members without F are combined with their Semigroup when there is one.
+      result.version ==> "v1v1"
     }
   }
 

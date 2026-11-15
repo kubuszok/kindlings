@@ -142,7 +142,7 @@ trait InvariantKTraitRuleImpl {
 
               val isCovariantReturn: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
                 case (Some(om), Some(lm)) =>
-                  (om.method.knownReturning, lm.method.knownReturning) match {
+                  (knownReturningOfProbe(om.method), knownReturningOfProbe(lm.method)) match {
                     case (Some(or), Some(lr)) =>
                       (
                         OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
@@ -150,7 +150,8 @@ trait InvariantKTraitRuleImpl {
                       ) match {
                         case (Some(io), Some(il)) =>
                           import io.Underlying as IO; import il.Underlying as IL
-                          IO =:= IL
+                          // `plainPrint`: a polymorphic method's type parameters are distinct symbols per instance
+                          IO =:= IL || IO.plainPrint == IL.plainPrint
                         case _ => false
                       }
                     case _ => false
@@ -168,7 +169,8 @@ trait InvariantKTraitRuleImpl {
                       .zip(listParams)
                       .zipWithIndex
                       .collect {
-                        case (((_, optP), (_, listP)), idx) if !(optP.tpe.Underlying =:= listP.tpe.Underlying) =>
+                        case (((_, optP), (_, listP)), idx)
+                            if !(optP.tpe.Underlying =:= listP.tpe.Underlying) && optP.tpe.plainPrint != listP.tpe.plainPrint =>
                           idx
                       }
                       .toSet
@@ -182,9 +184,16 @@ trait InvariantKTraitRuleImpl {
                   // Build params for the source call, transforming contravariant params with gk (G ~> F)
                   val transformedParams: List[Expr_??] = octx.parameters.zipWithIndex.map { case (paramExpr, idx) =>
                     if (contravariantParamIndices.contains(idx)) {
+                      // Cast to the source method's parameter type (`F[X]`): the overriding method's (`G[X]`) is
+                      // wrong, and on Scala 2 it was reified as `Nothing` ("dead code following this construct").
+                      val sourceParamType: ?? = sourceMethodOpt
+                        .flatMap(_.method.totalParameters.flatten.toList.lift(idx).map(_._2.tpe))
+                        .getOrElse(paramExpr.Underlying.as_??)
                       import paramExpr.Underlying as P
-                      val transformed = mkApplyFk[P](gkExpr, paramExpr.value.upcast[Any])(paramExpr.Underlying)
-                      transformed.as_??(paramExpr.Underlying)
+                      val param: Expr[Any] = paramExpr.value.upcast[Any]
+                      import sourceParamType.Underlying as S
+                      mkApplyFk[S](gkExpr, param)(sourceParamType.Underlying)
+                        .as_??(sourceParamType.Underlying)
                     } else {
                       paramExpr
                     }
@@ -200,7 +209,8 @@ trait InvariantKTraitRuleImpl {
                       try
                         sm.fold(
                           onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                          onTypes = _ => Map.empty,
+                          onTypes = at =>
+                            at.typeParams.flatten.zip(octx.typeParameters).toMap, // forward the override's type params
                           onValues = av => {
                             val paramNames = av.totalParameters.flatten.toList.map(_._1)
                             paramNames.zip(transformedParams).toMap

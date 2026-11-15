@@ -19,6 +19,21 @@ trait InvariantKMacrosImpl
   protected def mkWCtor1: Type.Ctor1[CatsTaglessFactories.WCtor1] = Type.Ctor1.of[CatsTaglessFactories.WCtor1]
   protected def mkWCtor2: Type.Ctor1[CatsTaglessFactories.WCtor2] = Type.Ctor1.of[CatsTaglessFactories.WCtor2]
 
+  /** The result type of a method of a probe instance (`Alg[Option]` / `Alg[List]`). A polymorphic method's result is
+    * only known once its type parameters are applied, so they are applied with `String` first: the two probes' results
+    * can then be compared (`Option[List[String]]` vs `List[List[String]]`).
+    */
+  protected def knownReturningOfProbe(method: Method): Option[??] = method match {
+    case onInstance: Method.OnInstance if onInstance.knownReturning.isEmpty =>
+      // Only the types are inspected; this receiver is never emitted.
+      implicit val AnyType: Type[Any] = InvariantKTypes.Any
+      knownReturningOfProbe(onInstance.applyUntyped(Expr.quote(null.asInstanceOf[Any]).asUntyped))
+    case applyTypes: Method.ApplyTypes =>
+      val StringType: ?? = Type.of[String].as_??
+      knownReturningOfProbe(applyTypes(applyTypes.typeParams.flatten.map(_ -> StringType).toMap))
+    case other => other.knownReturning
+  }
+
   /** Applies a type class of kind `((* -> *) -> *) -> *` (given as an anchor, e.g. `Type[InvariantK[DummyHKT]]`) to an
     * algebra constructor of kind `(* -> *) -> *` (e.g. `InnerAlg`), building e.g. `Type[InvariantK[InnerAlg]]`.
     *
