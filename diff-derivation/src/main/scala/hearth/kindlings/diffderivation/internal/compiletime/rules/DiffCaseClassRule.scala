@@ -38,7 +38,7 @@ trait DiffCaseClassRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtension
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       val fieldsLeft = caseClass.caseFieldValuesAt(left, AtCallSite).toList
       val fieldsRight = caseClass.caseFieldValuesAt(right, AtCallSite).toList
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
 

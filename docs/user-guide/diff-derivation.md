@@ -69,7 +69,7 @@ The `Diff[A]` type class provides:
 |--------|-----------|-------------|
 | `diff` | `(left: A, right: A): DiffResult` | Compare two values |
 | `snapshot` | `(value: A): DiffResult` | Structural snapshot of a single value (used for inserts/deletes in collections) |
-| `prettyName` | `String` | ANSI-colored fully qualified name |
+| `prettyName` | `String` | `plainName` with ANSI colors (every identifier in green), computed at runtime, so the same in every build |
 | `plainName` | `String` | Fully qualified name (e.g. `scala.Option[java.lang.String]`) |
 | `simpleName` | `String` | Short name with type args (e.g. `Option[String]`) |
 | `shortName` | `String` | Short name without args (e.g. `Option`) |
@@ -126,14 +126,14 @@ Predefined configs:
 | `NameStyle.Simple` | `Option[String]` | Short name with type args (default) |
 | `NameStyle.Short` | `Option` | Short name without type args |
 | `NameStyle.FullyQualified` | `scala.Option[java.lang.String]` | Fully qualified name |
-| `NameStyle.Pretty` | *(ANSI-colored FQN)* | Colored fully qualified name |
+| `NameStyle.Pretty` | *(ANSI-colored FQN)* | Colored fully qualified name (`ColorMode.Ansi`); the plain fully qualified name with `ColorMode.Plain` |
 
 ### Color modes
 
 | Mode | Description |
 |------|-------------|
 | `ColorMode.Ansi` | ANSI escape codes: red for removed, green for added, yellow for changed |
-| `ColorMode.Plain` | No color codes; uses `+`/`-` markers |
+| `ColorMode.Plain` | No color codes (in any name style); uses `+`/`-` markers |
 
 ### Indentation
 

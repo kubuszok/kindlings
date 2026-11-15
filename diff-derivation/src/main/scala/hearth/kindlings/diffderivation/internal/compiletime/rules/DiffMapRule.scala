@@ -29,7 +29,7 @@ trait DiffMapRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensions =>
       import isMap.{Key, Value}
       implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
       implicit val DiffVT: Type[Diff[Value]] = DiffTypes.Diff[Value]
-      val pn = Expr(Type.prettyPrint[A])
+      val pn = Expr(Type.plainPrint[A])
       val fn = Expr(Type.plainPrint[A])
       val sn = Expr(Type.shortName[A])
       summonOrDeriveDiffInstance[Value](dctx.cache, dctx.derivedType).flatMap {

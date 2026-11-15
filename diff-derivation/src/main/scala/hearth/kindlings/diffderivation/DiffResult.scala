@@ -7,7 +7,7 @@ sealed abstract class DiffResult(
     _shortName: => String
 ) extends Product
     with Serializable {
-  lazy val prettyName: String = _prettyName
+  lazy val prettyName: String = internal.runtime.DiffRuntime.prettyTypeName(_prettyName)
   lazy val plainName: String = _plainName
   lazy val simpleName: String = _simpleName
   lazy val shortName: String = _shortName

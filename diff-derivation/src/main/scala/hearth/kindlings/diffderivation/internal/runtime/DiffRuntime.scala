@@ -5,6 +5,36 @@ import hearth.kindlings.diffderivation.DiffResult.*
 
 object DiffRuntime {
 
+  private val AnsiEscape = "\u001b\\[[0-9;]*m".r
+  private val AnsiTypeNameColor = "\u001b[32m"
+  private val AnsiReset = "\u001b[0m"
+
+  /** `name` without ANSI escape codes. */
+  def plainTypeName(name: String): String = AnsiEscape.replaceAllIn(name, "")
+
+  /** The colored ("pretty") form of a type name: every identifier in green, the punctuation (`.`, `[`, `,`, ...) as it
+    * is. Computed from the plain name, so it is the same for the same type in every build (the generated code used to
+    * embed the compile-time `Type.prettyPrint`, whose colors depend on how the type was written or read). Codes already
+    * present (instances compiled by older versions) are removed first.
+    */
+  def prettyTypeName(name: String): String = {
+    val plain = plainTypeName(name)
+    val sb = new StringBuilder(plain.length * 2)
+    var i = 0
+    while (i < plain.length)
+      if (Character.isJavaIdentifierPart(plain.charAt(i))) {
+        val start = i
+        while (i < plain.length && Character.isJavaIdentifierPart(plain.charAt(i))) i += 1
+        sb ++= AnsiTypeNameColor
+        sb ++= plain.substring(start, i)
+        sb ++= AnsiReset
+      } else {
+        sb += plain.charAt(i)
+        i += 1
+      }
+    sb.result()
+  }
+
   def diffSeq[A](
       prettyName: => String,
       plainName: => String,

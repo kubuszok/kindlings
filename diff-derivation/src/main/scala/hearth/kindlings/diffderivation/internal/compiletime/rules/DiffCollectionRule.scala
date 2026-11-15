@@ -20,7 +20,7 @@ trait DiffCollectionRuleImpl { this: DiffMacrosImpl & MacroCommons & StdExtensio
             implicit val DRT: Type[DiffResult] = DiffTypes.DiffResultType
             implicit val ST: Type[String] = DiffTypes.StringType
             implicit val DiffItemT: Type[Diff[Item]] = DiffTypes.Diff[Item]
-            val pn = Expr(Type.prettyPrint[A])
+            val pn = Expr(Type.plainPrint[A])
             val fn = Expr(Type.plainPrint[A])
             val sn = Expr(Type.shortName[A])
             summonOrDeriveDiffInstance[Item](dctx.cache, dctx.derivedType).flatMap {
