@@ -8,6 +8,9 @@ import sttp.tapir.Schema
 // Types for AbsentFieldSchemaSpec: a field is optional in the derived tapir Schema exactly when the decoder derived with
 // the same JSON library config accepts it missing from the JSON object.
 
+/** A value type wrapping a collection: coded as the collection, but decoders do not fill it in when absent. */
+final case class AbsTags(values: List[String]) extends AnyVal
+
 /** One field of every kind the absent-field semantics distinguish. */
 final case class AbsAll(
     plain: Int,
@@ -20,7 +23,9 @@ final case class AbsAll(
     set: Set[Int],
     listWithDefault: List[Int] = List(1),
     opt: Option[Int],
-    optWithDefault: Option[Int] = Some(1)
+    optWithDefault: Option[Int] = Some(1),
+    wrappedTags: AbsTags,
+    wrappedTagsWithDefault: AbsTags = AbsTags(List("d"))
 )
 object AbsAll {
   val sample: AbsAll = AbsAll(
@@ -34,7 +39,9 @@ object AbsAll {
     set = Set(1),
     listWithDefault = List(2),
     opt = Some(1),
-    optWithDefault = Some(2)
+    optWithDefault = Some(2),
+    wrappedTags = AbsTags(List("w")),
+    wrappedTagsWithDefault = AbsTags(List("v"))
   )
 }
 
