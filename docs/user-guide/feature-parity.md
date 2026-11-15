@@ -565,6 +565,32 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
 
 ---
 
+## optics
+
+**Replaces:** [SoftwareMill quicklens](https://github.com/softwaremill/quicklens) (`modify`/`modifyAll`/`modifyLens`
+paths). An independent reimplementation with the same DSL names, for Scala 2.13 and 3 on JVM, Scala.js and Scala Native.
+
+| Feature | quicklens | Kindlings | Status |
+|---|---|---|---|
+| `modify(_.a.b)` with `using`/`apply`/`setTo`/`setToIfDefined`/`setToIf`/`usingIf` | Yes | Yes | Parity |
+| `.each` / `.eachWhere` over `Seq`s, `Option`, `Map` values | Yes (`Map.eachWhere` only on Scala 3) | Yes, on every container an `IsCollection`/`IsMap`/`IsOption` provider supports (`Set`, `Array`, java and cats collections, ...) | Improvement |
+| `.at(i)` / `.index(i)` / `.atOrElse(i, d)` over `Seq`s | `.at` throws `IndexOutOfBoundsException`, `.atOrElse` appends `f(d)` when absent | Same | Parity |
+| `.at(k)` / `.index(k)` / `.atOrElse(k, d)` over `Map`s, `.at` / `.index` / `.atOrElse(d)` over `Option` | `.at` throws `NoSuchElementException` | Same | Parity |
+| `.eachLeft` / `.eachRight` | Yes | Yes | Parity |
+| `.when[Subtype]`, common fields of sealed hierarchies | Yes | Yes (also Scala 3 `enum`s) | Parity |
+| `modifyAll`, `modifyLens`, `modifyAllLens`, `andThenModify` | Yes | Yes (shared prefixes rebuilt with one `copy`) | Parity |
+
+### Checked against upstream (oracle)
+
+`upstream-oracle-tests` (`OpticsOracleSpec`) applies the same paths and terminal operations with Kindlings and with
+quicklens to the same values — including missing indices/keys, empty options, `Left`s, sealed hierarchies — and
+compares the results and the exceptions thrown. The one expected difference:
+
+- `.index(i)` with a **negative** index is a no-op, as in quicklens for Scala 3; quicklens for Scala 2 throws
+  `IndexOutOfBoundsException` there (it only checks `i < size`), so on Scala 2.13 this differs.
+
+---
+
 ## pureconfig-derivation
 
 **Replaces:** PureConfig's auto/semi-automatic derivation surfaces:

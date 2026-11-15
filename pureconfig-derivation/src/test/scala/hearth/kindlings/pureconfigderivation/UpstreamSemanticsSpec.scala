@@ -4,7 +4,11 @@ import com.typesafe.config.{ConfigFactory, ConfigRenderOptions}
 import hearth.MacroSuite
 import pureconfig.ConfigCursor
 import pureconfig.error.{ConfigReaderFailures, ConvertFailure, KeyNotFound, UnknownKey, WrongType}
-import pureconfig.generic.error.{CoproductHintException, NoValidCoproductOptionFound, UnexpectedValueForFieldCoproductHint}
+import pureconfig.generic.error.{
+  CoproductHintException,
+  NoValidCoproductOptionFound,
+  UnexpectedValueForFieldCoproductHint
+}
 
 sealed trait UsSource
 final case class UsUrlSource(url: String) extends UsSource
@@ -34,7 +38,10 @@ final class UpstreamSemanticsSpec extends MacroSuite {
       val r = KindlingsConfigReader.derived[UsStrict]
       reasons(r.from(cursor("port = x, extra = 1"))) ==> List(
         "" -> KeyNotFound("name"),
-        "port" -> WrongType(com.typesafe.config.ConfigValueType.STRING, Set(com.typesafe.config.ConfigValueType.NUMBER)),
+        "port" -> WrongType(
+          com.typesafe.config.ConfigValueType.STRING,
+          Set(com.typesafe.config.ConfigValueType.NUMBER)
+        ),
         "extra" -> UnknownKey("extra")
       )
     }
