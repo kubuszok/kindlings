@@ -1085,7 +1085,10 @@ val ironDepForScala3 = List(
 
 val ironDepForUpstreamOracleTests = List(
   MatrixAction.ForScala(_.isScala3).Configure { project =>
-    project.dependsOn(LocalProject(s"ironIntegration${project.id.stripPrefix("upstreamOracleTests")}"))
+    val suffix = project.id.stripPrefix("upstreamOracleTests")
+    project
+      .dependsOn(LocalProject(s"ironIntegration$suffix"))
+      .dependsOn(LocalProject(s"neotypeIntegration$suffix"))
   }
 )
 
@@ -1145,6 +1148,9 @@ lazy val upstreamOracleTests = projectMatrix
   .dependsOn(avroDerivation)
   .dependsOn(pureconfigDerivation, yamlDerivation, optics)
   .dependsOn(catsDerivation, catsTaglessDerivation, scalacheckDerivation)
+  // refined / scala-newtype oracles (tapir-refined, circe-refined, tapir-newtype); scala-newtype-compat is JVM-only, as is
+  // this module
+  .dependsOn(refinedIntegration, newtypeIntegration)
   .settings(noPublishSettings *)
   .settings(settings *)
   .settings(dependencies *)
@@ -1203,13 +1209,29 @@ lazy val upstreamOracleTests = projectMatrix
         "io.github.iltotore" %% "iron" % versions.iron % Test,
         "io.github.iltotore" %% "iron-circe" % versions.iron % Test,
         "io.github.iltotore" %% "iron-jsoniter" % versions.iron % Test,
-        "com.softwaremill.sttp.tapir" %% "tapir-iron" % versions.tapir % Test
+        "com.softwaremill.sttp.tapir" %% "tapir-iron" % versions.tapir % Test,
+        // neotype oracle: neotype-tapir, neotype-circe, neotype-jsoniter
+        "io.github.kitlangton" %% "neotype" % versions.neotype % Test,
+        "io.github.kitlangton" %% "neotype-tapir" % versions.neotype % Test,
+        "io.github.kitlangton" %% "neotype-circe" % versions.neotype % Test,
+        "io.github.kitlangton" %% "neotype-jsoniter" % versions.neotype % Test
       ),
       for2_13 = Seq(
         // pureconfig oracle: pureconfig's Shapeless derivation (`pureconfig.generic.semiauto`)
-        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig % Test
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig % Test,
+        // scala-newtype oracle: tapir-newtype is published for Scala 2.13 only
+        "com.softwaremill.sttp.tapir" %% "tapir-newtype" % versions.tapir % Test
       )
-    )
+    ),
+    // refined oracle: tapir-refined, circe-refined
+    libraryDependencies ++= Seq(
+      "eu.timepit" %% "refined" % versions.refined % Test,
+      "com.softwaremill.sttp.tapir" %% "tapir-refined" % versions.tapir % Test,
+      "io.circe" %% "circe-refined" % versions.circeRefined % Test,
+      "com.kubuszok" %% "newtype-compat" % versions.newtypeCompat % Test
+    ),
+    //  expansion in the scala-newtype oracle (Scala 2.13 only: tapir-newtype has no Scala 3 artifact)
+    Test / scalacOptions ++= foldVersion(scalaVersion.value)(for3 = Seq.empty, for2_13 = Seq("-Ymacro-annotations"))
   )
 
 lazy val derivationPolicyTests = projectMatrix

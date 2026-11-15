@@ -40,6 +40,8 @@ final class TapirSchemaOracleSpec extends MacroSuite {
       def tree: Schema[OTree] = KindlingsSchema.derived[OTree].schema
       def annotated: Schema[OAnnotated] = KindlingsSchema.derived[OAnnotated].schema
       def usesBox: Schema[OUsesBox] = KindlingsSchema.derived[OUsesBox].schema
+      def mapDescriptions: Schema[OMapDescriptions] = KindlingsSchema.derived[OMapDescriptions].schema
+      def mapFields: Schema[OMapFields] = KindlingsSchema.derived[OMapFields].schema
     }
   }
 
@@ -59,6 +61,8 @@ final class TapirSchemaOracleSpec extends MacroSuite {
       def tree: Schema[OTree] = implicitly[Schema[OTree]]
       def annotated: Schema[OAnnotated] = implicitly[Schema[OAnnotated]]
       def usesBox: Schema[OUsesBox] = implicitly[Schema[OUsesBox]]
+      def mapDescriptions: Schema[OMapDescriptions] = implicitly[Schema[OMapDescriptions]]
+      def mapFields: Schema[OMapFields] = implicitly[Schema[OMapFields]]
     }
   }
 
@@ -149,6 +153,23 @@ final class TapirSchemaOracleSpec extends MacroSuite {
 
     test("maps keyed by case objects and by types with a key encoder (upstream: Schema.schemaForMap)") {
       compare(MapKeys.mapKeys, MapKeysUpstream.mapKeys)
+    }
+
+    // Both render one `Map_String` definition without a description, and each field's description next to its `$ref`
+    // (tapir's docs interpreter, #1203): the shared named map schema does not absorb field descriptions.
+    test("fields of the same named map type with different descriptions (annotations)") {
+      compare(kindlings.mapDescriptions, upstream.mapDescriptions)
+      val rendered = Oracle.jsonSchema(kindlings.mapDescriptions)
+      def description(schema: Option[sttp.apispec.SchemaLike]): Option[String] =
+        schema.collect { case s: sttp.apispec.Schema => s.description }.flatten
+      assertEquals(description(rendered.$defs.flatMap(_.get("Map_String"))), None)
+      assertEquals(description(rendered.properties.get("first")), Some("the first map"))
+    }
+
+    test("fields of the same named map type with different descriptions (Schema.modify)") {
+      def describe(schema: Schema[OMapFields]): Schema[OMapFields] =
+        schema.modify(_.first)(_.description("the first map")).modify(_.second)(_.description("the second map"))
+      compare(describe(kindlings.mapFields), describe(upstream.mapFields))
     }
 
     test("generic case classes") {
