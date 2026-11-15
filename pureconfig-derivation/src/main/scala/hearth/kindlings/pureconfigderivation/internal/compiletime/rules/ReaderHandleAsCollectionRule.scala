@@ -49,13 +49,15 @@ trait ReaderHandleAsCollectionRuleImpl {
                       val cursor = Expr.splice(rctx.cursor)
                       cursor.asList match {
                         case Right(items) =>
+                          // Every item is read and all failures are reported, as upstream's `mapList` does.
+                          val failures = new PureConfigDerivationUtils.FailureAccumulator
                           items.foreach { itemCursor =>
                             reader.from(itemCursor) match {
-                              case Right(item) => collBuilder += item
-                              case Left(e)     =>
-                                throw new PureConfigDerivationUtils.CollectionBuildException(e)
+                              case Right(item) => if (failures.isEmpty) collBuilder += item
+                              case Left(e)     => failures.add(e)
                             }
                           }
+                          failures.throwIfAny()
                         case Left(e) =>
                           throw new PureConfigDerivationUtils.CollectionBuildException(e)
                       }

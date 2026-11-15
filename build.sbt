@@ -774,7 +774,10 @@ lazy val pureconfigDerivation = projectMatrix
   .settings(publishSettings *)
   .settings(
     libraryDependencies ++= Seq(
-      "com.github.pureconfig" %% "pureconfig-core" % versions.pureconfig
+      "com.github.pureconfig" %% "pureconfig-core" % versions.pureconfig,
+      // upstream's failure reasons and exceptions for sealed families (`UnexpectedValueForFieldCoproductHint`,
+      // `NoValidCoproductOptionFound`, `CoproductHintException`); no Shapeless/Magnolia, only pureconfig-core
+      "com.github.pureconfig" %% "pureconfig-generic-base" % versions.pureconfig
     )
   )
 
@@ -1140,6 +1143,7 @@ lazy val upstreamOracleTests = projectMatrix
   )
   .dependsOn(circeDerivation, jsoniterDerivation, tapirSchemaDerivation, catsIntegration, jsoniterJson)
   .dependsOn(avroDerivation)
+  .dependsOn(pureconfigDerivation, yamlDerivation, optics)
   .settings(noPublishSettings *)
   .settings(settings *)
   .settings(dependencies *)
@@ -1163,7 +1167,9 @@ lazy val upstreamOracleTests = projectMatrix
       // circe oracle: circe-generic (semiauto), generic-extras (configured) and jsoniter-scala-circe (circe's Json
       // read/written by jsoniter-scala, the counterpart of kindlings-jsoniter-json)
       "io.circe" %% "circe-generic" % versions.circe % Test,
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-circe" % versions.jsoniterScala % Test
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-circe" % versions.jsoniterScala % Test,
+      // optics oracle: SoftwareMill quicklens
+      "com.softwaremill.quicklens" %% "quicklens" % versions.quicklens % Test
     ),
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq("io.circe" %% "circe-generic-extras" % versions.circeGenericExtras3 % Test),
@@ -1175,12 +1181,17 @@ lazy val upstreamOracleTests = projectMatrix
                                                                      else versions.avro4s213) % Test,
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq(
+        // pureconfig oracle: pureconfig's hint-aware Scala 3 derivation (`pureconfig.generic.semiauto`)
+        "com.github.pureconfig" %% "pureconfig-generic-scala3" % versions.pureconfig % Test,
         "io.github.iltotore" %% "iron" % versions.iron % Test,
         "io.github.iltotore" %% "iron-circe" % versions.iron % Test,
         "io.github.iltotore" %% "iron-jsoniter" % versions.iron % Test,
         "com.softwaremill.sttp.tapir" %% "tapir-iron" % versions.tapir % Test
       ),
-      for2_13 = Seq.empty
+      for2_13 = Seq(
+        // pureconfig oracle: pureconfig's Shapeless derivation (`pureconfig.generic.semiauto`)
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig % Test
+      )
     )
   )
 

@@ -104,6 +104,19 @@ The defaults match upstream PureConfig behavior: kebab-case member names, kebab-
 
 For per-type customization (e.g. one case class uses `snake_case` while everything else stays `kebab-case`), define an implicit `KindlingsProductHint` or `KindlingsCoproductHint` for the specific type. The macro looks them up at derivation time and falls back to the global `PureConfig` when no per-type hint is in scope.
 
+| Per-type hint | Upstream equivalent | Behaviour |
+|---|---|---|
+| `KindlingsProductHint[A](transformMemberNames, useDefaults, allowUnknownKeys)` | `ProductHint[A](fieldMapping, useDefaultArgs, allowUnknownKeys)` | Field names, defaults, strict keys for one case class |
+| `KindlingsCoproductHint.Field[A](fieldName, transformConstructorNames)` | `FieldCoproductHint[A](fieldName)` with `fieldValue` overridden | Discriminator field and values for one sealed family |
+| `KindlingsCoproductHint.Wrapped[A](transformConstructorNames)` | (custom `CoproductHint`) | Single-key objects `{ subtype-name { ... } }` |
+| `KindlingsCoproductHint.FirstSuccess[A]()` | `FirstSuccessCoproductHint[A]` | No disambiguation: subtypes are attempted in the alphabetical order of their names, the first one read successfully wins; written as is |
+
+Declare a coproduct hint with its concrete variant as the type (`implicit val hint: KindlingsCoproductHint.FirstSuccess[Source] = KindlingsCoproductHint.FirstSuccess()`).
+
+### Failures
+
+Derived readers report failures like upstream's derivation: every failing field of a case class (then each unknown key of a strict one), every failing item of a collection and value of a map, with upstream's failure reasons (`KeyNotFound` with candidate keys, `WrongType`, `UnknownKey`, `UnexpectedValueForFieldCoproductHint` for an unknown discriminator value, `NoValidCoproductOptionFound` when no subtype of a first-success family can be read).
+
 ## Annotations
 
 | Annotation | Description |

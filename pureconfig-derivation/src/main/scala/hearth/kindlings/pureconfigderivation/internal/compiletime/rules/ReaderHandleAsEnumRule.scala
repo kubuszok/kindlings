@@ -8,7 +8,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.pureconfigderivation.KindlingsCoproductHint
-import hearth.kindlings.pureconfigderivation.internal.runtime.PureConfigDerivationUtils
+import hearth.kindlings.pureconfigderivation.internal.runtime.{EnumerationFailures, PureConfigDerivationUtils}
 import pureconfig.{ConfigCursor, ConfigReader}
 import pureconfig.error.ConfigReaderFailures
 
@@ -105,8 +105,6 @@ trait ReaderHandleAsEnumRuleImpl {
           })
 
         case Some(children) =>
-          val knownNames: List[String] = children.toList.map(_._1)
-
           children
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
@@ -118,129 +116,218 @@ trait ReaderHandleAsEnumRuleImpl {
                 )
               }
             }
-            .map { childDispatchers =>
-              // Build a chain of `if (typeName == childName) <decode> else <else>` expressions
-              // by folding over the dispatchers from right to left.
-              val errorExpr: Expr[String] => Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]] =
-                typeNameExpr =>
-                  innerCursorExpr =>
-                    Expr.quote {
-                      Left(
-                        PureConfigDerivationUtils.failedToMatchSubtype(
-                          Expr.splice(typeNameExpr),
-                          Expr.splice(innerCursorExpr),
-                          Expr.splice(Expr(knownNames))
-                        )
-                      ): Either[ConfigReaderFailures, A]
-                    }
-
-              val dispatchTree: (Expr[String], Expr[ConfigCursor]) => Expr[Either[ConfigReaderFailures, A]] =
-                (typeNameExpr, innerCursorExpr) =>
-                  childDispatchers.toList.foldRight(errorExpr(typeNameExpr)(innerCursorExpr)) {
-                    case (dispatcher, elseExpr) =>
-                      dispatcher(typeNameExpr, innerCursorExpr, elseExpr)
-                  }
-
-              // FirstSuccessCoproductHint: not yet implemented at the macro level. The
-              // existing dispatcher closure threads (typeName, innerCursor, else) and
-              // doesn't expose the bare "run this child reader" call. The macro currently
-              // ignores the hint when it's FirstSuccess and uses the global config's
-              // discriminator instead. Refactoring the child dispatcher to support raw
-              // invocation is a follow-up.
-              val _ = maybeFirstSuccessHint // suppress unused warning until wired
-
-              // Compute the resolved discriminator field at compile time, threading the
-              // per-type CoproductHint variants through the global config fall-back.
-              // Field hint → use its fieldName. Wrapped hint → no discriminator.
-              // No hint → defer to global config at runtime.
-              val discrFieldExpr: Expr[Option[String]] = maybeFieldHint match {
-                case Some(h) => Expr.quote((Some(Expr.splice(h).fieldName): Option[String]))
+            .map { childReaders =>
+              maybeFirstSuccessHint match {
+                case Some(_) => firstSuccess[A](childReaders.toList)
                 case None    =>
-                  maybeWrappedHint match {
-                    case Some(_) => Expr.quote(None: Option[String])
-                    case None    =>
-                      rctx.evaluatedConfig match {
-                        case Some(evConfig) =>
-                          evConfig.discriminator match {
-                            case Some(d) => Expr.quote((Some(Expr.splice(Expr(d))): Option[String]))
-                            case None    => Expr.quote(None: Option[String])
-                          }
-                        case None => Expr.quote(Expr.splice(rctx.config).discriminator)
-                      }
-                  }
-              }
-
-              if (allCaseObjects) {
-                Expr.quote {
-                  val cur = Expr.splice(rctx.cursor)
-                  // Singleton case objects: prefer to read as a string scalar
-                  // ("VariantName"), falling back to wrapping/discriminator object encoding.
-                  cur.asString match {
-                    case Right(str) =>
-                      val _ = str
-                      Expr.splice(dispatchTree(Expr.quote(str), Expr.quote(cur)))
-                    case Left(_) =>
-                      Expr.splice(discrFieldExpr) match {
-                        case Some(field) =>
-                          cur.asObjectCursor.flatMap { obj =>
-                            PureConfigDerivationUtils
-                              .readDiscriminator(obj, field)
-                              .flatMap { typeName =>
-                                Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(cur)))
-                              }
-                          }
-                        case None =>
-                          cur.asObjectCursor.flatMap { obj =>
-                            PureConfigDerivationUtils.readWrapped(obj).flatMap { case (typeName, innerCur) =>
-                              Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(innerCur)))
-                            }
-                          }
-                      }
-                  }
-                }
-              } else {
-                Expr.quote {
-                  val cur = Expr.splice(rctx.cursor)
-                  cur.asObjectCursor.flatMap { obj =>
-                    Expr.splice(discrFieldExpr) match {
-                      case Some(field) =>
-                        PureConfigDerivationUtils.readDiscriminator(obj, field).flatMap { typeName =>
-                          // For discriminator-style encoding, the inner cursor is the same
-                          // object cursor (so the case-class rule can find its fields alongside
-                          // the discriminator key, which it will ignore).
-                          Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(cur)))
-                        }
-                      case None =>
-                        PureConfigDerivationUtils.readWrapped(obj).flatMap { case (typeName, innerCur) =>
-                          Expr.splice(dispatchTree(Expr.quote(typeName), Expr.quote(innerCur)))
-                        }
-                    }
-                  }
-                }
+                  byName[A](childReaders.toList, allCaseObjects, discriminatorExpr[A](maybeFieldHint, maybeWrappedHint))
               }
             }
       }
     }
 
-    /** Derive a single sealed-trait child case dispatcher: a function that takes the
-      * runtime `(typeName, innerCursor)` and an `else` branch, and emits an `if (typeName
-      * == "ChildName") childReader.from(innerCursor) else else`.
+    /** How to read one subtype: `read` reads it from the cursor of the subtype's value, `readFromObject` too, but (like
+      * upstream's derived reader of a case object) requires that cursor to be an object.
+      */
+    final private case class ChildReader[A](
+        childName: String,
+        transformedName: Expr[String],
+        read: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]],
+        readFromObject: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]]
+    )
+
+    /** The discriminator field: the per-type hint's (`Field` = its field name, `Wrapped` = none), otherwise the global
+      * config's (a constant when the config could be evaluated at compile time).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def discriminatorExpr[A: ReaderCtx](
+        maybeFieldHint: Option[Expr[KindlingsCoproductHint.Field[A]]],
+        maybeWrappedHint: Option[Expr[KindlingsCoproductHint.Wrapped[A]]]
+    ): Expr[Option[String]] = {
+      implicit val StringT: Type[String] = RTypes.String
+      implicit val OptionStringT: Type[Option[String]] = RTypes.OptionString
+      implicit val FieldHintT: Type[KindlingsCoproductHint.Field[A]] = RTypes.fieldCoproductHintType[A]
+      maybeFieldHint match {
+        case Some(h) => Expr.quote((Some(Expr.splice(h).fieldName): Option[String]))
+        case None    =>
+          maybeWrappedHint match {
+            case Some(_) => Expr.quote(None: Option[String])
+            case None    =>
+              rctx.evaluatedConfig match {
+                case Some(evConfig) =>
+                  evConfig.discriminator match {
+                    case Some(d) => Expr.quote((Some(Expr.splice(Expr(d))): Option[String]))
+                    case None    => Expr.quote(None: Option[String])
+                  }
+                case None => Expr.quote(Expr.splice(rctx.config).discriminator)
+              }
+          }
+      }
+    }
+
+    /** Subtypes selected by name:
+      *   - with a discriminator field (upstream `FieldCoproductHint`): the value must be an object, its discriminator
+      *     names the subtype, which is read from the object without the discriminator key; an unknown name fails with
+      *     upstream's `UnexpectedValueForFieldCoproductHint` at the discriminator;
+      *   - without one, a family of case objects is read from strings (upstream `deriveEnumerationReader`);
+      *   - without one, other families are read from single-key objects `{ subtype-name { ... } }`.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def byName[A: ReaderCtx](
+        childReaders: List[ChildReader[A]],
+        allCaseObjects: Boolean,
+        discrFieldExpr: Expr[Option[String]]
+    ): Expr[Either[ConfigReaderFailures, A]] = {
+      implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
+      implicit val FailuresT: Type[ConfigReaderFailures] = RTypes.ConfigReaderFailures
+      implicit val StringT: Type[String] = RTypes.String
+      implicit val ListStringT: Type[List[String]] = RTypes.ListString
+      implicit val OptionStringT: Type[Option[String]] = RTypes.OptionString
+      implicit val EitherT: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
+
+      val knownNames: List[String] = childReaders.map(_.childName)
+
+      // `if (typeName == "child-name") <read child> else ... else <unknown>`
+      def dispatch(
+          typeNameExpr: Expr[String],
+          innerCursorExpr: Expr[ConfigCursor],
+          unknownExpr: Expr[Either[ConfigReaderFailures, A]]
+      ): Expr[Either[ConfigReaderFailures, A]] =
+        childReaders.foldRight(unknownExpr) { (child, elseExpr) =>
+          Expr.quote {
+            if (Expr.splice(child.transformedName) == Expr.splice(typeNameExpr))
+              Expr.splice(child.read(innerCursorExpr))
+            else Expr.splice(elseExpr)
+          }
+        }
+
+      val typeNameStr: String = Type[A].shortName
+
+      val withoutDiscriminator: Expr[Either[ConfigReaderFailures, A]] =
+        if (allCaseObjects)
+          Expr.quote {
+            val cur = Expr.splice(rctx.cursor)
+            cur.asString.flatMap { str =>
+              Expr.splice(
+                dispatch(
+                  Expr.quote(str),
+                  Expr.quote(cur),
+                  Expr.quote {
+                    Left(
+                      EnumerationFailures.invalidEnumValue(cur, str, Expr.splice(Expr(typeNameStr)))
+                    ): Either[ConfigReaderFailures, A]
+                  }
+                )
+              )
+            }
+          }
+        else
+          Expr.quote {
+            val cur = Expr.splice(rctx.cursor)
+            cur.asObjectCursor.flatMap { obj =>
+              PureConfigDerivationUtils.readWrapped(obj).flatMap { case (typeName, innerCur) =>
+                Expr.splice(
+                  dispatch(
+                    Expr.quote(typeName),
+                    Expr.quote(innerCur),
+                    Expr.quote {
+                      Left(
+                        PureConfigDerivationUtils.failedToMatchSubtype(
+                          typeName,
+                          innerCur,
+                          Expr.splice(Expr(knownNames))
+                        )
+                      ): Either[ConfigReaderFailures, A]
+                    }
+                  )
+                )
+              }
+            }
+          }
+
+      Expr.quote {
+        Expr.splice(discrFieldExpr) match {
+          case Some(field) =>
+            Expr.splice(rctx.cursor).asObjectCursor.flatMap { obj =>
+              obj.atKey(field).flatMap { discrCur =>
+                discrCur.asString.flatMap { typeName =>
+                  Expr.splice(
+                    dispatch(
+                      Expr.quote(typeName),
+                      Expr.quote(obj.withoutKey(field): ConfigCursor),
+                      Expr.quote {
+                        Left(PureConfigDerivationUtils.unexpectedDiscriminatorValue(discrCur)): Either[
+                          ConfigReaderFailures,
+                          A
+                        ]
+                      }
+                    )
+                  )
+                }
+              }
+            }
+          case None =>
+            Expr.splice(withoutDiscriminator)
+        }
+      }
+    }
+
+    /** Upstream `FirstSuccessCoproductHint`: every subtype is attempted on the same cursor, in the alphabetical order
+      * of the subtypes' names (as upstream's derivation passes them to the hint), and the first one read successfully
+      * wins. When none can be read, the failure is upstream's `NoValidCoproductOptionFound` with every attempt's
+      * failures.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def firstSuccess[A: ReaderCtx](
+        childReaders: List[ChildReader[A]]
+    ): Expr[Either[ConfigReaderFailures, A]] = {
+      implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
+      implicit val FailuresT: Type[ConfigReaderFailures] = RTypes.ConfigReaderFailures
+      implicit val StringT: Type[String] = RTypes.String
+      implicit val ListStringT: Type[List[String]] = RTypes.ListString
+      implicit val EitherT: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
+      implicit val AttemptsT: Type[PureConfigDerivationUtils.FirstSuccessAttempts] = RTypes.FirstSuccessAttempts
+
+      val ordered = childReaders.sortBy(_.childName)
+      val optionNames: List[String] = ordered.map(_.childName)
+
+      // No `val` per attempt (nested `ValDefs` here trip Scala 3's owner checks): a runtime `FirstSuccessAttempts`
+      // records each failed attempt and the first success.
+      def chain(attempts: Expr[PureConfigDerivationUtils.FirstSuccessAttempts]): Expr[Either[ConfigReaderFailures, A]] =
+        ordered.foldRight(Expr.quote(Expr.splice(attempts).failed[A])) { (child, elseExpr) =>
+          Expr.quote {
+            if (
+              Expr
+                .splice(attempts)
+                .succeeded(Expr.splice(child.readFromObject(Expr.quote(Expr.splice(attempts).cursor))))
+            )
+              Expr.splice(attempts).result[A]
+            else Expr.splice(elseExpr)
+          }
+        }
+
+      Expr.quote {
+        val attempts = new PureConfigDerivationUtils.FirstSuccessAttempts(
+          Expr.splice(rctx.cursor),
+          Expr.splice(Expr(optionNames))
+        )
+        Expr.splice(chain(Expr.quote(attempts)))
+      }
+    }
+
+    /** Derive how to read a single sealed-trait subtype (see [[ChildReader]]).
       *
       * The child case can be:
-      *  - A user-provided implicit `ConfigReader[ChildType]`
-      *  - A singleton case object → return the singleton value directly
-      *  - A recursive derivation via the cached helper
+      *   - A user-provided implicit `ConfigReader[ChildType]`
+      *   - A singleton case object → return the singleton value directly
+      *   - A recursive derivation via the cached helper
       */
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildReader[A: ReaderCtx, ChildType: Type](
         childName: String,
         transformConstructorNamesExpr: Expr[String => String],
         preComputedConstructorTransform: Option[String => String]
-    ): MIO[
-      (Expr[String], Expr[ConfigCursor], Expr[Either[ConfigReaderFailures, A]]) => Expr[
-        Either[ConfigReaderFailures, A]
-      ]
-    ] = {
+    ): MIO[ChildReader[A]] = {
       implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
       implicit val FailuresT: Type[ConfigReaderFailures] = RTypes.ConfigReaderFailures
       implicit val StringT: Type[String] = RTypes.String
@@ -255,70 +342,58 @@ trait ReaderHandleAsEnumRuleImpl {
         case None            => Expr.quote(Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))))
       }
 
+      def same(read: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]]): ChildReader[A] =
+        ChildReader[A](childName, transformedNameExpr, read, read)
+
       RTypes
         .ConfigReader[ChildType]
         .summonExprIgnoring(ReaderUseImplicitWhenAvailableRule.ignoredImplicits*)
         .toEither match {
         case Right(readerExpr) =>
           Log.info(s"Found implicit ConfigReader[$childName], using it") >>
-            MIO.pure {
-              (
-                  typeNameExpr: Expr[String],
-                  innerCurExpr: Expr[ConfigCursor],
-                  elseExpr: Expr[Either[ConfigReaderFailures, A]]
-              ) =>
-                Expr.quote {
-                  if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
-                    Expr
-                      .splice(readerExpr)
-                      .from(Expr.splice(innerCurExpr))
-                      .asInstanceOf[Either[ConfigReaderFailures, A]]
-                  else
-                    Expr.splice(elseExpr)
-                }
-            }
+            MIO.pure(same { (innerCurExpr: Expr[ConfigCursor]) =>
+              Expr.quote {
+                Expr
+                  .splice(readerExpr)
+                  .from(Expr.splice(innerCurExpr))
+                  .asInstanceOf[Either[ConfigReaderFailures, A]]
+              }
+            })
 
         case Left(_) =>
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
               Log.info(s"Using singleton for $childName") >>
-                MIO.pure {
-                  (
-                      typeNameExpr: Expr[String],
-                      _: Expr[ConfigCursor],
-                      elseExpr: Expr[Either[ConfigReaderFailures, A]]
-                  ) =>
-                    Expr.quote {
-                      if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
-                        Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigReaderFailures, A]
-                      else
-                        Expr.splice(elseExpr)
-                    }
-                }
+                MIO.pure(
+                  ChildReader[A](
+                    childName,
+                    transformedNameExpr,
+                    (_: Expr[ConfigCursor]) =>
+                      Expr.quote(Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigReaderFailures, A]),
+                    (innerCurExpr: Expr[ConfigCursor]) =>
+                      Expr.quote {
+                        PureConfigDerivationUtils.readObjectAs[A](
+                          Expr.splice(innerCurExpr),
+                          Expr.splice(singleton).asInstanceOf[A]
+                        )
+                      }
+                  )
+                )
             case None =>
               deriveReaderRecursively[ChildType](using rctx.nest[ChildType](rctx.cursor)).flatMap { _ =>
-                rctx.getHelper[ChildType].map {
+                rctx.getHelper[ChildType].flatMap {
                   case Some(helper) =>
-                    (
-                        typeNameExpr: Expr[String],
-                        innerCurExpr: Expr[ConfigCursor],
-                        elseExpr: Expr[Either[ConfigReaderFailures, A]]
-                    ) => {
+                    MIO.pure(same { (innerCurExpr: Expr[ConfigCursor]) =>
                       val helperCallExpr = helper(innerCurExpr, rctx.config)
-                      Expr.quote {
-                        if (Expr.splice(transformedNameExpr) == Expr.splice(typeNameExpr))
-                          Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigReaderFailures, A]]
-                        else
-                          Expr.splice(elseExpr)
-                      }
-                    }
-
+                      Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigReaderFailures, A]])
+                    })
                   case None =>
-                    (
-                        _: Expr[String],
-                        _: Expr[ConfigCursor],
-                        elseExpr: Expr[Either[ConfigReaderFailures, A]]
-                    ) => elseExpr
+                    val err = ReaderDerivationError.CannotConstructType(
+                      Type[ChildType].prettyPrint,
+                      isSingleton = false,
+                      Some("no cached reader for the subtype")
+                    )
+                    Log.error(err.message) >> MIO.fail(err)
                 }
               }
           }

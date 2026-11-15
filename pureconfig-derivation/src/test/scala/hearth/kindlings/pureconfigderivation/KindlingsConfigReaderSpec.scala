@@ -274,7 +274,9 @@ final class KindlingsConfigReaderSpec extends MacroSuite {
 
       test("case-object enum (as string field of a wrapping object)") {
         // HOCON top-level must be an object — wrap the bare scalar in a single-key object
-        // and read the inner cursor.
+        // and read the inner cursor. Case objects are read from strings without a discriminator
+        // (upstream's `deriveEnumerationReader`); with the default discriminator they are objects.
+        implicit val config: PureConfig = PureConfig.default.withWrappedSubtypes
         val r = KindlingsConfigReader.derived[CardinalDirection]
         val rootCur = cursor("{ direction = north }")
         val innerCur = rootCur.asObjectCursor.flatMap(_.atKey("direction"))

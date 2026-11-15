@@ -34,12 +34,16 @@ trait WriterHandleAsEnumRuleImpl {
       implicit val OptionStringT: Type[Option[String]] = WTypes.OptionString
       implicit val FieldHintT: Type[KindlingsCoproductHint.Field[A]] = WTypes.fieldCoproductHintType[A]
       implicit val WrappedHintT: Type[KindlingsCoproductHint.Wrapped[A]] = WTypes.wrappedCoproductHintType[A]
+      implicit val FirstSuccessHintT: Type[KindlingsCoproductHint.FirstSuccess[A]] =
+        WTypes.firstSuccessCoproductHintType[A]
 
       // Per-type override: see ReaderHandleAsEnumRule for the same pattern.
       val maybeFieldHint: Option[Expr[KindlingsCoproductHint.Field[A]]] =
         Expr.summonImplicit[KindlingsCoproductHint.Field[A]].toOption
       val maybeWrappedHint: Option[Expr[KindlingsCoproductHint.Wrapped[A]]] =
         Expr.summonImplicit[KindlingsCoproductHint.Wrapped[A]].toOption
+      // Upstream `FirstSuccessCoproductHint.to` writes the subtype's value as is, with no disambiguation information.
+      val isFirstSuccess: Boolean = Expr.summonImplicit[KindlingsCoproductHint.FirstSuccess[A]].toOption.isDefined
 
       // When no per-type hint is present and the global config was evaluable at compile time,
       // we can pre-compute transformConstructorNames(childName) as constant strings.
@@ -102,12 +106,13 @@ trait WriterHandleAsEnumRuleImpl {
                 case Some(transform) => Expr(transform(caseName))
                 case None => Expr.quote(Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName))))
               }
-              if (allCaseObjects) {
+              if (isFirstSuccess) caseValue
+              else if (allCaseObjects) {
                 Expr.quote {
                   val name = Expr.splice(nameExpr)
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
-                      PureConfigDerivationUtils.addDiscriminator(
+                      PureConfigDerivationUtils.addDiscriminatorField(
                         discriminatorField,
                         name,
                         Expr.splice(caseValue)
@@ -121,7 +126,7 @@ trait WriterHandleAsEnumRuleImpl {
                   val name = Expr.splice(nameExpr)
                   Expr.splice(discrFieldExpr) match {
                     case Some(discriminatorField) =>
-                      PureConfigDerivationUtils.addDiscriminator(
+                      PureConfigDerivationUtils.addDiscriminatorField(
                         discriminatorField,
                         name,
                         Expr.splice(caseValue)

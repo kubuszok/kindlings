@@ -12,8 +12,7 @@ import pureconfig.{ConfigFieldMapping, KebabCase, PascalCase}
   *   - [[Field]] — discriminator-based encoding (matches upstream `FieldCoproductHint`)
   *   - [[Wrapped]] — single-key wrapping (kindlings-specific, but functionally equivalent to omitting the discriminator
   *     field by setting `PureConfig.discriminator = None`)
-  *   - [[FirstSuccess]] — reserved to mirror upstream `FirstSuccessCoproductHint`; not yet wired up at the macro level
-  *     (currently falls back to the global discriminator config)
+  *   - [[FirstSuccess]] — no disambiguation information (matches upstream `FirstSuccessCoproductHint`)
   *
   * Like [[KindlingsProductHint]], this trait does not have an implicit `default[A]`. The macro falls back to the global
   * [[PureConfig]] config when no per-type hint is in scope.
@@ -39,12 +38,14 @@ object KindlingsCoproductHint {
       transformConstructorNames: String => String = ConfigFieldMapping(PascalCase, KebabCase)
   ) extends KindlingsCoproductHint[A]
 
-  /** Reserved to mirror upstream PureConfig's `FirstSuccessCoproductHint` ("try every subtype reader in order until one
-    * succeeds, no discriminator"). NOT yet wired up at the macro level — currently the macro treats it the same as the
-    * global discriminator config.
+  /** Matches upstream PureConfig's `FirstSuccessCoproductHint`: no disambiguation information. Reading attempts every
+    * subtype on the same value, in the alphabetical order of the subtypes' names (the order upstream's derivation
+    * passes them to the hint, not the declaration order), and the first one read successfully wins; when none can be
+    * read, the failure is upstream's `NoValidCoproductOptionFound` listing every attempt's failures. Writing writes the
+    * subtype's value as is.
     *
-    * Upstream's first-success strategy is quadratic in the number of subtypes and produces hard-to-read error messages
-    * when nothing matches.
+    * Every attempt reads the value, so the cost grows with the number of subtypes, and a subtype that accepts the input
+    * (e.g. a case object, which reads any object) shadows the subtypes after it.
     */
   final case class FirstSuccess[A]() extends KindlingsCoproductHint[A] {
     override def transformConstructorNames: String => String = identity

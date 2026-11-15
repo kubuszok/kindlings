@@ -13,6 +13,115 @@ object PureConfigDerivationUtils {
   class CollectionBuildException(val error: ConfigReaderFailures)
       extends RuntimeException("pureconfig collection decoding error")
 
+  /** Collects the failures of every item of a collection / map, so that (like upstream pureconfig's
+    * `ConfigCursor.fluent.mapList` / `mapObject`) all of them are reported, not only the first one.
+    */
+  final class FailureAccumulator {
+    private var failures: ConfigReaderFailures = null
+    def add(f: ConfigReaderFailures): Unit = failures = if (failures == null) f else failures ++ f
+    def isEmpty: Boolean = failures == null
+    def throwIfAny(): Unit = if (failures != null) throw new CollectionBuildException(failures)
+  }
+
+  /** Combines the failures of every field of a case class (in the order of the fields) with the unknown-key failures
+    * (`bottom`), as upstream pureconfig's `ConfigReader.Result.zipWith` + `ProductHint.bottom` do. Called only when the
+    * fail-fast construction failed or `bottom` is defined.
+    */
+  def combineFieldFailures(
+      fieldResults: List[Result[Any]],
+      bottom: Option[ConfigReaderFailures]
+  ): ConfigReaderFailures = {
+    val fieldFailures = fieldResults.collect { case Left(f) => f }
+    (fieldFailures ++ bottom.toList).reduce(_ ++ _)
+  }
+
+  /** The `UnknownKey` failures upstream pureconfig's `ProductHint.bottom` reports for the keys of `cursor` that are not
+    * `usedKeys`, or `None`.
+    */
+  def unknownKeysFailures(cursor: ConfigCursor, usedKeys: Set[String]): Option[ConfigReaderFailures] =
+    cursor.asObjectCursor.toOption.flatMap { obj =>
+      obj.map.toList.collect {
+        case (k, keyCur) if !usedKeys.contains(k) => keyCur.failureFor(pureconfig.error.UnknownKey(k))
+      } match {
+        case Nil          => None
+        case head :: tail => Some(ConfigReaderFailures(head, tail*))
+      }
+    }
+
+  /** Read a field the way upstream pureconfig does: a missing key is passed to readers that read missing keys
+    * (`ReadsMissingKeys`, e.g. `Option`), and reported as `KeyNotFound` (with upstream's candidate keys) otherwise.
+    */
+  def readField[A](obj: pureconfig.ConfigObjectCursor, key: String, reader: ConfigReader[A]): Result[A] = {
+    val keyCur = obj.atKeyOrUndefined(key)
+    if (!keyCur.isUndefined || reader.isInstanceOf[pureconfig.ReadsMissingKeys]) reader.from(keyCur)
+    else obj.failed(KeyNotFound.forKeys(key, obj.keys))
+  }
+
+  /** `value` when `cursor` is an object (how upstream's derived reader of a case object reads), its failure otherwise.
+    */
+  def readObjectAs[A](cursor: ConfigCursor, value: A): Result[A] = cursor.asObjectCursor.map(_ => value)
+
+  /** The failure upstream pureconfig's `FieldCoproductHint` reports for a discriminator value that names no subtype. */
+  def unexpectedDiscriminatorValue(discriminatorCursor: ConfigCursor): ConfigReaderFailures =
+    ConfigReaderFailures(
+      discriminatorCursor.failureFor(
+        pureconfig.generic.error.UnexpectedValueForFieldCoproductHint(discriminatorCursor.valueOpt.get)
+      )
+    )
+
+  /** The failure upstream pureconfig's `FirstSuccessCoproductHint` reports when no subtype could be read. */
+  def noValidCoproductOption(
+      cursor: ConfigCursor,
+      optionFailures: Seq[(String, ConfigReaderFailures)]
+  ): ConfigReaderFailures =
+    cursor.asConfigValue.fold(
+      identity,
+      v =>
+        ConfigReaderFailures(cursor.failureFor(pureconfig.generic.error.NoValidCoproductOptionFound(v, optionFailures)))
+    )
+
+  /** The attempts of upstream `FirstSuccessCoproductHint` semantics: each subtype's result is passed to [[succeeded]]
+    * in the order attempted; the first success is the [[result]], and when none succeeds, [[failed]] reports every
+    * attempt.
+    */
+  final class FirstSuccessAttempts(val cursor: ConfigCursor, options: List[String]) {
+    private var failures: List[ConfigReaderFailures] = Nil
+    private var success: Result[Any] = null
+    def succeeded(attempt: Result[Any]): Boolean = attempt match {
+      case Right(_) => success = attempt; true
+      case Left(f)  => failures = f :: failures; false
+    }
+    def result[A]: Result[A] = success.asInstanceOf[Result[A]]
+    def failed[A]: Result[A] = Left(noValidCoproductOption(cursor, options.zip(failures.reverse)))
+  }
+
+  /** [[noValidCoproductOption]] built from the failed results of every attempted subtype (in the order attempted). */
+  def noValidCoproductOptionFromResults(
+      cursor: ConfigCursor,
+      options: List[String],
+      results: List[Result[Any]]
+  ): ConfigReaderFailures =
+    noValidCoproductOption(
+      cursor,
+      options.zip(results).collect { case (option, Left(failures)) => (option, failures) }
+    )
+
+  /** Write a sealed-trait subtype with a discriminator field, the way upstream pureconfig's `FieldCoproductHint.to`
+    * does: the discriminator comes first, a subtype value that already has the key, or is not an object, is rejected
+    * with a `CoproductHintException`.
+    */
+  def addDiscriminatorField(discriminator: String, typeName: String, inner: ConfigValue): ConfigValue = inner match {
+    case obj: com.typesafe.config.ConfigObject if obj.containsKey(discriminator) =>
+      throw pureconfig.generic.error.CoproductHintException(
+        pureconfig.error.CollidingKeys(discriminator, obj.get(discriminator))
+      )
+    case _: com.typesafe.config.ConfigObject => addDiscriminator(discriminator, typeName, inner)
+    case other                               =>
+      throw pureconfig.generic.error.CoproductHintException(
+        WrongType(other.valueType, Set(com.typesafe.config.ConfigValueType.OBJECT))
+      )
+  }
+
   def liftStringError(cursor: ConfigCursor, msg: String): ConfigReaderFailures =
     ConfigReaderFailures(
       ConvertFailure(
@@ -292,6 +401,15 @@ object PureConfigDerivationUtils {
   def writeFields(fields: List[(String, ConfigValue)]): ConfigValue = {
     val map = new java.util.LinkedHashMap[String, ConfigValue]()
     fields.foreach { case (k, v) => map.put(k, v) }
+    ConfigValueFactory.fromMap(map)
+  }
+
+  /** Like [[writeFields]], but omits the fields whose value is `null` (the macro's marker for an empty `Option`, which
+    * upstream pureconfig omits via `WritesMissingKeys`).
+    */
+  def writeFieldsOmittingMissing(fields: List[(String, ConfigValue)]): ConfigValue = {
+    val map = new java.util.LinkedHashMap[String, ConfigValue]()
+    fields.foreach { case (k, v) => if (v != null) { val _ = map.put(k, v) } }
     ConfigValueFactory.fromMap(map)
   }
 

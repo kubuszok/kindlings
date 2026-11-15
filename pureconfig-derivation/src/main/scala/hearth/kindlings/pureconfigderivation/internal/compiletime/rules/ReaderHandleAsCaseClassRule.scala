@@ -140,6 +140,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
           implicit val EitherFailuresAnyT: Type[Either[ConfigReaderFailures, Any]] = RTypes.EitherFailuresAny
           implicit val ArrayAnyT: Type[Array[Any]] = RTypes.ArrayAny
           implicit val ListEitherT: Type[List[Either[ConfigReaderFailures, Any]]] = RTypes.ListEitherFailuresAny
+          implicit val OptionFailuresT: Type[Option[ConfigReaderFailures]] = RTypes.OptionFailures
+          implicit val EitherFailuresA: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
 
           val indexedFields = fields.toList.zipWithIndex
           NonEmptyList
@@ -271,7 +273,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                           cur.asObjectCursor
                             .flatMap { obj =>
                               PureConfigDerivationUtils
-                                .readRequiredFieldWithSuggestions(obj, Expr.splice(keyExpr), Expr.splice(readerExpr))
+                                .readField(obj, Expr.splice(keyExpr), Expr.splice(readerExpr))
                             }
                             .asInstanceOf[Either[ConfigReaderFailures, Any]]
                         }
@@ -293,10 +295,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
               val makeFieldArgs = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
 
-              // Build the runtime expected-keys set from the per-field key expressions.
-              // Used by the strict-mode (`allowUnknownKeys = false`) check at the end.
-              // When we statically know allowUnknownKeys is true, skip building this set
-              // entirely — it's never checked.
+              // The keys of every field: what upstream's `ProductHint.bottom` treats as used when it reports unknown
+              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed.
               val expectedKeysExpr: Expr[Set[String]] =
                 if (staticAllowUnknownKeys.contains(true)) Expr.quote(Set.empty[String])
                 else
@@ -304,8 +304,6 @@ trait ReaderHandleAsCaseClassRuleImpl {
                     Expr.quote(Expr.splice(acc) + Expr.splice(k))
                   }
 
-              // Zero-allocation fail-fast construction: nested zero-closure `Either` folds short-circuit on the first
-              // `Left`, with no intermediate `List`, `Array[Any]`, `sequence`, or closure.
               def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
                 val nonTransientFieldMap: Map[String, Expr_??] =
                   makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
@@ -323,24 +321,66 @@ trait ReaderHandleAsCaseClassRuleImpl {
                     )
                 }
               }
-              val ffConstructed: Expr[Either[ConfigReaderFailures, A]] =
-                buildEitherFailFast[ConfigReaderFailures, A](decodeExprs)(constructFF)
 
-              MIO.pure(
-                // When allowUnknownKeys is statically true, skip the checkUnknownKeys call entirely.
-                if (staticAllowUnknownKeys.contains(true)) ffConstructed
-                else
-                  Expr.quote {
-                    val coreResult: Either[ConfigReaderFailures, A] = Expr.splice(ffConstructed)
-                    PureConfigDerivationUtils.checkUnknownKeys[A](
-                      Expr.splice(rctx.cursor),
-                      coreResult,
-                      Expr.splice(expectedKeysExpr),
-                      Expr.splice(allowUnknownKeysExpr),
-                      Expr.splice(rctx.config).discriminator
-                    )
+              // Like upstream pureconfig (`ConfigReader.Result.zipWith` over the fields, then `ProductHint.bottom`),
+              // every field is read and all failures are reported: each field's result is bound to a `val`, the
+              // value is constructed from them fail-fast (no intermediate collections on the success path), and only
+              // when something failed are the failures of every field and the unknown keys combined.
+              def bindAll(
+                  remaining: List[Expr[Either[ConfigReaderFailures, Any]]],
+                  boundReversed: List[Expr[Either[ConfigReaderFailures, Any]]]
+              ): Expr[Either[ConfigReaderFailures, A]] = remaining match {
+                case result :: rest =>
+                  ValDefs.createVal[Either[ConfigReaderFailures, Any]](result).use { bound =>
+                    bindAll(rest, bound :: boundReversed)
                   }
-              )
+                case Nil =>
+                  val bound = boundReversed.reverse
+                  val constructed = buildEitherFailFast[ConfigReaderFailures, A](bound)(constructFF)
+                  val resultsExpr: Expr[List[Either[ConfigReaderFailures, Any]]] =
+                    bound.foldRight(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (r, acc) =>
+                      // `acc.::(r)`, not `r :: acc`: Scala 3 desugars the latter into a local `val`, which must not
+                      // share a block with the `ValDefs` vals.
+                      Expr.quote(Expr.splice(acc).::(Expr.splice(r)))
+                    }
+                  // Bound with `ValDefs` (not a `val` inside the quote): the constructed expression holds `ValDefs`
+                  // vals, and on Scala 3 quote-defined and `ValDefs` vals must not own each other's definitions.
+                  ValDefs.createVal[Either[ConfigReaderFailures, A]](constructed).use { constructedResult =>
+                    if (staticAllowUnknownKeys.contains(true))
+                      Expr.quote {
+                        if (Expr.splice(constructedResult).isRight) Expr.splice(constructedResult)
+                        else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), None))
+                      }
+                    else
+                      ValDefs
+                        .createVal[Option[ConfigReaderFailures]](Expr.quote {
+                          if (Expr.splice(allowUnknownKeysExpr)) None
+                          else
+                            PureConfigDerivationUtils
+                              .unknownKeysFailures(Expr.splice(rctx.cursor), Expr.splice(expectedKeysExpr))
+                        })
+                        .use { unknownKeys =>
+                          Expr.quote {
+                            if (Expr.splice(constructedResult).isRight && Expr.splice(unknownKeys).isEmpty)
+                              Expr.splice(constructedResult)
+                            else
+                              Left(
+                                PureConfigDerivationUtils
+                                  .combineFieldFailures(Expr.splice(resultsExpr), Expr.splice(unknownKeys))
+                              )
+                          }
+                        }
+                  }
+              }
+
+              val body = bindAll(decodeExprs, Nil)
+              MIO.pure(Expr.quote {
+                // A value that is not an object fails once (as upstream), not once per field.
+                Expr.splice(rctx.cursor).asObjectCursor match {
+                  case Left(failures) => Left(failures): Either[ConfigReaderFailures, A]
+                  case Right(_)       => Expr.splice(body)
+                }
+              })
             }
       }
     }

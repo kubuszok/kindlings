@@ -616,8 +616,9 @@ PureConfig configures derivation via implicit `ProductHint[A]` and `CoproductHin
 | Discriminator field | `FieldCoproductHint(fieldName)` (default `"type"`) | `PureConfig.discriminator = Some("type")` global default; `KindlingsCoproductHint.Field[A](fieldName = …)` per ADT override | Parity |
 | Single-key sealed-trait wrapping | Custom `CoproductHint` (or `EnumCoproductHint`) | `PureConfig.discriminator = None` (`.withWrappedSubtypes`) globally; `KindlingsCoproductHint.Wrapped[A]()` per ADT | Parity |
 | Use case-class default values for missing fields | `ProductHint(useDefaultArgs = true)` (default) | `PureConfig.useDefaults = true` (default, matches upstream); `KindlingsProductHint[A](useDefaults = …)` per type | Parity |
-| Strict mode (reject unknown keys) | `ProductHint(allowUnknownKeys = false)` per type | `PureConfig.allowUnknownKeys = false` global (`.withStrictDecoding`); `KindlingsProductHint[A](allowUnknownKeys = false)` per type — failures use the same `KeyNotFound`-style `ConvertFailure` shape upstream produces | Parity |
+| Strict mode (reject unknown keys) | `ProductHint(allowUnknownKeys = false)` per type | `PureConfig.allowUnknownKeys = false` global (`.withStrictDecoding`); `KindlingsProductHint[A](allowUnknownKeys = false)` per type — one `UnknownKey` failure per unknown key, after the field failures, as upstream | Parity |
 | Per-type customization (different config per type) | Yes (per-companion `ProductHint` / `CoproductHint`) | Yes (`implicit val hint: KindlingsProductHint[MyType]` / `KindlingsCoproductHint.Field[MySealed]` resolved by the macro at derivation site, overriding the global `PureConfig`) | Parity |
+| First-success sealed families (no disambiguation) | `FirstSuccessCoproductHint` — subtypes attempted in the alphabetical order of their names, first success wins, `NoValidCoproductOptionFound` otherwise; written without disambiguation | `KindlingsCoproductHint.FirstSuccess[A]()` — same order, failure and output | Parity |
 
 ### Annotations
 
@@ -645,7 +646,7 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 | Case classes → HOCON object | Via Shapeless / Magnolia | Via Hearth macro (cleaner generated code, faster compile) | Parity |
 | Sealed traits → discriminator object | Via `FieldCoproductHint` | Via macro + `discriminator` config | Parity |
 | Sealed traits → single-key wrapping | Via custom `CoproductHint` | Via macro + `withWrappedSubtypes` | Parity |
-| Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `derive[E]` (auto-detected — case-object children encode as strings when no discriminator is set) | Improvement |
+| Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `derive[E]` with `withWrappedSubtypes` (no discriminator): case-object families read and write strings, as `deriveEnumerationReader`/`Writer`; with the default discriminator they are `{ type = north }` objects, as upstream's default `FieldCoproductHint` | Improvement |
 | Singleton (`case object`) members | Yes | Yes | Parity |
 | Value classes / `AnyVal` wrappers | Manual `ConfigReader.fromString` per type | Automatic unwrapping via `IsValueType` (covers `AnyVal`, `extends AnyVal`, refined types via `refined-integration`, opaque types) | Improvement |
 | Refined types (`eu.timepit.refined`) | Separate `pureconfig-refined` module | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected by `IsValueType`) | Improvement |
@@ -680,15 +681,38 @@ loaded ==> Right(SimplePerson("Alice", 30))
 
 To prevent infinite macro expansion, the kindlings macro filters out its own `derived` companion methods during implicit search (`KindlingsConfigReader.type` and `KindlingsConfigConvert.type` on the reader side; `KindlingsConfigWriter.type` and `KindlingsConfigConvert.type` on the writer side). Users who also enable upstream auto-derivation — `pureconfig.generic.auto._` (Scala 2) or a `derives ConfigReader` clause on the type itself (Scala 3; the `pureconfig.generic.derivation.default._` import is deprecated since 0.17.7) — will get whichever derivation rule is more specific in implicit resolution; if both are in scope and you want the kindlings derivation, do not also import the upstream auto-derivation surfaces.
 
+### Checked against upstream (oracle)
+
+`upstream-oracle-tests` (`PureConfigOracleSpec`) derives the same fixtures with Kindlings and with pureconfig's own
+derivation (`pureconfig.generic.semiauto`: Shapeless on Scala 2, the hint-aware `pureconfig-generic-scala3` on Scala 3,
+with the equivalent `ProductHint` / `FieldCoproductHint` / `FirstSuccessCoproductHint`, and `deriveEnumerationReader` /
+`deriveEnumerationWriter` for case-object enumerations), and compares the values read from HOCON — including every
+failure, its reason and path — and the config values written. There are **no expected differences**:
+
+- every failure is reported, not only the first one: every field of a case class (then the unknown keys of a strict
+  product), every item of a collection and every value of a map;
+- a missing key is `KeyNotFound` with upstream's candidate keys (`KeyNotFound.forKeys`), passed to readers of missing
+  keys (`ReadsMissingKeys`, e.g. `Option`) like upstream;
+- with a discriminator (upstream's `FieldCoproductHint`): the value must be an object (also for case objects), the
+  subtype is read without the discriminator key (so a strict subtype does not report it, and a strict case class read
+  on its own does), an unknown value is `UnexpectedValueForFieldCoproductHint` at the discriminator, and writing a
+  subtype that has a field named like the discriminator throws upstream's `CoproductHintException`;
+- without a discriminator, a family of case objects reads only strings (upstream's `deriveEnumerationReader`; an
+  unknown value is `NoValidCoproductOptionFound` on Scala 2 and `CannotConvert` on Scala 3, as upstream on each);
+- an empty `Option` field is omitted when writing (upstream's `WritesMissingKeys`), not written as `null`.
+
+The Kindlings-only additions stay opt-in: `withWrappedSubtypes` for families that are not all case objects (single-key
+objects, no upstream counterpart), `@configKey`, `@transientField`.
+
 ### Not ported
 
 | Feature | Notes |
 |---|---|
-| `FirstSuccessCoproductHint` | The `KindlingsCoproductHint.FirstSuccess[A]` case is reserved in the ADT but the macro currently treats it the same as the discriminator-based `Field` variant. The upstream "try every subtype reader in sequence until one succeeds" pattern is intentionally not wired up because it's brittle and slow; if a use case shows up we can implement it without changing the public surface. |
 | `pureconfig-cats` / `pureconfig-magnolia` / `pureconfig-shapeless` modules | External ecosystem add-ons. Cats data types (`NonEmptyList`, etc.) are reachable via `kindlings-cats-integration`. |
 | `pureconfig-yaml` / `pureconfig-circe` etc. format adapters | Out of scope — kindlings ships separate `kindlings-yaml-derivation` and `kindlings-circe-derivation` modules. |
 | `ConfigSource` API (`ConfigSource.file`, `ConfigSource.url`, …) | Not duplicated — users keep using `pureconfig.ConfigSource.*` and pass our derived instances to it. |
-| Custom `FailureReason` subtypes | Inherited from upstream when summoning user-provided `ConfigReader`s. The kindlings macro itself reports `KeyNotFound`, `WrongType`, and (for strict mode) the standard PureConfig unknown-key failure via the upstream factories. |
+| Custom `FailureReason` subtypes | Inherited from upstream when summoning user-provided `ConfigReader`s. The kindlings macro itself reports upstream's failure reasons (`KeyNotFound`, `WrongType`, `UnknownKey`, `UnexpectedValueForFieldCoproductHint`, `NoValidCoproductOptionFound`, …; the sealed-family ones come from the small `pureconfig-generic-base` module, now a dependency). |
+| Custom `ProductHint` / `CoproductHint` implementations | Kindlings reads its own `KindlingsProductHint` / `KindlingsCoproductHint` (the configuration of upstream's built-in hints), not arbitrary `from`/`to` implementations. |
 
 ---
 

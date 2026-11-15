@@ -308,5 +308,10 @@ trait WriterMacrosImpl
 
     def wrappedCoproductHintType[A: Type]: Type[KindlingsCoproductHint.Wrapped[A]] =
       Type.of[KindlingsCoproductHint.Wrapped[A]]
+
+    val Any: Type[Any] = Type.of[Any]
+
+    def firstSuccessCoproductHintType[A: Type]: Type[KindlingsCoproductHint.FirstSuccess[A]] =
+      Type.of[KindlingsCoproductHint.FirstSuccess[A]]
   }
 }
