@@ -6,7 +6,8 @@ import hearth.std.*
 
 import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint, ProductHint, SConfig}
 import hearth.kindlings.sconfigderivation.annotations.{configKey, transientField}
-import org.ekrich.config.ConfigValue
+import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
+import org.ekrich.config.{ConfigObject, ConfigValue}
 
 trait ReaderMacrosImpl
     extends SconfigDerivationTimeout
@@ -275,6 +276,9 @@ trait ReaderMacrosImpl
     val ReaderLogDerivation: Type[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation] =
       Type.of[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation]
     val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
+    val ConfigObject: Type.Lazy[ConfigObject] = Type.Lazy(Type.of[ConfigObject])
+    val FirstSuccessAttempts: Type.Lazy[SConfigDerivationUtils.FirstSuccessAttempts] =
+      Type.Lazy(Type.of[SConfigDerivationUtils.FirstSuccessAttempts])
     val ConfigDecodingError: Type.Lazy[ConfigDecodingError] = Type.Lazy(Type.of[ConfigDecodingError])
     val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
@@ -313,6 +317,9 @@ trait ReaderMacrosImpl
 
     def fieldCoproductHintType[A: Type]: Type[CoproductHint.Field[A]] =
       Type.of[CoproductHint.Field[A]]
+
+    def firstSuccessCoproductHintType[A: Type]: Type[CoproductHint.FirstSuccess[A]] =
+      Type.of[CoproductHint.FirstSuccess[A]]
 
     def wrappedCoproductHintType[A: Type]: Type[CoproductHint.Wrapped[A]] =
       Type.of[CoproductHint.Wrapped[A]]

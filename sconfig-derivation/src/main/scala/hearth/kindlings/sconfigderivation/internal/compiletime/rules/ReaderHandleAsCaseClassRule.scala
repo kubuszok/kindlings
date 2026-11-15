@@ -11,7 +11,7 @@ import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ProductHint}
 import hearth.kindlings.sconfigderivation.annotations.{configKey, transientField}
 import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
 import hearth.kindlings.sconfigderivation.ConfigReader
-import org.ekrich.config.ConfigValue
+import org.ekrich.config.{ConfigObject, ConfigValue}
 
 trait ReaderHandleAsCaseClassRuleImpl {
   this: ReaderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -41,6 +41,8 @@ trait ReaderHandleAsCaseClassRuleImpl {
       implicit val configKeyT: Type[configKey] = RTypes.ConfigKey
       implicit val transientFieldT: Type[transientField] = RTypes.TransientField
       implicit val ProductHintT: Type[ProductHint[A]] = RTypes.productHintType[A]
+      implicit val ConfigObjectT: Type[ConfigObject] = RTypes.ConfigObject
+      implicit val EitherErrorA: Type[Either[ConfigDecodingError, A]] = RTypes.ReaderResult[A]
 
       // Per-type override: see KindlingsConfigReader for the same pattern in pureconfig.
       val maybeHint: Option[Expr[ProductHint[A]]] = Expr.summonImplicit[ProductHint[A]].toOption
@@ -123,7 +125,11 @@ trait ReaderHandleAsCaseClassRuleImpl {
             .flatMap {
               case Some(expr) =>
                 MIO.pure(Expr.quote {
-                  SConfigDerivationUtils.asObject(Expr.splice(rctx.value)).map(_ => Expr.splice(expr))
+                  SConfigDerivationUtils.asObject(Expr.splice(rctx.value)).flatMap { obj =>
+                    val result: Either[ConfigDecodingError, A] = Right(Expr.splice(expr))
+                    if (Expr.splice(allowUnknownKeysExpr)) result
+                    else SConfigDerivationUtils.withUnknownKeys[A](obj, result, Set.empty[String])
+                  }
                 })
               case None =>
                 val err = ReaderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false)
@@ -183,99 +189,49 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   }
                   val useDefaultsIsStaticallyTrue = staticUseDefaults.contains(true)
 
-                  val decodeExpr: Expr[Either[ConfigDecodingError, Any]] = effectiveDefault match {
-                    case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
-                      // useDefaults is statically true: no runtime boolean check needed
-                      if (isOptionField)
+                  // Every field is read from the object (checked once, see below) like upstream PureConfig: a
+                  // missing key uses the default (when enabled), goes to readers of missing keys (`Option` fields,
+                  // `ReadsMissingKeys`), or fails with `KeyNotFound`; the value's failures are reported under the key.
+                  val readsMissingKeysExpr: Expr[Boolean] =
+                    if (isOptionField) Expr.quote(true) else Expr.quote(false)
+                  val decodeExpr: Expr[ConfigObject] => Expr[Either[ConfigDecodingError, Any]] = objExpr =>
+                    effectiveDefault match {
+                      case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
+                        // useDefaults is statically true: no runtime boolean check needed
                         Expr.quote {
-                          val v = Expr.splice(rctx.value)
+                          val o = Expr.splice(objExpr)
+                          val key = Expr.splice(keyExpr)
+                          if (o.get(key) == null)
+                            Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
+                          else
+                            SConfigDerivationUtils
+                              .readField(o, key, Expr.splice(readerExpr), Expr.splice(readsMissingKeysExpr))
+                              .asInstanceOf[Either[ConfigDecodingError, Any]]
+                        }
+                      case Some(defaultAnyExpr) =>
+                        // useDefaults is unknown at compile time: keep runtime check
+                        Expr.quote {
+                          val o = Expr.splice(objExpr)
+                          val key = Expr.splice(keyExpr)
+                          if (Expr.splice(useDefaultsExpr) && o.get(key) == null)
+                            Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
+                          else
+                            SConfigDerivationUtils
+                              .readField(o, key, Expr.splice(readerExpr), Expr.splice(readsMissingKeysExpr))
+                              .asInstanceOf[Either[ConfigDecodingError, Any]]
+                        }
+                      case None =>
+                        Expr.quote {
                           SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              val keyVal = SConfigDerivationUtils.readOptionalField(obj, key)
-                              if (obj.get(key) == null)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
-                              else
-                                Expr.splice(readerExpr).from(keyVal)
-                            }
+                            .readField(
+                              Expr.splice(objExpr),
+                              Expr.splice(keyExpr),
+                              Expr.splice(readerExpr),
+                              Expr.splice(readsMissingKeysExpr)
+                            )
                             .asInstanceOf[Either[ConfigDecodingError, Any]]
                         }
-                      else
-                        Expr.quote {
-                          val v = Expr.splice(rctx.value)
-                          SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              if (obj.get(key) == null)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
-                              else
-                                SConfigDerivationUtils
-                                  .readRequiredField(obj, key)
-                                  .flatMap(c => Expr.splice(readerExpr).from(c))
-                            }
-                            .asInstanceOf[Either[ConfigDecodingError, Any]]
-                        }
-                    case Some(defaultAnyExpr) =>
-                      // useDefaults is unknown at compile time: keep runtime check
-                      if (isOptionField)
-                        Expr.quote {
-                          val v = Expr.splice(rctx.value)
-                          SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              val keyVal = SConfigDerivationUtils.readOptionalField(obj, key)
-                              if (Expr.splice(useDefaultsExpr) && obj.get(key) == null)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
-                              else
-                                Expr.splice(readerExpr).from(keyVal)
-                            }
-                            .asInstanceOf[Either[ConfigDecodingError, Any]]
-                        }
-                      else
-                        Expr.quote {
-                          val v = Expr.splice(rctx.value)
-                          SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              if (Expr.splice(useDefaultsExpr) && obj.get(key) == null)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigDecodingError, Any]
-                              else
-                                SConfigDerivationUtils
-                                  .readRequiredField(obj, key)
-                                  .flatMap(c => Expr.splice(readerExpr).from(c))
-                            }
-                            .asInstanceOf[Either[ConfigDecodingError, Any]]
-                        }
-                    case None =>
-                      if (isOptionField)
-                        Expr.quote {
-                          val v = Expr.splice(rctx.value)
-                          SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              Expr
-                                .splice(readerExpr)
-                                .from(SConfigDerivationUtils.readOptionalField(obj, Expr.splice(keyExpr)))
-                            }
-                            .asInstanceOf[Either[ConfigDecodingError, Any]]
-                        }
-                      else
-                        Expr.quote {
-                          val v = Expr.splice(rctx.value)
-                          SConfigDerivationUtils
-                            .asObject(v)
-                            .flatMap { obj =>
-                              SConfigDerivationUtils
-                                .readRequiredField(obj, Expr.splice(keyExpr))
-                                .flatMap(c => Expr.splice(readerExpr).from(c))
-                            }
-                            .asInstanceOf[Either[ConfigDecodingError, Any]]
-                        }
-                  }
+                    }
                   val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                     val typedExpr = Expr.quote {
                       SConfigDerivationUtils.unsafeCast(
@@ -294,15 +250,13 @@ trait ReaderHandleAsCaseClassRuleImpl {
               val makeAccessors = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
 
-              val listExpr: Expr[List[Either[ConfigDecodingError, Any]]] =
+              def listExpr(objExpr: Expr[ConfigObject]): Expr[List[Either[ConfigDecodingError, Any]]] =
                 decodeExprs.foldRight(Expr.quote(List.empty[Either[ConfigDecodingError, Any]])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+                  Expr.quote(Expr.splice(elem(objExpr)) :: Expr.splice(acc))
                 }
 
-              // Build the runtime expected-keys set from the per-field key expressions.
-              // Used by the strict-mode (`allowUnknownKeys = false`) check at the end.
-              // When we statically know allowUnknownKeys is true, skip building this set
-              // entirely — it's never checked.
+              // The keys of every field: what upstream's `ProductHint.bottom` treats as used when it reports unknown
+              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed.
               val expectedKeysExpr: Expr[Set[String]] =
                 if (staticAllowUnknownKeys.contains(true)) Expr.quote(Set.empty[String])
                 else
@@ -332,26 +286,32 @@ trait ReaderHandleAsCaseClassRuleImpl {
                 }
                 .map { builder =>
                   val constructLambda = builder.build[A]
-                  // When allowUnknownKeys is statically true, skip the checkUnknownKeys
-                  // call entirely — it's a no-op that just returns coreResult.
+                  // Like upstream PureConfig: a value that is not an object fails once (not once per field); then
+                  // every field is read and all failures are reported (`sequenceResults`), followed by the unknown
+                  // keys of a strict case class (`ProductHint.bottom`). When allowUnknownKeys is statically true, the
+                  // unknown-keys check is skipped entirely.
                   if (staticAllowUnknownKeys.contains(true))
                     Expr.quote {
-                      SConfigDerivationUtils
-                        .sequenceResults(Expr.splice(listExpr))
-                        .map(Expr.splice(constructLambda))
+                      SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+                        case Left(e)    => Left(e): Either[ConfigDecodingError, A]
+                        case Right(obj) =>
+                          SConfigDerivationUtils
+                            .sequenceResults(Expr.splice(listExpr(Expr.quote(obj))))
+                            .map(Expr.splice(constructLambda))
+                      }
                     }
                   else
                     Expr.quote {
-                      val coreResult: Either[ConfigDecodingError, A] =
-                        SConfigDerivationUtils
-                          .sequenceResults(Expr.splice(listExpr))
-                          .map(Expr.splice(constructLambda))
-                      SConfigDerivationUtils.checkUnknownKeys[A](
-                        Expr.splice(rctx.value),
-                        coreResult,
-                        Expr.splice(expectedKeysExpr),
-                        Expr.splice(allowUnknownKeysExpr)
-                      )
+                      SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+                        case Left(e)    => Left(e): Either[ConfigDecodingError, A]
+                        case Right(obj) =>
+                          val coreResult: Either[ConfigDecodingError, A] =
+                            SConfigDerivationUtils
+                              .sequenceResults(Expr.splice(listExpr(Expr.quote(obj))))
+                              .map(Expr.splice(constructLambda))
+                          if (Expr.splice(allowUnknownKeysExpr)) coreResult
+                          else SConfigDerivationUtils.withUnknownKeys[A](obj, coreResult, Expr.splice(expectedKeysExpr))
+                      }
                     }
                 }
             }

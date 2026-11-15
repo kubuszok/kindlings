@@ -139,7 +139,8 @@ object ConfigReader extends ConfigReaderCompanionCompat {
   }
 
   implicit def optionReader[A](implicit inner: ConfigReader[A]): ConfigReader[Option[A]] =
-    new ConfigReader[Option[A]] {
+    // `ReadsMissingKeys`: a missing key reads as `None` (as upstream's `Option` reader).
+    new ConfigReader[Option[A]] with ReadsMissingKeys {
       def from(value: ConfigValue): Either[ConfigDecodingError, Option[A]] =
         if (value == null || value.valueType == ConfigValueType.NULL) Right(None)
         else inner.from(value).map(Some(_))
