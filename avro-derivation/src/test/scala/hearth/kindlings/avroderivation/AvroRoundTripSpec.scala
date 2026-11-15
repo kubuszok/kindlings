@@ -433,6 +433,23 @@ final class AvroRoundTripSpec extends MacroSuite {
         decoded ==> original
       }
 
+      test("recursive sealed trait (RecExpr) schema, binary and JSON round-trip") {
+        val encoder: AvroEncoder[RecExpr] = AvroEncoder.derived[RecExpr]
+        val decoder: AvroDecoder[RecExpr] = AvroDecoder.derived[RecExpr]
+        val schema = AvroSchemaFor.derived[RecExpr].schema
+        schema.getType ==> org.apache.avro.Schema.Type.UNION
+        val add = schema.getTypes.get(0)
+        add.getName ==> "RecAdd"
+        // the fields refer to the same union, its records by name
+        add.getField("left").schema() ==> schema
+        add.getField("right").schema() ==> schema
+        encoder.schema ==> schema
+        decoder.schema ==> schema
+        val original: RecExpr = RecAdd(RecLit(1), RecAdd(RecLit(2), RecLit(3)))
+        AvroIO.fromBinary[RecExpr](AvroIO.toBinary(original)(encoder))(decoder) ==> original
+        AvroIO.fromJson[RecExpr](AvroIO.toJson(original)(encoder))(decoder) ==> original
+      }
+
       test("mixed sealed trait (case objects + case classes) round-trip") {
         val encoder: AvroEncoder[MixedEvent] = AvroEncoder.derived[MixedEvent]
         val decoder: AvroDecoder[MixedEvent] = AvroDecoder.derived[MixedEvent]

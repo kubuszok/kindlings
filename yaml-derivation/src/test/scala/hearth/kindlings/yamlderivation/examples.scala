@@ -129,3 +129,6 @@ case class CombOuter(
 
 // Name collision test types
 case class WithKeywordFields(`type`: String, `class`: Int, `val`: Boolean)
+
+// Recursive through Option
+case class RecursiveOption(value: String, child: Option[RecursiveOption])
