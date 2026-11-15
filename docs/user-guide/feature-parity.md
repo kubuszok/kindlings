@@ -162,18 +162,18 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | `cats.Functor` | Yes | Yes | Yes | Parity |
 | `cats.Contravariant` | Yes | Yes | Yes | Parity |
 | `cats.Invariant` | Yes | Yes | Yes | Parity |
-| `cats.Apply` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
-| `cats.Applicative` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.Apply` | Yes | Yes | Yes | Parity |
+| `cats.Applicative` | Yes | Yes | Yes | Parity |
 | `cats.Foldable` | Yes | Yes | Yes | Parity |
 | `cats.Traverse` | Yes | Yes | Yes | Parity |
-| `cats.Reducible` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
-| `cats.NonEmptyTraverse` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.Reducible` | Yes | Yes | Yes | Parity |
+| `cats.NonEmptyTraverse` | Yes | Yes | Yes | Parity |
 | `cats.SemigroupK` | Yes | Yes | Yes | Parity |
 | `cats.MonoidK` | Yes | Yes | Yes | Parity |
-| `alleycats.Pure` | Yes | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `alleycats.Pure` | Yes | Yes | Yes | Parity |
 | `alleycats.EmptyK` | Yes | Yes | Yes | Parity |
-| `cats.NonEmptyAlternative` | No | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
-| `cats.Alternative` | No | Yes | Yes | Partial — fields nesting a type constructor (e.g. `List[A]`) not yet supported (Gap) |
+| `cats.NonEmptyAlternative` | No | Yes | Yes | Parity |
+| `cats.Alternative` | No | Yes | Yes | Parity |
 | `alleycats.ConsK` | Yes (list-like sealed traits) | No ([#489](https://github.com/typelevel/kittens/issues/489)) | Yes (case classes: head + nested tail) | Different shapes — kittens' list-like sealed traits not supported (Gap); case classes (Improvement) |
 
 ### Type classes — bi-variant (kind `(*, *) -> *`)
@@ -202,6 +202,9 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Sealed trait with case objects only | Yes | Yes | Parity |
 | Fields nesting several type constructors (e.g. `List[Option[A]]`) for Functor/Foldable/Traverse | Yes (composed instances) | Yes (composed instances) | Parity |
 | Recursive sealed traits for Functor/Foldable/Traverse without an instance in scope | Yes | Yes | Parity |
+| Fields wrapping the type parameter (`tail: List[A]`, `children: List[Tree[A]]`, `Option[Vector[A]]`, `List[Option[A]]`) for Apply / Applicative / Pure / Reducible / NonEmptyTraverse / NonEmptyAlternative / Alternative | Yes | Yes (instances combined field by field, like kittens; same shapes rejected: no instance for the wrapping type, no non-empty field for Reducible / NonEmptyTraverse, a field of type `A` for (NonEmpty)Alternative) | Parity |
+| Apply / Applicative for recursive types (e.g. a rose tree) | Yes, but the derived instance overflows the stack (observed on Scala 3) | Yes | Improvement |
+| A wrapped field whose type constructor is another case class to derive (e.g. `middle: Nel[A]`) | Derived recursively | Needs that class's instance in scope (`implicit val … = Reducible.derived[Nel]`) | Difference (Kindlings' HKT derivations do not derive nested type constructors) |
 | PartialOrder: fields with only a `PartialOrder` (e.g. `Set`); different subtypes incomparable (`NaN`) | Yes | Yes | Parity |
 | Empty for sealed traits: the single subtype forming an `Empty` (case object or derivable case class) | Yes | Yes (a single subtype with an implicit `Empty` is preferred) | Parity+ |
 | SemigroupK/MonoidK/EmptyK: fields `G[A]` combined with `SemigroupK[G]`/`MonoidK[G]`/`EmptyK[G]` | Yes | Yes | Parity |
@@ -242,8 +245,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
 | `cats.sequence` / `cats.lift` / `cats.replicateH` | kittens Scala-2/Shapeless utilities (sequencing over HLists/records, lifting functions, heterogeneous replicate); out of scope for type-class derivation |
 | `Iterable` derivation (`MkIterable`) | kittens Scala-2-only helper; not ported |
-| Fields nesting a type constructor in Apply / Applicative / Pure / Reducible / NonEmptyTraverse / NonEmptyAlternative / Alternative | kittens derives e.g. `NonEmptyList`-like `Nel(head: A, tail: List[A])`; Kindlings supports only fields of type `A` (and constant fields) there (Gap) |
-| `ConsK` for list-like sealed traits | kittens 2 derives `ConsK` for `sealed trait IList[A]` with a `Cons(head: A, tail: IList[A])` case; Kindlings derives it for case classes only (Gap) |
+| `ConsK` for list-like sealed traits | kittens 2 derives `ConsK` for `sealed trait IList[A]` with a `Cons(head: A, tail: IList[A])` case; Kindlings derives it for case classes only (Gap: it needs a sum-type rule choosing and building the cons case, unrelated to the field-by-field product machinery) |
 
 ### Upstream oracle
 
@@ -260,7 +262,9 @@ of values (subtype ordering included), hash consistency with `eqv`, `combine`/`e
 - **`reduceRightTo` laziness**: same results, but when the function short-circuits on an earlier field Kindlings never
   evaluates the later ones; kittens evaluates the function on the later fields first.
 - **Hash values** are not compared (only consistency with `eqv`); kittens does not specify them.
-- The gaps listed under "Not ported" are asserted too (Kindlings fails to derive them while kittens derives them).
+- The `ConsK` gap is asserted too, and so are shapes both reject (e.g. Reducible without a non-empty field, a wrapping
+  type without the needed instance, a field of type `A` in NonEmptyAlternative).
+- Apply/Applicative for the recursive rose tree are not compared: kittens' derived instances overflow the stack.
 
 ---
 

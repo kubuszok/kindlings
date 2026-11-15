@@ -18,7 +18,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *   - ap[A, B]: needs F[Any] erasure because ff: F[A => B] and fa: F[A] have different type parameters
   *   - combineK[A]: summons Semigroup for field types at macro time, needs concrete types
   */
-trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -27,6 +27,12 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
     val AltFType: Type[cats.Alternative[F]] = Type.CtorK1.of[cats.Alternative].apply[F](using FCtor0)
     val macroName = "Alternative.derived"
     enforceDerivationPolicyOrAbort(AltFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.Alternative[F]](WrappedTC.Alternative, "Alternative.derived")(using
+        AltFType,
+        FCtor0
+      )
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val AltFT: Type[cats.Alternative[F]] = AltFType

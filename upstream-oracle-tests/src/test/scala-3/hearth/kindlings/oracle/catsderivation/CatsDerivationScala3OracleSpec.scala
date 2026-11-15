@@ -110,19 +110,28 @@ final class CatsDerivationScala3OracleSpec extends MacroSuite {
     )
   }
 
-  test("documented gaps: NonEmptyAlternative and Alternative need fields nesting a type constructor") {
-    // kittens derives them for e.g. `CtLists(list: List[A], opt: Option[A])` (every field must form one, and `A`
-    // itself does not); Kindlings' Applicative part supports only fields of type `A`. Documented as Gap in
-    // docs/user-guide/feature-parity.md (cats-derivation).
+  test("NonEmptyAlternative and Alternative (every field wraps the type parameter)") {
+    import hearth.kindlings.catsderivation.extensions.*
+    val kindlingsNea: cats.NonEmptyAlternative[CtLists] = cats.NonEmptyAlternative.derived[CtLists]
+    val kindlingsAlt: cats.Alternative[CtLists] = cats.Alternative.derived[CtLists]
+    val kittensNea: cats.NonEmptyAlternative[CtLists] = cats.derived.semiauto.nonEmptyAlternative[CtLists]
+    val kittensAlt: cats.Alternative[CtLists] = cats.derived.semiauto.alternative[CtLists]
+    val values = List(CtLists(List(1, 2), Some(1)), CtLists(Nil, None), CtLists(List(3), Some(3)))
+    def observe(nea: cats.NonEmptyAlternative[CtLists]) = (
+      nea.pure(5),
+      pairs(values).map { case (x, y) => nea.combineK(x, y) },
+      pairs(values).map { case (x, y) => nea.map2(x, y)(_ * 10 + _) },
+      values.map(v => nea.map(v)(_ + 1))
+    )
+    check("non-empty alternative")(observe(kindlingsNea), observe(kittensNea))
+    check("alternative")((observe(kindlingsAlt), kindlingsAlt.empty[Int]), (observe(kittensAlt), kittensAlt.empty[Int]))
+    // A field of the type parameter itself has no NonEmptyAlternative: rejected by both.
     assert(compileErrors("""
       import hearth.kindlings.catsderivation.extensions.*
-      cats.Alternative.derived[hearth.kindlings.oracle.catsderivation.CtLists]
-    """).contains("Macro derivation failed"))
+      cats.NonEmptyAlternative.derived[hearth.kindlings.oracle.catsderivation.CtProd]
+    """).contains("has no NonEmptyAlternative"))
     assert(compileErrors("""
-      import hearth.kindlings.catsderivation.extensions.*
-      cats.NonEmptyAlternative.derived[hearth.kindlings.oracle.catsderivation.CtLists]
-    """).contains("Macro derivation failed"))
-    assert(cats.derived.semiauto.alternative[CtLists] != null)
-    assert(cats.derived.semiauto.nonEmptyAlternative[CtLists] != null)
+      cats.derived.semiauto.nonEmptyAlternative[hearth.kindlings.oracle.catsderivation.CtProd]
+    """).nonEmpty)
   }
 }

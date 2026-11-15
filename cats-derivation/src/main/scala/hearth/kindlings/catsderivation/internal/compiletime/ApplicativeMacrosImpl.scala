@@ -17,7 +17,8 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait ApplicativeMacrosImpl
     extends rules.ApplicativeCaseClassRuleImpl
     with CatsDerivationTimeout
-    with CatsDerivationErrorSupport {
+    with CatsDerivationErrorSupport
+    with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   final case class ApplicativeCaseClassResult[F[_]](
@@ -101,6 +102,12 @@ trait ApplicativeMacrosImpl
     val ApplicativeFType: Type[cats.Applicative[F]] = Type.CtorK1.of[cats.Applicative].apply[F](using FCtor0)
     val macroName = "Applicative.derived"
     enforceDerivationPolicyOrAbort(ApplicativeFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, cats.Applicative[F]](WrappedTC.Applicative, "Applicative.derived")(using
+        ApplicativeFType,
+        FCtor0
+      )
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val ApplicativeFT: Type[cats.Applicative[F]] = ApplicativeFType

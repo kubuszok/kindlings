@@ -61,6 +61,26 @@ object CtKindlingsSide extends CtInstances {
   val applyTriple: Apply[CtTriple] = Apply.derived[CtTriple]
   val applicativeTriple: Applicative[CtTriple] = Applicative.derived[CtTriple]
   val pureTriple: Pure[CtTriple] = Pure.derived[CtTriple]
+  // A field wrapping the type parameter in another derived case class needs that class's instance in scope (kittens
+  // derives it) - documented in feature-parity.md.
+  implicit private val nonEmptyTraverseNelInScope: NonEmptyTraverse[CtNel] = NonEmptyTraverse.derived[CtNel]
+  val reducibleNel: Reducible[CtNel] = Reducible.derived[CtNel]
+  val reducibleNelPlus: Reducible[CtNelPlus] = Reducible.derived[CtNelPlus]
+  val reducibleRose: Reducible[CtRose] = Reducible.derived[CtRose]
+  val reducibleDeep: Reducible[CtDeep] = Reducible.derived[CtDeep]
+  val nonEmptyTraverseNel: NonEmptyTraverse[CtNel] = nonEmptyTraverseNelInScope
+  val nonEmptyTraverseNelPlus: NonEmptyTraverse[CtNelPlus] = NonEmptyTraverse.derived[CtNelPlus]
+  val nonEmptyTraverseRose: NonEmptyTraverse[CtRose] = NonEmptyTraverse.derived[CtRose]
+  val nonEmptyTraverseDeep: NonEmptyTraverse[CtDeep] = NonEmptyTraverse.derived[CtDeep]
+  val applyProd: Apply[CtProd] = Apply.derived[CtProd]
+  val applyWrapPair: Apply[CtWrapPair] = Apply.derived[CtWrapPair]
+  val applyDeep: Apply[CtDeep] = Apply.derived[CtDeep]
+  val applicativeProd: Applicative[CtProd] = Applicative.derived[CtProd]
+  val applicativeWrapPair: Applicative[CtWrapPair] = Applicative.derived[CtWrapPair]
+  val applicativeDeep: Applicative[CtDeep] = Applicative.derived[CtDeep]
+  val pureProd: Pure[CtProd] = Pure.derived[CtProd]
+  val pureWrapPair: Pure[CtWrapPair] = Pure.derived[CtWrapPair]
+  val pureDeep: Pure[CtDeep] = Pure.derived[CtDeep]
   val contravariantPred: Contravariant[CtPred] = Contravariant.derived[CtPred]
   val invariantCodec: Invariant[CtCodec] = Invariant.derived[CtCodec]
   val semigroupKLists: SemigroupK[CtLists] = SemigroupK.derived[CtLists]
@@ -113,17 +133,22 @@ object CtKittensSide extends CtInstances with CtKittensVersionSpecific {
   val applyTriple: Apply[CtTriple] = semiauto.apply[CtTriple]
   val applicativeTriple: Applicative[CtTriple] = semiauto.applicative[CtTriple]
   val pureTriple: Pure[CtTriple] = semiauto.pure[CtTriple]
+  val reducibleNel: Reducible[CtNel] = semiauto.reducible[CtNel]
+  val reducibleNelPlus: Reducible[CtNelPlus] = semiauto.reducible[CtNelPlus]
+  val reducibleDeep: Reducible[CtDeep] = semiauto.reducible[CtDeep]
+  val nonEmptyTraverseNel: NonEmptyTraverse[CtNel] = semiauto.nonEmptyTraverse[CtNel]
+  val nonEmptyTraverseNelPlus: NonEmptyTraverse[CtNelPlus] = semiauto.nonEmptyTraverse[CtNelPlus]
+  val nonEmptyTraverseDeep: NonEmptyTraverse[CtDeep] = semiauto.nonEmptyTraverse[CtDeep]
+  val applyProd: Apply[CtProd] = semiauto.apply[CtProd]
+  val applyWrapPair: Apply[CtWrapPair] = semiauto.apply[CtWrapPair]
+  val applyDeep: Apply[CtDeep] = semiauto.apply[CtDeep]
+  val applicativeProd: Applicative[CtProd] = semiauto.applicative[CtProd]
+  val applicativeWrapPair: Applicative[CtWrapPair] = semiauto.applicative[CtWrapPair]
+  val applicativeDeep: Applicative[CtDeep] = semiauto.applicative[CtDeep]
+  val pureProd: Pure[CtProd] = semiauto.pure[CtProd]
+  val pureWrapPair: Pure[CtWrapPair] = semiauto.pure[CtWrapPair]
+  val pureDeep: Pure[CtDeep] = semiauto.pure[CtDeep]
 
-  /** The shapes Kindlings does not support yet (see the "documented gaps" test). */
-  val nelGaps: List[Any] = List(
-    semiauto.reducible[CtNel],
-    semiauto.reducible[CtNelPlus],
-    semiauto.nonEmptyTraverse[CtNel],
-    semiauto.nonEmptyTraverse[CtNelPlus],
-    semiauto.apply[CtProd],
-    semiauto.applicative[CtProd],
-    semiauto.pure[CtProd]
-  )
   val semigroupKLists: SemigroupK[CtLists] = semiauto.semigroupK[CtLists]
   val monoidKLists: MonoidK[CtLists] = semiauto.monoidK[CtLists]
   val emptyKLists: EmptyK[CtLists] = WithAlleycatsStd.emptyKLists

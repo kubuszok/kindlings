@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * method-level type parameters inside Expr.quote/Expr.splice. All type-parameter-dependent fields are filled with the
   * provided value. Invariant fields cause a derivation error.
   */
-trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with WrappedFieldsSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -23,6 +23,9 @@ trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSuppo
     val PureFType: Type[alleycats.Pure[F]] = Type.CtorK1.of[alleycats.Pure].apply[F](using FCtor0)
     val macroName = "Pure.derived"
     enforceDerivationPolicyOrAbort(PureFType.prettyPrint)
+    // Fields wrapping the type parameter (`List[A]`, `Option[F[A]]`, ...): built field by field, like kittens.
+    if (hasWrappedFields[F](using FCtor0))
+      return runWrappedFieldsDerivation[F, alleycats.Pure[F]](WrappedTC.Pure, "Pure.derived")(using PureFType, FCtor0)
 
     implicit val FCtor: Type.Ctor1[F] = FCtor0
     implicit val PureFT: Type[alleycats.Pure[F]] = PureFType

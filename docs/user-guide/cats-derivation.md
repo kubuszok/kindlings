@@ -83,9 +83,19 @@ Derived for case classes and sealed traits.
 
 Derived for type constructors (case classes with one type parameter, and sealed traits where noted in
 [feature parity](feature-parity.md#cats-derivation)). Fields may be the type parameter itself, constant, or wrapped in
-other type constructors: `G[A]` for Functor, Foldable, Traverse, SemigroupK, MonoidK and EmptyK (using `G`'s instance),
-and also deeper nestings such as `List[Option[A]]` for Functor, Foldable and Traverse (composed instances). Apply,
-Applicative, Pure, Reducible, NonEmptyTraverse, NonEmptyAlternative and Alternative do not support wrapped fields yet.
+other type constructors: `G[A]` (using `G`'s instance), deeper nestings such as `List[Option[A]]` (composed instances)
+and, for recursive types, fields mentioning the type itself (`children: List[Tree[A]]`). Like kittens:
+
+- Apply / Applicative / Pure need `Apply` / `Applicative` / `Pure` for every wrapping type, and combine constant fields
+  with their `Semigroup` / `Monoid` / `Empty`;
+- Reducible / NonEmptyTraverse need `Foldable` / `Traverse` for every wrapping type and at least one field that is never
+  empty (the type parameter itself, or wrapped in a `Reducible` / `NonEmptyTraverse` type), so `Nel[A](head: A, tail:
+  List[A])` works;
+- NonEmptyAlternative / Alternative need every field to wrap the type parameter in a `NonEmptyAlternative` /
+  `Alternative` type (`G[H[A]]` needs `H: Applicative`);
+- SemigroupK / MonoidK / EmptyK use `G`'s instance for `G[A]` fields.
+
+A wrapping type constructor that is itself a case class to derive (e.g. `middle: Nel[A]`) needs its instance in scope.
 
 | Type class | Package |
 |-----------|---------|
