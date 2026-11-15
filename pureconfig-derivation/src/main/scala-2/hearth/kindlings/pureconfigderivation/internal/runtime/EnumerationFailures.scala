@@ -4,8 +4,8 @@ import pureconfig.ConfigCursor
 import pureconfig.error.ConfigReaderFailures
 import pureconfig.generic.error.NoValidCoproductOptionFound
 
-/** The failure upstream pureconfig reports for a string that names no case object of an enumeration (a sealed family
-  * of case objects read as strings). It differs between Scala versions: on Scala 2 (`pureconfig-generic`'s
+/** The failure upstream pureconfig reports for a string that names no case object of an enumeration (a sealed family of
+  * case objects read as strings). It differs between Scala versions: on Scala 2 (`pureconfig-generic`'s
   * `deriveEnumerationReader`) it is `NoValidCoproductOptionFound` with no option failures.
   */
 object EnumerationFailures {

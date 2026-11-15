@@ -50,9 +50,14 @@ final class PureConfigOracleSpec extends MacroSuite {
       val k = show(kindlings.from(cur))
       val u = show(upstream.from(cur))
       if (k == u) Nil
-      else List(s"${cur.valueOpt.fold("<undefined>")(_.render(ConfigRenderOptions.concise()))}: kindlings=$k upstream=$u")
+      else
+        List(s"${cur.valueOpt.fold("<undefined>")(_.render(ConfigRenderOptions.concise()))}: kindlings=$k upstream=$u")
     }
-    assertEquals(differences, expectedDifferences.toList, s"Kindlings vs pureconfig reads:\n${differences.mkString("\n")}")
+    assertEquals(
+      differences,
+      expectedDifferences.toList,
+      s"Kindlings vs pureconfig reads:\n${differences.mkString("\n")}"
+    )
   }
 
   /** Every input with every result each library produced, for assertions on the results themselves. */
@@ -75,7 +80,11 @@ final class PureConfigOracleSpec extends MacroSuite {
     val differences = values.toList.flatMap { a =>
       Oracle.diff(write(kindlings, a), write(upstream, a)).map(d => s"$a: $d")
     }
-    assertEquals(differences, expectedDifferences.toList, s"Kindlings vs pureconfig writes:\n${differences.mkString("\n")}")
+    assertEquals(
+      differences,
+      expectedDifferences.toList,
+      s"Kindlings vs pureconfig writes:\n${differences.mkString("\n")}"
+    )
   }
 
   // --- derivations ---------------------------------------------------------------------------------------------------
