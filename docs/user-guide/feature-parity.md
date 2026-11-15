@@ -1107,7 +1107,9 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 |---|---|---|---|
 | Field name transforms (snake/kebab/pascal/screaming) | No | Yes | Improvement |
 | Constructor name transforms | No | Yes | Improvement |
-| Discriminator config | No | Yes | Improvement |
+| Discriminator config | No | Yes (`withDiscriminator`) | Improvement |
+| Single-key wrapper for subtypes | No | Yes (`withWrappedSubtypes`) | Improvement |
+| Constructor defaults for absent fields | Always | On by default (`withoutUseDefaults` turns them off) | Parity |
 | `enumAsStrings` | No (buggy for enums) | Yes | Improvement |
 
 ### Type classes
@@ -1129,29 +1131,32 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
-| Sealed trait handling | No discriminator: ordinal-based encode that drops type info + brute-force try-each decode (ambiguous, O(n), #363) | Discriminator-based | Improvement |
+| Sealed trait handling | Untagged: encoded without type info, decoded by trying each subtype in order (ambiguous for overlapping subtypes, #363) | The same by default; opt-in `withWrappedSubtypes` / `withDiscriminator` keep the type | Parity (default) / Improvement (opt-in) |
 | Enum support | Buggy ([#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Works | Improvement |
 | Option encoding | Buggy (documented) | Works | Improvement |
 | Recursive types | Undocumented | Yes | Improvement |
 | Value classes | Not documented | Automatic unwrapping | Improvement |
 | Java enums | No (Mirror-based derivation cannot) | Yes | Improvement |
 | Scala 3 named tuples | No | Yes | Improvement |
+| `Map[K, V]` | No special-casing | Yes (via Hearth `IsMap`) | Improvement |
 
 ### Checked against upstream (oracle)
 
 `upstream-oracle-tests` (`scala-3/YamlOracleSpec`, Scala 3 only, as scala-yaml's derivation) derives the same fixtures
 with Kindlings (default `YamlConfig`) and with scala-yaml's `YamlCodec.derived`, and compares the encoded YAML nodes
 (values and tags) and the decoded values of valid and invalid inputs, including failure messages. Products, `Option`
-fields (an absent one is `None`), primitives, collections, maps and nested case classes have no differences. The
-expected differences are the two defaults below.
+fields (an absent one is `None`), constructor defaults, primitives, collections, maps, nested case classes, sealed traits
+(untagged, overlapping subtypes and case objects attempted in declaration order) and Scala 3 enums have **no
+differences**. The suite also checks that the opt-ins differ as intended:
 
-### Default value differences
+| Opt-in | scala-yaml | Kindlings |
+|---|---|---|
+| `withoutUseDefaults` | Absent field with a constructor default uses it | Fails (`Key x doesn't exist in parsed document`) |
+| `withWrappedSubtypes` | Subtype written untagged; decoding tries every subtype | Single-key mapping `{ Subtype: { ... } }` |
+| `withDiscriminator(field)` | (as above) | The subtype's name in `field` |
 
-| Behaviour | scala-yaml | Kindlings default | Kindlings opt-in |
-|---|---|---|---|
-| Absent field with a constructor default | Always uses the default | Fails (`Key x doesn't exist in parsed document`) | `withUseDefaults` (same as scala-yaml; an absent `Option` field with a default then decodes to the default, scala-yaml gives `None`) |
-| Sealed traits | Subtype written without type information; decoding tries every subtype (first success) | Single-key mapping `{ Subtype: { ... } }` | `withDiscriminator(field)` (no option reproduces scala-yaml's untagged encoding) |
-| `Map[K, V]` | No special-casing | Yes (via Hearth `IsMap`) | Improvement |
+Kindlings additions without a scala-yaml counterpart: union types are always wrapped; Java enum / `scala.Enumeration`
+values are written as their names.
 
 ### Cross-compilation
 
@@ -1165,7 +1170,7 @@ expected differences are the two defaults below.
 
 | Feature | scala-yaml | Kindlings | Status |
 |---|---|---|---|
-| `useDefaults` | Always on, not configurable (compile-time macro reflection) | Configurable, compile-time | Improvement |
+| `useDefaults` | Always on, not configurable (compile-time macro reflection) | On by default, configurable (`withoutUseDefaults`), compile-time | Improvement |
 
 ---
 

@@ -20,11 +20,13 @@ final class YamlScala3Spec extends MacroSuite {
     group("encoding") {
 
       test("enum variant with fields (wrapper-style)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Apple(1.5))
         node ==> mappingOf("Apple" -> mappingOf("weight" -> scalarNode(doubleStr(1.5))))
       }
 
       test("second enum variant (wrapper-style)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Banana(20.0))
         node ==> mappingOf("Banana" -> mappingOf("length" -> scalarNode(doubleStr(20.0))))
       }
@@ -48,7 +50,7 @@ final class YamlScala3Spec extends MacroSuite {
 
       test("enum with custom constructor name transform") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = KindlingsYamlEncoder.encode[Fruit](Fruit.Apple(1.5))
         node ==> mappingOf("apple" -> mappingOf("weight" -> scalarNode(doubleStr(1.5))))
       }
@@ -57,11 +59,13 @@ final class YamlScala3Spec extends MacroSuite {
     group("decoding") {
 
       test("enum variant with fields (wrapper-style)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("Banana" -> mappingOf("length" -> scalarNode("20.0")))
         KindlingsYamlDecoder.decode[Fruit](node) ==> Right(Fruit.Banana(20.0))
       }
 
       test("second enum variant (wrapper-style)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("Apple" -> mappingOf("weight" -> scalarNode("1.5")))
         KindlingsYamlDecoder.decode[Fruit](node) ==> Right(Fruit.Apple(1.5))
       }
@@ -77,7 +81,7 @@ final class YamlScala3Spec extends MacroSuite {
 
       test("enum with custom constructor name transform") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = mappingOf("banana" -> mappingOf("length" -> scalarNode("20.0")))
         KindlingsYamlDecoder.decode[Fruit](node) ==> Right(Fruit.Banana(20.0))
       }
@@ -277,7 +281,7 @@ final class YamlScala3Spec extends MacroSuite {
 
       test("constructor name transforms are applied") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = KindlingsYamlEncoder.encode[Shape](Circle(5.0))
         node ==> mappingOf("circle" -> mappingOf("radius" -> scalarNode(doubleStr(5.0))))
       }
@@ -299,7 +303,7 @@ final class YamlScala3Spec extends MacroSuite {
 
       test("constructor name transforms are applied") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = mappingOf("circle" -> mappingOf("radius" -> scalarNode("5.0")))
         KindlingsYamlDecoder.decode[Shape](node) ==> Right(Circle(5.0): Shape)
       }

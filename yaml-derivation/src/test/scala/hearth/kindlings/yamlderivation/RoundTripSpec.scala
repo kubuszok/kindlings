@@ -230,6 +230,7 @@ final class RoundTripSpec extends MacroSuite {
     group("mixed sealed traits") {
 
       test("mixed sealed trait case class round-trip") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val value: MixedPet = Budgie("Polly", true)
         val node = KindlingsYamlEncoder.encode(value)
         val decoded = KindlingsYamlDecoder.decode[MixedPet](node)

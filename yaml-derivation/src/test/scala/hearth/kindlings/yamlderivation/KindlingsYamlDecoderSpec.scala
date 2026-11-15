@@ -123,12 +123,14 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
     group("sealed traits") {
 
-      test("wrapper-style decoding (default)") {
+      test("wrapper-style decoding (withWrappedSubtypes)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("Circle" -> mappingOf("radius" -> scalarNode("5.0")))
         KindlingsYamlDecoder.decode[Shape](node) ==> Right(Circle(5.0): Shape)
       }
 
       test("wrapper-style decoding for second case") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf(
           "Rectangle" -> mappingOf(
             "width" -> scalarNode("3.0"),
@@ -149,6 +151,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
 
       test("unknown discriminator produces error") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("Unknown" -> mappingOf())
         val Left(error) = KindlingsYamlDecoder.decode[Shape](node): @unchecked
         assert(error.getMessage.contains("Unknown type discriminator: Unknown"))
@@ -228,7 +231,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
 
       test("custom constructor name transform") {
         implicit val config: YamlConfig =
-          YamlConfig(transformConstructorNames = _.toLowerCase)
+          YamlConfig(transformConstructorNames = _.toLowerCase, wrappedSubtypes = true)
         val node = mappingOf("circle" -> mappingOf("radius" -> scalarNode("5.0")))
         KindlingsYamlDecoder.decode[Shape](node) ==> Right(Circle(5.0): Shape)
       }
@@ -547,6 +550,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
 
       test("without useDefaults, missing defaulted field is an error") {
+        implicit val config: YamlConfig = YamlConfig.default.withoutUseDefaults
         val node = mappingOf("name" -> scalarNode("Alice"))
         val Left(error) = KindlingsYamlDecoder.decode[WithDefaults](node): @unchecked
         assert(error.getMessage.contains("Key age doesn't exist in parsed document"))
@@ -629,6 +633,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
     group("mixed sealed traits (case objects + case classes)") {
 
       test("decode case class child of mixed sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("Budgie" -> mappingOf("name" -> scalarNode("Polly"), "canTalk" -> scalarNode("true")))
         KindlingsYamlDecoder.decode[MixedPet](node) ==> Right(Budgie("Polly", true): MixedPet)
       }
@@ -660,6 +665,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
 
       test("decode direct child of base sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("YamlBicycle" -> mappingOf("gears" -> scalarNode("21")))
         KindlingsYamlDecoder.decode[YamlVehicle](node) ==> Right(YamlBicycle(21): YamlVehicle)
       }
@@ -668,11 +674,13 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
     group("@transientField on sealed trait subtype fields") {
 
       test("@transientField uses default value when decoding sealed trait subtype (CombTransientA)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("CombTransientA" -> mappingOf("name" -> scalarNode("Alice")))
         KindlingsYamlDecoder.decode[CombTransientST](node) ==> Right(CombTransientA("Alice", ""): CombTransientST)
       }
 
       test("@transientField uses default value when decoding sealed trait subtype (CombTransientB)") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf("CombTransientB" -> mappingOf("value" -> scalarNode("42")))
         KindlingsYamlDecoder.decode[CombTransientST](node) ==> Right(CombTransientB(42, None): CombTransientST)
       }
@@ -681,6 +689,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
     group("collection of sealed traits") {
 
       test("decode List[Shape]") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = seqOf(
           mappingOf("Circle" -> mappingOf("radius" -> scalarNode("5.0"))),
           mappingOf("Rectangle" -> mappingOf("width" -> scalarNode("3.0"), "height" -> scalarNode("4.0")))
@@ -691,6 +700,7 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
       }
 
       test("decode ShapeCollection with embedded list of sealed trait") {
+        implicit val config: YamlConfig = YamlConfig.default.withWrappedSubtypes
         val node = mappingOf(
           "shapes" -> seqOf(
             mappingOf("Circle" -> mappingOf("radius" -> scalarNode("1.0"))),

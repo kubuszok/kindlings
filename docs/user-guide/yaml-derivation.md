@@ -100,8 +100,13 @@ import hearth.kindlings.yamlderivation._
 implicit val config: YamlConfig = YamlConfig.default
   .withSnakeCaseMemberNames
   .withDiscriminator("type")
-  .withUseDefaults
 ```
+
+The defaults match scala-yaml's own derivation (`derives YamlCodec`): absent fields with a constructor default use it,
+and the subtypes of sealed traits / enums are written **untagged** (a case class as its fields, a case object as `{}`)
+and decoded by trying every subtype in declaration order (the first that decodes wins; when none does, the failure is
+scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are always wrapped, and Java enum /
+`scala.Enumeration` values are written as their names.
 
 | Builder method | Description |
 |---------------|-------------|
@@ -115,7 +120,12 @@ implicit val config: YamlConfig = YamlConfig.default
 | `withTransformConstructorNames(f)` | Custom constructor name transform |
 | `withDiscriminator(field)` | ADT discriminator field name |
 | `withEnumAsStrings` | Encode Scala 3 / Java enums as strings |
-| `withUseDefaults` | Use case class default values for missing fields |
+| `withWrappedSubtypes` | Without a discriminator, wrap each subtype in a single-key mapping `{ Circle: { radius: 1.0 } }` (Kindlings 0.3.x's default) |
+| `withUntaggedSubtypes` | Untagged subtypes, decoded by trying each one (the default, as scala-yaml) |
+| `withUseDefaults` | Use case class default values for missing fields (the default, as scala-yaml) |
+| `withoutUseDefaults` | Missing fields fail even when they have a default (Kindlings 0.3.x's default) |
+
+`YamlConfig.kindlings03Defaults` restores both defaults of Kindlings 0.3.x (`withoutUseDefaults.withWrappedSubtypes`).
 
 ## Annotations
 
@@ -173,8 +183,7 @@ case class User(
 
     import hearth.kindlings.yamlderivation._
 
-    implicit val config: YamlConfig = YamlConfig.default.withUseDefaults
-
+    // constructor defaults fill in absent fields by default, as in scala-yaml (`withoutUseDefaults` turns it off)
     case class Settings(host: String, port: Int = 8080, debug: Boolean = false)
 
     val result = KindlingsYamlDecoder.fromYamlString[Settings]("host: localhost")
@@ -227,10 +236,10 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Feature | scala-yaml `derives` | Kindlings |
 |---------|---------------------|-----------|
 | Same API on Scala 2.13 and 3 | No (Scala 3 only) | Yes |
-| Sealed trait / ADT support | Yes, but no discriminator (ordinal encode drops type info, brute-force decode — [#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Yes (discriminator-based) |
+| Sealed trait / ADT support | Untagged: the subtype's value without type information, decoded by trying each subtype ([#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | The same by default; opt-in single-key wrapper (`withWrappedSubtypes`) or discriminator (`withDiscriminator`) |
 | Configuration (naming, discriminator) | No | Yes (`YamlConfig`) |
 | Field name annotations | No | Yes (`@fieldName`) |
-| Default values | Always on, not configurable | Configurable (`withUseDefaults`, off by default) |
+| Default values | Always on, not configurable | On by default, as scala-yaml; `withoutUseDefaults` turns them off |
 | Absent `Option` field | `None` | `None` |
 | Failure messages of derived products | `Key x doesn't exist in parsed document`, `Expected MappingNode, got ...` | Same |
 | Enum handling | Broken in some cases | Correct |

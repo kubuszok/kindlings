@@ -1,11 +1,28 @@
 package hearth.kindlings.yamlderivation
 
+/** Derivation configuration.
+  *
+  * The defaults match scala-yaml's own derivation (`derives YamlCodec`): constructor defaults fill in absent fields,
+  * and the subtypes of sealed traits / enums are written without type information and decoded by trying every subtype
+  * in turn (the first that decodes wins).
+  *
+  * @param discriminator
+  *   write the subtype's name in this field of its mapping (instead of scala-yaml's untagged encoding)
+  * @param enumAsStrings
+  *   write the cases of an enum (a sealed family of case objects) as their names
+  * @param useDefaults
+  *   use constructor defaults for absent fields (default: on, as scala-yaml; [[withoutUseDefaults]] turns it off)
+  * @param wrappedSubtypes
+  *   without a discriminator, wrap each subtype in a single-key mapping `{ SubtypeName: ... }` (instead of scala-yaml's
+  *   untagged encoding); the behaviour of Kindlings 0.3.x
+  */
 final case class YamlConfig(
     transformMemberNames: String => String = identity,
     transformConstructorNames: String => String = identity,
     discriminator: Option[String] = None,
     enumAsStrings: Boolean = false,
-    useDefaults: Boolean = false
+    useDefaults: Boolean = true,
+    wrappedSubtypes: Boolean = false
 ) {
 
   def withTransformMemberNames(f: String => String): YamlConfig = copy(transformMemberNames = f)
@@ -19,11 +36,95 @@ final case class YamlConfig(
   def withKebabCaseConstructorNames: YamlConfig = copy(transformConstructorNames = YamlConfig.kebabCase)
   def withDiscriminator(field: String): YamlConfig = copy(discriminator = Some(field))
   def withEnumAsStrings: YamlConfig = copy(enumAsStrings = true)
+
+  /** Use constructor defaults for absent fields (the default, as scala-yaml). */
   def withUseDefaults: YamlConfig = copy(useDefaults = true)
+
+  /** Absent fields fail even when they have a constructor default (Kindlings 0.3.x's default). */
+  def withoutUseDefaults: YamlConfig = copy(useDefaults = false)
+
+  /** Without a discriminator, wrap each subtype in a single-key mapping `{ SubtypeName: ... }` (Kindlings 0.3.x's
+    * default).
+    */
+  def withWrappedSubtypes: YamlConfig = copy(wrappedSubtypes = true)
+
+  /** Without a discriminator, write subtypes untagged and decode by trying each subtype (the default, as scala-yaml).
+    */
+  def withUntaggedSubtypes: YamlConfig = copy(wrappedSubtypes = false)
+
+  // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
+  // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
+  def copy(
+      transformMemberNames: String => String = this.transformMemberNames,
+      transformConstructorNames: String => String = this.transformConstructorNames,
+      discriminator: Option[String] = this.discriminator,
+      enumAsStrings: Boolean = this.enumAsStrings,
+      useDefaults: Boolean = this.useDefaults,
+      wrappedSubtypes: Boolean = this.wrappedSubtypes
+  ): YamlConfig = new YamlConfig(
+    transformMemberNames,
+    transformConstructorNames,
+    discriminator,
+    enumAsStrings,
+    useDefaults,
+    wrappedSubtypes
+  )
+
+  /** The `copy` of Kindlings 0.3.x (`wrappedSubtypes` is kept). */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
+    "0.3.5"
+  )
+  def copy(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      discriminator: Option[String],
+      enumAsStrings: Boolean,
+      useDefaults: Boolean
+  ): YamlConfig = new YamlConfig(
+    transformMemberNames,
+    transformConstructorNames,
+    discriminator,
+    enumAsStrings,
+    useDefaults,
+    wrappedSubtypes
+  )
+
+  /** The constructor of Kindlings 0.3.x: without a discriminator, its subtypes were wrapped. */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use the primary constructor",
+    "0.3.5"
+  )
+  def this(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      discriminator: Option[String],
+      enumAsStrings: Boolean,
+      useDefaults: Boolean
+  ) = this(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true)
 }
 object YamlConfig {
 
   implicit val default: YamlConfig = YamlConfig()
+
+  /** The defaults of Kindlings 0.3.x: no constructor defaults for absent fields, subtypes wrapped in a single-key
+    * mapping.
+    */
+  def kindlings03Defaults: YamlConfig = YamlConfig(useDefaults = false, wrappedSubtypes = true)
+
+  /** The `apply` of Kindlings 0.3.x: without a discriminator, its subtypes were wrapped. */
+  @deprecated(
+    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use apply with named arguments",
+    "0.3.5"
+  )
+  def apply(
+      transformMemberNames: String => String,
+      transformConstructorNames: String => String,
+      discriminator: Option[String],
+      enumAsStrings: Boolean,
+      useDefaults: Boolean
+  ): YamlConfig =
+    new YamlConfig(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true)
 
   private[yamlderivation] val snakeCase: String => String = { s =>
     val sb = new StringBuilder
