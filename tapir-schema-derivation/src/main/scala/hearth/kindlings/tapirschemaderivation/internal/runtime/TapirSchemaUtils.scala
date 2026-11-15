@@ -179,27 +179,30 @@ object TapirSchemaUtils {
               validator = Validator.pass
             )
           } else {
-            val withDiscField = childSchema.schemaType match {
+            // As tapir's `SCoproduct.addDiscriminatorField`: the discriminator is appended to the subtype's fields
+            // (unless already there), and the field's schema carries the value (rendered as `const`).
+            childSchema.schemaType match {
               case p: SchemaType.SProduct[Any @unchecked] =>
-                val alreadyHasField = p.fields.exists(_.name.encodedName == discFieldName)
-                if (alreadyHasField) childSchema
-                else {
-                  val discFieldSchema = Schema.string.copy(
-                    validator = Validator.enumeration(List(resolvedName), (v: String) => Some(v))
-                  )
-                  val discField = SchemaType.SProductField[Any, String](
-                    FieldName(discFieldName, discFieldName),
-                    discFieldSchema,
-                    _ => Some(resolvedName)
-                  )
-                  childSchema.copy(schemaType = p.copy(fields = discField :: p.fields))
+                val withField =
+                  if (p.fields.exists(_.name.encodedName == discFieldName)) p.fields
+                  else
+                    p.fields :+ SchemaType.SProductField[Any, String](
+                      FieldName(discFieldName, discFieldName),
+                      Schema.string,
+                      _ => Some(resolvedName)
+                    )
+                val fields = withField.map { field =>
+                  if (field.name.encodedName != discFieldName) field
+                  else
+                    SchemaType.SProductField[Any, field.FieldType](
+                      field.name,
+                      field.schema.encodedDiscriminatorValue(resolvedName),
+                      field.get
+                    )
                 }
+                childSchema.copy(schemaType = p.copy(fields = fields))
               case _ => childSchema
             }
-            withDiscField.attribute(
-              Schema.EncodedDiscriminatorValue.Attribute,
-              Schema.EncodedDiscriminatorValue(resolvedName)
-            )
           }
         }
       case None =>
@@ -355,6 +358,10 @@ object TapirSchemaUtils {
       isOptional = true
     )
 
+  /** Wrap a value schema as a Map[String, V], named like tapir's `Schema.schemaForMap` (`Map_V`). */
+  def mapSchema[V](valueSchema: Schema[V], name: SName): Schema[Any] =
+    mapSchema[V](valueSchema).copy(name = Some(name))
+
   /** Wrap a value schema as a Map[K, V], whose keys are converted to Strings with `keyToString` (e.g. unwrapping a
     * value type/opaque type key).
     */
@@ -366,6 +373,10 @@ object TapirSchemaUtils {
       ),
       isOptional = true
     )
+
+  /** As `mapSchemaWithKeys`, named like tapir's `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`). */
+  def mapSchemaWithKeys[K, V](valueSchema: Schema[V], keyToString: K => String, name: SName): Schema[Any] =
+    mapSchemaWithKeys[K, V](valueSchema, keyToString).copy(name = Some(name))
 
   /** Wrap a value schema as a Map encoded as array of key-value pair objects (for jsoniter mapAsArray). */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
@@ -417,7 +428,8 @@ object TapirSchemaUtils {
     */
   def parseSName(fullTypeName: String): SName = {
     val bracketIdx = fullTypeName.indexOf('[')
-    if (bracketIdx < 0) SName(fullTypeName)
+    // A singleton's type prints as `pkg.Obj.type`; tapir names it `pkg.Obj` (otherwise its short name would be `type`).
+    if (bracketIdx < 0) SName(fullTypeName.stripSuffix(".type"))
     else {
       val baseName = fullTypeName.substring(0, bracketIdx)
       val typeParamsStr = fullTypeName.substring(bracketIdx + 1, fullTypeName.length - 1)

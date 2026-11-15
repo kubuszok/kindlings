@@ -110,7 +110,17 @@ object SchemaConformance {
           case Some(d) =>
             json.asObject.flatMap(_(d.name.encodedName)).flatMap(_.asString) match {
               case Some(v) =>
-                Right(c.subtypes.filter(_.attribute(Schema.EncodedDiscriminatorValue.Attribute).exists(_.v == v)))
+                // As tapir: the discriminator field of each subtype carries its value; the mapping names the subtype.
+                def fieldValue(s: Schema[?]): Option[String] = s.schemaType match {
+                  case p: SchemaType.SProduct[?] =>
+                    p.fields
+                      .find(_.name.encodedName == d.name.encodedName)
+                      .flatMap(_.schema.attribute(Schema.EncodedDiscriminatorValue.Attribute))
+                      .map(_.v)
+                  case _ => None
+                }
+                val mapped = d.mapping.get(v).map(_.name)
+                Right(c.subtypes.filter(s => fieldValue(s).contains(v) || (mapped.isDefined && s.name == mapped)))
               case None => Left(fail(s"an object with a '${d.name.encodedName}' discriminator"))
             }
           case None => Right(c.subtypes)

@@ -6,6 +6,7 @@ import hearth.fp.effect.*
 import hearth.std.*
 
 import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
+import hearth.kindlings.tapirschemaderivation.internal.runtime.TapirSchemaUtils
 import sttp.tapir.Schema
 
 trait SchemaHandleAsValueTypeRuleImpl {
@@ -27,7 +28,18 @@ trait SchemaHandleAsValueTypeRuleImpl {
             val unwrapped: MIO[Expr[Schema[A]]] =
               Log.info(s"Deriving Schema for value type ${Type[A].prettyPrint} as ${Type[Inner].prettyPrint}") >>
                 deriveSchemaRecursively[Inner](using sctx.nest[Inner]).map { innerSchema =>
-                  Expr.quote(Expr.splice(innerSchema).asInstanceOf[Schema[A]])
+                  // A value type wrapping a collection or map is coded as that collection, but the decoders do not fill
+                  // it in when the field is absent (the wrapper has no empty value), so unlike the collection it is
+                  // required.
+                  if (collectionCanBeEmpty[Inner].isDefined) {
+                    @scala.annotation.nowarn("msg=is never used")
+                    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+                    Expr.quote(
+                      TapirSchemaUtils
+                        .setFieldOptional(Expr.splice(innerSchema).asInstanceOf[Schema[Any]], false)
+                        .asInstanceOf[Schema[A]]
+                    )
+                  } else Expr.quote(Expr.splice(innerSchema).asInstanceOf[Schema[A]])
                 }
             // An `AnyVal` case class that the JSON library may code as an object (circe's `unwrapValueClasses = false`):
             // the unwrapped or the product schema, chosen at runtime (cached as a whole).

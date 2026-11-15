@@ -1145,7 +1145,7 @@ final class KindlingsSchemaSpec extends MacroSuite {
           val fieldNames = c.subtypes.map(_.schemaType).collect { case p: SchemaType.SProduct[?] =>
             p.fields.map(_.name.encodedName)
           }
-          assertEquals(fieldNames, List(List("CirceMixedIntId"), List("type", "x")))
+          assertEquals(fieldNames, List(List("CirceMixedIntId"), List("x", "type")))
           assertEquals(c.discriminator.map(_.mapping.keySet), Some(Set("CirceMixedObj")))
         case other => fail(s"Expected SCoproduct, got: $other")
       }
@@ -1164,17 +1164,18 @@ final class KindlingsSchemaSpec extends MacroSuite {
                   typeField.isDefined,
                   s"Child schema should have a 'type' field, fields: ${p.fields.map(_.name.encodedName)}"
                 )
-                // The discriminator field should have a single-value validator
-                assert(
-                  typeField.get.schema.validator != sttp.tapir.Validator.pass,
-                  "Discriminator field should have a validator"
+                // As tapir's addDiscriminatorField: appended last, its schema carries the encoded value
+                assertEquals(p.fields.last.name.encodedName, "type")
+                val discValue = typeField.get.schema.attribute(Schema.EncodedDiscriminatorValue.Attribute)
+                assert(discValue.isDefined, "Discriminator field should have the encodedDiscriminatorValue attribute")
+                assertEquals(
+                  c.discriminator.flatMap(_.mapping.get(discValue.get.v)).map(_.name),
+                  childSchema.name,
+                  "The discriminator mapping should point at the child with this value"
                 )
               case other =>
                 fail(s"Expected SProduct for child, got: $other")
             }
-            // Each child should have encodedDiscriminatorValue attribute
-            val discValue = childSchema.attributes.get(Schema.EncodedDiscriminatorValue.Attribute)
-            assert(discValue.isDefined, "Child schema should have encodedDiscriminatorValue attribute")
           }
         case other =>
           fail(s"Expected SCoproduct, got: $other")

@@ -33,7 +33,18 @@ trait SchemaHandleAsMapRuleImpl {
     ): MIO[Expr[Schema[A]]] = {
       import isMap.{Key, Value}
       implicit val stringT: Type[String] = TsTypes.StringType
+      implicit val sNameT: Type[sttp.tapir.Schema.SName] = TsTypes.SNameType
       val mapsAreArraysExpr: Expr[Boolean] = sctx.jsonCfg.mapsAreArrays
+      // Named like tapir's `Schema.schemaForMap`: `Map` with the key (unless a String) and the value as parameters.
+      val valueNameExpr = computeFullNameExpr[Value](sctx.derivedType)
+      val mapNameExpr: Expr[sttp.tapir.Schema.SName] =
+        if (Key <:< Type[String]) Expr.quote(TapirSchemaUtils.parseSName("Map[" + Expr.splice(valueNameExpr) + "]"))
+        else {
+          val keyNameExpr = computeFullNameExpr[Key](sctx.derivedType)
+          Expr.quote(
+            TapirSchemaUtils.parseSName("Map[" + Expr.splice(keyNameExpr) + "," + Expr.splice(valueNameExpr) + "]")
+          )
+        }
       if (Key <:< Type[String]) {
         Log.info(s"Deriving Schema for map value: ${Type[Value].prettyPrint}") >>
           deriveSchemaRecursively[Value](using sctx.nest[Value]).map { valueSchema =>
@@ -41,7 +52,9 @@ trait SchemaHandleAsMapRuleImpl {
               if (Expr.splice(mapsAreArraysExpr))
                 TapirSchemaUtils.mapAsArraySchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
               else
-                TapirSchemaUtils.mapSchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
+                TapirSchemaUtils
+                  .mapSchema[Value](Expr.splice(valueSchema), Expr.splice(mapNameExpr))
+                  .asInstanceOf[Schema[A]]
             }
           }
       } else
@@ -54,7 +67,11 @@ trait SchemaHandleAsMapRuleImpl {
                     TapirSchemaUtils.mapAsArraySchema[Value](Expr.splice(valueSchema)).asInstanceOf[Schema[A]]
                   else
                     TapirSchemaUtils
-                      .mapSchemaWithKeys[Key, Value](Expr.splice(valueSchema), Expr.splice(keyToStringExpr))
+                      .mapSchemaWithKeys[Key, Value](
+                        Expr.splice(valueSchema),
+                        Expr.splice(keyToStringExpr),
+                        Expr.splice(mapNameExpr)
+                      )
                       .asInstanceOf[Schema[A]]
                 }
               }

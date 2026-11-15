@@ -62,7 +62,9 @@ final class AbsentFieldSchemaSpec extends MacroSuite {
     "set",
     "listWithDefault",
     "opt",
-    "optWithDefault"
+    "optWithDefault",
+    "wrappedTags",
+    "wrappedTagsWithDefault"
   )
 
   group("jsoniter: schema optionality matches the decoder") {
@@ -82,7 +84,8 @@ final class AbsentFieldSchemaSpec extends MacroSuite {
   group("jsoniter: expected optional fields") {
 
     val always = Set("opt", "optWithDefault")
-    val defaults = Set("name", "size", "listWithDefault")
+    // a value type wrapping a collection is required (decoders do not fill it in), unless it has a default value
+    val defaults = Set("name", "size", "listWithDefault", "wrappedTagsWithDefault")
     val emptiableCollections = Set("tags", "counts", "vec", "set")
 
     test("default config: defaults, Options and collections (not String)") {
