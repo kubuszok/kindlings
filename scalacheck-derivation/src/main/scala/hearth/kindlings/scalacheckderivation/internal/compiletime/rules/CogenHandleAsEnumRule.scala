@@ -8,6 +8,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import org.scalacheck.Cogen
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait CogenHandleAsEnumRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -25,7 +26,7 @@ trait CogenHandleAsEnumRuleImpl { this: CogenMacrosImpl & MacroCommons & StdExte
     private def deriveEnumCogen[A: CogenCtx](enumData: Enum[A]): MIO[Expr[Cogen[A]]] = {
       implicit val CogenA: Type[Cogen[A]] = CogenTypes.Cogen[A]
 
-      val childrenList = enumData.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(CogenHandleAsEnumRuleImpl.this)(enumData)
 
       childrenList match {
         case Nil =>

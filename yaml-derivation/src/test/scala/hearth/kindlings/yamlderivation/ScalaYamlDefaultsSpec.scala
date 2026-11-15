@@ -45,9 +45,12 @@ final class ScalaYamlDefaultsSpec extends MacroSuite {
     }
 
     test("case objects decode from any mapping with scalar keys, as scala-yaml's empty products") {
-      KindlingsYamlDecoder.decode[CardinalDirection](mappingOf()) ==> Right(North: CardinalDirection)
-      KindlingsYamlDecoder.decode[CardinalDirection](mappingOf("any" -> ScalarNode("1"))) ==>
-        Right(North: CardinalDirection)
+      // The first subtype tried wins: in declaration order on Scala 3 (as scala-yaml), by name on Scala 2 (the same
+      // in every build: Scala 2 class files do not record the declaration order).
+      val isScala3 = scala.util.Try(Class.forName("scala.runtime.TupleXXL")).isSuccess
+      val first: CardinalDirection = if (isScala3) North else East
+      KindlingsYamlDecoder.decode[CardinalDirection](mappingOf()) ==> Right(first)
+      KindlingsYamlDecoder.decode[CardinalDirection](mappingOf("any" -> ScalarNode("1"))) ==> Right(first)
       val nonScalarKey: Node = MappingNode(Map((SequenceNode(ScalarNode("k")): Node) -> (ScalarNode("v"): Node)))
       assert(KindlingsYamlDecoder.decode[CardinalDirection](nonScalarKey).isLeft)
       assert(KindlingsYamlDecoder.decode[CardinalDirection](ScalarNode("North")).isLeft)

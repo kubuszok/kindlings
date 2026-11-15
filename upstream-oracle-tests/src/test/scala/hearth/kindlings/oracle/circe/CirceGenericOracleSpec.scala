@@ -115,7 +115,7 @@ final class CirceGenericOracleSpec extends MacroSuite {
     val u = new CiExtrasSide()(ExtrasConfiguration.default.withStrictDecoding.withDefaults)
     check(
       all("strict", k, extras(u), wrapperInputs),
-      wrapped ++ onScala2(strictWrapper) ++ onScala3(CiExpected.hearthChildrenOrder)
+      wrapped ++ onScala2(strictWrapper)
     )
   }
 

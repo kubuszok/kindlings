@@ -11,6 +11,7 @@ import hearth.kindlings.avroderivation.AvroConfig
 import hearth.kindlings.avroderivation.annotations.{avroEnumDefault, avroNamespace, avroSortPriority}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait AvroSchemaForHandleAsEnumRuleImpl {
   this: SchemaForMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -69,16 +70,11 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
           if (allCaseObjects) {
             // Pure enum of case objects → Avro ENUM schema
             // Sort by @avroSortPriority
-            // Sealed traits' case objects: on Scala 3 in declaration order (as avro4s 5); on Scala 2 by full name (as
-            // avro4s 4 - Magnolia sorts subtypes by name there - and because Scala 2 does not reliably preserve the
-            // declaration order: it is lost when the sealed trait comes from a class file, e.g. an incremental build).
+            // Sealed traits' case objects: on Scala 3 in declaration order (as avro4s 5, Mirror order); on Scala 2 in
+            // Hearth's `ChildrenOrder.ByName` (avro4s 4 sorts by full name - the same order for case objects declared
+            // in one scope), which keeps the order the same in every build (see `StableChildrenOrder`).
             val childrenInOrder =
-              if (Environment.isScala3 || Type[A].isEnumeration || Type[A].isJavaEnum) children.toList
-              else
-                children.toList.sortBy { case (_, child) =>
-                  import child.Underlying as ChildType
-                  Type[ChildType].plainPrint
-                }
+              StableChildrenOrder.inStableOrder(AvroSchemaForHandleAsEnumRuleImpl.this)(children.toList)
             val symbolsWithPriority = childrenInOrder.map { case (name, child) =>
               import child.Underlying as ChildType
               val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]

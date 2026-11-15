@@ -4,6 +4,7 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait OrderEnumRuleImpl {
   this: OrderMacrosImpl & MacroCommons & StdExtensions =>
@@ -49,12 +50,11 @@ trait OrderEnumRuleImpl {
         }
         ordinalOfY = ordinalFn(y)
         result <- {
-          var childOrdinal = 0
+          val ordinalOf = enumOrdinals[A](enumm)
           enumm
             .matchOn[MIO, Int](x) { matchedX =>
               import matchedX.{value as caseX, Underlying as EnumCase}
-              val currentOrdinal = childOrdinal
-              childOrdinal += 1
+              val currentOrdinal = ordinalOf(Type[EnumCase].as_??)
               SingletonValue.unapply(Type[EnumCase]) match {
                 case Some(sv) =>
                   // Singleton (parameterless enum case / case object): use reference equality
@@ -84,17 +84,32 @@ trait OrderEnumRuleImpl {
       } yield result
     }
 
+    /** The ordinal of each subtype: its position in the build-independent subtype order (declaration order on Scala 3,
+      * like kittens; by name on Scala 2, where kittens has no Order for several subtypes), not the order of the match
+      * cases.
+      */
+    private def enumOrdinals[A](enumm: Enum[A]): ?? => Int = {
+      val children = StableChildrenOrder.directChildren(OrderEnumRuleImpl.this)(enumm).map(_._2.Underlying.as_??)
+      (tpe: ??) => {
+        import tpe.Underlying as C
+        val index = children.indexWhere { child =>
+          import child.Underlying as D
+          Type[D] =:= Type[C]
+        }
+        if (index >= 0) index else children.indexWhere(child => Type[C] <:< child.Underlying)
+      }
+    }
+
     private def deriveEnumOrdinal[A: OrderCtx](
         enumm: Enum[A],
         a: Expr[A]
     ): MIO[Expr[Int]] = {
       implicit val IntType: Type[Int] = OrderTypes.Int
-      var childOrdinal = 0
+      val ordinalOf = enumOrdinals[A](enumm)
       enumm
-        .matchOn[MIO, Int](a) { _ =>
-          val ordinal = childOrdinal
-          childOrdinal += 1
-          MIO.pure(Expr(ordinal))
+        .matchOn[MIO, Int](a) { matched =>
+          import matched.Underlying as EnumCase
+          MIO.pure(Expr(ordinalOf(Type[EnumCase].as_??)))
         }
         .flatMap {
           case Some(result) => MIO.pure(result)

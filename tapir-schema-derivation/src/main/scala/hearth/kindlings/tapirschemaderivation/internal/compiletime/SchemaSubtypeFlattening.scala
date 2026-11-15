@@ -4,6 +4,7 @@ import hearth.MacroCommons
 import hearth.std.*
 
 import hearth.kindlings.jsonschemaconfigs.JsonSchemaConfigs
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 /** The subtypes of a sum as a JSON library that flattens nested sealed hierarchies writes them (see
   * `JsonSchemaConfig.flattensNestedSubtypes`): the leaves, except that an intermediate sealed hierarchy with its own
@@ -66,12 +67,17 @@ trait SchemaSubtypeFlattening { this: MacroCommons & StdExtensions & JsonSchemaC
       import child.Underlying as C
       if (isNestedSum(child))
         Enum.parse[C].toOption match {
-          case Some(nested) => expand(nested.directChildren.toList.map { case (n, c) => (n, c.Underlying.as_??) })
-          case None         => List(entry)
+          case Some(nested) =>
+            expand(StableChildrenOrder.directChildren(SchemaSubtypeFlattening.this)(nested).map { case (n, c) =>
+              (n, c.Underlying.as_??)
+            })
+          case None => List(entry)
         }
       else List(entry)
     }
-    dedupe(expand(e.directChildren.toList.map { case (n, c) => (n, c.Underlying.as_??) }))
+    dedupe(expand(StableChildrenOrder.directChildren(SchemaSubtypeFlattening.this)(e).map { case (n, c) =>
+      (n, c.Underlying.as_??)
+    }))
   }
 
   /** The subtypes of `A` as written by the JSON library (see [[SchemaSubtypeFlattening]]). */

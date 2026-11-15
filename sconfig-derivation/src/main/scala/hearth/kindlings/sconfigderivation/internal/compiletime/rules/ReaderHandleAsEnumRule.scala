@@ -10,6 +10,7 @@ import hearth.std.*
 import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint}
 import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
 import org.ekrich.config.{ConfigObject, ConfigValue}
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait ReaderHandleAsEnumRuleImpl {
   this: ReaderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -72,7 +73,7 @@ trait ReaderHandleAsEnumRuleImpl {
           }
       }
 
-      val childrenList = enumm.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(ReaderHandleAsEnumRuleImpl.this)(enumm)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
           SingletonValue.unapply(child.Underlying).isDefined

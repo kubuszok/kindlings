@@ -1,6 +1,7 @@
 package hearth.kindlings.circederivation.internal.compiletime
 
 import hearth.MacroCommons
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 /** Flattens nested sealed hierarchies the way circe's `ConfiguredEncoder`/`ConfiguredDecoder` do: a child of a sum that
   * is itself a derived sum contributes its own children (recursively), so `Child` of
@@ -44,7 +45,7 @@ trait SealedHierarchyFlattening { this: MacroCommons =>
   }
 
   private def childrenOf[B](enumm: Enum[B]): List[(String, ??)] =
-    enumm.directChildren.toList.map { case (name, child) =>
+    StableChildrenOrder.directChildren(SealedHierarchyFlattening.this)(enumm).map { case (name, child) =>
       import child.Underlying as C
       (name, Type[C].as_??)
     }

@@ -9,6 +9,7 @@ import hearth.std.*
 
 import hearth.kindlings.xmlderivation.{XmlConfig, XmlDecodingError}
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait DecoderHandleAsEnumRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -36,7 +37,7 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val AnyT: Type[Any] = DTypes.Any
       implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
       implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
-      val childrenList = enumType.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(DecoderHandleAsEnumRuleImpl.this)(enumType)
 
       // Pre-compute discriminator attribute name from config
       val discriminatorAttr: Option[String] = dctx.evaluatedConfig.flatMap(_.discriminatorAttribute)

@@ -10,6 +10,7 @@ import hearth.std.*
 import hearth.kindlings.jsoniterderivation.JsoniterConfig
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait DecoderHandleAsMapRuleImpl {
   this: CodecMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -916,7 +917,7 @@ trait DecoderHandleAsMapRuleImpl {
                   // 4. Enum (all case objects) — read key as string, match against case names
                   Enum.parse[K].toOption match {
                     case Some(enumm) =>
-                      val childrenList = enumm.directChildren.toList
+                      val childrenList = StableChildrenOrder.directChildren(DecoderHandleAsMapRuleImpl.this)(enumm)
                       val allCaseObjects = Type[K].isEnumeration || isJavaEnumType[K] || childrenList.forall {
                         case (_, child) =>
                           SingletonValue.unapply(child.Underlying).isDefined

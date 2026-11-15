@@ -8,6 +8,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import org.scalacheck.Shrink
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -25,7 +26,7 @@ trait ShrinkHandleAsEnumRuleImpl { this: ShrinkMacrosImpl & MacroCommons & StdEx
     private def deriveEnumShrink[A: ShrinkCtx](enumData: Enum[A]): MIO[Expr[Shrink[A]]] = {
       implicit val ShrinkA: Type[Shrink[A]] = ShrinkTypes.Shrink[A]
 
-      val childrenList = enumData.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(ShrinkHandleAsEnumRuleImpl.this)(enumData)
 
       childrenList match {
         case Nil =>

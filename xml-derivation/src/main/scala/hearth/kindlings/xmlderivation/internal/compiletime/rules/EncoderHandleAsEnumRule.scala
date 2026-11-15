@@ -7,6 +7,7 @@ import hearth.std.*
 
 import hearth.kindlings.xmlderivation.XmlConfig
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
+import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait EncoderHandleAsEnumRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -30,7 +31,7 @@ trait EncoderHandleAsEnumRuleImpl {
         enumType: Enum[A]
     ): MIO[Rule.Applicability[Expr[scala.xml.Elem]]] = {
       implicit val XmlConfigT: Type[XmlConfig] = Types.XmlConfig
-      val childrenList = enumType.directChildren.toList
+      val childrenList = StableChildrenOrder.directChildren(EncoderHandleAsEnumRuleImpl.this)(enumType)
 
       // Pre-compute discriminator attribute name from config
       val discriminatorAttr: Option[String] = ectx.evaluatedConfig.flatMap(_.discriminatorAttribute)

@@ -80,7 +80,7 @@ final class CirceCoreOracleSpec extends MacroSuite {
           Configuration.default.withKebabCaseConstructorNames.withDefaults.withStrictDecoding,
           CoreConfiguration.default.withKebabCaseConstructorNames.withDefaults.withStrictDecoding
         ),
-      List(CiExpected.hearthChildrenOrder)
+      Nil
     )
   }
 
