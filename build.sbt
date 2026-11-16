@@ -66,10 +66,9 @@ val nativeEvictionWarn = List(
 // (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
 // scope may be filtered here, each with a justification. Bump this on every release.
 //
-// `None` until 0.4.0 is released: 0.4.0 deliberately breaks binary compatibility with 0.3.x (it drops the deprecated
-// 0.3.x forwarders, see kubuszok/kindlings#277), so there is no baseline to compare against. After the 0.4.0 release,
-// set it to `Some("0.4.0")`.
-val mimaPreviousVersion: Option[String] = None
+// Binary-compatibility baseline. 0.4.0 deliberately broke binary compatibility with 0.3.x (it dropped the deprecated
+// 0.3.x forwarders, see kubuszok/kindlings#277); later releases are checked against it.
+val mimaPreviousVersion: Option[String] = Some("0.4.0")
 
 // Published modules first released AFTER `mimaPreviousVersion` - there is no baseline artifact to compare against yet.
 // Remove an entry once `mimaPreviousVersion` is bumped to a release that contains the module.
@@ -467,11 +466,6 @@ lazy val parser = projectMatrix
   .settings(settings *)
   .settings(dependencies *)
   .settings(publishSettings *)
-  .settings(
-    // New module: there is no previously released artifact to check binary compatibility against yet.
-    mimaPreviousArtifacts := Set.empty,
-    mimaFailOnNoPrevious := false
-  )
 
 // Cats Effect runtime for `kindlings-parser`: a `ParserEngine[F]` for any `Async[F]`/`Sync[F]` that fuses each
 // effectful action's bind with the next parsing segment, cedes every `budget` steps and reads input with `blocking`.
@@ -492,10 +486,7 @@ lazy val parserCatsEffect = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % versions.catsEffect
-    ),
-    // New module: there is no previously released artifact to check binary compatibility against yet.
-    mimaPreviousArtifacts := Set.empty,
-    mimaFailOnNoPrevious := false
+    )
   )
 
 // fs2 integration for `kindlings-parser`: `Pipe`s feeding stream chunks into a push machine (bounded memory), with
@@ -518,10 +509,7 @@ lazy val parserFs2 = projectMatrix
   .settings(
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % versions.fs2
-    ),
-    // New module: there is no previously released artifact to check binary compatibility against yet.
-    mimaPreviousArtifacts := Set.empty,
-    mimaFailOnNoPrevious := false
+    )
   )
 
 lazy val mock = projectMatrix
