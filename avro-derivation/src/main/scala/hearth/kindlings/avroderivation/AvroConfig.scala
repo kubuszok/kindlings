@@ -63,70 +63,6 @@ final case class AvroConfig(
 
   /** Only `@avroDefault` becomes a schema default; Scala default values are used only when decoding. */
   def withoutScalaDefaultsInSchema: AvroConfig = copy(scalaDefaultsInSchema = false)
-
-  // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
-  // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
-  def copy(
-      namespace: Option[String] = this.namespace,
-      transformFieldNames: String => String = this.transformFieldNames,
-      transformConstructorNames: String => String = this.transformConstructorNames,
-      decimalConfig: Option[DecimalConfig] = this.decimalConfig,
-      instantPrecision: TimestampPrecision = this.instantPrecision,
-      localDateTimePrecision: TimestampPrecision = this.localDateTimePrecision,
-      offsetDateTimeAsIsoString: Boolean = this.offsetDateTimeAsIsoString,
-      scalaDefaultsInSchema: Boolean = this.scalaDefaultsInSchema
-  ): AvroConfig = new AvroConfig(
-    namespace,
-    transformFieldNames,
-    transformConstructorNames,
-    decimalConfig,
-    instantPrecision,
-    localDateTimePrecision,
-    offsetDateTimeAsIsoString,
-    scalaDefaultsInSchema
-  )
-
-  /** The `copy` of Kindlings 0.3.x (without the fields added since); the other fields keep their values. */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
-    "0.3.5"
-  )
-  def copy(
-      namespace: Option[String],
-      transformFieldNames: String => String,
-      transformConstructorNames: String => String,
-      decimalConfig: Option[DecimalConfig]
-  ): AvroConfig = new AvroConfig(
-    namespace,
-    transformFieldNames,
-    transformConstructorNames,
-    decimalConfig,
-    instantPrecision,
-    localDateTimePrecision,
-    offsetDateTimeAsIsoString,
-    scalaDefaultsInSchema
-  )
-
-  /** The constructor of Kindlings 0.3.x (without the fields added since, which get their defaults). */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use the primary constructor",
-    "0.3.5"
-  )
-  def this(
-      namespace: Option[String],
-      transformFieldNames: String => String,
-      transformConstructorNames: String => String,
-      decimalConfig: Option[DecimalConfig]
-  ) = this(
-    namespace,
-    transformFieldNames,
-    transformConstructorNames,
-    decimalConfig,
-    TimestampPrecision.Millis,
-    TimestampPrecision.Nanos,
-    false,
-    true
-  )
 }
 object AvroConfig {
 
@@ -139,18 +75,6 @@ object AvroConfig {
     decimalConfig = Some(DecimalConfig(precision = 8, scale = 2)),
     offsetDateTimeAsIsoString = true
   )
-
-  /** The `apply` of Kindlings 0.3.x (without the fields added since, which get their defaults). */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use apply with named arguments",
-    "0.3.5"
-  )
-  def apply(
-      namespace: Option[String],
-      transformFieldNames: String => String,
-      transformConstructorNames: String => String,
-      decimalConfig: Option[DecimalConfig]
-  ): AvroConfig = new AvroConfig(namespace, transformFieldNames, transformConstructorNames, decimalConfig)
 
   private[avroderivation] val snakeCase: String => String = { s =>
     val sb = new StringBuilder

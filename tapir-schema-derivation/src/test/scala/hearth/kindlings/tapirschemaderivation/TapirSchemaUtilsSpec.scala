@@ -82,7 +82,10 @@ final class TapirSchemaUtilsSpec extends MacroSuite {
 
     test("of a map counts its entries") {
       val toEntries: Any => Iterable[Any] = _.asInstanceOf[Map[String, Int]]
-      val schema = TapirSchemaUtils.nonEmptyCollectionSchema(TapirSchemaUtils.mapSchema(Schema.schemaForInt), toEntries)
+      val schema = TapirSchemaUtils.nonEmptyCollectionSchema(
+        TapirSchemaUtils.mapSchema(Schema.schemaForInt, Schema.SName("Map_Int")),
+        toEntries
+      )
       assert(!schema.isOptional)
       assertEquals(schema.applyValidation(Map("a" -> 1)), Nil)
       assertEquals(schema.applyValidation(Map.empty[String, Int]).size, 1)

@@ -52,31 +52,6 @@ object ShrinkUtils {
       keyShrink.shrink(k).map(pair(_, v)) #::: valueShrink.shrink(v).map(pair(k, _))
     }
 
-  /** Shrinks a collection by trying progressively smaller sublists and shrinking individual elements. Uses
-    * Iterable[Any] at runtime to avoid higher-kinded type issues in macro-generated code.
-    */
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def shrinkCollection(
-      elemShrink: Shrink[Any],
-      factory: Any // scala.collection.IterableFactory[CC] — erased
-  ): Shrink[Any] =
-    Shrink { value =>
-      val coll = value.asInstanceOf[Iterable[Any]]
-      val elems = coll.toList
-      val f = factory.asInstanceOf[scala.collection.IterableFactory[Iterable]]
-      if (elems.isEmpty) Stream.empty
-      else {
-        // Try removing elements (halving strategy)
-        val removeStreams = removeChunks(elems).map(smaller => f.from(smaller))
-        // Try shrinking individual elements
-        val shrinkElemStreams = shrinkOne(elems, elemShrink).map(smaller => f.from(smaller))
-        (removeStreams #::: shrinkElemStreams).asInstanceOf[Stream[Any]]
-      }
-    }
-
   /** Shrinks a case class by shrinking one field at a time. */
   def shrinkCaseClass[A](
       fieldShrinks: List[Shrink[Any]],
@@ -84,7 +59,7 @@ object ShrinkUtils {
       reconstruct: Array[Any] => A
   ): Shrink[A] =
     Shrink { value =>
-      // Guard: when used inside shrinkEnum, the wrong case's shrink may be called.
+      // Guard: a Shrink of the wrong case must not crash.
       // On Scala Native, calling productElement beyond a Product's arity causes SIGSEGV
       // (not a catchable exception). Check arity matches before extracting.
       val product = value.asInstanceOf[Product]
@@ -102,8 +77,8 @@ object ShrinkUtils {
     }
 
   /** Shrinks an enum/sealed trait value with the Shrink of its case, selected by the macro-generated `ordinal` (a real
-    * pattern match). Unlike [[shrinkEnum]] - which tried every case's Shrink - a value is never shrunk by another
-    * case's instance (which could turn e.g. `B(1)` into a same-arity `C(0)`).
+    * pattern match). Unlike trying every case's Shrink, a value is never shrunk by another case's instance (which could
+    * turn e.g. `B(1)` into a same-arity `C(0)`).
     */
   def shrinkEnumByOrdinal[A](caseShrinks: List[Shrink[A]], ordinal: A => Int): Shrink[A] = {
     lazy val shrinks = caseShrinks.toArray
@@ -113,21 +88,6 @@ object ShrinkUtils {
       else shrinks(index).shrink(value)
     }
   }
-
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def shrinkEnum[A](caseShrinks: List[Shrink[A]]): Shrink[A] =
-    Shrink { value =>
-      // Evaluate try/catch eagerly (strict List.map) to avoid try/catch inside lazy
-      // Stream.flatMap — that combination overflows Scala Native's stack.
-      val results: List[Stream[A]] = caseShrinks.map { caseShrink =>
-        try caseShrink.shrink(value)
-        catch { case _: Throwable => Stream.empty[A] }
-      }
-      results.foldRight(Stream.empty[A])(_ #::: _)
-    }
 
   // --- Internal helpers ---
 
@@ -160,25 +120,6 @@ object ShrinkUtils {
     case head :: tail =>
       shrink.shrink(head).map(_ :: tail) #::: shrinkOne(tail, shrink).map(head :: _)
   }
-
-  /** Shrinks a Map by shrinking its entries as a list of pairs. */
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def shrinkMap(keyShrink: Shrink[Any], valueShrink: Shrink[Any]): Shrink[Any] =
-    Shrink { value =>
-      val entries = value.asInstanceOf[Map[Any, Any]].toList
-      if (entries.isEmpty) Stream.empty
-      else {
-        val pairShrink: Shrink[(Any, Any)] = Shrink { case (k, v) =>
-          keyShrink.shrink(k).map((_, v)) #::: valueShrink.shrink(v).map((k, _))
-        }
-        val removeStreams = removeChunks(entries).map(_.toMap)
-        val shrinkEntryStreams = shrinkOne(entries, pairShrink).map(_.toMap)
-        (removeStreams #::: shrinkEntryStreams).asInstanceOf[Stream[Any]]
-      }
-    }
 
   /** Lazy Shrink - defers (and memoizes) evaluation of the underlying Shrink until the first `shrink` call. Breaks
     * infinite recursion for recursive types, whose cached shrinker would otherwise be built while building itself.

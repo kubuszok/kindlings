@@ -76,23 +76,21 @@ final class ScalaYamlDefaultsSpec extends MacroSuite {
         Right(Circle(5.0): Shape)
     }
 
-    test("the 0.3.x constructor, apply and copy (kept for binary compatibility) keep wrapped subtypes") {
-      @scala.annotation.nowarn("cat=deprecation")
-      def configs: List[YamlConfig] = List(
+    test("positional arguments of the 0.3.x fields still compile, the new fields get their defaults") {
+      val configs: List[YamlConfig] = List(
         new YamlConfig(identity, identity, None, false, false),
-        YamlConfig(identity[String], identity[String], None, false, false),
-        YamlConfig.default.withWrappedSubtypes.copy(identity[String], identity[String], None, false, false)
+        YamlConfig(identity[String], identity[String], None, false, false)
       )
       configs.foreach { config =>
-        config.wrappedSubtypes ==> true
         config.useDefaults ==> false
+        config.wrappedSubtypes ==> false
         config.emptyCollectionsAsFlow ==> false
       }
-      YamlConfig.default.copy(useDefaults = false).wrappedSubtypes ==> false
-      // the 0.3.x copy keeps the fields it does not take
-      @scala.annotation.nowarn("cat=deprecation")
+      // copy keeps the fields it is not given
       val copied =
-        YamlConfig.default.withEmptyCollectionsAsFlow.copy(identity[String], identity[String], None, false, true)
+        YamlConfig.default.withWrappedSubtypes.withEmptyCollectionsAsFlow
+          .copy(identity[String], identity[String], None, false, true)
+      copied.wrappedSubtypes ==> true
       copied.emptyCollectionsAsFlow ==> true
     }
 

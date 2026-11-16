@@ -33,16 +33,6 @@ object CogenUtils {
   def cogenPair[Pair, K, V](keyCogen: Cogen[K], valueCogen: Cogen[V], key: Pair => K, value: Pair => V): Cogen[Pair] =
     Cogen((seed, p) => valueCogen.perturb(keyCogen.perturb(seed, key(p)), value(p)))
 
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def cogenCollection(elemCogen: Cogen[Any]): Cogen[Any] =
-    Cogen { (seed, value) =>
-      val coll = value.asInstanceOf[Iterable[Any]]
-      coll.foldLeft(seed)((s, elem) => elemCogen.perturb(s, elem))
-    }
-
   /** Perturbs the seed with every field in order and then - when `terminate` - with `Cogen[Unit]`, like
     * scalacheck-shapeless and scalacheck-derived do for case classes (tuples, like ScalaCheck's `Cogen.tupleN`, do
     * not).
@@ -63,19 +53,6 @@ object CogenUtils {
         i += 1
       }
       s
-    }
-
-  /** Cogen for Map: perturbs seed with each key-value pair. */
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def cogenMap(keyCogen: Cogen[Any], valueCogen: Cogen[Any]): Cogen[Any] =
-    Cogen { (seed, value) =>
-      val map = value.asInstanceOf[Map[Any, Any]]
-      map.foldLeft(seed) { case (s, (k, v)) =>
-        valueCogen.perturb(keyCogen.perturb(s, k), v)
-      }
     }
 
   /** Cogen for a `FunctionN` like ScalaCheck's `Cogen.functionN`: applies the function to arguments generated from the
@@ -117,9 +94,9 @@ object CogenUtils {
     }
 
   /** Cogen for an enum/sealed trait: perturbs the seed with the matching case's Cogen and then with the index of the
-    * value's case (from the macro-generated `ordinal`, a real pattern match), like scalacheck-derived. Unlike
-    * [[cogenEnum]] it uses neither `hashCode` (identity-based for Java enums and function fields, so not reproducible
-    * across runs) nor try-each-case dispatch.
+    * value's case (from the macro-generated `ordinal`, a real pattern match), like scalacheck-derived. It uses neither
+    * `hashCode` (identity-based for Java enums and function fields, so not reproducible across runs) nor try-each-case
+    * dispatch.
     */
   def cogenEnumByOrdinal[A](caseCogens: List[Cogen[A]], ordinal: A => Int): Cogen[A] = {
     lazy val cogens = caseCogens.toArray
@@ -146,25 +123,4 @@ object CogenUtils {
       }
       Cogen.cogenLong.perturb(Cogen.cogenInt.perturb(seed, count), sum)
     }
-
-  @deprecated(
-    "Kept for binary compatibility of code compiled against kindlings 0.3.x; the macro no longer emits it",
-    "0.3.3"
-  )
-  def cogenEnum[A](caseCogens: List[Cogen[A]]): Cogen[A] = {
-    def perturbEnum(seed: org.scalacheck.rng.Seed, value: A): org.scalacheck.rng.Seed = {
-      // Perturb with both class name (type discriminator) and value hash (instance discriminator).
-      // Class name alone is insufficient for Java enums where all constants share the same class.
-      val typeSeed = Cogen.cogenLong.perturb(seed, value.getClass.getName.hashCode.toLong)
-      val ordinalSeed = Cogen.cogenLong.perturb(typeSeed, value.hashCode().toLong)
-      val iter = caseCogens.iterator
-      while (iter.hasNext) {
-        val caseCogen = iter.next()
-        try return caseCogen.perturb(ordinalSeed, value)
-        catch { case _: ClassCastException => () }
-      }
-      ordinalSeed
-    }
-    Cogen(perturbEnum)
-  }
 }

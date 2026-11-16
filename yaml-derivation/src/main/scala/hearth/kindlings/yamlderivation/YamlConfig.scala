@@ -62,60 +62,6 @@ final case class YamlConfig(
 
   /** `toYamlString` prints empty sequences and mappings as an empty value (the default, as scala-yaml's printer). */
   def withoutEmptyCollectionsAsFlow: YamlConfig = copy(emptyCollectionsAsFlow = false)
-
-  // Written out by hand (it is what the compiler would synthesize): Scala 2 does not synthesize a case class `copy`
-  // when the class declares any other `copy`, and the deprecated overload below is needed for binary compatibility.
-  def copy(
-      transformMemberNames: String => String = this.transformMemberNames,
-      transformConstructorNames: String => String = this.transformConstructorNames,
-      discriminator: Option[String] = this.discriminator,
-      enumAsStrings: Boolean = this.enumAsStrings,
-      useDefaults: Boolean = this.useDefaults,
-      wrappedSubtypes: Boolean = this.wrappedSubtypes,
-      emptyCollectionsAsFlow: Boolean = this.emptyCollectionsAsFlow
-  ): YamlConfig = new YamlConfig(
-    transformMemberNames,
-    transformConstructorNames,
-    discriminator,
-    enumAsStrings,
-    useDefaults,
-    wrappedSubtypes,
-    emptyCollectionsAsFlow
-  )
-
-  /** The `copy` of Kindlings 0.3.x (`wrappedSubtypes` and `emptyCollectionsAsFlow` are kept). */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use copy with named arguments",
-    "0.3.5"
-  )
-  def copy(
-      transformMemberNames: String => String,
-      transformConstructorNames: String => String,
-      discriminator: Option[String],
-      enumAsStrings: Boolean,
-      useDefaults: Boolean
-  ): YamlConfig = new YamlConfig(
-    transformMemberNames,
-    transformConstructorNames,
-    discriminator,
-    enumAsStrings,
-    useDefaults,
-    wrappedSubtypes,
-    emptyCollectionsAsFlow
-  )
-
-  /** The constructor of Kindlings 0.3.x: without a discriminator, its subtypes were wrapped. */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use the primary constructor",
-    "0.3.5"
-  )
-  def this(
-      transformMemberNames: String => String,
-      transformConstructorNames: String => String,
-      discriminator: Option[String],
-      enumAsStrings: Boolean,
-      useDefaults: Boolean
-  ) = this(transformMemberNames, transformConstructorNames, discriminator, enumAsStrings, useDefaults, true, false)
 }
 object YamlConfig {
 
@@ -125,28 +71,6 @@ object YamlConfig {
     * mapping.
     */
   def kindlings03Defaults: YamlConfig = YamlConfig(useDefaults = false, wrappedSubtypes = true)
-
-  /** The `apply` of Kindlings 0.3.x: without a discriminator, its subtypes were wrapped. */
-  @deprecated(
-    "kept for binary compatibility of code compiled against Kindlings 0.3.x; use apply with named arguments",
-    "0.3.5"
-  )
-  def apply(
-      transformMemberNames: String => String,
-      transformConstructorNames: String => String,
-      discriminator: Option[String],
-      enumAsStrings: Boolean,
-      useDefaults: Boolean
-  ): YamlConfig =
-    new YamlConfig(
-      transformMemberNames,
-      transformConstructorNames,
-      discriminator,
-      enumAsStrings,
-      useDefaults,
-      true,
-      false
-    )
 
   private[yamlderivation] val snakeCase: String => String = { s =>
     val sb = new StringBuilder
