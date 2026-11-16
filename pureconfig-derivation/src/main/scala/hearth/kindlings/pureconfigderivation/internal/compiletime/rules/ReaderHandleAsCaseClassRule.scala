@@ -336,41 +336,28 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   }
                 case Nil =>
                   val bound = boundReversed.reverse
-                  val constructed = buildEitherFailFast[ConfigReaderFailures, A](bound)(constructFF)
+                  val constructedExpr = buildEitherFailFast[ConfigReaderFailures, A](bound)(constructFF)
                   val resultsExpr: Expr[List[Either[ConfigReaderFailures, Any]]] =
                     bound.foldRight(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (r, acc) =>
-                      // `acc.::(r)`, not `r :: acc`: Scala 3 desugars the latter into a local `val`, which must not
-                      // share a block with the `ValDefs` vals.
-                      Expr.quote(Expr.splice(acc).::(Expr.splice(r)))
+                      Expr.quote(Expr.splice(r) :: Expr.splice(acc))
                     }
-                  // Bound with `ValDefs` (not a `val` inside the quote): the constructed expression holds `ValDefs`
-                  // vals, and on Scala 3 quote-defined and `ValDefs` vals must not own each other's definitions.
-                  ValDefs.createVal[Either[ConfigReaderFailures, A]](constructed).use { constructedResult =>
-                    if (staticAllowUnknownKeys.contains(true))
-                      Expr.quote {
-                        if (Expr.splice(constructedResult).isRight) Expr.splice(constructedResult)
-                        else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), None))
-                      }
-                    else
-                      ValDefs
-                        .createVal[Option[ConfigReaderFailures]](Expr.quote {
-                          if (Expr.splice(allowUnknownKeysExpr)) None
-                          else
-                            PureConfigDerivationUtils
-                              .unknownKeysFailures(Expr.splice(rctx.cursor), Expr.splice(expectedKeysExpr))
-                        })
-                        .use { unknownKeys =>
-                          Expr.quote {
-                            if (Expr.splice(constructedResult).isRight && Expr.splice(unknownKeys).isEmpty)
-                              Expr.splice(constructedResult)
-                            else
-                              Left(
-                                PureConfigDerivationUtils
-                                  .combineFieldFailures(Expr.splice(resultsExpr), Expr.splice(unknownKeys))
-                              )
-                          }
-                        }
-                  }
+                  if (staticAllowUnknownKeys.contains(true))
+                    Expr.quote {
+                      val constructed = Expr.splice(constructedExpr)
+                      if (constructed.isRight) constructed
+                      else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), None))
+                    }
+                  else
+                    Expr.quote {
+                      val constructed = Expr.splice(constructedExpr)
+                      val unknownKeys: Option[ConfigReaderFailures] =
+                        if (Expr.splice(allowUnknownKeysExpr)) None
+                        else
+                          PureConfigDerivationUtils
+                            .unknownKeysFailures(Expr.splice(rctx.cursor), Expr.splice(expectedKeysExpr))
+                      if (constructed.isRight && unknownKeys.isEmpty) constructed
+                      else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), unknownKeys))
+                    }
               }
 
               val body = bindAll(decodeExprs, Nil)

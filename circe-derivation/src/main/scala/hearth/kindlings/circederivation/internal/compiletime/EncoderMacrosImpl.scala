@@ -130,13 +130,12 @@ trait EncoderMacrosImpl
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
           Expr.quote {
             val cfg = Expr.splice(configVal)
-            // (no local `val` around the splice: lambdas built inside it, e.g. for an `Option` of a value class, would
-            // be owned by a different symbol than the `val`, which Scala 3 rejects)
             val encodeObject: A => JsonObject = (a: A) => {
               val _ = a
-              hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils.asJsonObjectOrThrow(Expr.splice {
+              val json: Json = Expr.splice {
                 fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-              })
+              }
+              hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils.asJsonObjectOrThrow(json)
             }
             // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
             if (Expr.splice(Expr(isMarkedSum[A])))

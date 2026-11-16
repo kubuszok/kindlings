@@ -287,33 +287,42 @@ trait ReaderHandleAsEnumRuleImpl {
       implicit val StringT: Type[String] = RTypes.String
       implicit val ListStringT: Type[List[String]] = RTypes.ListString
       implicit val EitherT: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
-      implicit val AttemptsT: Type[PureConfigDerivationUtils.FirstSuccessAttempts] = RTypes.FirstSuccessAttempts
+      implicit val EitherAnyT: Type[Either[ConfigReaderFailures, Any]] = RTypes.EitherFailuresAny
+      implicit val ListEitherT: Type[List[Either[ConfigReaderFailures, Any]]] = RTypes.ListEitherFailuresAny
 
       val ordered = childReaders.sortBy(_.childName)
       val optionNames: List[String] = ordered.map(_.childName)
 
-      // No `val` per attempt (nested `ValDefs` here trip Scala 3's owner checks): a runtime `FirstSuccessAttempts`
-      // records each failed attempt and the first success.
-      def chain(attempts: Expr[PureConfigDerivationUtils.FirstSuccessAttempts]): Expr[Either[ConfigReaderFailures, A]] =
-        ordered.foldRight(Expr.quote(Expr.splice(attempts).failed[A])) { (child, elseExpr) =>
-          Expr.quote {
-            if (
-              Expr
-                .splice(attempts)
-                .succeeded(Expr.splice(child.readFromObject(Expr.quote(Expr.splice(attempts).cursor))))
-            )
-              Expr.splice(attempts).result[A]
-            else Expr.splice(elseExpr)
+      // Each attempt is bound to a `val`; the next subtype is attempted only when it failed, and when every attempt
+      // failed, their failures are reported together.
+      def attempt(
+          cursor: Expr[ConfigCursor],
+          remaining: List[ChildReader[A]],
+          failedReversed: List[Expr[Either[ConfigReaderFailures, A]]]
+      ): Expr[Either[ConfigReaderFailures, A]] = remaining match {
+        case child :: rest =>
+          ValDefs.createVal[Either[ConfigReaderFailures, A]](child.readFromObject(cursor)).use { result =>
+            Expr.quote {
+              if (Expr.splice(result).isRight) Expr.splice(result)
+              else Expr.splice(attempt(cursor, rest, result :: failedReversed))
+            }
           }
-        }
-
-      Expr.quote {
-        val attempts = new PureConfigDerivationUtils.FirstSuccessAttempts(
-          Expr.splice(rctx.cursor),
-          Expr.splice(Expr(optionNames))
-        )
-        Expr.splice(chain(Expr.quote(attempts)))
+        case Nil =>
+          val results = failedReversed.foldLeft(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (acc, r) =>
+            Expr.quote((Expr.splice(r): Either[ConfigReaderFailures, Any]) :: Expr.splice(acc))
+          }
+          Expr.quote {
+            Left(
+              PureConfigDerivationUtils.noValidCoproductOptionFromResults(
+                Expr.splice(cursor),
+                Expr.splice(Expr(optionNames)),
+                Expr.splice(results)
+              )
+            )
+          }
       }
+
+      ValDefs.createVal[ConfigCursor](rctx.cursor).use(cursor => attempt(cursor, ordered, Nil))
     }
 
     /** Derive how to read a single sealed-trait subtype (see [[ChildReader]]).

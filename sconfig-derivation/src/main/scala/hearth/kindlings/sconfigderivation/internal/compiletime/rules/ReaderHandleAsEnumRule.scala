@@ -235,32 +235,42 @@ trait ReaderHandleAsEnumRuleImpl {
       implicit val StringT: Type[String] = RTypes.String
       implicit val ListStringT: Type[List[String]] = RTypes.ListString
       implicit val EitherT: Type[Either[ConfigDecodingError, A]] = RTypes.ReaderResult[A]
-      implicit val AttemptsT: Type[SConfigDerivationUtils.FirstSuccessAttempts] = RTypes.FirstSuccessAttempts
+      implicit val EitherAnyT: Type[Either[ConfigDecodingError, Any]] = RTypes.EitherErrorAny
+      implicit val ListEitherT: Type[List[Either[ConfigDecodingError, Any]]] = RTypes.ListEitherErrorAny
 
       val ordered = childReaders.sortBy(_.childName)
       val optionNames: List[String] = ordered.map(_.childName)
 
-      // A runtime `FirstSuccessAttempts` records each failed attempt and the first success (no `val` per attempt).
-      def chain(attempts: Expr[SConfigDerivationUtils.FirstSuccessAttempts]): Expr[Either[ConfigDecodingError, A]] =
-        ordered.foldRight(Expr.quote(Expr.splice(attempts).failed[A])) { (child, elseExpr) =>
-          Expr.quote {
-            if (
-              Expr
-                .splice(attempts)
-                .succeeded(Expr.splice(child.readFromObject(Expr.quote(Expr.splice(attempts).value))))
-            )
-              Expr.splice(attempts).result[A]
-            else Expr.splice(elseExpr)
+      // Each attempt is bound to a `val`; the next subtype is attempted only when it failed, and when every attempt
+      // failed, their failures are reported together.
+      def attempt(
+          value: Expr[ConfigValue],
+          remaining: List[ChildReader[A]],
+          failedReversed: List[Expr[Either[ConfigDecodingError, A]]]
+      ): Expr[Either[ConfigDecodingError, A]] = remaining match {
+        case child :: rest =>
+          ValDefs.createVal[Either[ConfigDecodingError, A]](child.readFromObject(value)).use { result =>
+            Expr.quote {
+              if (Expr.splice(result).isRight) Expr.splice(result)
+              else Expr.splice(attempt(value, rest, result :: failedReversed))
+            }
           }
-        }
-
-      Expr.quote {
-        val attempts = new SConfigDerivationUtils.FirstSuccessAttempts(
-          Expr.splice(rctx.value),
-          Expr.splice(Expr(optionNames))
-        )
-        Expr.splice(chain(Expr.quote(attempts)))
+        case Nil =>
+          val results = failedReversed.foldLeft(Expr.quote(List.empty[Either[ConfigDecodingError, Any]])) { (acc, r) =>
+            Expr.quote((Expr.splice(r): Either[ConfigDecodingError, Any]) :: Expr.splice(acc))
+          }
+          Expr.quote {
+            Left(
+              SConfigDerivationUtils.noValidCoproductOptionFromResults(
+                Expr.splice(value),
+                Expr.splice(Expr(optionNames)),
+                Expr.splice(results)
+              )
+            )
+          }
       }
+
+      ValDefs.createVal[ConfigValue](rctx.value).use(value => attempt(value, ordered, Nil))
     }
 
     /** Derive how to read a single sealed-trait subtype (see [[ChildReader]]): a user-provided implicit

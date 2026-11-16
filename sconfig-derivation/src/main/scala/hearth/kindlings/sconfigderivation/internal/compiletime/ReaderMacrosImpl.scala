@@ -277,8 +277,6 @@ trait ReaderMacrosImpl
       Type.of[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation]
     val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
     val ConfigObject: Type.Lazy[ConfigObject] = Type.Lazy(Type.of[ConfigObject])
-    val FirstSuccessAttempts: Type.Lazy[SConfigDerivationUtils.FirstSuccessAttempts] =
-      Type.Lazy(Type.of[SConfigDerivationUtils.FirstSuccessAttempts])
     val ConfigDecodingError: Type.Lazy[ConfigDecodingError] = Type.Lazy(Type.of[ConfigDecodingError])
     val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])

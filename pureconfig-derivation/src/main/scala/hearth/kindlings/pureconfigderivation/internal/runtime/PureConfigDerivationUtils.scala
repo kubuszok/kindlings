@@ -80,21 +80,6 @@ object PureConfigDerivationUtils {
         ConfigReaderFailures(cursor.failureFor(pureconfig.generic.error.NoValidCoproductOptionFound(v, optionFailures)))
     )
 
-  /** The attempts of upstream `FirstSuccessCoproductHint` semantics: each subtype's result is passed to [[succeeded]]
-    * in the order attempted; the first success is the [[result]], and when none succeeds, [[failed]] reports every
-    * attempt.
-    */
-  final class FirstSuccessAttempts(val cursor: ConfigCursor, options: List[String]) {
-    private var failures: List[ConfigReaderFailures] = Nil
-    private var success: Result[Any] = null
-    def succeeded(attempt: Result[Any]): Boolean = attempt match {
-      case Right(_) => success = attempt; true
-      case Left(f)  => failures = f :: failures; false
-    }
-    def result[A]: Result[A] = success.asInstanceOf[Result[A]]
-    def failed[A]: Result[A] = Left(noValidCoproductOption(cursor, options.zip(failures.reverse)))
-  }
-
   /** [[noValidCoproductOption]] built from the failed results of every attempted subtype (in the order attempted). */
   def noValidCoproductOptionFromResults(
       cursor: ConfigCursor,
