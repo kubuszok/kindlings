@@ -11,7 +11,7 @@ case class SdId(value: String) extends AnyVal
 case class SdDocumented(@avroDoc("the count") count: Int = 3)
 
 /** Unit tests of the conversion of Scala default values into Avro schema defaults (`AvroScalaDefaults`), the strict
-  * primitive decoders and `AvroConfig`'s binary-compatibility overloads.
+  * primitive decoders and `AvroConfig`'s builders.
   */
 final class AvroScalaDefaultsSpec extends MacroSuite {
 
@@ -127,8 +127,7 @@ final class AvroScalaDefaultsSpec extends MacroSuite {
       AvroConfig.default.withoutScalaDefaultsInSchema.withScalaDefaultsInSchema.scalaDefaultsInSchema ==> true
     }
 
-    @scala.annotation.nowarn("cat=deprecation")
-    def legacy(): Unit = {
+    test("positional arguments of the 0.3.x fields still compile, the new fields get their defaults") {
       val viaApply = AvroConfig(Some("ns"), identity, identity, None)
       val viaConstructor = new AvroConfig(Some("ns"), identity, identity, None)
       val custom = AvroConfig.default.withInstantPrecision(TimestampPrecision.Micros)
@@ -139,7 +138,5 @@ final class AvroScalaDefaultsSpec extends MacroSuite {
       viaCopy.namespace ==> Some("ns")
       viaCopy.instantPrecision ==> TimestampPrecision.Micros
     }
-
-    test("the 0.3.x apply, constructor and copy fill in the new fields")(legacy())
   }
 }

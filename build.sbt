@@ -65,48 +65,43 @@ val nativeEvictionWarn = List(
 // macro providers/traits users mix into their bundles, so the same nested-vs-top-level rule as Hearth applies
 // (see docs/contributing/binary-compatibility-and-mixins.md in hearth): only members added inside a NESTED
 // scope may be filtered here, each with a justification. Bump this on every release.
-val mimaPreviousVersion = "0.3.2"
+//
+// `None` until 0.4.0 is released: 0.4.0 deliberately breaks binary compatibility with 0.3.x (it drops the deprecated
+// 0.3.x forwarders, see kubuszok/kindlings#277), so there is no baseline to compare against. After the 0.4.0 release,
+// set it to `Some("0.4.0")`.
+val mimaPreviousVersion: Option[String] = None
 
 // Published modules first released AFTER `mimaPreviousVersion` - there is no baseline artifact to compare against yet.
 // Remove an entry once `mimaPreviousVersion` is bumped to a release that contains the module.
-val modulesWithoutMimaBaseline = Set(
-  "kindlings-neotype-integration",
-  "kindlings-newtype-integration"
-)
+val modulesWithoutMimaBaseline = Set.empty[String]
 
 val mimaSettings = Seq(
-  // Applied to every module via `settings`, but only PUBLISHED, JVM cells that already existed at 0.3.0 get a
-  // baseline. MiMa is scoped to JVM (some published modules are JVM-only, so per-module JS/Native baselines are
-  // uneven); binary compatibility is derived from the same sources, so JVM catches API-level breaks.
+  // Applied to every module via `settings`, but only PUBLISHED, JVM cells get a baseline. MiMa is scoped to JVM (some
+  // published modules are JVM-only, so per-module JS/Native baselines are uneven); binary compatibility is derived
+  // from the same sources, so JVM catches API-level breaks.
   mimaPreviousArtifacts := {
     // `.?` because `settings` is also applied to the non-matrix `root` project, where `virtualAxes`/`projectType`
     // are undefined; those default to "not published / not JVM" and get no baseline.
     val isPublished = projectType.?.value.contains(ProjectType.ScalaLibrary)
     val isJvm = virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm))
-    // `kindlings-macro-commons` was promoted to the published set AFTER 0.3.0, but it shipped in 0.3.1, so from
-    // the 0.3.1 baseline on it has a baseline like every other published module.
     val hasBaseline = !modulesWithoutMimaBaseline(moduleName.value)
-    if (isPublished && isJvm && hasBaseline)
-      Set((organization.value % moduleName.value % mimaPreviousVersion).cross(crossVersion.value))
-    else Set.empty[ModuleID]
+    mimaPreviousVersion match {
+      case Some(previous) if isPublished && isJvm && hasBaseline =>
+        Set((organization.value % moduleName.value % previous).cross(crossVersion.value))
+      case _ => Set.empty[ModuleID]
+    }
   },
   mimaFailOnNoPrevious :=
-    projectType.?.value.contains(ProjectType.ScalaLibrary) &&
+    mimaPreviousVersion.isDefined &&
+      projectType.?.value.contains(ProjectType.ScalaLibrary) &&
       virtualAxes.?.value.exists(_.contains(VirtualAxis.jvm)) &&
       !modulesWithoutMimaBaseline(moduleName.value),
   mimaBinaryIssueFilters ++= Seq(
     // Everything under a `*.compiletime.*` package - the per-module `<module>.internal.compiletime.*` macro
     // implementations and the shared `hearth.kindlings.derivation.compiletime.*` (e.g. the `DerivationPolicy`
-    // trait) - is macro-implementation detail, never part of the published API. Every difference vs 0.3.0 lands
-    // there (chiefly the synthetic `derivationPolicyChecked` field accessor added to the internal `DerivationPolicy`
-    // trait, which is implemented only by kindlings' own `*MacrosImpl` classes, plus internal helper objects), so
-    // none of it is user-observable. Users call the public derivation entry points, not `*.compiletime.*`.
-    ProblemFilters.exclude[Problem]("hearth.kindlings.*compiletime*"),
-    // Scala 3 emits the static initializer of an object holding a `lazy val` as `private static {}` (instead of
-    // `public static {}`); these companions gained `lazy val`s (the jsoniter-scala name mappers). `<clinit>` is run
-    // only by the JVM, which ignores its access flags, and no bytecode can invoke it, so this is not a binary break.
-    ProblemFilters.exclude[DirectMissingMethodProblem]("hearth.kindlings.jsoniterderivation.JsoniterConfig.<clinit>"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("hearth.kindlings.ubjsonderivation.UBJsonConfig.<clinit>")
+    // trait) - is macro-implementation detail, never part of the published API. Users call the public derivation
+    // entry points, not `*.compiletime.*`.
+    ProblemFilters.exclude[Problem]("hearth.kindlings.*compiletime*")
   )
 )
 

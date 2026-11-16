@@ -350,33 +350,27 @@ object TapirSchemaUtils {
   def setSchema[E](elementSchema: Schema[E]): Schema[Any] =
     collectionSchema[E](elementSchema).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))
 
-  /** Wrap a value schema as a Map[String, V]. */
+  /** Wrap a value schema as a Map[String, V], named like tapir's `Schema.schemaForMap` (`Map_V`). */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  def mapSchema[V](valueSchema: Schema[V]): Schema[Any] =
+  def mapSchema[V](valueSchema: Schema[V], name: SName): Schema[Any] =
     Schema[Any](
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(_.asInstanceOf[Map[String, V]]),
-      isOptional = true
+      isOptional = true,
+      name = Some(name)
     )
 
-  /** Wrap a value schema as a Map[String, V], named like tapir's `Schema.schemaForMap` (`Map_V`). */
-  def mapSchema[V](valueSchema: Schema[V], name: SName): Schema[Any] =
-    mapSchema[V](valueSchema).copy(name = Some(name))
-
   /** Wrap a value schema as a Map[K, V], whose keys are converted to Strings with `keyToString` (e.g. unwrapping a
-    * value type/opaque type key).
+    * value type/opaque type key), named like tapir's `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`).
     */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  def mapSchemaWithKeys[K, V](valueSchema: Schema[V], keyToString: K => String): Schema[Any] =
+  def mapSchemaWithKeys[K, V](valueSchema: Schema[V], keyToString: K => String, name: SName): Schema[Any] =
     Schema[Any](
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(
         _.asInstanceOf[Map[K, V]].map { case (k, v) => keyToString(k) -> v }
       ),
-      isOptional = true
+      isOptional = true,
+      name = Some(name)
     )
-
-  /** As `mapSchemaWithKeys`, named like tapir's `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`). */
-  def mapSchemaWithKeys[K, V](valueSchema: Schema[V], keyToString: K => String, name: SName): Schema[Any] =
-    mapSchemaWithKeys[K, V](valueSchema, keyToString).copy(name = Some(name))
 
   /** Wrap a value schema as a Map encoded as array of key-value pair objects (for jsoniter mapAsArray). */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
