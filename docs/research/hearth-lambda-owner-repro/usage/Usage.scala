@@ -8,6 +8,9 @@ object ReproMacros {
   }
   inline def quotedLambdaInsideLambdaBuilder: Int => Int = ${ Repro.quotedLambdaInsideLambdaBuilderImpl }
   inline def lambdaBuilderInsideQuotedLambda: Int => Int = ${ Repro.lambdaBuilderInsideQuotedLambdaImpl }
+  inline def matchCaseChainInsideQuotedLambda: Int => Either[String, Int] = ${
+    Repro.matchCaseChainInsideQuotedLambdaImpl
+  }
 }
 
 @main def runRepro(): Unit = {
@@ -16,4 +19,5 @@ object ReproMacros {
   println(ReproMacros.valDefsNextToQuotedValsInsideQuotedLambda(10))
   println(ReproMacros.quotedLambdaInsideLambdaBuilder(10))
   println(ReproMacros.lambdaBuilderInsideQuotedLambda(10))
+  println(ReproMacros.matchCaseChainInsideQuotedLambda(10))
 }

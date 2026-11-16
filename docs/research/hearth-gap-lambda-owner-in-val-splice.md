@@ -1,5 +1,10 @@
 # Hearth gap: a lambda built inside a splice that initialises a local `val` (Scala 3)
 
+**Status: RESOLVED** in Hearth `90383964` ("Give definitions the owner of the place they end up in (Scala 3)"), first
+in `0.4.4-13-g9038396-SNAPSHOT` (2026-11-16). Every variant of `hearth-lambda-owner-repro/` compiles (including
+variant M, the regression of the reverted first attempt `d62d007e`), and every Kindlings workaround is removed - see
+"Re-checked with Hearth `0.4.4-13-g9038396-SNAPSHOT`" at the end. The history below is kept as a record.
+
 ## Symptom
 
 `KindlingsEncoder.derived[A]` (which for products returns `deriveEncoderAsObjectTypeClass`) failed on Scala 3 for a
@@ -286,3 +291,102 @@ The same shape-2 chain also fails inside a quoted lambda nested in a `LambdaBuil
 are owned by `val macro` (the expansion's root) while the definitions created in the nested splices (or by the quote
 itself) are owned by the lambda (`$anonfun`) - i.e. `ValDefs.createVal` does not use the splice owner of the quoted
 lambda it is created in.
+
+## Re-checked with Hearth `0.4.4-11-gd62d007-SNAPSHOT` (2026-11-15)
+
+Hearth `d62d007e` makes `ValDefs` take the current `CrossQuotes.ctx` splice owner even when it is a quoted lambda's
+`$anonfun` (it used to fall back to the expansion's owner), and gives `LambdaBuilder` bodies their parameters' owner.
+
+**Fixed:** every variant of `hearth-lambda-owner-repro/` above compiles, and in Kindlings these workarounds could be
+removed (Scala 2.13 and 3 compile and pass):
+
+- circe `deriveAsObject`: `val json: Json = ${ ... }` around the splice again;
+- circe `EncoderHandleAsMapRule`: non-`String` keys are encoded inside the pair lambda again
+  (`jsonFromMappedPairs`; `jsonFromKeyedPairs` is deprecated, kept for 0.3.x-compiled code);
+- sconfig `ReaderHandleAsEnumRule.firstSuccess`: one `ValDefs` val per attempt, the next attempt in the `else` splice
+  (the unreleased `FirstSuccessAttempts` runtime accumulator is deleted);
+- pureconfig `ReaderHandleAsEnumRule.firstSuccess`: the same (blocked from verification by the regression below).
+
+**Regression (OPEN):** `ValDefs` vals nested through `MatchCase.matchOn` case bodies (which is how
+`IsEither.fold` folds a Scala `Either` without closures, and so how `EitherFieldsConstruct.buildEitherFailFast`
+constructs a case class) inside the splice of a quoted lambda now get two different owners: the outer val, created
+directly in the splice, is owned by `$anonfun`, while the val created in the case body's callback is owned by
+`val macro`. With `0.4.4-10` both were owned by `val macro` and it compiled. Unchanged pureconfig-derivation code from
+`master` (`ReaderHandleAsCaseClassRule.bindAll` + `buildEitherFailFast`) now fails 95 expansions in
+`pureconfigDerivation/Test/compile` on Scala 3 (every derived case-class reader), e.g.
+`KindlingsConfigReader.derived[(person: SimplePerson, score: Int)]` (`PureconfigScala3Spec.scala:26`):
+
+```
+assertion failed: Block contains definition with different owners.
+Found definitions 2 distinct owners: val macro, method $anonfun
+Block: {
+  val either$macro$3: Either[ConfigReaderFailures, Any] = either$macro$1
+  (either$macro$3 @unchecked) match {
+    case right$macro$1: Right[ConfigReaderFailures, Any] =>
+      { val either$macro$4: Either[ConfigReaderFailures, Any] = either$macro$2
+        (either$macro$4 @unchecked) match { case right$macro$2: Right[...] => Right(new SimplePerson(...)) ... } }
+    case left$macro$2: Left[ConfigReaderFailures, Any] => ...
+  }
+}
+Definitions owned by val macro: left$macro$1, right$macro$2, val either$macro$4
+Definitions owned by method $anonfun: left$macro$2, right$macro$1, val either$macro$3
+```
+
+Hearth-only reproducer: variant M (`matchCaseChainInsideQuotedLambda`) in `hearth-lambda-owner-repro/`, `./run.sh`:
+
+```scala
+def foldAll(remaining: List[Expr[Either[String, Int]]], sum: Expr[Int]): Expr[Either[String, Int]] = remaining match {
+  case r :: rest =>
+    ValDefs.createVal[Either[String, Int]](r, "either").use { bound =>
+      MatchCase.matchOn[Either[String, Int], Either[String, Int]](bound)(NonEmptyVector(
+        MatchCase.typeMatch[Right[String, Int]]("right").map(right => foldAll(rest, Expr.quote(Expr.splice(sum) + Expr.splice(right).value))),
+        MatchCase.typeMatch[Left[String, Int]]("left").map(left => Expr.quote(Expr.splice(left): Either[String, Int]))
+      ))
+    }
+  case Nil => Expr.quote(Right(Expr.splice(sum)): Either[String, Int])
+}
+Expr.quote((i: Int) => Expr.splice(foldAll(List(Expr.quote(Right(i): Either[String, Int]), Expr.quote(Right(i + 1): Either[String, Int])), Expr(0))))
+```
+
+compiles with `0.4.4-10-ga030def-SNAPSHOT` and fails with `0.4.4-11-gd62d007-SNAPSHOT` ("Found definitions 2 distinct
+owners: val macro, method $anonfun": `either$macro$1`/`right$macro$1` owned by `$anonfun`, `either$macro$2`/
+`right$macro$2` by `val macro`), while variants D, shape 1, G and H are the other way round. Suggested Hearth fix:
+build `MatchCase` case bodies (the `.map` callbacks run by `matchOn`) under the same `CrossQuotes.ctx` as the
+`matchOn` call, so vals created in them get the same splice owner as the scrutinee's val - or re-own case bodies to
+the scrutinee's owner as `matchOn` already does for the scrutinee.
+
+**Extent of the regression** (`<module>/Test/compile` on Scala 3 with `0.4.4-11-gd62d007-SNAPSHOT`, after `cleanFull`;
+everything compiles with `0.4.4-10`):
+
+| Module | Failure |
+|---|---|
+| pureconfig-derivation | 95 expansions, "different owners" in `buildEitherFailFast` (above) |
+| yaml-derivation | 17 expansions, the same (`KindlingsYamlDecoder.fromYamlString[SimplePerson]`, `InlineMethodsSpec.scala:29`) |
+| cats-derivation | 53 expansions, "different owners" between `ValDefsCache` entries: cached `def`s (e.g. `eqv_Green`, `compare_Green`) owned by `val macro`, cached `lazy val`s (e.g. `eq_Int`) owned by `$anonfun` (`cats.kernel.Eq.derived[TrafficLight]`, `CatsScala3Spec.scala:83`) |
+| cats-tagless-derivation | 7 expansions, the same between two cached `lazy val`s (`KindlingsInvariantK.derived[OuterAlg]`, `examples.scala:46`) |
+| integration-tests | 12 expansions (cats + yaml, `CatsYamlSpec.scala:25`) |
+| optics | compiler crash in `lambdaLift`: "Could not find proxy for case val x25: SealedFieldSpec.Motorized" (`SealedFieldSpec.scala`) - no `-Xcheck-macros` there, so the wrong owner surfaces as a crash |
+| upstream-oracle-tests | compiler crash in `lambdaLift`: "value recon is not visible from <none>" (`oracle/catsderivation/CtSides.scala`) |
+
+All other JVM modules compile.
+
+**Still a workaround, kept until the regression is fixed:** pureconfig `ReaderHandleAsCaseClassRule.bindAll` keeps
+`constructedResult`/`unknownKeys` as `ValDefs` vals and builds lists with `acc.::(r)` (restoring the quote-level
+`val constructed` + `r :: acc` fails the same way as the unchanged code, so it could not be evaluated either).
+
+## Re-checked with Hearth `0.4.4-13-g9038396-SNAPSHOT` (2026-11-16)
+
+Status: **RESOLVED**. Hearth reverted `d62d007e` (`15b70edb`) and replaced it with `90383964`: `ValDefs` vals and
+`MatchCase` case bodies use the current splice owner (the lambda inside its splice), definitions built with
+`ValDefBuilder` (`ValDefsCache`) keep the owner of the place the cache is turned into definitions, and `LambdaBuilder`
+gives its body the owner of its parameters' vals. Variant M is now a Hearth test.
+
+- `hearth-lambda-owner-repro/` (`./run.sh`): every variant compiles, variant M included.
+- All Kindlings JVM modules compile and pass on Scala 3 and 2.13 (the seven modules broken by `0.4.4-11` included).
+- Workarounds removed: circe `deriveAsObject` (`val json`), circe `EncoderHandleAsMapRule` (keys encoded inside the
+  pair lambda; `jsonFromKeyedPairs` deprecated, kept for 0.3.x-compiled code), sconfig and pureconfig
+  `ReaderHandleAsEnumRule.firstSuccess` (one `val` per attempt; the unreleased `FirstSuccessAttempts` deleted),
+  pureconfig `ReaderHandleAsCaseClassRule.bindAll` (`val constructed`/`val unknownKeys` in the quote, `r :: acc`), and
+  yaml `deriveInlineToYamlString` (`val node = ${ ... }` again, from #298's `toYamlString` of recursive types reached
+  through an `Option`).
+
