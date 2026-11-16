@@ -63,14 +63,8 @@ trait EncoderMacrosImpl
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            // Spliced directly as the argument: splicing the derived body as the right-hand side of a local `val`
-            // gives that `val` as the owner of the definitions the body creates (e.g. the lambdas of Option/collection
-            // fields) while they belong to the enclosing method - Scala 3 -Xcheck-macros rejects that ("Block contains
-            // definition with different owners") for recursive types reached through an Option.
-            YamlDerivationUtils.nodeToYaml(
-              Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig))),
-              Expr.splice(configVal).emptyCollectionsAsFlow
-            )
+            val node = Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
+            YamlDerivationUtils.nodeToYaml(node, Expr.splice(configVal).emptyCollectionsAsFlow)
           }
         }
       }

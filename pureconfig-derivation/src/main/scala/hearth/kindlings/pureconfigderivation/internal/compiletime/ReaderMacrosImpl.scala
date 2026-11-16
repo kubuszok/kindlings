@@ -312,8 +312,6 @@ trait ReaderMacrosImpl
       Type.Lazy(Type.of[Either[ConfigReaderFailures, Any]])
     val ListEitherFailuresAny: Type[List[Either[ConfigReaderFailures, Any]]] =
       Type.of[List[Either[ConfigReaderFailures, Any]]]
-    val FirstSuccessAttempts: Type[PureConfigDerivationUtils.FirstSuccessAttempts] =
-      Type.of[PureConfigDerivationUtils.FirstSuccessAttempts]
     val OptionFailures: Type[Option[ConfigReaderFailures]] = Type.of[Option[ConfigReaderFailures]]
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
     val SetString: Type.Lazy[Set[String]] = Type.Lazy(Type.of[Set[String]])

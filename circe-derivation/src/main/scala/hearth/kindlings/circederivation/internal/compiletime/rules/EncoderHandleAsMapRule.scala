@@ -59,10 +59,7 @@ trait EncoderHandleAsMapRuleImpl {
             })
           }
       } else {
-        // Non-String keys — try to derive a key-to-String function. The pair lambda returns the key itself (not the
-        // encoded key): splicing the key-encoding function literal inside the LambdaBuilder body would nest a lambda
-        // created with a different owner (Scala 3 "Block contains definition with different owners").
-        implicit val KeyJsonPairT: Type[(Key, Json)] = Type.of[(Key, Json)]
+        // Non-String keys — try to derive a key-to-String function
         deriveKeyEncoder[Key].flatMap {
           case Some(keyEncoderLambda) =>
             LambdaBuilder
@@ -72,18 +69,17 @@ trait EncoderHandleAsMapRuleImpl {
                 val valueExpr = isMap.value(pairExpr)
                 deriveEncoderRecursively[Value](using ectx.nest(valueExpr)).map { valueJson =>
                   Expr.quote {
-                    (Expr.splice(keyExpr), Expr.splice(valueJson))
+                    (Expr.splice(keyEncoderLambda).apply(Expr.splice(keyExpr)), Expr.splice(valueJson))
                   }
                 }
               }
               .map { builder =>
-                val pairLambda = builder.build[(Key, Json)]
+                val pairLambda = builder.build[(String, Json)]
                 val iterableExpr = isMap.asIterable(ectx.value)
                 Rule.matched(Expr.quote {
-                  CirceDerivationUtils.jsonFromKeyedPairs[Pair, Key](
+                  CirceDerivationUtils.jsonFromMappedPairs[Pair](
                     Expr.splice(iterableExpr),
-                    Expr.splice(pairLambda),
-                    Expr.splice(keyEncoderLambda)
+                    Expr.splice(pairLambda)
                   )
                 })
               }

@@ -252,21 +252,19 @@ object SConfigDerivationUtils {
     */
   def readObjectAs[A](config: ConfigValue, value: A): Either[ConfigDecodingError, A] = asObject(config).map(_ => value)
 
-  /** The attempts of upstream `FirstSuccessCoproductHint` semantics: each subtype's result is passed to [[succeeded]]
-    * in the order attempted; the first success is the [[result]], and when none succeeds, [[failed]] reports every
-    * attempt in `NoValidCoproductOptionFound`.
+  /** The failure upstream `FirstSuccessCoproductHint` reports when no subtype could be read:
+    * `NoValidCoproductOptionFound` with the failed results of every attempted subtype (in the order attempted).
     */
-  final class FirstSuccessAttempts(val value: ConfigValue, options: List[String]) {
-    private var failures: List[ConfigDecodingError] = Nil
-    private var success: Either[ConfigDecodingError, Any] = null
-    def succeeded(attempt: Either[ConfigDecodingError, Any]): Boolean = attempt match {
-      case Right(_) => success = attempt; true
-      case Left(f)  => failures = f :: failures; false
-    }
-    def result[A]: Either[ConfigDecodingError, A] = success.asInstanceOf[Either[ConfigDecodingError, A]]
-    def failed[A]: Either[ConfigDecodingError, A] =
-      Left(ConfigDecodingError.NoValidCoproductOptionFound(Nil, value, options.zip(failures.reverse)))
-  }
+  def noValidCoproductOptionFromResults(
+      value: ConfigValue,
+      options: List[String],
+      results: List[Either[ConfigDecodingError, Any]]
+  ): ConfigDecodingError =
+    ConfigDecodingError.NoValidCoproductOptionFound(
+      Nil,
+      value,
+      options.zip(results).collect { case (option, Left(failure)) => (option, failure) }
+    )
 
   /** Write a sealed-trait subtype with a discriminator field, the way upstream PureConfig's `FieldCoproductHint.to`
     * does: the discriminator comes first; a subtype value that already has the key, or is not an object, is rejected

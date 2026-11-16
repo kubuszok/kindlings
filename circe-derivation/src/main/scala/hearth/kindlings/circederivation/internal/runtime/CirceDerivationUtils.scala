@@ -228,15 +228,6 @@ object CirceDerivationUtils {
   def jsonFromMappedPairs[P](pairs: Iterable[P], toPair: P => (String, Json)): Json =
     Json.fromJsonObject(JsonObject.fromIterable(pairs.map(toPair)))
 
-  /** Like [[jsonFromMappedPairs]] for non-`String` keys: `toPair` returns the key, which `encodeKey` turns into a
-    * `String`.
-    */
-  def jsonFromKeyedPairs[P, K](pairs: Iterable[P], toPair: P => (K, Json), encodeKey: K => String): Json =
-    Json.fromJsonObject(JsonObject.fromIterable(pairs.map { p =>
-      val (k, json) = toPair(p)
-      (encodeKey(k), json)
-    }))
-
   // --- Decoder helpers ---
 
   def decodeField[A](cursor: HCursor, fieldName: String, decoder: Decoder[A]): Decoder.Result[A] =
@@ -947,6 +938,16 @@ object CirceDerivationUtils {
 
   final private val Compat03 =
     "kept for binary compatibility of code compiled against Kindlings 0.3.x; the macro no longer emits it"
+
+  /** Like [[jsonFromMappedPairs]] for non-`String` keys: `toPair` returns the key, which `encodeKey` turns into a
+    * `String`.
+    */
+  @deprecated(Compat03, "0.3.5")
+  def jsonFromKeyedPairs[P, K](pairs: Iterable[P], toPair: P => (K, Json), encodeKey: K => String): Json =
+    Json.fromJsonObject(JsonObject.fromIterable(pairs.map { p =>
+      val (k, json) = toPair(p)
+      (encodeKey(k), json)
+    }))
 
   @deprecated(Compat03, "0.3.4")
   def decodeEnumFromString[A](cursor: HCursor, knownSubtypes: List[String])(
