@@ -3,6 +3,7 @@ package repro
 import hearth.*
 import hearth.fp.instances.*
 import hearth.fp.syntax.*
+import hearth.fp.data.NonEmptyVector
 import scala.quoted.Quotes
 
 /** The macro logic, written with Hearth's cross-platform API. */
@@ -71,6 +72,39 @@ trait ReproImpl { this: MacroCommons =>
         .apply(i)
     }
   }
+
+  /** Variant M (regression in 0.4.4-11): `ValDefs` vals nested through `MatchCase.matchOn` case bodies (how
+    * `IsEither.fold` folds an `Either` without closures), built inside the splice of a quoted lambda.
+    */
+  def matchCaseChainInsideQuotedLambda: Expr[Int => Either[String, Int]] = {
+    implicit val IntT: Type[Int] = Type.of[Int]
+    implicit val StringT: Type[String] = Type.of[String]
+    implicit val EitherT: Type[Either[String, Int]] = Type.of[Either[String, Int]]
+    implicit val RightT: Type[Right[String, Int]] = Type.of[Right[String, Int]]
+    implicit val LeftT: Type[Left[String, Int]] = Type.of[Left[String, Int]]
+    def foldAll(remaining: List[Expr[Either[String, Int]]], sum: Expr[Int]): Expr[Either[String, Int]] =
+      remaining match {
+        case r :: rest =>
+          ValDefs.createVal[Either[String, Int]](r, "either").use { bound =>
+            MatchCase.matchOn[Either[String, Int], Either[String, Int]](bound)(
+              NonEmptyVector(
+                MatchCase.typeMatch[Right[String, Int]]("right").map { right =>
+                  foldAll(rest, Expr.quote(Expr.splice(sum) + Expr.splice(right).value))
+                },
+                MatchCase.typeMatch[Left[String, Int]]("left").map { left =>
+                  Expr.quote(Expr.splice(left): Either[String, Int])
+                }
+              )
+            )
+          }
+        case Nil => Expr.quote(Right(Expr.splice(sum)): Either[String, Int])
+      }
+    Expr.quote { (i: Int) =>
+      Expr.splice(
+        foldAll(List(Expr.quote(Right(i): Either[String, Int]), Expr.quote(Right(i + 1): Either[String, Int])), Expr(0))
+      )
+    }
+  }
 }
 
 final class Repro(q: Quotes) extends MacroCommonsScala3(using q), ReproImpl
@@ -86,4 +120,6 @@ object Repro {
     new Repro(q).quotedLambdaInsideLambdaBuilder
   def lambdaBuilderInsideQuotedLambdaImpl(using q: Quotes): scala.quoted.Expr[Int => Int] =
     new Repro(q).lambdaBuilderInsideQuotedLambda
+  def matchCaseChainInsideQuotedLambdaImpl(using q: Quotes): scala.quoted.Expr[Int => Either[String, Int]] =
+    new Repro(q).matchCaseChainInsideQuotedLambda
 }
