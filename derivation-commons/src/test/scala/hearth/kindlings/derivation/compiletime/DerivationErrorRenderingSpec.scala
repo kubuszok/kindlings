@@ -20,6 +20,14 @@ final class DerivationErrorRenderingSpec extends hearth.MacroSuite {
 
   group("DerivationErrorRendering.renderError") {
 
+    test("removes ANSI colour codes (Type#prettyPrint) from the message") {
+      DerivationErrorRendering.renderError(
+        new RuntimeException(
+          "The type \u001b[32mFoo\u001b[0m[\u001b[32mInt\u001b[0m] is not\nhandled by \u001b[1;31mX\u001b[0m"
+        )
+      ) ==> "  - The type Foo[Int] is not\n    handled by X"
+    }
+
     test("renders a single-line message as one bullet") {
       DerivationErrorRendering.renderError(new RuntimeException("boom")) ==> "  - boom"
     }

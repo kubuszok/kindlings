@@ -14,9 +14,17 @@ object DerivationErrorRendering {
     if (message eq null) e.toString else message
   }
 
-  /** Renders one error as `"  - first line"`, with every further line indented by 4 spaces. */
+  private val AnsiEscape = "\u001b\\[[0-9;]*[A-Za-z]".r
+
+  /** `text` without ANSI escape codes. Error messages are built with `Type#prettyPrint`, which colours type names for
+    * the logs; in an error message the codes are noise (e.g. in munit's `compileErrors` or an IDE).
+    */
+  def withoutAnsiCodes(text: String): String =
+    if (text.indexOf('\u001b') < 0) text else AnsiEscape.replaceAllIn(text, "")
+
+  /** Renders one error as `"  - first line"`, with every further line indented by 4 spaces, without ANSI codes. */
   def renderError(e: Throwable): String = {
-    val message = messageOf(e)
+    val message = withoutAnsiCodes(messageOf(e))
     message.split("\n").toList match {
       case head :: tail => (("  - " + head) :: tail.map("    " + _)).mkString("\n")
       case Nil          => "  - " + message

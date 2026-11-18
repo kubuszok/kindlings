@@ -84,7 +84,7 @@ trait ShowMacrosImpl
         val hint =
           "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
         if (errorLogs.nonEmpty)
-          s"Macro derivation failed with the following errors:\n$errorsRendered\nand the following logs:\n$errorLogs\n$hint"
+          s"Macro derivation failed with the following errors:\n$errorsRendered\nand the following logs:\n${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}\n$hint"
         else
           s"Macro derivation failed with the following errors:\n$errorsRendered\n$hint"
       }

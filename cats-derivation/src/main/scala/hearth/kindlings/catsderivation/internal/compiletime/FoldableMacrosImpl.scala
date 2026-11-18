@@ -240,7 +240,8 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
           hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
           "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
-        if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
+        if (errorLogs.nonEmpty)
+          s"Macro derivation failed:\n$errorsRendered\nlogs:\n${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }
   }
