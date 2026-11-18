@@ -98,27 +98,35 @@ trait DecoderHandleAsEnumRuleImpl {
                 }
                 .map { builder =>
                   val dispatchFn = builder.build[Either[ConstructError, A]]
+                  // The dispatch function is spliced once, bound to a val, and used by every encoding that reads a
+                  // type name (it used to be spliced into each of them). scala-yaml's untagged decoding does not need
+                  // it, so it is checked first and does not create the function.
                   Expr.quote {
                     val config = Expr.splice(dctx.config)
                     val node = Expr.splice(dctx.node)
-                    if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings) {
-                      YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) { typeName =>
-                        Expr.splice(dispatchFn)((typeName, node))
-                      }
-                    } else {
-                      config.discriminator match {
-                        case Some(field) =>
-                          YamlDerivationUtils.decodeDiscriminator(node, field).flatMap(Expr.splice(dispatchFn))
-                        case None =>
-                          if (config.wrappedSubtypes || Expr.splice(Expr(alwaysWrapped)))
-                            YamlDerivationUtils.decodeWrapped(node).flatMap(Expr.splice(dispatchFn))
-                          // Java enum / Enumeration values (not supported by scala-yaml) are their names
-                          else if (Expr.splice(Expr(isValueEnum)))
-                            YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) {
-                              typeName => Expr.splice(dispatchFn)((typeName, node))
-                            }
-                          else Expr.splice(untagged(Expr.quote(node)))
-                      }
+                    if (
+                      !(Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings) && config.discriminator.isEmpty &&
+                      !config.wrappedSubtypes && !Expr.splice(Expr(alwaysWrapped)) && !Expr.splice(Expr(isValueEnum))
+                    ) Expr.splice(untagged(Expr.quote(node)))
+                    else {
+                      val dispatchSubtype = Expr.splice(dispatchFn)
+                      if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings)
+                        YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) { typeName =>
+                          dispatchSubtype((typeName, node))
+                        }
+                      else
+                        config.discriminator match {
+                          case Some(field) =>
+                            YamlDerivationUtils.decodeDiscriminator(node, field).flatMap(dispatchSubtype)
+                          case None =>
+                            if (config.wrappedSubtypes || Expr.splice(Expr(alwaysWrapped)))
+                              YamlDerivationUtils.decodeWrapped(node).flatMap(dispatchSubtype)
+                            // Java enum / Enumeration values (not supported by scala-yaml) are their names
+                            else
+                              YamlDerivationUtils.decodeEnumFromString[A](node, Expr.splice(Expr(knownNames))) {
+                                typeName => dispatchSubtype((typeName, node))
+                              }
+                        }
                     }
                   }
                 }
