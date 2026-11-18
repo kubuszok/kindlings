@@ -60,12 +60,26 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.wrapByteSeq(Expr.splice(value).asInstanceOf[Vector[Byte]]): Any))
       else if (tpe =:= Type.of[BigDecimal])
         Some(
-          Expr.quote {
-            val bd = Expr.splice(value).asInstanceOf[BigDecimal]
-            (Expr.splice(ectx.config).decimalConfig match {
-              case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
-              case None     => bd.toString
-            }): Any
+          ectx.evaluatedConfig match {
+            case Some(cfg) =>
+              cfg.decimalConfig match {
+                case Some(dc) =>
+                  Expr.quote(
+                    AvroDerivationUtils.encodeBigDecimal(
+                      Expr.splice(value).asInstanceOf[BigDecimal],
+                      Expr.splice(Expr(dc.scale))
+                    ): Any
+                  )
+                case None => Expr.quote(Expr.splice(value).asInstanceOf[BigDecimal].toString: Any)
+              }
+            case None =>
+              Expr.quote {
+                val bd = Expr.splice(value).asInstanceOf[BigDecimal]
+                (Expr.splice(ectx.config).decimalConfig match {
+                  case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
+                  case None     => bd.toString
+                }): Any
+              }
           }
         )
       else if (tpe =:= Type.of[java.util.UUID])
@@ -75,7 +89,7 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
           Expr.quote(
             AvroDerivationUtils.encodeInstant(
               Expr.splice(value).asInstanceOf[java.time.Instant],
-              Expr.splice(ectx.config).instantPrecision
+              Expr.splice(instantPrecisionExpr(ectx.config, ectx.evaluatedConfig))
             ): Any
           )
         )
@@ -88,7 +102,7 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
           Expr.quote(
             AvroDerivationUtils.encodeLocalDateTime(
               Expr.splice(value).asInstanceOf[java.time.LocalDateTime],
-              Expr.splice(ectx.config).localDateTimePrecision
+              Expr.splice(localDateTimePrecisionExpr(ectx.config, ectx.evaluatedConfig))
             ): Any
           )
         )
@@ -97,7 +111,7 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
           Expr.quote(
             AvroDerivationUtils.encodeOffsetDateTime(
               Expr.splice(value).asInstanceOf[java.time.OffsetDateTime],
-              Expr.splice(ectx.config).offsetDateTimeAsIsoString
+              Expr.splice(offsetDateTimeAsIsoStringExpr(ectx.config, ectx.evaluatedConfig))
             ): Any
           )
         )
@@ -106,7 +120,7 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
           Expr.quote(
             AvroDerivationUtils.encodeSqlTimestamp(
               Expr.splice(value).asInstanceOf[java.sql.Timestamp],
-              Expr.splice(ectx.config).instantPrecision
+              Expr.splice(instantPrecisionExpr(ectx.config, ectx.evaluatedConfig))
             ): Any
           )
         )
