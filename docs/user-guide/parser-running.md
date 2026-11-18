@@ -165,9 +165,41 @@ with bounded memory (plus whatever your actions build). Multi-byte UTF-8 charact
 ### Push API (integrations and REPLs)
 
 `parser.pushMachine()` returns a low-level machine fed with `machine.feed(chunk)` / `machine.endOfInput()` and driven
-with `machine.run(budget)`, which returns `Machine.NeedInput`, `Machine.Effect` (run `machine.pendingEffect`, then
-`machine.resume(result)`), `Machine.Yield` (the budget was spent), `Machine.Done` (`machine.result`) or
-`Machine.Error` (`machine.error`). The engines and the fs2 pipes are built on it.
+with `machine.run(budget)`, which returns one of the `MachineStatus` constants (in `hearth.kindlings.parser`, so no
+`internal` import is needed): `MachineStatus.NeedInput`, `MachineStatus.Effect` (run `machine.pendingEffect`, then
+`machine.resume(result)`), `MachineStatus.Yield` (the budget was spent), `MachineStatus.Done` (`machine.result`) or
+`MachineStatus.Error` (`machine.error`). The engines and the fs2 pipes are built on it.
+
+```scala
+//> using dep com.kubuszok::kindlings-parser:{{ kindlings_version() }}
+
+import hearth.kindlings.parser._
+
+val sum: Parser[Id, Int] = Grammar.grammar[Int, Id] { g =>
+  import g._
+  val sum = nonTerminal[Int]
+  skip(" +")
+  sum ::= all(rep(terminal("[0-9]+").map(_.toInt))).pure(_.sum)
+  sum
+}
+
+val machine = sum.pushMachine()
+val chunks = Iterator("1 2 ", "3", "4 5", " 6")
+var result: Option[Any] = None
+while (result.isEmpty)
+  machine.run() match {
+    case MachineStatus.NeedInput => if (chunks.hasNext) machine.feed(chunks.next()) else machine.endOfInput()
+    case MachineStatus.Done      => result = Some(machine.result)
+    case MachineStatus.Error     => throw machine.error
+    case _                       => () // Yield: run again (Effect cannot happen: this grammar has no effects)
+  }
+println(result.get)
+// expected output:
+// 48
+```
+
+The same constants are also available as `hearth.kindlings.parser.internal.runtime.Machine.Done`, ... (used before
+`MachineStatus` was added).
 
 ## Syntax errors
 
