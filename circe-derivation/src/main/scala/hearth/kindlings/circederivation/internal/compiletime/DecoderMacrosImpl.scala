@@ -17,7 +17,7 @@ trait DecoderMacrosImpl
     with CirceDerivationPolicy
     with SealedHierarchyFlattening
     with hearth.kindlings.derivation.compiletime.MethodFolds
-    with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
+    with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsLiteralTypeRuleImpl
@@ -101,149 +101,157 @@ trait DecoderMacrosImpl
         s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
         MIO.scoped { runSafe =>
-          // Step 1: Run derivation once (populates cache with the cached def)
-          val ctx = DecoderCtx.from[A](
-            cursor = Expr.quote(null.asInstanceOf[HCursor]), // placeholder — real cursor comes from cached def params
-            config = Expr.quote(null.asInstanceOf[Configuration]), // placeholder
-            failFast = Expr.quote(true), // placeholder
-            derivedType = selfType,
-            evaluatedConfig = evConfig
-          )
-          runSafe {
-            for {
-              _ <- ensureStandardExtensionsLoaded()
-              _ <- deriveDecoderRecursively[A](using ctx)
-            } yield ()
-          }
+          // The configuration is a val around the whole instance (cached defs and lazy vals included), so cached field
+          // decoders can be lazy vals of the instance (created once, not on every decode).
+          ValDefs.createVal[Configuration](configExpr).use { configVal =>
+            // Step 1: Run derivation once (populates cache with the cached def)
+            val ctx = DecoderCtx.from[A](
+              cursor = Expr.quote(null.asInstanceOf[HCursor]), // placeholder — real cursor comes from cached def params
+              config = configVal,
+              failFast = Expr.quote(true), // placeholder
+              derivedType = selfType,
+              evaluatedConfig = evConfig
+            )
+            runSafe {
+              for {
+                _ <- ensureStandardExtensionsLoaded()
+                _ <- deriveDecoderRecursively[A](using ctx)
+              } yield ()
+            }
 
-          // Step 2: Get the cached helper reference and cache
-          val helperOpt = runSafe(ctx.getHelper[A])
-          val cache = runSafe(ctx.cache.get)
+            // Step 2: Get the cached helper reference and cache
+            val helperOpt = runSafe(ctx.getHelper[A])
+            // A case class has separate fail-fast and accumulating defs: `apply` and `decodeAccumulating` call them.
+            val failFastHelperOpt = runSafe(ctx.getFailFastHelper[A])
+            val accumulatingHelperOpt = runSafe(ctx.getAccumulatingHelper[A])
+            val cache = runSafe(ctx.cache.get)
 
-          // Step 2b: For types handled without a cached helper (value types, options, collections, maps),
-          // build a direct Decoder[A] that we can delegate to in the KindlingsDecoder body.
-          val directDecoderOpt: Option[Expr[Decoder[A]]] =
-            if (helperOpt.isDefined) None
-            else Some(runSafe(deriveDecoderViaLambda[A](configExpr, selfType, evConfig)))
+            // Step 2b: For types handled without a cached helper (value types, options, collections, maps),
+            // build a direct Decoder[A] that we can delegate to in the KindlingsDecoder body.
+            val directDecoderOpt: Option[Expr[Decoder[A]]] =
+              if (helperOpt.isDefined) None
+              else Some(runSafe(deriveDecoderViaLambda[A](configVal, selfType, evConfig)))
 
-          // Step 2c: A derived sum is marked as a KindlingsSumDecoder, exposing the constructor names it dispatches on
-          // (so that it is flattened when used as the instance of an intermediate sealed trait).
-          val sumMarker: Option[(Expr[List[String]], Expr[List[Decoder[Any]]])] =
-            if (helperOpt.isDefined && isMarkedSum[A])
-              Enum.parse[A].toOption.map { enumm =>
-                val entries = decoderSumEntries[A](enumm)
-                val names = entries.map(_._1).foldRight(Expr.quote(List.empty[String])) { (n, acc) =>
-                  Expr.quote(Expr.splice(Expr(n)) :: Expr.splice(acc))
-                }
-                (names, intermediateDecodersExpr(entries))
-              }
-            else None
-
-          // Step 2d: A derived case class exposes its expected fields and its strictness (generic-extras' ExtrasDecoder).
-          val productFields: Option[Expr[Configuration] => Expr[List[String]]] =
-            if (helperOpt.isEmpty || sumMarker.isDefined || anyValCaseClass[A].isDefined || Type[A].isTuple) None
-            else
-              CaseClass.parse[A].toOption.filter(_ => SingletonValue.unapply(Type[A]).isEmpty).map { caseClass =>
-                implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
-                implicit val transientFieldT: Type[transientField] = DTypes.TransientField
-                val names: List[(String, Option[String])] = caseClass.primaryConstructor.totalParameters.flatten.toList
-                  .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
-                  .map { case (name, p) => (name, getAnnotationStringArg[fieldName](p)) }
-                (cfg: Expr[Configuration]) =>
-                  names.foldRight(Expr.quote(Expr.splice(cfg).discriminator.toList)) {
-                    case ((_, Some(custom)), acc) => Expr.quote(Expr.splice(Expr(custom)) :: Expr.splice(acc))
-                    case ((name, None), acc)      =>
-                      Expr.quote(Expr.splice(cfg).transformMemberNames(Expr.splice(Expr(name))) :: Expr.splice(acc))
+            // Step 2c: A derived sum is marked as a KindlingsSumDecoder, exposing the constructor names it dispatches
+            // on (so that it is flattened when used as the instance of an intermediate sealed trait).
+            val sumMarker: Option[(Expr[List[String]], Expr[List[Decoder[Any]]])] =
+              if (helperOpt.isDefined && isMarkedSum[A])
+                Enum.parse[A].toOption.map { enumm =>
+                  val entries = decoderSumEntries[A](enumm)
+                  val names = entries.map(_._1).foldRight(Expr.quote(List.empty[String])) { (n, acc) =>
+                    Expr.quote(Expr.splice(Expr(n)) :: Expr.splice(acc))
                   }
+                  (names, intermediateDecodersExpr(entries))
+                }
+              else None
+
+            // Step 2d: A derived case class exposes its expected fields and its strictness (generic-extras'
+            // ExtrasDecoder).
+            val productFields: Option[Expr[Configuration] => Expr[List[String]]] =
+              if (helperOpt.isEmpty || sumMarker.isDefined || anyValCaseClass[A].isDefined || Type[A].isTuple) None
+              else
+                CaseClass.parse[A].toOption.filter(_ => SingletonValue.unapply(Type[A]).isEmpty).map { caseClass =>
+                  implicit val fieldNameT: Type[fieldName] = DTypes.FieldName
+                  implicit val transientFieldT: Type[transientField] = DTypes.TransientField
+                  val names: List[(String, Option[String])] =
+                    caseClass.primaryConstructor.totalParameters.flatten.toList
+                      .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
+                      .map { case (name, p) => (name, getAnnotationStringArg[fieldName](p)) }
+                  (cfg: Expr[Configuration]) =>
+                    names.foldRight(Expr.quote(Expr.splice(cfg).discriminator.toList)) {
+                      case ((_, Some(custom)), acc) => Expr.quote(Expr.splice(Expr(custom)) :: Expr.splice(acc))
+                      case ((name, None), acc)      =>
+                        Expr.quote(Expr.splice(cfg).transformMemberNames(Expr.splice(Expr(name))) :: Expr.splice(acc))
+                    }
+                }
+
+            // `apply` and `decodeAccumulating` of the instance.
+            def applyResult(c: Expr[HCursor]): Expr[Either[DecodingFailure, A]] = failFastHelperOpt match {
+              case Some(failFast) => failFast(c)
+              case None           =>
+                Expr.quote(
+                  Expr.splice(helperOpt.get(c, configVal, Expr.quote(true))).asInstanceOf[Either[DecodingFailure, A]]
+                )
+            }
+            def accumulatingResult(c: Expr[HCursor]): Expr[ValidatedNel[DecodingFailure, A]] =
+              accumulatingHelperOpt match {
+                case Some(accumulating) => accumulating(c)
+                case None               =>
+                  Expr.quote(
+                    Expr
+                      .splice(helperOpt.get(c, configVal, Expr.quote(false)))
+                      .asInstanceOf[ValidatedNel[DecodingFailure, A]]
+                  )
               }
 
-          // Step 3: Wrap cached defs around the entire KindlingsDecoder block
-          // Both apply and decodeAccumulating call the same cached def with different failFast values
-          // Without a cached helper the step-1 cache is not referenced (the direct decoder has its own).
-          def withStep1Cache(body: Expr[KindlingsDecoder[A]]): Expr[KindlingsDecoder[A]] =
-            if (helperOpt.isDefined) cache.toValDefs.use(_ => body) else body
-          withStep1Cache {
-            ValDefs.createVal[Configuration](configExpr).use { configVal =>
-              Expr.quote {
-                val cfg = Expr.splice(configVal)
-                Expr.splice {
-                  helperOpt match {
-                    case Some(helper) if sumMarker.isDefined =>
-                      val namesExpr: Expr[List[String]] = sumMarker.get._1
-                      val intermediatesExpr: Expr[List[Decoder[Any]]] = sumMarker.get._2
-                      Expr.quote {
-                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                          .sumDecoderWithAccInstance[A](
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
-                                .asInstanceOf[Either[DecodingFailure, A]]
-                            },
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
-                                .asInstanceOf[ValidatedNel[DecodingFailure, A]]
-                            },
-                            (name: String) =>
-                              CirceDerivationUtils.sumHandles(
-                                name,
-                                cfg.transformConstructorNames,
-                                Expr.splice(namesExpr),
-                                Expr.splice(intermediatesExpr)
-                              )
+            // Step 3: Wrap cached defs around the entire KindlingsDecoder block.
+            // Without a cached helper the step-1 cache is not referenced (the direct decoder has its own).
+            def withStep1Cache(body: Expr[KindlingsDecoder[A]]): Expr[KindlingsDecoder[A]] =
+              if (helperOpt.isDefined) cache.toValDefs.use(_ => body) else body
+            withStep1Cache {
+              helperOpt match {
+                case Some(_) if sumMarker.isDefined =>
+                  val namesExpr: Expr[List[String]] = sumMarker.get._1
+                  val intermediatesExpr: Expr[List[Decoder[Any]]] = sumMarker.get._2
+                  Expr.quote {
+                    hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                      .sumDecoderWithAccInstance[A](
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(applyResult(Expr.quote(c)))
+                        },
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(accumulatingResult(Expr.quote(c)))
+                        },
+                        (name: String) =>
+                          CirceDerivationUtils.sumHandles(
+                            name,
+                            Expr.splice(configVal).transformConstructorNames,
+                            Expr.splice(namesExpr),
+                            Expr.splice(intermediatesExpr)
                           )
-                      }
-                    case Some(helper) if productFields.isDefined =>
-                      val fieldsExpr: Expr[List[String]] = productFields.get(Expr.quote(cfg))
-                      Expr.quote {
-                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                          .productDecoderWithAccInstance[A](
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
-                                .asInstanceOf[Either[DecodingFailure, A]]
-                            },
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
-                                .asInstanceOf[ValidatedNel[DecodingFailure, A]]
-                            },
-                            cfg.strictDecoding,
-                            Expr.splice(fieldsExpr)
-                          )
-                      }
-                    case Some(helper) =>
-                      Expr.quote {
-                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                          .decoderWithAccInstance[A](
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(true)))
-                                .asInstanceOf[Either[DecodingFailure, A]]
-                            },
-                            (c: HCursor) => {
-                              val _ = c
-                              Expr
-                                .splice(helper(Expr.quote(c), Expr.quote(cfg), Expr.quote(false)))
-                                .asInstanceOf[ValidatedNel[DecodingFailure, A]]
-                            }
-                          )
-                      }
-                    case None =>
-                      Expr.quote {
-                        val _ = cfg // suppress unused when the derived type is a built-in (#206)
-                        // Delegates every method (incl. decodeAccumulating and tryDecode) to the direct decoder, so
-                        // e.g. a derived Decoder[Option[X]] keeps circe's absent-key semantics.
-                        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                          .delegatingDecoderInstance[A](Expr.splice(directDecoderOpt.get))
-                      }
+                      )
                   }
-                }
+                case Some(_) if productFields.isDefined =>
+                  val fieldsExpr: Expr[List[String]] = productFields.get(configVal)
+                  Expr.quote {
+                    hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                      .productDecoderWithAccInstance[A](
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(applyResult(Expr.quote(c)))
+                        },
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(accumulatingResult(Expr.quote(c)))
+                        },
+                        Expr.splice(configVal).strictDecoding,
+                        Expr.splice(fieldsExpr)
+                      )
+                  }
+                case Some(_) =>
+                  Expr.quote {
+                    hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                      .decoderWithAccInstance[A](
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(applyResult(Expr.quote(c)))
+                        },
+                        (c: HCursor) => {
+                          val _ = c
+                          Expr.splice(accumulatingResult(Expr.quote(c)))
+                        }
+                      )
+                  }
+                case None =>
+                  Expr.quote {
+                    val _ = Expr.splice(configVal) // suppress unused when the derived type is a built-in (#206)
+                    // Delegates every method (incl. decodeAccumulating and tryDecode) to the direct decoder, so
+                    // e.g. a derived Decoder[Option[X]] keeps circe's absent-key semantics.
+                    hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+                      .delegatingDecoderInstance[A](Expr.splice(directDecoderOpt.get))
+                  }
               }
             }
           }
@@ -810,15 +818,76 @@ trait DecoderMacrosImpl
       failFast = newFailFast
     )
 
+    /** The context of a cached helper's body. The configuration is NOT replaced by the helper's `config` parameter:
+      * every entry point binds the configuration to a value around all the cached definitions and every helper call
+      * passes that value, so referring to it directly lets the cached field decoders (lazy vals of the instance, see
+      * [[getFieldDecoder]]) be built from code that does not depend on a helper's parameters.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     def nestInCache(
         newCursor: Expr[HCursor],
         newConfig: Expr[Configuration],
         newFailFast: Expr[Boolean]
     ): DecoderCtx[A] = copy(
       cursor = newCursor,
-      config = newConfig,
       failFast = newFailFast
     )
+
+    /** A field's decoder, cached as a lazy val of the instance (evaluated once, not on every decode). */
+    def getFieldDecoder[B: Type]: MIO[Option[Expr[Decoder[B]]]] = {
+      implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
+      cache.get0Ary[Decoder[B]]("cached-field-decoder")
+    }
+    def setFieldDecoder[B: Type](decoder: Expr[Decoder[B]]): MIO[Unit] = {
+      implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
+      cache.buildCachedWith(
+        "cached-field-decoder",
+        ValDefBuilder.ofLazy[Decoder[B]](s"fieldDecoder_${Type[B].shortName}")
+      )(_ => decoder)
+    }
+
+    // A case class's decoding is cached as two defs with one mode each, `(cursor) => Either[DecodingFailure, B]` and
+    // `(cursor) => ValidatedNel[DecodingFailure, B]`, instead of one helper: the instance's `apply` and
+    // `decodeAccumulating` call them directly, and `getHelper` gives other derived code (which has a runtime
+    // `failFast`) `if (failFast) <fail-fast def>(cursor) else <accumulating def>(cursor)`.
+    def getFailFastHelper[B: Type]: MIO[Option[Expr[HCursor] => Expr[Either[DecodingFailure, B]]]] = {
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val ResultT: Type[Either[DecodingFailure, B]] = DTypes.DecoderResult[B]
+      cache.get1Ary[HCursor, Either[DecodingFailure, B]]("cached-decode-fail-fast-method")
+    }
+    def getAccumulatingHelper[B: Type]: MIO[Option[Expr[HCursor] => Expr[ValidatedNel[DecodingFailure, B]]]] = {
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val ResultT: Type[ValidatedNel[DecodingFailure, B]] = DTypes.ValidatedNelDF[B]
+      cache.get1Ary[HCursor, ValidatedNel[DecodingFailure, B]]("cached-decode-accumulating-method")
+    }
+
+    /** Forward-declares both defs (so that recursive references see them), then derives and builds their bodies. */
+    def setModeHelpers[B: Type](
+        deriveBodies: MIO[
+          (Expr[HCursor] => Expr[Either[DecodingFailure, B]], Expr[HCursor] => Expr[ValidatedNel[DecodingFailure, B]])
+        ]
+    ): MIO[Unit] = {
+      implicit val HCursorT: Type[HCursor] = DTypes.HCursor
+      implicit val ResultT: Type[Either[DecodingFailure, B]] = DTypes.DecoderResult[B]
+      implicit val AccResultT: Type[ValidatedNel[DecodingFailure, B]] = DTypes.ValidatedNelDF[B]
+      val failFastBuilder =
+        ValDefBuilder.ofDef1[HCursor, Either[DecodingFailure, B]](s"decodeFailFast_${Type[B].shortName}")
+      val accumulatingBuilder =
+        ValDefBuilder.ofDef1[HCursor, ValidatedNel[DecodingFailure, B]](s"decodeAccumulating_${Type[B].shortName}")
+      for {
+        _ <- Log.info(s"Forward-declaring fail-fast and accumulating decode helpers for ${Type[B].prettyPrint}")
+        _ <- cache.forwardDeclare("cached-decode-fail-fast-method", failFastBuilder)
+        _ <- cache.forwardDeclare("cached-decode-accumulating-method", accumulatingBuilder)
+        bodies <- deriveBodies
+        _ <- cache.buildCachedWith("cached-decode-fail-fast-method", failFastBuilder) { case (_, cursor) =>
+          bodies._1(cursor)
+        }
+        _ <- cache.buildCachedWith("cached-decode-accumulating-method", accumulatingBuilder) { case (_, cursor) =>
+          bodies._2(cursor)
+        }
+        _ <- Log.info(s"Defined fail-fast and accumulating decode helpers for ${Type[B].prettyPrint}")
+      } yield ()
+    }
 
     def getInstance[B: Type]: MIO[Option[Expr[Decoder[B]]]] = {
       implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
@@ -858,7 +927,20 @@ trait DecoderMacrosImpl
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val ConfigT: Type[Configuration] = DTypes.Configuration
       implicit val BooleanT: Type[Boolean] = DTypes.Boolean
-      cache.get3Ary[HCursor, Configuration, Boolean, Any](helperCacheKey[B])
+      for {
+        failFastHelper <- getFailFastHelper[B]
+        accumulatingHelper <- getAccumulatingHelper[B]
+        helper <- cache.get3Ary[HCursor, Configuration, Boolean, Any](helperCacheKey[B])
+      } yield (failFastHelper, accumulatingHelper) match {
+        case (Some(failFast), Some(accumulating)) =>
+          Some { (cursor: Expr[HCursor], _: Expr[Configuration], failFastExpr: Expr[Boolean]) =>
+            Expr.quote {
+              (if (Expr.splice(failFastExpr)) Expr.splice(failFast(cursor))
+               else Expr.splice(accumulating(cursor))): Any
+            }
+          }
+        case _ => helper
+      }
     }
     def setHelper[B: Type](
         helper: (Expr[HCursor], Expr[Configuration], Expr[Boolean]) => MIO[Expr[Any]]
@@ -962,15 +1044,30 @@ trait DecoderMacrosImpl
     */
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   protected def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[Decoder[Field]]] =
-    DTypes
-      .Decoder[Field]
-      .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-      .toEither match {
-      case Right(decoderExpr) =>
-        Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
-      case Left(_) =>
-        Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-          buildDerivedDecoder[Field](ctx.config, ctx)
+    // The decoder is cached as a lazy val (once per instance instead of evaluating e.g. `Decoder.decodeOption(...)` or
+    // allocating a derived decoder on every decode), and shared by all the fields of this type.
+    ctx.getFieldDecoder[Field].flatMap {
+      case Some(cached) => MIO.pure(cached)
+      case None         =>
+        val decoder: MIO[Expr[Decoder[Field]]] = DTypes
+          .Decoder[Field]
+          .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+          .toEither match {
+          case Right(decoderExpr) =>
+            Log.info(s"Found implicit Decoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+          case Left(_) =>
+            Log.info(s"Building Decoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+              buildDerivedDecoder[Field](ctx.config, ctx)
+        }
+        for {
+          decoderExpr <- decoder
+          // a recursive field type may have cached it while it was being derived
+          cached <- ctx.getFieldDecoder[Field]
+          result <- cached match {
+            case Some(existing) => MIO.pure(existing)
+            case None           => ctx.setFieldDecoder[Field](decoderExpr) >> ctx.getFieldDecoder[Field].map(_.get)
+          }
+        } yield result
     }
 
   /** Builds a `Decoder[B]` from the rule chain: one lambda `(cursor, failFast) => result` serves both `apply` and
@@ -1010,7 +1107,7 @@ trait DecoderMacrosImpl
       DecoderCtx.from[A](Expr.quote(null.asInstanceOf[HCursor]), configExpr, Expr.quote(true), selfType, evConfig)
     for {
       _ <- ensureStandardExtensionsLoaded()
-      decoder <- buildDerivedDecoder[A](configExpr, ctx)
+      decoder <- buildDerivedDecoder[A](configExpr, ctx) // (configExpr: a val of the caller)
       cache <- ctx.cache.get
     } yield cache.toValDefs.use(_ => decoder)
   }
@@ -1141,5 +1238,7 @@ trait DecoderMacrosImpl
       Type.of[ValidatedNel[DecodingFailure, Array[Any]]]
     val ListValidatedNelDFAny: Type[List[ValidatedNel[DecodingFailure, Any]]] =
       Type.of[List[ValidatedNel[DecodingFailure, Any]]]
+    val NelDF: Type.Lazy[cats.data.NonEmptyList[DecodingFailure]] =
+      Type.Lazy(Type.of[cats.data.NonEmptyList[DecodingFailure]])
   }
 }
