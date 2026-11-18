@@ -60,26 +60,57 @@ trait AvroSchemaForUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[Vector[Byte]])
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote {
-          Expr.splice(sfctx.config).decimalConfig match {
-            case Some(dc) => AvroDerivationUtils.decimalSchema(dc.precision, dc.scale)
-            case None     => AvroDerivationUtils.stringSchema
-          }
+        Some(sfctx.evaluatedConfig match {
+          case Some(cfg) =>
+            cfg.decimalConfig match {
+              case Some(dc) =>
+                Expr.quote(
+                  AvroDerivationUtils.decimalSchema(Expr.splice(Expr(dc.precision)), Expr.splice(Expr(dc.scale)))
+                )
+              case None => Expr.quote(AvroDerivationUtils.stringSchema)
+            }
+          case None =>
+            Expr.quote {
+              Expr.splice(sfctx.config).decimalConfig match {
+                case Some(dc) => AvroDerivationUtils.decimalSchema(dc.precision, dc.scale)
+                case None     => AvroDerivationUtils.stringSchema
+              }
+            }
         })
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.uuidSchema))
       else if (tpe =:= Type.of[java.time.Instant])
-        Some(Expr.quote(AvroDerivationUtils.timestampSchema(Expr.splice(sfctx.config).instantPrecision)))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.timestampSchema(Expr.splice(instantPrecisionExpr(sfctx.config, sfctx.evaluatedConfig)))
+          )
+        )
       else if (tpe =:= Type.of[java.time.LocalDate])
         Some(Expr.quote(AvroDerivationUtils.dateSchema))
       else if (tpe =:= Type.of[java.time.LocalTime])
         Some(Expr.quote(AvroDerivationUtils.timeMicrosSchema))
       else if (tpe =:= Type.of[java.time.LocalDateTime])
-        Some(Expr.quote(AvroDerivationUtils.timestampSchema(Expr.splice(sfctx.config).localDateTimePrecision)))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.timestampSchema(
+              Expr.splice(localDateTimePrecisionExpr(sfctx.config, sfctx.evaluatedConfig))
+            )
+          )
+        )
       else if (tpe =:= Type.of[java.time.OffsetDateTime])
-        Some(Expr.quote(AvroDerivationUtils.offsetDateTimeSchema(Expr.splice(sfctx.config).offsetDateTimeAsIsoString)))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.offsetDateTimeSchema(
+              Expr.splice(offsetDateTimeAsIsoStringExpr(sfctx.config, sfctx.evaluatedConfig))
+            )
+          )
+        )
       else if (tpe =:= Type.of[java.sql.Timestamp])
-        Some(Expr.quote(AvroDerivationUtils.timestampSchema(Expr.splice(sfctx.config).instantPrecision)))
+        Some(
+          Expr.quote(
+            AvroDerivationUtils.timestampSchema(Expr.splice(instantPrecisionExpr(sfctx.config, sfctx.evaluatedConfig)))
+          )
+        )
       else if (tpe =:= Type.of[java.sql.Date])
         Some(Expr.quote(AvroDerivationUtils.dateSchema))
       else if (tpe =:= Type.of[None.type])

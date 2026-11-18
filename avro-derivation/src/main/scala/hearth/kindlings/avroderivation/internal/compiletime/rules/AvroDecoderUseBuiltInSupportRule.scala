@@ -59,11 +59,23 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
       else if (tpe =:= Type.of[Vector[Byte]])
         Some(Expr.quote(AvroDerivationUtils.decodeByteBufferToVector(Expr.splice(value)).asInstanceOf[A]))
       else if (tpe =:= Type.of[BigDecimal])
-        Some(Expr.quote {
-          (Expr.splice(dctx.config).decimalConfig match {
-            case Some(dc) => AvroDerivationUtils.decodeBigDecimal(Expr.splice(value), dc.scale)
-            case None     => BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)))
-          }).asInstanceOf[A]
+        Some(dctx.evaluatedConfig match {
+          case Some(cfg) =>
+            cfg.decimalConfig match {
+              case Some(dc) =>
+                Expr.quote(
+                  AvroDerivationUtils.decodeBigDecimal(Expr.splice(value), Expr.splice(Expr(dc.scale))).asInstanceOf[A]
+                )
+              case None =>
+                Expr.quote(BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value))).asInstanceOf[A])
+            }
+          case None =>
+            Expr.quote {
+              (Expr.splice(dctx.config).decimalConfig match {
+                case Some(dc) => AvroDerivationUtils.decodeBigDecimal(Expr.splice(value), dc.scale)
+                case None     => BigDecimal(AvroDerivationUtils.decodeCharSequence(Expr.splice(value)))
+              }).asInstanceOf[A]
+            }
         })
       else if (tpe =:= Type.of[java.util.UUID])
         Some(Expr.quote(AvroDerivationUtils.decodeUUID(Expr.splice(value)).asInstanceOf[A]))
@@ -71,7 +83,7 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(
           Expr.quote(
             AvroDerivationUtils
-              .decodeInstant(Expr.splice(value), Expr.splice(dctx.config).instantPrecision)
+              .decodeInstant(Expr.splice(value), Expr.splice(instantPrecisionExpr(dctx.config, dctx.evaluatedConfig)))
               .asInstanceOf[A]
           )
         )
@@ -83,7 +95,10 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(
           Expr.quote(
             AvroDerivationUtils
-              .decodeLocalDateTime(Expr.splice(value), Expr.splice(dctx.config).localDateTimePrecision)
+              .decodeLocalDateTime(
+                Expr.splice(value),
+                Expr.splice(localDateTimePrecisionExpr(dctx.config, dctx.evaluatedConfig))
+              )
               .asInstanceOf[A]
           )
         )
@@ -91,7 +106,10 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(
           Expr.quote(
             AvroDerivationUtils
-              .decodeOffsetDateTime(Expr.splice(value), Expr.splice(dctx.config).offsetDateTimeAsIsoString)
+              .decodeOffsetDateTime(
+                Expr.splice(value),
+                Expr.splice(offsetDateTimeAsIsoStringExpr(dctx.config, dctx.evaluatedConfig))
+              )
               .asInstanceOf[A]
           )
         )
@@ -99,7 +117,10 @@ trait AvroDecoderUseBuiltInSupportRuleImpl {
         Some(
           Expr.quote(
             AvroDerivationUtils
-              .decodeSqlTimestamp(Expr.splice(value), Expr.splice(dctx.config).instantPrecision)
+              .decodeSqlTimestamp(
+                Expr.splice(value),
+                Expr.splice(instantPrecisionExpr(dctx.config, dctx.evaluatedConfig))
+              )
               .asInstanceOf[A]
           )
         )

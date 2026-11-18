@@ -4,7 +4,7 @@ import hearth.MacroCommons
 import hearth.fp.effect.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor, DecimalConfig}
+import hearth.kindlings.avroderivation.{AvroConfig, AvroSchemaFor, DecimalConfig, TimestampPrecision}
 import hearth.kindlings.avroderivation.annotations.{
   avroAlias,
   avroDefault,
@@ -429,6 +429,42 @@ trait SchemaForMacrosImpl
     }
   }
 
+  // Configuration known at compile time
+
+  // When the config is evaluated at compile time, its temporal settings become constants in the generated code
+  // instead of a read of the runtime config per encoded/decoded value.
+
+  private def precisionConstant(precision: TimestampPrecision): Expr[TimestampPrecision] = {
+    implicit val TimestampPrecisionT: Type[TimestampPrecision] = SfTypes.TimestampPrecision
+    precision match {
+      case TimestampPrecision.Millis => Expr.quote(TimestampPrecision.Millis: TimestampPrecision)
+      case TimestampPrecision.Micros => Expr.quote(TimestampPrecision.Micros: TimestampPrecision)
+      case TimestampPrecision.Nanos  => Expr.quote(TimestampPrecision.Nanos: TimestampPrecision)
+    }
+  }
+
+  def instantPrecisionExpr(config: Expr[AvroConfig], evaluated: Option[AvroConfig]): Expr[TimestampPrecision] =
+    evaluated match {
+      case Some(cfg) => precisionConstant(cfg.instantPrecision)
+      case None      =>
+        implicit val TimestampPrecisionT: Type[TimestampPrecision] = SfTypes.TimestampPrecision
+        Expr.quote(Expr.splice(config).instantPrecision)
+    }
+
+  def localDateTimePrecisionExpr(config: Expr[AvroConfig], evaluated: Option[AvroConfig]): Expr[TimestampPrecision] =
+    evaluated match {
+      case Some(cfg) => precisionConstant(cfg.localDateTimePrecision)
+      case None      =>
+        implicit val TimestampPrecisionT: Type[TimestampPrecision] = SfTypes.TimestampPrecision
+        Expr.quote(Expr.splice(config).localDateTimePrecision)
+    }
+
+  def offsetDateTimeAsIsoStringExpr(config: Expr[AvroConfig], evaluated: Option[AvroConfig]): Expr[Boolean] =
+    evaluated match {
+      case Some(cfg) => Expr(cfg.offsetDateTimeAsIsoString)
+      case None      => Expr.quote(Expr.splice(config).offsetDateTimeAsIsoString)
+    }
+
   // Types
 
   private[compiletime] object SfTypes {
@@ -440,6 +476,7 @@ trait SchemaForMacrosImpl
     val SchemaField: Type.Lazy[org.apache.avro.Schema.Field] = Type.Lazy(Type.of[org.apache.avro.Schema.Field])
     val AvroConfig: Type.Lazy[AvroConfig] = Type.Lazy(Type.of[AvroConfig])
     val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
+    val TimestampPrecision: Type.Lazy[TimestampPrecision] = Type.Lazy(Type.of[TimestampPrecision])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])
     val FieldName: Type.Lazy[fieldName] = Type.Lazy(Type.of[fieldName])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
