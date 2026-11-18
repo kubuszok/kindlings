@@ -84,12 +84,13 @@ Snippets use Jinja2-style template variables interpolated from `docs/mkdocs.yml`
 |----------|--------------|-------------|
 | `{{ kindlings_version() }}` | `0.1.2` | Current Kindlings version |
 | `{{ scala.2_13 }}` | `2.13.18` | Scala 2.13 version |
-| `{{ scala.3 }}` | `3.8.2` | Scala 3 version |
-| `{{ libraries.circe }}` | `0.14.15` | Circe version |
-| `{{ libraries.jsoniterScala }}` | `2.38.12` | Jsoniter Scala version |
+| `{{ scala.3 }}` | `3.8.4` | Scala 3 version |
+| `{{ libraries.circe }}` | `0.14.17` | Circe version |
+| `{{ libraries.jsoniterScala }}` | `2.42.3` | Jsoniter Scala version |
 | `{{ libraries.cats }}` | `2.13.0` | Cats version |
 
-Full list is in `docs/mkdocs.yml` under `extra:`.
+Full list is in `docs/mkdocs.yml` under `extra:`. Keep the `libraries` pins there in sync with `project/Versions.scala`
+when dependencies are bumped (the snippets are tested against them).
 
 ## Running tests locally
 

@@ -29,10 +29,15 @@ Each module provides its own `debug/package.scala` with a module-specific implic
 ```scala
 package hearth.kindlings.mymodule
 
+// A marker defined by the module itself (Hearth has no `LogDerivation` type), usually nested in the type class
+// companion: `object MyTypeClass { sealed trait LogDerivation; object LogDerivation extends LogDerivation }`
 package object debug {
-  implicit val logDerivationForMyTypeClass: hearth.LogDerivation = hearth.LogDerivation.Enabled
+  implicit val logDerivationForMyTypeClass: MyTypeClass.LogDerivation = MyTypeClass.LogDerivation
 }
 ```
+
+The macro checks for it with `Expr.summonImplicit[MyTypeClass.LogDerivation].isDefined` (see
+`fast-show-pretty/.../debug/package.scala` and `FastShowPretty.LogDerivation`).
 
 ### Method 2: Scalac option
 

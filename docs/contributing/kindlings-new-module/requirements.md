@@ -142,8 +142,10 @@ via `Log.info(...)` or `Log.namedScope(...)`.
 
 ### REQ-9a: Import-based logging
 ```scala
+// `MyTypeClass.LogDerivation` is the module's own marker (`sealed trait LogDerivation; object LogDerivation extends
+// LogDerivation` in the companion) - Hearth has no `LogDerivation` type.
 package object debug {
-  implicit val logDerivationForMyTypeClass: hearth.LogDerivation = hearth.LogDerivation.Enabled
+  implicit val logDerivationForMyTypeClass: MyTypeClass.LogDerivation = MyTypeClass.LogDerivation
 }
 ```
 
