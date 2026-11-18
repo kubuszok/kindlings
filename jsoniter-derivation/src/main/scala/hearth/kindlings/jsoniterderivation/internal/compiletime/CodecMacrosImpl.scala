@@ -1016,7 +1016,7 @@ trait CodecMacrosImpl
       s"""Macro derivation failed with the following errors:
          |$errorsRendered
          |and the following logs:
-         |$errorLogs
+         |${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}
          |$hint""".stripMargin
     else
       s"""Macro derivation failed with the following errors:

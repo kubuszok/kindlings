@@ -397,6 +397,17 @@ final class FastShowPrettySpec extends MacroSuite {
 
     group("compile-time errors") {
 
+      test("error messages contain no ANSI colour codes") {
+        val errors = compileErrors(
+          """
+          import hearth.kindlings.fastshowpretty.{FastShowPretty, RenderConfig}
+          FastShowPretty.render(List(new hearth.kindlings.fastshowpretty.NotAHandledType), RenderConfig.Default)
+          """
+        )
+        errors.check("Macro derivation failed with the following errors:")
+        assert(!errors.contains("\u001b"), s"ANSI escape codes in: ${errors.replace("\u001b", "<ESC>")}")
+      }
+
       test("unhandled type produces error message") {
         compileErrors(
           """
