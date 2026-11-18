@@ -176,6 +176,22 @@ before the macro sees it. A value whose class merely *extends* a function type (
 - attempts to wire a **primitive or `String`**, and
 - any provided dependency that ended up **unused**.
 
+Pass `DI.autowireMembersOf(module)` to use the public parameterless members (`val`s, no-argument `def`s) of `module` as
+dependencies, as macwire's `autowireMembersOf` does. A module usually has more members than one graph needs, so its
+unused members are not errors; only a module none of whose members is used is reported, as
+`unused dependencies: DI.autowireMembersOf(module)`:
+
+```scala
+class AppModule {
+  val db = new DatabaseAccess()
+  val sf = new SecurityFilter()
+  val metrics = new Metrics() // not needed by UserFinder: fine
+}
+
+val module = new AppModule
+val finder: UserFinder = DI.autowire[UserFinder](DI.autowireMembersOf(module))
+```
+
 ## Tagging
 
 Disambiguate two values of the same base type with [tags](https://github.com/softwaremill/scala-common) — the `@@`

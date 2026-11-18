@@ -479,7 +479,17 @@ private[di] trait WiringMacrosImpl
     * local `val` (a let-block ending in the root), mirroring macwire. Detects cyclic dependencies, refuses primitives
     * and `String`, and reports any provided dependency that ended up unused.
     */
-  def autowire[A: Type](rawDeps: List[Expr_??]): Expr[A] = {
+  def autowire[A: Type](rawDeps: List[Expr_??]): Expr[A] = autowireGrouped[A](rawDeps, Nil)
+
+  /** One argument of `autowire` for the "unused dependencies" check: the indices (in the expanded dependency list) it
+    * provided, and how to show it. A plain argument provides one dependency; `DI.autowireMembersOf(instance)` provides
+    * all the members of `instance` and counts as used when ANY of them is (as in macwire).
+    */
+  final private case class DependencyArgument(describe: () => String, indices: List[Int])
+
+  /** [[autowire]] with the dependencies grouped by the `autowire` argument they come from (`Nil`: one per dependency).
+    */
+  private def autowireGrouped[A: Type](rawDeps: List[Expr_??], arguments: List[DependencyArgument]): Expr[A] = {
     checkDuplicateDependencyTypes(rawDeps)
     val used = scala.collection.mutable.Set.empty[Int]
     // Collected in resolution order, keyed by `=:=`-identity — feeds both the ZIO-Magic wiring graph and the full log.
@@ -572,7 +582,7 @@ private[di] trait WiringMacrosImpl
       rootRef.value.upcast[A]
     }.close
 
-    verifyAllDependenciesUsed(rawDeps, used.toSet)
+    verifyAllDependenciesUsed(rawDeps, arguments, used.toSet)
     emitWiringGraphIfEnabled("DI.autowire", rootKey, graphNodes, wiringLogModeFromSettings)
     if (shouldWeLogGeneration) {
       val trace = new Trace
@@ -786,14 +796,24 @@ private[di] trait WiringMacrosImpl
     */
   def autowireWithMembers[A: Type](rawArgs: List[Expr[Any]]): Expr[A] = {
     implicit val anyType: Type[Any] = Type.of[Any]
-    val expanded: List[Expr_??] = rawArgs.flatMap { raw =>
+    val perArgument: List[(List[Expr_??], () => String)] = rawArgs.map { raw =>
       val parsed = DestructuredExpr.parse(raw)
       membersOfMarkerInstance(parsed) match {
-        case Some(instance) => expandMembersOf(instance)
-        case None           => List(toTypedExpr(parsed))
+        case Some(instance) =>
+          // reported (if none of its members is used) as the marker call itself, e.g. `DI.autowireMembersOf(module)`
+          (expandMembersOf(instance), () => raw.sourceCode.getOrElse(raw.plainPrint))
+        case None =>
+          val dep = toTypedExpr(parsed)
+          (List(dep), () => describeDep(dep))
       }
     }
-    autowire[A](expanded)
+    val (expanded, arguments) =
+      perArgument.foldLeft((List.empty[Expr_??], List.empty[DependencyArgument])) {
+        case ((deps, args), (argDeps, describe)) =>
+          val indices = argDeps.indices.map(_ + deps.size).toList
+          (deps ++ argDeps, args :+ DependencyArgument(describe, indices))
+      }
+    autowireGrouped[A](expanded, arguments)
   }
 
   /** If `parsed` is a `DI.autowireMembersOf(instance)` call, recover the (precise-typed) wrapped `instance`. Recognized
@@ -981,8 +1001,15 @@ private[di] trait WiringMacrosImpl
       )
   }
 
-  private def verifyAllDependenciesUsed(rawDeps: List[Expr_??], used: Set[Int]): Unit = {
-    val unused = rawDeps.zipWithIndex.collect { case (dep, i) if !used.contains(i) => describeDep(dep) }
+  private def verifyAllDependenciesUsed(
+      rawDeps: List[Expr_??],
+      arguments: List[DependencyArgument],
+      used: Set[Int]
+  ): Unit = {
+    val perArgument =
+      if (arguments.nonEmpty) arguments
+      else rawDeps.zipWithIndex.map { case (dep, i) => DependencyArgument(() => describeDep(dep), List(i)) }
+    val unused = perArgument.collect { case arg if !arg.indices.exists(used.contains) => arg.describe() }
     if (unused.nonEmpty) Environment.reportErrorAndAbort(s"unused dependencies: ${unused.mkString(", ")}")
   }
 }
