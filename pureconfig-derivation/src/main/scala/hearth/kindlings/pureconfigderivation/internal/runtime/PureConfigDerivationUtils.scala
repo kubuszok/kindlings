@@ -35,6 +35,26 @@ object PureConfigDerivationUtils {
     (fieldFailures ++ bottom.toList).reduce(_ ++ _)
   }
 
+  /** `failures` (`null` when no field has failed yet) followed by the failures of a field's `result`: the merge of
+    * [[combineFieldFailures]], one field at a time (generated code merges each field's result as it is read).
+    */
+  def mergeFieldFailures(failures: ConfigReaderFailures, result: Result[Any]): ConfigReaderFailures =
+    result match {
+      case Left(f) => if (failures == null) f else failures ++ f
+      case _       => failures
+    }
+
+  /** `failures` (or `null`) followed by the [[unknownKeysFailures]] of `cursor`, if any. */
+  def mergeUnknownKeysFailures(
+      failures: ConfigReaderFailures,
+      cursor: ConfigCursor,
+      usedKeys: Set[String]
+  ): ConfigReaderFailures =
+    unknownKeysFailures(cursor, usedKeys) match {
+      case Some(f) => if (failures == null) f else failures ++ f
+      case None    => failures
+    }
+
   /** The `UnknownKey` failures upstream pureconfig's `ProductHint.bottom` reports for the keys of `cursor` that are not
     * `usedKeys`, or `None`.
     */

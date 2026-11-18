@@ -20,7 +20,7 @@ trait ReaderMacrosImpl
     extends PureconfigDerivationTimeout
     with PureconfigDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
-    with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
+    with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsBuiltInRuleImpl

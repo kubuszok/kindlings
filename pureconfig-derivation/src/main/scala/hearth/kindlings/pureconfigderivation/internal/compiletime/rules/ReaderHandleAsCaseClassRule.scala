@@ -305,57 +305,36 @@ trait ReaderHandleAsCaseClassRuleImpl {
               }
 
               // Like upstream pureconfig (`ConfigReader.Result.zipWith` over the fields, then `ProductHint.bottom`),
-              // every field is read and all failures are reported: each field's result is bound to a `val`, the
-              // value is constructed from them fail-fast (no intermediate collections on the success path), and only
-              // when something failed are the failures of every field and the unknown keys combined.
-              def bindAll(
-                  remaining: List[Expr[Either[ConfigReaderFailures, Any]]],
-                  boundReversed: List[Expr[Either[ConfigReaderFailures, Any]]]
-              ): Expr[Either[ConfigReaderFailures, A]] = remaining match {
-                case result :: rest =>
-                  // Each field is read by its own local def (which closes over the object cursor): inlined into one
-                  // method, ~40 fields already exceed the size HotSpot JIT-compiles (8000 bytes of bytecode).
-                  ValDefs
-                    .createDef[Either[ConfigReaderFailures, Any]](result, FreshName.FromPrefix("readField"))
-                    .use { readField =>
-                      ValDefs.createVal[Either[ConfigReaderFailures, Any]](readField).use { bound =>
-                        bindAll(rest, bound :: boundReversed)
+              // every field is read and all failures are reported, followed by the unknown keys of a strict case
+              // class. Each field is read by its own local def (inlined into one method, ~40 fields already exceed
+              // the size HotSpot JIT-compiles) and its failures are merged as it is read; the value is constructed
+              // when there are none (see FlatFieldsConstruct).
+              def readAll(objectCursor: Expr[ConfigObjectCursor]): Expr[Either[ConfigReaderFailures, A]] =
+                constructAccumulating[Either[ConfigReaderFailures, Any], ConfigReaderFailures, A, Either[
+                  ConfigReaderFailures,
+                  A
+                ]](decodeFroms.map(_(objectCursor)))(
+                  mergeErrors = (failures, r) =>
+                    Expr.quote(PureConfigDerivationUtils.mergeFieldFailures(Expr.splice(failures), Expr.splice(r))),
+                  valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigReaderFailures, Any]].value),
+                  construct = constructFF,
+                  onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigReaderFailures, A]),
+                  onFailure = failures => Expr.quote(Left(Expr.splice(failures)): Either[ConfigReaderFailures, A]),
+                  extraErrors =
+                    if (staticAllowUnknownKeys.contains(true)) None
+                    else
+                      Some { failures =>
+                        Expr.quote {
+                          if (Expr.splice(allowUnknownKeysExpr)) Expr.splice(failures)
+                          else
+                            PureConfigDerivationUtils.mergeUnknownKeysFailures(
+                              Expr.splice(failures),
+                              Expr.splice(rctx.cursor),
+                              Expr.splice(expectedKeysExpr)
+                            )
+                        }
                       }
-                    }
-                case Nil =>
-                  // When every field was read, the value is constructed from the fields' `Right`s (cast to the field
-                  // types); otherwise the failures of all the fields are combined. (Unlike a fold that inspects the
-                  // results one by one and re-wraps the first `Left`, this is a flat `&&` chain: one branch per field,
-                  // no nested matches, so the method stays ~30 B per field.)
-                  val bound = boundReversed.reverse
-                  val allRight: Expr[Boolean] =
-                    bound.map(r => Expr.quote(Expr.splice(r).isRight)).reduceLeft { (acc, next) =>
-                      Expr.quote(Expr.splice(acc) && Expr.splice(next))
-                    }
-                  val constructedExpr: Expr[A] = constructFF(bound.map { r =>
-                    Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigReaderFailures, Any]].value)
-                  })
-                  val resultsExpr: Expr[List[Either[ConfigReaderFailures, Any]]] =
-                    bound.foldRight(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (r, acc) =>
-                      Expr.quote(Expr.splice(r) :: Expr.splice(acc))
-                    }
-                  if (staticAllowUnknownKeys.contains(true))
-                    Expr.quote {
-                      if (Expr.splice(allRight)) Right(Expr.splice(constructedExpr)): Either[ConfigReaderFailures, A]
-                      else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), None))
-                    }
-                  else
-                    Expr.quote {
-                      val unknownKeys: Option[ConfigReaderFailures] =
-                        if (Expr.splice(allowUnknownKeysExpr)) None
-                        else
-                          PureConfigDerivationUtils
-                            .unknownKeysFailures(Expr.splice(rctx.cursor), Expr.splice(expectedKeysExpr))
-                      if (Expr.splice(allRight) && unknownKeys.isEmpty)
-                        Right(Expr.splice(constructedExpr)): Either[ConfigReaderFailures, A]
-                      else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), unknownKeys))
-                    }
-              }
+                )
 
               MIO.pure(Expr.quote {
                 // A value that is not an object fails once (as upstream), not once per field; every field is read from
@@ -364,7 +343,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   case Left(failures) => Left(failures): Either[ConfigReaderFailures, A]
                   // (a distinct name: the field reads bind their own `obj`, and Scala 2 quotes are not hygienic)
                   case Right(objectCursor) =>
-                    Expr.splice(bindAll(decodeFroms.map(_(Expr.quote(objectCursor))), Nil))
+                    Expr.splice(readAll(Expr.quote(objectCursor)))
                 }
               })
             }
