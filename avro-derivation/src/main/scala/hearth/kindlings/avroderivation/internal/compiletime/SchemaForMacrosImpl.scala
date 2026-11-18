@@ -340,7 +340,12 @@ trait SchemaForMacrosImpl
   protected def extractPackageNamespace[A: Type]: String = {
     val fqcn = enumerationObjectFqn[A].getOrElse(Type[A].plainPrint.takeWhile(_ != '[').stripSuffix(".type"))
     val lastDot = fqcn.lastIndexOf('.')
-    if (lastDot < 0) "" else fqcn.substring(0, lastDot).stripSuffix(".package")
+    val namespace = if (lastDot < 0) "" else fqcn.substring(0, lastDot).stripSuffix(".package")
+    // Scala 2 prints a type in the empty package as `<empty>`.Foo (Scala 3 as Foo): no namespace on both versions.
+    namespace match {
+      case "<empty>" | "`<empty>`" => ""
+      case other                   => other
+    }
   }
 
   /** For a `scala.Enumeration` value type (`Weekday.Value`), the fully qualified name of the enumeration object: avro4s
