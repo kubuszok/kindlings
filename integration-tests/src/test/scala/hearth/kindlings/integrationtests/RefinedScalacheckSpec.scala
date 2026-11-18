@@ -7,8 +7,8 @@ import hearth.MacroSuite
 import hearth.kindlings.scalacheckderivation.{DeriveArbitrary, DeriveShrink}
 import org.scalacheck.{Arbitrary, Gen, Shrink}
 
-/** Refined types are value types whose smart constructor returns `Either[String, A]`: the derived generator must
-  * unwrap the `Right` (and regenerate rejected candidates), the derived `Shrink` must drop rejected candidates.
+/** Refined types are value types whose smart constructor returns `Either[String, A]`: the derived generator must unwrap
+  * the `Right` (and regenerate rejected candidates), the derived `Shrink` must drop rejected candidates.
   */
 final class RefinedScalacheckSpec extends MacroSuite {
 
