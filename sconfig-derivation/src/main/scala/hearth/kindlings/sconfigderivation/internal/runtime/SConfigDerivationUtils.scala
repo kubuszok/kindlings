@@ -188,6 +188,27 @@ object SConfigDerivationUtils {
     * a [[hearth.kindlings.sconfigderivation.ReadsMissingKeys]] reader), and reported as `KeyNotFound` (with upstream's
     * candidate keys) at `obj` otherwise.
     */
+  /** Read the value found under `key` (as [[readField]] does once it found it): its failures are reported under the
+    * key.
+    */
+  def readFieldValue[A](value: ConfigValue, key: String, reader: ConfigReader[A]): Either[ConfigDecodingError, A] =
+    reader.from(value) match {
+      case Left(e) => Left(e.withParentPath(key))
+      case right   => right
+    }
+
+  /** The failures of `results` merged in order (as [[sequenceResults]] merges them); there is at least one. */
+  def combineFailures(results: List[Either[ConfigDecodingError, Any]]): ConfigDecodingError = {
+    var failure: ConfigDecodingError = null
+    val iter = results.iterator
+    while (iter.hasNext)
+      iter.next() match {
+        case Left(e) => failure = if (failure == null) e else ConfigDecodingError.merge(failure, e)
+        case _       => ()
+      }
+    failure
+  }
+
   def readField[A](
       obj: ConfigObject,
       key: String,
