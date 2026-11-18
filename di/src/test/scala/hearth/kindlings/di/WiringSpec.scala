@@ -172,6 +172,26 @@ final class WiringSpec extends MacroSuite {
       (c.b eq deps.bb) ==> true
     }
 
+    test("unused members of an autowireMembersOf module are allowed (as in macwire)") {
+      val module = new WiringSpec.MembModuleWithExtras(new WiringSpec.MembA {}, new WiringSpec.MembB {})
+      val c = DI.autowire[WiringSpec.MembC](DI.autowireMembersOf(module))
+      (c.a eq module.a) ==> true
+      (c.b eq module.b) ==> true
+    }
+
+    test("an autowireMembersOf module none of whose members is used is reported once, by its source") {
+      compileErrors(
+        """
+        import hearth.kindlings.di.DI
+        import hearth.kindlings.di.WiringSpec.*
+        val unrelated = new MembUnrelatedModule
+        DI.autowire[MembC](DI.autowireMembersOf(unrelated), new MembA {}, new MembB {})
+        """
+      ).check(
+        "unused dependencies: DI.autowireMembersOf(unrelated)"
+      )
+    }
+
     test("an autowireMembersOf member type clashing with an explicit dependency is a duplicate error") {
       // Ported from macwire's `autowire/autowireMembersOfDuplicate.failure`: `deps.a` (a MembA) and the explicit
       // `new MembA {}` both provide MembA.
@@ -714,6 +734,14 @@ object WiringSpec {
     def cc(z: Int): MembA = a
   }
   case class MembC(a: MembA, b: MembB)
+  class MembExtra
+  class MembModuleWithExtras(val a: MembA, val b: MembB) {
+    val extra: MembExtra = new MembExtra
+    def anotherExtra: List[MembExtra] = Nil
+  }
+  class MembUnrelatedModule {
+    val extra: MembExtra = new MembExtra
+  }
 
   class UserModule {
     lazy val databaseAccess = new DatabaseAccess()
