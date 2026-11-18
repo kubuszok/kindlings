@@ -56,6 +56,11 @@ object AvroDerivationUtils {
     schema
   }
 
+  /** Appends a field to the fields of a record schema being built (one statement per field in derived schemas). */
+  def addRecordField(fields: util.ArrayList[Schema.Field], field: Schema.Field): Unit = {
+    val _ = fields.add(field)
+  }
+
   /** Sets fields from a Scala List on a pre-created record schema and returns it. */
   def setRecordFieldsFromList(schema: Schema, fields: List[Schema.Field]): Schema = {
     val javaFields = new util.ArrayList[Schema.Field](fields.size)
