@@ -24,7 +24,11 @@ Hearth skill is wrong or missing something, fix it in `agent-skills` (local clon
    `kindlings-troubleshooting`, `kindlings-migration`; bump `metadata.library-version` and the plugin version on
    release, following that repository's `AGENTS.md`).
 This covers new/changed APIs, configuration options and defaults, settings keys, error messages, supported types,
-fixed bugs and known gotchas. Mention the matching `agent-skills` change (or why none is needed) in the PR.
+parity changes, fixed bugs and known gotchas. The `kindlings` skills describe the **released** version, so skill
+changes for unreleased behaviour are not pushed to `agent-skills` master: write them in an "## agent-skills" section
+of the PR description (or "none: <reason>"); the release collects them into one `agent-skills` PR that is merged after
+the release is deployed. Follow `docs/contributing/kindlings-release/SKILL.md`. Fixes to skills that are wrong about an
+already released version can go to `agent-skills` directly.
 
 ## Global Rules
 
@@ -294,6 +298,11 @@ Key reference files:
 - `cats-integration/runtime/CatsConversions.scala` — reference for **runtime helper pattern** (Newtype aliases)
 
 Key patterns: helper method pattern (path-dependent types), runtime helper pattern (Newtype aliases), plain `Type.CtorN.of` for constructor matching (also across the SPI).
+
+### Releasing — follow `docs/contributing/kindlings-release/SKILL.md`
+
+Inventory of user-visible changes since the last tag, docs and release notes, and the `agent-skills` PR (new features,
+parity changes, fixed bugs, version bumps) that is merged only after the release is on Maven Central.
 
 ### Documentation maintenance — follow `docs/contributing/kindlings-doc-maintenance/SKILL.md`
 
