@@ -118,7 +118,7 @@ trait EncoderHandleAsEnumRuleImpl {
                         fieldsOnly <- fieldsOnlyMIO
                         fullEnc <- fullEncMIO
                       } yield {
-                        val nameExpr = enumLeafNameExpr[A, EnumCase](caseName, ectx.config)
+                        val nameExpr = enumLeafNameExpr[A, EnumCase](caseName, ectx.config, ectx.evaluatedConfig)
                         val isSingletonCase = SingletonValue.unapply(Type[EnumCase]).isDefined
                         if (isEnumerationOrJavaEnum) {
                           // As in jsoniter-scala: always a JSON string (or the id with useScalaEnumValueId).

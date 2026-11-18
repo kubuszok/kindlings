@@ -460,7 +460,7 @@ trait EncoderHandleAsMapRuleImpl {
                           SingletonValue.unapply(Type[ChildType]).map { sv =>
                             (
                               sv.singletonExpr.asInstanceOf[Expr[K]],
-                              enumLeafNameExpr[K, ChildType](childName, ctx.config)
+                              enumLeafNameExpr[K, ChildType](childName, ctx.config, ctx.evaluatedConfig)
                             )
                           }
                         }

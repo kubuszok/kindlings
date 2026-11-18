@@ -215,10 +215,15 @@ trait CodecMacrosImpl
   @scala.annotation.nowarn("msg=is never used")
   private[compiletime] def enumLeafNameExpr[A: Type, Child: Type](
       childName: String,
-      config: Expr[JsoniterConfig]
+      config: Expr[JsoniterConfig],
+      evaluatedConfig: Option[JsoniterConfig]
   ): Expr[String] = {
     implicit val StringT: Type[String] = CTypes.String
-    if (isJavaEnumType[A]) Expr.quote(Expr.splice(config).javaEnumValueNameMapper(Expr.splice(Expr(childName))))
+    // With the config known at compile time, the mapped names are constants (no mapper call per subtype per use).
+    if (isJavaEnumType[A]) evaluatedConfig match {
+      case Some(c) => Expr(c.javaEnumValueNameMapper(childName))
+      case None    => Expr.quote(Expr.splice(config).javaEnumValueNameMapper(Expr.splice(Expr(childName))))
+    }
     else if (Type[A].isEnumeration)
       SingletonValue.unapply(Type[Child]) match {
         case Some(sv) => Expr.quote(Expr.splice(sv.singletonExpr).toString)
@@ -228,9 +233,13 @@ trait CodecMacrosImpl
       namedAnnotationOf[Child] match {
         case Some(name) => Expr(name)
         case None       =>
-          Expr.quote(
-            Expr.splice(config).adtLeafClassNameMapper(Expr.splice(Expr(adtLeafFullName[A, Child](childName))))
-          )
+          evaluatedConfig match {
+            case Some(c) => Expr(c.adtLeafClassNameMapper(adtLeafFullName[A, Child](childName)))
+            case None    =>
+              Expr.quote(
+                Expr.splice(config).adtLeafClassNameMapper(Expr.splice(Expr(adtLeafFullName[A, Child](childName))))
+              )
+          }
       }
   }
 

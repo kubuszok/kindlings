@@ -181,16 +181,24 @@ trait DecoderHandleAsEnumRuleImpl {
                   if (stringFn.isEmpty) Expr(objectOnlyError)
                   else {
                     val withStrings = if (allCaseObjects) "expected '\"'" else "expected '\"' or '{'"
-                    Expr.quote {
-                      if (Expr.splice(dctx.config).circeLikeObjectEncoding) Expr.splice(Expr(objectOnlyError))
-                      else Expr.splice(Expr(withStrings))
-                    }
+                    // The same message either way (Scala 3, case classes too), or a config known at compile time:
+                    // no runtime choice.
+                    if (withStrings == objectOnlyError) Expr(withStrings)
+                    else
+                      dctx.evaluatedConfig match {
+                        case Some(c) => Expr(if (c.circeLikeObjectEncoding) objectOnlyError else withStrings)
+                        case None    =>
+                          Expr.quote {
+                            if (Expr.splice(dctx.config).circeLikeObjectEncoding) Expr.splice(Expr(objectOnlyError))
+                            else Expr.splice(Expr(withStrings))
+                          }
+                      }
                   }
                 // As in jsoniter-scala, an unknown discriminator value is reported where it was read, also when the
                 // discriminator is not the first key (before the object is re-read from its start).
                 val leafNameChecks: List[Expr[String] => Expr[Boolean]] = childrenList.map { case (childName, child) =>
                   import child.Underlying as ChildType
-                  val leafName = enumLeafNameExpr[A, ChildType](childName, dctx.config)
+                  val leafName = enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)
                   (typeName: Expr[String]) => Expr.quote(Expr.splice(leafName) == Expr.splice(typeName))
                 }
                 def anyLeafName(typeName: Expr[String]): Expr[Boolean] =
@@ -279,7 +287,10 @@ trait DecoderHandleAsEnumRuleImpl {
           .decodeProduct[ChildType](baseAsLeaf.get)(using dctx.nest[ChildType](dctx.reader))
           .map { decodedExpr => (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
             Expr.quote {
-              if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
+              if (
+                Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)) == Expr
+                  .splice(typeNameExpr)
+              )
                 Expr.splice(decodedExpr).asInstanceOf[A]
               else Expr.splice(elseExpr)
             }
@@ -290,7 +301,10 @@ trait DecoderHandleAsEnumRuleImpl {
             Log.info(s"Found implicit JsonValueCodec[$childName], using it") >>
               MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
                 Expr.quote {
-                  if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
+                  if (
+                    Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)) == Expr
+                      .splice(typeNameExpr)
+                  )
                     Expr
                       .splice(codecExpr)
                       .decodeValue(Expr.splice(readerExpr), Expr.splice(codecExpr).nullValue)
@@ -308,7 +322,9 @@ trait DecoderHandleAsEnumRuleImpl {
                   MIO.pure { (typeNameExpr: Expr[String], readerExpr: Expr[JsonReader], elseExpr: Expr[A]) =>
                     Expr.quote {
                       if (
-                        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
+                        Expr.splice(
+                          enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)
+                        ) == Expr.splice(typeNameExpr)
                       ) {
                         // Consume the inner empty object {} written by EncoderHandleAsSingletonRule
                         JsoniterDerivationUtils.readEmptyObject(Expr.splice(readerExpr))
@@ -327,7 +343,9 @@ trait DecoderHandleAsEnumRuleImpl {
                         Expr.quote {
                           if (
                             Expr
-                              .splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(
+                              .splice(
+                                enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)
+                              ) == Expr.splice(
                               typeNameExpr
                             )
                           )
@@ -343,7 +361,9 @@ trait DecoderHandleAsEnumRuleImpl {
                         Expr.quote {
                           if (
                             Expr
-                              .splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(
+                              .splice(
+                                enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)
+                              ) == Expr.splice(
                               typeNameExpr
                             )
                           )
@@ -368,7 +388,9 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val BooleanT: Type[Boolean] = CTypes.Boolean
 
       def matches(typeNameExpr: Expr[String]): Expr[Boolean] = Expr.quote {
-        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
+        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)) == Expr.splice(
+          typeNameExpr
+        )
       }
 
       if (hasUserCodecAsLeaf[ChildType]) {
@@ -452,7 +474,10 @@ trait DecoderHandleAsEnumRuleImpl {
           Log.info(s"Using singleton for string enum child $childName") >>
             MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
               Expr.quote {
-                if (Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr))
+                if (
+                  Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)) == Expr
+                    .splice(typeNameExpr)
+                )
                   Expr.splice(sv.singletonExpr).asInstanceOf[A]
                 else
                   Expr.splice(elseExpr)
@@ -477,7 +502,9 @@ trait DecoderHandleAsEnumRuleImpl {
                   MIO.pure { (typeNameExpr: Expr[String], _: Expr[JsonReader], elseExpr: Expr[A]) =>
                     Expr.quote {
                       if (
-                        Expr.splice(enumLeafNameExpr[A, ChildType](childName, dctx.config)) == Expr.splice(typeNameExpr)
+                        Expr.splice(
+                          enumLeafNameExpr[A, ChildType](childName, dctx.config, dctx.evaluatedConfig)
+                        ) == Expr.splice(typeNameExpr)
                       )
                         Expr.splice(instanceExpr).asInstanceOf[A]
                       else
