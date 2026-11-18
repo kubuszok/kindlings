@@ -7,6 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
+import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
+
 trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl & MacroCommons & StdExtensions =>
 
   object FastShowPrettyHandleAsCaseClassRule extends DerivationRule("handle as case class when possible") {
@@ -61,46 +63,7 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
                 }
               }
             }
-            .map { toAppend =>
-              implicit val StringType: Type[String] = Types.String
-              val className = Type[A].shortName
-
-              val fieldIndentExpr: Expr[String] = Expr.quote {
-                Expr.splice(ctx.config).indentString * (Expr.splice(ctx.level) + 1)
-              }
-              val closingIndentExpr: Expr[String] = Expr.quote {
-                Expr.splice(ctx.config).indentString * Expr.splice(ctx.level)
-              }
-
-              ValDefs.createVal[String](fieldIndentExpr).use { fieldIndent =>
-                ValDefs.createVal[String](closingIndentExpr).use { closingIndent =>
-                  val renderLeftParenthesisAndHeadField = toAppend.head match {
-                    case (fieldName, fieldResult) =>
-                      val header = Expr(className + "(\n")
-                      val fieldPrefix = Expr(fieldName + " = ")
-                      Expr.quote {
-                        val _ = Expr.splice(ctx.sb).append(Expr.splice(header))
-                        val _ = Expr.splice(ctx.sb).append(Expr.splice(fieldIndent)).append(Expr.splice(fieldPrefix))
-                        Expr.splice(fieldResult)
-                      }
-                  }
-                  val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
-                    case (renderPreviousFields, (fieldName, fieldResult)) =>
-                      val fieldPrefix = Expr(fieldName + " = ")
-                      Expr.quote {
-                        val _ = Expr.splice(renderPreviousFields).append(",\n")
-                        val _ = Expr.splice(ctx.sb).append(Expr.splice(fieldIndent)).append(Expr.splice(fieldPrefix))
-                        Expr.splice(fieldResult)
-                      }
-                  }
-
-                  Expr.quote {
-                    val _ = Expr.splice(renderAllFields).append("\n")
-                    Expr.splice(ctx.sb).append(Expr.splice(closingIndent)).append(")")
-                  }
-                }
-              }
-            }
+            .map(toAppend => renderFieldsFlat[A](Type[A].shortName + "(\n", toAppend))
         case None =>
           MIO.pure {
             Expr.quote {
@@ -110,5 +73,61 @@ trait FastShowPrettyHandleAsCaseClassRuleImpl { this: FastShowPrettyMacrosImpl &
       }
     }
 
+  }
+
+  /** Renders `header`, then each field as `name = <value>` on its own indented line, then the closing `)`.
+    *
+    * One flat statement per field: `nextField(<previous field's rendering>, ...)`. Nesting each field's appends inside
+    * the previous one's (a `foldLeft` of blocks) made the Scala 2.13 StackMapTable quadratic in the number of fields
+    * (503 KB for 90 fields).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def renderFieldsFlat[A: DerivationCtx](
+      header: String,
+      fields: NonEmptyList[(String, Expr[StringBuilder])]
+  ): Expr[StringBuilder] = {
+    implicit val StringType: Type[String] = Types.String
+    implicit val IntType: Type[Int] = Types.Int
+
+    def renderRemaining(
+        previous: Expr[StringBuilder],
+        remaining: List[(String, Expr[StringBuilder])]
+    ): Expr[StringBuilder] = remaining match {
+      case (fieldName, fieldResult) :: tail =>
+        val prefix = Expr(fieldName + " = ")
+        Expr.quote {
+          FastShowPrettyUtils.nextField(
+            Expr.splice(previous),
+            Expr.splice(ctx.sb),
+            Expr.splice(ctx.config).indentString,
+            Expr.splice(ctx.level) + 1,
+            Expr.splice(prefix)
+          )
+          Expr.splice(renderRemaining(fieldResult, tail))
+        }
+      case Nil =>
+        Expr.quote {
+          FastShowPrettyUtils.closeFields(
+            Expr.splice(previous),
+            Expr.splice(ctx.sb),
+            Expr.splice(ctx.config).indentString,
+            Expr.splice(ctx.level)
+          )
+        }
+    }
+
+    val (headName, headResult) = fields.head
+    val headerExpr = Expr(header)
+    val headPrefix = Expr(headName + " = ")
+    Expr.quote {
+      FastShowPrettyUtils.openFields(
+        Expr.splice(ctx.sb),
+        Expr.splice(headerExpr),
+        Expr.splice(ctx.config).indentString,
+        Expr.splice(ctx.level) + 1,
+        Expr.splice(headPrefix)
+      )
+      Expr.splice(renderRemaining(headResult, fields.tail))
+    }
   }
 }

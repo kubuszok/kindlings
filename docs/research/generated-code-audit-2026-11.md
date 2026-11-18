@@ -134,6 +134,10 @@ Fix: specialise when `evaluatedConfig` is defined. Otherwise compute names once 
 
 fast-show-pretty's nested `foldLeft` appends: the `Big90` class is 503 KB, of which 484 KB is StackMapTable. Flat
 statements plus a `nextField` helper would bring it to ~2.2 KB.
+**Fixed in `perf-fast-show-pretty-flat`:** case classes and named tuples render as one statement per field
+(`FastShowPrettyUtils.openFields`/`nextField`/`closeFields`). 100-field fixture: Scala 3 class 57.4 → 15.4 KB
+(StackMapTable 41 KB → 212 B, largest method 4321 → 3465 B); Scala 2.13 16.0 KB (StackMapTable 654 B, largest
+method 2887 B), where the old shape ran the 3 GB sbt heap out of memory. Guarded by `FastShowPrettyBytecodeSizeSpec`.
 
 ### Other
 

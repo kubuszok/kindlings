@@ -12,6 +12,40 @@ object FastShowPrettyUtils {
     sb
   }
 
+  /** Starts rendering a case class: `header` (`ClassName(` and a new line), the field indentation and the first field's
+    * `name = `. Called by generated code; with [[nextField]] and [[closeFields]] it keeps the generated code one flat
+    * statement per field.
+    */
+  def openFields(sb: StringBuilder, header: String, indentString: String, fieldLevel: Int, prefix: String): Unit = {
+    sb.append(header): Unit
+    appendIndent(sb, indentString, fieldLevel): Unit
+    sb.append(prefix): Unit
+  }
+
+  /** Continues rendering a case class after a field's value (`previous` is what rendering it returned): `,`, a new
+    * line, the field indentation and the next field's `name = `.
+    */
+  def nextField(
+      previous: StringBuilder,
+      sb: StringBuilder,
+      indentString: String,
+      fieldLevel: Int,
+      prefix: String
+  ): Unit = {
+    previous.append(",\n"): Unit
+    appendIndent(sb, indentString, fieldLevel): Unit
+    sb.append(prefix): Unit
+  }
+
+  /** Finishes rendering a case class after the last field's value (`previous` is what rendering it returned): a new
+    * line, the closing indentation and `)`.
+    */
+  def closeFields(previous: StringBuilder, sb: StringBuilder, indentString: String, level: Int): StringBuilder = {
+    previous.append("\n"): Unit
+    appendIndent(sb, indentString, level): Unit
+    sb.append(")")
+  }
+
   def renderBoolean(sb: StringBuilder)(value: Boolean): StringBuilder =
     if (value) sb.append("true") else sb.append("false")
   def renderByte(sb: StringBuilder)(value: Byte): StringBuilder =

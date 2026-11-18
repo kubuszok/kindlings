@@ -7,8 +7,6 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.fastshowpretty.internal.runtime.FastShowPrettyUtils
-
 trait FastShowPrettyHandleAsNamedTupleRuleImpl { this: FastShowPrettyMacrosImpl & MacroCommons & StdExtensions =>
 
   object FastShowPrettyHandleAsNamedTupleRule extends DerivationRule("handle as named tuple when possible") {
@@ -65,54 +63,8 @@ trait FastShowPrettyHandleAsNamedTupleRuleImpl { this: FastShowPrettyMacrosImpl 
                 }
               }
             }
-            .map { toAppend =>
-              // Render without a type name prefix — just "(\n  name = ...,\n  age = ...\n)"
-              val renderLeftParenthesisAndHeadField = toAppend.head match {
-                case (fieldName, fieldResult) =>
-                  Expr.quote {
-                    val _ = Expr
-                      .splice(ctx.sb)
-                      .append("(\n")
-                    val _ = FastShowPrettyUtils
-                      .appendIndent(
-                        Expr.splice(ctx.sb),
-                        Expr.splice(ctx.config).indentString,
-                        Expr.splice(ctx.level) + 1
-                      )
-                      .append(Expr.splice(Expr(fieldName)))
-                      .append(" = ")
-                    Expr.splice(fieldResult)
-                  }
-              }
-              val renderAllFields = toAppend.tail.foldLeft(renderLeftParenthesisAndHeadField) {
-                case (renderPreviousFields, (fieldName, fieldResult)) =>
-                  Expr.quote {
-                    val _ = Expr
-                      .splice(renderPreviousFields)
-                      .append(",\n")
-                    val _ = FastShowPrettyUtils
-                      .appendIndent(
-                        Expr.splice(ctx.sb),
-                        Expr.splice(ctx.config).indentString,
-                        Expr.splice(ctx.level) + 1
-                      )
-                      .append(Expr.splice(Expr(fieldName)))
-                      .append(" = ")
-                    Expr.splice(fieldResult)
-                  }
-              }
-
-              Expr.quote {
-                val _ = Expr.splice(renderAllFields).append("\n")
-                FastShowPrettyUtils
-                  .appendIndent(
-                    Expr.splice(ctx.sb),
-                    Expr.splice(ctx.config).indentString,
-                    Expr.splice(ctx.level)
-                  )
-                  .append(")")
-              }
-            }
+            // Rendered without a type name prefix: "(\n  name = ...,\n  age = ...\n)"
+            .map(toAppend => renderFieldsFlat[A]("(\n", toAppend))
         case None =>
           MIO.pure {
             Expr.quote {
