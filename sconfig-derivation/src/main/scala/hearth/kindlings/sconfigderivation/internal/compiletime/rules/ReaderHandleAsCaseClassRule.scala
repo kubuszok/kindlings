@@ -281,55 +281,26 @@ trait ReaderHandleAsCaseClassRuleImpl {
 
               // Like upstream PureConfig: a value that is not an object fails once (not once per field); then every
               // field is read and all failures are reported, followed by the unknown keys of a strict case class
-              // (`ProductHint.bottom`). Each field is read by its own local def and its result bound to a `val`;
-              // when all of them are `Right` the value is constructed from them, otherwise their failures are merged.
-              // (A list of the reads with each field's branches inside its elements made the compiler keep every
-              // previous element on the stack, with a stack map frame per branch listing all of them.)
-              def readAll(objExpr: Expr[ConfigObject])(
-                  finish: List[Expr[Either[ConfigDecodingError, Any]]] => Expr[Either[ConfigDecodingError, A]]
-              ): Expr[Either[ConfigDecodingError, A]] = {
-                def loop(
-                    remaining: List[Expr[ConfigObject] => Expr[Either[ConfigDecodingError, Any]]],
-                    boundReversed: List[Expr[Either[ConfigDecodingError, Any]]]
-                ): Expr[Either[ConfigDecodingError, A]] = remaining match {
-                  case read :: rest =>
-                    ValDefs
-                      .createDef[Either[ConfigDecodingError, Any]](read(objExpr), FreshName.FromPrefix("readField"))
-                      .use { readField =>
-                        ValDefs.createVal[Either[ConfigDecodingError, Any]](readField).use { bound =>
-                          loop(rest, bound :: boundReversed)
-                        }
-                      }
-                  case Nil => finish(boundReversed.reverse)
-                }
-                loop(decodeExprs, Nil)
-              }
-
+              // (`ProductHint.bottom`). Each field is read by its own local def and its failure merged as it is read;
+              // the value is constructed when there is none (see FlatFieldsConstruct).
               MIO.scoped { runSafe =>
-                def finish(
-                    bound: List[Expr[Either[ConfigDecodingError, Any]]]
-                ): Expr[Either[ConfigDecodingError, A]] = {
-                  val allRight: Expr[Boolean] =
-                    bound.map(r => Expr.quote(Expr.splice(r).isRight)).reduceLeft { (acc, next) =>
-                      Expr.quote(Expr.splice(acc) && Expr.splice(next))
-                    }
-                  val constructed: Expr[A] = runSafe(constructFrom(bound.map { r =>
-                    Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigDecodingError, Any]].value)
-                  }))
-                  val resultsExpr: Expr[List[Either[ConfigDecodingError, Any]]] =
-                    bound.foldRight(Expr.quote(List.empty[Either[ConfigDecodingError, Any]])) { (r, acc) =>
-                      Expr.quote(Expr.splice(r) :: Expr.splice(acc))
-                    }
-                  Expr.quote {
-                    if (Expr.splice(allRight)) Right(Expr.splice(constructed)): Either[ConfigDecodingError, A]
-                    else Left(SConfigDerivationUtils.combineFailures(Expr.splice(resultsExpr)))
-                  }
-                }
+                def readAll(objExpr: Expr[ConfigObject]): Expr[Either[ConfigDecodingError, A]] =
+                  constructAccumulating[Either[ConfigDecodingError, Any], ConfigDecodingError, A, Either[
+                    ConfigDecodingError,
+                    A
+                  ]](decodeExprs.map(_(objExpr)))(
+                    mergeErrors = (failure, r) =>
+                      Expr.quote(SConfigDerivationUtils.mergeFailure(Expr.splice(failure), Expr.splice(r))),
+                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigDecodingError, Any]].value),
+                    construct = values => runSafe(constructFrom(values)),
+                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigDecodingError, A]),
+                    onFailure = failure => Expr.quote(Left(Expr.splice(failure)): Either[ConfigDecodingError, A])
+                  )
                 if (staticAllowUnknownKeys.contains(true))
                   Expr.quote {
                     SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
                       case Left(e)             => Left(e): Either[ConfigDecodingError, A]
-                      case Right(objectFields) => Expr.splice(readAll(Expr.quote(objectFields))(finish))
+                      case Right(objectFields) => Expr.splice(readAll(Expr.quote(objectFields)))
                     }
                   }
                 else
@@ -338,7 +309,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                       case Left(e)             => Left(e): Either[ConfigDecodingError, A]
                       case Right(objectFields) =>
                         val coreResult: Either[ConfigDecodingError, A] =
-                          Expr.splice(readAll(Expr.quote(objectFields))(finish))
+                          Expr.splice(readAll(Expr.quote(objectFields)))
                         if (Expr.splice(allowUnknownKeysExpr)) coreResult
                         else
                           SConfigDerivationUtils

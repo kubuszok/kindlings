@@ -13,6 +13,7 @@ trait ReaderMacrosImpl
     extends SconfigDerivationTimeout
     with SconfigDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.ReaderUseCachedDefWhenAvailableRuleImpl
     with rules.ReaderUseImplicitWhenAvailableRuleImpl
     with rules.ReaderHandleAsBuiltInRuleImpl

@@ -197,6 +197,15 @@ object SConfigDerivationUtils {
       case right   => right
     }
 
+  /** `failure` (`null` when no field has failed yet) merged with the failure of a field's `result`: the merge of
+    * [[combineFailures]], one field at a time (generated code merges each field's result as it is read).
+    */
+  def mergeFailure(failure: ConfigDecodingError, result: Either[ConfigDecodingError, Any]): ConfigDecodingError =
+    result match {
+      case Left(e) => if (failure == null) e else ConfigDecodingError.merge(failure, e)
+      case _       => failure
+    }
+
   /** The failures of `results` merged in order (as [[sequenceResults]] merges them); there is at least one. */
   def combineFailures(results: List[Either[ConfigDecodingError, Any]]): ConfigDecodingError = {
     var failure: ConfigDecodingError = null
