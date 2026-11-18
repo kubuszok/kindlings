@@ -35,7 +35,7 @@ The integration registers `IsCollection`, `IsMap`, `IsEither`, and `IsValueType`
 
 Each provider teaches all derivation modules how to encode and decode the corresponding Cats type:
 
-- **Collections** (`NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`): encoded as JSON arrays, decoded with non-emptiness validation where applicable.
+- **Collections** (`NonEmptyList`, `NonEmptyVector`, `NonEmptySeq`, `NonEmptyLazyList`, `NonEmptyChain`, `Chain`): encoded as JSON arrays, decoded with non-emptiness validation where applicable.
 - **Maps** (`NonEmptyMap`): encoded as JSON objects (like `Map`), decoded with non-emptiness validation.
 - **Sets** (`NonEmptySet`): encoded as JSON arrays, decoded with non-emptiness and ordering validation.
 - **Either-like** (`Validated`): encoded/decoded like `Either`, mapping `Invalid` to left and `Valid` to right.
@@ -49,6 +49,8 @@ Each provider teaches all derivation modules how to encode and decode the corres
 |------|-----------|-------------------|
 | `NonEmptyList[A]` | Array | Must be non-empty |
 | `NonEmptyVector[A]` | Array | Must be non-empty |
+| `NonEmptySeq[A]` | Array | Must be non-empty |
+| `NonEmptyLazyList[A]` | Array | Must be non-empty |
 | `NonEmptyChain[A]` | Array | Must be non-empty |
 | `Chain[A]` | Array | None |
 

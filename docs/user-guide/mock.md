@@ -10,6 +10,15 @@ no bytecode generation**, so — unlike ScalaMock's default JVM backend — the 
 Scala.js and Scala Native** on both Scala 2.13 and Scala 3. (Cross-platform support is the main reason this exists
 rather than just using ScalaMock.)
 
+## What gets mocked
+
+Only **abstract** members are mocked (routed into the `MockContext`). Concrete members of the mocked type keep their
+real implementation, so a `def` with a body on a trait or class runs as written, even if it calls mocked members.
+
+When the mocked type is a class, its primary constructor is invoked with a `Defaultable` default for every parameter
+(`0`, `""`, `None`, …, `null` for other reference types), so constructor side effects run and constructor `val`s hold
+those defaults.
+
 ## Installation
 
 !!! example "sbt"
@@ -74,10 +83,16 @@ is implicitly in scope (the same one the mock was created with).
 ## Return values, exceptions and computed results
 
 ```scala
-ctx.expecting("greet", "world").returning("hi")               // fixed value
-ctx.expecting("greet", "boom").throwing(new RuntimeException)  // throw
-ctx.expecting("greet").onCall(args => s"hi, ${args.head}")     // compute from the actual args
+ctx.expecting("greet", "world").returning("hi")               // fixed value (alias: returns)
+ctx.expecting("greet", "boom").throwing(new RuntimeException)  // throw (alias: throws)
+ctx.expecting("greet").onCall(args => s"hi, ${args.head}")     // compute from the actual args (a Seq[Any])
+ctx.expecting("greet").onCall1[String](name => s"hi, $name")   // typed, one argument
+ctx.expecting("add").onCall2[Int, Int](_ + _)                  // typed, two arguments
 ```
+
+`expecting` with no arguments matches a call with any arguments. An expectation without `returning`/`throwing`/`onCall`
+returns the method's default. A call that matches no expectation throws `MockExpectationException`
+(`Unexpected call: greet(...)`).
 
 ## Call counts
 
@@ -90,6 +105,11 @@ ctx.expecting("greet", "world").returning("hi").never()
 ctx.expecting("greet", "world").returning("hi").anyNumberOfTimes()
 ctx.expecting("greet", "world").returning("hi").atLeastOnce()
 ctx.expecting("greet", "world").returning("hi").repeat(3)
+ctx.expecting("greet", "world").returning("hi").repeat(2 to 4)
+ctx.expecting("greet", "world").returning("hi").atLeast(2)
+ctx.expecting("greet", "world").returning("hi").atMost(2)
+ctx.expecting("greet", "world").returning("hi").noMoreThanOnce()
+ctx.expecting("greet", "world").returning("hi").noMoreThanTwice()
 ```
 
 `ctx.verifyExpectations()` at the end of the test fails if any expectation's actual count is outside its range.
@@ -105,7 +125,13 @@ ctx.expecting("greet", ArgMatcher.any).returning("hi")                 // any ar
 ctx.expecting("greet", ArgMatcher.where[String](_.nonEmpty))           // predicate
 ctx.expecting("greet", ArgMatcher.argThat[String](_.length > 3))       // alias for `where`
 ctx.expecting("measure", ArgMatcher.epsilon(1.0, 0.05))                // numeric, within tolerance
+ctx.expecting("greet", ArgMatcher.argThatDescribed[String]("non-empty")(_.nonEmpty)) // with a description
+ctx.expecting("greet", ArgMatcher.from(myMatcher))                     // a Matcher[A] implementation
+ctx.expectingSeq("add", ArgMatcher.where2[Int, Int](_ < _))            // predicate over both arguments
 ```
+
+`ArgMatcher.where2` returns the two matchers for a two-argument call; they share state, so do not reuse the pair in
+another expectation.
 
 `Capture` records the argument the expectation actually fired with, for later inspection:
 
@@ -113,7 +139,9 @@ ctx.expecting("measure", ArgMatcher.epsilon(1.0, 0.05))                // numeri
 val name = new Capture[String]
 ctx.expecting("greet", ArgMatcher.capture(name)).returning("hi")
 greeter.greet("Alice")
-println(name.value)   // "Alice"
+println(name.value)   // "Alice" — the most recent capture; throws NoSuchElementException if none
+name.values           // every captured value, in call order
+name.hasValue         // whether anything was captured
 ```
 
 ## Ordering
@@ -172,7 +200,36 @@ println(default)
 ```
 
 Like `expects`, both `when` and `verify` have name-keyed equivalents (`ctx.when("add", 2, 3)`,
-`ctx.verify("add", 2, 3)`).
+`ctx.verify("add", 2, 3)`). Besides `once()`, `twice()` and `never()`, a verification can check `wasCalled(n)`,
+`atLeastOnce()`, `atLeast(n)` and `atMost(n)`. `ctx.verifyInSequence("add" -> Seq(2, 3), "add" -> Seq(9, 9))` checks
+that the listed calls were recorded in that relative order (other calls may come in between).
+
+To return a different default than the built-in ones for a type, provide an implicit
+`Defaultable[A]` (`Defaultable.of(value)`).
+
+## Verifying automatically
+
+`ctx.withExpectations { ... }` runs the block, then calls `verifyExpectations()`, and resets the context afterwards
+either way (`ctx.reset()` clears every expectation, preset and recorded call). If the block itself throws, that
+exception is rethrown instead of an unsatisfied-expectation error.
+
+The framework-agnostic `MockSuite` mix-in provides an implicit `mockContext` and a `withExpectations` method:
+
+```scala
+class GreeterSpec extends munit.FunSuite with MockSuite {
+  test("greets") {
+    withExpectations {
+      val greeter = Mock.mock[Greeter]
+      (greeter.greet _).expects("world").returning("hi")
+      assertEquals(greeter.greet("world"), "hi")
+    }
+  }
+}
+```
+
+`MockSuite` holds **one** `MockContext` per suite instance, shared by all its tests. `withExpectations` resets it after
+each block, but mocks used outside a `withExpectations` block accumulate expectations and calls across tests, and
+tests of the same suite instance must not run in parallel.
 
 ## How it works
 

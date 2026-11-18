@@ -90,9 +90,10 @@ All methods take an implicit/using `XmlConfig` parameter (defaults to `XmlConfig
 
 `KindlingsXmlEncoder[A]` extends `XmlEncoder[A]` and `KindlingsXmlDecoder[A]` extends `XmlDecoder[A]`, so derived instances work anywhere the base types are expected. `KindlingsXmlCodec[A]` extends both `XmlEncoder[A]` and `XmlDecoder[A]`.
 
-### Syntax extensions (Scala 3)
+### Syntax extensions
 
-Import `hearth.kindlings.xmlderivation.syntax.*` for extension methods:
+Import `hearth.kindlings.xmlderivation.syntax._` (Scala 3: `syntax.*`) for extension methods — available on Scala 2.13
+and Scala 3:
 
 | Extension | Description |
 |-----------|-------------|

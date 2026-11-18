@@ -16,7 +16,7 @@ import cats.effect.kernel.Resource
   *
   * ==Constraint decision (no typeclass constraints)==
   *
-  * In cats-effect 3.6.3 the three primitives we splice are all constraint-free:
+  * In cats-effect 3 the three primitives we splice are all constraint-free:
   *   - `Resource.pure[F, A](a: A): Resource[F, A]`
   *   - `Resource.eval[F, A](fa: F[A]): Resource[F, A]`
   *   - `Resource#flatMap[B](f: A => Resource[F, B]): Resource[F, B]`

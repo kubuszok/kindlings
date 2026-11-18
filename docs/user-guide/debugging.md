@@ -39,6 +39,7 @@ scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
 | circe-derivation | `hearth.kindlings.circederivation.debug._` | `circeDerivation.logDerivation=true` |
 | jsoniter-derivation | `hearth.kindlings.jsoniterderivation.debug._` | `jsoniterDerivation.logDerivation=true` |
 | cats-derivation | `hearth.kindlings.catsderivation.debug._` | `catsDerivation.logDerivation=true` |
+| cats-tagless-derivation | `hearth.kindlings.catstaglessderivation.debug._` | `catsTaglessDerivation.logDerivation=true` |
 | avro-derivation | `hearth.kindlings.avroderivation.debug._` | `avroDerivation.logDerivation=true` |
 | pureconfig-derivation | `hearth.kindlings.pureconfigderivation.debug._` | `pureconfigDerivation.logDerivation=true` |
 | tapir-schema-derivation | `hearth.kindlings.tapirschemaderivation.debug._` | `tapirSchemaDerivation.logDerivation=true` |
@@ -129,7 +130,7 @@ Supported formats:
 | Milliseconds | `5000ms` or `5000milliseconds` | 5 seconds |
 | Minutes | `5m` or `5minutes` | 5 minutes |
 
-Invalid values emit a compiler warning and fall back to the 120-second default.
+Invalid values emit a compiler warning and fall back to the 5-second default.
 
 ### Settings namespace per module
 
@@ -138,6 +139,8 @@ Invalid values emit a compiler warning and fall back to the 120-second default.
 | circe-derivation | `circeDerivation` |
 | jsoniter-derivation | `jsoniterDerivation` |
 | cats-derivation | `catsDerivation` |
+| cats-tagless-derivation | `catsTaglessDerivation` |
+| diff-derivation | `diffDerivation` |
 | avro-derivation | `avroDerivation` |
 | pureconfig-derivation | `pureconfigDerivation` |
 | tapir-schema-derivation | `tapirSchemaDerivation` |

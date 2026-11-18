@@ -118,7 +118,7 @@ A wrapping type constructor that is itself a case class to derive (e.g. `middle:
 
 ### Bi-variant (kind `(*, *) → *`)
 
-Derived for type constructors with two type parameters (case classes only).
+Derived for type constructors with two type parameters (case classes and sealed traits).
 
 | Type class | Package |
 |-----------|---------|
@@ -128,17 +128,59 @@ Derived for type constructors with two type parameters (case classes only).
 
 ## API
 
-Cats derivation works via extension methods on the Cats companion objects themselves. The derivation is triggered by calling `.derived` on the type class companion:
+Cats derivation works via extension methods on the Cats companion objects themselves. Import
+`hearth.kindlings.catsderivation.extensions._` and call `.derived` on the type class companion:
 
 ```scala
-// Semi-automatic — call .derived explicitly
+import hearth.kindlings.catsderivation.extensions._
+
+// Semi-automatic — call .derived explicitly (nested field types are derived inside the same expansion)
 val showPerson: Show[Person] = Show.derived[Person]
 val eqPerson: Eq[Person] = Eq.derived[Person]
 val functorBox: Functor[Box] = Functor.derived[Box]
+```
 
-// Sanely-automatic — just use the type class
-import hearth.kindlings.catsderivation._
+The `hearth.kindlings.catsderivation._` package import alone does **not** bring `.derived` into scope — the extension
+methods live in the `extensions` object.
+
+### Automatic derivation (`auto`)
+
+To have instances appear wherever they are needed (kittens' `cats.derived.auto.<tc>._`), import the type class's object
+from `hearth.kindlings.catsderivation.auto`:
+
+```scala
+import hearth.kindlings.catsderivation.auto.show._  // Scala 3: auto.show.given
+
 Person("Alice", 30).show  // Show.derived[Person] resolved automatically
+```
+
+Available objects: `show`, `eq`, `order`, `partialOrder`, `hash`, `semigroup`, `monoid`, `empty` on both Scala versions,
+plus `functor`, `contravariant`, `foldable`, `traverse` on Scala 3. For the other type classes call `.derived`.
+
+### Scala 3 `derives`
+
+Because `.derived` is provided as an extension on the companion, the Scala 3 `derives` clause works once the extensions
+are imported:
+
+```scala
+import hearth.kindlings.catsderivation.extensions.*
+
+case class Person(name: String, age: Int) derives cats.Show, cats.Eq
+case class Box[A](value: A) derives cats.Functor
+```
+
+### Strict derivation
+
+By default, field types without an instance in scope are derived recursively. With an implicit `StrictDerivation` in
+scope, `Show`, `ShowPretty`, `Eq`, `PartialOrder`, `Order`, `Hash`, `Semigroup`, `Monoid`, `Group` and `Empty`
+derivation instead fails at compile time when a field's instance is not found, so every nested instance has to be
+provided explicitly:
+
+```scala
+import hearth.kindlings.catsderivation.StrictDerivation
+
+implicit val strict: StrictDerivation = StrictDerivation.instance
+val show = Show.derived[Outer]  // fails if Show[Inner] is not in scope
 ```
 
 ## Usage examples

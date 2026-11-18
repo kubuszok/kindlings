@@ -64,8 +64,12 @@ If both Kindlings' and the original library's automatic derivation are in scope,
 ## How do I migrate from kittens?
 
 1. Replace the dependency: `kittens` with `kindlings-cats-derivation`
-2. Replace imports: `cats.derived._` or `cats.derived.auto.*` with `hearth.kindlings.catsderivation._`
-3. For Scala 3 `derives` syntax: replace `derives cats.Show` with `derives cats.Show` (Kindlings provides the `derived` method as an extension, so `derives` just works)
+2. Replace imports: `cats.derived._` / `cats.derived.semiauto.*` with `hearth.kindlings.catsderivation.extensions._`
+   (this brings the `.derived` extension methods into scope), and `cats.derived.auto.show._` (etc.) with
+   `hearth.kindlings.catsderivation.auto.show._` (Scala 3: `auto.show.given`)
+3. For Scala 3 `derives` syntax: keep `derives cats.Show` as it is and import
+   `hearth.kindlings.catsderivation.extensions.*` (Kindlings provides the `derived` method as an extension on the
+   companion, so `derives` resolves to it)
 4. For semi-automatic: replace `cats.derived.semiauto.show[A]` with `cats.Show.derived[A]`
 
 ## How do I migrate from jsoniter-scala macros?
@@ -230,7 +234,7 @@ The macro extension system discovers the integration at compile time. No imports
 
 ## Where are Cats collection types like NonEmptyList supported?
 
-Add the `kindlings-cats-integration` dependency. It provides `IsCollection` and `IsMap` providers for `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, and `NonEmptySet`. These are then automatically available to all derivation modules (Circe, Jsoniter, Avro, etc.).
+Add the `kindlings-cats-integration` dependency. It provides `IsCollection` and `IsMap` providers for `NonEmptyList`, `NonEmptyVector`, `NonEmptySeq`, `NonEmptyLazyList`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, and `NonEmptySet`. These are then automatically available to all derivation modules (Circe, Jsoniter, Avro, etc.).
 
 ```scala
 libraryDependencies += "com.kubuszok" %% "kindlings-cats-integration" % "{{ kindlings_version() }}"

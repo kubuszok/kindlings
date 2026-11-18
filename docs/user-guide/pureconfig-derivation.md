@@ -283,7 +283,7 @@ Import the debug package to log the derivation process at compile time:
 import hearth.kindlings.pureconfigderivation.debug._
 ```
 
-This enables `LogDerivation` implicits for `KindlingsConfigReader`, `KindlingsConfigWriter`, and `KindlingsConfigConvert`, printing the derivation steps to the compiler output.
+This enables the `LogDerivation` implicits of `KindlingsConfigReader` and `KindlingsConfigWriter` (there is no separate one for `KindlingsConfigConvert`: its derivation logs through the reader and writer ones), printing the derivation steps to the compiler output. Project-wide: `scalacOptions += "-Xmacro-settings:pureconfigDerivation.logDerivation=true"`.
 
 ## Comparison with pureconfig-generic
 
@@ -293,7 +293,7 @@ This enables `LogDerivation` implicits for `KindlingsConfigReader`, `KindlingsCo
 |---------|----------------------------|--------------------------|-----------|
 | Same API on Scala 2.13 and 3 | No | No | Yes |
 | Sanely-automatic derivation | No | No | Yes |
-| `derives` support on Scala 2.13 | No | N/A | Yes |
+| `derives` support (Scala 3) | N/A | `ConfigReader` only (Writer/Convert via semiauto) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` |
 | Recursive types | Needs `Lazy` | Yes | Just works |
 | Named tuples | No | No | Yes |
 | Opaque types | No | Partial | Yes |

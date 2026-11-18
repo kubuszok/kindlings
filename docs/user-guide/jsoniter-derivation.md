@@ -75,6 +75,44 @@ Drop-in replacement for `jsoniter-scala-macros` `JsonCodecMaker` — derives `Js
 
 All methods take an implicit/using `JsoniterConfig` parameter (defaults to `JsoniterConfig.default`).
 
+### Syntax extensions
+
+`import hearth.kindlings.jsoniterderivation.syntax._` (Scala 3: `syntax.*`) adds the inline encoding/decoding as
+extension methods, on Scala 2.13 and Scala 3:
+
+| Extension | Returns | Description |
+|-----------|---------|-------------|
+| `value.toJsonString` | `String` | Like `KindlingsJsonValueCodec.writeToString(value)` |
+| `json.fromJsonString[A]` | `Either[JsonReaderException, A]` | Like `KindlingsJsonValueCodec.readFromString[A](json)` |
+
+```scala
+import hearth.kindlings.jsoniterderivation.syntax._
+
+Person("Alice", 30).toJsonString                        // {"name":"Alice","age":30}
+"""{"name":"Bob","age":25}""".fromJsonString[Person]  // Right(Person(Bob,25))
+```
+
+### Mapping codecs
+
+`import hearth.kindlings.jsoniterderivation.JsonValueCodecExtensions._` adds two methods to any `JsonValueCodec[A]`
+for building a codec of another type from it:
+
+| Method | Description |
+|--------|-------------|
+| `codec.map[B](f: A => B)(g: B => A)` | Decode with `f`, encode with `g` |
+| `codec.mapDecode[B](f: A => Either[String, B])(g: B => A)` | Like `map`, but a `Left(message)` from `f` fails decoding with a `JsonReaderException` carrying that message |
+
+```scala
+import hearth.kindlings.jsoniterderivation.JsonValueCodecExtensions._
+
+final case class Email(value: String)
+
+implicit val emailCodec: JsonValueCodec[Email] =
+  KindlingsJsonValueCodec.derived[String].mapDecode { s =>
+    if (s.contains("@")) Right(Email(s)) else Left(s"invalid email: $s")
+  }(_.value)
+```
+
 ## Configuration
 
 ```scala

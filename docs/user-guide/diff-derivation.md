@@ -81,6 +81,9 @@ The `Diff[A]` type class provides:
 | `DiffRenderer.render(result)` | Render with default config (simple names, ANSI colors, 2-space indent) |
 | `DiffRenderer.render(result, config)` | Render with custom `RenderConfig` |
 
+See [Customizing comparisons](#customizing-comparisons) for `ignoreField`, `Diff.approximate`, key-matched sequences
+and the `assertNoDiff` / `assertDiff` helpers.
+
 ### Supported types
 
 | Type | Diff behavior |
@@ -97,6 +100,70 @@ The `Diff[A]` type class provides:
 | Value types / opaque types | Unwrap and diff inner type |
 | Singletons (`case object`) | Always identical |
 | Recursive types | Handled automatically |
+
+## Customizing comparisons
+
+### Overriding a type's comparison
+
+Derivation uses any implicit `Diff` in scope for a field type instead of deriving one, so a hand-written or adjusted
+instance changes how that type is compared everywhere inside the derived instance.
+
+`Diff.approximate(epsilon)` builds a `Diff` for any `Numeric` type that treats values within `epsilon` of each other as
+identical:
+
+```scala
+implicit val approxDouble: Diff[Double] = Diff.approximate(0.01)
+
+case class Point(x: Double, y: Double)
+val diffPoint: Diff[Point] = Diff.derived[Point]
+
+diffPoint.diff(Point(1.0, 2.0), Point(1.001, 2.0)).isIdentical  // true
+diffPoint.diff(Point(1.0, 2.0), Point(1.5, 2.0)).isIdentical    // false
+```
+
+### Ignoring fields
+
+`ignoreField(name)` (or `modifyField(name).ignore`) returns a `Diff` that drops the named field from the result, so
+differences in it do not make the values differ:
+
+??? example "Ignoring a field"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-diff-derivation:{{ kindlings_version() }}
+
+    import hearth.kindlings.diffderivation._
+
+    case class Document(title: String, updatedAt: Long)
+
+    val diffDocument: Diff[Document] = Diff.derived[Document].ignoreField("updatedAt")
+
+    println(diffDocument.diff(Document("a", 1L), Document("a", 2L)).isIdentical)
+    // expected output:
+    // true
+    ```
+
+The name refers to a field of the outermost case class (or of the matched subtype, for a sealed trait); fields of nested
+types are not reached. To ignore a nested field, put an adjusted instance of the nested type in implicit scope before
+deriving the outer one. `modifyField(name).using(diff)` exists as well, but it currently does not replace the field's
+comparison.
+
+### Comparing collection elements by key
+
+`Diff.seqDiff(elementDiff, ObjectMatcher.by(key))` builds a `Diff[Iterable[A]]` that pairs elements by a key instead of
+by position, so reordered elements are matched to each other:
+
+```scala
+case class Item(id: Int, value: String)
+
+val diffItems: Diff[Iterable[Item]] = Diff.seqDiff(Diff.derived[Item], ObjectMatcher.by[Item, Int](_.id))
+```
+
+### Assertions
+
+`Diff.assertNoDiff(left, right)` throws an `AssertionError` whose message is `Values differ:` followed by the plain
+rendering of the difference; `Diff.assertDiff(left, right)` throws when the values are identical and returns the
+`DiffResult` otherwise. Both use the implicit `Diff[A]` and work with any test framework.
 
 ## Configuration
 
@@ -327,11 +394,11 @@ Supported formats: `30` (seconds), `30s`, `5000ms`, `1m`.
 | Set diff | Yes | Yes | Yes |
 | Option diff | Yes | Yes | Yes |
 | Recursive types | Yes | Yes | Yes |
-| Path-based configuration | Yes (`ignoreAt`, `replace`) | Yes (`modify(_.field).ignore`) | Not yet |
-| Test framework integrations | MUnit, ScalaTest, Weaver | MUnit, ScalaTest, Weaver, Specs2, utest | Not yet |
-| Cats collection support | Yes | Yes | Not yet |
-| Custom equality (`useEquals`) | Yes | Yes | Not yet |
-| Approximate numeric comparison | No | Yes | Not yet |
+| Path-based configuration | Yes (`ignoreAt`, `replace`) | Yes (`modify(_.field).ignore`) | Top-level fields only (`ignoreField(name)`, `modifyField(name).ignore`) |
+| Test framework integrations | MUnit, ScalaTest, Weaver | MUnit, ScalaTest, Weaver, Specs2, utest | Framework-agnostic `Diff.assertNoDiff` / `Diff.assertDiff` only |
+| Cats collection support | Yes | Yes | Yes (with `kindlings-cats-integration`) |
+| Custom equality (`useEquals`) | Yes | Yes | Via an implicit `Diff` for the type (no `useEquals` helper) |
+| Approximate numeric comparison | No | Yes | Yes (`Diff.approximate`) |
 | Type name rendering | FQN + short (izumi-reflect) | Fixed string | 4 modes (simple/short/FQN/pretty), lazy, runtime-composable |
 | Color modes | ANSI (fansi) | ANSI (4 themes) | ANSI + plain (configurable) |
 | Configurable indentation | No (fixed 2 spaces) | No (fixed 5 spaces) | Yes (spaces or tab) |
