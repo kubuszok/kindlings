@@ -485,8 +485,19 @@ trait DiffMacrosImpl
       .collect { case method if method.name == "derived" => method }
       .toSeq
 
-  protected def shouldWeLogDiffDerivation: Boolean =
-    Type.of[Diff.LogDerivation].summonExprIgnoring().toOption.isDefined
+  /** Enables logging if we either:
+    *   - import [[hearth.kindlings.diffderivation.debug.logDerivationForDiffDerivation]] in the scope
+    *   - have set scalac option `-Xmacro-settings:diffDerivation.logDerivation=true`
+    */
+  protected lazy val shouldWeLogDiffDerivation: Boolean = {
+    def logDerivationImported = Type.of[Diff.LogDerivation].summonExprIgnoring().toOption.isDefined
+    def logDerivationSetGlobally = (for {
+      data <- Environment.typedSettings.toOption
+      diffDerivation <- data.get(derivationSettingsNamespace)
+      shouldLog <- diffDerivation.get("logDerivation").flatMap(_.asBoolean)
+    } yield shouldLog).getOrElse(false)
+    logDerivationImported || logDerivationSetGlobally
+  }
 
   @scala.annotation.nowarn("msg=is never used|unused")
   def deriveTypeClass[A: Type]: Expr[Diff[A]] = {
@@ -624,7 +635,7 @@ trait DiffMacrosImpl
         val errorsRendered =
           hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
-          "Enable debug logging with: import hearth.kindlings.diffderivation.debug.logDerivationForDiffDerivation"
+          "Enable debug logging with: import hearth.kindlings.diffderivation.debug.logDerivationForDiffDerivation or scalac option -Xmacro-settings:diffDerivation.logDerivation=true"
         if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }

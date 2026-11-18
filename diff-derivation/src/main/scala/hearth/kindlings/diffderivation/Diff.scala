@@ -50,10 +50,10 @@ object Diff extends DiffCompanionCompat {
     def shortName: String = underlying.shortName
 
     def diff(left: A, right: A): DiffResult =
-      applyOverrides(underlying.diff(left, right))
+      applyOverrides(underlying.diff(left, right), left, right, isSnapshot = false)
 
     def snapshot(value: A): DiffResult =
-      applyOverrides(underlying.snapshot(value))
+      applyOverrides(underlying.snapshot(value), value, value, isSnapshot = true)
 
     override def ignoreField(fieldName: String): Diff[A] =
       Modified(underlying, overrides + (fieldName -> Modified.Ignore))
@@ -69,25 +69,56 @@ object Diff extends DiffCompanionCompat {
           )
       }
 
-    private def applyOverrides(result: DiffResult): DiffResult = result match {
-      case r: DiffResult.Record =>
-        val modifiedFields = r.fields.flatMap { case (name, fieldResult) =>
-          overrides.get(name) match {
-            case Some(Modified.Ignore)     => None
-            case Some(Modified.Replace(_)) => Some((name, fieldResult))
-            case None                      => Some((name, fieldResult))
+    // `left`/`right` are the values `result` was computed from: the whole value for a `Record`, the subtype's value
+    // for a `Variant` (whose body is the `Record` of that subtype), so a replaced field's Diff can be run on the
+    // field values read by name from the case class (`Product.productElementName`).
+    private def applyOverrides(result: DiffResult, left: Any, right: Any, isSnapshot: Boolean): DiffResult =
+      result match {
+        case r: DiffResult.Record =>
+          val modifiedFields = r.fields.flatMap { case (name, fieldResult) =>
+            overrides.get(name) match {
+              case Some(Modified.Ignore)             => None
+              case Some(Modified.Replace(fieldDiff)) =>
+                val replaced = (Modified.fieldValue(left, name), Modified.fieldValue(right, name)) match {
+                  case (Some(l), Some(r)) =>
+                    if (isSnapshot) fieldDiff.snapshot(l) else fieldDiff.diff(l, r)
+                  case _ => fieldResult
+                }
+                Some((name, replaced))
+              case None => Some((name, fieldResult))
+            }
           }
-        }
-        DiffResult.Record(r.prettyName, r.plainName, r.simpleName, r.shortName, modifiedFields)
-      case v: DiffResult.Variant =>
-        DiffResult.Variant(v.prettyName, v.plainName, v.simpleName, v.shortName, v.variantName, applyOverrides(v.body))
-      case other => other
-    }
+          DiffResult.Record(r.prettyName, r.plainName, r.simpleName, r.shortName, modifiedFields)
+        case v: DiffResult.Variant =>
+          DiffResult.Variant(
+            v.prettyName,
+            v.plainName,
+            v.simpleName,
+            v.shortName,
+            v.variantName,
+            applyOverrides(v.body, left, right, isSnapshot)
+          )
+        case other => other
+      }
   }
   private[diffderivation] object Modified {
     sealed trait Override
     case object Ignore extends Override
     final case class Replace(diff: Diff[Any]) extends Override
+
+    /** Reads a case class field by name, if `value` is a `Product` with such an element. */
+    def fieldValue(value: Any, name: String): Option[Any] = value match {
+      case p: Product =>
+        var i = 0
+        val n = p.productArity
+        var found: Option[Any] = None
+        while (found.isEmpty && i < n) {
+          if (p.productElementName(i) == name) found = Some(p.productElement(i))
+          i += 1
+        }
+        found
+      case _ => None
+    }
   }
 
   def seqDiff[A](elemDiff: Diff[A], matcher: ObjectMatcher[A]): Diff[Iterable[A]] = new Diff[Iterable[A]] {

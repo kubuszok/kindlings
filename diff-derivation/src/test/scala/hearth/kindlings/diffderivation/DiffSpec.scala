@@ -579,6 +579,44 @@ final class DiffSpec extends hearth.MacroSuite {
         val result = d.diff(Person("Alice", 30), Person("Alice", 99))
         assert(result.isIdentical, s"expected identical after ignoring age, got $result")
       }
+
+      test("modifyField().using replaces the field's Diff") {
+        val d = Diff.derived[Person].modifyField("age").using(Diff.approximate(5))
+        assert(d.diff(Person("Alice", 30), Person("Alice", 33)).isIdentical)
+        assert(!d.diff(Person("Alice", 30), Person("Alice", 36)).isIdentical)
+        assert(!d.diff(Person("Alice", 30), Person("Bob", 30)).isIdentical)
+      }
+
+      test("modifyField().using composes with ignoreField") {
+        val d = Diff.derived[Person].ignoreField("name").modifyField("age").using(Diff.approximate(5))
+        assert(d.diff(Person("Alice", 30), Person("Bob", 33)).isIdentical)
+        val d2 = Diff.derived[Person].modifyField("age").using(Diff.approximate(5)).ignoreField("name")
+        assert(d2.diff(Person("Alice", 30), Person("Bob", 33)).isIdentical)
+      }
+
+      test("modifyField().using applies to the fields of sealed trait subtypes") {
+        val d = Diff.derived[Shape].modifyField("radius").using(Diff.approximate(0.5))
+        assert(d.diff(Circle(1.0), Circle(1.25)).isIdentical)
+        assert(!d.diff(Circle(1.0), Circle(2.0)).isIdentical)
+        assert(!d.diff(Circle(1.0), Rectangle(1.0, 1.0)).isIdentical)
+      }
+
+      test("modifyField().using is used by snapshot") {
+        val custom = new Diff[Int] {
+          def prettyName: String = "Int"
+          def plainName: String = "Int"
+          def simpleName: String = "Int"
+          def shortName: String = "Int"
+          def diff(left: Int, right: Int): DiffResult = DiffResult.Identical("Int", "Int", "Int", "Int", "same")
+          def snapshot(value: Int): DiffResult = DiffResult.Identical("Int", "Int", "Int", "Int", s"age=$value")
+        }
+        val d = Diff.derived[Person].modifyField("age").using(custom)
+        d.snapshot(Person("Alice", 30)) match {
+          case r: DiffResult.Record =>
+            assertEquals(r.fields.collectFirst { case ("age", DiffResult.Identical(s)) => s }, Some("age=30"))
+          case other => fail(s"expected Record, got $other")
+        }
+      }
     }
 
     group("assertNoDiff / assertDiff") {
