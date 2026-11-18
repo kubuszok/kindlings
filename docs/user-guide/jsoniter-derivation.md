@@ -254,7 +254,8 @@ case for `JsoniterConfig.default`, `JsoniterConfig.jsoniterScalaDefaults`, a con
 (`KindlingsJsonValueCodec.derived[A](JsoniterConfig.default.withX)` on Scala 2.13, `derived[A](using ...)` on Scala 3)
 and, on Scala 3, a local `implicit val`/`given` or a `val` of an `object` (or a `final val`) initialized with such an
 expression. Configs read from a `var`, from an overridable (non-final) class/trait `val`, or computed from runtime
-values are only known at runtime: the codec then checks the config when it runs, with the same behaviour. So that the
+values are only known at runtime: the codec then checks the config when it runs, with the same behaviour (the keys
+its `fieldNameMapper` gives are computed once per codec instance, on first use, not on every decode). So that the
 result never depends on the incremental-compilation state, members of classes/objects of the module being compiled are
 not evaluated by reflection: on Scala 3 their `val`s are followed to their right-hand side, on Scala 2 such configs are
 always treated as runtime configs, whether their classes are compiled in the same run or by an earlier incremental run
