@@ -81,6 +81,10 @@ No configuration class is needed -- derivation is fully automatic based on the t
   shrinks with depth, and at size 0 only the cases of a sealed trait that cannot recurse are generated
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
+- **Value types with smart constructors** -- refined / Iron types, opaque types or custom `IsValueType` providers whose
+  constructor returns an `Either` are generated from the underlying type's generator: a value the constructor rejects
+  is regenerated (up to 100 candidates, then the generator fails with `Gen.fail`, which `forAll` counts as discarded),
+  and `Shrink` drops the shrunk candidates the constructor rejects
 - **Everything ScalaCheck supports out of the box** -- primitives, `String`, `BigInt`/`BigDecimal`, `UUID`, `Symbol`,
   durations, `java.time.*`, throwables, ... use ScalaCheck's own instances (whatever the ScalaCheck version on the
   classpath provides)

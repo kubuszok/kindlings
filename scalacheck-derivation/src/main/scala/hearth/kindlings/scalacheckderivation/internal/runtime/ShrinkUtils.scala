@@ -12,6 +12,26 @@ object ShrinkUtils {
       case Some(x) => None #:: innerShrink.shrink(x).map(Some(_))
     }
 
+  /** Shrinks a value type built with a smart constructor (`wrap`, e.g. a refined type's `refineV`): shrinks the
+    * underlying value and drops the candidates the constructor rejects (a `Left`, or an exception thrown by `wrap`).
+    */
+  def shrinkValueType[Inner, A](
+      innerShrink: Shrink[Inner],
+      unwrap: A => Inner,
+      wrap: Inner => Either[Any, A]
+  ): Shrink[A] =
+    Shrink { value =>
+      innerShrink.shrink(unwrap(value)).flatMap { candidate =>
+        val wrapped =
+          try wrap(candidate)
+          catch { case scala.util.control.NonFatal(e) => Left(e) }
+        wrapped match {
+          case Right(shrunk) => Stream(shrunk)
+          case Left(_)       => Stream.empty
+        }
+      }
+    }
+
   /** Shrinks a collection by trying progressively smaller sublists and shrinking individual elements.
     *
     * Reads the value through the provider's `asIterable` and rebuilds every candidate through the provider's smart

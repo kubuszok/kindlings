@@ -33,6 +33,28 @@ object ScalaCheckUtils {
       }
     }
 
+  /** How many candidates [[genValueType]] generates before giving up. */
+  final val MaxValueTypeCandidates = 100
+
+  /** Generates a value type through its smart constructor (`wrap`, e.g. a refined type's `refineV`): a rejected
+    * candidate (a `Left`, or an exception thrown by `wrap`) is regenerated, up to [[MaxValueTypeCandidates]] times, and
+    * then the generator fails with ScalaCheck's own `Gen.fail` - no value, which `forAll` counts as discarded, never an
+    * exception.
+    */
+  def genValueType[Inner, A](innerGen: Gen[Inner], wrap: Inner => Either[Any, A]): Gen[A] = {
+    def attempt(remaining: Int): Gen[A] = innerGen.flatMap { inner =>
+      val wrapped =
+        try wrap(inner)
+        catch { case scala.util.control.NonFatal(e) => Left(e) }
+      wrapped match {
+        case Right(value)             => Gen.const(value)
+        case Left(_) if remaining > 1 => attempt(remaining - 1)
+        case Left(_)                  => Gen.fail[A]
+      }
+    }
+    attempt(MaxValueTypeCandidates)
+  }
+
   /** Generates a `FunctionN` like ScalaCheck's `Gen.functionN`: every generated function is pure - it perturbs a
     * generated seed with its arguments (through their `Cogen`s) and runs `resultGen` with the resulting seed. The
     * instances are by-name (and memoized) so that recursive types are not evaluated while their generator is built.
