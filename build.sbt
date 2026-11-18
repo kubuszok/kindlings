@@ -409,9 +409,10 @@ lazy val di = projectMatrix
 
 lazy val diCats = projectMatrix
   .in(file("di-cats"))
-  // JVM + JS only: cats-effect for Scala Native 0.5 is published from 3.7.0+, but we pin 3.6.3 (which has no
-  // `cats-effect_native0.5_3` artifact). Add `VirtualAxis.native` here once the cats-effect pin moves to >= 3.7.0.
-  .someVariations(versions.scalas, List(VirtualAxis.jvm, VirtualAxis.js))((useCrossQuotes ++ dev.only1VersionInIDE) *)
+  // JVM + JS + Native (cats-effect publishes Scala Native 0.5 artifacts since 3.7.0).
+  .someVariations(versions.scalas, versions.platforms)(
+    (useCrossQuotes ++ dev.only1VersionInIDE ++ nativeEvictionWarn) *
+  )
   .dependsOn(di, macroCommons)
   .settings(
     moduleName := "kindlings-di-cats",

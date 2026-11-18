@@ -23,8 +23,8 @@ works for `IO`, `SyncIO`, or any other effect — and needs **no** `Sync`/`Async
     //> using dep com.kubuszok::kindlings-di-cats:{{ kindlings_version() }}
     ```
 
-`kindlings-di-cats` is published for the JVM and Scala.js. (Scala Native support follows the Cats-Effect Native
-artifact, first published from cats-effect 3.7.0.)
+`kindlings-di-cats` is published for the JVM, Scala.js and Scala Native (like Cats-Effect, which publishes Scala
+Native artifacts since 3.7.0).
 
 ## Quick start
 
