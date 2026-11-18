@@ -41,7 +41,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
       name =>
         nonTransientWithIndex.exists { case ((n, p), _) =>
           n == name && isTransientAtRuntimeOnly[A](p, dctx.evaluatedConfig)
-        }
+        },
+      dctx.evaluatedConfig
     )
 
   /** A field's decode function, which with a runtime config skips a `scala.transient` field when

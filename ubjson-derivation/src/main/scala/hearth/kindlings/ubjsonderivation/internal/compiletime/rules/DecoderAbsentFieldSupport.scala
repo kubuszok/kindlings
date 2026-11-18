@@ -108,18 +108,25 @@ trait DecoderAbsentFieldSupport {
       config: Expr[UBJsonConfig],
       reader: Expr[UBJsonReader],
       argumentValues: Map[String, Expr_??] = Map.empty,
-      runtimeOnlyTransient: String => Boolean = _ => false
+      runtimeOnlyTransient: String => Boolean = _ => false,
+      evaluatedConfig: Option[UBJsonConfig] = None
   ): List[Expr[Unit]] = {
     implicit val AnyT: Type[Any] = CTypes.Any
     implicit val StringT: Type[String] = CTypes.String
     fields.map { case (fName, param, idx, nameOverride) =>
       import param.tpe.Underlying as Field
-      val mappedName: Expr[String] = nameOverride match {
-        case Some(customName) => Expr(customName)
-        case None             => Expr.quote(Expr.splice(config).fieldNameMapper(Expr.splice(Expr(fName))))
+      val mappedName: Expr[String] = (nameOverride, evaluatedConfig) match {
+        case (Some(customName), _)  => Expr(customName)
+        case (None, Some(evConfig)) => Expr(evConfig.fieldNameMapper(fName))
+        case (None, None)           => Expr.quote(Expr.splice(config).fieldNameMapper(Expr.splice(Expr(fName))))
       }
       val fallbacks = absentFieldFallbacks[Field](param, argumentValues)
-      val normalFallback = runtimeAbsentFallback[Field](fallbacks, config, reader, mappedName)
+      // With the config known at compile time only the fallback that applies is emitted (no `require*` branches).
+      val normalFallback = evaluatedConfig match {
+        case Some(evConfig) =>
+          staticAbsentFallback[Field](fallbacks, evConfig).getOrElse(missingRequiredFieldOf[Field](reader, mappedName))
+        case None => runtimeAbsentFallback[Field](fallbacks, config, reader, mappedName)
+      }
       // A `scala.transient` field (runtime config): its default when `scalaTransientSupport` is on
       val fallback: Expr[Field] = fallbacks.default match {
         case Some(default) if runtimeOnlyTransient(fName) =>
