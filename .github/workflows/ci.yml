@@ -65,7 +65,17 @@ jobs:
       - uses: extractions/setup-just@v4
       - uses: coursier/setup-action@v3.1.0
         with:
+          jvm: 'temurin:1.17.0.15'
           apps: scala-cli sbt
+      # sbt 2's `sbt` launcher defaults to a thin client that starts a background server. On a runner that server keeps
+      # the environment of the step that started it and can fail to start (`failed to connect to server`). `--server`
+      # runs sbt in the foreground, one JVM per call, as before sbt 2; the wrapper first on the PATH adds it everywhere.
+      - name: Make `sbt` run in the foreground
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/sbt-foreground"; mkdir -p "$dir"
+          printf '#!/usr/bin/env bash\nexec "%s" --server "$@"\n' "$(command -v sbt)" > "$dir/sbt"
+          chmod +x "$dir/sbt"; echo "$dir" >> "$GITHUB_PATH"
       - name: Run snippets from documentation
         working-directory: docs
         run: |
@@ -104,6 +114,15 @@ jobs:
         with:
           jvm: ${{ matrix.jvm }}
           apps: sbt scala-cli
+      # sbt 2's `sbt` launcher defaults to a thin client that starts a background server. On a runner that server keeps
+      # the environment of the step that started it and can fail to start (`failed to connect to server`). `--server`
+      # runs sbt in the foreground, one JVM per call, as before sbt 2; the wrapper first on the PATH adds it everywhere.
+      - name: Make `sbt` run in the foreground
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/sbt-foreground"; mkdir -p "$dir"
+          printf '#!/usr/bin/env bash\nexec "%s" --server "$@"\n' "$(command -v sbt)" > "$dir/sbt"
+          chmod +x "$dir/sbt"; echo "$dir" >> "$GITHUB_PATH"
       - name: Install native dependencies
         if: matrix.platform == 'native'
         run: sudo apt-get update && sudo apt-get install -y libidn2-dev

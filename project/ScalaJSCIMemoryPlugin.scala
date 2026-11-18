@@ -2,6 +2,7 @@ import sbt.*
 import sbt.Keys.*
 import org.scalajs.sbtplugin.ScalaJSPlugin
 import org.scalajs.sbtplugin.ScalaJSPlugin.autoImport.*
+import kubuszok.sbt.KubuszokPlugin.autoImport.isCI
 
 /** Keeps Scala.js linking within CI memory limits.
   *
@@ -16,8 +17,6 @@ import org.scalajs.sbtplugin.ScalaJSPlugin.autoImport.*
   * Local builds keep incremental linking (faster re-linking while iterating).
   */
 object ScalaJSCIMemoryPlugin extends AutoPlugin {
-
-  private val isCI: Boolean = sys.env.get("CI").exists(_.nonEmpty)
 
   override def requires = ScalaJSPlugin
   override def trigger = allRequirements
