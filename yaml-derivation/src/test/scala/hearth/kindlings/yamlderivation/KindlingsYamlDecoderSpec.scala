@@ -46,6 +46,46 @@ final class KindlingsYamlDecoderSpec extends MacroSuite {
         KindlingsYamlDecoder.decode[SimplePerson](node) ==> Right(SimplePerson("Alice", 30))
       }
 
+      test("a repeated key gives its last value, as scala-yaml") {
+        val yaml = "name: Alice\nage: 30\nname: Bob\nage: 31"
+        KindlingsYamlDecoder.fromYamlString[SimplePerson](yaml) ==> Right(SimplePerson("Bob", 31))
+        val decoder = KindlingsYamlDecoder.derived[SimplePerson]
+        internal.runtime.YamlDerivationUtils.parseAndDecode[SimplePerson](yaml, decoder.construct(_)) ==>
+          Right(SimplePerson("Bob", 31))
+      }
+
+      test("a mapping with a key that is not a scalar fails, as scala-yaml") {
+        val node = MappingNode(
+          Map[Node, Node](
+            ScalarNode("name") -> scalarNode("Alice"),
+            seqOf(scalarNode("k")) -> scalarNode("v"),
+            ScalarNode("age") -> scalarNode("30")
+          )
+        )
+        KindlingsYamlDecoder.decode[SimplePerson](node).left.map(_.msg) ==>
+          Left("Parameter of a class must be a scalar value")
+      }
+
+      test("a derived decoder creates its field decoders once, not on every decode") {
+        val node = mappingOf(
+          "first" -> scalarNode("a"),
+          "second" -> scalarNode("b"),
+          "label" -> scalarNode("l")
+        )
+        val before = CountedValue.decodersCreated
+        val decoder = KindlingsYamlDecoder.derived[WithCounted]
+        (1 to 3).foreach { _ =>
+          decoder.construct(node) ==> Right(WithCounted(CountedValue("a"), CountedValue("b"), "l"))
+        }
+        // one decoder shared by both fields of its type, created on the first decode
+        CountedValue.decodersCreated - before ==> 1
+      }
+
+      test("a node that is not a mapping") {
+        KindlingsYamlDecoder.decode[SimplePerson](scalarNode("x")).left.map(_.msg) ==>
+          Left("Expected MappingNode, got ScalarNode")
+      }
+
       test("empty case class") {
         val node = mappingOf()
         KindlingsYamlDecoder.decode[EmptyClass](node) ==> Right(EmptyClass())

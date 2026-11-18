@@ -93,6 +93,64 @@ object YamlDerivationUtils {
         Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
     }
 
+  /** The value node of each scalar key of a mapping, read once per decode (then each field is a hash lookup, not a scan
+    * of the mapping). As scala-yaml's derived decoders: a repeated key gives its last value, a key that is not a scalar
+    * fails with `Parameter of a class must be a scalar value`, a node that is not a mapping with `Expected MappingNode,
+    * got <class>`.
+    */
+  def fieldNodes(node: Node): Either[ConstructError, java.util.HashMap[String, Node]] =
+    node match {
+      case MappingNode(mappings, _) =>
+        val fields = new java.util.HashMap[String, Node](mappings.size * 2)
+        val iter = mappings.iterator
+        var error: ConstructError = null
+        while (error == null && iter.hasNext) {
+          val (key, value) = iter.next()
+          key match {
+            case ScalarNode(name, _) => val _ = fields.put(name, value)
+            case _                   => error = ConstructError.from("Parameter of a class must be a scalar value", key)
+          }
+        }
+        if (error == null) Right(fields) else Left(error)
+      case other =>
+        Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
+    }
+
+  /** [[decodeRequiredField]] with the mapping's [[fieldNodes]]. */
+  def decodeRequiredFieldOf(
+      fields: java.util.HashMap[String, Node],
+      node: Node,
+      fieldName: String,
+      decoder: YamlDecoder[?]
+  ): Either[ConstructError, Any] = {
+    val fieldNode = fields.get(fieldName)
+    if (fieldNode == null) Left(ConstructError.from(s"Key $fieldName doesn't exist in parsed document", node))
+    else decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+  }
+
+  /** [[decodeOptionalField]] with the mapping's [[fieldNodes]]. */
+  def decodeOptionalFieldOf(
+      fields: java.util.HashMap[String, Node],
+      fieldName: String,
+      decoder: YamlDecoder[?]
+  ): Either[ConstructError, Any] = {
+    val fieldNode = fields.get(fieldName)
+    if (fieldNode == null) Right(None)
+    else decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+  }
+
+  /** [[decodeFieldWithDefault]] with the mapping's [[fieldNodes]]. */
+  def decodeFieldWithDefaultOf(
+      fields: java.util.HashMap[String, Node],
+      fieldName: String,
+      decoder: YamlDecoder[?],
+      default: Any
+  ): Either[ConstructError, Any] = {
+    val fieldNode = fields.get(fieldName)
+    if (fieldNode == null) Right(default)
+    else decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+  }
+
   /** Decode a field that must be present: `getField(node, fieldName).flatMap(decoder.construct(_))`. */
   def decodeRequiredField(node: Node, fieldName: String, decoder: YamlDecoder[?]): Either[ConstructError, Any] =
     getField(node, fieldName) match {
