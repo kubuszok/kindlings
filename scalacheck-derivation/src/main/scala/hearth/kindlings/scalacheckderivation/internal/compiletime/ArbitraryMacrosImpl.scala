@@ -165,6 +165,7 @@ trait ArbitraryMacrosImpl
     val Unit: Type.Lazy[Unit] = Type.Lazy(Type.of[Unit])
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ListAny: Type.Lazy[List[Any]] = Type.Lazy(Type.of[List[Any]])
+    val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val ListGenAny: Type.Lazy[List[org.scalacheck.Gen[Any]]] = Type.Lazy(Type.of[List[org.scalacheck.Gen[Any]]])
     val LogDerivation: Type[hearth.kindlings.scalacheckderivation.LogDerivation] =
       Type.of[hearth.kindlings.scalacheckderivation.LogDerivation]

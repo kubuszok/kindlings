@@ -54,14 +54,9 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
                 deriveShrinkRecursively[Field](using shrinkctx.nest[Field]).map { shrinkExpr =>
                   val shrinkAny: Expr[Shrink[Any]] = Expr.quote(Expr.splice(shrinkExpr).asInstanceOf[Shrink[Any]])
 
-                  // Build a cast function that uses the shrinkExpr as a type witness
-                  // (same pattern as ScalaCheckUtils.unsafeCast in the Arbitrary rule)
-                  val castFn: Expr[Any] => Expr_?? = { (anyExpr: Expr[Any]) =>
-                    Expr.quote {
-                      hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
-                        .unsafeCastViaShrink(Expr.splice(anyExpr), Expr.splice(shrinkExpr))
-                    }.as_??
-                  }
+                  // A cast to the field's type (not a `Shrink` witness, which would be evaluated again for every
+                  // shrunk value)
+                  val castFn: Expr[Any] => Expr_?? = (anyExpr: Expr[Any]) => castTo[Field](anyExpr).as_??
                   (fieldName, shrinkAny, castFn)
                 }
               }
@@ -119,5 +114,8 @@ trait ShrinkHandleAsCaseClassRuleImpl { this: ShrinkMacrosImpl & MacroCommons & 
             }
       }
     }
+
+    /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
+    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
   }
 }
