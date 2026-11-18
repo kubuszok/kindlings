@@ -16,7 +16,7 @@ trait AvroEncoderHandleAsSingletonRuleImpl {
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
         SingletonValue.parse[A].toEither match {
           case Right(_) =>
-            deriveSelfContainedSchema[A](ectx.config, ectx.evaluatedConfig).map { schemaExpr =>
+            cachedEncodeSchema[A].map { schemaExpr =>
               Rule.matched(Expr.quote {
                 val record = new GenericData.Record(Expr.splice(schemaExpr))
                 record: Any

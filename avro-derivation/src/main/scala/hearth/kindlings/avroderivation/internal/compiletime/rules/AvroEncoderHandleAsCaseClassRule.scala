@@ -16,23 +16,7 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
   private def cachedSchemaForEncode[A: Type](implicit ctx: EncoderCtx[A]): MIO[Expr[Schema]] =
-    ctx.precomputedSchema match {
-      case Some(schemaExpr) =>
-        Log.info(s"Using precomputed schema for ${Type[A].prettyPrint}") >>
-          MIO.pure(schemaExpr)
-      case None =>
-        ctx.getCachedSchemaForEncode[A].flatMap {
-          case Some(cached) =>
-            Log.info(s"Using encoder-cached schema for ${Type[A].prettyPrint}") >>
-              MIO.pure(cached)
-          case None =>
-            for {
-              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
-              _ <- ctx.setCachedSchemaForEncode[A](schema)
-              result <- ctx.getCachedSchemaForEncode[A]
-            } yield result.get
-        }
-    }
+    cachedEncodeSchema[A]
 
   @scala.annotation.nowarn("msg=is never used")
   private def inlineBuiltInAvroEncode[Field: Type](value: Expr[Field])(implicit AnyT: Type[Any]): Option[Expr[Any]] =

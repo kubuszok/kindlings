@@ -80,44 +80,65 @@ trait DecoderMacrosImpl
         s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
         MIO.scoped { runSafe =>
-          // Derive schema with its own cache (self-contained)
+          // Everything is derived here, once: the schema, the instance's config and the decode body become lazy vals
+          // and defs of the instance (`toValDefs.use` around the whole instance), so a decode call only runs the body.
+          val cache = ValDefsCache.mlocal
+          val instanceCtx = DecoderCtx[A](
+            tpe = Type[A],
+            avroValue = Expr.quote(null.asInstanceOf[Any]),
+            config = configExpr,
+            cache = cache,
+            derivedType = selfType,
+            evaluatedConfig = evConfig
+          )
+
           val schemaExpr: Expr[Schema] = runSafe {
-            deriveSelfContainedSchema[A](configExpr)
+            for {
+              schema <- deriveSelfContainedSchema[A](configExpr, evConfig)
+              _ <- instanceCtx.setCachedSchemaForDecode[A](schema)
+              cached <- instanceCtx.getCachedSchemaForDecode[A]
+            } yield cached.get
           }
 
-          // Create decoder derivation callback
-          val fromCtx: (DecoderCtx[A] => Expr[A]) = (ctx: DecoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveDecoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
+          val outerConfigExpr: Expr[AvroConfig] = runSafe {
+            for {
+              _ <- cache.buildCachedWith("outer-config", ValDefBuilder.ofLazy[AvroConfig]("outerCfg"))(_ => configExpr)
+              cfgOpt <- cache.get0Ary[AvroConfig]("outer-config")
+            } yield cfgOpt.get
+          }
 
-          // Assemble the type class instance
-          ValDefs.createVal[AvroConfig](configExpr).use { configVal =>
+          val defBuilder = ValDefBuilder.ofDef2[Any, AvroConfig, A](s"decode_${Type[A].shortName}_instance")
+          val decodeFn: (Expr[Any], Expr[AvroConfig]) => Expr[A] = runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              _ <- MIO.scoped { rs =>
+                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (v, c)) =>
+                  rs(
+                    deriveDecoderRecursively[A](using
+                      instanceCtx.copy(
+                        avroValue = v,
+                        config = c,
+                        precomputedSchema = Some(schemaExpr),
+                        outerConfig = Some(outerConfigExpr)
+                      )
+                    )
+                  )
+                })
+              }
+              fn <- cache.get2Ary[Any, AvroConfig, A]("codec-decode-body")
+            } yield fn.get
+          }
+
+          val vals = runSafe(cache.get)
+          vals.toValDefs.use { _ =>
             Expr.quote {
-              val cfg = Expr.splice(configVal)
-              val sch = Expr.splice(schemaExpr)
               (hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories
                 .decoderInstanceWithSchema[A](
-                  sch,
+                  Expr.splice(schemaExpr),
                   (value: Any, cachedSchema: Schema) => {
                     val _ = value
-                    val _ = cfg
                     val _ = cachedSchema
-                    Expr.splice {
-                      fromCtx(
-                        DecoderCtx.from(
-                          Expr.quote(value),
-                          Expr.quote(cfg),
-                          derivedType = selfType,
-                          precomputedSchema = Some(Expr.quote(cachedSchema)),
-                          evaluatedConfig = evConfig
-                        )
-                      )
-                    }
+                    Expr.splice(decodeFn(Expr.quote(value), outerConfigExpr))
                   }
                 )): AvroDecoder[A]
             }
@@ -226,8 +247,12 @@ trait DecoderMacrosImpl
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
       precomputedSchema: Option[Expr[org.apache.avro.Schema]] = None,
-      evaluatedConfig: Option[AvroConfig] = None
+      evaluatedConfig: Option[AvroConfig] = None,
+      // the instance's config (a lazy val of the instance), for lazy vals that must not read a `def`'s parameter
+      outerConfig: Option[Expr[AvroConfig]] = None
   ) {
+
+    def schemaConfig: Expr[AvroConfig] = outerConfig.getOrElse(config)
 
     def nest[B: Type](newValue: Expr[Any]): DecoderCtx[B] = copy[B](
       tpe = Type[B],
@@ -331,6 +356,24 @@ trait DecoderMacrosImpl
 
   def dctx[A](implicit A: DecoderCtx[A]): DecoderCtx[A] = A
 
+  /** The self-contained schema of `A` as a lazy val of the decoder instance: built once, not on every decoded value.
+    * Only when the instance's config is available (`outerConfig`); otherwise it is derived where it is used.
+    */
+  protected def cachedDecodeSchema[A: Type](implicit ctx: DecoderCtx[A]): MIO[Expr[org.apache.avro.Schema]] =
+    ctx.outerConfig match {
+      case None    => deriveSelfContainedSchema[A](ctx.config, ctx.evaluatedConfig)
+      case Some(_) =>
+        ctx.getCachedSchemaForDecode[A].flatMap {
+          case Some(cached) => MIO.pure(cached)
+          case None         =>
+            for {
+              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
+              _ <- ctx.setCachedSchemaForDecode[A](schema)
+              result <- ctx.getCachedSchemaForDecode[A]
+            } yield result.get
+        }
+    }
+
   implicit def currentDecoderValueType[A: DecoderCtx]: Type[A] = dctx.tpe
 
   abstract class DecoderDerivationRule(val name: String) extends Rule {
@@ -425,7 +468,11 @@ trait DecoderMacrosImpl
       .summonExprIgnoring(AvroDecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
       .toEither match {
       case Right(decoderExpr) =>
-        Log.info(s"Found implicit AvroDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+        Log.info(s"Found implicit AvroDecoder[${Type[Field].prettyPrint}]") >>
+          ctx.getInstance[Field].flatMap {
+            case Some(cached) => MIO.pure(cached)
+            case None         => ctx.setInstance[Field](decoderExpr) >> ctx.getInstance[Field].map(_.get)
+          }
       case Left(_) =>
         Log.info(s"Building AvroDecoder[${Type[Field].prettyPrint}] via cached def") >> {
           // Placeholder Expr[Any] for the field's value slot — the rule chain (via setHelper)
@@ -446,21 +493,32 @@ trait DecoderMacrosImpl
             // smaller and the breakage is real. Sequential is the safe choice.
             _ <- deriveDecoderRecursively[Field](using ctx.nest[Field](placeholderValue))
             helperOpt <- ctx.getHelper[Field]
-            schemaExpr <- deriveSelfContainedSchema[Field](ctx.config, ctx.evaluatedConfig)
-          } yield {
-            val callerFn = helperOpt.get
-            val configExpr: Expr[AvroConfig] = ctx.config
-            Expr.quote {
-              val sch = Expr.splice(schemaExpr)
-              hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.decoderInstance[Field](
-                sch,
-                (value: Any) => {
-                  val _ = value
-                  Expr.splice(callerFn(Expr.quote(value), configExpr))
+            cachedOpt <- ctx.outerConfig.fold(MIO.pure(Option.empty[Expr[AvroDecoder[Field]]]))(_ =>
+              ctx.getCachedFieldDecoder[Field]
+            )
+            result <- cachedOpt match {
+              case Some(cached) => MIO.pure(cached)
+              case None         =>
+                // With the instance's config at hand the decoder (and its schema) is a lazy val of the instance,
+                // built once; otherwise it is built where it is used, from the call site's config.
+                val configExpr: Expr[AvroConfig] = ctx.schemaConfig
+                deriveSelfContainedSchema[Field](configExpr, ctx.evaluatedConfig).flatMap { schemaExpr =>
+                  val callerFn = helperOpt.get
+                  val decoder: Expr[AvroDecoder[Field]] = Expr.quote {
+                    val sch = Expr.splice(schemaExpr)
+                    hearth.kindlings.avroderivation.internal.runtime.AvroDerivationFactories.decoderInstance[Field](
+                      sch,
+                      (value: Any) => {
+                        val _ = value
+                        Expr.splice(callerFn(Expr.quote(value), configExpr))
+                      }
+                    )
+                  }
+                  if (ctx.outerConfig.isEmpty) MIO.pure(decoder)
+                  else ctx.setCachedFieldDecoder[Field](decoder) >> ctx.getCachedFieldDecoder[Field].map(_.get)
                 }
-              )
             }
-          }
+          } yield result
         }
     }
   }

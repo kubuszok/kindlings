@@ -34,10 +34,19 @@ trait AvroDecoderUseImplicitWhenAvailableRuleImpl {
         else
           DecTypes.AvroDecoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
             case Right(instanceExpr) =>
-              Log.info(s"Found implicit decoder ${instanceExpr.prettyPrint}, using directly") >>
-                MIO.pure(Rule.matched(Expr.quote {
-                  Expr.splice(instanceExpr).decode(Expr.splice(dctx.avroValue))
-                }))
+              // a lazy val of the instance: resolved once, not on every decoded value
+              Log.info(s"Found implicit decoder ${instanceExpr.prettyPrint}, caching it in the instance") >>
+                dctx
+                  .getInstance[A]
+                  .flatMap {
+                    case Some(cached) => MIO.pure(cached)
+                    case None         => dctx.setInstance[A](instanceExpr) >> dctx.getInstance[A].map(_.get)
+                  }
+                  .map { cached =>
+                    Rule.matched(Expr.quote {
+                      Expr.splice(cached).decode(Expr.splice(dctx.avroValue))
+                    })
+                  }
             case Left(reason) =>
               MIO.pure(
                 Rule.yielded(
