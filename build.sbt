@@ -13,11 +13,11 @@ val dev = new DevProperties(
   platforms = versions.platforms
 )
 
-val logCrossQuotes = dev.props.getProperty("log.cross-quotes") match {
-  case "true"                          => true
-  case "false"                         => false
-  case otherwise if otherwise.nonEmpty => otherwise
-  case _                               => !isCI
+val logCrossQuotes = dev.prop("log.cross-quotes") match {
+  case Some("true")    => true
+  case Some("false")   => false
+  case Some(otherwise) => otherwise
+  case None            => !isCI
 }
 
 // Common settings:
@@ -295,37 +295,12 @@ lazy val aliases = new Aliases(
   }
 }
 
-// On sbt 2.0 sbt-welcome is gone, so the `ci-*` / `test-*` command aliases it used to register
-// (from `aliases.usefulTasks(...)`) are wired explicitly here. The CI workflow invokes
-// `sbt ci-<platform>-<scala>`; the local helper aliases mirror AGENTS.md (`test-jvm-2_13`, ...).
-//
-// IMPORTANT (sbt 2.0): `test` was redefined to *incremental* test (only re-runs suites whose
-// inputs changed), so on a fresh CI checkout `<module>/test` reports "No tests to run" and the
-// suites never execute. We therefore rewrite the `/test` tasks produced by `Aliases` to
-// `/testFull`, which always runs every suite. See the sbt 2.0 change summary ("test changed to
-// incremental test").
-lazy val commandAliases: Seq[Def.Setting[State => State]] = {
-  val combos = for {
-    platform <- Seq("jvm", "js", "native")
-    scala <- Seq("2_13", "3")
-  } yield (platform, scala)
-  val platformName = Map("jvm" -> "JVM", "js" -> "JS", "native" -> "Native")
-  val scalaBinary = Map("2_13" -> "2.13", "3" -> "3")
-  def fullTests(commands: String): String = commands.replace("/test", "/testFull")
-  val perAxis = combos.flatMap { case (platform, scala) =>
-    val p = platformName(platform)
-    val s = scalaBinary(scala)
-    addCommandAlias(s"ci-$platform-$scala", fullTests(aliases.ci(p, s))) ++
-      addCommandAlias(s"test-$platform-$scala", fullTests(aliases.test(p, s)))
-  }
-  // `publish-local-for-tests` used to be registered by sbt-welcome's `usefulTasks`. sbt-welcome has
-  // no sbt-2.0 build, so re-register it here: `docs/Justfile` (`just test-snippets`, run in CI)
-  // calls `sbt --client "publish-local-for-tests"` to publishLocal every JVM 2.13 + 3 artifact
-  // before running the documentation snippets.
-  val publishLocalForTests =
-    addCommandAlias("publish-local-for-tests", aliases.publishLocalForTests((_, platform) => platform == "JVM"))
-  perAxis ++ publishLocalForTests
-}
+// `ci-<platform>-<scala>` (invoked by the CI workflow) and `test-<platform>-<scala>` command aliases, plus
+// `publish-local-for-tests`: `docs/Justfile` (`just test-snippets`, run in CI) calls
+// `sbt --client "publish-local-for-tests"` to publishLocal every JVM 2.13 + 3 artifact before running the
+// documentation snippets. On sbt 2 the aliases use `<module>/testFull` and `ci` also runs `<module>/doc`.
+lazy val commandAliases: Seq[Def.Setting[?]] =
+  aliases.commandAliases(publishLocalForTestsFilter = Some((_, platform) => platform == "JVM"))
 
 lazy val root = project
   .in(file("."))
