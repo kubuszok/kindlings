@@ -26,6 +26,21 @@ jobs:
       - name: Check code formatting
         run: scalafmt --check
 
+  check-runtime-packages:
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.action != 'labeled' # run for 'opened', 'reopened' and 'synchronize'
+
+    name: Check that the FAQ classifies every published package as runtime or compile-time
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: coursier/setup-action@v3.1.0
+        with:
+          apps: scala-cli
+      - name: Compare published packages with the FAQ tables
+        run: scala-cli run scripts/check-runtime-packages.scala
+
   check-snippets:
 
     runs-on: ubuntu-latest
@@ -88,12 +103,17 @@ jobs:
       - uses: coursier/setup-action@v3.1.0
         with:
           jvm: ${{ matrix.jvm }}
-          apps: sbt
+          apps: sbt scala-cli
       - name: Install native dependencies
         if: matrix.platform == 'native'
         run: sudo apt-get update && sudo apt-get install -y libidn2-dev
       - name: "Clean, compile, test${{matrix.platform == 'jvm' && ', generate coverage report' || ''}}"
         run: sbt ci-${{ matrix.platform }}-${{ matrix.scala }}
+      - name: Check that code expanded by macros in tests refers only to packages the FAQ lists as needed at runtime
+        if: matrix.platform == 'jvm'
+        run: |
+          scala-cli run scripts/check-runtime-packages.scala -- \
+            --test-classes-glob "target/out/jvm/scala-${{ matrix.scala == '2_13' && '2.13' || '3' }}.*/*/test-classes"
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

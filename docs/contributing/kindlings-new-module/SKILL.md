@@ -49,6 +49,19 @@ my-type-class/src/main/
         +-- MyTypeClassMacros.scala                 # Scala 3 macro bridge
 ```
 
+**Keep the `compiletime` / `runtime` split strict.** The FAQ section "Which parts of Kindlings end up in my application
+at runtime?" (`docs/user-guide/faq.md`) tells users to delete every `hearth.kindlings.*.internal.compiletime` package
+from their fat JARs, and to keep everything else. `scripts/check-runtime-packages.scala` checks it in CI. So:
+
+- anything that macro-generated code calls at runtime goes in `internal.runtime` (or the public package), **never**
+  in `internal.compiletime`;
+- anything used only during macro expansion goes in `internal.compiletime`, not in the public package or in
+  `internal.runtime`;
+- a new compile-time-only package outside `internal.compiletime` (like `derivation.compiletime` or
+  `jsonschemaconfigs`), or a new test-oriented module, must be added to the FAQ tables. The tables' fallback row
+  `hearth.kindlings.*` classifies any other new package as runtime, so the check does not catch a missing
+  compile-time-only or test-only entry; it only catches a compile-time-only entry that generated code refers to.
+
 ## Testing
 
 Tests extend `MacroSuite` (from `hearth-munit`) and use `group()` / nested `test()`:

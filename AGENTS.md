@@ -23,6 +23,14 @@ Metals MCP at `.metals/mcp.json` (`kindlings-metals`). Query definitions/types/s
  - Only run `sbt compile`/`sbt test` after MCP shows no compilation issues.
  - **Do not modify `dev.properties`** — used by the developer for IDE platform focus.
  - **Do not add yourself as co-author** — no `Co-Authored-By: Claude ...` in commits.
+ - **Keep the runtime / compile-time package split strict.** The FAQ section "Which parts of Kindlings end up in my
+   application at runtime?" tells users to delete `hearth.kindlings.*.internal.compiletime` (and the other
+   compile-time-only packages listed there) from their fat JARs. Code that macro-generated code calls goes in
+   `internal.runtime` or the public package, never in `internal.compiletime`. If a macro starts generating code that
+   refers to a package listed as compile-time only, move that package to the runtime table instead. CI enforces this with
+   `scripts/check-runtime-packages.scala` (adapted from Hearth's script; run it with
+   `scala-cli run scripts/check-runtime-packages.scala -- --test-classes-glob 'target/out/jvm/scala-3.*/*/test-classes'`
+   after compiling the tests).
 
 ### Project matrix structure
 

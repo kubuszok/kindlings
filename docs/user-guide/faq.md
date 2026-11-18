@@ -89,6 +89,114 @@ All other modules are cross-compiled for JVM, Scala.js, and Scala Native.
 
 All other modules support both Scala 2.13 and Scala 3.
 
+## Which parts of Kindlings end up in my application at runtime? Can I remove the rest from a fat JAR?
+
+Kindlings modules are normal `Compile` dependencies, so all of their code ends up on your runtime classpath and in every
+fat JAR (uberjar) that sbt-assembly, Maven Shade, Gradle Shadow, etc. build. Most of that code is macro
+implementations, which run only inside the compiler while it expands macros. Your application never loads them. In
+the published JVM jars, the compile-time-only packages are **over 80% of the bytes** (about 82% on Scala 3, 84% on
+Scala 2.13).
+
+!!! note "This only matters on the JVM"
+
+    Scala.js and Scala Native linkers keep only the code that is reachable from your program, so the compile-time
+    part of Kindlings is dropped from the output anyway.
+
+The tables below list packages, not single classes, so they stay valid when modules grow. `*` stands for any one
+package segment, usually a module's package (`circederivation`, `jsoniterderivation`, `parser`, ...). When several rows
+match a package, the most specific one wins. Our CI checks two things. Every package of every published module must
+match a row. Code that Kindlings' macros generate in our test suites must refer only to packages listed as used at
+runtime (or in tests).
+
+### Used at runtime: keep
+
+| Package | What is there |
+|---|---|
+| `hearth.kindlings.*` | Everything not listed in the tables below: the public API (type classes, companions, configuration, extension methods), `jsoniterjson`, `tapiropenapijsoniter` (including its hand-written `internal` codecs), the parser runtime with its `catseffect` and `streams` engines, etc. |
+| `hearth.kindlings.*.internal.runtime` | Helpers and factories that macro-generated code calls |
+| `hearth.kindlings.*.annotations` | Annotations such as `@fieldName` or `@transientField`. The macros read them during compilation, but some generated code also creates them at runtime (e.g. a derived Tapir `Schema` creates jsoniter's `@named`, and Avro derivation creates `@avroSortPriority`) |
+
+### Used at runtime, but probably only in tests
+
+These modules are meant for tests. Add them with `% Test`, so they never get into a fat JAR. If one does, fix the
+dependency scope instead of filtering it out.
+
+| Package | Artifact | What is there |
+|---|---|---|
+| `hearth.kindlings.mock` | `kindlings-mock` | mocking library |
+| `hearth.kindlings.scalacheckderivation` | `kindlings-scalacheck-derivation` | `Arbitrary` / `Gen` / `Shrink` / `Cogen` derivation |
+| `hearth.kindlings.diffderivation` | `kindlings-diff-derivation` | structural diffs, mostly used in test assertions. Keep it in `Compile` if you compute diffs in production (e.g. for audit logs) |
+
+The `internal.compiletime` packages of these modules are still compile-time only (see below).
+
+### Used only during macro expansion: safe to remove
+
+| Package / file | Artifact | Notes |
+|---|---|---|
+| `hearth.kindlings.*.internal.compiletime` (with subpackages such as `...internal.compiletime.rules`) | every derivation / macro module, and every integration module | the macro implementations - by far the largest part of Kindlings |
+| `hearth.kindlings.derivation.compiletime` | `kindlings-derivation-commons` (whole artifact) | utilities shared by the derivation macros |
+| `hearth.kindlings.macros.compiletime` | `kindlings-macro-commons` (whole artifact) | utilities shared by `di`, `mock` and `optics` |
+| `hearth.kindlings.jsonschemaconfigs` | `kindlings-json-schema-config-macro-providers` (whole artifact) | lets Tapir Schema derivation find Circe / Jsoniter configuration |
+| `META-INF/services/hearth.*` | integration modules, `kindlings-circe-derivation`, `kindlings-jsoniter-derivation` | macro extensions, which the compiler loads with `ServiceLoader` during macro expansion |
+| `hearth.kindlings.*.debug`, `hearth.kindlings.*.policy` | every derivation / macro module | implicit markers that you import to [log](debugging.md) or [allow](derivation-policy.md) derivation. The macros look them up during compilation. They are tiny, so remove them only if your code never refers to the marker values (some code assigns one to a `val` to keep `-Wunused` quiet) |
+
+`kindlings-refined-integration`, `kindlings-iron-integration`, `kindlings-neotype-integration` and
+`kindlings-newtype-integration` contain nothing but compile-time code. `kindlings-cats-integration` also has a small
+runtime part (`hearth.kindlings.catsintegration.internal.runtime`).
+
+Kindlings depends on [Hearth](https://scala-hearth.readthedocs.io/), whose own packages and dependencies (on Scala 2.13
+these include `scala-compiler`) are mostly compile-time only too. Hearth sorts them in the same way in
+[its FAQ](https://scala-hearth.readthedocs.io/en/latest/faq/#which-parts-of-hearth-end-up-in-my-application-at-runtime-can-i-remove-the-rest-from-a-fat-jar).
+The example below combines both lists.
+
+!!! warning "Scala 3 multi-stage programming"
+
+    With `scala.quoted.staging`, or Scala 2's `scala.tools.reflect.ToolBox`, the compiler runs inside your
+    application. Macros are then expanded at runtime, and the "compile-time only" packages above become runtime
+    dependencies. We have **not tested** whether Kindlings (or Hearth) works with staging. If you use it, keep all of
+    Kindlings and Hearth in your fat JAR (and please tell us whether it works).
+
+### Example: sbt-assembly
+
+```scala
+// build.sbt (sbt 1.x, sbt-assembly 2.x)
+assembly / assemblyExcludedJars := {
+  // Hearth: see Hearth's FAQ
+  val compileTimeOnlyJars = Seq(
+    "hearth-better-printers_",
+    "hearth-cross-quotes_",
+    "hearth-micro-fp_",
+    // Scala 2.13 only - remove these lines if your application uses them itself
+    "scala-compiler-",
+    "jline-",
+    "java-diff-utils-"
+  )
+  (assembly / fullClasspath).value.filter { jar =>
+    compileTimeOnlyJars.exists(jar.data.getName.startsWith)
+  }
+}
+
+assembly / assemblyMergeStrategy := {
+  // Kindlings
+  case PathList("hearth", "kindlings", _, "internal", "compiletime", _*)                 => MergeStrategy.discard
+  case PathList("hearth", "kindlings", "derivation" | "macros", "compiletime", _*)       => MergeStrategy.discard
+  case PathList("hearth", "kindlings", "jsonschemaconfigs", _*)                          => MergeStrategy.discard
+  // uncomment if nothing in your code refers to the debug / policy marker values:
+  // case PathList("hearth", "kindlings", _, "debug" | "policy", _*) => MergeStrategy.discard
+  // Hearth: see Hearth's FAQ
+  case PathList("hearth", "typed" | "untyped" | "std" | "debug", _*)                => MergeStrategy.discard
+  // macro extensions of both Hearth and Kindlings
+  case PathList("META-INF", "services", service) if service.startsWith("hearth.") => MergeStrategy.discard
+  case other =>
+    val defaultStrategy = (assembly / assemblyMergeStrategy).value
+    defaultStrategy(other)
+}
+```
+
+Run your application (or its integration tests) from the fat JAR afterwards. A `NoClassDefFoundError` that mentions
+`hearth/kindlings/...` means that something does need the removed package at runtime. Put the package back, and
+please report which class was missing.
+
 ## Do I need to import anything for Refined / Iron support?
 
 No. Add the integration dependency to your build and derivation handles refined/iron types automatically:
