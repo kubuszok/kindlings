@@ -18,6 +18,14 @@ object CirceWideInstances {
   }
 }
 
+case class InlineNested(x: Int, label: Option[String])
+case class InlineDecoded(name: String, tags: List[String], nested: Option[InlineNested], more: List[InlineNested])
+
+/** The inline `KindlingsDecoder.decode`, in a class of its own so its bytecode can be inspected. */
+object CirceInlineDecodes {
+  def decode(json: Json): Either[io.circe.DecodingFailure, InlineDecoded] = KindlingsDecoder.decode[InlineDecoded](json)
+}
+
 /** Guards against generated methods too large to be JIT-compiled (see `docs/research/generated-code-audit-2026-11.md`).
   * JVM only: it reads the class files.
   */
@@ -28,6 +36,15 @@ final class CirceBytecodeSizeSpec extends MacroSuite {
     assert(sizes.map(_._3).sum > 5000, s"expected the derived decoders' code, got: $sizes")
     val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
     assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("the inline decode allocates no lazy cell per call") {
+    // the instance's cached field decoders are lazy vals (positive control: the check sees them)
+    assert(BytecodeSizes.refersTo(CirceWideInstances.getClass, "scala/runtime/LazyRef"))
+    // the inline decode runs its definitions once per call: field decoders are defs there
+    assert(!BytecodeSizes.refersTo(CirceInlineDecodes.getClass, "scala/runtime/LazyRef"))
+    val value = InlineDecoded("n", List("a"), Some(InlineNested(1, None)), List(InlineNested(2, Some("l"))))
+    CirceInlineDecodes.decode(KindlingsEncoder.encode[InlineDecoded](value)) ==> Right(value)
   }
 
   test("the decoders work, fail-fast and accumulating") {

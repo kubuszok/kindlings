@@ -62,12 +62,22 @@ trait DecoderMacrosImpl
             val _ = Expr.splice(configVal)
             Expr.splice {
               val cursorExpr: Expr[HCursor] = Expr.quote(Expr.splice(jsonVal).hcursor)
-              fromCtx(DecoderCtx.from(cursorExpr, configVal, Expr.quote(true), derivedType = None, evConfig))
+              fromCtx(perCallDecoderCtx[A](cursorExpr, configVal, evConfig))
             }
           }
         }
       }
     }
+  }
+
+  /** The context of the inline `decode` (see `DecoderCtx.perCall`). */
+  private def perCallDecoderCtx[A: Type](
+      cursor: Expr[HCursor],
+      config: Expr[Configuration],
+      evConfig: Option[Configuration]
+  ): DecoderCtx[A] = {
+    implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+    DecoderCtx.from[A](cursor, config, Expr.quote(true), derivedType = None, evConfig).copy(perCall = true)
   }
 
   @scala.annotation.nowarn("msg=is never used")
@@ -801,7 +811,10 @@ trait DecoderMacrosImpl
       failFast: Expr[Boolean],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[Configuration] = None
+      evaluatedConfig: Option[Configuration] = None,
+      // The inline `KindlingsDecoder.decode`: the cached definitions are evaluated on every call, so a cached field
+      // decoder is a `def` (evaluated where it is used) instead of a `lazy val` (a lazy cell allocated per call).
+      perCall: Boolean = false
   ) {
 
     /** Nested derivation keeps `failFast`: every rule returns an `Either` when it is true and a `ValidatedNel` when it
@@ -833,17 +846,25 @@ trait DecoderMacrosImpl
       failFast = newFailFast
     )
 
-    /** A field's decoder, cached as a lazy val of the instance (evaluated once, not on every decode). */
+    /** A field's decoder, cached as a lazy val of the instance (evaluated once, not on every decode), or as a def when
+      * the definitions are evaluated per call ([[perCall]]).
+      */
     def getFieldDecoder[B: Type]: MIO[Option[Expr[Decoder[B]]]] = {
       implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
       cache.get0Ary[Decoder[B]]("cached-field-decoder")
     }
     def setFieldDecoder[B: Type](decoder: Expr[Decoder[B]]): MIO[Unit] = {
       implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
-      cache.buildCachedWith(
-        "cached-field-decoder",
-        ValDefBuilder.ofLazy[Decoder[B]](s"fieldDecoder_${Type[B].shortName}")
-      )(_ => decoder)
+      if (perCall)
+        cache.buildCachedWith(
+          "cached-field-decoder",
+          ValDefBuilder.ofDef0[Decoder[B]](s"fieldDecoder_${Type[B].shortName}")
+        )(_ => decoder)
+      else
+        cache.buildCachedWith(
+          "cached-field-decoder",
+          ValDefBuilder.ofLazy[Decoder[B]](s"fieldDecoder_${Type[B].shortName}")
+        )(_ => decoder)
     }
 
     // A case class's decoding is cached as two defs with one mode each, `(cursor) => Either[DecodingFailure, B]` and
@@ -1045,7 +1066,8 @@ trait DecoderMacrosImpl
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   protected def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[Decoder[Field]]] =
     // The decoder is cached as a lazy val (once per instance instead of evaluating e.g. `Decoder.decodeOption(...)` or
-    // allocating a derived decoder on every decode), and shared by all the fields of this type.
+    // allocating a derived decoder on every decode), and shared by all the fields of this type (a def for the inline
+    // `decode`, see `DecoderCtx.perCall`).
     ctx.getFieldDecoder[Field].flatMap {
       case Some(cached) => MIO.pure(cached)
       case None         =>
