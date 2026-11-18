@@ -109,6 +109,28 @@ object ScalaCheckUtils {
     loop(gens, Nil)
   }
 
+  /** Like [[sequenceGens]], but hands the generated values to `construct` as an array (indexed in constant time; a
+    * `List` read by index made constructing a wide case class quadratic in its number of fields).
+    */
+  def sequenceGensToArray[A](gens: List[Gen[Any]], size: Int)(construct: Array[Any] => A): Gen[A] = {
+    def loop(remaining: List[Gen[Any]], acc: List[Any]): Gen[A] = remaining match {
+      case Nil =>
+        Gen.const {
+          val values = new Array[Any](size)
+          var i = size - 1
+          var rest = acc
+          while (i >= 0) {
+            values(i) = rest.head
+            rest = rest.tail
+            i -= 1
+          }
+          construct(values)
+        }
+      case gen :: tail => gen.flatMap(value => loop(tail, value :: acc))
+    }
+    loop(gens, Nil)
+  }
+
   /** Runtime type cast helper to avoid path-dependent type leakage in macros.
     *
     * The gen parameter is unused at runtime due to JVM type erasure, but carries type information at compile-time. This

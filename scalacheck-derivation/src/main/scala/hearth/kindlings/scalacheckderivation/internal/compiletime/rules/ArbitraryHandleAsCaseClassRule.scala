@@ -57,7 +57,7 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
         case Some(fields) =>
           // Multi-parameter case class
           // Following circe's pattern: create accessor functions outside lambda builder
-          implicit val ListAnyType: Type[List[Any]] = ArbitraryTypes.ListAny
+          implicit val ArrayAnyType: Type[Array[Any]] = ArbitraryTypes.ArrayAny
           implicit val ListGenAnyType: Type[List[Gen[Any]]] = ArbitraryTypes.ListGenAny
           implicit val GenAType: Type[Gen[A]] = ArbitraryTypes.Gen[A]
 
@@ -89,16 +89,11 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                   // Cast to Gen[Any] for the list literal
                   val genAny: Expr[Gen[Any]] = Expr.quote(Expr.splice(finalGenExpr).asInstanceOf[Gen[Any]])
 
-                  // Create accessor function - closes over finalGenExpr (type witness) and idx
-                  val makeAccessor: Expr[List[Any]] => (String, Expr_??) = { listExpr =>
-                    val typedExpr = Expr.quote {
-                      hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
-                        .unsafeCast(
-                          Expr.splice(listExpr)(Expr.splice(Expr(idx))),
-                          Expr.splice(finalGenExpr) // Type witness: Gen[Field]
-                        )
-                    }
-                    (fieldName, typedExpr.as_??)
+                  // The constructor argument: the generated value, read from the values array by index and cast to
+                  // the field's type (a cast, not a `Gen` witness, which would be evaluated again for every sample).
+                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrayExpr =>
+                    val element: Expr[Any] = Expr.quote(Expr.splice(arrayExpr)(Expr.splice(Expr(idx))))
+                    (fieldName, castTo[Field](element).as_??)
                   }
 
                   (genAny, makeAccessor)
@@ -117,7 +112,7 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
 
               // Build constructor lambda using LambdaBuilder
               LambdaBuilder
-                .of1[List[Any]]("values")
+                .of1[Array[Any]]("values")
                 .traverse { valuesExpr =>
                   // Apply accessor functions to get typed field expressions
                   val fieldMap: Map[String, Expr_??] = makeAccessors.map(_(valuesExpr)).toMap
@@ -137,11 +132,16 @@ trait ArbitraryHandleAsCaseClassRuleImpl { this: ArbitraryMacrosImpl & MacroComm
                   val constructFn = builder.build[A]
                   Expr.quote {
                     hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
-                      .sequenceGens(Expr.splice(genListExpr))(Expr.splice(constructFn))
+                      .sequenceGensToArray(Expr.splice(genListExpr), Expr.splice(Expr(fieldsList.size)))(
+                        Expr.splice(constructFn)
+                      )
                   }
                 }
             }
       }
     }
+
+    /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
+    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
   }
 }
