@@ -93,6 +93,14 @@ object YamlDerivationUtils {
         Left(ConstructError.from(s"Expected MappingNode, got ${other.getClass.getSimpleName}", other))
     }
 
+  /** Decode a field that must be present: `getField(node, fieldName).flatMap(decoder.construct(_))`. */
+  def decodeRequiredField(node: Node, fieldName: String, decoder: YamlDecoder[?]): Either[ConstructError, Any] =
+    getField(node, fieldName) match {
+      case Right(fieldNode) =>
+        decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+      case left => left
+    }
+
   /** Decode an `Option` field: an absent key is `None` (as scala-yaml's derived decoders). */
   def decodeOptionalField(node: Node, fieldName: String, decoder: YamlDecoder[?]): Either[ConstructError, Any] =
     getOptionalField(node, fieldName).flatMap {

@@ -149,17 +149,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       }
                     else
                       Expr.quote {
-                        YamlDerivationUtils
-                          .getField(
-                            Expr.splice(dctx.node),
-                            Expr.splice(fieldNameExpr)
-                          )
-                          .flatMap(fieldNode =>
-                            Expr
-                              .splice(decoderExpr)
-                              .construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                          )
-                          .asInstanceOf[Either[ConstructError, Any]]
+                        YamlDerivationUtils.decodeRequiredField(
+                          Expr.splice(dctx.node),
+                          Expr.splice(fieldNameExpr),
+                          Expr.splice(decoderExpr)
+                        )
                       }
 
                   val decodeExpr: Expr[Either[ConstructError, Any]] = defaultAsAnyOpt match {
@@ -194,13 +188,9 @@ trait DecoderHandleAsCaseClassRuleImpl {
                       }
                     case None => requiredFieldExpr
                   }
-                  // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
-                  // intermediate `Array[Any]`.
+                  // The constructor argument: the field's value (read from its `Right`) cast to the field's type.
                   val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
-                    val typedExpr = Expr.quote {
-                      YamlDerivationUtils.unsafeCast(Expr.splice(valExpr), Expr.splice(decoderExpr))
-                    }
-                    (fName, typedExpr.as_??)
+                    (fName, castTo[Field](valExpr).as_??)
                   }
                   (decodeExpr, makeFieldArg)
                 }
@@ -210,8 +200,6 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val decodeExprs = fieldData.toList.map(_._1)
               val makeFieldArgs = fieldData.toList.map(_._2)
 
-              // Zero-allocation fail-fast construction: nested zero-closure `Either` folds short-circuit on the first
-              // `Left`, with no intermediate `List`, `Array[Any]`, `sequence`, or closure.
               def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
                 val nonTransientFieldMap: Map[String, Expr_??] =
                   makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
@@ -229,9 +217,24 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     )
                 }
               }
-              MIO.pure(buildEitherFailFast[ConstructError, A](decodeExprs)(constructFF))
+              implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+              // Like scala-yaml, the first failing field (in field order) is reported and the later ones are not
+              // decoded: each field is decoded by its own local def, and the value is constructed when the last
+              // result is a `Right` (see FlatFieldsConstruct).
+              MIO.pure(
+                constructFailFast[Either[ConstructError, Any], A, Either[ConstructError, A]](decodeExprs)(
+                  isSuccess = r => Expr.quote(Expr.splice(r).isRight),
+                  valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConstructError, Any]].value),
+                  construct = constructFF,
+                  onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConstructError, A]),
+                  onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[ConstructError, A]])
+                )
+              )
             }
       }
     }
+
+    /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
+    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
   }
 }
