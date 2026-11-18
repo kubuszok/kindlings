@@ -39,12 +39,12 @@ final class Parser[F[_], R] private[parser] (grammar: CompiledGrammar, engine: P
   /** Low-level API for integrations (stream pipes, REPLs, custom engines): a fresh machine whose input is pushed with
     * `machine.feed(chunk)` / `machine.endOfInput()`.
     *
-    * Drive it with `machine.run(budget)`:
-    *   - `Machine.NeedInput`: feed another chunk or end the input,
-    *   - `Machine.Effect`: run `machine.pendingEffect` (an `F[Any]` produced by an effectful action) and continue with
-    *     `machine.resume(result)`,
-    *   - `Machine.Yield`: the step budget was spent; run again,
-    *   - `Machine.Done` / `Machine.Error`: `machine.result` / `machine.error`.
+    * Drive it with `machine.run(budget)`, which returns one of the [[MachineStatus]] constants:
+    *   - `MachineStatus.NeedInput`: feed another chunk or end the input,
+    *   - `MachineStatus.Effect`: run `machine.pendingEffect` (an `F[Any]` produced by an effectful action) and continue
+    *     with `machine.resume(result)`,
+    *   - `MachineStatus.Yield`: the step budget was spent; run again,
+    *   - `MachineStatus.Done` / `MachineStatus.Error`: `machine.result` / `machine.error`.
     *
     * A machine is mutable and belongs to one parse.
     */
