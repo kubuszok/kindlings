@@ -166,7 +166,10 @@ sconfig has no derivation of its own; derived instances behave like upstream Pur
 
 - readers report **every** failure: each failing field of a case class (then each unknown key of a strict one), each failing item of a collection, each failing value of a map;
 - a missing key fails with `KeyNotFound`, which lists the object's keys that look like the expected key under a different naming (e.g. `firstName` for `first-name`); readers of missing keys (`Option` fields, readers extending `ReadsMissingKeys`, which are called with `null`) read it instead;
-- an empty `Option` field is omitted when writing, not written as `null`.
+- an empty `Option` field is omitted when writing, not written as `null`;
+- as in PureConfig, the implicit instances a derived reader/writer uses for its fields are resolved once, when it is
+  created (an `implicit def` instance is called once per derived instance, not on every read/write), and so are the
+  subtype names a config's `transformConstructorNames` gives, also for a config only known at runtime.
 
 ## Annotations
 

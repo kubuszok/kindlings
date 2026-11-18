@@ -48,27 +48,39 @@ trait ReaderMacrosImpl
     // like SConfig.default. Pending fix in hearth 0.3.1.
     val evConfig: Option[SConfig] = configExpr.semiEval.toOption
 
-    deriveReaderFromCtxAndAdaptForEntrypoint[A, ConfigReader[A]]("ConfigReader.derived") { fromCtx =>
+    deriveReaderFromCtxAndAdaptForEntrypoint[A, ConfigReader[A]](
+      "ConfigReader.derived",
+      selfType,
+      evConfig,
+      Some(configExpr)
+    ) { callReader =>
       ValDefs.createVal[SConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
           hearth.kindlings.sconfigderivation.internal.runtime.SconfigDerivationFactories.readerInstance[A] {
             (value: ConfigValue) =>
               val _ = value
-              Expr.splice {
-                fromCtx(
-                  ReaderCtx.from(Expr.quote(value), Expr.quote(cfg), derivedType = selfType, evaluatedConfig = evConfig)
-                )
-              }
+              Expr.splice(callReader(Expr.quote(value), Expr.quote(cfg)))
           }
         }
       }
     }
   }
 
-  def deriveReaderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (ReaderCtx[A] => Expr[Either[ConfigDecodingError, A]]) => Expr[Out]
+  /** Derives the reader body once, as a `def` at the instance scope (with the cached instances and helpers around the
+    * whole instance), and lets `adapt` build the instance calling it.
+    */
+  def deriveReaderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      selfType: Option[??],
+      evConfig: Option[SConfig],
+      rootConfig: Option[Expr[SConfig]] = None
+  )(
+      adapt: ((Expr[ConfigValue], Expr[SConfig]) => Expr[Either[ConfigDecodingError, A]]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
+    implicit val SConfigT: Type[SConfig] = RTypes.SConfig
+    implicit val ResultA: Type[Either[ConfigDecodingError, A]] = RTypes.ReaderResult[A]
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -76,17 +88,25 @@ trait ReaderMacrosImpl
       )
     Log
       .namedScope(s"Deriving reader for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: ReaderCtx[A] => Expr[Either[ConfigDecodingError, A]] = (ctx: ReaderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveReaderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        val entryKey = "entry-reader"
+        val entryBuilder = ValDefBuilder.ofDef2[ConfigValue, SConfig, Either[ConfigDecodingError, A]](
+          s"read_${Type[A].shortName}_instance"
+        )
+        for {
+          _ <- ensureStandardExtensionsLoaded()
+          _ <- MIO.scoped { runSafe =>
+            runSafe(cache.buildCachedWith(entryKey, entryBuilder) { case (_, (value, config)) =>
+              runSafe(
+                deriveReaderRecursively[A](using
+                  ReaderCtx(Type[A], value, config, cache, selfType, evConfig, rootConfig)
+                )
+              )
+            })
+          }
+          call <- cache.get2Ary[ConfigValue, SConfig, Either[ConfigDecodingError, A]](entryKey)
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(call.get))
       }
       .flatTap { result =>
         Log.info(s"Derived final reader result: ${result.prettyPrint}")
@@ -133,8 +153,14 @@ trait ReaderMacrosImpl
       config: Expr[SConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[SConfig] = None
+      evaluatedConfig: Option[SConfig] = None,
+      // The config expression of the entry point (`config` is a parameter of the cached defs): what per-instance
+      // `lazy val`s of the reader (computed once, not per read) can read when the config is only known at runtime.
+      rootConfig: Option[Expr[SConfig]] = None
   ) {
+
+    /** The config for per-instance values: the entry point's config expression ([[config]] when it is not known). */
+    def instanceConfig: Expr[SConfig] = rootConfig.getOrElse(config)
 
     def nest[B: Type](newValue: Expr[ConfigValue]): ReaderCtx[B] = copy[B](
       tpe = Type[B],
@@ -162,6 +188,13 @@ trait ReaderMacrosImpl
           ValDefBuilder.ofLazy[ConfigReader[B]](s"reader_${Type[B].shortName}")
         )(_ => instance)
     }
+
+    /** A summoned instance as a lazy val of the derived instance: resolved once, not on every read. */
+    def cachedInstance[B: Type](instance: Expr[ConfigReader[B]]): MIO[Expr[ConfigReader[B]]] =
+      getInstance[B].flatMap {
+        case Some(cached) => MIO.pure(cached)
+        case None         => setInstance[B](instance) >> getInstance[B].map(_.get)
+      }
 
     def getHelper[B: Type]: MIO[Option[(Expr[ConfigValue], Expr[SConfig]) => Expr[Either[ConfigDecodingError, B]]]] = {
       implicit val ResultB: Type[Either[ConfigDecodingError, B]] = RTypes.ReaderResult[B]
@@ -298,6 +331,7 @@ trait ReaderMacrosImpl
     val ListEitherErrorAny: Type[List[Either[ConfigDecodingError, Any]]] =
       Type.of[List[Either[ConfigDecodingError, Any]]]
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
     val SetString: Type.Lazy[Set[String]] = Type.Lazy(Type.of[Set[String]])
     val OptionString: Type.Lazy[Option[String]] = Type.Lazy(Type.of[Option[String]])
     val StringToString: Type.Lazy[String => String] = Type.Lazy(Type.of[String => String])
