@@ -62,6 +62,12 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
 | `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Semi-automatic schema derivation |
 | `KindlingsSchema.derived[A].schema` | `Schema[A]` | The underlying Tapir `Schema[A]` |
 | `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Sanely-automatic (given/implicit) |
+| `KindlingsSchema.derivedEnumeration[A]` | `KindlingsSchema[A]` | A string-enum schema for a sealed trait / `enum` of case objects (like Tapir's `Schema.derivedEnumeration[A].defaultStringBased`) |
+
+`derivedEnumeration` needs no JSON configuration and lists the **plain case names** (`Red`, `Green`, ...), as Tapir's
+`derivedEnumeration` does with its default `toString` encoding. It does not apply circe's `transformConstructorNames`
+or jsoniter-scala's `adtLeafClassNameMapper`; to get the names your JSON codec writes, use `KindlingsSchema.derived[A]`
+with `enumAsStrings` (circe) or the matching jsoniter configuration in scope.
 
 Unlike other Kindlings modules, Tapir Schema derivation takes **no configuration parameter**. Instead, it automatically discovers JSON configuration from sibling modules (see below).
 
@@ -121,7 +127,8 @@ With a circe `Configuration`, the schema also follows how circe codes sealed hie
 
 #### Disambiguating multiple JSON configs
 
-If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails. Import an implicit `PreferSchemaConfig` to tell the macro which one to use:
+If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails. Import an implicit `PreferSchemaConfig` to tell the macro which one to use (the error message lists the exact declaration and
+the `-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe|jsoniter-scala` setting for each configuration found):
 
 ```scala
 import hearth.kindlings.circederivation.Configuration

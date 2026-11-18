@@ -214,15 +214,12 @@ trait SchemaMacrosImpl
         preferred match {
           case List(single) => single
           case Nil          =>
-            val libs = multiple.map(_.libraryName).mkString(", ")
             Environment.reportErrorAndAbort(
-              s"$macroName: Multiple JSON library configurations found: $libs.\n" +
-                "Disambiguate by adding a scalac setting:\n" +
-                s"  scalacOptions += \"-Xmacro-settings:$derivationSettingsNamespace.preferConfig=circe\"\n" +
-                "Or add an implicit PreferSchemaConfig in an enclosing object (not class body):\n" +
-                multiple
-                  .map(p => s"  implicit val prefer: PreferSchemaConfig[${p.libraryName}Config] = PreferSchemaConfig()")
-                  .mkString("\n")
+              PreferSchemaConfigHint.multipleConfigurations(
+                macroName,
+                derivationSettingsNamespace,
+                multiple.map(p => PreferSchemaConfigHint.Found(p.libraryName, p.configClassName))
+              )
             )
           case tooMany =>
             val libs = tooMany.map(_.libraryName).mkString(", ")
