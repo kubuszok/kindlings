@@ -249,6 +249,13 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
 
 Add the integration jar to your build and the types work transparently — no imports, no configuration. The macro extension system discovers providers at compile time via SPI.
 
+To make your own library's types work the same way in every Kindlings derivation, see [Your own integration](custom-integrations.md).
+
+## Guides
+
+- [Testing](testing.md) — golden wire-format tests, round-trip properties with derived `Arbitrary`, readable `Diff` failures, compile-time and derivation-policy tests
+- [HTTP APIs with tapir](http-api.md) — one configuration for the JSON codecs, the tapir `Schema` and the OpenAPI document
+
 ## Macro utilities
 
 Not type-class derivation, but built on the same Hearth macro-agnostic API and cross-compiled the same way — these modules reimplement popular libraries from scratch (no dependency on the originals).
