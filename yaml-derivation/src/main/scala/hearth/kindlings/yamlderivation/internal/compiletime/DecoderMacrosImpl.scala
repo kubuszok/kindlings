@@ -14,7 +14,7 @@ trait DecoderMacrosImpl
     extends YamlDerivationTimeout
     with YamlDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
-    with hearth.kindlings.derivation.compiletime.EitherFieldsConstruct
+    with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsBuiltInRuleImpl
