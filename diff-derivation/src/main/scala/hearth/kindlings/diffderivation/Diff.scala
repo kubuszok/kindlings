@@ -122,10 +122,11 @@ object Diff extends DiffCompanionCompat {
   }
 
   def seqDiff[A](elemDiff: Diff[A], matcher: ObjectMatcher[A]): Diff[Iterable[A]] = new Diff[Iterable[A]] {
+    // each name style from the element's name in the same style (`prettyName` is the only one with ANSI colors)
     def prettyName: String = s"Iterable[${elemDiff.prettyName}]"
-    def plainName: String = prettyName
-    def simpleName: String = prettyName
-    def shortName: String = prettyName
+    def plainName: String = s"Iterable[${elemDiff.plainName}]"
+    def simpleName: String = s"Iterable[${elemDiff.simpleName}]"
+    def shortName: String = s"Iterable[${elemDiff.shortName}]"
     def diff(left: Iterable[A], right: Iterable[A]): DiffResult =
       internal.runtime.DiffRuntime.diffSeqByKey(
         prettyName,

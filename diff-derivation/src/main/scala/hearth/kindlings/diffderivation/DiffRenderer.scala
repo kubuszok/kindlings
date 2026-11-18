@@ -117,11 +117,11 @@ object DiffRenderer {
         sb += '\n'
         appendIndent(sb, config, level + 1)
         sb ++= "- "
-        renderTo(sb, v.leftSnapshot, config, level + 1)
+        renderTo(sb, v.leftSnapshot, config, level + 2)
         sb += '\n'
         appendIndent(sb, config, level + 1)
         sb ++= "+ "
-        renderTo(sb, v.rightSnapshot, config, level + 1)
+        renderTo(sb, v.rightSnapshot, config, level + 2)
 
       case v: SeqDiff =>
         sb ++= nameOf(v, config)
@@ -132,13 +132,13 @@ object DiffRenderer {
           edit match {
             case Edit.Equal(d) =>
               sb ++= "  "
-              renderTo(sb, d, config, level + 1)
+              renderTo(sb, d, config, level + 2)
             case Edit.Insert(d) =>
               sb ++= colorAdded("+ ", config)
-              renderTo(sb, d, config, level + 1)
+              renderTo(sb, d, config, level + 2)
             case Edit.Delete(d) =>
               sb ++= colorRemoved("- ", config)
-              renderTo(sb, d, config, level + 1)
+              renderTo(sb, d, config, level + 2)
           }
           sb += ','
         }
@@ -157,17 +157,17 @@ object DiffRenderer {
               sb ++= "  "
               sb ++= key
               sb ++= " -> "
-              renderTo(sb, valueDiff, config, level + 1)
+              renderTo(sb, valueDiff, config, level + 2)
             case MapEntry.Added(key, snapshot) =>
               sb ++= colorAdded("+ ", config)
               sb ++= key
               sb ++= " -> "
-              renderTo(sb, snapshot, config, level + 1)
+              renderTo(sb, snapshot, config, level + 2)
             case MapEntry.Removed(key, snapshot) =>
               sb ++= colorRemoved("- ", config)
               sb ++= key
               sb ++= " -> "
-              renderTo(sb, snapshot, config, level + 1)
+              renderTo(sb, snapshot, config, level + 2)
           }
           sb += ','
         }
@@ -184,13 +184,13 @@ object DiffRenderer {
           entry match {
             case SetEntry.Matched(d) =>
               sb ++= "  "
-              renderTo(sb, d, config, level + 1)
+              renderTo(sb, d, config, level + 2)
             case SetEntry.Added(snapshot) =>
               sb ++= colorAdded("+ ", config)
-              renderTo(sb, snapshot, config, level + 1)
+              renderTo(sb, snapshot, config, level + 2)
             case SetEntry.Removed(snapshot) =>
               sb ++= colorRemoved("- ", config)
-              renderTo(sb, snapshot, config, level + 1)
+              renderTo(sb, snapshot, config, level + 2)
           }
           sb += ','
         }

@@ -691,6 +691,25 @@ final class DiffSpec extends hearth.MacroSuite {
         }
       }
 
+      test("seq diff renders without ANSI codes in plain mode, nested elements indented under their entry") {
+        implicit val personDiff: Diff[Person] = Diff.derived[Person]
+        val seqDiff = Diff.seqDiff(personDiff, ObjectMatcher.by[Person, String](_.name))
+        val result = seqDiff.diff(List(Person("Alice", 30), Person("Bob", 40)), List(Person("Alice", 31)))
+        val rendered = DiffRenderer.render(result, RenderConfig.plain)
+        assert(!rendered.contains("\u001b"), s"unexpected ANSI codes in: $rendered")
+        assert(!result.plainName.contains("\u001b"), s"unexpected ANSI codes in: ${result.plainName}")
+        assertEquals(
+          rendered,
+          """Iterable[Person](
+            |    Person(
+            |      name = "Alice",
+            |      age = 30 -> 31,
+            |    ),
+            |  - Person(...),
+            |)""".stripMargin
+        )
+      }
+
       test("seq diff by key detects additions and removals") {
         case class Item(id: String, value: Int)
         implicit val itemDiff: Diff[Item] = Diff.derived[Item]
