@@ -161,7 +161,7 @@ trait PartialOrderMacrosImpl extends StrictDerivationSupport with CatsDerivation
   /** Root rule for the derivation policy (issue kubuszok/kindlings#85). */
   object PartialOrderDerivationPolicyRule extends PartialOrderDerivationRule("derivation policy") {
     def apply[A: PartialOrderCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 
   @scala.annotation.nowarn("msg=is never used")

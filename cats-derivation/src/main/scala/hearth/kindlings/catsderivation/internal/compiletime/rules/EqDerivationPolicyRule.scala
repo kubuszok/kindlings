@@ -13,6 +13,6 @@ trait EqDerivationPolicyRuleImpl {
     */
   object EqDerivationPolicyRule extends EqDerivationRule("derivation policy") {
     def apply[A: EqCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

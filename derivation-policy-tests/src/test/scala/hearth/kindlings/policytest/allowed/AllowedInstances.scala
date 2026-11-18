@@ -12,3 +12,10 @@ import hearth.kindlings.policytest.model.Allowed1
 object AllowedInstances {
   val instance: FastShowPretty[Allowed1] = FastShowPretty.derived[Allowed1]
 }
+
+/** The same with no explicit type: the policy check must not force the type of the `val` being inferred (it gave
+  * "illegal cyclic reference" on Scala 2.13).
+  */
+object AllowedUntypedInstances {
+  val instance = FastShowPretty.derived[Allowed1]
+}

@@ -13,6 +13,6 @@ trait MonoidDerivationPolicyRuleImpl {
     */
   object MonoidDerivationPolicyRule extends MonoidDerivationRule("derivation policy") {
     def apply[A: MonoidCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

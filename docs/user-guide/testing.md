@@ -455,13 +455,12 @@ test("the marker import allows it") {
 }
 ```
 
-!!! warning "Give the result of `compileErrors` an explicit type"
+!!! note "Untyped `val`s and the derivation policy in Kindlings 0.4.0"
 
-    Write `val errors: String = compileErrors(...)`. With the derivation policy enabled, in Kindlings
-    {{ kindlings_version() }} `val errors = compileErrors(...)` without a type makes the derivation fail with `Recursive value errors needs type` (Scala 3) or
-    `illegal cyclic reference involving value errors` (Scala 2.13) instead of the error you expect. On Scala 2.13 the
-    same applies to any `val` that holds a derived instance in a project with an opt-in policy, so annotate those
-    types too.
+    In Kindlings 0.4.0, with the derivation policy enabled, `val errors = compileErrors(...)` without a type made the
+    derivation fail with `Recursive value errors needs type` (Scala 3) or `illegal cyclic reference involving value
+    errors` (Scala 2.13), and on Scala 2.13 so did any untyped `val` holding a derived instance. Later versions read the
+    enclosing scope without forcing those types; on 0.4.0, write `val errors: String = compileErrors(...)`.
 
 Match only stable fragments of the message, like the rule name or the policy sentence. The full message lists every
 rule that was tried, and the list can grow between versions.

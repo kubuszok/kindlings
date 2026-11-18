@@ -13,6 +13,6 @@ trait WriterDerivationPolicyRuleImpl {
     */
   object WriterDerivationPolicyRule extends WriterDerivationRule("derivation policy") {
     def apply[A: WriterCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

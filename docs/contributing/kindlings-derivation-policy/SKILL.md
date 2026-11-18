@@ -30,12 +30,19 @@ semi-automatic derivation?".
 
 - reuses the per-module `derivationSettingsNamespace` (same one `DerivationTimeout` uses),
 - reads `<namespace>.policy.{enabled,allowedScopes,optInByImport}` from `Environment.typedSettings`,
-- in `opt-in` mode, matches `enclosingScope` (the cake-level `enclosingScope: NonEmptyVector[Enclosure]`, Hearth ≥ 0.4.0)
-  against `allowedScopes` (package-prefix aware), then falls back to the opt-in import marker,
+- in `opt-in` mode, matches the full names of the enclosing owners against `allowedScopes` (package-prefix aware),
+  then falls back to the opt-in import marker. The owners come from `EnclosingOwnerNames` (`scala-2`/`scala-3` sources
+  walking `c.internal.enclosingOwner` / `Symbol.spliceOwner`), NOT from Hearth's `enclosingScope`: that one lists the
+  members of the enclosing classes and the types of local values, which fails with "illegal cyclic reference" while the
+  type of an untyped `val e = X.derived[A]` (or `val errors = compileErrors(...)`) is being inferred,
 - exposes two enforcement entry points (both no-ops under the default `always-allowed`, both run the check at most once
   per expansion via an internal flag):
-  - `protected def checkDerivationPolicyOncePerExpansion(typeName: => String): MIO[Unit]` — yields `()` when permitted,
-    else `MIO.fail(new DerivationPolicy.PolicyViolation(<message>))`. Used as the body of a per-module **root rule**.
+  - `protected def checkDerivationPolicyOncePerExpansionFor[A: Type]: MIO[Unit]` — yields `()` when permitted, else
+    `MIO.fail(new DerivationPolicy.PolicyViolation(<message>))`. Used as the body of a per-module **root rule**. It
+    only gates **structural** derivation: for a built-in, collection/map, `Option`, `Either`, value type, tuple or
+    named tuple it yields without recording the check, so the elements are gated when they need structural derivation
+    (`derived[List[User]]` at a denied site compiles when a `User` instance is in scope).
+    (`checkDerivationPolicyOncePerExpansion(typeName)` gates whatever it is called for.)
   - `protected def enforceDerivationPolicyOrAbort(typeName: => String): Unit` — eager variant that calls
     `Environment.reportErrorAndAbort`, for polymorphic derivations that are NOT structured as a `Rules(...)` pipeline
     (the cats / cats-tagless `deriveXxx[F]` entry points).
@@ -101,7 +108,7 @@ Pure, unit-tested helpers live in the `DerivationPolicy` companion: `parseMode`,
    ```scala
    object FooDerivationPolicyRule extends FooDerivationRule("derivation policy") {
      def apply[A: FooCtx]: MIO[Rule.Applicability[Out]] =
-       checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+       checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
    }
    // ...
    Rules(FooUseCachedRule, FooUseImplicitRule, FooDerivationPolicyRule, FooBuiltInRule, ...)

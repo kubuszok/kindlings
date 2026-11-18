@@ -86,7 +86,9 @@ trait DerivationPolicy { this: MacroCommons =>
             .getOrElse(Nil)
         val optInByImport =
           policyData.flatMap(_.get("optInByImport")).flatMap(_.asBoolean).getOrElse(true)
-        val enclosureFullNames = enclosingScope.toList.flatMap(_.fullName)
+        // Read without forcing any type (`enclosingScope` lists members and local values, which fails with "illegal
+        // cyclic reference" while the type of the `val` holding this expansion is being inferred).
+        val enclosureFullNames = EnclosingOwnerNames(this).getOrElse(enclosingScope.toList.flatMap(_.fullName))
 
         DerivationPolicy.decide(
           allowedScopes = allowedScopes,
@@ -118,6 +120,36 @@ trait DerivationPolicy { this: MacroCommons =>
         case denied: DerivationPolicy.Decision.Denied =>
           MIO.fail(new DerivationPolicy.PolicyViolation(derivationPolicyDeniedMessage(typeName, denied)))
       }
+  }
+
+  /** [[checkDerivationPolicyOncePerExpansion]] that gates only '''structural''' derivation: when `A` is a built-in, a
+    * collection or map, an `Option`, an `Either`, a value type, a tuple or a named tuple, the check is skipped (and NOT
+    * recorded as passed), so the derivation proceeds and the policy is checked when (if) an element of `A` needs
+    * structural derivation - e.g. `derived[List[User]]` at a denied site compiles when an instance of `User` is in
+    * scope, and is denied (for `User`) when it is not.
+    */
+  protected def checkDerivationPolicyOncePerExpansionFor[A: Type]: MIO[Unit] =
+    MIO.pure(()).flatMap { _ =>
+      if (derivationPolicyChecked) MIO.pure(())
+      // the default (always-allowed) path never pays for the type analysis
+      else if (derivationPolicyDecision == DerivationPolicy.Decision.Allowed || isStructuralDerivationTarget[A])
+        checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint)
+      else MIO.pure(())
+    }
+
+  /** Whether deriving `A` is structural derivation (a case class, a case object, a sealed hierarchy or an enum) that is
+    * not also handled as one of "the parts that always work" (collection, `Option`, `Either`, value type, tuple).
+    */
+  private def isStructuralDerivationTarget[A: Type]: Boolean = {
+    val structural = Type[A].isCase || Type[A].isCaseObject || Enum.parse[A].toOption.isDefined
+    structural && !Type[A].isTuple && !Type[A].isNamedTuple && (this match {
+      case std: hearth.std.StdExtensions =>
+        // `this` is the platform MacroCommons, which always mixes in StdExtensions: same `Type` at runtime.
+        val tpe = Type[A].asInstanceOf[std.Type[A]]
+        std.IsOption.unapply(tpe).isEmpty && std.IsEither.unapply(tpe).isEmpty &&
+        std.IsCollection.unapply(tpe).isEmpty && std.IsValueType.unapply(tpe).isEmpty
+      case _ => true
+    })
   }
 
   /** Eager variant for derivations that are NOT structured as a `MIO` rule pipeline (the cats polymorphic entry
@@ -198,6 +230,13 @@ object DerivationPolicy {
       fullName.startsWith(a + "#") ||
       fullName.startsWith(a + "$"))
   }
+
+  /** Whether an owner's full name is worth matching/showing: drops the root and empty packages and compiler-generated
+    * owners (anonymous classes and functions, local dummies, macro-expansion wrappers).
+    */
+  def isUserVisibleOwnerName(fullName: String): Boolean =
+    fullName.nonEmpty && fullName != "<root>" && fullName != "<empty>" && !fullName.contains("$anon") &&
+      !fullName.contains("<local ") && !fullName.endsWith("$macro") && !fullName.endsWith(".macro")
 
   def scopeAllows(allowedScopes: List[String], enclosureFullNames: List[String]): Boolean =
     allowedScopes.exists(a => enclosureFullNames.exists(fn => scopeMatches(a, fn)))

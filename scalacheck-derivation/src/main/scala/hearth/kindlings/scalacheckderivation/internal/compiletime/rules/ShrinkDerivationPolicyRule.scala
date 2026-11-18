@@ -12,6 +12,6 @@ trait ShrinkDerivationPolicyRuleImpl { this: ShrinkMacrosImpl & MacroCommons & S
     */
   object ShrinkDerivationPolicyRule extends ShrinkDerivationRule("derivation policy") {
     def apply[A: ShrinkCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

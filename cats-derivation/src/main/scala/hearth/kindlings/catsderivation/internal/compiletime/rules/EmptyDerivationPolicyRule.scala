@@ -13,6 +13,6 @@ trait EmptyDerivationPolicyRuleImpl {
     */
   object EmptyDerivationPolicyRule extends EmptyDerivationRule("derivation policy") {
     def apply[A: EmptyCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

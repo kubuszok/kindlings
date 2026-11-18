@@ -13,6 +13,6 @@ trait AvroDecoderDerivationPolicyRuleImpl {
     */
   object AvroDecoderDerivationPolicyRule extends DecoderDerivationRule("derivation policy") {
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

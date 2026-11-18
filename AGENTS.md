@@ -181,9 +181,12 @@ Global, per-library opt-out of automatic (structural) derivation. Shared mechani
 timeout. Keys: `<ns>.policy.enabled=always-allowed|opt-in` (default `always-allowed`),
 `<ns>.policy.allowedScopes=<fqn>[;<fqn>]` (package-prefix aware; split on `;`/`|`, **never `,`** — Scala 3 splits a
 single `-Xmacro-settings` option on commas, Scala 2 does not), `<ns>.policy.optInByImport=true|false` (default `true`).
-Enforced once per macro expansion by a single root rule (`checkDerivationPolicyOncePerExpansion`) inserted into each
-`Rules(...)` chain right after the use-implicit/use-cached rules and before any derivation rule — so found implicits,
-cached recursive types, built-ins, collections, value types, etc. stay unconditional. Polymorphic (HKT) derivations
+Enforced once per macro expansion by a single root rule (`checkDerivationPolicyOncePerExpansionFor[A]`) inserted into
+each `Rules(...)` chain right after the use-implicit/use-cached rules and before any derivation rule — so found
+implicits and cached recursive types stay unconditional, and the rule itself skips types that are not structural
+(built-ins, collections, `Option`, `Either`, value types, tuples, named tuples), so `derived[List[User]]` is only gated
+if `User` needs structural derivation. The enclosing scope is read from the owner chain (`EnclosingOwnerNames`, per
+Scala version), not `Environment.enclosingScope`, which forces types and fails for an untyped `val e = X.derived[A]`. Polymorphic (HKT) derivations
 without a `*`-kinded rule chain (cats/cats-tagless `deriveXxx[F]`) instead call `enforceDerivationPolicyOrAbort` once at
 the entry point. Opt-in-by-import
 uses an `AllowDerivation` marker (parallel to `LogDerivation`) exposed from each module's `policy` package object.

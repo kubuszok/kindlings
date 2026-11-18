@@ -13,6 +13,6 @@ trait AvroSchemaForDerivationPolicyRuleImpl {
     */
   object AvroSchemaForDerivationPolicyRule extends SchemaDerivationRule("derivation policy") {
     def apply[A: SchemaForCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

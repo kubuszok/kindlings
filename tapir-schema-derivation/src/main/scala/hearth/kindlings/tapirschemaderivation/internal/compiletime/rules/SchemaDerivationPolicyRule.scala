@@ -15,6 +15,6 @@ trait SchemaDerivationPolicyRuleImpl {
     */
   object SchemaDerivationPolicyRule extends SchemaDerivationRule("derivation policy") {
     def apply[A: SchemaCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }
