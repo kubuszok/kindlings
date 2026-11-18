@@ -89,6 +89,24 @@ All other modules are cross-compiled for JVM, Scala.js, and Scala Native.
 
 All other modules support both Scala 2.13 and Scala 3.
 
+## Why does Scala 2.13 fail with "HearthAssertionError: MIO timeout is already set"?
+
+A known Hearth bug (see `docs/research/hearth-bug-mio-timeout-reentry.md` in the repository): when a derivation reads
+the subtypes of a sealed trait, the Scala 2 compiler may type another `val` of the same file whose type is inferred
+from a derived instance, and so start that second derivation while the first is still running. Give the `val` (or
+`def`) holding a derived instance an explicit type:
+
+```scala
+object Other { val encoder: Encoder[Http] = KindlingsEncoder.derived[Http] } // not `val encoder = ...`
+```
+
+## Why does Scala 3 crash with "missing outer accessor in class X"?
+
+A known Hearth bug (see `docs/research/hearth-bug-enum-child-this-type-prefix.md` in the repository): deriving for a
+sealed trait declared inside a **class** (a test suite, a `.sc` script) whose case object lives in the trait's
+companion (`object Shape { case object Empty extends Shape }`) crashes the compiler. Declare the hierarchy at the top
+level or inside an `object` (e.g. the suite's companion object) instead.
+
 ## Which parts of Kindlings end up in my application at runtime? Can I remove the rest from a fat JAR?
 
 Kindlings modules are normal `Compile` dependencies, so all of their code ends up on your runtime classpath and in every
