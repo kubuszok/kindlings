@@ -16,14 +16,9 @@ trait MonoidCaseClassRuleImpl {
       CaseClass.parse[A].toEither match {
         case Right(caseClass) =>
           deriveMonoidCaseClassEmpty[A](caseClass).map { empty =>
-            val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
-              // Use a fresh SemigroupCtx with its own cache so combine defs are self-contained
-              val sgCtx = SemigroupCtx.from(x, y, moidctx.derivedType)
-              for {
-                result <- deriveSemigroupRecursively[A](using sgCtx)
-                cache <- sgCtx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
+            val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) =>
+              // The shared cache: the entry point emits its defs and lazy vals once, at the instance scope.
+              deriveSemigroupRecursively[A](using SemigroupCtx(Type[A], x, y, moidctx.cache, moidctx.derivedType))
             Rule.matched(MonoidDerivationResult(empty, combine))
           }
         case Left(reason) =>

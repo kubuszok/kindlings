@@ -71,13 +71,9 @@ trait GroupBuiltInRuleImpl {
         emptyVal: Expr[A],
         negate: Expr[A] => Expr[A]
     ): GroupDerivationResult[A] = {
-      val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
-        val sgCtx = SemigroupCtx.from(x, y, gctx.derivedType)
-        for {
-          result <- deriveSemigroupRecursively[A](using sgCtx)
-          cache <- sgCtx.cache.get
-        } yield cache.toValDefs.use(_ => result)
-      }
+      val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) =>
+        // The shared cache: the entry point emits its defs and lazy vals once, at the instance scope.
+        deriveSemigroupRecursively[A](using SemigroupCtx(Type[A], x, y, gctx.cache, gctx.derivedType))
       val inverse: Expr[A] => MIO[Expr[A]] = a => MIO.pure(negate(a))
       GroupDerivationResult(emptyVal, combine, inverse)
     }

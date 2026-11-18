@@ -116,6 +116,13 @@ Fix: specialise when `evaluatedConfig` is defined. Otherwise compute names once 
 
 - **cats** `Show`/`Eq`/`Order`/...: `toValDefs.use` sits inside the per-call lambda, so every call does 5× `new
   LazyRef` plus a synchronized re-summon. `HashMacrosImpl` already places it correctly.
+  **Fixed in `perf-cats-instance-scope`:** Show, ShowPretty, Eq, PartialOrder, Order, Semigroup (and Band,
+  Semilattice, CommutativeSemigroup), Monoid (and CommutativeMonoid, BoundedSemilattice), Group (and
+  CommutativeGroup) derive each method body once into an instance-scope `def` (`InstanceScopeSupport`), and Monoid and
+  Group derive `combine` into the shared cache. Per call: Show SimpleCC 296 → 224 B, Eq/Order SimpleCC 72/24 → 0 B,
+  Semigroup/Monoid combine 48 → 24 B. The polymorphic type classes (Functor, Traverse, ...) have no cache to move, but
+  splice nested and composed instances (`HktNestedRuntime.composeFunctor(...)`, summoned `implicit def`s) into the
+  per-call body; not changed yet.
 - **Avro** rebuilds schemas inside encode/decode for case-object enums, case objects in mixed sealed traits, named
   tuples and `Either`.
 - **Avro** `parseAvroName` compiles a regex on every call (`String.replaceAll`), once per candidate subtype per

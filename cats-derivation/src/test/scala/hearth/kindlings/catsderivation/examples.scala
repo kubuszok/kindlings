@@ -25,6 +25,27 @@ object examples {
     implicit val emptyPoint: alleycats.Empty[Point] = alleycats.Empty.derived
   }
 
+  /** A field type whose instances are `def`s counting how often they are created: the derived instances must resolve
+    * them once per instance, not on every call.
+    */
+  final case class Counted(value: Int)
+  object Counted {
+    @volatile var instancesCreated: Int = 0
+    implicit def showCounted: cats.Show[Counted] = { instancesCreated += 1; cats.Show.show(_.value.toString) }
+    implicit def orderCounted: cats.kernel.Order[Counted] = {
+      instancesCreated += 1; cats.kernel.Order.by[Counted, Int](_.value)
+    }
+    implicit def groupCounted: cats.kernel.Group[Counted] = {
+      instancesCreated += 1
+      new cats.kernel.Group[Counted] {
+        def empty: Counted = Counted(0)
+        def combine(x: Counted, y: Counted): Counted = Counted(x.value + y.value)
+        def inverse(a: Counted): Counted = Counted(-a.value)
+      }
+    }
+  }
+  final case class WithCounted(counted: Counted, other: Int)
+
   final case class Person(name: String, age: Int)
   object Person {
     implicit val showPerson: cats.Show[Person] = cats.Show.derived

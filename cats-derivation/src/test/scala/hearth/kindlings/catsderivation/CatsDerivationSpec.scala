@@ -1386,6 +1386,59 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("field instances are resolved once per derived instance, not per call") {
+    import hearth.kindlings.catsderivation.extensions.*
+    import examples.{Counted, WithCounted}
+
+    // Calls `op` three times and returns how many field instances the 2nd and 3rd call created.
+    def createdByRepeatedCalls(op: () => Any): Int = {
+      op()
+      val before = Counted.instancesCreated
+      op()
+      op()
+      Counted.instancesCreated - before
+    }
+    val a = WithCounted(Counted(1), 2)
+    val b = WithCounted(Counted(3), 4)
+
+    test("Show") {
+      val show = cats.Show.derived[WithCounted]
+      createdByRepeatedCalls(() => show.show(a)) ==> 0
+    }
+    test("ShowPretty") {
+      val show = ShowPretty.derived[WithCounted]
+      createdByRepeatedCalls(() => show.show(a)) ==> 0
+    }
+    test("Eq") {
+      val eq = cats.kernel.Eq.derived[WithCounted]
+      createdByRepeatedCalls(() => eq.eqv(a, b)) ==> 0
+    }
+    test("PartialOrder") {
+      val po = cats.kernel.PartialOrder.derived[WithCounted]
+      createdByRepeatedCalls(() => po.partialCompare(a, b)) ==> 0
+    }
+    test("Order") {
+      val order = cats.kernel.Order.derived[WithCounted]
+      createdByRepeatedCalls(() => order.compare(a, b)) ==> 0
+    }
+    test("Hash") {
+      val hash = cats.kernel.Hash.derived[WithCounted]
+      createdByRepeatedCalls(() => hash.eqv(a, b)) ==> 0
+    }
+    test("Semigroup") {
+      val sg = cats.kernel.Semigroup.derived[WithCounted]
+      createdByRepeatedCalls(() => sg.combine(a, b)) ==> 0
+    }
+    test("Monoid") {
+      val monoid = cats.kernel.Monoid.derived[WithCounted]
+      createdByRepeatedCalls(() => monoid.combine(a, b)) ==> 0
+    }
+    test("Group") {
+      val group = cats.kernel.Group.derived[WithCounted]
+      createdByRepeatedCalls(() => group.combine(group.inverse(a), b)) ==> 0
+    }
+  }
+
   group("strict derivation") {
 
     test("StrictDerivation sentinel type exists and can be instantiated") {

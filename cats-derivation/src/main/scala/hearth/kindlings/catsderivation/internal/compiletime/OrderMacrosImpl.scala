@@ -17,6 +17,7 @@ trait OrderMacrosImpl
     with rules.OrderSingletonRuleImpl
     with rules.OrderCaseClassRuleImpl
     with rules.OrderEnumRuleImpl
+    with InstanceScopeSupport
     with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
@@ -26,22 +27,21 @@ trait OrderMacrosImpl
     implicit val IntType: Type[Int] = OrderTypes.Int
     val selfType: Option[??] = Some(Type[A].as_??)
 
-    deriveOrderEntrypoint[A, cats.kernel.Order[A]](macroName) { fromCtx =>
+    deriveOrderEntrypoint[A, cats.kernel.Order[A]](macroName, selfType) { call =>
       Expr.quote {
         hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.orderInstance[A] { (x: A, y: A) =>
           val _ = x
           val _ = y
-          Expr.splice {
-            fromCtx(OrderCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
-          }
+          Expr.splice(call(Expr.quote(x), Expr.quote(y)))
         }
       }
     }
   }
 
-  protected def deriveOrderEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (OrderCtx[A] => Expr[Int]) => Expr[Out]
+  protected def deriveOrderEntrypoint[A: Type, Out: Type](macroName: String, selfType: Option[??])(
+      adapt: ((Expr[A], Expr[A]) => Expr[Int]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val IntType: Type[Int] = OrderTypes.Int
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended."
@@ -49,17 +49,14 @@ trait OrderMacrosImpl
 
     Log
       .namedScope(s"Deriving Order[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: OrderCtx[A] => Expr[Int] = (ctx: OrderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveOrderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          call <- instanceScopedDef2[A, A, Int](cache, s"compare_${Type[A].shortName}_instance") { (x, y) =>
+            deriveOrderRecursively[A](using OrderCtx(Type[A], x, y, cache, selfType))
+          }
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(call))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

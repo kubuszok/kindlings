@@ -32,14 +32,9 @@ trait MonoidBuiltInRuleImpl {
       }
 
     private def mkNumericMonoid[A: MonoidCtx](emptyVal: Expr[A]): MonoidDerivationResult[A] = {
-      val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) => {
-        // Use a fresh SemigroupCtx with its own cache so combine defs are self-contained
-        val sgCtx = SemigroupCtx.from(x, y, moidctx.derivedType)
-        for {
-          result <- deriveSemigroupRecursively[A](using sgCtx)
-          cache <- sgCtx.cache.get
-        } yield cache.toValDefs.use(_ => result)
-      }
+      val combine: (Expr[A], Expr[A]) => MIO[Expr[A]] = (x, y) =>
+        // The shared cache: the entry point emits its defs and lazy vals once, at the instance scope.
+        deriveSemigroupRecursively[A](using SemigroupCtx(Type[A], x, y, moidctx.cache, moidctx.derivedType))
       MonoidDerivationResult(emptyVal, combine)
     }
   }
