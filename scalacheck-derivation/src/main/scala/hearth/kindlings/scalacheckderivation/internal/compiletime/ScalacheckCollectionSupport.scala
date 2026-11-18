@@ -59,6 +59,45 @@ trait ScalacheckCollectionSupport { this: MacroCommons & StdExtensions =>
     }
   }
 
+  /** How a value type `A` is built from its underlying `Inner` (its `IsValueType` `wrap`):
+    *   - `Left(wrap)`: a plain constructor, `Inner => A` (e.g. an `AnyVal`),
+    *   - `Right(fn)`: a smart constructor that can reject a value (`Either[String, A]`, `Either[Throwable, A]`, ... -
+    *     e.g. refined types or opaque types with an `Either`-returning constructor), emitted as
+    *     `(inner: Inner) => Either[Any, A]` whose `Left` only means "rejected".
+    *
+    * `None` for a custom `CtorLikeOf` variant whose result shape is unknown.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def valueTypeWrap[A: Type, Inner: Type](
+      isValueType: IsValueTypeOf[A, Inner]
+  ): Option[Either[Expr[Inner] => Expr[A], Expr[Inner => Either[Any, A]]]] = {
+    implicit val EitherAnyA: Type[Either[Any, A]] = Type.of[Either[Any, A]]
+    val wrap = isValueType.wrap
+    wrap match {
+      case _: CtorLikeOf.PlainValue[?, ?] =>
+        // The cast (erased, free) keeps the expression typed as `A` whatever static type the constructor call has.
+        Some(
+          Left((inner: Expr[Inner]) =>
+            Expr.quote(Expr.splice(wrap.apply(inner).asInstanceOf[Expr[Any]]).asInstanceOf[A])
+          )
+        )
+      case _: CtorLikeOf.EitherStringOrValue[?, ?] | _: CtorLikeOf.EitherIterableStringOrValue[?, ?] |
+          _: CtorLikeOf.EitherThrowableOrValue[?, ?] | _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+        // Either is covariant in its Left, so each of these is already an Either[Any, A].
+        val toEither: Expr[Inner] => Expr[Either[Any, A]] = inner =>
+          Expr.quote(Expr.splice(wrap.apply(inner).asInstanceOf[Expr[Any]]).asInstanceOf[Either[Any, A]])
+        Some(Right(Expr.quote { (inner: Inner) =>
+          Expr.splice(toEither(Expr.quote(inner)))
+        }))
+      case _ =>
+        None
+    }
+  }
+
+  /** Reason used when `valueTypeWrap` does not recognize the value type's constructor. */
+  protected def unsupportedValueTypeWrap[A: Type](isValueType: IsValueTypeOf[A, ?]): String =
+    s"The type ${Type[A].prettyPrint} is built with an unsupported smart constructor (${isValueType.wrap})"
+
   /** Emits `(value: A) => Iterable[Item]` using the provider's `asIterable`. */
   @scala.annotation.nowarn("msg=is never used")
   protected def collectionToIterableFn[A: Type, Item: Type](
