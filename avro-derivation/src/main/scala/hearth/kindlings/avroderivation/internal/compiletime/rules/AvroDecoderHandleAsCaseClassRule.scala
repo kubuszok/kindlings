@@ -101,6 +101,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
 
         case Some(fields) =>
           implicit val ListStringT: Type[List[String]] = DecTypes.ListString
+          implicit val GenericRecordT: Type[GenericRecord] = DecTypes.GenericRecord
 
           fields
             .parTraverse { case (fName, param) =>
@@ -121,10 +122,59 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
               val avroFixedSize = getAnnotationIntArg[avroFixed](param)
               val decimalOverride = getAnnotationTwoIntArgs[avroScalePrecision](param)
 
-              val aliasesExpr: Expr[List[String]] =
-                aliases.foldRight(Expr.quote(List.empty[String])) { (a, acc) =>
-                  Expr.quote(Expr.splice(Expr(a)) :: Expr.splice(acc))
-                }
+              // No alias (the usual case) and one alias have their own overloads: no list is built per decoded field.
+              def fieldByNameOrAlias(record: Expr[GenericRecord]): Expr[Any] = aliases match {
+                case Nil =>
+                  Expr.quote(
+                    AvroDerivationUtils.getFieldByNameOrAlias(Expr.splice(record), Expr.splice(avroFieldNameExpr))
+                  )
+                case alias :: Nil =>
+                  Expr.quote(
+                    AvroDerivationUtils.getFieldByNameOrAlias(
+                      Expr.splice(record),
+                      Expr.splice(avroFieldNameExpr),
+                      Expr.splice(Expr(alias))
+                    )
+                  )
+                case _ =>
+                  val aliasesExpr: Expr[List[String]] =
+                    aliases.foldRight(Expr.quote(List.empty[String])) { (a, acc) =>
+                      Expr.quote(Expr.splice(Expr(a)) :: Expr.splice(acc))
+                    }
+                  Expr.quote(
+                    AvroDerivationUtils.getFieldByNameOrAlias(
+                      Expr.splice(record),
+                      Expr.splice(avroFieldNameExpr),
+                      Expr.splice(aliasesExpr)
+                    )
+                  )
+              }
+              // The same lookup, returning `AvroDerivationUtils.MissingField` when the record has no such field.
+              def fieldOrMissing(record: Expr[GenericRecord]): Expr[Any] = aliases match {
+                case Nil =>
+                  Expr.quote(AvroDerivationUtils.fieldOrMissing(Expr.splice(record), Expr.splice(avroFieldNameExpr)))
+                case alias :: Nil =>
+                  Expr.quote(
+                    AvroDerivationUtils.fieldOrMissing(
+                      Expr.splice(record),
+                      Expr.splice(avroFieldNameExpr),
+                      Expr.splice(Expr(alias))
+                    )
+                  )
+                case _ =>
+                  val aliasesExpr: Expr[List[String]] =
+                    aliases.foldRight(Expr.quote(List.empty[String])) { (a, acc) =>
+                      Expr.quote(Expr.splice(Expr(a)) :: Expr.splice(acc))
+                    }
+                  Expr.quote(
+                    AvroDerivationUtils.fieldOrMissing(
+                      Expr.splice(record),
+                      Expr.splice(avroFieldNameExpr),
+                      Expr.splice(aliasesExpr)
+                    )
+                  )
+              }
+              val recordExpr: Expr[GenericRecord] = Expr.quote(Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord])
 
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 (avroFixedSize, decimalOverride) match {
@@ -133,14 +183,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                     MIO.pure {
                       implicit val ArrayByteT: Type[Array[Byte]] = arrayByteType
                       val decodedExpr: Expr_?? = Expr.quote {
-                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
-                        AvroDerivationUtils.decodeFixed(
-                          AvroDerivationUtils.getFieldByNameOrAlias(
-                            record,
-                            Expr.splice(avroFieldNameExpr),
-                            Expr.splice(aliasesExpr)
-                          )
-                        ): Array[Byte]
+                        AvroDerivationUtils.decodeFixed(Expr.splice(fieldByNameOrAlias(recordExpr))): Array[Byte]
                       }.as_??
                       (fName, decodedExpr, false)
                     }
@@ -149,26 +192,14 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                     MIO.pure {
                       implicit val BigDecimalT: Type[BigDecimal] = bigDecimalType
                       val decodedExpr: Expr_?? = Expr.quote {
-                        val record = Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord]
                         AvroDerivationUtils.decodeBigDecimal(
-                          AvroDerivationUtils.getFieldByNameOrAlias(
-                            record,
-                            Expr.splice(avroFieldNameExpr),
-                            Expr.splice(aliasesExpr)
-                          ),
+                          Expr.splice(fieldByNameOrAlias(recordExpr)),
                           Expr.splice(Expr(scale))
                         ): BigDecimal
                       }.as_??
                       (fName, decodedExpr, false)
                     }
                   case _ =>
-                    val fieldAvroValue: Expr[Any] = Expr.quote {
-                      AvroDerivationUtils.getFieldByNameOrAlias(
-                        Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord],
-                        Expr.splice(avroFieldNameExpr),
-                        Expr.splice(aliasesExpr)
-                      )
-                    }
                     // As avro4s: a field with a Scala default decodes to the default when the record has no such field
                     // (data written with an older schema) or when its value cannot be decoded.
                     val defaultExpr: Option[Expr[Field]] = param.defaultValue.flatMap { method =>
@@ -177,24 +208,32 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                         onValues = _ => Map.empty
                       ).toOption.map(_.value.asInstanceOf[Expr[Field]])
                     }
-                    deriveDecoderRecursively[Field](using dctx.nest[Field](fieldAvroValue)).map { decoded =>
-                      defaultExpr match {
-                        case Some(default) =>
-                          val withDefault: Expr[Field] = Expr.quote {
-                            if (
-                              AvroDerivationUtils.hasFieldOrAlias(
-                                Expr.splice(dctx.avroValue).asInstanceOf[GenericRecord],
-                                Expr.splice(avroFieldNameExpr),
-                                Expr.splice(aliasesExpr)
-                              )
-                            )
-                              try Expr.splice(decoded)
-                              catch { case scala.util.control.NonFatal(_) => Expr.splice(default) }
-                            else Expr.splice(default)
-                          }
+                    defaultExpr match {
+                      case Some(default) =>
+                        // One lookup (as avro4s' `safeDecodeFieldValue`): the value, or the `MissingField` sentinel.
+                        MIO.scoped { runSafe =>
+                          val withDefault: Expr[Field] =
+                            ValDefs
+                              .createVal[Any](fieldOrMissing(recordExpr), FreshName.FromPrefix(s"avroField_$fName"))
+                              .use { fieldValue =>
+                                val decoded =
+                                  runSafe(deriveDecoderRecursively[Field](using dctx.nest[Field](fieldValue)))
+                                Expr.quote {
+                                  if (AvroDerivationUtils.isMissingField(Expr.splice(fieldValue))) Expr.splice(default)
+                                  else
+                                    try Expr.splice(decoded)
+                                    catch {
+                                      case avroDecodeError: Throwable =>
+                                        if (AvroDerivationUtils.isFatal(avroDecodeError)) throw avroDecodeError
+                                        else Expr.splice(default)
+                                    }
+                                }
+                              }
                           (fName, withDefault.as_??, true)
-                        case None => (fName, decoded.as_??, false)
-                      }
+                        }
+                      case None =>
+                        deriveDecoderRecursively[Field](using dctx.nest[Field](fieldByNameOrAlias(recordExpr)))
+                          .map(decoded => (fName, decoded.as_??, false))
                     }
                 }
               }

@@ -334,6 +334,62 @@ object AvroDerivationUtils {
     null
   }
 
+  def getFieldByNameOrAlias(record: GenericRecord, name: String): Any = {
+    val field = record.getSchema.getField(name)
+    if (field != null) record.get(field.pos()) else null
+  }
+
+  def getFieldByNameOrAlias(record: GenericRecord, name: String, alias: String): Any = {
+    val schema = record.getSchema
+    val field = schema.getField(name)
+    if (field != null) record.get(field.pos())
+    else {
+      val aliasField = schema.getField(alias)
+      if (aliasField != null) record.get(aliasField.pos()) else null
+    }
+  }
+
+  /** What [[fieldOrMissing]] returns when the record has no field with the name (nor any of the aliases). */
+  val MissingField: AnyRef = new AnyRef {
+    override def toString: String = "MissingField"
+  }
+
+  def isMissingField(value: Any): Boolean = value.asInstanceOf[AnyRef] eq MissingField
+
+  /** Whether `NonFatal` would not match `error` (smaller than inlining the `NonFatal` extractor per decoded field). */
+  def isFatal(error: Throwable): Boolean = !scala.util.control.NonFatal(error)
+
+  /** The value of a record's field (found by name or alias), or [[MissingField]]: one lookup for a field with a
+    * default, which decodes to the default when the record has no such field.
+    */
+  def fieldOrMissing(record: GenericRecord, name: String): Any = {
+    val field = record.getSchema.getField(name)
+    if (field != null) record.get(field.pos()) else MissingField
+  }
+
+  def fieldOrMissing(record: GenericRecord, name: String, alias: String): Any = {
+    val schema = record.getSchema
+    val field = schema.getField(name)
+    if (field != null) record.get(field.pos())
+    else {
+      val aliasField = schema.getField(alias)
+      if (aliasField != null) record.get(aliasField.pos()) else MissingField
+    }
+  }
+
+  def fieldOrMissing(record: GenericRecord, name: String, aliases: List[String]): Any = {
+    val schema = record.getSchema
+    val field = schema.getField(name)
+    if (field != null) return record.get(field.pos())
+    var remaining = aliases
+    while (remaining.nonEmpty) {
+      val aliasField = schema.getField(remaining.head)
+      if (aliasField != null) return record.get(aliasField.pos())
+      remaining = remaining.tail
+    }
+    MissingField
+  }
+
   @scala.annotation.nowarn("msg=unused explicit parameter")
   def unsafeCast[A](value: Any, schemaFor: hearth.kindlings.avroderivation.AvroSchemaFor[A]): A =
     value.asInstanceOf[A]

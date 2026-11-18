@@ -154,6 +154,11 @@ case class WithMultipleProps(name: String)
 case class AliasedRecord(name: String, age: Int)
 
 case class WithFieldAlias(@avroAlias("old_name") name: String, age: Int)
+case class AliasedDefaults(
+    @avroAlias("one_old") one: Int = 1,
+    @avroAlias("two_a") @avroAlias("two_b") two: String = "two",
+    three: Int = 3
+)
 
 @avroAlias("V1Name")
 @avroAlias("V2Name")

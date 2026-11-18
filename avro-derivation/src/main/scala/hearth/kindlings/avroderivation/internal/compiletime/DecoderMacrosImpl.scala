@@ -488,5 +488,7 @@ trait DecoderMacrosImpl
     val AvroFixed: Type.Lazy[avroFixed] = Type.Lazy(Type.of[avroFixed])
     val AvroAlias: Type.Lazy[avroAlias] = Type.Lazy(Type.of[avroAlias])
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val GenericRecord: Type.Lazy[org.apache.avro.generic.GenericRecord] =
+      Type.Lazy(Type.of[org.apache.avro.generic.GenericRecord])
   }
 }
