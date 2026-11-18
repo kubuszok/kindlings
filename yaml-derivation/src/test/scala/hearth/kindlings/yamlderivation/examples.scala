@@ -141,3 +141,14 @@ case class WithEmpties(
     mapOfLists: Map[String, List[Int]],
     after: String
 )
+
+// A field type whose implicit decoder counts how often it is created
+final case class CountedValue(value: String)
+object CountedValue {
+  @volatile var decodersCreated: Int = 0
+  implicit def countedDecoder: org.virtuslab.yaml.YamlDecoder[CountedValue] = {
+    decodersCreated += 1
+    org.virtuslab.yaml.YamlDecoder.forString.map(CountedValue(_))
+  }
+}
+case class WithCounted(first: CountedValue, second: CountedValue, label: String)

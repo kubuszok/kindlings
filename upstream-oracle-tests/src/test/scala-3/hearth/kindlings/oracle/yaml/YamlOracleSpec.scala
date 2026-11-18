@@ -153,11 +153,31 @@ final class YamlOracleSpec extends MacroSuite {
         "name: Alice\nage: 30",
         "name: Alice\nage: 30\nnickname: null",
         "name: Alice\nage: 30\nextra: 1",
+        // a repeated key: its last value
+        "name: Alice\nage: 30\nage: 31",
+        "name: Alice\nnickname: A\nage: 30\nnickname: B\nname: Bob",
         "name: Alice",
         "name: Alice\nage: thirty",
         "- 1\n- 2",
         "hello"
       )()
+    }
+
+    test("case class from a mapping with a key that is not a scalar (built as a node: not parsed from YAML)") {
+      def outcome(decoder: YamlDecoder[YmPerson], node: Node): String =
+        decoder.construct(node) match {
+          case Right(value) => s"Right($value)"
+          case Left(error)  => s"Left(${error.msg})"
+        }
+      val nonScalarKey = Node.MappingNode(
+        Map[Node, Node](
+          Node.ScalarNode("name") -> Node.ScalarNode("Alice"),
+          Node.SequenceNode(Node.ScalarNode("k")) -> Node.ScalarNode("v"),
+          Node.ScalarNode("age") -> Node.ScalarNode("30")
+        )
+      )
+      assertEquals(outcome(K.person, nonScalarKey), outcome(U.person, nonScalarKey))
+      assertEquals(outcome(K.person, nonScalarKey), "Left(Parameter of a class must be a scalar value)")
     }
 
     test("primitives") {

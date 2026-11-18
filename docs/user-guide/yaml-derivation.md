@@ -250,6 +250,8 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Default values | Always on, not configurable | On by default, as scala-yaml; `withoutUseDefaults` turns them off |
 | Absent `Option` field | `None` | `None` |
 | Failure messages of derived products | `Key x doesn't exist in parsed document`, `Expected MappingNode, got ...` | Same |
+| Repeated key in a mapping decoded as a case class | Its last value | Same |
+| Key that is not a scalar in such a mapping | `Parameter of a class must be a scalar value` | Same |
 | Enum handling | Broken in some cases | Correct |
 | Option decoding | Broken in some cases | Correct |
 | Inline encoding/decoding | No | Yes (`toYamlString`, `fromYamlString`) |

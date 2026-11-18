@@ -54,7 +54,7 @@ trait DecoderMacrosImpl
             val _ = Expr.splice(nodeVal)
             val _ = Expr.splice(configVal)
             Expr.splice {
-              fromCtx(DecoderCtx.from(nodeVal, configVal, derivedType = None, evConfig))
+              fromCtx(perCallDecoderCtx[A](nodeVal, configVal, evConfig))
             }
           }
         }
@@ -88,7 +88,7 @@ trait DecoderMacrosImpl
                   val _ = node
                   val _ = cfg
                   Expr.splice {
-                    fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = None, evConfig))
+                    fromCtx(perCallDecoderCtx[A](Expr.quote(node), Expr.quote(cfg), evConfig))
                   }
                 }
               )
@@ -109,20 +109,31 @@ trait DecoderMacrosImpl
     val selfType: Option[??] = Some(Type[A].as_??)
     val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, KindlingsYamlDecoder[A]]("KindlingsYamlDecoder.derived") { fromCtx =>
+    // The configuration is a val around the whole instance and so are the cached definitions (the decode helpers and
+    // the lazy vals of the field decoders): they are created once per instance, not on every decode.
+    deriveDecoderInstanceForEntrypoint[A, KindlingsYamlDecoder[A]]("KindlingsYamlDecoder.derived") { deriveHelper =>
       ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
-        Expr.quote {
-          val cfg = Expr.splice(configVal)
-          hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.decoderInstance[A] { (node: Node) =>
-            val _ = node
-            Expr.splice {
-              fromCtx(DecoderCtx.from(Expr.quote(node), Expr.quote(cfg), derivedType = selfType, evConfig))
+        val (decodeCall, cache) = deriveHelper(
+          DecoderCtx.from[A](Expr.quote(null.asInstanceOf[Node]), configVal, derivedType = selfType, evConfig)
+        )
+        cache.toValDefs.use { _ =>
+          Expr.quote {
+            hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.decoderInstance[A] { (node: Node) =>
+              Expr.splice(decodeCall(Expr.quote(node)))
             }
           }
         }
       }
     }
   }
+
+  /** The context of the inline entry points (see `DecoderCtx.perCall`). */
+  private def perCallDecoderCtx[A: Type](
+      node: Expr[Node],
+      config: Expr[YamlConfig],
+      evConfig: Option[YamlConfig]
+  ): DecoderCtx[A] =
+    DecoderCtx.from[A](node, config, derivedType = None, evConfig).copy(perCall = true)
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
@@ -161,22 +172,69 @@ trait DecoderMacrosImpl
         infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
         errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
         timeout = derivationTimeout
-      ) { (errorLogs, errors) =>
-        val errorsRendered =
-          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.yamlderivation.debug.logDerivationForKindlingsYamlDecoder or scalac option -Xmacro-settings:yamlDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
+      )(renderDecoderDerivationErrors)
+  }
+
+  /** As [[deriveDecoderFromCtxAndAdaptForEntrypoint]], for an instance: the function given to `provideCtxAndAdapt`
+    * derives the decoder of `A` as a cached helper and returns the helper's call (for a node) and the cache, whose
+    * definitions the instance wraps itself (once per instance, not inside its per-call decode function).
+    */
+  def deriveDecoderInstanceForEntrypoint[A: Type, Out: Type](macroName: String)(
+      provideCtxAndAdapt: (DecoderCtx[A] => (Expr[Node] => Expr[Either[ConstructError, A]], ValDefsCache)) => Expr[Out]
+  ): Expr[Out] = {
+    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
+      Environment.reportErrorAndAbort(
+        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          "or add a type ascription to the result variable."
+      )
+    Log
+      .namedScope(
+        s"Deriving decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
+      ) {
+        MIO.scoped { runSafe =>
+          val deriveHelper: DecoderCtx[A] => (Expr[Node] => Expr[Either[ConstructError, A]], ValDefsCache) =
+            (ctx: DecoderCtx[A]) =>
+              runSafe {
+                for {
+                  _ <- ensureStandardExtensionsLoaded()
+                  _ <- deriveDecoderRecursively[A](using ctx)
+                  helper <- ctx.getHelper[A]
+                  cache <- ctx.cache.get
+                } yield ((node: Expr[Node]) => helper.get(node, ctx.config), cache)
+              }
+          provideCtxAndAdapt(deriveHelper)
+        }
       }
+      .flatTap { result =>
+        Log.info(s"Derived final decoder result: ${result.prettyPrint}")
+      }
+      .runToExprOrFail(
+        macroName,
+        infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
+        timeout = derivationTimeout
+      )(renderDecoderDerivationErrors)
+  }
+
+  private def renderDecoderDerivationErrors(
+      errorLogs: String,
+      errors: hearth.fp.data.NonEmptyVector[Throwable]
+  ): String = {
+    val errorsRendered =
+      hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
+    val hint =
+      "Enable debug logging with: import hearth.kindlings.yamlderivation.debug.logDerivationForKindlingsYamlDecoder or scalac option -Xmacro-settings:yamlDerivation.logDerivation=true"
+    if (errorLogs.nonEmpty)
+      s"""Macro derivation failed with the following errors:
+         |$errorsRendered
+         |and the following logs:
+         |${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}
+         |$hint""".stripMargin
+    else
+      s"""Macro derivation failed with the following errors:
+         |$errorsRendered
+         |$hint""".stripMargin
   }
 
   def shouldWeLogDecoderDerivation: Boolean = {
@@ -200,7 +258,10 @@ trait DecoderMacrosImpl
       config: Expr[YamlConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[YamlConfig] = None
+      evaluatedConfig: Option[YamlConfig] = None,
+      // The inline entry points run the cached definitions on every call: there a cached field decoder is a `def`
+      // (evaluated where it is used), not a `lazy val` (a lazy cell allocated per call).
+      perCall: Boolean = false
   ) {
 
     def nest[B: Type](newNode: Expr[Node]): DecoderCtx[B] = copy[B](
@@ -208,13 +269,39 @@ trait DecoderMacrosImpl
       node = newNode
     )
 
+    /** The context of a cached helper's body. The configuration is NOT replaced by the helper's `config` parameter:
+      * every entry point binds the configuration to a value around all the cached definitions and every helper call
+      * passes that value, so referring to it directly lets the cached field decoders (lazy vals of the instance, see
+      * [[getFieldDecoder]]) be built from code that does not depend on a helper's parameters.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     def nestInCache(
         newNode: Expr[Node],
         newConfig: Expr[YamlConfig]
     ): DecoderCtx[A] = copy(
-      node = newNode,
-      config = newConfig
+      node = newNode
     )
+
+    /** A field's decoder, cached as a lazy val of the instance (evaluated once, not on every decode), or as a def when
+      * the definitions are evaluated per call ([[perCall]]).
+      */
+    def getFieldDecoder[B: Type]: MIO[Option[Expr[YamlDecoder[B]]]] = {
+      implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]
+      cache.get0Ary[YamlDecoder[B]]("cached-field-decoder")
+    }
+    def setFieldDecoder[B: Type](decoder: Expr[YamlDecoder[B]]): MIO[Unit] = {
+      implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]
+      if (perCall)
+        cache.buildCachedWith(
+          "cached-field-decoder",
+          ValDefBuilder.ofDef0[YamlDecoder[B]](s"fieldDecoder_${Type[B].shortName}")
+        )(_ => decoder)
+      else
+        cache.buildCachedWith(
+          "cached-field-decoder",
+          ValDefBuilder.ofLazy[YamlDecoder[B]](s"fieldDecoder_${Type[B].shortName}")
+        )(_ => decoder)
+    }
 
     def getInstance[B: Type]: MIO[Option[Expr[YamlDecoder[B]]]] = {
       implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]
@@ -339,25 +426,45 @@ trait DecoderMacrosImpl
         }
       }
 
+  /** The decoder of a case class field: cached as a lazy val of the instance (created once, not on every decode, see
+    * `DecoderCtx.getFieldDecoder`) and shared by all the fields of this type.
+    */
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
   def deriveFieldDecoder[Field: Type](implicit ctx: DecoderCtx[?]): MIO[Expr[YamlDecoder[Field]]] = {
     implicit val NodeT: Type[Node] = DTypes.Node
     implicit val EitherCEField: Type[Either[ConstructError, Field]] = DTypes.DecoderResult[Field]
 
-    DTypes.YamlDecoder[Field].summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*).toEither match {
-      case Right(decoderExpr) =>
-        Log.info(s"Found implicit YamlDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
-      case Left(_) =>
-        Log.info(s"Building YamlDecoder[${Type[Field].prettyPrint}] via recursive derivation") >>
-          LambdaBuilder
-            .of1[Node]("fieldNode")
-            .traverse { fieldNodeExpr =>
-              deriveDecoderRecursively[Field](using ctx.nest[Field](fieldNodeExpr))
-            }
-            .map { builder =>
-              val decodeFn = builder.build[Either[ConstructError, Field]]
-              Expr.quote(YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
-            }
+    ctx.getFieldDecoder[Field].flatMap {
+      case Some(cached) => MIO.pure(cached)
+      case None         =>
+        val decoder: MIO[Expr[YamlDecoder[Field]]] =
+          DTypes
+            .YamlDecoder[Field]
+            .summonExprIgnoring(DecoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+            .toEither match {
+            case Right(decoderExpr) =>
+              Log.info(s"Found implicit YamlDecoder[${Type[Field].prettyPrint}]") >> MIO.pure(decoderExpr)
+            case Left(_) =>
+              Log.info(s"Building YamlDecoder[${Type[Field].prettyPrint}] via recursive derivation") >>
+                LambdaBuilder
+                  .of1[Node]("fieldNode")
+                  .traverse { fieldNodeExpr =>
+                    deriveDecoderRecursively[Field](using ctx.nest[Field](fieldNodeExpr))
+                  }
+                  .map { builder =>
+                    val decodeFn = builder.build[Either[ConstructError, Field]]
+                    Expr.quote(YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn)))
+                  }
+          }
+        for {
+          decoderExpr <- decoder
+          // a recursive field type may have cached it while it was being derived
+          cached <- ctx.getFieldDecoder[Field]
+          result <- cached match {
+            case Some(existing) => MIO.pure(existing)
+            case None           => ctx.setFieldDecoder[Field](decoderExpr) >> ctx.getFieldDecoder[Field].map(_.get)
+          }
+        } yield result
     }
   }
 
@@ -386,6 +493,9 @@ trait DecoderMacrosImpl
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val EitherCEAny: Type.Lazy[Either[ConstructError, Any]] = Type.Lazy(Type.of[Either[ConstructError, Any]])
+    val FieldNodes: Type[java.util.HashMap[String, Node]] = Type.of[java.util.HashMap[String, Node]]
+    val EitherCEFieldNodes: Type[Either[ConstructError, java.util.HashMap[String, Node]]] =
+      Type.of[Either[ConstructError, java.util.HashMap[String, Node]]]
     val ListEitherCEAny: Type[List[Either[ConstructError, Any]]] =
       Type.of[List[Either[ConstructError, Any]]]
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
