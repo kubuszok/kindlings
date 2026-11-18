@@ -416,7 +416,7 @@ final class FastShowPrettySpec extends MacroSuite {
           "    - The rule handle as singleton when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not a singleton type",
           "    - The rule handle as case class when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not a case class",
           "    - The rule handle as enum when possible was not applicable, for the following reasons: hearth.kindlings.fastshowpretty.NotAHandledType is not sealed, not an enumeration, and not a union type",
-          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
+          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPrettyDerivation.logDerivation=true"
         )
       }
     }

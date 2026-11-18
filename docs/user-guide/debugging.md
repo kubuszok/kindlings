@@ -47,7 +47,7 @@ scalacOptions += "-Xmacro-settings:circeDerivation.logDerivation=true"
 | sconfig-derivation | `hearth.kindlings.sconfigderivation.debug._` | `sconfigDerivation.logDerivation=true` |
 | ubjson-derivation | `hearth.kindlings.ubjsonderivation.debug._` | `ubjsonDerivation.logDerivation=true` |
 | xml-derivation | `hearth.kindlings.xmlderivation.debug._` | `xmlDerivation.logDerivation=true` |
-| fast-show-pretty | `hearth.kindlings.fastshowpretty.debug._` | `fastShowPretty.logDerivation=true` |
+| fast-show-pretty | `hearth.kindlings.fastshowpretty.debug._` | `fastShowPrettyDerivation.logDerivation=true` |
 
 ## Generation logging for the non-derivation macro modules
 

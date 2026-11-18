@@ -353,5 +353,9 @@ Or enable project-wide via scalac option:
 
 ```scala
 // build.sbt
-scalacOptions += "-Xmacro-settings:fastShowPretty.logDerivation=true"
+scalacOptions += "-Xmacro-settings:fastShowPrettyDerivation.logDerivation=true"
 ```
+
+All fast-show-pretty settings live in the `fastShowPrettyDerivation` namespace: `logDerivation`, `timeout` (e.g.
+`-Xmacro-settings:fastShowPrettyDerivation.timeout=30s`) and the [derivation policy](derivation-policy.md) keys. The
+`fastShowPretty.logDerivation=true` spelling used by Kindlings 0.4.0 and earlier is still accepted.

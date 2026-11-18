@@ -141,7 +141,7 @@ trait FastShowPrettyMacrosImpl
         val errorsRendered =
           hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
         val hint =
-          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPretty.logDerivation=true"
+          "Enable debug logging with: import hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty or scalac option -Xmacro-settings:fastShowPrettyDerivation.logDerivation=true"
         if (errorLogs.nonEmpty)
           s"""Macro derivation failed with the following errors:
              |$errorsRendered
@@ -157,17 +157,19 @@ trait FastShowPrettyMacrosImpl
 
   /** Enables logging if we either:
     *   - import [[hearth.kindlings.fastshowpretty.debug.logDerivationForFastShowPretty]] in the scope
-    *   - have set scalac option `-Xmacro-settings:fastShowPretty.logDerivation=true`
+    *   - have set scalac option `-Xmacro-settings:fastShowPrettyDerivation.logDerivation=true` (the namespace shared
+    *     with the timeout and the derivation policy; the pre-0.4.1 `fastShowPretty.logDerivation=true` is still
+    *     accepted)
     */
   def shouldWeLogDerivation: Boolean = {
     implicit val LogDerivation: Type[FastShowPretty.LogDerivation] = Types.LogDerivation
     def logDerivationImported = Expr.summonImplicit[FastShowPretty.LogDerivation].isDefined
 
-    def logDerivationSetGlobally = (for {
-      data <- Environment.typedSettings.toOption
-      fastShowPretty <- data.get("fastShowPretty")
-      shouldLog <- fastShowPretty.get("logDerivation").flatMap(_.asBoolean)
-    } yield shouldLog).getOrElse(false)
+    def logDerivationSetGlobally = Environment.typedSettings.toOption.exists { data =>
+      (derivationSettingsNamespace :: "fastShowPretty" :: Nil).exists { namespace =>
+        data.get(namespace).flatMap(_.get("logDerivation")).flatMap(_.asBoolean).getOrElse(false)
+      }
+    }
 
     logDerivationImported || logDerivationSetGlobally
   }

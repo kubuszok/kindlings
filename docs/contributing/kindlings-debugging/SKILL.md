@@ -39,7 +39,7 @@ package object debug {
 Set a scalac option globally to enable logging for all macro calls in the compilation:
 
 ```
--Xmacro-settings:fastShowPretty.logDerivation=true
+-Xmacro-settings:fastShowPrettyDerivation.logDerivation=true
 -Xmacro-settings:circeDerivation.logDerivation=true
 -Xmacro-settings:jsoniterDerivation.logDerivation=true
 ```
