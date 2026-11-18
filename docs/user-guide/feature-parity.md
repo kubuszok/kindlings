@@ -51,6 +51,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | Feature | avro4s | Kindlings | Status |
 |---|---|---|---|
 | Namespace config | `@AvroNamespace` only | `@avroNamespace` + `AvroConfig.namespace` | Improvement |
+| Namespace of a type in the empty package | avro4s 5 (Scala 3): none; avro4s 4 (Scala 2): `"empty"` for records, `"<empty>"` (not a valid Avro namespace) for enums | None, on both Scala versions | Difference (Scala 2 only) |
 | Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (4 built-in strategies) | Parity |
 | Constructor name transforms | Not built-in | Yes | Improvement |
 | Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig`, `@avroScalePrecision` | Parity (different API) |
