@@ -14,7 +14,10 @@ The policy is a **compile-time, per-library switch** configured entirely through
 Everything else keeps working unconditionally:
 
 - a type that already has an instance in implicit scope (your hand-written `given`/`implicit`),
-- built-in/primitive support, collections, `Option`, value types / newtypes, named tuples.
+- built-in/primitive support, collections and maps, `Option`, `Either`, value types / newtypes, tuples, named tuples.
+
+The types inside them are checked when they need structural derivation themselves: at a denied location
+`derived[List[User]]` compiles when an instance of `User` is in scope, and is rejected (for `User`) when it is not.
 
 In other words, the policy never blocks "the parts that always work" — it only decides whether the macro is allowed to
 **structurally derive a new instance for a product/sum type at this location**.

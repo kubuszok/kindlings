@@ -12,6 +12,6 @@ trait CogenDerivationPolicyRuleImpl { this: CogenMacrosImpl & MacroCommons & Std
     */
   object CogenDerivationPolicyRule extends CogenDerivationRule("derivation policy") {
     def apply[A: CogenCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

@@ -12,6 +12,6 @@ trait DiffDerivationPolicyRuleImpl { this: DiffMacrosImpl & MacroCommons & StdEx
     */
   object DiffDerivationPolicyRule extends DiffDerivationRule("derivation policy") {
     def apply[A: DiffCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

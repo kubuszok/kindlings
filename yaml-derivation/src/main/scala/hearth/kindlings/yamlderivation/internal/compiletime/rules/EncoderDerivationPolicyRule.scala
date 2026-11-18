@@ -13,6 +13,6 @@ trait EncoderDerivationPolicyRuleImpl {
     */
   object EncoderDerivationPolicyRule extends EncoderDerivationRule("derivation policy") {
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

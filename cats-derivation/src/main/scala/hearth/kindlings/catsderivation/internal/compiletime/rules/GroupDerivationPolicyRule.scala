@@ -13,6 +13,6 @@ trait GroupDerivationPolicyRuleImpl {
     */
   object GroupDerivationPolicyRule extends GroupDerivationRule("derivation policy") {
     def apply[A: GroupCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

@@ -12,6 +12,6 @@ trait ArbitraryDerivationPolicyRuleImpl { this: ArbitraryMacrosImpl & MacroCommo
     */
   object ArbitraryDerivationPolicyRule extends ArbitraryDerivationRule("derivation policy") {
     def apply[A: ArbitraryCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

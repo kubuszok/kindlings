@@ -13,6 +13,6 @@ trait ShowDerivationPolicyRuleImpl {
     */
   object ShowDerivationPolicyRule extends ShowDerivationRule("derivation policy") {
     def apply[A: ShowCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

@@ -136,4 +136,18 @@ final class DerivationPolicySpec extends hearth.MacroSuite {
         Decision.Denied(None, Nil, optInByImport = false)
     }
   }
+
+  group("DerivationPolicy.isUserVisibleOwnerName") {
+
+    test("keeps packages, classes, objects, methods and values") {
+      List("com", "com.acme.Codecs", "com.acme.Codecs.encoder", "com.acme.Spec.test").foreach { name =>
+        assert(DerivationPolicy.isUserVisibleOwnerName(name), name)
+      }
+    }
+
+    test("drops the root/empty packages and compiler-generated owners") {
+      List("", "<root>", "<empty>", "com.acme.Spec.$anonfun", "com.acme.Spec.$anon", "com.acme.Spec.<local Spec>")
+        .foreach(name => assert(!DerivationPolicy.isUserVisibleOwnerName(name), name))
+    }
+  }
 }

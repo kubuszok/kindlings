@@ -156,7 +156,7 @@ package object debug {
 
 Mix in `hearth.kindlings.derivation.compiletime.DerivationPolicy` (next to `DerivationTimeout`), add the
 `AllowDerivation` marker (parallel to `LogDerivation`) + a `policy` package object, and insert ONE root rule
-(`checkDerivationPolicyOncePerExpansion`) into each `Rules(...)` chain right after the use-implicit/use-cached rules
+(`checkDerivationPolicyOncePerExpansionFor[A]`) into each `Rules(...)` chain right after the use-implicit/use-cached rules
 (polymorphic HKT entry points use `enforceDerivationPolicyOrAbort` instead). Full recipe:
 `docs/contributing/kindlings-derivation-policy/SKILL.md`. The build switch is `<namespace>.policy.enabled=opt-in`
 with `<namespace>.policy.allowedScopes=<fqn>[;<fqn>]` and `<namespace>.policy.optInByImport=true|false`.

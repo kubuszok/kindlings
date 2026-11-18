@@ -13,6 +13,6 @@ trait ReaderDerivationPolicyRuleImpl {
     */
   object ReaderDerivationPolicyRule extends ReaderDerivationRule("derivation policy") {
     def apply[A: ReaderCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

@@ -13,6 +13,6 @@ trait SemigroupDerivationPolicyRuleImpl {
     */
   object SemigroupDerivationPolicyRule extends SemigroupDerivationRule("derivation policy") {
     def apply[A: SemigroupCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }

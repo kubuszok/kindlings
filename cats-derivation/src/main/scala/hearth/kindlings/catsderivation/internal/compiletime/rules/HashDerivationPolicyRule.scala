@@ -13,6 +13,6 @@ trait HashDerivationPolicyRuleImpl {
     */
   object HashDerivationPolicyRule extends HashDerivationRule("derivation policy") {
     def apply[A: HashCtx]: MIO[Rule.Applicability[Nothing]] =
-      checkDerivationPolicyOncePerExpansion(Type[A].prettyPrint).map(_ => Rule.yielded())
+      checkDerivationPolicyOncePerExpansionFor[A].map(_ => Rule.yielded())
   }
 }
