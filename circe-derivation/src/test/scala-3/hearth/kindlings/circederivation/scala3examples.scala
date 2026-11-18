@@ -39,3 +39,6 @@ sealed trait DerivesGP
 case class DerivesUncle(n: Int) extends DerivesGP
 sealed trait DerivesParent extends DerivesGP derives KindlingsCodecAsObject
 case class DerivesChild(a: Int) extends DerivesParent
+
+// KindlingsCodecAsObject.derive(enumAsStrings = ...)
+case class WithDirection(name: String, direction: CardinalDirection)

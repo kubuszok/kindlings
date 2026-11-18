@@ -433,6 +433,13 @@ final class CirceScala3Spec extends MacroSuite {
         val dec = KindlingsDecoder.derive[PersonWithDefaults](useDefaults = true)
         dec.decodeJson(Json.obj("name" -> Json.fromString("n"))) ==> Right(PersonWithDefaults("n", 25))
       }
+
+      test("KindlingsCodecAsObject.derive accepts enumAsStrings like KindlingsEncoder/KindlingsDecoder.derive") {
+        val codec = KindlingsCodecAsObject.derive[WithDirection](enumAsStrings = true)
+        val json = Json.obj("name" -> Json.fromString("a"), "direction" -> Json.fromString("North"))
+        codec(WithDirection("a", North)) ==> json
+        codec.decodeJson(json) ==> Right(WithDirection("a", North))
+      }
     }
 
     group("enum factories (Scala 3 core ConfiguredEnumCodec.derive(...))") {

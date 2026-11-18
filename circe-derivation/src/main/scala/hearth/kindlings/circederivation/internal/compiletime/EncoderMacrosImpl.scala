@@ -201,7 +201,7 @@ trait EncoderMacrosImpl
   /** Why `A` may not encode to a JSON object, or `None` when it always does (a product or a sum, as in circe). */
   protected def nonObjectReason[A: Type](evConfig: Option[Configuration]): Option[String] = {
     // IsOption/IsCollection/IsValueType need the standard extensions; this runs before the derivation's MIO run.
-    ensureStandardExtensionsLoaded().unsafe.runSync: Unit
+    ensureStandardExtensionsLoadedOutsideMioRun()
     if (Type[A].isTuple && !Type[A].isNamedTuple) Some("a tuple is encoded as a JSON array")
     else if (Type[A].isNamedTuple) None
     else
