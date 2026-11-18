@@ -11,6 +11,7 @@ private[circederivation] trait KindlingsCodecAsObjectCompanionCompat { this: Kin
       useDefaults: Boolean = Configuration.default.useDefaults,
       discriminator: Option[String] = Configuration.default.discriminator,
       strictDecoding: Boolean = Configuration.default.strictDecoding,
+      enumAsStrings: Boolean = Configuration.default.enumAsStrings,
       unwrapValueClasses: Boolean = Configuration.default.unwrapValueClasses
   ): KindlingsCodecAsObject[A] =
     derived[A](using
@@ -20,7 +21,8 @@ private[circederivation] trait KindlingsCodecAsObjectCompanionCompat { this: Kin
         useDefaults,
         discriminator,
         strictDecoding,
-        unwrapValueClasses = unwrapValueClasses
+        enumAsStrings,
+        unwrapValueClasses
       )
     )
 
