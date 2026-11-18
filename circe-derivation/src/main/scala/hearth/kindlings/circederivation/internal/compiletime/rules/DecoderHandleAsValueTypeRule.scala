@@ -37,7 +37,8 @@ trait DecoderHandleAsValueTypeRuleImpl {
                       for {
                         _ <- dctx.setHelper[A] { (cursor, config, failFast) =>
                           val ctx = dctx.nestInCache(cursor, config, failFast)
-                          val productMIO = DecoderHandleAsCaseClassRule.decodeCaseClassFields[A](caseClass)(using ctx)
+                          val productMIO =
+                            DecoderHandleAsCaseClassRule.decodeCaseClassAsHelperBody[A](caseClass)(using ctx)
                           if (staticallyProduct) productMIO
                           else
                             for {

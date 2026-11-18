@@ -714,6 +714,19 @@ object CirceDerivationUtils {
     }
   }
 
+  /** `failures` (`null` when no field has failed yet) followed by the failures of a field's accumulated `result`, in
+    * order: the merge of [[sequenceDecodeResultsAccumulating]], one field at a time (generated code merges each field's
+    * result as it is decoded).
+    */
+  def mergeAccumulatedFailures(
+      failures: NonEmptyList[DecodingFailure],
+      result: ValidatedNel[DecodingFailure, Any]
+  ): NonEmptyList[DecodingFailure] =
+    result match {
+      case Validated.Invalid(e) => if (failures == null) e else failures.concatNel(e)
+      case _                    => failures
+    }
+
   def checkStrictDecodingAccumulating(
       cursor: HCursor,
       typeName: String,
