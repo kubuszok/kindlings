@@ -446,7 +446,7 @@ trait DecoderMacrosImpl
             // smaller and the breakage is real. Sequential is the safe choice.
             _ <- deriveDecoderRecursively[Field](using ctx.nest[Field](placeholderValue))
             helperOpt <- ctx.getHelper[Field]
-            schemaExpr <- deriveSelfContainedSchema[Field](ctx.config)
+            schemaExpr <- deriveSelfContainedSchema[Field](ctx.config, ctx.evaluatedConfig)
           } yield {
             val callerFn = helperOpt.get
             val configExpr: Expr[AvroConfig] = ctx.config

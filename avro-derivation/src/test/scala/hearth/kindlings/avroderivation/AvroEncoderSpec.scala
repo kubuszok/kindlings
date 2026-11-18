@@ -5,6 +5,21 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 
 import java.nio.ByteBuffer
 
+case class UserSchemaInner(a: Int)
+object UserSchemaInner {
+  // a user-provided schema (and no user-provided encoder): only the schema of the enclosing record uses it
+  implicit val schemaFor: AvroSchemaFor[UserSchemaInner] = new AvroSchemaFor[UserSchemaInner] {
+    val schema: org.apache.avro.Schema = org.apache.avro.SchemaBuilder
+      .record("CustomInner")
+      .namespace("custom")
+      .doc("user-provided")
+      .fields()
+      .requiredInt("a")
+      .endRecord()
+  }
+}
+case class UserSchemaOuter(inner: UserSchemaInner, b: String)
+
 final class AvroEncoderSpec extends MacroSuite {
 
   group("AvroEncoder") {
@@ -428,6 +443,22 @@ final class AvroEncoderSpec extends MacroSuite {
         record.get("person_name").toString ==> "Alice"
         record.get("data_value").asInstanceOf[Int] ==> 30
         record.get("is_active").asInstanceOf[Boolean] ==> true
+      }
+    }
+
+    group("a nested type with a user-provided AvroSchemaFor") {
+
+      test("the enclosing schema uses the user's schema, the value still round-trips") {
+        val encoder = AvroEncoder.derived[UserSchemaOuter]
+        val decoder = AvroDecoder.derived[UserSchemaOuter]
+        val innerSchema = encoder.schema.getField("inner").schema()
+        innerSchema.getFullName ==> "custom.CustomInner"
+        innerSchema.getDoc ==> "user-provided"
+        val record = encoder.encode(UserSchemaOuter(UserSchemaInner(1), "x")).asInstanceOf[GenericRecord]
+        record.get("inner").asInstanceOf[GenericRecord].get("a") ==> 1
+        record.get("b") ==> "x"
+        val original = UserSchemaOuter(UserSchemaInner(2), "y")
+        AvroIO.fromBinary[UserSchemaOuter](AvroIO.toBinary(original)(encoder))(decoder) ==> original
       }
     }
 

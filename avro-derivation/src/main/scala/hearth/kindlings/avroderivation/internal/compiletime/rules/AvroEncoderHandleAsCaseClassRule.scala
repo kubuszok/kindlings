@@ -27,7 +27,7 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
               MIO.pure(cached)
           case None =>
             for {
-              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig)
+              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
               _ <- ctx.setCachedSchemaForEncode[A](schema)
               result <- ctx.getCachedSchemaForEncode[A]
             } yield result.get
