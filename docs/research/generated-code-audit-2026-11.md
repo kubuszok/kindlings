@@ -116,7 +116,7 @@ Fix: specialise when `evaluatedConfig` is defined. Otherwise compute names once 
 
 - **cats** `Show`/`Eq`/`Order`/...: `toValDefs.use` sits inside the per-call lambda, so every call does 5× `new
   LazyRef` plus a synchronized re-summon. `HashMacrosImpl` already places it correctly.
-  **Fixed in `perf-cats-instance-scope`:** Show, ShowPretty, Eq, PartialOrder, Order, Semigroup (and Band,
+  **Fixed in PR #320:** Show, ShowPretty, Eq, PartialOrder, Order, Semigroup (and Band,
   Semilattice, CommutativeSemigroup), Monoid (and CommutativeMonoid, BoundedSemilattice), Group (and
   CommutativeGroup) derive each method body once into an instance-scope `def` (`InstanceScopeSupport`), and Monoid and
   Group derive `combine` into the shared cache. Per call: Show SimpleCC 296 → 224 B, Eq/Order SimpleCC 72/24 → 0 B,
