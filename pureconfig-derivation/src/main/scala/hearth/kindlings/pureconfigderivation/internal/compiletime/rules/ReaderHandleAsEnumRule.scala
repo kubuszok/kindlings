@@ -7,7 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.pureconfigderivation.KindlingsCoproductHint
+import hearth.kindlings.pureconfigderivation.{KindlingsCoproductHint, KindlingsProductHint}
+import hearth.kindlings.pureconfigderivation.annotations.configKey
 import hearth.kindlings.pureconfigderivation.internal.runtime.{EnumerationFailures, PureConfigDerivationUtils}
 import pureconfig.{ConfigCursor, ConfigReader}
 import pureconfig.error.ConfigReaderFailures
@@ -93,6 +94,13 @@ trait ReaderHandleAsEnumRuleImpl {
           SingletonValue.unapply(child.Underlying).isDefined
         }
 
+      // The discriminator field, when it is a compile-time constant (no per-type hint, evaluable global config).
+      val staticDiscriminator: Option[String] =
+        (maybeFirstSuccessHint, maybeFieldHint, maybeWrappedHint) match {
+          case (None, None, None) => rctx.evaluatedConfig.flatMap(_.discriminator)
+          case _                  => None
+        }
+
       NonEmptyList.fromList(childrenList) match {
         case None =>
           MIO.pure(Expr.quote {
@@ -113,7 +121,8 @@ trait ReaderHandleAsEnumRuleImpl {
                 deriveChildReader[A, ChildType](
                   childName,
                   transformConstructorNamesExpr,
-                  preComputedConstructorTransform
+                  preComputedConstructorTransform,
+                  staticDiscriminator
                 )
               }
             }
@@ -129,12 +138,18 @@ trait ReaderHandleAsEnumRuleImpl {
 
     /** How to read one subtype: `read` reads it from the cursor of the subtype's value, `readFromObject` too, but (like
       * upstream's derived reader of a case object) requires that cursor to be an object.
+      *
+      * `needsDiscriminatorRemoved`: with a discriminator field, upstream reads the subtype from the object without the
+      * discriminator key (`withoutKey`, which copies the object). It is `false` only when reading from the object with
+      * the key is provably the same: the subtype ignores the cursor (a case object), or its reader is derived here as a
+      * case class that statically allows unknown keys and has no field whose key is the discriminator.
       */
     final private case class ChildReader[A](
         childName: String,
         transformedName: Expr[String],
         read: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]],
-        readFromObject: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]]
+        readFromObject: Expr[ConfigCursor] => Expr[Either[ConfigReaderFailures, A]],
+        needsDiscriminatorRemoved: Boolean = true
     )
 
     /** The discriminator field: the per-type hint's (`Field` = its field name, `Wrapped` = none), otherwise the global
@@ -191,13 +206,16 @@ trait ReaderHandleAsEnumRuleImpl {
       // `if (typeName == "child-name") <read child> else ... else <unknown>`
       def dispatch(
           typeNameExpr: Expr[String],
-          innerCursorExpr: Expr[ConfigCursor],
+          // the inner cursor, given whether the subtype needs the discriminator removed (a Boolean rather than the
+          // ChildReader: lambdas passed into splices must not mention macro-internal types on Scala 2)
+          innerCursorFor: Boolean => Expr[ConfigCursor],
           unknownExpr: Expr[Either[ConfigReaderFailures, A]]
       ): Expr[Either[ConfigReaderFailures, A]] =
         childReaders.foldRight(unknownExpr) { (child, elseExpr) =>
+          val innerCursor = innerCursorFor(child.needsDiscriminatorRemoved)
           Expr.quote {
             if (Expr.splice(child.transformedName) == Expr.splice(typeNameExpr))
-              Expr.splice(child.read(innerCursorExpr))
+              Expr.splice(child.read(innerCursor))
             else Expr.splice(elseExpr)
           }
         }
@@ -212,7 +230,7 @@ trait ReaderHandleAsEnumRuleImpl {
               Expr.splice(
                 dispatch(
                   Expr.quote(str),
-                  Expr.quote(cur),
+                  _ => Expr.quote(cur),
                   Expr.quote {
                     Left(
                       EnumerationFailures.invalidEnumValue(cur, str, Expr.splice(Expr(typeNameStr)))
@@ -230,7 +248,7 @@ trait ReaderHandleAsEnumRuleImpl {
                 Expr.splice(
                   dispatch(
                     Expr.quote(typeName),
-                    Expr.quote(innerCur),
+                    _ => Expr.quote(innerCur),
                     Expr.quote {
                       Left(
                         PureConfigDerivationUtils.failedToMatchSubtype(
@@ -255,7 +273,10 @@ trait ReaderHandleAsEnumRuleImpl {
                   Expr.splice(
                     dispatch(
                       Expr.quote(typeName),
-                      Expr.quote(obj.withoutKey(field): ConfigCursor),
+                      // `withoutKey` copies the object, so it is done only for subtypes whose reading can depend on it
+                      (needsRemoval: Boolean) =>
+                        if (needsRemoval) Expr.quote(obj.withoutKey(field): ConfigCursor)
+                        else Expr.quote(obj: ConfigCursor),
                       Expr.quote {
                         Left(PureConfigDerivationUtils.unexpectedDiscriminatorValue(discrCur)): Either[
                           ConfigReaderFailures,
@@ -336,7 +357,8 @@ trait ReaderHandleAsEnumRuleImpl {
     private def deriveChildReader[A: ReaderCtx, ChildType: Type](
         childName: String,
         transformConstructorNamesExpr: Expr[String => String],
-        preComputedConstructorTransform: Option[String => String]
+        preComputedConstructorTransform: Option[String => String],
+        staticDiscriminator: Option[String]
     ): MIO[ChildReader[A]] = {
       implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
       implicit val FailuresT: Type[ConfigReaderFailures] = RTypes.ConfigReaderFailures
@@ -386,17 +408,20 @@ trait ReaderHandleAsEnumRuleImpl {
                           Expr.splice(innerCurExpr),
                           Expr.splice(singleton).asInstanceOf[A]
                         )
-                      }
+                      },
+                    needsDiscriminatorRemoved = false // `read` ignores the cursor
                   )
                 )
             case None =>
               deriveReaderRecursively[ChildType](using rctx.nest[ChildType](rctx.cursor)).flatMap { _ =>
                 rctx.getHelper[ChildType].flatMap {
                   case Some(helper) =>
-                    MIO.pure(same { (innerCurExpr: Expr[ConfigCursor]) =>
-                      val helperCallExpr = helper(innerCurExpr, rctx.config)
-                      Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigReaderFailures, A]])
-                    })
+                    MIO.pure(
+                      same { (innerCurExpr: Expr[ConfigCursor]) =>
+                        val helperCallExpr = helper(innerCurExpr, rctx.config)
+                        Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigReaderFailures, A]])
+                      }.copy(needsDiscriminatorRemoved = !discriminatorKeyIsIgnored[ChildType](staticDiscriminator))
+                    )
                   case None =>
                     val err = ReaderDerivationError.CannotConstructType(
                       Type[ChildType].prettyPrint,
@@ -408,6 +433,27 @@ trait ReaderHandleAsEnumRuleImpl {
               }
           }
       }
+    }
+
+    /** Whether the reader derived for the case class `ChildType` reads the same from an object with or without the
+      * discriminator key: it statically allows unknown keys (global config evaluable at compile time, no per-type
+      * `KindlingsProductHint`) and no field's key is the (statically known) discriminator. Anything else - a non-case
+      * class, a hint, a runtime config or discriminator - conservatively answers `false`.
+      */
+    private def discriminatorKeyIsIgnored[ChildType: Type](staticDiscriminator: Option[String])(implicit
+        ctx: ReaderCtx[?]
+    ): Boolean = {
+      implicit val configKeyT: Type[configKey] = RTypes.ConfigKey
+      implicit val ProductHintT: Type[KindlingsProductHint[ChildType]] = RTypes.kindlingsProductHintType[ChildType]
+      (for {
+        discriminator <- staticDiscriminator
+        config <- ctx.evaluatedConfig
+        if config.allowUnknownKeys
+        if Expr.summonImplicit[KindlingsProductHint[ChildType]].toOption.isEmpty
+        caseClass <- CaseClass.parse[ChildType].toEither.toOption
+      } yield caseClass.primaryConstructor.totalParameters.flatten.forall { case (name, param) =>
+        getAnnotationStringArg[configKey](param).getOrElse(config.transformMemberNames(name)) != discriminator
+      }).getOrElse(false)
     }
   }
 }
