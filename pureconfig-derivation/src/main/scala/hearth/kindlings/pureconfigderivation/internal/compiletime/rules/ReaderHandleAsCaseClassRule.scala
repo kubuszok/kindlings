@@ -10,7 +10,7 @@ import hearth.std.*
 import hearth.kindlings.pureconfigderivation.KindlingsProductHint
 import hearth.kindlings.pureconfigderivation.annotations.{configKey, transientField}
 import hearth.kindlings.pureconfigderivation.internal.runtime.PureConfigDerivationUtils
-import pureconfig.{ConfigCursor, ConfigReader}
+import pureconfig.{ConfigCursor, ConfigObjectCursor, ConfigReader}
 import pureconfig.error.ConfigReaderFailures
 
 trait ReaderHandleAsCaseClassRuleImpl {
@@ -36,6 +36,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
       implicit val StringT: Type[String] = RTypes.String
       implicit val SetStringT: Type[Set[String]] = RTypes.SetString
       implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
+      implicit val ConfigObjectCursorT: Type[ConfigObjectCursor] = RTypes.ConfigObjectCursor
       implicit val FailuresT: Type[ConfigReaderFailures] = RTypes.ConfigReaderFailures
       implicit val BooleanT: Type[Boolean] = RTypes.Boolean
       implicit val FuncT: Type[String => String] = RTypes.StringToString
@@ -198,86 +199,71 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   }
                   val useDefaultsIsStaticallyTrue = staticUseDefaults.contains(true)
 
-                  val decodeExpr: Expr[Either[ConfigReaderFailures, Any]] = effectiveDefault match {
-                    case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
-                      // useDefaults is statically true: no runtime boolean check needed
-                      if (isOptionField)
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              val keyCur = obj.atKeyOrUndefined(Expr.splice(keyExpr))
-                              if (keyCur.isUndefined)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
-                              else
-                                Expr.splice(readerExpr).from(keyCur)
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                  // Reads the field from the object cursor, which the reader obtains once for all the fields (a
+                  // per-field `cursor.asObjectCursor.flatMap(...)` allocated a cursor, a `Right` and a lambda for
+                  // every field of every read).
+                  val decodeFrom: Expr[ConfigObjectCursor] => Expr[Either[ConfigReaderFailures, Any]] =
+                    effectiveDefault match {
+                      case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
+                        // useDefaults is statically true: no runtime boolean check needed
+                        if (isOptionField) { objExpr =>
+                          Expr.quote {
+                            val keyCur = Expr.splice(objExpr).atKeyOrUndefined(Expr.splice(keyExpr))
+                            (if (keyCur.isUndefined)
+                               Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                             else
+                               Expr.splice(readerExpr).from(keyCur)).asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
+                        } else { objExpr =>
+                          Expr.quote {
+                            val obj = Expr.splice(objExpr)
+                            val key = Expr.splice(keyExpr)
+                            val keyCur = obj.atKeyOrUndefined(key)
+                            (if (keyCur.isUndefined)
+                               Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                             else
+                               obj.atKey(key).flatMap(c => Expr.splice(readerExpr).from(c)))
+                              .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
                         }
-                      else
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              val keyCur = obj.atKeyOrUndefined(key)
-                              if (keyCur.isUndefined)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
-                              else
-                                obj.atKey(key).flatMap(c => Expr.splice(readerExpr).from(c))
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                      case Some(defaultAnyExpr) =>
+                        // useDefaults is unknown at compile time: keep runtime check
+                        if (isOptionField) { objExpr =>
+                          Expr.quote {
+                            val keyCur = Expr.splice(objExpr).atKeyOrUndefined(Expr.splice(keyExpr))
+                            (if (Expr.splice(useDefaultsExpr) && keyCur.isUndefined)
+                               Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                             else
+                               Expr.splice(readerExpr).from(keyCur)).asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
+                        } else { objExpr =>
+                          Expr.quote {
+                            val obj = Expr.splice(objExpr)
+                            val key = Expr.splice(keyExpr)
+                            val keyCur = obj.atKeyOrUndefined(key)
+                            (if (Expr.splice(useDefaultsExpr) && keyCur.isUndefined)
+                               Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
+                             else
+                               obj.atKey(key).flatMap(c => Expr.splice(readerExpr).from(c)))
+                              .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
                         }
-                    case Some(defaultAnyExpr) =>
-                      // useDefaults is unknown at compile time: keep runtime check
-                      if (isOptionField)
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              val keyCur = obj.atKeyOrUndefined(Expr.splice(keyExpr))
-                              if (Expr.splice(useDefaultsExpr) && keyCur.isUndefined)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
-                              else
-                                Expr.splice(readerExpr).from(keyCur)
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                      case None =>
+                        if (isOptionField) { objExpr =>
+                          Expr.quote {
+                            Expr
+                              .splice(readerExpr)
+                              .from(Expr.splice(objExpr).atKeyOrUndefined(Expr.splice(keyExpr)))
+                              .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
+                        } else { objExpr =>
+                          Expr.quote {
+                            PureConfigDerivationUtils
+                              .readField(Expr.splice(objExpr), Expr.splice(keyExpr), Expr.splice(readerExpr))
+                              .asInstanceOf[Either[ConfigReaderFailures, Any]]
+                          }
                         }
-                      else
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              val key = Expr.splice(keyExpr)
-                              val keyCur = obj.atKeyOrUndefined(key)
-                              if (Expr.splice(useDefaultsExpr) && keyCur.isUndefined)
-                                Right(Expr.splice(defaultAnyExpr)): Either[ConfigReaderFailures, Any]
-                              else
-                                obj.atKey(key).flatMap(c => Expr.splice(readerExpr).from(c))
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
-                        }
-                    case None =>
-                      if (isOptionField)
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              Expr.splice(readerExpr).from(obj.atKeyOrUndefined(Expr.splice(keyExpr)))
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
-                        }
-                      else
-                        Expr.quote {
-                          val cur = Expr.splice(rctx.cursor)
-                          cur.asObjectCursor
-                            .flatMap { obj =>
-                              PureConfigDerivationUtils
-                                .readField(obj, Expr.splice(keyExpr), Expr.splice(readerExpr))
-                            }
-                            .asInstanceOf[Either[ConfigReaderFailures, Any]]
-                        }
-                  }
+                    }
                   // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
                   // intermediate `Array[Any]`.
                   val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
@@ -286,12 +272,12 @@ trait ReaderHandleAsCaseClassRuleImpl {
                     }
                     (fName, typedExpr.as_??)
                   }
-                  (decodeExpr, makeFieldArg, keyExpr)
+                  (decodeFrom, makeFieldArg, keyExpr)
                 }
               }
             }
             .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
+              val decodeFroms = fieldData.toList.map(_._1)
               val makeFieldArgs = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
 
@@ -360,12 +346,14 @@ trait ReaderHandleAsCaseClassRuleImpl {
                     }
               }
 
-              val body = bindAll(decodeExprs, Nil)
               MIO.pure(Expr.quote {
-                // A value that is not an object fails once (as upstream), not once per field.
+                // A value that is not an object fails once (as upstream), not once per field; every field is read from
+                // the same object cursor.
                 Expr.splice(rctx.cursor).asObjectCursor match {
                   case Left(failures) => Left(failures): Either[ConfigReaderFailures, A]
-                  case Right(_)       => Expr.splice(body)
+                  // (a distinct name: the field reads bind their own `obj`, and Scala 2 quotes are not hygienic)
+                  case Right(objectCursor) =>
+                    Expr.splice(bindAll(decodeFroms.map(_(Expr.quote(objectCursor))), Nil))
                 }
               })
             }
