@@ -170,13 +170,10 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   // global SConfig). When the config was evaluable at compile time, we
                   // pre-compute the mapped name as a constant string — eliminating the
                   // expensive runtime regex in CapitalizedWordsNamingConvention.toTokens.
-                  val keyExpr: Expr[String] = nameOverride match {
-                    case Some(customName) => Expr(customName)
-                    case None             =>
-                      preComputedTransform match {
-                        case Some(transform) => Expr(transform(fName))
-                        case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
-                      }
+                  val constantKey: Option[String] = nameOverride.orElse(preComputedTransform.map(_(fName)))
+                  val keyExpr: Expr[String] = constantKey match {
+                    case Some(key) => Expr(key)
+                    case None      => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
                   }
                   // When we statically know useDefaults is false, defaults are never used even
                   // if the field has one — skip the useDefaults branch entirely. When statically
@@ -242,7 +239,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   val makeAccessor: Expr[Any] => (String, Expr_??) = { valExpr =>
                     (fName, castTo[Field](valExpr).as_??)
                   }
-                  (decodeExpr, makeAccessor, keyExpr)
+                  (decodeExpr, makeAccessor, keyExpr, constantKey)
                 }
               }
             }
@@ -250,15 +247,25 @@ trait ReaderHandleAsCaseClassRuleImpl {
               val decodeExprs = fieldData.toList.map(_._1)
               val makeAccessors = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
+              val constantKeys = fieldData.toList.map(_._4)
 
               // The keys of every field: what upstream's `ProductHint.bottom` treats as used when it reports unknown
-              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed.
-              val expectedKeysExpr: Expr[Set[String]] =
-                if (staticAllowUnknownKeys.contains(true)) Expr.quote(Set.empty[String])
-                else
-                  keyExprs.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
-                    Expr.quote(Expr.splice(acc) + Expr.splice(k))
-                  }
+              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed. When every key
+              // is known at compile time the set is a lazy val of the instance, built once instead of on every read.
+              def keySet(keys: List[Expr[String]]): Expr[Set[String]] =
+                keys.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
+                  Expr.quote(Expr.splice(acc) + Expr.splice(k))
+                }
+              val expectedKeysMIO: MIO[Expr[Set[String]]] =
+                if (staticAllowUnknownKeys.contains(true)) MIO.pure(Expr.quote(Set.empty[String]))
+                else if (constantKeys.forall(_.isDefined)) {
+                  val cacheKey = s"cached-expected-keys:${Type[A].plainPrint}"
+                  rctx.cache.buildCachedWith(
+                    cacheKey,
+                    ValDefBuilder.ofLazy[Set[String]](s"expectedKeys_${Type[A].shortName}")
+                  )(_ => keySet(keyExprs)) >>
+                    rctx.cache.get0Ary[Set[String]](cacheKey).map(_.get)
+                } else MIO.pure(keySet(keyExprs))
 
               def constructFrom(boundValues: List[Expr[Any]]): MIO[Expr[A]] = {
                 val nonTransientFieldMap: Map[String, Expr_??] =
@@ -283,39 +290,41 @@ trait ReaderHandleAsCaseClassRuleImpl {
               // field is read and all failures are reported, followed by the unknown keys of a strict case class
               // (`ProductHint.bottom`). Each field is read by its own local def and its failure merged as it is read;
               // the value is constructed when there is none (see FlatFieldsConstruct).
-              MIO.scoped { runSafe =>
-                def readAll(objExpr: Expr[ConfigObject]): Expr[Either[ConfigDecodingError, A]] =
-                  constructAccumulating[Either[ConfigDecodingError, Any], ConfigDecodingError, A, Either[
-                    ConfigDecodingError,
-                    A
-                  ]](decodeExprs.map(_(objExpr)))(
-                    mergeErrors = (failure, r) =>
-                      Expr.quote(SConfigDerivationUtils.mergeFailure(Expr.splice(failure), Expr.splice(r))),
-                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigDecodingError, Any]].value),
-                    construct = values => runSafe(constructFrom(values)),
-                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigDecodingError, A]),
-                    onFailure = failure => Expr.quote(Left(Expr.splice(failure)): Either[ConfigDecodingError, A])
-                  )
-                if (staticAllowUnknownKeys.contains(true))
-                  Expr.quote {
-                    SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
-                      case Left(e)             => Left(e): Either[ConfigDecodingError, A]
-                      case Right(objectFields) => Expr.splice(readAll(Expr.quote(objectFields)))
+              expectedKeysMIO.flatMap { expectedKeysExpr =>
+                MIO.scoped { runSafe =>
+                  def readAll(objExpr: Expr[ConfigObject]): Expr[Either[ConfigDecodingError, A]] =
+                    constructAccumulating[Either[ConfigDecodingError, Any], ConfigDecodingError, A, Either[
+                      ConfigDecodingError,
+                      A
+                    ]](decodeExprs.map(_(objExpr)))(
+                      mergeErrors = (failure, r) =>
+                        Expr.quote(SConfigDerivationUtils.mergeFailure(Expr.splice(failure), Expr.splice(r))),
+                      valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigDecodingError, Any]].value),
+                      construct = values => runSafe(constructFrom(values)),
+                      onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigDecodingError, A]),
+                      onFailure = failure => Expr.quote(Left(Expr.splice(failure)): Either[ConfigDecodingError, A])
+                    )
+                  if (staticAllowUnknownKeys.contains(true))
+                    Expr.quote {
+                      SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+                        case Left(e)             => Left(e): Either[ConfigDecodingError, A]
+                        case Right(objectFields) => Expr.splice(readAll(Expr.quote(objectFields)))
+                      }
                     }
-                  }
-                else
-                  Expr.quote {
-                    SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
-                      case Left(e)             => Left(e): Either[ConfigDecodingError, A]
-                      case Right(objectFields) =>
-                        val coreResult: Either[ConfigDecodingError, A] =
-                          Expr.splice(readAll(Expr.quote(objectFields)))
-                        if (Expr.splice(allowUnknownKeysExpr)) coreResult
-                        else
-                          SConfigDerivationUtils
-                            .withUnknownKeys[A](objectFields, coreResult, Expr.splice(expectedKeysExpr))
+                  else
+                    Expr.quote {
+                      SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+                        case Left(e)             => Left(e): Either[ConfigDecodingError, A]
+                        case Right(objectFields) =>
+                          val coreResult: Either[ConfigDecodingError, A] =
+                            Expr.splice(readAll(Expr.quote(objectFields)))
+                          if (Expr.splice(allowUnknownKeysExpr)) coreResult
+                          else
+                            SConfigDerivationUtils
+                              .withUnknownKeys[A](objectFields, coreResult, Expr.splice(expectedKeysExpr))
+                      }
                     }
-                  }
+                }
               }
             }
       }
@@ -335,7 +344,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
         .summonExprIgnoring(ReaderUseImplicitWhenAvailableRule.ignoredImplicits*)
         .toEither match {
         case Right(readerExpr) =>
-          Log.info(s"Found implicit ConfigReader[${Type[Field].prettyPrint}]") >> MIO.pure(readerExpr)
+          Log.info(s"Found implicit ConfigReader[${Type[Field].prettyPrint}]") >> ctx.cachedInstance[Field](readerExpr)
         case Left(_) =>
           Log.info(s"Building ConfigReader[${Type[Field].prettyPrint}] via recursive derivation") >>
             LambdaBuilder

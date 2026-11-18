@@ -37,10 +37,12 @@ trait WriterUseImplicitWhenAvailableRuleImpl {
     private def cacheAndUse[A: WriterCtx](
         instanceExpr: Expr[ConfigWriter[A]]
     ): MIO[Rule.Applicability[Expr[ConfigValue]]] =
-      Log.info(s"Found implicit writer ${instanceExpr.prettyPrint}, using directly") >>
-        MIO.pure(Rule.matched(Expr.quote {
-          Expr.splice(instanceExpr).to(Expr.splice(wctx.value))
-        }))
+      Log.info(s"Found implicit writer ${instanceExpr.prettyPrint}, caching it in the instance") >>
+        wctx.cachedInstance[A](instanceExpr).map { cached =>
+          Rule.matched(Expr.quote {
+            Expr.splice(cached).to(Expr.splice(wctx.value))
+          })
+        }
 
     private def yieldUnsupported[A: WriterCtx](
         reason: String

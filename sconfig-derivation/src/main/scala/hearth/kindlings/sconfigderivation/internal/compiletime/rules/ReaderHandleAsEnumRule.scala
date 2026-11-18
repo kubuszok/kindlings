@@ -52,25 +52,31 @@ trait ReaderHandleAsEnumRuleImpl {
       val maybeFirstSuccessHint: Option[Expr[CoproductHint.FirstSuccess[A]]] =
         Expr.summonImplicit[CoproductHint.FirstSuccess[A]].toOption
 
-      val transformConstructorNamesExpr: Expr[String => String] = maybeFirstSuccessHint match {
-        case Some(_) => Expr.quote((name: String) => name) // names are not read with FirstSuccess
+      // How the subtypes' names are transformed: by a per-type hint, or by the global config (`None` when it is known
+      // at compile time: the names are then constants).
+      val runtimeTransform: Option[Expr[String => String]] = maybeFieldHint match {
+        case Some(h) => Some(Expr.quote(Expr.splice(h).transformConstructorNames))
         case None    =>
-          maybeFieldHint match {
-            case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
+          maybeWrappedHint match {
+            case Some(h) => Some(Expr.quote(Expr.splice(h).transformConstructorNames))
             case None    =>
-              maybeWrappedHint match {
-                case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
-                case None    => Expr.quote(Expr.splice(rctx.config).transformConstructorNames)
-              }
+              if (rctx.evaluatedConfig.isDefined) None
+              else Some(Expr.quote(Expr.splice(rctx.instanceConfig).transformConstructorNames))
           }
       }
 
-      val discrFieldExpr: Expr[Option[String]] = maybeFieldHint match {
-        case Some(h) => Expr.quote((Some(Expr.splice(h).fieldName): Option[String]))
+      // Whether the subtype is named by a discriminator field or by a wrapper key, decided at compile time unless the
+      // global config is only known at runtime.
+      val discriminatorMode: SumMode = maybeFieldHint match {
+        case Some(h) => SumMode.Discriminator(Expr.quote(Expr.splice(h).fieldName))
         case None    =>
           maybeWrappedHint match {
-            case Some(_) => Expr.quote(None: Option[String])
-            case None    => Expr.quote(Expr.splice(rctx.config).discriminator)
+            case Some(_) => SumMode.Wrapped
+            case None    =>
+              rctx.evaluatedConfig match {
+                case Some(c) => c.discriminator.fold[SumMode](SumMode.Wrapped)(f => SumMode.Discriminator(Expr(f)))
+                case None    => SumMode.Runtime(Expr.quote(Expr.splice(rctx.config).discriminator))
+              }
           }
       }
 
@@ -99,19 +105,68 @@ trait ReaderHandleAsEnumRuleImpl {
           })
 
         case Some(children) =>
-          children
-            .parTraverse { case (childName, child) =>
-              import child.Underlying as ChildType
-              Log.namedScope(s"Deriving reader for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                deriveChildReader[A, ChildType](childName, transformConstructorNamesExpr, staticDiscriminator)
+          val childNames = childrenList.map(_._1)
+          // (names are not read with FirstSuccess)
+          val namesMIO: MIO[String => Expr[String]] =
+            if (maybeFirstSuccessHint.isDefined) MIO.pure((name: String) => Expr(name))
+            else subtypeNames[A](childNames, runtimeTransform)
+          namesMIO.flatMap { nameOf =>
+            children
+              .parTraverse { case (childName, child) =>
+                import child.Underlying as ChildType
+                Log.namedScope(s"Deriving reader for enum case $childName: ${Type[ChildType].prettyPrint}") {
+                  deriveChildReader[A, ChildType](childName, nameOf(childName), staticDiscriminator)
+                }
               }
-            }
-            .map { childReaders =>
-              maybeFirstSuccessHint match {
-                case Some(_) => firstSuccess[A](childReaders.toList)
-                case None    => byName[A](childReaders.toList, allCaseObjects, discrFieldExpr)
+              .map { childReaders =>
+                maybeFirstSuccessHint match {
+                  case Some(_) => firstSuccess[A](childReaders.toList)
+                  case None    => byName[A](childReaders.toList, allCaseObjects, discriminatorMode)
+                }
               }
-            }
+          }
+      }
+    }
+
+    /** How a sum names its subtypes: in a discriminator field, by a wrapper key, or as the config says at runtime. */
+    sealed private trait SumMode
+    private object SumMode {
+      final case class Discriminator(field: Expr[String]) extends SumMode
+      case object Wrapped extends SumMode
+      final case class Runtime(discriminator: Expr[Option[String]]) extends SumMode
+    }
+
+    /** The (transformed) names of the subtypes: constants when the transform is known at compile time, otherwise an
+      * array computed once per instance (a `lazy val`), not on every read.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def subtypeNames[A: ReaderCtx](
+        childNames: List[String],
+        runtimeTransform: Option[Expr[String => String]]
+    ): MIO[String => Expr[String]] = {
+      implicit val StringT: Type[String] = RTypes.String
+      implicit val ArrayStringT: Type[Array[String]] = RTypes.ArrayString
+      implicit val IntT: Type[Int] = RTypes.Int
+      implicit val ListStringT: Type[List[String]] = RTypes.ListString
+      implicit val FuncT: Type[String => String] = RTypes.StringToString
+      runtimeTransform match {
+        case None =>
+          val config = rctx.evaluatedConfig.get
+          MIO.pure((name: String) => Expr(config.transformConstructorNames(name)))
+        case Some(transform) =>
+          val cacheKey = s"cached-subtype-names:${Type[A].plainPrint}"
+          val names: Expr[Array[String]] = Expr.quote {
+            val transformName = Expr.splice(transform)
+            Expr.splice(Expr(childNames)).map(transformName).toArray
+          }
+          for {
+            state <- rctx.cache.get
+            builder = ValDefBuilder.ofLazy[Array[String]](s"subtypeNames_${Type[A].shortName}")
+            _ <-
+              if (builder.isBuilt(state, cacheKey)) MIO.pure(())
+              else rctx.cache.buildCachedWith(cacheKey, builder)(_ => names)
+            cached <- rctx.cache.get0Ary[Array[String]](cacheKey)
+          } yield (name: String) => Expr.quote(Expr.splice(cached.get)(Expr.splice(Expr(childNames.indexOf(name)))))
       }
     }
 
@@ -141,7 +196,7 @@ trait ReaderHandleAsEnumRuleImpl {
     private def byName[A: ReaderCtx](
         childReaders: List[ChildReader[A]],
         allCaseObjects: Boolean,
-        discrFieldExpr: Expr[Option[String]]
+        mode: SumMode
     ): Expr[Either[ConfigDecodingError, A]] = {
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
       implicit val ConfigObjectT: Type[ConfigObject] = RTypes.ConfigObject
@@ -172,72 +227,94 @@ trait ReaderHandleAsEnumRuleImpl {
 
       val typeNameStr: String = Type[A].shortName
 
+      // (no function value per read: the results are matched, not `flatMap`ped)
       val withoutDiscriminator: Expr[Either[ConfigDecodingError, A]] =
         if (allCaseObjects)
           Expr.quote {
             val v = Expr.splice(rctx.value)
-            SConfigDerivationUtils.asString(v).flatMap { str =>
-              Expr.splice(
-                dispatch(
-                  Expr.quote(str),
-                  _ => Expr.quote(v),
-                  Expr.quote {
-                    Left(
-                      SConfigDerivationUtils.invalidEnumValue(str, Expr.splice(Expr(typeNameStr)))
-                    ): Either[ConfigDecodingError, A]
-                  }
+            SConfigDerivationUtils.asString(v) match {
+              case Right(str) =>
+                Expr.splice(
+                  dispatch(
+                    Expr.quote(str),
+                    _ => Expr.quote(v),
+                    Expr.quote {
+                      Left(
+                        SConfigDerivationUtils.invalidEnumValue(str, Expr.splice(Expr(typeNameStr)))
+                      ): Either[ConfigDecodingError, A]
+                    }
+                  )
                 )
-              )
+              case Left(e) => Left(e): Either[ConfigDecodingError, A]
             }
           }
         else
           Expr.quote {
-            SConfigDerivationUtils.asObject(Expr.splice(rctx.value)).flatMap { obj =>
-              SConfigDerivationUtils.readWrapped(obj).flatMap { case (typeName, inner) =>
-                // the subtype's failures are reported under its key
-                Expr
-                  .splice(
-                    dispatch(
-                      Expr.quote(typeName),
-                      _ => Expr.quote(inner),
-                      Expr.quote {
-                        Left(
-                          SConfigDerivationUtils.failedToMatchSubtype(typeName, Expr.splice(Expr(knownNames)))
-                        ): Either[ConfigDecodingError, A]
-                      }
+            SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+              case Right(obj) =>
+                SConfigDerivationUtils.readWrapped(obj) match {
+                  case Right(wrapped) =>
+                    val typeName = wrapped._1
+                    val inner = wrapped._2
+                    val result: Either[ConfigDecodingError, A] = Expr.splice(
+                      dispatch(
+                        Expr.quote(typeName),
+                        _ => Expr.quote(inner),
+                        Expr.quote {
+                          Left(
+                            SConfigDerivationUtils.failedToMatchSubtype(typeName, Expr.splice(Expr(knownNames)))
+                          ): Either[ConfigDecodingError, A]
+                        }
+                      )
                     )
-                  )
-                  .left
-                  .map(_.withParentPath(typeName))
-              }
+                    // the subtype's failures are reported under its key
+                    if (result.isLeft)
+                      Left(result.asInstanceOf[Left[ConfigDecodingError, A]].value.withParentPath(typeName))
+                    else result
+                  case Left(e) => Left(e): Either[ConfigDecodingError, A]
+                }
+              case Left(e) => Left(e): Either[ConfigDecodingError, A]
             }
           }
 
-      Expr.quote {
-        Expr.splice(discrFieldExpr) match {
-          case Some(field) =>
-            SConfigDerivationUtils.asObject(Expr.splice(rctx.value)).flatMap { obj =>
-              SConfigDerivationUtils.readDiscriminatorField(obj, field).flatMap { typeName =>
-                Expr.splice(
-                  dispatch(
-                    Expr.quote(typeName),
-                    // `withoutKey` copies the object, so it is done only for subtypes whose reading can depend on it
-                    (needsRemoval: Boolean) =>
-                      if (needsRemoval) Expr.quote(obj.withoutKey(field): ConfigValue)
-                      else Expr.quote(obj: ConfigValue),
-                    Expr.quote {
-                      Left(SConfigDerivationUtils.unexpectedDiscriminatorValue(obj, field)): Either[
-                        ConfigDecodingError,
-                        A
-                      ]
-                    }
+      def withDiscriminator(fieldExpr: Expr[String]): Expr[Either[ConfigDecodingError, A]] =
+        Expr.quote {
+          val field = Expr.splice(fieldExpr)
+          SConfigDerivationUtils.asObject(Expr.splice(rctx.value)) match {
+            case Right(obj) =>
+              SConfigDerivationUtils.readDiscriminatorField(obj, field) match {
+                case Right(typeName) =>
+                  Expr.splice(
+                    dispatch(
+                      Expr.quote(typeName),
+                      // `withoutKey` copies the object, so it is done only for subtypes whose reading can depend on it
+                      (needsRemoval: Boolean) =>
+                        if (needsRemoval) Expr.quote(obj.withoutKey(field): ConfigValue)
+                        else Expr.quote(obj: ConfigValue),
+                      Expr.quote {
+                        Left(SConfigDerivationUtils.unexpectedDiscriminatorValue(obj, field)): Either[
+                          ConfigDecodingError,
+                          A
+                        ]
+                      }
+                    )
                   )
-                )
+                case Left(e) => Left(e): Either[ConfigDecodingError, A]
               }
-            }
-          case None =>
-            Expr.splice(withoutDiscriminator)
+            case Left(e) => Left(e): Either[ConfigDecodingError, A]
+          }
         }
+
+      mode match {
+        case SumMode.Discriminator(field)        => withDiscriminator(field)
+        case SumMode.Wrapped                     => withoutDiscriminator
+        case SumMode.Runtime(discriminatorField) =>
+          Expr.quote {
+            Expr.splice(discriminatorField) match {
+              case Some(runtimeField) => Expr.splice(withDiscriminator(Expr.quote(runtimeField)))
+              case None               => Expr.splice(withoutDiscriminator)
+            }
+          }
       }
     }
 
@@ -298,7 +375,7 @@ trait ReaderHandleAsEnumRuleImpl {
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildReader[A: ReaderCtx, ChildType: Type](
         childName: String,
-        transformConstructorNamesExpr: Expr[String => String],
+        transformedNameExpr: Expr[String],
         staticDiscriminator: Option[String]
     ): MIO[ChildReader[A]] = {
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
@@ -309,9 +386,6 @@ trait ReaderHandleAsEnumRuleImpl {
       implicit val ReaderResultChild: Type[Either[ConfigDecodingError, ChildType]] = RTypes.ReaderResult[ChildType]
       implicit val ReaderChild: Type[ConfigReader[ChildType]] = RTypes.ConfigReader[ChildType]
 
-      val transformedNameExpr: Expr[String] =
-        Expr.quote(Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(childName))))
-
       def same(read: Expr[ConfigValue] => Expr[Either[ConfigDecodingError, A]]): ChildReader[A] =
         ChildReader[A](childName, transformedNameExpr, read, read)
 
@@ -321,14 +395,16 @@ trait ReaderHandleAsEnumRuleImpl {
         .toEither match {
         case Right(readerExpr) =>
           Log.info(s"Found implicit ConfigReader[$childName], using it") >>
-            MIO.pure(same { (innerValueExpr: Expr[ConfigValue]) =>
-              Expr.quote {
-                Expr
-                  .splice(readerExpr)
-                  .from(Expr.splice(innerValueExpr))
-                  .asInstanceOf[Either[ConfigDecodingError, A]]
+            rctx.cachedInstance[ChildType](readerExpr).map { cached =>
+              same { (innerValueExpr: Expr[ConfigValue]) =>
+                Expr.quote {
+                  Expr
+                    .splice(cached)
+                    .from(Expr.splice(innerValueExpr))
+                    .asInstanceOf[Either[ConfigDecodingError, A]]
+                }
               }
-            })
+            }
 
         case Left(_) =>
           Expr.singletonOf[ChildType] match {

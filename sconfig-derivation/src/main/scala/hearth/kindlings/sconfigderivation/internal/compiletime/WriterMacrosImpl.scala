@@ -43,26 +43,37 @@ trait WriterMacrosImpl
     // like SConfig.default. Pending fix in hearth 0.3.1.
     val evConfig: Option[SConfig] = configExpr.semiEval.toOption
 
-    deriveWriterFromCtxAndAdaptForEntrypoint[A, ConfigWriter[A]]("ConfigWriter.derived") { fromCtx =>
+    deriveWriterFromCtxAndAdaptForEntrypoint[A, ConfigWriter[A]](
+      "ConfigWriter.derived",
+      selfType,
+      evConfig,
+      Some(configExpr)
+    ) { callWriter =>
       ValDefs.createVal[SConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
           hearth.kindlings.sconfigderivation.internal.runtime.SconfigDerivationFactories.writerInstance[A] { (a: A) =>
             val _ = a
-            Expr.splice {
-              fromCtx(
-                WriterCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evaluatedConfig = evConfig)
-              )
-            }
+            Expr.splice(callWriter(Expr.quote(a), Expr.quote(cfg)))
           }
         }
       }
     }
   }
 
-  def deriveWriterFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (WriterCtx[A] => Expr[ConfigValue]) => Expr[Out]
+  /** Derives the writer body once, as a `def` at the instance scope (with the cached instances and helpers around the
+    * whole instance), and lets `adapt` build the instance calling it.
+    */
+  def deriveWriterFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      selfType: Option[??],
+      evConfig: Option[SConfig],
+      rootConfig: Option[Expr[SConfig]] = None
+  )(
+      adapt: ((Expr[A], Expr[SConfig]) => Expr[ConfigValue]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ConfigValueT: Type[ConfigValue] = WTypes.ConfigValue
+    implicit val SConfigT: Type[SConfig] = WTypes.SConfig
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -70,17 +81,23 @@ trait WriterMacrosImpl
       )
     Log
       .namedScope(s"Deriving writer for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: WriterCtx[A] => Expr[ConfigValue] = (ctx: WriterCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveWriterRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        val entryKey = "entry-writer"
+        val entryBuilder = ValDefBuilder.ofDef2[A, SConfig, ConfigValue](s"write_${Type[A].shortName}_instance")
+        for {
+          _ <- ensureStandardExtensionsLoaded()
+          _ <- MIO.scoped { runSafe =>
+            runSafe(cache.buildCachedWith(entryKey, entryBuilder) { case (_, (value, config)) =>
+              runSafe(
+                deriveWriterRecursively[A](using
+                  WriterCtx(Type[A], value, config, cache, selfType, evConfig, rootConfig)
+                )
+              )
+            })
+          }
+          call <- cache.get2Ary[A, SConfig, ConfigValue](entryKey)
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(call.get))
       }
       .flatTap { result =>
         Log.info(s"Derived final writer result: ${result.prettyPrint}")
@@ -127,8 +144,14 @@ trait WriterMacrosImpl
       config: Expr[SConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[SConfig] = None
+      evaluatedConfig: Option[SConfig] = None,
+      // The config expression of the entry point (`config` is a parameter of the cached defs): what per-instance
+      // `lazy val`s of the writer (computed once, not per write) can read when the config is only known at runtime.
+      rootConfig: Option[Expr[SConfig]] = None
   ) {
+
+    /** The config for per-instance values: the entry point's config expression ([[config]] when it is not known). */
+    def instanceConfig: Expr[SConfig] = rootConfig.getOrElse(config)
 
     def nest[B: Type](newValue: Expr[B]): WriterCtx[B] = copy[B](
       tpe = Type[B],
@@ -156,6 +179,13 @@ trait WriterMacrosImpl
           ValDefBuilder.ofLazy[ConfigWriter[B]](s"writer_${Type[B].shortName}")
         )(_ => instance)
     }
+
+    /** A summoned instance as a lazy val of the derived instance: resolved once, not on every write. */
+    def cachedInstance[B: Type](instance: Expr[ConfigWriter[B]]): MIO[Expr[ConfigWriter[B]]] =
+      getInstance[B].flatMap {
+        case Some(cached) => MIO.pure(cached)
+        case None         => setInstance[B](instance) >> getInstance[B].map(_.get)
+      }
 
     def getHelper[B: Type]: MIO[Option[(Expr[B], Expr[SConfig]) => Expr[ConfigValue]]] = {
       implicit val ConfigValueT: Type[ConfigValue] = WTypes.ConfigValue
@@ -264,6 +294,9 @@ trait WriterMacrosImpl
   // Types
 
   private[compiletime] object WTypes {
+    val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
+    val IntType: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
+    val ListStringType: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
 
     def ConfigWriter: Type.Ctor1[ConfigWriter] = Type.Ctor1.of[ConfigWriter]
     val WriterLogDerivation: Type[hearth.kindlings.sconfigderivation.ConfigWriter.LogDerivation] =

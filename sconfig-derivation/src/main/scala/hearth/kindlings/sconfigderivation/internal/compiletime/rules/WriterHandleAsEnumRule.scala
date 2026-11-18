@@ -25,6 +25,7 @@ trait WriterHandleAsEnumRuleImpl {
         }
       }
 
+    @scala.annotation.nowarn("msg=is never used")
     private def encodeEnumCases[A: WriterCtx](
         enumm: Enum[A]
     ): MIO[Expr[ConfigValue]] = {
@@ -46,21 +47,31 @@ trait WriterHandleAsEnumRuleImpl {
         Expr.summonImplicit[CoproductHint.FirstSuccess[A]].toOption.isDefined
       }
 
-      val transformConstructorNamesExpr: Expr[String => String] = maybeFieldHint match {
-        case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
+      // How the subtypes' names are transformed: by a per-type hint, or by the global config (`None` when it is known
+      // at compile time: the names are then constants).
+      val runtimeTransform: Option[Expr[String => String]] = maybeFieldHint match {
+        case Some(h) => Some(Expr.quote(Expr.splice(h).transformConstructorNames))
         case None    =>
           maybeWrappedHint match {
-            case Some(h) => Expr.quote(Expr.splice(h).transformConstructorNames)
-            case None    => Expr.quote(Expr.splice(wctx.config).transformConstructorNames)
+            case Some(h) => Some(Expr.quote(Expr.splice(h).transformConstructorNames))
+            case None    =>
+              if (wctx.evaluatedConfig.isDefined) None
+              else Some(Expr.quote(Expr.splice(wctx.instanceConfig).transformConstructorNames))
           }
       }
 
-      val discrFieldExpr: Expr[Option[String]] = maybeFieldHint match {
-        case Some(h) => Expr.quote((Some(Expr.splice(h).fieldName): Option[String]))
+      // A discriminator field (`Right(Some(field))`), a wrapper key / string (`Right(None)`), decided at compile time
+      // unless the global config is only known at runtime (`Left`).
+      val discriminatorMode: Either[Expr[Option[String]], Option[Expr[String]]] = maybeFieldHint match {
+        case Some(h) => Right(Some(Expr.quote(Expr.splice(h).fieldName)))
         case None    =>
           maybeWrappedHint match {
-            case Some(_) => Expr.quote(None: Option[String])
-            case None    => Expr.quote(Expr.splice(wctx.config).discriminator)
+            case Some(_) => Right(None)
+            case None    =>
+              wctx.evaluatedConfig match {
+                case Some(c) => Right(c.discriminator.map(f => Expr(f)))
+                case None    => Left(Expr.quote(Expr.splice(wctx.config).discriminator))
+              }
           }
       }
 
@@ -70,61 +81,86 @@ trait WriterHandleAsEnumRuleImpl {
         SingletonValue.unapply(child.Underlying).isDefined
       }
 
-      enumm
-        .parMatchOn[MIO, ConfigValue](wctx.value) { matched =>
-          import matched.{value as enumCaseValue, Underlying as EnumCase}
-          Log.namedScope(s"Writing enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-            val caseValueMIO: MIO[Expr[ConfigValue]] =
-              if (isEnumerationOrJavaEnum)
-                MIO.pure(Expr.quote(SConfigDerivationUtils.emptyConfigObject))
-              else deriveWriterRecursively[EnumCase](using wctx.nest(enumCaseValue))
-            caseValueMIO.map { caseValue =>
-              val caseName: String = childrenList
-                .find { case (_, child) =>
-                  import child.Underlying as ChildType
-                  Type[EnumCase] <:< Type[ChildType]
-                }
-                .map(_._1)
-                .getOrElse(Type[EnumCase].shortName)
-              if (isFirstSuccess) caseValue
-              else if (allCaseObjects) {
-                Expr.quote {
-                  val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
-                  Expr.splice(discrFieldExpr) match {
-                    case Some(discriminatorField) =>
-                      SConfigDerivationUtils.addDiscriminatorField(
-                        discriminatorField,
-                        name,
-                        Expr.splice(caseValue)
-                      )
-                    case None =>
-                      SConfigDerivationUtils.writeEnumAsString(name)
+      val namesMIO: MIO[String => Expr[String]] = runtimeTransform match {
+        case None =>
+          val config = wctx.evaluatedConfig.get
+          MIO.pure((name: String) => Expr(config.transformConstructorNames(name)))
+        case Some(transform) =>
+          // computed once per instance (a lazy val), not on every write
+          implicit val ArrayStringT: Type[Array[String]] = WTypes.ArrayString
+          implicit val IntT: Type[Int] = WTypes.IntType
+          implicit val ListStringT: Type[List[String]] = WTypes.ListStringType
+          val childNames = childrenList.map(_._1)
+          val cacheKey = s"cached-subtype-names:${Type[A].plainPrint}"
+          val names: Expr[Array[String]] = Expr.quote {
+            val transformName = Expr.splice(transform)
+            Expr.splice(Expr(childNames)).map(transformName).toArray
+          }
+          val builder = ValDefBuilder.ofLazy[Array[String]](s"subtypeNames_${Type[A].shortName}")
+          for {
+            state <- wctx.cache.get
+            _ <-
+              if (builder.isBuilt(state, cacheKey)) MIO.pure(())
+              else wctx.cache.buildCachedWith(cacheKey, builder)(_ => names)
+            cached <- wctx.cache.get0Ary[Array[String]](cacheKey)
+          } yield (name: String) =>
+            Expr.quote(Expr.splice(cached.get)(Expr.splice(Expr(math.max(childNames.indexOf(name), 0)))))
+      }
+
+      // `name`: the subtype's name; `named(name)`: its value as the mode says
+      def written(nameExpr: Expr[String], caseValue: Expr[ConfigValue]): Expr[ConfigValue] = {
+        def withField(field: Expr[String]): Expr[ConfigValue] = Expr.quote {
+          SConfigDerivationUtils.addDiscriminatorField(
+            Expr.splice(field),
+            Expr.splice(nameExpr),
+            Expr.splice(caseValue)
+          )
+        }
+        val withoutField: Expr[ConfigValue] =
+          if (allCaseObjects) Expr.quote(SConfigDerivationUtils.writeEnumAsString(Expr.splice(nameExpr)))
+          else Expr.quote(SConfigDerivationUtils.wrapWithTypeName(Expr.splice(nameExpr), Expr.splice(caseValue)))
+        discriminatorMode match {
+          case Right(Some(field)) => withField(field)
+          case Right(None)        => withoutField
+          case Left(runtime)      =>
+            Expr.quote {
+              Expr.splice(runtime) match {
+                case Some(discriminatorField) => Expr.splice(withField(Expr.quote(discriminatorField)))
+                case None                     => Expr.splice(withoutField)
+              }
+            }
+        }
+      }
+
+      namesMIO.flatMap { nameOf =>
+        enumm
+          .parMatchOn[MIO, ConfigValue](wctx.value) { matched =>
+            import matched.{value as enumCaseValue, Underlying as EnumCase}
+            Log.namedScope(s"Writing enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
+              val caseValueMIO: MIO[Expr[ConfigValue]] =
+                if (isEnumerationOrJavaEnum)
+                  MIO.pure(Expr.quote(SConfigDerivationUtils.emptyConfigObject))
+                else deriveWriterRecursively[EnumCase](using wctx.nest(enumCaseValue))
+              caseValueMIO.map { caseValue =>
+                val caseName: String = childrenList
+                  .find { case (_, child) =>
+                    import child.Underlying as ChildType
+                    Type[EnumCase] <:< Type[ChildType]
                   }
-                }
-              } else {
-                Expr.quote {
-                  val name = Expr.splice(transformConstructorNamesExpr)(Expr.splice(Expr(caseName)))
-                  Expr.splice(discrFieldExpr) match {
-                    case Some(discriminatorField) =>
-                      SConfigDerivationUtils.addDiscriminatorField(
-                        discriminatorField,
-                        name,
-                        Expr.splice(caseValue)
-                      )
-                    case None =>
-                      SConfigDerivationUtils.wrapWithTypeName(name, Expr.splice(caseValue))
-                  }
-                }
+                  .map(_._1)
+                  .getOrElse(Type[EnumCase].shortName)
+                if (isFirstSuccess) caseValue
+                else written(nameOf(caseName), caseValue)
               }
             }
           }
-        }
-        .flatMap {
-          case Some(result) => MIO.pure(result)
-          case None         =>
-            val err = WriterDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
-            Log.error(err.message) >> MIO.fail(err)
-        }
+          .flatMap {
+            case Some(result) => MIO.pure(result)
+            case None         =>
+              val err = WriterDerivationError.NoChildrenInSealedTrait(Type[A].prettyPrint)
+              Log.error(err.message) >> MIO.fail(err)
+          }
+      }
     }
   }
 }
