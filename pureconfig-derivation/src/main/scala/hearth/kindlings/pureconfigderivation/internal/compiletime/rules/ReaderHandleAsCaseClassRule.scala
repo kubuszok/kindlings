@@ -168,13 +168,10 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   // global PureConfig). When the config was evaluable at compile time, we
                   // pre-compute the mapped name as a constant string — eliminating the
                   // expensive runtime regex in CapitalizedWordsNamingConvention.toTokens.
-                  val keyExpr: Expr[String] = nameOverride match {
-                    case Some(customName) => Expr(customName)
-                    case None             =>
-                      preComputedTransform match {
-                        case Some(transform) => Expr(transform(fName))
-                        case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
-                      }
+                  val constantKey: Option[String] = nameOverride.orElse(preComputedTransform.map(_(fName)))
+                  val keyExpr: Expr[String] = constantKey match {
+                    case Some(key) => Expr(key)
+                    case None      => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
                   }
                   // Option fields must use atKeyOrUndefined so missing keys propagate as an
                   // `isUndefined` cursor that the option rule turns into `None`. For non-option
@@ -268,7 +265,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
                     (fName, castTo[Field](valExpr).as_??)
                   }
-                  (decodeFrom, makeFieldArg, keyExpr)
+                  (decodeFrom, makeFieldArg, keyExpr, constantKey)
                 }
               }
             }
@@ -276,76 +273,87 @@ trait ReaderHandleAsCaseClassRuleImpl {
               val decodeFroms = fieldData.toList.map(_._1)
               val makeFieldArgs = fieldData.toList.map(_._2)
               val keyExprs = fieldData.toList.map(_._3)
+              val constantKeys = fieldData.toList.map(_._4)
 
               // The keys of every field: what upstream's `ProductHint.bottom` treats as used when it reports unknown
-              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed.
-              val expectedKeysExpr: Expr[Set[String]] =
-                if (staticAllowUnknownKeys.contains(true)) Expr.quote(Set.empty[String])
-                else
-                  keyExprs.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
-                    Expr.quote(Expr.splice(acc) + Expr.splice(k))
+              // keys (`allowUnknownKeys = false`). Not needed when unknown keys are statically allowed. When every key
+              // is known at compile time the set is a lazy val of the instance, built once instead of on every read.
+              def keySet(keys: List[Expr[String]]): Expr[Set[String]] =
+                keys.foldRight(Expr.quote(Set.empty[String])) { (k, acc) =>
+                  Expr.quote(Expr.splice(acc) + Expr.splice(k))
+                }
+              val expectedKeysMIO: MIO[Expr[Set[String]]] =
+                if (staticAllowUnknownKeys.contains(true)) MIO.pure(Expr.quote(Set.empty[String]))
+                else if (constantKeys.forall(_.isDefined)) {
+                  val cacheKey = s"cached-expected-keys:${Type[A].plainPrint}"
+                  rctx.cache.buildCachedWith(
+                    cacheKey,
+                    ValDefBuilder.ofLazy[Set[String]](s"expectedKeys_${Type[A].shortName}")
+                  )(_ => keySet(keyExprs)) >>
+                    rctx.cache.get0Ary[Set[String]](cacheKey).map(_.get)
+                } else MIO.pure(keySet(keyExprs))
+              expectedKeysMIO.flatMap { expectedKeysExpr =>
+                def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
+                  val nonTransientFieldMap: Map[String, Expr_??] =
+                    makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
+                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                    case Left(error)          =>
+                      Environment.reportErrorAndAbort(
+                        ReaderDerivationError
+                          .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                          .message
+                      )
                   }
-
-              def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
-                val nonTransientFieldMap: Map[String, Expr_??] =
-                  makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
-                val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                  onTypes = _ => Map.empty,
-                  onValues = _ => fieldMap
-                ) match {
-                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
-                  case Left(error)          =>
-                    Environment.reportErrorAndAbort(
-                      ReaderDerivationError
-                        .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
-                        .message
-                    )
                 }
-              }
 
-              // Like upstream pureconfig (`ConfigReader.Result.zipWith` over the fields, then `ProductHint.bottom`),
-              // every field is read and all failures are reported, followed by the unknown keys of a strict case
-              // class. Each field is read by its own local def (inlined into one method, ~40 fields already exceed
-              // the size HotSpot JIT-compiles) and its failures are merged as it is read; the value is constructed
-              // when there are none (see FlatFieldsConstruct).
-              def readAll(objectCursor: Expr[ConfigObjectCursor]): Expr[Either[ConfigReaderFailures, A]] =
-                constructAccumulating[Either[ConfigReaderFailures, Any], ConfigReaderFailures, A, Either[
-                  ConfigReaderFailures,
-                  A
-                ]](decodeFroms.map(_(objectCursor)))(
-                  mergeErrors = (failures, r) =>
-                    Expr.quote(PureConfigDerivationUtils.mergeFieldFailures(Expr.splice(failures), Expr.splice(r))),
-                  valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigReaderFailures, Any]].value),
-                  construct = constructFF,
-                  onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigReaderFailures, A]),
-                  onFailure = failures => Expr.quote(Left(Expr.splice(failures)): Either[ConfigReaderFailures, A]),
-                  extraErrors =
-                    if (staticAllowUnknownKeys.contains(true)) None
-                    else
-                      Some { failures =>
-                        Expr.quote {
-                          if (Expr.splice(allowUnknownKeysExpr)) Expr.splice(failures)
-                          else
-                            PureConfigDerivationUtils.mergeUnknownKeysFailures(
-                              Expr.splice(failures),
-                              Expr.splice(rctx.cursor),
-                              Expr.splice(expectedKeysExpr)
-                            )
+                // Like upstream pureconfig (`ConfigReader.Result.zipWith` over the fields, then `ProductHint.bottom`),
+                // every field is read and all failures are reported, followed by the unknown keys of a strict case
+                // class. Each field is read by its own local def (inlined into one method, ~40 fields already exceed
+                // the size HotSpot JIT-compiles) and its failures are merged as it is read; the value is constructed
+                // when there are none (see FlatFieldsConstruct).
+                def readAll(objectCursor: Expr[ConfigObjectCursor]): Expr[Either[ConfigReaderFailures, A]] =
+                  constructAccumulating[Either[ConfigReaderFailures, Any], ConfigReaderFailures, A, Either[
+                    ConfigReaderFailures,
+                    A
+                  ]](decodeFroms.map(_(objectCursor)))(
+                    mergeErrors = (failures, r) =>
+                      Expr.quote(PureConfigDerivationUtils.mergeFieldFailures(Expr.splice(failures), Expr.splice(r))),
+                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigReaderFailures, Any]].value),
+                    construct = constructFF,
+                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigReaderFailures, A]),
+                    onFailure = failures => Expr.quote(Left(Expr.splice(failures)): Either[ConfigReaderFailures, A]),
+                    extraErrors =
+                      if (staticAllowUnknownKeys.contains(true)) None
+                      else
+                        Some { failures =>
+                          Expr.quote {
+                            if (Expr.splice(allowUnknownKeysExpr)) Expr.splice(failures)
+                            else
+                              PureConfigDerivationUtils.mergeUnknownKeysFailures(
+                                Expr.splice(failures),
+                                Expr.splice(rctx.cursor),
+                                Expr.splice(expectedKeysExpr)
+                              )
+                          }
                         }
-                      }
-                )
+                  )
 
-              MIO.pure(Expr.quote {
-                // A value that is not an object fails once (as upstream), not once per field; every field is read from
-                // the same object cursor.
-                Expr.splice(rctx.cursor).asObjectCursor match {
-                  case Left(failures) => Left(failures): Either[ConfigReaderFailures, A]
-                  // (a distinct name: the field reads bind their own `obj`, and Scala 2 quotes are not hygienic)
-                  case Right(objectCursor) =>
-                    Expr.splice(readAll(Expr.quote(objectCursor)))
-                }
-              })
+                MIO.pure(Expr.quote {
+                  // A value that is not an object fails once (as upstream), not once per field; every field is read from
+                  // the same object cursor.
+                  Expr.splice(rctx.cursor).asObjectCursor match {
+                    case Left(failures) => Left(failures): Either[ConfigReaderFailures, A]
+                    // (a distinct name: the field reads bind their own `obj`, and Scala 2 quotes are not hygienic)
+                    case Right(objectCursor) =>
+                      Expr.splice(readAll(Expr.quote(objectCursor)))
+                  }
+                })
+              }
             }
       }
     }
@@ -367,7 +375,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
         .summonExprIgnoring(ReaderUseImplicitWhenAvailableRule.ignoredImplicits*)
         .toEither match {
         case Right(readerExpr) =>
-          Log.info(s"Found implicit ConfigReader[${Type[Field].prettyPrint}]") >> MIO.pure(readerExpr)
+          Log.info(s"Found implicit ConfigReader[${Type[Field].prettyPrint}]") >> ctx.cachedInstance[Field](readerExpr)
         case Left(_) =>
           Log.info(s"Building ConfigReader[${Type[Field].prettyPrint}] via recursive derivation") >>
             LambdaBuilder

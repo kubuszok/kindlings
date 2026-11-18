@@ -50,10 +50,12 @@ trait ReaderUseImplicitWhenAvailableRuleImpl {
     private def cacheAndUse[A: ReaderCtx](
         instanceExpr: Expr[ConfigReader[A]]
     ): MIO[Rule.Applicability[Expr[Either[ConfigReaderFailures, A]]]] =
-      Log.info(s"Found implicit reader ${instanceExpr.prettyPrint}, using directly") >>
-        MIO.pure(Rule.matched(Expr.quote {
-          Expr.splice(instanceExpr).from(Expr.splice(rctx.cursor))
-        }))
+      Log.info(s"Found implicit reader ${instanceExpr.prettyPrint}, caching it in the instance") >>
+        rctx.cachedInstance[A](instanceExpr).map { cached =>
+          Rule.matched(Expr.quote {
+            Expr.splice(cached).from(Expr.splice(rctx.cursor))
+          })
+        }
 
     private def yieldUnsupported[A: ReaderCtx](
         reason: String

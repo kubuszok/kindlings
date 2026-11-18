@@ -56,18 +56,18 @@ trait ReaderMacrosImpl
     // like PureConfig.default. Pending fix in hearth 0.3.1.
     val evConfig: Option[PureConfig] = configExpr.semiEval.toOption
 
-    deriveReaderFromCtxAndAdaptForEntrypoint[A, KindlingsConfigReader[A]]("KindlingsConfigReader.derived") { fromCtx =>
+    deriveReaderFromCtxAndAdaptForEntrypoint[A, KindlingsConfigReader[A]](
+      "KindlingsConfigReader.derived",
+      selfType,
+      evConfig
+    ) { callReader =>
       ValDefs.createVal[PureConfig](configExpr).use { configVal =>
         Expr.quote {
           val cfg = Expr.splice(configVal)
           hearth.kindlings.pureconfigderivation.internal.runtime.PureconfigDerivationFactories.readerInstance[A] {
             (cur: ConfigCursor) =>
               val _ = cur
-              Expr.splice {
-                fromCtx(
-                  ReaderCtx.from(Expr.quote(cur), Expr.quote(cfg), derivedType = selfType, evaluatedConfig = evConfig)
-                )
-              }
+              Expr.splice(callReader(Expr.quote(cur), Expr.quote(cfg)))
           }
         }
       }
@@ -76,9 +76,19 @@ trait ReaderMacrosImpl
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
-  def deriveReaderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (ReaderCtx[A] => Expr[Either[ConfigReaderFailures, A]]) => Expr[Out]
+  /** Derives the reader body once, as a `def` at the instance scope (with the cached instances and helpers around the
+    * whole instance), and lets `adapt` build the instance calling it.
+    */
+  def deriveReaderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      selfType: Option[??],
+      evConfig: Option[PureConfig]
+  )(
+      adapt: ((Expr[ConfigCursor], Expr[PureConfig]) => Expr[Either[ConfigReaderFailures, A]]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ConfigCursorT: Type[ConfigCursor] = RTypes.ConfigCursor
+    implicit val PureConfigT: Type[PureConfig] = RTypes.PureConfig
+    implicit val ResultA: Type[Either[ConfigReaderFailures, A]] = RTypes.ReaderResult[A]
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -89,18 +99,23 @@ trait ReaderMacrosImpl
       .namedScope(
         s"Deriving reader for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: ReaderCtx[A] => Expr[Either[ConfigReaderFailures, A]] = (ctx: ReaderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveReaderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        val entryKey = "entry-reader"
+        val entryBuilder = ValDefBuilder.ofDef2[ConfigCursor, PureConfig, Either[ConfigReaderFailures, A]](
+          s"read_${Type[A].shortName}_instance"
+        )
+        for {
+          _ <- ensureStandardExtensionsLoaded()
+          _ <- MIO.scoped { runSafe =>
+            runSafe(cache.buildCachedWith(entryKey, entryBuilder) { case (_, (cursor, config)) =>
+              runSafe(
+                deriveReaderRecursively[A](using ReaderCtx(Type[A], cursor, config, cache, selfType, evConfig))
+              )
+            })
+          }
+          call <- cache.get2Ary[ConfigCursor, PureConfig, Either[ConfigReaderFailures, A]](entryKey)
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(call.get))
       }
       .flatTap { result =>
         Log.info(s"Derived final reader result: ${result.prettyPrint}")
@@ -177,6 +192,13 @@ trait ReaderMacrosImpl
           ValDefBuilder.ofLazy[ConfigReader[B]](s"reader_${Type[B].shortName}")
         )(_ => instance)
     }
+
+    /** A summoned instance as a lazy val of the derived instance: resolved once, not on every read. */
+    def cachedInstance[B: Type](instance: Expr[ConfigReader[B]]): MIO[Expr[ConfigReader[B]]] =
+      getInstance[B].flatMap {
+        case Some(cached) => MIO.pure(cached)
+        case None         => setInstance[B](instance) >> getInstance[B].map(_.get)
+      }
 
     def getHelper[B: Type]
         : MIO[Option[(Expr[ConfigCursor], Expr[PureConfig]) => Expr[Either[ConfigReaderFailures, B]]]] = {
