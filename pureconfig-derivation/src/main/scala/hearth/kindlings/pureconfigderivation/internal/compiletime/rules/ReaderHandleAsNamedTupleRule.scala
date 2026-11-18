@@ -157,7 +157,7 @@ trait ReaderHandleAsNamedTupleRuleImpl {
         .ConfigReader[Field]
         .summonExprIgnoring(ReaderUseImplicitWhenAvailableRule.ignoredImplicits*)
         .toEither match {
-        case Right(readerExpr) => MIO.pure(readerExpr)
+        case Right(readerExpr) => ctx.cachedInstance[Field](readerExpr)
         case Left(_)           =>
           LambdaBuilder
             .of1[ConfigCursor]("fieldCursor")
