@@ -4,7 +4,7 @@
 
 **Kindlings** provides type classes (re)implemented with [Hearth](https://github.com/kubuszok/hearth/) to kick-off the ecosystem — cross-compiled (Scala 2.13 + 3) type class derivation using Hearth's macro-agnostic APIs.
 
-- **Scala Versions**: 2.13.18, 3.8.3 | **Platforms**: JVM, Scala.js, Scala Native | **Build Tool**: SBT
+- **Scala Versions**: 2.13.18, 3.8.4 | **Platforms**: JVM, Scala.js, Scala Native | **Build Tool**: SBT
 
 ## MCP — Always verify APIs via MCP before using them
 
@@ -141,8 +141,9 @@ The most load-bearing entries to keep in mind for any macro work:
   `for`-comprehensions short-circuit on the first failure, hiding errors from
   later-derived method bodies. `parTuple` (on `MIO`) runs both derivations and
   aggregates errors. The exception is when two derivations share `MLocal` state via the
-  rule chain — parallel branches fork `MLocal`, so a branch that reads state populated
-  by another branch will silently see a stale fork. See
+  rule chain — parallel branches fork an `MLocal(initial)(fork)(join)`, so a branch that reads state populated
+  by another branch will silently see a stale fork. (`ValDefsCache.mlocal` is not forked: it is
+  `MLocal.unsafeSharedParallel`, so the second branch sees the defs cached by the first.) See
   `def-caching-skill.md` § "Deriving multiple method bodies in PARALLEL via parTuple".
 - **User-provided implicits must override built-in derivation rules.** Order rules so
   that `*UseImplicitWhenAvailableRule` runs before any built-in / value-type / collection
@@ -290,7 +291,7 @@ Derives type classes from cats/alleycats for case classes and sealed traits:
 Key reference files:
 - `SemigroupMacrosImpl.scala` — monomorphic derivation (summon field instances, combine pairwise)
 - `FunctorMacrosImpl.scala` — polymorphic derivation (erased approach, two-probe field classification)
-- `ConsKMacrosImpl.scala` — polymorphic with nested field handling (bridge method for type constructor summoning, runtime helper, carry-and-absorb algorithm)
+- `ConsKMacrosImpl.scala` — polymorphic with nested field handling (`Type.decompose1` + `Type.CtorK1#apply` to summon for a field's type constructor, runtime helper, carry-and-absorb algorithm)
 - `ContravariantMacrosImpl.scala` — Function1 field classification using `Type.Ctor2.of[Function1]`
 - `ApplicativeMacrosImpl.scala` — composed derivation (pure + map + ap body builders)
 - `NonEmptyAlternativeMacrosImpl.scala` — multi-trait composition (Applicative + SemigroupK patterns)

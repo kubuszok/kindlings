@@ -90,7 +90,9 @@ Scala 3-only tests go in `src/test/scala-3/`.
 5. **Cache definitions** using `ValDefsCache` to avoid duplication
 6. **Derive recursively** using `ctx.nest(...)` for nested types
 7. **Ignore the derivation macro** when summoning implicits
-8. **For decoder-style derivation**, use `primaryConstructor(fieldMap)` with `Expr_??`
+8. **For decoder-style derivation**, build the value with `caseClass.construct[MIO](...)` (or `parConstruct` to
+   aggregate field errors), producing one `Expr_??` per constructor parameter; `caseClass.primaryConstructor` is the
+   constructor `Method` (inspect `totalParameters`)
 9. **Avoid path-dependent types in `Expr.quote`** -- use `LambdaBuilder` or runtime type witnesses
 10. **Validate against requirements** (REQ-1 through REQ-12) -- see [requirements.md](requirements.md)
 11. **Test in your module** after MCP confirms compilation
