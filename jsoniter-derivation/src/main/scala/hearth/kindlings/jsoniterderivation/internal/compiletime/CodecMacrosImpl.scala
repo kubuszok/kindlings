@@ -339,6 +339,11 @@ trait CodecMacrosImpl
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
+    val FieldIndex: Type.Lazy[JsoniterDerivationUtils.FieldIndex] =
+      Type.Lazy(Type.of[JsoniterDerivationUtils.FieldIndex])
+    val KeyTable: Type.Lazy[JsoniterDerivationUtils.KeyTable] =
+      Type.Lazy(Type.of[JsoniterDerivationUtils.KeyTable])
     val JsonReaderException: Type.Lazy[JsonReaderException] = Type.Lazy(Type.of[JsonReaderException])
     def EitherJsonReaderException[A: Type]: Type[Either[JsonReaderException, A]] =
       Type.of[Either[JsonReaderException, A]]
@@ -573,7 +578,7 @@ trait CodecMacrosImpl
             implicit val StringT: Type[String] = CTypes.String
             val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
             implicit val ctx: DecoderCtx[A] =
-              DecoderCtx.from(stubReader, configExpr, cache, selfType, semiEvalConfig(configExpr))
+              DecoderCtx.from(stubReader, configExpr, cache, selfType, semiEvalConfig(configExpr), Some(configExpr))
             DecoderHandleAsMapRule.deriveKeyDecoding[A]
           }
 
@@ -673,7 +678,11 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
+                  rs(
+                    deriveDecoderRecursively[A](using
+                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
+                    )
+                  )
                 })
               }
               _ <- Log.info(s"Defined json codec decode body for ${Type[A].prettyPrint}")
@@ -695,7 +704,8 @@ trait CodecMacrosImpl
           val keyDecMIO: MIO[Option[Expr[JsonReader => A]]] = {
             implicit val StringT: Type[String] = CTypes.String
             val stubReader = Expr.quote(null.asInstanceOf[JsonReader])
-            implicit val ctx: DecoderCtx[A] = DecoderCtx.from(stubReader, configExpr, cache, selfType, evConfig)
+            implicit val ctx: DecoderCtx[A] =
+              DecoderCtx.from(stubReader, configExpr, cache, selfType, evConfig, Some(configExpr))
             DecoderHandleAsMapRule.deriveKeyDecoding[A]
           }
 
@@ -859,7 +869,11 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
+                  rs(
+                    deriveDecoderRecursively[A](using
+                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
+                    )
+                  )
                 })
               }
               _ <- Log.info(s"Defined decoder-only decode body for ${Type[A].prettyPrint}")
@@ -960,7 +974,11 @@ trait CodecMacrosImpl
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               _ <- MIO.scoped { rs =>
                 rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig)))
+                  rs(
+                    deriveDecoderRecursively[A](using
+                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
+                    )
+                  )
                 })
               }
               _ <- Log.info(s"Defined codec decode body for ${Type[A].prettyPrint}")
@@ -1371,11 +1389,17 @@ trait CodecMacrosImpl
       derivedType: Option[??],
       evaluatedConfig: Option[JsoniterConfig] = None,
       // See EncoderCtx.stringified.
-      stringified: Option[Boolean] = None
+      stringified: Option[Boolean] = None,
+      // The config expression of the entry point (`config` is a parameter of the cached defs): what per-instance
+      // `lazy val`s of the codec (computed once, not per call) can read when the config is only known at runtime.
+      rootConfig: Option[Expr[JsoniterConfig]] = None
   ) {
 
     /** Whether numbers/booleans are read from strings: `Some` when known at compile time. */
     def stringifiedMode: Option[Boolean] = stringified.orElse(evaluatedConfig.map(_.isStringified))
+
+    /** The config for per-instance values: the entry point's config expression ([[config]] when it is not known). */
+    def instanceConfig: Expr[JsoniterConfig] = rootConfig.getOrElse(config)
 
     private def helperKey: String = "cached-decode-method" + stringifiedKeySuffix(stringified)
 
@@ -1450,14 +1474,16 @@ trait CodecMacrosImpl
         config: Expr[JsoniterConfig],
         cache: MLocal[ValDefsCache],
         derivedType: Option[??],
-        evaluatedConfig: Option[JsoniterConfig] = None
+        evaluatedConfig: Option[JsoniterConfig] = None,
+        rootConfig: Option[Expr[JsoniterConfig]] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       reader = reader,
       config = config,
       cache = cache,
       derivedType = derivedType,
-      evaluatedConfig = evaluatedConfig
+      evaluatedConfig = evaluatedConfig,
+      rootConfig = rootConfig
     )
   }
 

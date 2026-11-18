@@ -165,11 +165,12 @@ trait DecoderAbsentFieldSupport {
     implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
     nullAsDefaultValue[Field](param) match {
       case Some(default) =>
+        // not `JsoniterDerivationUtils.readNullAsDefault`: no thunk of the default and no decoder lambda (which
+        // captures the config) per field per decode
         (reader: Expr[JsonReader]) =>
           Expr.quote {
-            JsoniterDerivationUtils.readNullAsDefault[Field](Expr.splice(reader), Expr.splice(default)) {
-              (r: JsonReader) => Expr.splice(decode(Expr.quote(r)))
-            }
+            if (JsoniterDerivationUtils.readNullForDefault(Expr.splice(reader))) Expr.splice(default)
+            else Expr.splice(decode(reader))
           }
       case None => decode
     }

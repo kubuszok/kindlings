@@ -41,9 +41,10 @@ final class AbsentFieldsSpec extends MacroSuite {
   group("absent fields (jsoniter-scala parity)") {
 
     group("codegen paths") {
-      // Both codegens report unexpected keys with jsoniter-scala's wording; the generic one decodes inside
-      // `JsoniterDerivationUtils.readObject`, the optimized one inlines the read loop. If one of these fails, the codecs
-      // below no longer test the path they claim to test.
+      // Both codegens report unexpected keys with jsoniter-scala's wording; the generic one reads keys as strings and
+      // reports them with `JsoniterDerivationUtils.unexpectedField`, the optimized one reads them into the reader's
+      // buffer (`JsonReader.unexpectedKeyError`). If one of these fails, the codecs below no longer test the path they
+      // claim to test.
       test("OptimizedCodecs use the optimized codegen, runtime configs the generic one") {
         val json = """{"label":"a","count":1,"extra":1}"""
         val withStackTrace = ReaderConfig.withThrowReaderExceptionWithStackTrace(true)
@@ -53,7 +54,7 @@ final class AbsentFieldsSpec extends MacroSuite {
         def readsViaRuntimeHelper(e: Throwable): Boolean =
           !framesNameClasses || e.getStackTrace.exists { f =>
             val frame = f.toString
-            frame.contains("JsoniterDerivationUtils") && frame.contains("readObject")
+            frame.contains("JsoniterDerivationUtils") && frame.contains("unexpectedField")
           }
         val optimized = intercept[JsonReaderException](
           readFromString[AbsentPrimitive](json, withStackTrace)(OptimizedCodecs.strictPrimitive)
