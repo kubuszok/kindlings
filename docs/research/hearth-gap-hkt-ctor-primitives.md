@@ -65,4 +65,4 @@ The shared implementation follows the old Scala 3 semantics (dealias, exactly on
 - `cats-derivation/src/main/scala/.../*MacrosImpl.scala`: `derive<TC>[F](FCtor0)` builds its own `Type[TC[F]]`.
 - `cats-tagless-derivation/src/main/scala/.../InvariantKMacrosImpl.scala`: `applyTypeClassToAlgebra`,
   `constructTypeClassTypeForField`.
-- `docs/contributing/hearth-hkt-derivation/SKILL.md`: the derivation patterns.
+- `hearth-hkt-derivation` skill (`hearth@kubuszok` plugin): the derivation patterns.

@@ -303,7 +303,7 @@ After applying these optimizations to a module:
 
 ## Related skills
 
-- [`../hearth-def-caching/`](../hearth-def-caching/SKILL.md) — toValDefs.use scoping and cached def patterns
+- `hearth-def-caching` skill (`hearth@kubuszok` plugin) — toValDefs.use scoping and cached def patterns
 - [`../kindlings-factory-instance/`](../kindlings-factory-instance/SKILL.md) — factory pattern for type class instances (reduces .class file count)
-- [`../hearth-lambda-builder/`](../hearth-lambda-builder/SKILL.md) — when LambdaBuilder is appropriate vs inline loops
-- [`../hearth-api-reference/`](../hearth-api-reference/SKILL.md) — ValDefs.createVar, ValDefBuilder API signatures
+- `hearth-lambda-builder` skill (`hearth@kubuszok` plugin) — when LambdaBuilder is appropriate vs inline loops
+- `hearth-getting-started` skill (`hearth@kubuszok` plugin) — ValDefs.createVar, ValDefBuilder API signatures

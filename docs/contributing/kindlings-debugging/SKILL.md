@@ -236,7 +236,7 @@ one platform only.
 
 ## Related skills
 
-- [hearth-macro-basics](../hearth-macro-basics/SKILL.md) -- core architecture, logging
+- `hearth-type-class-derivation` skill (`hearth@kubuszok` plugin) -- core architecture, logging
 - [kindlings-new-module](../kindlings-new-module/SKILL.md) -- module setup, error hierarchy
-- [hearth-cross-compilation](../hearth-cross-compilation/SKILL.md) -- pitfalls that commonly need debugging
-- [hearth-def-caching](../hearth-def-caching/SKILL.md) -- def-caching pattern
+- `hearth-cross-compilation-pitfalls` skill (`hearth@kubuszok` plugin) -- pitfalls that commonly need debugging
+- `hearth-def-caching` skill (`hearth@kubuszok` plugin) -- def-caching pattern

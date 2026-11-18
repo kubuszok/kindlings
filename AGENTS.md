@@ -10,6 +10,22 @@
 
 Metals MCP at `.metals/mcp.json` (`kindlings-metals`). Query definitions/types/symbols, check compilation errors before running sbt. Fix MCP issues before running sbt to avoid long feedback loops.
 
+## Agent skills: `hearth` plugin, and keeping the `kindlings` plugin in sync
+
+Hearth skills (how to write macros with Hearth) are **not** kept in this repository. They come from the `hearth`
+plugin of the [`kubuszok/agent-skills`](https://github.com/kubuszok/agent-skills) marketplace, enabled for this
+project in `.claude/settings.json` (`hearth@kubuszok`). Skills below named `hearth-*` refer to that plugin. If a
+Hearth skill is wrong or missing something, fix it in `agent-skills` (local clone: `../agent-skills`), not here.
+`docs/contributing/` keeps only Kindlings-maintenance skills (`kindlings-*`).
+
+**Every change to how Kindlings behaves for users must be reflected in BOTH places:**
+ - the user guide in `docs/user-guide/` (and `feature-parity.md` when it changes a difference from upstream), and
+ - the `kindlings` plugin skills in `agent-skills` (`plugins/kindlings/skills/`, e.g. `kindlings-<module>`,
+   `kindlings-troubleshooting`, `kindlings-migration`; bump `metadata.library-version` and the plugin version on
+   release, following that repository's `AGENTS.md`).
+This covers new/changed APIs, configuration options and defaults, settings keys, error messages, supported types,
+fixed bugs and known gotchas. Mention the matching `agent-skills` change (or why none is needed) in the PR.
+
 ## Global Rules
 
  - **Kindlings stress-tests Hearth.** When a Hearth bug is discovered, create a
@@ -66,20 +82,20 @@ Code uses `Expr`, `Type`, etc. from **Hearth's API**, NOT `scala.quoted.Expr` or
 
 ## Cross-Compilation Pitfalls
 
-See `docs/contributing/hearth-cross-compilation/SKILL.md` for the full live list.
+See the `hearth-cross-compilation-pitfalls` skill (`hearth@kubuszok` plugin) for the full live list.
 The most load-bearing entries to keep in mind for any macro work:
 
 - **Sibling `Expr.splice` isolation (Scala 3)** — each splice gets its own `Quotes`; for
   multi-method type-class instances **derive everything at `Q0` using `ValDefsCache`,
   then call cached `def`s by name from inside each splice**. See
-  `docs/contributing/hearth-def-caching/SKILL.md`. Do **not** use `LambdaBuilder` as a
+  the `hearth-def-caching` skill. Do **not** use `LambdaBuilder` as a
   workaround — that was a misdiagnosis; the real fix is `cache.toValDefs.use` placement.
 - **`summonExprIgnoring` vs OOM** — always pass the library auto-derivation methods to
   ignore, otherwise summoning recurses into them and OOMs the compiler.
 - **`IsMap` before `IsCollection`** — `Map <: Iterable`, so check `IsMap` first.
 - **~~`Type.Ctor2.of[Function1].unapply` wrong on Scala 3~~** — fixed in kubuszok/hearth#389 (subtypes are now
   decomposed via their base type). Use plain `Type.CtorN.of[F]`; the `fromUntyped(of[F].asUntyped)` wrapper is no
-  longer needed (pitfalls skill #11).
+  longer needed.
 - **Scala 2 entry point for `F[_]` / `Alg[_[_]]`** — write `Type.Ctor1.of[F]` / `Type.CtorK1.of[Alg]` in the macro
   bundle; since kubuszok/hearth#389 it reads the method's implicit `c.WeakTypeTag[F[Any]]` / `[Alg[Option]]` (keep
   that parameter, it is matched by the type parameter's name).
@@ -100,17 +116,17 @@ The most load-bearing entries to keep in mind for any macro work:
 ## Standard extensions, `LambdaBuilder`, and def-caching rules
 
 - **Load standard extensions exactly once per macro bundle.** See
-  `docs/contributing/hearth-standard-extensions/SKILL.md`. The shared implementation
+  the `hearth-standard-extensions` skill. The shared implementation
   lives in `derivation-commons` (`hearth.kindlings.derivation.compiletime.LoadStandardExtensionsOnce`);
   per-module thin delegates re-export it in each module's `internal.compiletime` package.
   Use `ensureStandardExtensionsLoaded()` instead of calling
   `Environment.loadStandardExtensions()` directly. Issue `kubuszok/kindlings#65`.
 - **`LambdaBuilder` only for collection/Optional iteration lambdas.** Strict rule, no
-  exceptions. See `docs/contributing/hearth-lambda-builder/SKILL.md`. For
+  exceptions. See the `hearth-lambda-builder` skill. For
   multi-method type-class instances or any other shape that needs pre-derived helper
   functions, use the def-caching pattern instead.
 - **Def-caching is the answer to multi-method instances and sibling-splice isolation.**
-  See `docs/contributing/hearth-def-caching/SKILL.md`. The recipe: shared `ValDefsCache`,
+  See the `hearth-def-caching` skill. The recipe: shared `ValDefsCache`,
   derivation in `Q0` via `forwardDeclare` + `buildCachedWith`, helper-call functions
   retrieved via `cache.getNAry`, outer `cacheState.toValDefs.use` wrapping the entire
   `Expr.quote { new T[A] { … } }`. Reference implementations: `cats-derivation`
@@ -171,22 +187,22 @@ To wire it into a module, follow `docs/contributing/kindlings-derivation-policy/
 module (end-to-end). User docs: `docs/user-guide/derivation-policy.md` + FAQ.
 
 Hearth source is at `../hearth/` when documentation is insufficient.
-See `docs/contributing/hearth-documentation/SKILL.md` § "Hearth source as reference" for key files.
+The `hearth-getting-started` skill has the docs links and an API cheat sheet (`api-reference.md`).
 
 ## Hearth documentation and API reference
 
-- **`docs/contributing/hearth-documentation/SKILL.md`** — finding docs, verifying APIs, hearth source reference
-- **`docs/contributing/hearth-api-reference/SKILL.md`** — quick-reference table of commonly used hearth API signatures
+- **`hearth-getting-started`** skill — finding docs, setup, API cheat sheet (`api-reference.md`)
+- **`hearth-debugging`** skill — debug utilities, derivation logs, flame graphs
+- **`hearth-macro-review`** skill — production-readiness (self-)review of a macro; run it before finishing macro work
 - Check `build.sbt` for `versions.hearth` — use `https://scala-hearth.readthedocs.io/en/latest/` for SNAPSHOT, `/en/<version>/` for stable
 
 ## Skills routing
 
 ### Type class derivation (split into focused skills)
 
-- `docs/contributing/hearth-macro-basics/SKILL.md` — rule architecture, context, MIO, caching
-- `docs/contributing/hearth-case-class-rules/SKILL.md` — case class derivation, decoder construction
-- `docs/contributing/hearth-enum-rules/SKILL.md` — enum/sealed trait derivation, matchOn, discriminators
-- `docs/contributing/hearth-hkt-derivation/SKILL.md` — polymorphic (HKT) derivation, erased approach
+- `hearth-type-class-derivation` skill — rule architecture, context, MIO, caching
+- `hearth-case-classes-and-enums` skill — case class / enum / sealed trait derivation, decoder construction, matchOn
+- `hearth-hkt-derivation` skill — polymorphic (HKT) derivation, erased approach
 - `docs/contributing/kindlings-new-module/SKILL.md` — bootstrapping a new module, requirements checklist
 - `docs/contributing/kindlings-debugging/SKILL.md` — debugging derivation, logging, error hierarchy
 - `docs/contributing/kindlings-derivation-policy/SKILL.md` — wiring the per-library derivation policy (issue #85): `AllowDerivation` marker, `policy` package object, gating the structural rules
@@ -202,12 +218,12 @@ Reference implementations:
 For macros that are NOT type-class derivation — wiring (`di`), mocking (`mock`), or a
 path/selector DSL (`optics`) — follow:
 
-- `docs/contributing/hearth-expr-parsing-dsl/SKILL.md` — parsing selector/path lambdas
+- `hearth-expr-parsing-dsl` skill — parsing selector/path lambdas
   (`_.a.b.each.when[T]`) with `DestructuredExpr`, building marker-based optics-like DSLs
   (per-platform markers + invariant evidence + `@compileTimeOnly`), `CaseClass`
   copy-with-modification, non-exhaustive `MatchCase`, runtime-typeclass delegation, and the
   non-derivation 3-layer module recipe.
-- `docs/contributing/hearth-cross-compilation/SKILL.md` pitfalls #35–#39 — `classOf` vs
+- `hearth-cross-compilation-pitfalls` skill (pitfalls #17–#18) and `hearth-expr-parsing-dsl` — `classOf` vs
   `ClassTag`, `java.lang.Class` shadowing, `@compileTimeOnly`, invariant evidence,
   context-function eta-application.
 
@@ -271,7 +287,7 @@ Key reference files:
 - `ApplicativeMacrosImpl.scala` — composed derivation (pure + map + ap body builders)
 - `NonEmptyAlternativeMacrosImpl.scala` — multi-trait composition (Applicative + SemigroupK patterns)
 
-### Collection & map integration — follow `docs/contributing/hearth-collection-map/SKILL.md`
+### Collection & map integration — follow the `hearth-standard-extensions` skill (`writing-providers.md`)
 
 - `cats-integration/CatsCollectionAndMapProviders.scala` — reference for **collection/map providers** (NonEmptyList, NonEmptyVector, NonEmptyChain, Chain, NonEmptyMap, NonEmptySet)
 - `cats-integration/runtime/CatsConversions.scala` — reference for **runtime helper pattern** (Newtype aliases)

@@ -76,7 +76,7 @@ the QuoteMatcher for abstract, intersection or bottom heads. This affects every 
 (or invariant-but-inferred) parameter, for example user `trait Consumer[-A]`, not only `Function1`. Add an
 `IntPredicate`-style test to the generated `CrossCtorInjectionSpec`, or to `TypesSpec`.
 
-kindlings docs to update: `docs/contributing/hearth-cross-compilation/pitfalls.md` §11 and the SKILL.md rule
+kindlings docs to update: `hearth-cross-compilation-pitfalls` skill (`hearth@kubuszok` plugin) §11 and the SKILL.md rule
 "fromUntyped for ALL SPI-boundary type matching". The real rule is "on Scala 3, `of[F].unapply` on a *subtype* of
 `F[contravariant, …]` yields `Nothing`; `fromUntyped` (baseType) does not". The compilation unit or SPI has nothing to
 do with it.

@@ -409,6 +409,6 @@ must remain accessible.
 
 ## Related skills
 
-- [`../hearth-def-caching/`](../hearth-def-caching/SKILL.md) — def-caching pattern that works alongside factory instances
+- `hearth-def-caching` skill (`hearth@kubuszok` plugin) — def-caching pattern that works alongside factory instances
 - [`../kindlings-runtime-perf/`](../kindlings-runtime-perf/SKILL.md) — runtime performance optimization techniques
-- [`../hearth-api-reference/`](../hearth-api-reference/SKILL.md) — Expr.quote, ValDefsCache API signatures
+- `hearth-getting-started` skill (`hearth@kubuszok` plugin) — Expr.quote, ValDefsCache API signatures

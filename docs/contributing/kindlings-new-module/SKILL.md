@@ -20,7 +20,7 @@ Guide for bootstrapping a new type class derivation module in the Kindlings proj
 2. **Read the reference implementation** -- study `FastShowPrettyMacrosImpl.scala` and
    the `rules/` trait files
 3. **Check hearth documentation** -- see
-   [hearth-documentation](../hearth-documentation/SKILL.md) for docs version
+   `hearth-getting-started` skill (`hearth@kubuszok` plugin) for docs version
 
 ## Build configuration
 
@@ -114,10 +114,10 @@ coverage tables, test file organization, and error type hierarchy.
 
 ## Related skills
 
-- [hearth-macro-basics](../hearth-macro-basics/SKILL.md) -- core architecture
-- [hearth-case-class-rules](../hearth-case-class-rules/SKILL.md) -- case class derivation
-- [hearth-enum-rules](../hearth-enum-rules/SKILL.md) -- enum derivation
-- [hearth-cross-compilation](../hearth-cross-compilation/SKILL.md) -- cross-compilation pitfalls
-- [hearth-def-caching](../hearth-def-caching/SKILL.md) -- def-caching pattern
+- `hearth-type-class-derivation` skill (`hearth@kubuszok` plugin) -- core architecture
+- `hearth-case-classes-and-enums` skill (`hearth@kubuszok` plugin) -- case class derivation
+- `hearth-case-classes-and-enums` skill (`hearth@kubuszok` plugin) -- enum derivation
+- `hearth-cross-compilation-pitfalls` skill (`hearth@kubuszok` plugin) -- cross-compilation pitfalls
+- `hearth-def-caching` skill (`hearth@kubuszok` plugin) -- def-caching pattern
 - [kindlings-debugging](../kindlings-debugging/SKILL.md) -- debugging derivation
 - [kindlings-factory-instance](../kindlings-factory-instance/SKILL.md) -- factory instance pattern

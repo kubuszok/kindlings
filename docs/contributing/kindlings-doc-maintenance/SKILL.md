@@ -168,4 +168,4 @@ Note: the 4-space indent inside admonitions is required.
 
 ## Related skills
 
-- [`../hearth-documentation/`](../hearth-documentation/SKILL.md) — Hearth API documentation and verification workflow
+- `hearth-getting-started` skill (`hearth@kubuszok` plugin) — Hearth API documentation and verification workflow
