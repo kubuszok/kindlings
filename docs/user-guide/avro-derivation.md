@@ -134,7 +134,7 @@ import hearth.kindlings.avroderivation.annotations._
 | Annotation | Target | Description |
 |-----------|--------|-------------|
 | `@avroDoc("text")` | Type, Field | Add documentation to the schema |
-| `@avroNamespace("ns")` | Type | Set the Avro namespace for a specific type |
+| `@avroNamespace("ns")` | Type, Field | Set the Avro namespace for a specific type; on a field, it overrides the namespace of the record / enum / fixed schema of that field (taking precedence over the type's own annotation) |
 | `@avroProp("key", "value")` | Type, Field | Add custom Avro properties (stackable) |
 | `@avroAlias("alias")` | Type, Field | Add schema aliases for evolution (stackable) |
 

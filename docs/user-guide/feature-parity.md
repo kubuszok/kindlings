@@ -52,7 +52,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 |---|---|---|---|
 | Namespace config | `@AvroNamespace` only | `@avroNamespace` + `AvroConfig.namespace` | Improvement |
 | Namespace of a type in the empty package | avro4s 5 (Scala 3): none; avro4s 4 (Scala 2): `"empty"` for records, `"<empty>"` (not a valid Avro namespace) for enums | None, on both Scala versions | Difference (Scala 2 only) |
-| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (4 built-in strategies) | Parity |
+| Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (3 built-in strategies — snake, kebab, Pascal case — plus a custom function via `withTransformFieldNames`) | Parity |
 | Constructor name transforms | Not built-in | Yes | Improvement |
 | Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig`, `@avroScalePrecision` | Parity (different API) |
 | Timestamp precision | A `SchemaFor` with the `timestamp-micros`/`-nanos` logical type | `withInstantPrecision`, `withLocalDateTimePrecision` | Parity (different API) |
@@ -227,9 +227,11 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 | Feature | kittens | Kindlings | Status |
 |---|---|---|---|
 | Semi-automatic (`TypeClass.derived`) | Yes | Yes | Parity |
-| Automatic (`import derived._`) | Yes (Scala 3 only for some) | No | Gap |
+| Automatic (`import cats.derived.auto.<tc>._`) | Yes | Yes for `Show`, `Eq`, `Order`, `PartialOrder`, `Hash`, `Semigroup`, `Monoid`, `Empty` (`import hearth.kindlings.catsderivation.auto.<tc>._`), plus `Functor`, `Contravariant`, `Foldable`, `Traverse` on Scala 3; other type classes need `.derived` | Parity (listed type classes) / Gap (the rest) |
+| Scala 3 `derives` clause | Yes | Yes (with `import hearth.kindlings.catsderivation.extensions.*`) | Parity |
 | Unified Scala 2+3 API | No — Shapeless on 2, Mirrors on 3 | Yes | Improvement |
 | Cross-platform (JVM/JS/Native) | JVM focus | JVM + JS + Native | Improvement |
+| Strict mode: fail instead of deriving missing field instances (`StrictDerivation`) | No | Yes (monomorphic type classes) | Improvement |
 
 ### Runtime performance (ops/s, 2f/5w/10m, temurin 17)
 
@@ -252,7 +254,7 @@ Kindlings uses `Int` priority (upstream avro4s uses `Float`). Higher priority va
 
 | Feature | Notes |
 |---|---|
-| Automatic derivation | kittens Scala 3 supports `derives`; Kindlings uses explicit `.derived` calls |
+| Automatic derivation for the remaining type classes | `hearth.kindlings.catsderivation.auto` covers `Show`, `Eq`, `Order`, `PartialOrder`, `Hash`, `Semigroup`, `Monoid`, `Empty` (and `Functor`, `Contravariant`, `Foldable`, `Traverse` on Scala 3); the others need `.derived` |
 | `cats.sequence` / `cats.lift` / `cats.replicateH` | kittens Scala-2/Shapeless utilities (sequencing over HLists/records, lifting functions, heterogeneous replicate); out of scope for type-class derivation |
 | `Iterable` derivation (`MkIterable`) | kittens Scala-2-only helper; not ported |
 | `ConsK` for list-like sealed traits | kittens 2 derives `ConsK` for `sealed trait IList[A]` with a `Cons(head: A, tail: IList[A])` case; Kindlings derives it for case classes only (Gap: it needs a sum-type rule choosing and building the cons case, unrelated to the field-by-field product machinery) |
@@ -366,6 +368,16 @@ Kindlings' SemigroupalK/ApplyK still keep the first algebra's members without `F
 ### Output rendering
 
 `DiffRenderer` formats `DiffResult` as human-readable text with ANSI colors or plain text, showing insertions, deletions, and changes at each nesting level.
+
+### Customization
+
+| Feature | Support |
+|---|---|
+| Implicit `Diff` for a field type overrides derivation | Yes |
+| Approximate numeric comparison | `Diff.approximate(epsilon)` |
+| Ignoring fields | Top-level fields only: `ignoreField(name)` / `modifyField(name).ignore` |
+| Key-matched sequence diff | `Diff.seqDiff(elementDiff, ObjectMatcher.by(key))` |
+| Assertions | `Diff.assertNoDiff` / `Diff.assertDiff` (throw `AssertionError`, framework-agnostic) |
 
 ### Cross-compilation
 
@@ -674,11 +686,11 @@ A derived instance is therefore a drop-in replacement for the upstream interface
 
 | Feature | PureConfig | Kindlings | Status |
 |---|---|---|---|
-| Semi-automatic (`derive[A]`) | `semiauto.deriveReader[A]` (Scala 2 + 3) | `KindlingsConfigReader.derived[A]` | Parity |
+| Semi-automatic (`deriveReader[A]`) | `semiauto.deriveReader[A]` (Scala 2 + 3) | `KindlingsConfigReader.derived[A]` | Parity |
 | Automatic (full recursion via import) | `pureconfig.generic.auto._` (Scala 2 only — Shapeless) | `KindlingsConfigReader.derived[A]` (sanely-automatic, both Scala 2 + 3) | Improvement |
-| Scala 3 native `derives` clause | `derives ConfigReader` via `pureconfig.generic.derivation.default` (Scala 3 only) | Same `derives` syntax via `KindlingsConfigReader` (both Scala 2 + 3) | Improvement |
+| Scala 3 native `derives` clause | `derives ConfigReader` via `pureconfig.generic.derivation.default` (Scala 3 only) | `derives KindlingsConfigReader` (Scala 3; on Scala 2.13, which has no `derives`, `KindlingsConfigReader.derived[A]` is an implicit def) | Parity |
 | Unified Scala 2 + 3 API | No — three separate derivation modules with overlapping APIs and feature gaps | Yes — single API, same call shape on both | Improvement |
-| Scala 3 native `derives` for Writer/Convert | Native `derives` / `derivation.default` supports only `ConfigReader`; `ConfigWriter`/`ConfigConvert` require the separate Magnolia `pureconfig-generic-scala3` module (`semiauto.deriveConvert`) | `derives KindlingsConfigWriter` / `KindlingsConfigConvert` work on both Scala 2 + 3 | Improvement |
+| Scala 3 native `derives` for Writer/Convert | Native `derives` / `derivation.default` supports only `ConfigReader`; `ConfigWriter`/`ConfigConvert` require the separate Magnolia `pureconfig-generic-scala3` module (`semiauto.deriveConvert`) | `derives KindlingsConfigWriter` / `KindlingsConfigConvert` on Scala 3 (`.derived[A]` on Scala 2.13) | Improvement |
 | Recursive types | Works on Scala 2 (Shapeless `Lazy`); Scala 3 native derivation has limitations | Works without `Lazy` or wrappers on both | Improvement |
 | `ProductHint`/`CoproductHint` respected on Scala 3 | Native `derives` ignores all hints in scope | `KindlingsProductHint`/`KindlingsCoproductHint` honored on both Scala 2 + 3 | Improvement |
 
@@ -723,7 +735,7 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 | Case classes → HOCON object | Via Shapeless / Magnolia | Via Hearth macro (cleaner generated code, faster compile) | Parity |
 | Sealed traits → discriminator object | Via `FieldCoproductHint` | Via macro + `discriminator` config | Parity |
 | Sealed traits → single-key wrapping | Via custom `CoproductHint` | Via macro + `withWrappedSubtypes` | Parity |
-| Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `derive[E]` with `withWrappedSubtypes` (no discriminator): case-object families read and write strings, as `deriveEnumerationReader`/`Writer`; with the default discriminator they are `{ type = north }` objects, as upstream's default `FieldCoproductHint` | Improvement |
+| Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `KindlingsConfigReader.derived[E]` / `KindlingsConfigWriter.derived[E]` with `withWrappedSubtypes` (no discriminator): case-object families read and write strings, as `deriveEnumerationReader`/`Writer`; with the default discriminator they are `{ type = north }` objects, as upstream's default `FieldCoproductHint` | Improvement |
 | Singleton (`case object`) members | Yes | Yes | Parity |
 | Value classes / `AnyVal` wrappers | Manual `ConfigReader.fromString` per type | Automatic unwrapping via `IsValueType` (covers `AnyVal`, `extends AnyVal`, refined types via `refined-integration`, opaque types) | Improvement |
 | Refined types (`eu.timepit.refined`) | Separate `pureconfig-refined` module | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected by `IsValueType`) | Improvement |
@@ -934,8 +946,8 @@ Owned by the kindlings module — no extending of any third-party type, just a c
 | `ConfigReader.derived[A]` / `ConfigWriter.derived[A]` / `ConfigCodec.derived[A]` | Semi-automatic |
 | `ConfigReader.derived[A]` / `ConfigWriter.derived[A]` / `ConfigCodec.derived[A]` | Sanely-automatic — implicit on Scala 3 (`given`), explicit non-implicit on Scala 2 (to avoid clashing with the built-in instances under Scala 2 implicit-search rules) |
 | `derives ConfigReader` (Scala 3) | Yes |
-| Inline composition of `ConfigCodec` from `ConfigReader.derive` + `ConfigWriter.derive` | Scala 3 — sidesteps sibling-splice isolation by running each derivation as its own top-level macro expansion |
-| Single-macro Codec (`ConfigCodec.derive`) | Scala 2 — combines reader + writer in one macro expansion (no sibling-splice issue on Scala 2) |
+| Inline composition of `ConfigCodec.derived` from `ConfigReader.derived` + `ConfigWriter.derived` | Scala 3 — sidesteps sibling-splice isolation by running each derivation as its own top-level macro expansion |
+| Single-macro Codec (`ConfigCodec.derived`) | Scala 2 — combines reader + writer in one macro expansion (no sibling-splice issue on Scala 2) |
 | Unified Scala 2 + 3 API | Yes |
 
 ### Configuration
@@ -1133,7 +1145,7 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 | Config option | Default | Description |
 |---|---|---|
 | `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
-| `adtLeafClassNameMapper` | `identity` | Transform sealed trait subtype names |
+| `adtLeafClassNameMapper` | `UBJsonConfig.simpleClassName` | Transform sealed trait subtype names (receives the fully-qualified leaf name; the default keeps the simple name) |
 | `discriminatorFieldName` | `None` | Discriminator field for sealed traits (wrapper encoding when `None`) |
 | `skipUnexpectedFields` | `true` | Skip unknown fields during decoding |
 | `enumAsStrings` | `false` | Encode case object enums as strings instead of objects |
@@ -1145,13 +1157,18 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 | `checkFieldDuplication` | `false` | Check for duplicate field names during decoding |
 | `bigDecimalPrecision` | `34` | Maximum precision for BigDecimal (DoS protection) |
 | `bigDecimalScaleLimit` | `6178` | Maximum scale for BigDecimal (DoS protection) |
-| `bigDecimalDigitsLimit` | `308` | Maximum digits for BigDecimal/BigInt (DoS protection) |
+| `bigDecimalDigitsLimit` | `308` | Maximum digits for BigDecimal (DoS protection) |
 | `mapMaxInsertNumber` | `Int.MaxValue` | Maximum map entries (DoS protection) |
 | `setMaxInsertNumber` | `Int.MaxValue` | Maximum set entries (DoS protection) |
 | `useScalaEnumValueId` | `false` | `scala.Enumeration` values as their ids |
 | `skipNestedOptionValues` | `false` | `Option[Option[A]]` as a plain `Option` (otherwise the ADT `Option`, as jsoniter-scala) |
 | `scalaTransientSupport` | `false` | `scala.transient` fields are transient |
 | `transientNull` | `false` | Omit `null` fields of Scala 3 `T \| Null` types during encoding |
+| `circeLikeObjectEncoding` | `false` | Without a discriminator, case objects as wrapped empty objects (`{"Leaf":{}}`) instead of strings |
+| `javaEnumValueNameMapper` | `identity` | Transform Java enum constant names |
+| `bigIntDigitsLimit` | `308` | Maximum digits for decoded `BigInt` (DoS protection) |
+| `requireDiscriminatorFirst` | `true` | When `false`, the discriminator field may appear anywhere in the object |
+| `emptyCollectionsAsDefault` | `true` | An empty array/object for a collection/map field with a default decodes as that default (`withEmptyCollectionsAsEmpty` sets `false`) |
 
 ### Annotations
 

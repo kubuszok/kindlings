@@ -11,9 +11,10 @@ import hearth.std.StdExtensions
   * Extensions are discovered at macro expansion time via `java.util.ServiceLoader` when a consumer (e.g.,
   * tapir-schema-derivation) calls `Environment.loadMacroExtensions[JsonSchemaConfigExtension]`.
   *
-  * The type parameter is `MacroCommons & StdExtensions` (not `& JsonSchemaConfigs`) because `ClassTag` erasure for
-  * intersection types only preserves the first component. The `extend` method performs a runtime check for
-  * `JsonSchemaConfigs` and silently skips contexts that don't support it.
+  * The type parameter is `MacroCommons & StdExtensions` (not `& JsonSchemaConfigs`) because the `ClassTag` of an
+  * intersection type keeps only one of its components (the erasure of the intersection, which on Scala 3 is not
+  * necessarily the first one), so it cannot be used to check for all of them. The `extend` method performs a runtime
+  * check for `JsonSchemaConfigs` and silently skips contexts that don't support it.
   */
 abstract class JsonSchemaConfigExtension extends MacroExtension[MacroCommons & StdExtensions] {
 

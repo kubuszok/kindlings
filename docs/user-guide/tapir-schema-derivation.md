@@ -62,7 +62,7 @@ Drop-in replacement for Tapir's built-in `Schema.derived` -- derives `Schema[A]`
 | `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Semi-automatic schema derivation |
 | `KindlingsSchema.derived[A].schema` | `Schema[A]` | The underlying Tapir `Schema[A]` |
 | `KindlingsSchema.derived[A]` | `KindlingsSchema[A]` | Sanely-automatic (given/implicit) |
-| `KindlingsSchema.derivedEnumeration[A]` | `KindlingsSchema[A]` | A string-enum schema for a sealed trait / `enum` of case objects (like Tapir's `Schema.derivedEnumeration[A].defaultStringBased`) |
+| `KindlingsSchema.derivedEnumeration[A]` | `KindlingsSchema[A]` | A string-enum schema for a sealed trait / `enum` whose children are all case objects (like Tapir's `Schema.derivedEnumeration[A].defaultStringBased`; other children are a compile error) |
 
 `derivedEnumeration` needs no JSON configuration and lists the **plain case names** (`Red`, `Green`, ...), as Tapir's
 `derivedEnumeration` does with its default `toString` encoding. It does not apply circe's `transformConstructorNames`
@@ -93,6 +93,10 @@ from the JSON object:
 
 The `transient*` settings of a `JsoniterConfig` only change what the encoder writes, so they do not make fields
 optional.
+
+`Option` fields are optional but **not nullable** in the schema, while both codecs write `None` as `null` by default.
+To make the payloads match the documentation, use `withTransientNone` (jsoniter) or print circe JSON with
+`dropNullValues = true` (see [HTTP APIs with tapir](http-api.md#pitfalls)).
 
 #### What a `JsoniterConfig` changes
 
@@ -127,7 +131,10 @@ With a circe `Configuration`, the schema also follows how circe codes sealed hie
 
 #### Disambiguating multiple JSON configs
 
-If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails. Import an implicit `PreferSchemaConfig` to tell the macro which one to use (the error message lists the exact declaration and
+If both Circe and Jsoniter configurations are on the classpath, the macro finds multiple configs and fails with
+`Multiple JSON library configurations found: circe, jsoniter-scala.` Note that `kindlings-tapir-openapi-jsoniter`
+depends on `kindlings-jsoniter-derivation`, so circe users who render OpenAPI with it always hit this. Import an
+implicit `PreferSchemaConfig` to tell the macro which one to use (the error message lists the exact declaration and
 the `-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe|jsoniter-scala` setting for each configuration found):
 
 ```scala

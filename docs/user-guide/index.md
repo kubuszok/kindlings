@@ -241,7 +241,7 @@ All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala
 
 | Module | Description |
 |---|---|
-| [kindlings-cats-integration](cats-integration.md) | `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated`, `Const` — handled automatically in all derivation modules |
+| [kindlings-cats-integration](cats-integration.md) | `NonEmptyList`, `NonEmptyVector`, `NonEmptySeq`, `NonEmptyLazyList`, `NonEmptyChain`, `Chain`, `NonEmptyMap`, `NonEmptySet`, `Validated`, `Const` — handled automatically in all derivation modules |
 | [kindlings-iron-integration](iron-integration.md) | Iron constrained types (`A :| C`) — validated on decode, unwrapped on encode (Scala 3 only) |
 | [kindlings-neotype-integration](neotype-integration.md) | neotype `Newtype`/`Subtype` — validated with `make` on decode, unwrapped on encode (Scala 3 only) |
 | [kindlings-newtype-integration](newtype-integration.md) | scala-newtype `@newtype`/`@newsubtype` (via scala-newtype-compat) — unwrapped on encode, wrapped on decode (JVM only) |
@@ -268,7 +268,8 @@ Not type-class derivation, but built on the same Hearth macro-agnostic API and c
 | [kindlings-optics](optics.md) | quicklens | `obj.modify(_.a.b)` lenses — nested copy-with-modification, `.each`/`.at`/`.when`, reusable lenses. `.each` works over any `IsCollection`/`IsMap`/`IsOption` container (built-ins + cats `NonEmpty*` via `kindlings-cats-integration`) |
 | [kindlings-parser](parser.md) | yacc / fastparse | BNF grammars compiled at compile time into LALR(1) parsers (plus a recursive-descent fast path for LL(1) grammars), with typed actions, conflict diagnostics and a stack-safe, resumable machine; [Cats Effect](parser-running.md#cats-effect) and [fs2](parser-running.md#fs2-streams) modules |
 
-`kindlings-mock` is test-scope; the rest are cross-compiled for Scala 2.13 and 3 on JVM, Scala.js, and Scala Native.
+`kindlings-mock` is test-scope; the rest are cross-compiled for Scala 2.13 and 3 on JVM, Scala.js, and Scala Native —
+except `kindlings-di-cats`, which is published for the JVM and Scala.js only.
 
 ## Extra
 

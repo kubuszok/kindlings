@@ -176,10 +176,13 @@ before the macro sees it. A value whose class merely *extends* a function type (
 - attempts to wire a **primitive or `String`**, and
 - any provided dependency that ended up **unused**.
 
-Pass `DI.autowireMembersOf(module)` to use the public parameterless members (`val`s, no-argument `def`s) of `module` as
-dependencies, as macwire's `autowireMembersOf` does. A module usually has more members than one graph needs, so its
-unused members are not errors; only a module none of whose members is used is reported, as
-`unused dependencies: DI.autowireMembersOf(module)`:
+### `autowireMembersOf` — a module's members as dependencies
+
+`DI.autowireMembersOf(instance)`, passed as an argument of `autowire`, adds every public, parameterless member (`val`,
+`lazy val`, no-arg `def`) of `instance` as a dependency, each matched by its declared type (macwire's
+`autowireMembersOf`). A module usually has more members than one graph needs, so its unused members are not errors;
+only a module none of whose members is used is reported, as `unused dependencies: DI.autowireMembersOf(module)`.
+Outside `autowire` the call is the identity.
 
 ```scala
 class AppModule {
@@ -231,6 +234,27 @@ class AppModule(dataModule: DataModule) {
   lazy val userFinder: UserFinder = DI.wire[UserFinder]
 }
 ```
+
+### `wiredInModule` — a runtime registry
+
+`DI.wiredInModule(module)` captures every public, parameterless member of `module` whose type is a reference type
+(primitives are skipped) into a `Wired` registry keyed by the member's declared type, for looking instances up at
+runtime by class (macwire's `wiredInModule`):
+
+```scala
+import hearth.kindlings.di.{DI, Wired}
+
+val wired: Wired = DI.wiredInModule(new DataModule)
+
+wired.lookup(classOf[DatabaseAccess])             // List(databaseAccess): every entry assignable to the class
+wired.lookupSingleOrThrow(classOf[DatabaseAccess]) // the single match; IllegalArgumentException on none or several
+wired.withInstances(new SecurityFilter())          // a new Wired with extra instances (keyed by runtime class)
+wired.withInstanceFactory(() => new SecurityFilter()) // ... or an extra factory (keyed by its ClassTag)
+```
+
+Entries are factories: a `def` member is re-read on each lookup. Lookups are subtype-aware but use erased classes, so
+type arguments are not distinguished. macwire's reflective `wireClassInstance` / `wireClassInstanceByName` are not
+ported (they need JVM reflection, unavailable on Scala.js and Scala Native).
 
 ## `DI.plan` — recursive, cached, customizable wiring (Kindlings' own)
 
