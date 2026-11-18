@@ -973,7 +973,7 @@ trait DecoderHandleAsMapRuleImpl {
                                   case (name, caseExpr) =>
                                     val child = childrenList.find(_._1 == name).get._2
                                     import child.Underlying as ChildType
-                                    (caseExpr, enumLeafNameExpr[K, ChildType](name, ctx.config))
+                                    (caseExpr, enumLeafNameExpr[K, ChildType](name, ctx.config, ctx.evaluatedConfig))
                                 }
                                 LambdaBuilder
                                   .of1[JsonReader]("reader")
