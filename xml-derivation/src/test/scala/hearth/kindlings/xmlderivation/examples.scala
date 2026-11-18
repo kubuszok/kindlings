@@ -124,3 +124,7 @@ case class CombOuter(
     listCaseClass: List[CombInnerCC],
     mapCaseClass: Map[String, CombInnerCC]
 )
+
+// Absent Option fields (decoded as None, so that `withTransientNone` output round-trips)
+case class XmlOptAttr(@xmlAttribute id: Int, @xmlAttribute label: Option[String])
+case class XmlOptWithDefault(name: String, count: Option[Int] = Some(5))

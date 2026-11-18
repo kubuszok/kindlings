@@ -452,6 +452,58 @@ final class XmlConfigSpec extends MacroSuite {
       }
     }
 
+    group("absent Option and collection fields") {
+
+      test("decoder decodes an absent Option child element as None") {
+        val decoder = KindlingsXmlDecoder.derived[Box[Option[Int]]]
+        assert(decoder.decode(<box/>) == Right(Box(None)))
+        assert(decoder.decode(<box><value>3</value></box>) == Right(Box(Some(3))))
+      }
+
+      test("withTransientNone output round-trips") {
+        implicit val config: XmlConfig = XmlConfig().withTransientNone
+        val codec = KindlingsXmlCodec.derived[Box[Option[Int]]]
+        assert(codec.decode(codec.encode(Box(None), "box")) == Right(Box(None)))
+        assert(codec.decode(codec.encode(Box(Some(42)), "box")) == Right(Box(Some(42))))
+      }
+
+      test("decoder decodes an absent Option attribute as None") {
+        val decoder = KindlingsXmlDecoder.derived[XmlOptAttr]
+        assert(decoder.decode(<x id="1"/>) == Right(XmlOptAttr(1, None)))
+        assert(decoder.decode(<x id="1" label="a"/>) == Right(XmlOptAttr(1, Some("a"))))
+        assert(decoder.decode(<x label="a"/>).isLeft)
+      }
+
+      test("withTransientNone output round-trips for Option attributes") {
+        implicit val config: XmlConfig = XmlConfig().withTransientNone
+        val codec = KindlingsXmlCodec.derived[XmlOptAttr]
+        assert(codec.decode(codec.encode(XmlOptAttr(1, None), "x")) == Right(XmlOptAttr(1, None)))
+      }
+
+      test("an absent Option field with a default uses the default only with useDefaults") {
+        val withoutDefaults = KindlingsXmlDecoder.derived[XmlOptWithDefault]
+        assert(withoutDefaults.decode(<x><name>a</name></x>) == Right(XmlOptWithDefault("a", None)))
+        locally {
+          implicit val config: XmlConfig = XmlConfig().withUseDefaults
+          val withDefaults = KindlingsXmlDecoder.derived[XmlOptWithDefault]
+          assert(withDefaults.decode(<x><name>a</name></x>) == Right(XmlOptWithDefault("a", Some(5))))
+        }
+      }
+
+      test("withTransientEmpty output round-trips for collections") {
+        implicit val config: XmlConfig = XmlConfig().withTransientEmpty
+        val codec = KindlingsXmlCodec.derived[TeamWithMembers]
+        assertEquals(codec.decode(codec.encode(TeamWithMembers("A", Nil), "team")), Right(TeamWithMembers("A", Nil)))
+        val team = TeamWithMembers("A", List(SimplePerson("Alice", 30)))
+        assertEquals(codec.decode(codec.encode(team, "team")), Right(team))
+      }
+
+      test("a missing non-Option element is still an error") {
+        val decoder = KindlingsXmlDecoder.derived[Box[Int]]
+        assert(decoder.decode(<box/>) == Left(XmlDecodingError.MissingElement("value", "box")))
+      }
+    }
+
     group("transientEmpty") {
 
       test("encoder omits empty collections with transientEmpty") {

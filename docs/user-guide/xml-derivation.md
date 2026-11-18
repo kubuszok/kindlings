@@ -145,6 +145,15 @@ implicit val config: XmlConfig = XmlConfig.default
 | `withTransientNone` | Skip `None` fields during encoding |
 | `withTransientEmpty` | Skip empty collections during encoding |
 
+Decoding is lenient about absent optional data, so the output of `withTransientNone` / `withTransientEmpty` decodes
+back to the same value whatever decoder configuration is used:
+
+- an absent child element or attribute of an `Option` field decodes as `None` (with `withUseDefaults`, a field with a
+  default value gets the default instead),
+- an absent child element of a collection or map field decodes as an empty collection (unless `withUseDefaults` and a
+  default value apply),
+- any other absent element or attribute is still an error (`MissingElement` / `MissingAttribute`).
+
 ## Annotations
 
 | Annotation | Package | Description |
