@@ -4,6 +4,7 @@ package rules
 import hearth.MacroCommons
 import hearth.fp.data.NonEmptyList
 import hearth.fp.effect.*
+import hearth.fp.instances.ApplicativeTraverseForList
 import hearth.fp.syntax.*
 import hearth.std.*
 
@@ -141,7 +142,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                           )
                         ): Array[Byte]
                       }.as_??
-                      (fName, decodedExpr)
+                      (fName, decodedExpr, false)
                     }
                   case (_, Some((_, scale))) =>
                     val bigDecimalType: Type.Lazy[BigDecimal] = Type.Lazy(Type.of[BigDecimal])
@@ -158,7 +159,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                           Expr.splice(Expr(scale))
                         ): BigDecimal
                       }.as_??
-                      (fName, decodedExpr)
+                      (fName, decodedExpr, false)
                     }
                   case _ =>
                     val fieldAvroValue: Expr[Any] = Expr.quote {
@@ -191,25 +192,46 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
                               catch { case scala.util.control.NonFatal(_) => Expr.splice(default) }
                             else Expr.splice(default)
                           }
-                          (fName, withDefault.as_??)
-                        case None => (fName, decoded.as_??)
+                          (fName, withDefault.as_??, true)
+                        case None => (fName, decoded.as_??, false)
                       }
                     }
                 }
               }
             }
             .flatMap { fieldData =>
-              val fieldMap: Map[String, Expr_??] =
-                fieldData.toList.map { case (fName, decodedExpr) => (fName, decodedExpr) }.toMap ++ transientDefaults
-              foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                onTypes = _ => Map.empty,
-                onValues = _ => fieldMap
-              ) match {
-                case Right(constructExpr) =>
+              // A field with a default decodes through a try/catch. Inlined as a constructor argument, every such
+              // try/catch makes the compiler save all the previously evaluated arguments around it, so the decoding
+              // method grows quadratically with the number of defaulted fields: past ~25 of them it is too large to be
+              // JIT-compiled, past ~88 it exceeds the JVM's 64 KB limit ("Method too large", issue #308). Each
+              // defaulted field is therefore decoded by its own local def, and the constructor only calls the defs.
+              val boundFields: ValDefs[List[(String, Expr_??)]] =
+                fieldData.toList.traverse[ValDefs, (String, Expr_??)] { case (fName, decodedExpr, ownDef) =>
+                  if (ownDef) {
+                    import decodedExpr.{Underlying as Field, value as fieldExpr}
+                    ValDefs
+                      .createDef[Field](fieldExpr, FreshName.FromPrefix(s"decodeField_$fName"))
+                      .map(call => (fName, call.as_??))
+                  } else ValDefs.traverse.pure((fName, decodedExpr))
+                }
+              def construct(fields: List[(String, Expr_??)]) =
+                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                  onTypes = _ => Map.empty,
+                  onValues = _ => fields.toMap ++ transientDefaults
+                )
+              // The parameters are known up front, so a failure does not depend on how the fields are bound.
+              construct(fieldData.toList.map { case (fName, decodedExpr, _) => (fName, decodedExpr) }) match {
+                case Right(_) =>
+                  val constructed: Expr[A] = boundFields.use { fields =>
+                    construct(fields) match {
+                      case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                      case Left(error)          => throw new IllegalStateException(error) // checked above
+                    }
+                  }
                   MIO.pure(
                     Expr.quote {
                       val _ = AvroDerivationUtils.checkIsRecord(Expr.splice(dctx.avroValue))
-                      Expr.splice(constructExpr.value.asInstanceOf[Expr[A]])
+                      Expr.splice(constructed)
                     }
                   )
                 case Left(error) =>

@@ -571,5 +571,22 @@ final class AvroDecoderSpec extends MacroSuite {
         result ==> WithDefaultAge("Charlie")
       }
     }
+
+    group("records with many defaulted fields (#308)") {
+
+      test("round-trip of a 100-field record with defaults") {
+        val encoder: AvroEncoder[WideDefaults] = AvroEncoder.derived[WideDefaults]
+        val decoder: AvroDecoder[WideDefaults] = AvroDecoder.derived[WideDefaults]
+        val original = WideDefaults(f0 = Some("x"), f1 = 1, f2 = "y", f97 = 3, f98 = "z", f99 = 5L)
+        AvroIO.fromBinary[WideDefaults](AvroIO.toBinary(original)(encoder))(decoder) ==> original
+      }
+
+      test("fields missing from the record decode to their defaults") {
+        val record = new GenericData.Record(AvroSchemaFor.schemaOf[WideDefaultsV1])
+        record.put("f0", "x")
+        record.put("f1", 1)
+        AvroDecoder.decode[WideDefaults](record: Any) ==> WideDefaults(f0 = Some("x"), f1 = 1)
+      }
+    }
   }
 }
