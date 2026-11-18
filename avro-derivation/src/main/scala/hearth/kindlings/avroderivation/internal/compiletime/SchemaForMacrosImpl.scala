@@ -407,6 +407,8 @@ trait SchemaForMacrosImpl
         implicit val avroFqnParamNamesT: Type[avroFqnParamNames] = SfTypes.AvroFqnParamNames
         val useFqn = hasTypeAnnotation[avroFqnParamNames, A]
         val ignoredImplicits = AvroSchemaForUseImplicitWhenAvailableRule.ignoredImplicits
+        // whether a type argument's name is read from its (user-provided) schema at runtime
+        var nameReadAtRuntime = false
         val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
           import tpe.Underlying
           if (tpe.Underlying =:= Type[A]) None
@@ -416,6 +418,7 @@ trait SchemaForMacrosImpl
             Type[AvroSchemaFor[tpe.Underlying]].summonExprIgnoring(ignoredImplicits*).toEither match {
               case Right(schemaForExpr) =>
                 val fallback = Expr(Type.plainPrint[tpe.Underlying])
+                nameReadAtRuntime = true
                 Some(
                   Expr.quote {
                     val s = Expr.splice(schemaForExpr).schema
@@ -429,7 +432,14 @@ trait SchemaForMacrosImpl
             }
           }
         }
-        if (useFqn) Expr.quote(AvroDerivationUtils.parseAvroNameFqn(Expr.splice(fullNameExpr)))
+        if (!nameReadAtRuntime) {
+          // Every part of the name is known now: compute the Avro name at compile time instead of parsing the type
+          // name (with regex replacements) every time the expression is evaluated, e.g. per subtype per decode.
+          val fullName = Type.plainPrint[A]
+          Expr(
+            if (useFqn) AvroDerivationUtils.parseAvroNameFqn(fullName) else AvroDerivationUtils.parseAvroName(fullName)
+          )
+        } else if (useFqn) Expr.quote(AvroDerivationUtils.parseAvroNameFqn(Expr.splice(fullNameExpr)))
         else Expr.quote(AvroDerivationUtils.parseAvroName(Expr.splice(fullNameExpr)))
     }
   }

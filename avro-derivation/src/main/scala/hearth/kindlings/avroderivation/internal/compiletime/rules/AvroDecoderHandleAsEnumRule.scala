@@ -81,22 +81,28 @@ trait AvroDecoderHandleAsEnumRuleImpl {
                 }
               }
               .map { dispatchers =>
-                val errorExpr: Expr[A] = Expr.quote {
-                  AvroDerivationUtils.failedToMatchSubtype(
-                    AvroDerivationUtils.decodeEnumSymbol(Expr.splice(dctx.avroValue)),
-                    Expr.splice(Expr(knownNames))
+                // The symbol is read once; with the config known at compile time each case's name is a constant.
+                ValDefs
+                  .createVal[String](
+                    Expr.quote(AvroDerivationUtils.decodeEnumSymbol(Expr.splice(dctx.avroValue))),
+                    FreshName.FromPrefix("symbol")
                   )
-                }
-
-                dispatchers.toList.foldRight(errorExpr) { case ((childName, childExpr), elseExpr) =>
-                  Expr.quote {
-                    val name = AvroDerivationUtils.decodeEnumSymbol(Expr.splice(dctx.avroValue))
-                    if (Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == name)
-                      Expr.splice(childExpr)
-                    else
-                      Expr.splice(elseExpr)
+                  .use { symbol =>
+                    val errorExpr: Expr[A] = Expr.quote {
+                      AvroDerivationUtils.failedToMatchSubtype(Expr.splice(symbol), Expr.splice(Expr(knownNames)))
+                    }
+                    dispatchers.toList.foldRight(errorExpr) { case ((childName, childExpr), elseExpr) =>
+                      val caseNameExpr: Expr[String] = dctx.evaluatedConfig match {
+                        case Some(cfg) => Expr(cfg.transformConstructorNames(childName))
+                        case None      =>
+                          Expr.quote(Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))))
+                      }
+                      Expr.quote {
+                        if (Expr.splice(caseNameExpr) == Expr.splice(symbol)) Expr.splice(childExpr)
+                        else Expr.splice(elseExpr)
+                      }
+                    }
                   }
-                }
               }
           } else {
             // Mixed sealed trait → dispatch based on record schema name.

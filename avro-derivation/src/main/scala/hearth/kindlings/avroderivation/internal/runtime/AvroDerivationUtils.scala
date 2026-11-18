@@ -718,9 +718,12 @@ object AvroDerivationUtils {
     val stripped = stripTypeSuffix(fullName)
     val dotIdx = stripped.lastIndexOf('.')
     val name = if (dotIdx < 0) stripped else stripped.substring(dotIdx + 1)
-    name.replaceAll("[^A-Za-z0-9_]", "_")
+    NonAvroNameChars.matcher(name).replaceAll("_")
   }
 
   private def fqnToAvroName(fullName: String): String =
-    stripTypeSuffix(fullName).replaceAll("[^A-Za-z0-9_]", "_")
+    NonAvroNameChars.matcher(stripTypeSuffix(fullName)).replaceAll("_")
+
+  // compiled once (`String.replaceAll` compiles its regex on every call)
+  private val NonAvroNameChars: java.util.regex.Pattern = java.util.regex.Pattern.compile("[^A-Za-z0-9_]")
 }

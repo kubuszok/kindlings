@@ -30,10 +30,19 @@ trait AvroEncoderUseImplicitWhenAvailableRuleImpl {
         else
           EncTypes.AvroEncoder[A].summonExprIgnoring(ignoredImplicits*).toEither match {
             case Right(instanceExpr) =>
-              Log.info(s"Found implicit encoder ${instanceExpr.prettyPrint}, using directly") >>
-                MIO.pure(Rule.matched(Expr.quote {
-                  Expr.splice(instanceExpr).encode(Expr.splice(ectx.value))
-                }))
+              // a lazy val of the instance: resolved once, not on every encoded value
+              Log.info(s"Found implicit encoder ${instanceExpr.prettyPrint}, caching it in the instance") >>
+                ectx
+                  .getInstance[A]
+                  .flatMap {
+                    case Some(cached) => MIO.pure(cached)
+                    case None         => ectx.setInstance[A](instanceExpr) >> ectx.getInstance[A].map(_.get)
+                  }
+                  .map { cached =>
+                    Rule.matched(Expr.quote {
+                      Expr.splice(cached).encode(Expr.splice(ectx.value))
+                    })
+                  }
             case Left(reason) =>
               MIO.pure(
                 Rule.yielded(

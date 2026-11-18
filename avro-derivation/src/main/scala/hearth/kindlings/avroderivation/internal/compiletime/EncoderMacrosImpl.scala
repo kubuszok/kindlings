@@ -252,6 +252,29 @@ trait EncoderMacrosImpl
     logDerivationImported || logDerivationSetGlobally
   }
 
+  /** The self-contained schema of `A` as a lazy val of the encoder instance (or the precomputed schema): built once,
+    * not on every encoded value. Only when the schema can be built from the instance's config (`outerConfig`);
+    * otherwise (an entry point without one) it is derived where it is used, as before.
+    */
+  protected def cachedEncodeSchema[A: Type](implicit ctx: EncoderCtx[A]): MIO[Expr[org.apache.avro.Schema]] =
+    ctx.precomputedSchema match {
+      case Some(schemaExpr) =>
+        Log.info(s"Using precomputed schema for ${Type[A].prettyPrint}") >> MIO.pure(schemaExpr)
+      case None if ctx.outerConfig.isEmpty =>
+        deriveSelfContainedSchema[A](ctx.config, ctx.evaluatedConfig)
+      case None =>
+        ctx.getCachedSchemaForEncode[A].flatMap {
+          case Some(cached) =>
+            Log.info(s"Using encoder-cached schema for ${Type[A].prettyPrint}") >> MIO.pure(cached)
+          case None =>
+            for {
+              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
+              _ <- ctx.setCachedSchemaForEncode[A](schema)
+              result <- ctx.getCachedSchemaForEncode[A]
+            } yield result.get
+        }
+    }
+
   // Context
 
   final case class EncoderCtx[A](

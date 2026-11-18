@@ -34,7 +34,7 @@ trait AvroDecoderHandleAsEitherRuleImpl {
                 .traverse { rightRawExpr =>
                   deriveDecoderRecursively[RightValue](using dctx.nest[RightValue](rightRawExpr))
                 }
-              unionSchemaExpr <- deriveSelfContainedSchema[A](dctx.config, dctx.evaluatedConfig)
+              unionSchemaExpr <- cachedDecodeSchema[A]
             } yield {
               val leftDecodeFn = leftDecoderBuilder.build[LeftValue]
               val rightDecodeFn = rightDecoderBuilder.build[RightValue]

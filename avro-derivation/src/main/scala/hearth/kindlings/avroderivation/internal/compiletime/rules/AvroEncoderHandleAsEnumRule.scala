@@ -39,7 +39,7 @@ trait AvroEncoderHandleAsEnumRuleImpl {
 
       if (allCaseObjects) {
         // Pure enum → encode as GenericData.EnumSymbol
-        deriveSelfContainedSchema[A](ectx.config, ectx.evaluatedConfig).flatMap { schemaExpr =>
+        cachedEncodeSchema[A].flatMap { schemaExpr =>
           enumm
             .parMatchOn[MIO, Any](ectx.value) { matched =>
               import matched.Underlying as EnumCase
@@ -50,11 +50,12 @@ trait AvroEncoderHandleAsEnumRuleImpl {
                 }
                 .map(_._1)
                 .getOrElse(Type[EnumCase].shortName)
+              val nameExpr: Expr[String] = ectx.evaluatedConfig match {
+                case Some(cfg) => Expr(cfg.transformConstructorNames(caseName))
+                case None => Expr.quote(Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName))))
+              }
               MIO.pure(
-                Expr.quote {
-                  val name = Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName)))
-                  AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), name): Any
-                }
+                Expr.quote(AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), Expr.splice(nameExpr)): Any)
               )
             }
             .flatMap {
