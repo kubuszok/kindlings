@@ -17,6 +17,7 @@ trait EqMacrosImpl
     with rules.EqSingletonRuleImpl
     with rules.EqCaseClassRuleImpl
     with rules.EqEnumRuleImpl
+    with InstanceScopeSupport
     with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
@@ -26,22 +27,21 @@ trait EqMacrosImpl
     implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
     val selfType: Option[??] = Some(Type[A].as_??)
 
-    deriveEqFromCtxAndAdaptForEntrypoint[A, cats.kernel.Eq[A]](macroName) { fromCtx =>
+    deriveEqFromCtxAndAdaptForEntrypoint[A, cats.kernel.Eq[A]](macroName, selfType) { call =>
       Expr.quote {
         hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.eqInstance[A] { (x: A, y: A) =>
           val _ = x
           val _ = y
-          Expr.splice {
-            fromCtx(EqCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType))
-          }
+          Expr.splice(call(Expr.quote(x), Expr.quote(y)))
         }
       }
     }
   }
 
-  private def deriveEqFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (EqCtx[A] => Expr[Boolean]) => Expr[Out]
+  private def deriveEqFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String, selfType: Option[??])(
+      adapt: ((Expr[A], Expr[A]) => Expr[Boolean]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val BooleanType: Type[Boolean] = EqTypes.Boolean
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended."
@@ -49,17 +49,14 @@ trait EqMacrosImpl
 
     Log
       .namedScope(s"Deriving Eq[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: EqCtx[A] => Expr[Boolean] = (ctx: EqCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveEqRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          call <- instanceScopedDef2[A, A, Boolean](cache, s"eqv_${Type[A].shortName}_instance") { (x, y) =>
+            deriveEqRecursively[A](using EqCtx(Type[A], x, y, cache, selfType))
+          }
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(call))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

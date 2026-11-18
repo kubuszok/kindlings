@@ -92,22 +92,16 @@ trait MonoidMacrosImpl
 
     Log
       .namedScope(s"Deriving Monoid[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          runSafe {
-            val ctx = MonoidCtx.from[A](Some(Type[A].as_??))
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveMonoidRecursively[A](using ctx)
-              cache <- ctx.cache.get
-            } yield {
-              val doEmpty = cache.toValDefs.use(_ => result.empty)
-              // combine creates its own fresh SemigroupCtx with its own cache (via the rules),
-              // so we just need to runSafe the MIO
-              val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) => runSafe(result.combine(xExpr, yExpr))
-              adapt(doEmpty, doCombine)
-            }
-          }
-        }
+        val ctx = MonoidCtx.from[A](Some(Type[A].as_??))
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          result <- deriveMonoidRecursively[A](using ctx)
+          // `combine` derives into the same cache, so its defs and summoned instances live at the instance scope.
+          callCombine <- instanceScopedDef2[A, A, A](ctx.cache, s"combine_${Type[A].shortName}_instance")(
+            result.combine
+          )
+          cacheState <- ctx.cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(result.empty, callCombine))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

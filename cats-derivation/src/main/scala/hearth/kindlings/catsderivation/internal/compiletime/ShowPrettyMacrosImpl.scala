@@ -19,48 +19,17 @@ trait ShowPrettyMacrosImpl
     implicit val StringType: Type[String] = ShowTypes.String
     val selfType: Option[??] = Some(Type[A].as_??)
 
-    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
-      Environment.reportErrorAndAbort(
-        s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended."
-      )
-
-    Log
-      .namedScope(s"Deriving ShowPretty[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: ShowCtx[A] => Expr[String] = (ctx: ShowCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveShowPrettyRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          Expr.quote {
-            hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              .showPrettyInstance[A] { (value: A) =>
-                val _ = value
-                Expr.splice {
-                  fromCtx(ShowCtx.from(Expr.quote(value), derivedType = selfType))
-                }
-              }
+    deriveShowFromCtxAndAdaptForEntrypoint[A, hearth.kindlings.catsderivation.ShowPretty[A]](macroName, selfType)(
+      deriveShowPrettyRecursively[A](using _)
+    ) { callShow =>
+      Expr.quote {
+        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+          .showPrettyInstance[A] { (value: A) =>
+            val _ = value
+            Expr.splice(callShow(Expr.quote(value)))
           }
-        }
       }
-      .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
-      .runToExprOrFail(
-        macroName,
-        infoRendering = if (shouldWeLogShowDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogShowDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = derivationTimeout
-      ) { (errorLogs, errors) =>
-        val errorsRendered =
-          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
-        if (errorLogs.nonEmpty) s"Macro derivation failed:\n$errorsRendered\nlogs:\n$errorLogs\n$hint"
-        else s"Macro derivation failed:\n$errorsRendered\n$hint"
-      }
+    }
   }
 
   def deriveShowPrettyRecursively[A: ShowCtx]: MIO[Expr[String]] =

@@ -95,24 +95,18 @@ trait GroupMacrosImpl
 
     Log
       .namedScope(s"Deriving $macroName[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          runSafe {
-            val selfType: Option[??] = Some(Type[A].as_??)
-            val ctx = GroupCtx.from[A](selfType)
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveGroupRecursively[A](using ctx)
-              cache <- ctx.cache.get
-            } yield {
-              val doEmpty: Expr[A] = result.empty
-              val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) => runSafe(result.combine(xExpr, yExpr))
-              val doInverse: Expr[A] => Expr[A] = (aExpr) => runSafe(result.inverse(aExpr))
-              cache.toValDefs.use { _ =>
-                adapt(doEmpty, doCombine, doInverse)
-              }
-            }
-          }
-        }
+        val ctx = GroupCtx.from[A](Some(Type[A].as_??))
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          result <- deriveGroupRecursively[A](using ctx)
+          // `combine` and `inverse` derive into the same cache, so their defs and summoned instances live at the
+          // instance scope.
+          callCombine <- instanceScopedDef2[A, A, A](ctx.cache, s"combine_${Type[A].shortName}_instance")(
+            result.combine
+          )
+          callInverse <- instanceScopedDef1[A, A](ctx.cache, s"inverse_${Type[A].shortName}_instance")(result.inverse)
+          cacheState <- ctx.cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(result.empty, callCombine, callInverse))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

@@ -14,6 +14,7 @@ trait SemigroupMacrosImpl
     with rules.SemigroupUseImplicitRuleImpl
     with rules.SemigroupBuiltInRuleImpl
     with rules.SemigroupCaseClassRuleImpl
+    with InstanceScopeSupport
     with CatsDerivationTimeout
     with CatsDerivationErrorSupport {
   this: MacroCommons & StdExtensions =>
@@ -95,19 +96,15 @@ trait SemigroupMacrosImpl
 
     Log
       .namedScope(s"Deriving $macroName[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val selfType: Option[??] = Some(Type[A].as_??)
-          val doCombine: (Expr[A], Expr[A]) => Expr[A] = (xExpr, yExpr) =>
-            runSafe {
-              val ctx = SemigroupCtx.from(xExpr, yExpr, selfType)
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveSemigroupRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          adapt(doCombine)
-        }
+        val selfType: Option[??] = Some(Type[A].as_??)
+        val cache = ValDefsCache.mlocal
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          callCombine <- instanceScopedDef2[A, A, A](cache, s"combine_${Type[A].shortName}_instance") { (x, y) =>
+            deriveSemigroupRecursively[A](using SemigroupCtx(Type[A], x, y, cache, selfType))
+          }
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(callCombine))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

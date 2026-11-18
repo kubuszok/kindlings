@@ -20,6 +20,7 @@ trait ShowMacrosImpl
     with rules.ShowSingletonRuleImpl
     with rules.ShowCaseClassRuleImpl
     with rules.ShowEnumRuleImpl
+    with InstanceScopeSupport
     with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
   // Entrypoint
@@ -31,23 +32,26 @@ trait ShowMacrosImpl
     implicit val StringType: Type[String] = ShowTypes.String
     val selfType: Option[??] = Some(Type[A].as_??)
 
-    deriveShowFromCtxAndAdaptForEntrypoint[A, cats.Show[A]](macroName) { fromCtx =>
-      Expr.quote {
-        hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.showInstance[A] { (value: A) =>
-          val _ = value
-          Expr.splice {
-            fromCtx(ShowCtx.from(Expr.quote(value), derivedType = selfType))
+    deriveShowFromCtxAndAdaptForEntrypoint[A, cats.Show[A]](macroName, selfType)(deriveShowRecursively[A](using _)) {
+      callShow =>
+        Expr.quote {
+          hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.showInstance[A] { (value: A) =>
+            val _ = value
+            Expr.splice(callShow(Expr.quote(value)))
           }
         }
-      }
     }
   }
 
   // CPS-style entrypoint that handles logging, error reporting and cache
 
-  private def deriveShowFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (ShowCtx[A] => Expr[String]) => Expr[Out]
+  /** Derives the `show` body once, as a `def` at the instance scope, and lets `adapt` build the instance calling it. */
+  protected def deriveShowFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String, selfType: Option[??])(
+      derive: ShowCtx[A] => MIO[Expr[String]]
+  )(
+      adapt: (Expr[A] => Expr[String]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val StringType: Type[String] = ShowTypes.String
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -57,19 +61,16 @@ trait ShowMacrosImpl
 
     Log
       .namedScope(
-        s"Deriving Show[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}"
+        s"Deriving ${macroName.stripSuffix(".derived")}[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: ShowCtx[A] => Expr[String] = (ctx: ShowCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveShowRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-          provideCtxAndAdapt(fromCtx)
-        }
+        val cache = ValDefsCache.mlocal
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          callShow <- instanceScopedDef1[A, String](cache, s"show_${Type[A].shortName}_instance") { value =>
+            derive(ShowCtx(Type[A], value, cache, selfType))
+          }
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use(_ => adapt(callShow))
       }
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(

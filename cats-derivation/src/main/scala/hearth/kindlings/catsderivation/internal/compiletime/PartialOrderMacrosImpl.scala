@@ -12,7 +12,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * order, e.g. a `Set`, is supported) lexicographically - the first result other than `0.0` (including `NaN`) wins -
   * and values of different subtypes of a sealed trait are incomparable (`NaN`).
   */
-trait PartialOrderMacrosImpl extends StrictDerivationSupport with CatsDerivationTimeout {
+trait PartialOrderMacrosImpl extends StrictDerivationSupport with InstanceScopeSupport with CatsDerivationTimeout {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used")
@@ -29,21 +29,23 @@ trait PartialOrderMacrosImpl extends StrictDerivationSupport with CatsDerivation
 
     Log
       .namedScope(s"Deriving PartialOrder[${Type[A].prettyPrint}] at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val fromCtx: PartialOrderCtx[A] => Expr[Double] = (ctx: PartialOrderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- derivePartialOrderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
+        val cache = ValDefsCache.mlocal
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          callPartialCompare <- instanceScopedDef2[A, A, Double](
+            cache,
+            s"partialCompare_${Type[A].shortName}_instance"
+          ) { (x, y) =>
+            derivePartialOrderRecursively[A](using PartialOrderCtx(Type[A], x, y, cache, selfType))
+          }
+          cacheState <- cache.get
+        } yield cacheState.toValDefs.use { _ =>
           Expr.quote {
             hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories.partialOrderInstance[A] {
               (x: A, y: A) =>
                 val _ = x
                 val _ = y
-                Expr.splice(fromCtx(PartialOrderCtx.from(Expr.quote(x), Expr.quote(y), derivedType = selfType)))
+                Expr.splice(callPartialCompare(Expr.quote(x), Expr.quote(y)))
             }
           }
         }
