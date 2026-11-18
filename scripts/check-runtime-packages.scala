@@ -26,7 +26,7 @@
 // Without them, only check 1 runs.
 
 import java.io.{ByteArrayInputStream, DataInputStream}
-import java.nio.file.{FileSystems, Files, Path, Paths}
+import java.nio.file.{Files, FileSystems, Path, Paths}
 import scala.jdk.CollectionConverters.*
 
 // Configuration
@@ -111,7 +111,7 @@ val allPackages = packagesByModule.values.flatten.toSet
 val faqSection: List[String] = {
   val lines = Files.readAllLines(faqFile).asScala.toList
   val fromHeading = lines.dropWhile(line => !line.startsWith(sectionHeading))
-  if (fromHeading.isEmpty) {
+  if fromHeading.isEmpty then {
     System.err.println(s"Cannot find the section '$sectionHeading' in $faqFile")
     sys.exit(1)
   }
@@ -123,7 +123,7 @@ val packageName = ("""\Q""" + rootPackage + """\E(\.([a-z_][a-z0-9_]*|\*))*""").
 
 // Only the first column lists packages: other columns may mention packages in passing.
 def packagesInFirstColumn(line: String): List[String] =
-  if (line.startsWith("|") && !line.startsWith("|--")) {
+  if line.startsWith("|") && !line.startsWith("|--") then {
     val firstCell = line.split('|').lift(1).getOrElse("")
     backticked.findAllMatchIn(firstCell).map(_.group(1)).filter(packageName.matches).toList
   } else Nil
@@ -194,7 +194,7 @@ def referencedClasses(classFile: Path): Set[String] = {
   val utf8 = Array.ofDim[String](count)
   val classNameIndices = List.newBuilder[Int]
   var index = 1
-  while (index < count) {
+  while index < count do {
     in.readUnsignedByte() match {
       case 1                                  => utf8(index) = in.readUTF()
       case 7                                  => classNameIndices += in.readUnsignedShort()
@@ -220,7 +220,7 @@ def valuesAfter(flag: String, args: List[String]): List[String] = args
 def expandGlob(glob: String): List[Path] = {
   val matcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
   val fixedPrefix = Paths.get(glob.split('/').takeWhile(segment => !segment.exists("*?[{".contains(_))).mkString("/"))
-  if (!Files.isDirectory(fixedPrefix)) Nil
+  if !Files.isDirectory(fixedPrefix) then Nil
   else
     Files
       .walk(fixedPrefix, glob.count(_ == '/') + 1)
@@ -266,7 +266,7 @@ def referencesToCompileTimePackages(testClassDirs: List[Path], ownClassDirs: Lis
   val testClassDirs = valuesAfter("--test-classes", args.toList).map(Paths.get(_)) ++ globbed
   val ownClassDirs = valuesAfter("--own-classes", args.toList).map(Paths.get(_))
   val missingDirs = (testClassDirs ++ ownClassDirs).filterNot(Files.isDirectory(_))
-  if (missingDirs.nonEmpty || (globs.nonEmpty && globbed.isEmpty)) {
+  if missingDirs.nonEmpty || (globs.nonEmpty && globbed.isEmpty) then {
     System.err.println(
       s"Not a directory: ${(missingDirs ++ globs.filter(expandGlob(_).isEmpty)).mkString(", ")} - compile the tests first"
     )
@@ -280,11 +280,11 @@ def referencesToCompileTimePackages(testClassDirs: List[Path], ownClassDirs: Lis
       referencesToCompileTimePackages(testClassDirs, ownClassDirs)
   ).filter(_._2.nonEmpty)
 
-  if (problems.isEmpty) {
+  if problems.isEmpty then {
     println(
       s"All ${allPackages.size} packages of ${publishedModules.size} published modules are classified in $faqFile"
     )
-    if (testClassDirs.nonEmpty)
+    if testClassDirs.nonEmpty then
       println(s"Classes in ${testClassDirs.size} test-classes directories refer only to packages needed at runtime")
   } else {
     problems.foreach { case (title, entries) =>
