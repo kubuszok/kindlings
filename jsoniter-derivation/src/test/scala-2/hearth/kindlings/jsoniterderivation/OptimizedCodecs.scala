@@ -26,6 +26,10 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[AbsentAdt](JsoniterConfig.default.withDiscriminator("type"))
   val absentSnakeCase: KindlingsJsonValueCodec[AbsentCamelCase] =
     KindlingsJsonValueCodec.derived[AbsentCamelCase](JsoniterConfig.default.withSnakeCaseFieldNames)
+  val strictTwelve: KindlingsJsonValueCodec[TwelveFields] =
+    KindlingsJsonValueCodec.derived[TwelveFields](
+      JsoniterConfig.default.withSkipUnexpectedFields(false).withCheckFieldDuplication
+    )
   val strictZero: KindlingsJsonValueCodec[ParityZeroFields] =
     KindlingsJsonValueCodec.derived[ParityZeroFields](JsoniterConfig.default.withSkipUnexpectedFields(false))
   val strictAllTransient: KindlingsJsonValueCodec[ParityAllTransient] =

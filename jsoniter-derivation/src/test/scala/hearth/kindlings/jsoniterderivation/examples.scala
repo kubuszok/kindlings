@@ -266,6 +266,22 @@ object EmptyCollectionsRuntimeConfigs {
 }
 
 /** Configs read from mutable fields so that the macro cannot evaluate them at compile time (forces generic codegen). */
+/** More than 8 keys: decoders with a config known at compile time find keys by their hashes. */
+case class TwelveFields(
+    alpha: Int = 0,
+    beta: String = "",
+    gamma: Option[String] = None,
+    delta: Long = 0L,
+    epsilon: Boolean = false,
+    zeta: Int = 0,
+    eta: String = "",
+    theta: Double = 0.0,
+    iota: Int = 0,
+    kappa: String = "",
+    lambda: Option[Int] = None,
+    mu: Int = 0
+)
+
 object AbsentFieldsRuntimeConfigs {
   @volatile var default: JsoniterConfig = JsoniterConfig.default
   @volatile var allTransient: JsoniterConfig =
@@ -275,6 +291,8 @@ object AbsentFieldsRuntimeConfigs {
   @volatile var strict: JsoniterConfig = JsoniterConfig.default.withSkipUnexpectedFields(false)
   @volatile var checkDuplication: JsoniterConfig = JsoniterConfig.default.withCheckFieldDuplication
   @volatile var discriminator: JsoniterConfig = JsoniterConfig.default.withDiscriminator("type")
+  @volatile var strictCheckDuplication: JsoniterConfig =
+    JsoniterConfig.default.withSkipUnexpectedFields(false).withCheckFieldDuplication
 }
 
 /** Conflicting flag combinations; a compile-time-known config with them emits a derivation warning. */
