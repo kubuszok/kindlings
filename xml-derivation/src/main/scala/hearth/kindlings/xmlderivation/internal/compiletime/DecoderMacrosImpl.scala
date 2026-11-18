@@ -418,7 +418,9 @@ trait DecoderMacrosImpl
   object FieldDecoding {
     case class Default(value: Expr[Any]) extends FieldDecoding
     case class FromAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
+    case class FromOptionalAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
     case class FromChildElement(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
+    case class FromChildElementOrEmpty(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
     case class FromChildElementWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
         extends FieldDecoding
     case class FromChildElementWithRuntimeDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
