@@ -256,8 +256,13 @@ trait SchemaForMacrosImpl
   /** Derives schema with its own local cache, returning a self-contained expression. Use this instead of
     * deriveInlineSchema when calling from within an encoder/decoder MIO chain to avoid Scala 3 splice isolation issues.
     */
-  def deriveSelfContainedSchema[B: Type](config: Expr[AvroConfig]): MIO[Expr[Schema]] = {
-    val evConfig: Option[AvroConfig] = config.semiEval.toOption
+  def deriveSelfContainedSchema[B: Type](
+      config: Expr[AvroConfig],
+      evaluatedConfig: Option[AvroConfig] = None
+  ): MIO[Expr[Schema]] = {
+    // The caller may know the config's value even when `config` itself cannot be evaluated (e.g. it is the parameter
+    // of a cached def): use it, so the schema does not fall back to reading the config at runtime.
+    val evConfig: Option[AvroConfig] = evaluatedConfig.orElse(config.semiEval.toOption)
     val localCache = ValDefsCache.mlocal
     // Mark `B` as the type being derived so `AvroSchemaForUseImplicitWhenAvailableRule` skips the implicit
     // search for the *root* type and derives it structurally. Without this, a `derives AvroEncoder`/`AvroDecoder`

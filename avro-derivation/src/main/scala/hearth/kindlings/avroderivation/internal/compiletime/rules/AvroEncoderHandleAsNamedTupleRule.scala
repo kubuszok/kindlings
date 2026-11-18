@@ -82,7 +82,7 @@ trait AvroEncoderHandleAsNamedTupleRuleImpl {
                 }
               }
 
-              deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
+              deriveSelfContainedSchema[A](ectx.config, ectx.evaluatedConfig).map { schemaExpr =>
                 Expr.quote {
                   val schema = Expr.splice(schemaExpr)
                   val fields = Expr.splice(fieldsListExpr)
@@ -95,7 +95,7 @@ trait AvroEncoderHandleAsNamedTupleRuleImpl {
               }
             }
         case None =>
-          deriveSelfContainedSchema[A](ectx.config).map { schemaExpr =>
+          deriveSelfContainedSchema[A](ectx.config, ectx.evaluatedConfig).map { schemaExpr =>
             Expr.quote {
               val record = new GenericData.Record(Expr.splice(schemaExpr))
               record: Any

@@ -86,8 +86,22 @@ trait EncoderMacrosImpl
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
 
+          // The record schema is derived once and cached in the instance's scope, where the encode body's case-class
+          // rule finds it (`cached-encode-schema-for-A`) instead of deriving a second copy.
           val schemaExpr: Expr[Schema] = runSafe {
-            deriveSelfContainedSchema[A](configExpr)
+            for {
+              schema <- deriveSelfContainedSchema[A](configExpr, evConfig)
+              cachedSchemaCtx = EncoderCtx[A](
+                tpe = Type[A],
+                value = Expr.quote(null.asInstanceOf[A]),
+                config = configExpr,
+                cache = cache,
+                derivedType = selfType,
+                evaluatedConfig = evConfig
+              )
+              _ <- cachedSchemaCtx.setCachedSchemaForEncode[A](schema)
+              cached <- cachedSchemaCtx.getCachedSchemaForEncode[A]
+            } yield cached.get
           }
 
           val outerConfigExpr: Expr[AvroConfig] = runSafe {

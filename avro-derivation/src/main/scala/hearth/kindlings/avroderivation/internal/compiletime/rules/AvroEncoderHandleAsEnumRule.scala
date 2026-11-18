@@ -39,7 +39,7 @@ trait AvroEncoderHandleAsEnumRuleImpl {
 
       if (allCaseObjects) {
         // Pure enum → encode as GenericData.EnumSymbol
-        deriveSelfContainedSchema[A](ectx.config).flatMap { schemaExpr =>
+        deriveSelfContainedSchema[A](ectx.config, ectx.evaluatedConfig).flatMap { schemaExpr =>
           enumm
             .parMatchOn[MIO, Any](ectx.value) { matched =>
               import matched.Underlying as EnumCase
