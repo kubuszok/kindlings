@@ -212,8 +212,7 @@ val dependencies = Seq(
       compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
     )
   ),
-  resolvers += Resolver.mavenLocal,
-  resolvers += "Sonatype Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
+  resolvers += Resolver.mavenLocal
 )
 
 val publishSettings = Seq(
@@ -304,6 +303,7 @@ lazy val commandAliases: Seq[Def.Setting[?]] =
 
 lazy val root = project
   .in(file("."))
+  .enablePlugins(KubuszokRootPlugin)
   .settings(settings)
   .settings(publishSettings)
   .settings(noPublishSettings)
@@ -640,8 +640,7 @@ lazy val jsoniterJson = projectMatrix
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full)
       )
     ),
-    resolvers += Resolver.mavenLocal,
-    resolvers += "Sonatype Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
+    resolvers += Resolver.mavenLocal
   )
 
 lazy val ubjsonDerivation = projectMatrix
@@ -1250,7 +1249,6 @@ lazy val benchmarks = projectMatrix
     description := "JMH benchmarks comparing Kindlings derivation against original library derivation",
     scalacOptions --= Seq("-Werror", "-Xfatal-warnings", "-Xcheck-macros"),
     resolvers += Resolver.mavenLocal,
-    resolvers += "Sonatype Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/",
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-parser" % versions.circe,
       "io.circe" %% "circe-generic" % versions.circe,

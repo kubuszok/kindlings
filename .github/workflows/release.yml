@@ -1,12 +1,19 @@
 name: Sonatype Release
 
 on:
+  pull_request:
+    branches: [master]
   push:
     branches: [master]
     tags: ["*"]
 
 jobs:
   release-tag:
+    # PR snapshots let a change be tested before merging. Bot (Dependabot, Scala Steward) and fork PRs get no
+    # secrets, so only trusted authors' PRs publish. Never drop this guard while `pull_request` is a trigger.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-latest
 
     name: ${{ startsWith(github.ref, 'refs/tags/') && 'Publish Tag as Release' || 'Publish Snapshot' }}
@@ -25,6 +32,15 @@ jobs:
         with:
           jvm: "temurin:1.17.0.15"
           apps: sbt
+      # sbt 2's `sbt` launcher defaults to a thin client that starts a background server. On a runner that server keeps
+      # the environment of the step that started it and can fail to start (`failed to connect to server`). `--server`
+      # runs sbt in the foreground, one JVM per call, as before sbt 2; the wrapper first on the PATH adds it everywhere.
+      - name: Make `sbt` run in the foreground
+        shell: bash
+        run: |
+          dir="$RUNNER_TEMP/sbt-foreground"; mkdir -p "$dir"
+          printf '#!/usr/bin/env bash\nexec "%s" --server "$@"\n' "$(command -v sbt)" > "$dir/sbt"
+          chmod +x "$dir/sbt"; echo "$dir" >> "$GITHUB_PATH"
       # `ci-release` builds, documents and signs every module/platform/Scala-version cell in one sbt JVM before
       # uploading; with the local default (.jvmopts -Xmx3G) Scaladoc ran out of heap there (0.3.4). The runner has
       # 16 GB, so give the release build more; local builds keep .jvmopts as it is.
