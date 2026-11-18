@@ -119,6 +119,16 @@ final class KittensParitySpec extends MacroSuite {
     assertEquals(Reducible.derived[KpDeep].reduceLeft(deep)(_ * 10 + _), 123)
   }
 
+  test("Functor: invariant case classes recursing through a container (rose tree)") {
+    val rose = KpRose(1, List(KpRose(2, Nil), KpRose(3, List(KpRose(4, Nil)))))
+    val functor: Functor[KpRose] = Functor.derived[KpRose]
+    assertEquals(
+      functor.map(rose)(_ * 10),
+      KpRose(10, List(KpRose(20, Nil), KpRose(30, List(KpRose(40, Nil)))))
+    )
+    assertEquals(functor.map(rose)(_.toString).children.map(_.value), List("2", "3"))
+  }
+
   test("Apply, Applicative, Pure: fields wrapping the type parameter, constants combined with their instances") {
     import cats.{Applicative, Apply}
     import alleycats.Pure

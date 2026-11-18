@@ -131,8 +131,11 @@ trait FunctorMacrosImpl
         self$macro = CatsDerivationFactories.functorInstance[F] {
           (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
             val _ = fa; val _ = f
-            val r$0: F[Any] = Expr.splice {
-              val body: MIO[Expr[F[Any]]] =
+            // The body is typed `F[W2]` (what it is): typing it as `F[Any]` only compiled for covariant `F`, an
+            // invariant one (e.g. `Tree[A](value: A, children: List[Tree[A]])`) failed with "found F[W2], required
+            // F[Any]".
+            Expr.splice {
+              val body: MIO[Expr[F[CatsDerivationFactories.W2]]] =
                 deriveFunctorMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
                   result.FCtor,
                   result.directFieldSet,
@@ -145,10 +148,9 @@ trait FunctorMacrosImpl
                 )(
                   Type.of[CatsDerivationFactories.W1],
                   Type.of[CatsDerivationFactories.W2]
-                ).asInstanceOf[MIO[Expr[F[Any]]]]
+                )
               runSafe(body)
             }
-            r$0.asInstanceOf[F[CatsDerivationFactories.W2]]
         }
         self$macro.asInstanceOf[cats.Functor[F]]
       }
