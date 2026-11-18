@@ -47,7 +47,10 @@ final class CirceBytecodeSizeSpec extends MacroSuite {
     assert(first.left.toOption.flatMap(_.pathToRootString) == Some(".f1"), first.toString)
     // accumulating: every failing field, in field order
     val failures = withDefaults.decodeAccumulating(broken.hcursor)
-    assert(failures.fold(_.toList.map(_.pathToRootString), _ => Nil) == List(Some(".f1"), Some(".f3")), failures.toString)
+    assert(
+      failures.fold(_.toList.map(_.pathToRootString), _ => Nil) == List(Some(".f1"), Some(".f3")),
+      failures.toString
+    )
     // without defaults every absent non-Option field fails
     val missing = CirceWideInstances.decoder.decodeAccumulating(Json.obj().hcursor)
     assert(missing.fold(_.size, _ => 0) == 67, missing.toString)
