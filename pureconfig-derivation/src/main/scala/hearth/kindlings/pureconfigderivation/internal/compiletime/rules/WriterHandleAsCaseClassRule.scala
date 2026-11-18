@@ -93,36 +93,51 @@ trait WriterHandleAsCaseClassRuleImpl {
                   }
                 }
                 .map { fieldData =>
-                  fieldData.toList.foldRight(Expr.quote(List.empty[(String, ConfigValue)])) {
-                    case ((fName, fieldValueExpr, nameOverride, emptyOption), acc) =>
-                      // When the config was evaluable at compile time, pre-compute the
-                      // mapped name as a constant string.
-                      val keyExpr: Expr[String] = nameOverride match {
-                        case Some(customName) => Expr(customName)
-                        case None             =>
-                          preComputedTransform match {
-                            case Some(transform) => Expr(transform(fName))
-                            case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
-                          }
-                      }
-                      // A `null` (not `ConfigNull`) value marks a field to omit (see `writeFieldsOmittingMissing`).
-                      val valueExpr: Expr[ConfigValue] = emptyOption match {
-                        case Some(isEmpty) =>
-                          Expr.quote(if (Expr.splice(isEmpty)) (null: ConfigValue) else Expr.splice(fieldValueExpr))
-                        case None => fieldValueExpr
-                      }
-                      Expr.quote {
-                        (
-                          Expr.splice(keyExpr),
-                          Expr.splice(valueExpr)
-                        ) ::
-                          Expr.splice(acc)
-                      }
+                  // One statement per field putting it into the object's map (an empty `Option` is not put: like
+                  // upstream's `WritesMissingKeys`, it is omitted). Building `(key, value) :: ...` with an `if` inside
+                  // each element made the compiler keep every previous element on the stack and emit a stack map
+                  // frame per field listing all of them.
+                  val putFields: Expr[java.util.LinkedHashMap[String, ConfigValue]] => Expr[Unit] = { fieldsMap =>
+                    fieldData.toList.foldLeft(Expr.quote(()): Expr[Unit]) {
+                      case (acc, (fName, fieldValueExpr, nameOverride, emptyOption)) =>
+                        // When the config was evaluable at compile time, pre-compute the
+                        // mapped name as a constant string.
+                        val keyExpr: Expr[String] = nameOverride match {
+                          case Some(customName) => Expr(customName)
+                          case None             =>
+                            preComputedTransform match {
+                              case Some(transform) => Expr(transform(fName))
+                              case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                            }
+                        }
+                        emptyOption match {
+                          case Some(isEmpty) =>
+                            Expr.quote {
+                              Expr.splice(acc)
+                              if (Expr.splice(isEmpty)) ()
+                              else
+                                PureConfigDerivationUtils.putField(
+                                  Expr.splice(fieldsMap),
+                                  Expr.splice(keyExpr),
+                                  Expr.splice(fieldValueExpr)
+                                )
+                            }
+                          case None =>
+                            Expr.quote {
+                              Expr.splice(acc)
+                              PureConfigDerivationUtils.putField(
+                                Expr.splice(fieldsMap),
+                                Expr.splice(keyExpr),
+                                Expr.splice(fieldValueExpr)
+                              )
+                            }
+                        }
+                    }
                   }
-                }
-                .map { fieldsListExpr =>
                   Expr.quote {
-                    PureConfigDerivationUtils.writeFieldsOmittingMissing(Expr.splice(fieldsListExpr))
+                    val writtenFields = new java.util.LinkedHashMap[String, ConfigValue]()
+                    Expr.splice(putFields(Expr.quote(writtenFields)))
+                    PureConfigDerivationUtils.fieldsToObject(writtenFields)
                   }
                 }
             case None =>

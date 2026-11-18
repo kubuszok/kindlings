@@ -398,6 +398,15 @@ object PureConfigDerivationUtils {
     ConfigValueFactory.fromMap(map)
   }
 
+  /** Puts a field into the map of an object being written (one statement per field in derived writers). */
+  def putField(fields: java.util.LinkedHashMap[String, ConfigValue], key: String, value: ConfigValue): Unit = {
+    val _ = fields.put(key, value)
+  }
+
+  /** The object of the fields put by [[putField]]. */
+  def fieldsToObject(fields: java.util.LinkedHashMap[String, ConfigValue]): ConfigValue =
+    ConfigValueFactory.fromMap(fields)
+
   /** Wrap a value with a single-key parent object: `{"TypeName": inner}`. */
   def wrapWithTypeName(typeName: String, inner: ConfigValue): ConfigValue = {
     val map = new java.util.LinkedHashMap[String, ConfigValue]()
