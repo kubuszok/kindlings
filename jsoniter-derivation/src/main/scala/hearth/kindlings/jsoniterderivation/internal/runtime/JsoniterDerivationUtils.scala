@@ -457,6 +457,18 @@ object JsoniterDerivationUtils {
   /** Decodes a field that has a default value: a JSON `null` decodes as the default (as in jsoniter-scala, which passes
     * the field's current value as `default` to the field's decoder).
     */
+  /** [[readNullAsDefault]] without the thunk and the decoder function: reads a JSON `null` and returns `true`, or
+    * leaves the reader before the value and returns `false` (`if (readNullForDefault(in)) default else decode(in)`).
+    */
+  def readNullForDefault(in: JsonReader): Boolean =
+    if (in.isNextToken('n'.toByte)) {
+      in.readNullOrError((), "expected value or null")
+      true
+    } else {
+      in.rollbackToken()
+      false
+    }
+
   @inline def readNullAsDefault[A](in: JsonReader, default: => A)(decode: JsonReader => A): A =
     if (in.isNextToken('n'.toByte)) in.readNullOrError(default, "expected value or null")
     else {
@@ -832,6 +844,73 @@ object JsoniterDerivationUtils {
       in.skip()
       AbsentField
     } else decode(in)
+
+  /** The keys of a case class decoder whose field names are only known at runtime (a config the macro could not
+    * evaluate), built once per codec instance: a key is looked up by hash instead of being compared with every field's
+    * name (each computed with `fieldNameMapper`) on every key of every decode.
+    *
+    * @param names
+    *   the (mapped) key of each field, in the order of the decoder's field array
+    */
+  final class FieldIndex(names: Array[String]) {
+    private val indices: java.util.HashMap[String, Integer] = {
+      val map = new java.util.HashMap[String, Integer](names.length * 2)
+      var i = names.length - 1
+      while (i >= 0) { // the first field wins when names collide, as with a chain of comparisons
+        map.put(names(i), Integer.valueOf(i))
+        i -= 1
+      }
+      map
+    }
+
+    /** The index of the field with this key, `-1` for an unknown key. */
+    def indexOf(key: String): Int = {
+      val i = indices.get(key)
+      if (i eq null) -1 else i.intValue
+    }
+
+    /** The key of the field at index `i`. */
+    def name(i: Int): String = names(i)
+  }
+
+  def fieldIndex(names: Array[String]): FieldIndex = new FieldIndex(names)
+
+  /** The keys of a case class decoder that reads keys with `JsonReader.readKeyAsCharBuf`, built once per codec
+    * instance: as jsoniter-scala's `JsonCodecMaker` does for more than a few keys, a key is found by its hash
+    * (`JsonReader.charBufToHashCode`) and one comparison instead of a comparison with every key.
+    *
+    * @param names
+    *   the keys, without duplicates
+    */
+  final class KeyTable(names: Array[String]) {
+    // the keys' hashes, sorted, and the index of the key of each hash
+    private val indices: Array[Int] = names.indices.sortBy(i => hashOf(names(i))).toArray
+    private val hashes: Array[Int] = indices.map(i => hashOf(names(i)))
+
+    private def hashOf(name: String): Int = JsonReader.toHashCode(name.toCharArray, name.length)
+
+    /** The index of the key in the reader's char buffer (of length `len`), `-1` for an unknown key. */
+    def indexOf(in: JsonReader, len: Int): Int = {
+      val hash = in.charBufToHashCode(len)
+      var low = 0
+      var high = hashes.length
+      while (low < high) { // the first position whose hash is not lower
+        val middle = (low + high) >>> 1
+        if (hashes(middle) < hash) low = middle + 1 else high = middle
+      }
+      var found = -1
+      while (found < 0 && low < hashes.length && hashes(low) == hash) {
+        if (in.isCharBufEqualsTo(len, names(indices(low)))) found = indices(low)
+        low += 1
+      }
+      found
+    }
+  }
+
+  def keyTable(names: Array[String]): KeyTable = new KeyTable(names)
+
+  /** A field array of [[readObject]]'s shape (every slot absent), for decoders reading the object themselves. */
+  def absentFields(fieldCount: Int): Array[Any] = newFieldArray(fieldCount)
 
   private def newFieldArray(fieldCount: Int): Array[Any] = {
     val arr = new Array[Any](fieldCount)
