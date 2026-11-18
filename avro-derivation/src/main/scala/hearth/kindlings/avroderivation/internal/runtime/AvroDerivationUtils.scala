@@ -349,7 +349,7 @@ object AvroDerivationUtils {
     }
   }
 
-  /** What [[fieldOrMissing]] returns when the record has no field with the name (nor any of the aliases). */
+  /** What `fieldOrMissing` returns when the record has no field with the name (nor any of the aliases). */
   val MissingField: AnyRef = new AnyRef {
     override def toString: String = "MissingField"
   }
