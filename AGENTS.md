@@ -52,8 +52,9 @@ fixed bugs and known gotchas. Mention the matching `agent-skills` change (or why
 
 Uses **sbt-projectmatrix** (not sbt-crossproject). **Do NOT use** `++` version switching or `scalaCrossVersion`.
 
-**Naming**: no suffix = Scala 2.13 JVM, `3` = Scala 3 JVM, `JS`/`JS3` = Scala.js, `Native`/`Native3` = Scala Native.
-Example: `fastShowPretty` (2.13 JVM), `fastShowPretty3` (3 JVM), `fastShowPrettyJS3` (3 JS).
+**Naming** (since the sbt 2.1 upgrade): no suffix = Scala 3 JVM, `2_13` = Scala 2.13 JVM, `JS`/`JS2_13` = Scala.js,
+`Native`/`Native2_13` = Scala Native.
+Example: `fastShowPretty` (3 JVM), `fastShowPretty2_13` (2.13 JVM), `fastShowPrettyJS` (3 JS).
 
 ### Test aliases
 
@@ -65,7 +66,7 @@ Example: `fastShowPretty` (2.13 JVM), `fastShowPretty3` (3 JVM), `fastShowPretty
 ## Incremental Compilation Gotchas
 
  - **Always clean after macro changes** — incremental compilation does NOT re-expand macros.
- - Clean specific module: `sbt --client "module/clean ; module3/clean ; test-jvm-2_13 ; test-jvm-3"`
+ - Clean specific module: `sbt --client "module/clean ; module2_13/clean ; test-jvm-2_13 ; test-jvm-3"`
  - Nuclear option: `sbt --client clean` then `sbt --client "test-jvm-2_13 ; test-jvm-3"`
  - **sbt 2 build cache**: `clean` restores compiler outputs from the content-addressed disk cache (`~/.cache/sbt`), so
    test classes compiled from *stale macro expansions* can come back after a macro change. If tests still behave like
