@@ -264,13 +264,9 @@ trait ReaderHandleAsCaseClassRuleImpl {
                           }
                         }
                     }
-                  // Reads the already-bound `Right` value directly (zero-allocation fail-fast construction); no
-                  // intermediate `Array[Any]`.
+                  // The constructor argument: the field's value (read from its `Right`) cast to the field's type.
                   val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
-                    val typedExpr = Expr.quote {
-                      PureConfigDerivationUtils.unsafeCast(Expr.splice(valExpr), Expr.splice(readerExpr))
-                    }
-                    (fName, typedExpr.as_??)
+                    (fName, castTo[Field](valExpr).as_??)
                   }
                   (decodeFrom, makeFieldArg, keyExpr)
                 }
@@ -327,27 +323,36 @@ trait ReaderHandleAsCaseClassRuleImpl {
                       }
                     }
                 case Nil =>
+                  // When every field was read, the value is constructed from the fields' `Right`s (cast to the field
+                  // types); otherwise the failures of all the fields are combined. (Unlike a fold that inspects the
+                  // results one by one and re-wraps the first `Left`, this is a flat `&&` chain: one branch per field,
+                  // no nested matches, so the method stays ~30 B per field.)
                   val bound = boundReversed.reverse
-                  val constructedExpr = buildEitherFailFast[ConfigReaderFailures, A](bound)(constructFF)
+                  val allRight: Expr[Boolean] =
+                    bound.map(r => Expr.quote(Expr.splice(r).isRight)).reduceLeft { (acc, next) =>
+                      Expr.quote(Expr.splice(acc) && Expr.splice(next))
+                    }
+                  val constructedExpr: Expr[A] = constructFF(bound.map { r =>
+                    Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigReaderFailures, Any]].value)
+                  })
                   val resultsExpr: Expr[List[Either[ConfigReaderFailures, Any]]] =
                     bound.foldRight(Expr.quote(List.empty[Either[ConfigReaderFailures, Any]])) { (r, acc) =>
                       Expr.quote(Expr.splice(r) :: Expr.splice(acc))
                     }
                   if (staticAllowUnknownKeys.contains(true))
                     Expr.quote {
-                      val constructed = Expr.splice(constructedExpr)
-                      if (constructed.isRight) constructed
+                      if (Expr.splice(allRight)) Right(Expr.splice(constructedExpr)): Either[ConfigReaderFailures, A]
                       else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), None))
                     }
                   else
                     Expr.quote {
-                      val constructed = Expr.splice(constructedExpr)
                       val unknownKeys: Option[ConfigReaderFailures] =
                         if (Expr.splice(allowUnknownKeysExpr)) None
                         else
                           PureConfigDerivationUtils
                             .unknownKeysFailures(Expr.splice(rctx.cursor), Expr.splice(expectedKeysExpr))
-                      if (constructed.isRight && unknownKeys.isEmpty) constructed
+                      if (Expr.splice(allRight) && unknownKeys.isEmpty)
+                        Right(Expr.splice(constructedExpr)): Either[ConfigReaderFailures, A]
                       else Left(PureConfigDerivationUtils.combineFieldFailures(Expr.splice(resultsExpr), unknownKeys))
                     }
               }
@@ -365,6 +370,9 @@ trait ReaderHandleAsCaseClassRuleImpl {
             }
       }
     }
+
+    /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
+    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
 
     /** Derive a `ConfigReader[Field]` for a case-class field, either by summoning an implicit (filtered against our
       * auto-derivation entry points) or by recursively driving the rule chain on the field type.
