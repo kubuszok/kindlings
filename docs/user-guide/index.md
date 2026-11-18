@@ -276,3 +276,34 @@ Not type-class derivation, but built on the same Hearth macro-agnostic API and c
 |---|---|
 | [kindlings-jsoniter-json](jsoniter-json.md) | Minimal JSON AST with optics and `JsonValueCodec` for jsoniter-scala — no Circe/Cats dependencies |
 | [kindlings-tapir-openapi-jsoniter](tapir-openapi-jsoniter.md) | Serialize tapir-generated OpenAPI (sttp-apispec model) to JSON with jsoniter — no Circe dependency. JVM + Scala.js |
+
+## AI coding agents
+
+Skills that teach coding agents (Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, Gemini CLI, ...) how to use
+Kindlings - module selection, configuration, gotchas, differences from the upstream libraries, migration, testing -
+are published as the `kindlings` plugin of the [kubuszok/agent-skills](https://github.com/kubuszok/agent-skills)
+marketplace. Writing your own macros with Hearth? Install the `hearth` plugin from the same marketplace.
+
+!!! example "Claude Code"
+
+    ```
+    /plugin marketplace add kubuszok/agent-skills
+    /plugin install kindlings@kubuszok
+    ```
+
+!!! example "Codex"
+
+    ```bash
+    codex plugin marketplace add kubuszok/agent-skills
+    codex plugin add kindlings@kubuszok
+    ```
+
+!!! example "Other agents (OpenCode, Gemini CLI, Cursor, Copilot, ...)"
+
+    ```bash
+    npx skills add https://github.com/kubuszok/agent-skills/tree/master/skills/kindlings
+    ```
+
+The skills follow the Kindlings release they describe; see the
+[agent-skills README](https://github.com/kubuszok/agent-skills#installation) for sharing the setup with your team
+(`.claude/settings.json`) and for other installation methods.

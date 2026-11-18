@@ -115,7 +115,20 @@ Built on the same Hearth macro-agnostic API and cross-compiled the same way, but
 
 All modules are cross-compiled for Scala 2.13 and 3, on JVM, Scala.js, and Scala Native — except `kindlings-avro-derivation` and `kindlings-pureconfig-derivation` (JVM-only because their underlying libraries are JVM-only) and the `kindlings-tapir-openapi-jsoniter` tapir bridge (JVM + Scala.js, since `tapir-openapi-docs` is not published for Native; its underlying codecs remain cross-platform). Integration modules are add-and-forget: the macro extension system discovers them at compile time via SPI.
 
-For a detailed feature-by-feature comparison of each module against the library it replaces, see the [Feature Parity](https://kubuszok.github.io/kindlings/feature-parity/) page in the documentation.
+For a detailed feature-by-feature comparison of each module against the library it replaces, see the [Feature Parity](https://kindlings.readthedocs.io/en/latest/feature-parity/) page in the documentation.
+
+## AI coding agents
+
+Agent skills for using Kindlings (and for writing macros with Hearth) are published as plugins of the
+[kubuszok/agent-skills](https://github.com/kubuszok/agent-skills) marketplace, for Claude Code, Codex, Cursor,
+GitHub Copilot, OpenCode, Gemini CLI and other agents:
+
+```
+/plugin marketplace add kubuszok/agent-skills    # Claude Code
+/plugin install kindlings@kubuszok
+```
+
+See the [agent-skills README](https://github.com/kubuszok/agent-skills#installation) for the other agents.
 
 ## Why a separate project?
 
