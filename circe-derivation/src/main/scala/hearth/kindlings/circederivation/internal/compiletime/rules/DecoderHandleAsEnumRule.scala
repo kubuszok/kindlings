@@ -146,7 +146,15 @@ trait DecoderHandleAsEnumRuleImpl {
 
                     val unknownExpr: Expr[Any] = Expr.quote {
                       val failure =
-                        if (Expr.splice(Expr(entriesAreCaseObjects)) && Expr.splice(dctx.config).enumAsStrings)
+                        if (
+                          Expr.splice(
+                            staticFlag(
+                              entriesAreCaseObjects,
+                              _.enumAsStrings,
+                              Expr.quote(Expr.splice(dctx.config).enumAsStrings)
+                            )
+                          )
+                        )
                           CirceDerivationUtils.unknownEnumCase(
                             Expr.splice(sumNameExpr),
                             Expr.splice(typeNameExpr),
@@ -201,52 +209,111 @@ trait DecoderHandleAsEnumRuleImpl {
             stringDispatchOpt <- stringDispatchMIO
           } yield {
             val stringDispatchFn = stringDispatchOpt.getOrElse(dispatchFn)
-            Expr.quote {
-              val config = Expr.splice(dctx.config)
-              val cursor = Expr.splice(dctx.cursor)
-              val failFast = Expr.splice(dctx.failFast)
-              if (config.enumAsStrings && Expr.splice(Expr(!allLeavesSingletons)))
-                // enumAsStrings is only known at runtime here (statically it is a compile-time error)
-                CirceDerivationUtils.failResult(
-                  failFast,
-                  CirceDerivationUtils.enumAsStringsNotSupported(Expr.splice(sumNameExpr), cursor)
-                )
-              else if (config.enumAsStrings) {
-                // String enum decode path, like circe's ConfiguredEnumDecoder: read a string, dispatch on it
-                cursor.as[String](io.circe.Decoder.decodeString) match {
-                  case Right(typeName) => Expr.splice(stringDispatchFn)((typeName, cursor))
-                  case Left(err)       => CirceDerivationUtils.failResult(failFast, err)
+            val evaluated = dctx.evaluatedConfig
+            // Subtype names: constants with a config known at compile time.
+            def namesExpr(names: List[String]): Expr[List[String]] = evaluated match {
+              case Some(c) => Expr(names.map(c.transformConstructorNames))
+              case None => Expr.quote(Expr.splice(Expr(names)).map(Expr.splice(dctx.config).transformConstructorNames))
+            }
+            val nonObjectNamesExpr: Expr[Set[String]] = Expr.quote(Expr.splice(namesExpr(nonObjectNames)).toSet)
+            def withDiscriminator(field: Expr[String]): Expr[Either[DecodingFailure, (String, HCursor)]] =
+              if (nonObjectNames.nonEmpty)
+                Expr.quote {
+                  CirceDerivationUtils.decodeDiscriminatorOrWrapped(
+                    Expr.splice(dctx.cursor),
+                    Expr.splice(sumNameExpr),
+                    Expr.splice(field),
+                    Expr.splice(nonObjectNamesExpr),
+                    Expr.splice(intermediatesExpr)
+                  )
                 }
-              } else {
-                val readResult: Either[DecodingFailure, (String, HCursor)] =
-                  config.discriminator match {
-                    case Some(field) =>
-                      if (Expr.splice(Expr(nonObjectNames.nonEmpty)))
-                        CirceDerivationUtils.decodeDiscriminatorOrWrapped(
-                          cursor,
-                          Expr.splice(sumNameExpr),
-                          field,
-                          Expr.splice(Expr(nonObjectNames)).iterator.map(config.transformConstructorNames).toSet,
-                          Expr.splice(intermediatesExpr)
-                        )
-                      else CirceDerivationUtils.decodeDiscriminator(cursor, Expr.splice(sumNameExpr), field)
-                    case None =>
-                      CirceDerivationUtils.decodeWrapped(
-                        cursor,
-                        Expr.splice(sumNameExpr),
-                        config.strictDecoding,
-                        Expr.splice(Expr(directNames)).map(config.transformConstructorNames),
-                        Expr.splice(Expr(knownNames)).map(config.transformConstructorNames),
-                        Expr.splice(intermediatesExpr)
-                      )
+              else
+                Expr.quote {
+                  CirceDerivationUtils.decodeDiscriminator(
+                    Expr.splice(dctx.cursor),
+                    Expr.splice(sumNameExpr),
+                    Expr.splice(field)
+                  )
+                }
+            val wrapped: Expr[Either[DecodingFailure, (String, HCursor)]] = Expr.quote {
+              CirceDerivationUtils.decodeWrapped(
+                Expr.splice(dctx.cursor),
+                Expr.splice(sumNameExpr),
+                Expr.splice(staticFlag(true, _.strictDecoding, Expr.quote(Expr.splice(dctx.config).strictDecoding))),
+                Expr.splice(namesExpr(directNames)),
+                Expr.splice(namesExpr(knownNames)),
+                Expr.splice(intermediatesExpr)
+              )
+            }
+            // With a config known at compile time only the applicable dispatch is generated.
+            val readResultExpr: Expr[Either[DecodingFailure, (String, HCursor)]] =
+              evaluated.map(_.discriminator) match {
+                case Some(Some(field)) => withDiscriminator(Expr(field))
+                case Some(None)        => wrapped
+                case None              =>
+                  Expr.quote {
+                    Expr.splice(dctx.config).discriminator match {
+                      case Some(field) => Expr.splice(withDiscriminator(Expr.quote(field)))
+                      case None        => Expr.splice(wrapped)
+                    }
                   }
-                readResult match {
-                  case Right(r) => Expr.splice(dispatchFn)(r)
-                  case Left(e)  => CirceDerivationUtils.failResult(failFast, e)
-                }
+              }
+            val byKeyOrDiscriminator: Expr[Any] = Expr.quote {
+              Expr.splice(readResultExpr) match {
+                case Right(r) => Expr.splice(dispatchFn)(r)
+                case Left(e)  => CirceDerivationUtils.failResult(Expr.splice(dctx.failFast), e)
               }
             }
+            // String enum decode path, like circe's ConfiguredEnumDecoder: read a string, dispatch on it
+            val fromString: Expr[Any] = Expr.quote {
+              val cursor = Expr.splice(dctx.cursor)
+              cursor.as[String](io.circe.Decoder.decodeString) match {
+                case Right(typeName) => Expr.splice(stringDispatchFn)((typeName, cursor))
+                case Left(err)       => CirceDerivationUtils.failResult(Expr.splice(dctx.failFast), err)
+              }
+            }
+            evaluated.map(_.enumAsStrings) match {
+              case Some(true)  => fromString // (with subtypes that are not singletons: a compile-time error)
+              case Some(false) => byKeyOrDiscriminator
+              case None        =>
+                Expr.quote {
+                  val config = Expr.splice(dctx.config)
+                  if (config.enumAsStrings && Expr.splice(Expr(!allLeavesSingletons)))
+                    // enumAsStrings is only known at runtime here (statically it is a compile-time error)
+                    CirceDerivationUtils.failResult(
+                      Expr.splice(dctx.failFast),
+                      CirceDerivationUtils.enumAsStringsNotSupported(Expr.splice(sumNameExpr), Expr.splice(dctx.cursor))
+                    )
+                  else if (config.enumAsStrings) Expr.splice(fromString)
+                  else Expr.splice(byKeyOrDiscriminator)
+                }
+            }
           }
+      }
+    }
+
+    /** `Expr(applies && flag(config))` with a config known at compile time, otherwise `applies && <runtime flag>`. */
+    @scala.annotation.nowarn("msg=is never used|unused local definition")
+    private def staticFlag[A: DecoderCtx](
+        applies: Boolean,
+        flag: hearth.kindlings.circederivation.Configuration => Boolean,
+        runtime: Expr[Boolean]
+    ): Expr[Boolean] = {
+      implicit val BooleanT: Type[Boolean] = DTypes.Boolean
+      if (!applies) Expr(false)
+      else
+        dctx.evaluatedConfig match {
+          case Some(c) => Expr(flag(c))
+          case None    => runtime
+        }
+    }
+
+    /** The (transformed) name of a subtype: a constant with a config known at compile time. */
+    private def subtypeName[A: DecoderCtx](childName: String): Expr[String] = {
+      implicit val StringT: Type[String] = DTypes.String
+      dctx.evaluatedConfig match {
+        case Some(c) => Expr(c.transformConstructorNames(childName))
+        case None    => Expr.quote(Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))))
       }
     }
 
@@ -277,10 +344,7 @@ trait DecoderHandleAsEnumRuleImpl {
           Log.info(s"Found implicit Decoder[$childName], using it") >>
             MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
               Expr.quote {
-                if (
-                  Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                    .splice(typeNameExpr)
-                )
+                if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
                   (if (Expr.splice(dctx.failFast))
                      Expr
                        .splice(decoderExpr)
@@ -303,22 +367,19 @@ trait DecoderHandleAsEnumRuleImpl {
               Log.info(s"Using singleton for $childName") >>
                 MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                   Expr.quote {
-                    if (
-                      Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                        .splice(typeNameExpr)
-                    ) {
+                    if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr)) {
                       // A singleton case is encoded as `{}` (wrapped) or just the discriminator, so like circe
                       // require an object - except for enumAsStrings, where the cursor focuses the name string (#235).
                       val config = Expr.splice(dctx.config)
                       val inner = Expr.splice(innerCursorExpr)
-                      if (Expr.splice(Expr(allCaseObjects)) && config.enumAsStrings)
+                      if (Expr.splice(staticFlag(allCaseObjects, _.enumAsStrings, Expr.quote(config.enumAsStrings))))
                         CirceDerivationUtils.okResult(
                           Expr.splice(dctx.failFast),
                           Expr.splice(singleton).asInstanceOf[A]
                         )
                       else if (!inner.value.isObject)
                         CirceDerivationUtils.notAnObject(inner, Expr.splice(dctx.failFast))
-                      else if (config.strictDecoding)
+                      else if (Expr.splice(staticFlag(true, _.strictDecoding, Expr.quote(config.strictDecoding))))
                         // Like circe's derived decoder of a case object (a product without fields): only the
                         // discriminator is a valid key.
                         CirceDerivationUtils.fromEitherResult(
@@ -345,10 +406,7 @@ trait DecoderHandleAsEnumRuleImpl {
                       Some { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                         val helperCallExpr = helper(innerCursorExpr, dctx.config, dctx.failFast)
                         Expr.quote {
-                          if (
-                            Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                              .splice(typeNameExpr)
-                          )
+                          if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
                             Expr.splice(
                               helperCallExpr
                             ) // already returns Any (Either or ValidatedNel based on failFast)
@@ -370,10 +428,7 @@ trait DecoderHandleAsEnumRuleImpl {
                       decoderExpr =>
                         (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                           Expr.quote {
-                            if (
-                              Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))) == Expr
-                                .splice(typeNameExpr)
-                            )
+                            if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
                               (if (Expr.splice(dctx.failFast))
                                  Expr
                                    .splice(decoderExpr)
