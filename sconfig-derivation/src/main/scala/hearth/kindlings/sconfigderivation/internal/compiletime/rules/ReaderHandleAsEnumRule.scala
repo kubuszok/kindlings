@@ -7,7 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint}
+import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint, ProductHint}
+import hearth.kindlings.sconfigderivation.annotations.configKey
 import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
 import org.ekrich.config.{ConfigObject, ConfigValue}
 import hearth.kindlings.derivation.compiletime.StableChildrenOrder
@@ -73,6 +74,13 @@ trait ReaderHandleAsEnumRuleImpl {
           }
       }
 
+      // The discriminator field, when it is a compile-time constant (no per-type hint, evaluable global config).
+      val staticDiscriminator: Option[String] =
+        (maybeFirstSuccessHint, maybeFieldHint, maybeWrappedHint) match {
+          case (None, None, None) => rctx.evaluatedConfig.flatMap(_.discriminator)
+          case _                  => None
+        }
+
       val childrenList = StableChildrenOrder.directChildren(ReaderHandleAsEnumRuleImpl.this)(enumm)
       val allCaseObjects = Type[A].isEnumeration || Type[A].isJavaEnum ||
         childrenList.forall { case (_, child) =>
@@ -95,7 +103,7 @@ trait ReaderHandleAsEnumRuleImpl {
             .parTraverse { case (childName, child) =>
               import child.Underlying as ChildType
               Log.namedScope(s"Deriving reader for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                deriveChildReader[A, ChildType](childName, transformConstructorNamesExpr)
+                deriveChildReader[A, ChildType](childName, transformConstructorNamesExpr, staticDiscriminator)
               }
             }
             .map { childReaders =>
@@ -114,7 +122,12 @@ trait ReaderHandleAsEnumRuleImpl {
         childName: String,
         transformedName: Expr[String],
         read: Expr[ConfigValue] => Expr[Either[ConfigDecodingError, A]],
-        readFromObject: Expr[ConfigValue] => Expr[Either[ConfigDecodingError, A]]
+        readFromObject: Expr[ConfigValue] => Expr[Either[ConfigDecodingError, A]],
+        // With a discriminator field the subtype is read from the object without the discriminator key (as upstream
+        // PureConfig), and `withoutKey` copies the object. `false` only when reading from the object with the key is
+        // provably the same: a case object, or a case class derived here that statically allows unknown keys and has
+        // no field keyed as the discriminator.
+        needsDiscriminatorRemoved: Boolean = true
     )
 
     /** Subtypes selected by name (as upstream PureConfig):
@@ -143,13 +156,16 @@ trait ReaderHandleAsEnumRuleImpl {
       // `if (typeName == "child-name") <read child> else ... else <unknown>`
       def dispatch(
           typeNameExpr: Expr[String],
-          innerValueExpr: Expr[ConfigValue],
+          // the inner value, given whether the subtype needs the discriminator removed (a Boolean rather than the
+          // ChildReader: lambdas passed into splices must not mention macro-internal types on Scala 2)
+          innerValueFor: Boolean => Expr[ConfigValue],
           unknownExpr: Expr[Either[ConfigDecodingError, A]]
       ): Expr[Either[ConfigDecodingError, A]] =
         childReaders.foldRight(unknownExpr) { (child, elseExpr) =>
+          val innerValue = innerValueFor(child.needsDiscriminatorRemoved)
           Expr.quote {
             if (Expr.splice(child.transformedName) == Expr.splice(typeNameExpr))
-              Expr.splice(child.read(innerValueExpr))
+              Expr.splice(child.read(innerValue))
             else Expr.splice(elseExpr)
           }
         }
@@ -164,7 +180,7 @@ trait ReaderHandleAsEnumRuleImpl {
               Expr.splice(
                 dispatch(
                   Expr.quote(str),
-                  Expr.quote(v),
+                  _ => Expr.quote(v),
                   Expr.quote {
                     Left(
                       SConfigDerivationUtils.invalidEnumValue(str, Expr.splice(Expr(typeNameStr)))
@@ -183,7 +199,7 @@ trait ReaderHandleAsEnumRuleImpl {
                   .splice(
                     dispatch(
                       Expr.quote(typeName),
-                      Expr.quote(inner),
+                      _ => Expr.quote(inner),
                       Expr.quote {
                         Left(
                           SConfigDerivationUtils.failedToMatchSubtype(typeName, Expr.splice(Expr(knownNames)))
@@ -205,7 +221,10 @@ trait ReaderHandleAsEnumRuleImpl {
                 Expr.splice(
                   dispatch(
                     Expr.quote(typeName),
-                    Expr.quote(obj.withoutKey(field): ConfigValue),
+                    // `withoutKey` copies the object, so it is done only for subtypes whose reading can depend on it
+                    (needsRemoval: Boolean) =>
+                      if (needsRemoval) Expr.quote(obj.withoutKey(field): ConfigValue)
+                      else Expr.quote(obj: ConfigValue),
                     Expr.quote {
                       Left(SConfigDerivationUtils.unexpectedDiscriminatorValue(obj, field)): Either[
                         ConfigDecodingError,
@@ -279,7 +298,8 @@ trait ReaderHandleAsEnumRuleImpl {
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildReader[A: ReaderCtx, ChildType: Type](
         childName: String,
-        transformConstructorNamesExpr: Expr[String => String]
+        transformConstructorNamesExpr: Expr[String => String],
+        staticDiscriminator: Option[String]
     ): MIO[ChildReader[A]] = {
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
       implicit val ErrorT: Type[ConfigDecodingError] = RTypes.ConfigDecodingError
@@ -326,17 +346,20 @@ trait ReaderHandleAsEnumRuleImpl {
                           Expr.splice(innerValueExpr),
                           Expr.splice(singleton).asInstanceOf[A]
                         )
-                      }
+                      },
+                    needsDiscriminatorRemoved = false // `read` ignores the value
                   )
                 )
             case None =>
               deriveReaderRecursively[ChildType](using rctx.nest[ChildType](rctx.value)).flatMap { _ =>
                 rctx.getHelper[ChildType].flatMap {
                   case Some(helper) =>
-                    MIO.pure(same { (innerValueExpr: Expr[ConfigValue]) =>
-                      val helperCallExpr = helper(innerValueExpr, rctx.config)
-                      Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigDecodingError, A]])
-                    })
+                    MIO.pure(
+                      same { (innerValueExpr: Expr[ConfigValue]) =>
+                        val helperCallExpr = helper(innerValueExpr, rctx.config)
+                        Expr.quote(Expr.splice(helperCallExpr).asInstanceOf[Either[ConfigDecodingError, A]])
+                      }.copy(needsDiscriminatorRemoved = !discriminatorKeyIsIgnored[ChildType](staticDiscriminator))
+                    )
                   case None =>
                     val err = ReaderDerivationError.CannotConstructType(
                       Type[ChildType].prettyPrint,
@@ -348,6 +371,27 @@ trait ReaderHandleAsEnumRuleImpl {
               }
           }
       }
+    }
+
+    /** Whether the reader derived for the case class `ChildType` reads the same from an object with or without the
+      * discriminator key: it statically allows unknown keys (global config evaluable at compile time, no per-type
+      * `ProductHint`) and no field's key is the (statically known) discriminator. Anything else - a non-case class, a
+      * hint, a runtime config or discriminator - conservatively answers `false`.
+      */
+    private def discriminatorKeyIsIgnored[ChildType: Type](staticDiscriminator: Option[String])(implicit
+        ctx: ReaderCtx[?]
+    ): Boolean = {
+      implicit val configKeyT: Type[configKey] = RTypes.ConfigKey
+      implicit val ProductHintT: Type[ProductHint[ChildType]] = RTypes.productHintType[ChildType]
+      (for {
+        discriminator <- staticDiscriminator
+        config <- ctx.evaluatedConfig
+        if config.allowUnknownKeys
+        if Expr.summonImplicit[ProductHint[ChildType]].toOption.isEmpty
+        caseClass <- CaseClass.parse[ChildType].toEither.toOption
+      } yield caseClass.primaryConstructor.totalParameters.flatten.forall { case (name, param) =>
+        getAnnotationStringArg[configKey](param).getOrElse(config.transformMemberNames(name)) != discriminator
+      }).getOrElse(false)
     }
   }
 }
