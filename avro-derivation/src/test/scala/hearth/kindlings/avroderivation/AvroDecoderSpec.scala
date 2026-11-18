@@ -572,6 +572,37 @@ final class AvroDecoderSpec extends MacroSuite {
       }
     }
 
+    group("defaulted fields with aliases") {
+
+      test("a field found by its name or an alias, a missing field decodes to its default") {
+        val schema = org.apache.avro.SchemaBuilder
+          .record("AliasedDefaults")
+          .fields()
+          .requiredInt("one_old")
+          .requiredString("two_b")
+          .endRecord()
+        val record = new GenericData.Record(schema)
+        record.put("one_old", 10)
+        record.put("two_b", "b")
+        AvroDecoder.decode[AliasedDefaults](record: Any) ==> AliasedDefaults(10, "b", 3)
+      }
+
+      test("a value that cannot be decoded decodes to the default") {
+        val schema = org.apache.avro.SchemaBuilder
+          .record("AliasedDefaults")
+          .fields()
+          .requiredString("one")
+          .requiredString("two_a")
+          .requiredInt("three")
+          .endRecord()
+        val record = new GenericData.Record(schema)
+        record.put("one", "not an int")
+        record.put("two_a", "a")
+        record.put("three", 30)
+        AvroDecoder.decode[AliasedDefaults](record: Any) ==> AliasedDefaults(1, "a", 30)
+      }
+    }
+
     group("records with many defaulted fields (#308)") {
 
       test("round-trip of a 100-field record with defaults") {
