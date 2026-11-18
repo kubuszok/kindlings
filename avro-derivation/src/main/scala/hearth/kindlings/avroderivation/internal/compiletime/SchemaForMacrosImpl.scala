@@ -432,6 +432,7 @@ trait SchemaForMacrosImpl
     val SchemaForLogDerivation: Type[hearth.kindlings.avroderivation.AvroSchemaFor.LogDerivation] =
       Type.of[hearth.kindlings.avroderivation.AvroSchemaFor.LogDerivation]
     val Schema: Type.Lazy[Schema] = Type.Lazy(Type.of[Schema])
+    val SchemaField: Type.Lazy[org.apache.avro.Schema.Field] = Type.Lazy(Type.of[org.apache.avro.Schema.Field])
     val AvroConfig: Type.Lazy[AvroConfig] = Type.Lazy(Type.of[AvroConfig])
     val DecimalConfig: Type.Lazy[DecimalConfig] = Type.Lazy(Type.of[DecimalConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])

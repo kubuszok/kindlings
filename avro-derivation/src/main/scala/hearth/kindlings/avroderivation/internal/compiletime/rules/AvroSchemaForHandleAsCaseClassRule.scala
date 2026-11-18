@@ -240,14 +240,16 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                 }
               }
               .map { fieldPairs =>
-                val fieldsListExpr = buildFieldsExpr(fieldPairs.toList)
-                // Step 3: setRecordFieldsFromList on the self-record and apply annotations
+                val addFields = buildFieldsExpr(fieldPairs.toList)
+                // Step 3: set the fields on the self-record and apply annotations. The fields are added one statement
+                // at a time (instead of `f0 :: f1 :: ... :: Nil`), so no field is built in the middle of an expression:
+                // that would make the compiler keep every previous field on the stack and emit a stack map frame per
+                // branch listing all of them.
                 applyClassAnnotations(
                   Expr.quote {
-                    AvroDerivationUtils.setRecordFieldsFromList(
-                      Expr.splice(selfRecordRef),
-                      Expr.splice(fieldsListExpr)
-                    )
+                    val recordFields = new java.util.ArrayList[Schema.Field](Expr.splice(Expr(fieldPairs.toList.size)))
+                    Expr.splice(addFields(Expr.quote(recordFields)))
+                    AvroDerivationUtils.setRecordFields(Expr.splice(selfRecordRef), recordFields)
                   },
                   classProps,
                   classAliases
@@ -274,13 +276,16 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
               Option[Expr[Any]]
           )
         ]
-    )(implicit SchemaT: Type[Schema], StringT: Type[String], AvroConfigT: Type[AvroConfig]): Expr[List[Schema.Field]] =
-      fieldPairs.foldRight(
-        Expr.quote(List.empty[Schema.Field])
-      ) {
+    )(implicit
+        SchemaT: Type[Schema],
+        StringT: Type[String],
+        AvroConfigT: Type[AvroConfig]
+    ): Expr[java.util.ArrayList[Schema.Field]] => Expr[Unit] = recordFields => {
+      implicit val SchemaFieldT: Type[Schema.Field] = SfTypes.SchemaField
+      fieldPairs.foldLeft(Expr.quote(()): Expr[Unit]) {
         case (
-              (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases, scalaDefault),
-              acc
+              acc,
+              (fName, fieldSchema, nameOverride, fieldDoc, fieldDefault, fieldProps, fieldAliases, scalaDefault)
             ) =>
           val nameExpr: Expr[String] = nameOverride match {
             case Some(customName) => Expr(customName)
@@ -295,7 +300,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                   }
               }
           }
-          val annotatedFieldExpr: Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
+          def annotatedFieldExpr(fieldSchema: Expr[Schema]): Expr[Schema.Field] = (fieldDoc, fieldDefault) match {
             case (Some(doc), Some(default)) =>
               Expr.quote {
                 AvroDerivationUtils.createFieldWithDocAndDefault(
@@ -335,17 +340,34 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                 case Some(doc) => Expr(doc)
                 case None      => Expr.quote(null: String)
               }
-              Expr.quote {
-                if (Expr.splice(sfctx.config).scalaDefaultsInSchema)
-                  AvroDerivationUtils.createFieldWithScalaDefault(
-                    Expr.splice(nameExpr),
-                    Expr.splice(fieldSchema),
-                    Expr.splice(docExpr),
-                    Expr.splice(default)
-                  )
-                else Expr.splice(annotatedFieldExpr)
+              def withScalaDefault(fieldSchema: Expr[Schema]): Expr[Schema.Field] = Expr.quote {
+                AvroDerivationUtils.createFieldWithScalaDefault(
+                  Expr.splice(nameExpr),
+                  Expr.splice(fieldSchema),
+                  Expr.splice(docExpr),
+                  Expr.splice(default)
+                )
               }
-            case None => annotatedFieldExpr
+              sfctx.evaluatedConfig match {
+                // Config statically known: emit only the branch it selects.
+                case Some(cfg) =>
+                  if (cfg.scalaDefaultsInSchema) withScalaDefault(fieldSchema) else annotatedFieldExpr(fieldSchema)
+                // Otherwise build the field schema once and choose at runtime, in a local def of its own: a branch
+                // inline in the schema initialiser would need a stack map frame listing all the locals before it.
+                case None =>
+                  ValDefs
+                    .createDef[Schema.Field](
+                      Expr.quote {
+                        val sharedFieldSchema = Expr.splice(fieldSchema)
+                        if (Expr.splice(sfctx.config).scalaDefaultsInSchema)
+                          Expr.splice(withScalaDefault(Expr.quote(sharedFieldSchema)))
+                        else Expr.splice(annotatedFieldExpr(Expr.quote(sharedFieldSchema)))
+                      },
+                      FreshName.FromPrefix(s"schemaField_$fName")
+                    )
+                    .use(call => call)
+              }
+            case None => annotatedFieldExpr(fieldSchema)
           }
           // Apply field-level @avroProp annotations
           val fieldWithPropsExpr: Expr[Schema.Field] =
@@ -376,8 +398,12 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                 f
               }
             }
-          Expr.quote(Expr.splice(fieldExpr) :: Expr.splice(acc))
+          Expr.quote {
+            Expr.splice(acc)
+            AvroDerivationUtils.addRecordField(Expr.splice(recordFields), Expr.splice(fieldExpr))
+          }
       }
+    }
 
     private def applyClassAnnotations(
         schemaExpr: Expr[Schema],

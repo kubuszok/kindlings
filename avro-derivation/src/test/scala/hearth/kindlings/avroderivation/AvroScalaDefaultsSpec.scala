@@ -106,6 +106,36 @@ final class AvroScalaDefaultsSpec extends MacroSuite {
     }
   }
 
+  group("scalaDefaultsInSchema, known at compile time or only at runtime") {
+
+    // `config` is a parameter, so the macro cannot evaluate it and chooses at runtime
+    def schemaWith(config: AvroConfig): Schema = {
+      implicit val runtimeConfig: AvroConfig = config
+      AvroSchemaFor.schemaOf[SdDocumented]
+    }
+
+    test("a config known at compile time") {
+      val withDefaults = AvroSchemaFor.schemaOf[SdDocumented].getField("count")
+      withDefaults.doc ==> "the count"
+      withDefaults.defaultVal() ==> 3
+      val field = {
+        implicit val withoutDefaults: AvroConfig = AvroConfig.default.withoutScalaDefaultsInSchema
+        AvroSchemaFor.schemaOf[SdDocumented].getField("count")
+      }
+      field.doc ==> "the count"
+      field.hasDefaultValue ==> false
+    }
+
+    test("a config known only at runtime") {
+      val withDefaults = schemaWith(AvroConfig.default).getField("count")
+      withDefaults.doc ==> "the count"
+      withDefaults.defaultVal() ==> 3
+      val withoutDefaults = schemaWith(AvroConfig.default.withoutScalaDefaultsInSchema).getField("count")
+      withoutDefaults.doc ==> "the count"
+      withoutDefaults.hasDefaultValue ==> false
+    }
+  }
+
   group("strict primitive decoders") {
 
     test("widening and rejections") {
