@@ -5,12 +5,11 @@ import hearth.MacroCommons
 /** Builds a value from N per-field decode results as FLAT code: one local `def` per field and one statement per field
   * in the calling method, no nesting.
   *
-  * Fail-fast ([[constructFailFast]]) - the first failure in field order is the result and later fields are not
-  * decoded:
+  * Fail-fast ([[constructFailFast]]) - the first failure in field order is the result and later fields are not decoded:
   * {{{
   *   def field0 = <decode field 0>
-  *   def field1 = <decode field 1>
   *   val result0 = field0
+  *   def field1 = <decode field 1>
   *   val result1 = if (<result0 succeeded>) field1 else result0
   *   ...
   *   if (<resultN succeeded>) <success>(new A(<value of result0>.asInstanceOf[F0], ...)) else <failure>(resultN)
@@ -24,6 +23,7 @@ import hearth.MacroCommons
   *   def field0 = <decode field 0>
   *   val result0 = field0
   *   val errors0 = merge(null, result0)
+  *   def field1 = <decode field 1>
   *   val result1 = field1
   *   val errors1 = merge(errors0, result1)
   *   ...
@@ -36,8 +36,8 @@ import hearth.MacroCommons
   * and the values are cast to the field types instead of being typed by a field decoder expression (which would be
   * evaluated again). Local `def`s, not local `lazy val`s: those allocate a `LazyRef` and synchronize on every call.
   *
-  * The module supplies the per-field decode expressions and how to test, unwrap and merge its results; the names of
-  * the generated definitions are fresh (Scala 2 quotes are not hygienic).
+  * The module supplies the per-field decode expressions and how to test, unwrap and merge its results; the names of the
+  * generated definitions are fresh (Scala 2 quotes are not hygienic).
   */
 trait FlatFieldsConstruct { this: MacroCommons =>
 

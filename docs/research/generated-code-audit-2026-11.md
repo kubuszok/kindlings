@@ -84,6 +84,26 @@ Background facts:
 - yaml decoder: 11.8 KB / 16.1 KB.
 - Fix: per-field defs, an "all `Right`" check, an `Array`-based combine helper, and casts instead of witnesses.
 
+**Fixed in PR #313.** `EitherFieldsConstruct` is replaced by `FlatFieldsConstruct` (derivation-commons): one local
+def per field and one statement per field. Fail-fast is `val rK = if (rK-1 succeeded) fieldK else rK-1`, then the
+value is built when the last result succeeded. Accumulating is `val eK = merge(eK-1, rK)` with a runtime helper of
+the module, then the value is built when nothing was merged. Values are cast to the field types; no witnesses.
+circe now has a fail-fast and an accumulating def per case class (no runtime `failFast` branch inside), and its field
+decoders are lazy vals of the instance.
+
+| 100 defaulted fields, largest method | Scala 3 before | Scala 3 after | Scala 2.13 before | Scala 2.13 after |
+|---|---|---|---|---|
+| circe decoder, config known | 14622 B | 3404 B | 19954 B | 3187 B |
+| circe decoder, runtime config | 30081 B | 4637 B | 33079 B | 3883 B |
+| circe test class (StackMapTable) | 264 KB (141 KB) | 170 KB (5.6 KB) | 1218 KB (1104 KB) | 128 KB (5.7 KB) |
+| yaml decoder, config known | 11600 B | 3133 B | 18039 B | 3005 B |
+| yaml decoder, runtime config | 18179 B | 3333 B | 24149 B | 3105 B |
+| yaml test class (StackMapTable) | 203 KB (128 KB) | 69 KB (2.8 KB) | 1186 KB (1115 KB) | 58 KB (2.9 KB) |
+| pureconfig reader, config known / runtime | 3735 / 5777 B | 3223 / 5259 B | 3219 / 5060 B | 3107 / 4942 B |
+| sconfig reader, config known / runtime | 3733 / 5770 B | 3224 / 5261 B | 3217 / 5053 B | 3108 / 4944 B |
+
+(pureconfig and sconfig already had per-field defs and an "all `Right`" check earlier in #313.)
+
 ### Statically known configuration emitted as runtime branches
 
 - jsoniter, circe, yaml, sconfig and Avro sum-type dispatch.
