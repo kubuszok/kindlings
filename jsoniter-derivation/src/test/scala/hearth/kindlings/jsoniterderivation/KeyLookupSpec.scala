@@ -1,6 +1,12 @@
 package hearth.kindlings.jsoniterderivation
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, JsonReader, JsonValueCodec, JsonWriter}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  JsonReader,
+  JsonReaderException,
+  JsonValueCodec,
+  JsonWriter
+}
 import hearth.MacroSuite
 import hearth.kindlings.jsoniterderivation.internal.runtime.JsoniterDerivationUtils
 
@@ -48,6 +54,39 @@ final class KeyLookupSpec extends MacroSuite {
 
     test("works without keys") {
       indicesOf(JsoniterDerivationUtils.keyTable(Array.empty), """{"a":1}""") ==> List(-1)
+    }
+  }
+
+  group("decoders of case classes with more than 8 keys") {
+
+    val runtimeStrict: JsonValueCodec[TwelveFields] = {
+      implicit val config: JsoniterConfig = AbsentFieldsRuntimeConfigs.strictCheckDuplication
+      KindlingsJsonValueCodec.derived[TwelveFields]
+    }
+    val codecs = List("compile-time config" -> OptimizedCodecs.strictTwelve, "runtime config" -> runtimeStrict)
+
+    test("read every key in any order") {
+      val json = """{"mu":12,"alpha":1,"lambda":11,"kappa":"k","gamma":"g","theta":8.5,"beta":"b","eta":"e"}"""
+      val expected = TwelveFields(
+        alpha = 1,
+        beta = "b",
+        gamma = Some("g"),
+        eta = "e",
+        theta = 8.5,
+        kappa = "k",
+        lambda = Some(11),
+        mu = 12
+      )
+      codecs.foreach { case (_, codec) => readFromString(json)(codec) ==> expected }
+    }
+
+    test("reject unknown and duplicated keys as jsoniter-scala") {
+      codecs.foreach { case (name, codec) =>
+        val unknown = intercept[JsonReaderException](readFromString("""{"alpha":1,"alphb":2}""")(codec))
+        assert(unknown.getMessage.contains("unexpected field \"alphb\""), s"$name: ${unknown.getMessage}")
+        val duplicated = intercept[JsonReaderException](readFromString("""{"mu":1,"beta":"b","mu":2}""")(codec))
+        assert(duplicated.getMessage.contains("duplicated field \"mu\""), s"$name: ${duplicated.getMessage}")
+      }
     }
   }
 
