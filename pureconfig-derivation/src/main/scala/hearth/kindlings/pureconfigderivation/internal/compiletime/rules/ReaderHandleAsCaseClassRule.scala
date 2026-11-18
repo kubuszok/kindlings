@@ -317,9 +317,15 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   boundReversed: List[Expr[Either[ConfigReaderFailures, Any]]]
               ): Expr[Either[ConfigReaderFailures, A]] = remaining match {
                 case result :: rest =>
-                  ValDefs.createVal[Either[ConfigReaderFailures, Any]](result).use { bound =>
-                    bindAll(rest, bound :: boundReversed)
-                  }
+                  // Each field is read by its own local def (which closes over the object cursor): inlined into one
+                  // method, ~40 fields already exceed the size HotSpot JIT-compiles (8000 bytes of bytecode).
+                  ValDefs
+                    .createDef[Either[ConfigReaderFailures, Any]](result, FreshName.FromPrefix("readField"))
+                    .use { readField =>
+                      ValDefs.createVal[Either[ConfigReaderFailures, Any]](readField).use { bound =>
+                        bindAll(rest, bound :: boundReversed)
+                      }
+                    }
                 case Nil =>
                   val bound = boundReversed.reverse
                   val constructedExpr = buildEitherFailFast[ConfigReaderFailures, A](bound)(constructFF)
