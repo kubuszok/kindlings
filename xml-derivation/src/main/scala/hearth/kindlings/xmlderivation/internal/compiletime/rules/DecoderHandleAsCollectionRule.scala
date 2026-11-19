@@ -27,104 +27,131 @@ trait DecoderHandleAsCollectionRuleImpl {
             import isCollection.Underlying as Item
             isCollection.value.asMap match {
               case Some(isMapOf) =>
-                DecoderHandleAsMapRule.decodeMapEntries[A, Item](isMapOf)
-              case None =>
-                import isCollection.value.CtorResult
-                implicit val EitherItemT: Type[Either[XmlDecodingError, Item]] = DTypes.DecoderResult[Item]
-                LambdaBuilder
-                  .of1[scala.xml.Elem]("collItemElem")
-                  .traverse { itemElemExpr =>
-                    deriveDecoderRecursively[Item](using dctx.nest[Item](itemElemExpr))
-                  }
-                  .map { builder =>
-                    val lambda = builder.build[Either[XmlDecodingError, Item]]
-                    val factoryExpr = isCollection.value.factory
-                    val buildStep = isCollection.value.build
-
-                    val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
-                      hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
-                        .decodeCollectionBuilder(
-                          Expr.splice(dctx.elem),
-                          Expr.splice(lambda),
-                          Expr.splice(factoryExpr)
-                        )
-                    }
-                    val buildResultExpr = buildStep.ctor(readLoop)
-
-                    buildStep match {
-                      case _: CtorLikeOf.PlainValue[?, ?] =>
-                        Rule.matched(Expr.quote {
-                          try Right(Expr.splice(buildResultExpr.asInstanceOf[Expr[A]]))
-                          catch {
-                            case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
-                              Left(XmlDecodingError.Multiple(e.errors))
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(err)    => Left(XmlDecodingError.General(err))
-                            }
-                          catch {
-                            case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
-                              Left(XmlDecodingError.Multiple(e.errors))
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(errs)   => Left(XmlDecodingError.General(errs.mkString("\n")))
-                            }
-                          catch {
-                            case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
-                              Left(XmlDecodingError.Multiple(e.errors))
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(err)    => Left(XmlDecodingError.General(err.getMessage))
-                            }
-                          catch {
-                            case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
-                              Left(XmlDecodingError.Multiple(e.errors))
-                          }
-                        })
-
-                      case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
-                        val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
-                        Rule.matched(Expr.quote {
-                          try
-                            Expr.splice(eitherExpr) match {
-                              case Right(value) => Right(value)
-                              case Left(errs)   =>
-                                Left(XmlDecodingError.General(errs.map(_.getMessage).mkString("\n")))
-                            }
-                          catch {
-                            case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
-                              Left(XmlDecodingError.Multiple(e.errors))
-                          }
-                        })
-                    }
-                  }
+                DecoderHandleAsMapRule.decodeMapEntries[A, Item](isMapOf, None)
+              case None => decodeItems[A, Item](isCollection.value, None)
             }
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a collection or map"))
         }
       }
+
+    /** Decodes a collection from the child elements of the element: all of them, or (`itemsNamed`, for `@xmlUnwrapped`
+      * / `@xmlWrapper` fields) the ones with that name.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private[rules] def decodeItems[A: DecoderCtx, Item: Type](
+        isCollection: IsCollectionOf[A, Item],
+        itemsNamed: Option[Expr[String]]
+    ): MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] = {
+      implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
+      implicit val StringT: Type[String] = DTypes.String
+      import isCollection.CtorResult
+      implicit val EitherItemT: Type[Either[XmlDecodingError, Item]] = DTypes.DecoderResult[Item]
+      LambdaBuilder
+        .of1[scala.xml.Elem]("collItemElem")
+        .traverse { itemElemExpr =>
+          deriveDecoderRecursively[Item](using dctx.nest[Item](itemElemExpr))
+        }
+        .map { builder =>
+          val lambda = builder.build[Either[XmlDecodingError, Item]]
+          val factoryExpr = isCollection.factory
+          val buildStep = isCollection.build
+
+          val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = itemsNamed match {
+            case None =>
+              Expr.quote {
+                hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
+                  .decodeCollectionBuilder(
+                    Expr.splice(dctx.elem),
+                    Expr.splice(lambda),
+                    Expr.splice(factoryExpr)
+                  )
+              }
+            case Some(itemName) =>
+              Expr.quote {
+                hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
+                  .decodeNamedCollectionBuilder(
+                    Expr.splice(dctx.elem),
+                    Expr.splice(itemName),
+                    Expr.splice(lambda),
+                    Expr.splice(factoryExpr)
+                  )
+              }
+          }
+          val buildResultExpr = buildStep.ctor(readLoop)
+
+          buildStep match {
+            case _: CtorLikeOf.PlainValue[?, ?] =>
+              Rule.matched(Expr.quote {
+                try Right(Expr.splice(buildResultExpr.asInstanceOf[Expr[A]]))
+                catch {
+                  case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
+                    Left(XmlDecodingError.Multiple(e.errors))
+                }
+              })
+
+            case _: CtorLikeOf.EitherStringOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[String, A]]]
+              Rule.matched(Expr.quote {
+                try
+                  Expr.splice(eitherExpr) match {
+                    case Right(value) => Right(value)
+                    case Left(err)    => Left(XmlDecodingError.General(err))
+                  }
+                catch {
+                  case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
+                    Left(XmlDecodingError.Multiple(e.errors))
+                }
+              })
+
+            case _: CtorLikeOf.EitherIterableStringOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[String], A]]]
+              Rule.matched(Expr.quote {
+                try
+                  Expr.splice(eitherExpr) match {
+                    case Right(value) => Right(value)
+                    case Left(errs)   => Left(XmlDecodingError.General(errs.mkString("\n")))
+                  }
+                catch {
+                  case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
+                    Left(XmlDecodingError.Multiple(e.errors))
+                }
+              })
+
+            case _: CtorLikeOf.EitherThrowableOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Throwable, A]]]
+              Rule.matched(Expr.quote {
+                try
+                  Expr.splice(eitherExpr) match {
+                    case Right(value) => Right(value)
+                    case Left(err)    => Left(XmlDecodingError.General(err.getMessage))
+                  }
+                catch {
+                  case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
+                    Left(XmlDecodingError.Multiple(e.errors))
+                }
+              })
+
+            case _: CtorLikeOf.EitherIterableThrowableOrValue[?, ?] =>
+              val eitherExpr = buildResultExpr.asInstanceOf[Expr[Either[Iterable[Throwable], A]]]
+              Rule.matched(Expr.quote {
+                try
+                  Expr.splice(eitherExpr) match {
+                    case Right(value) => Right(value)
+                    case Left(errs)   =>
+                      Left(XmlDecodingError.General(errs.map(_.getMessage).mkString("\n")))
+                  }
+                catch {
+                  case e: hearth.kindlings.xmlderivation.internal.runtime.XmlCollectionBuildException =>
+                    Left(XmlDecodingError.Multiple(e.errors))
+                }
+              })
+          }
+        }
+    }
   }
 
 }

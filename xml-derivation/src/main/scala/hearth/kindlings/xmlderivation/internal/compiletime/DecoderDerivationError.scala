@@ -14,4 +14,8 @@ private[compiletime] object DecoderDerivationError {
       extends DecoderDerivationError(
         s"Singleton disappeared for $typeName"
       )
+  final case class InvalidFieldAnnotations(typeName: String, errors: List[String])
+      extends DecoderDerivationError(
+        s"Cannot derive XmlDecoder for type $typeName:\n${errors.map(" - " + _).mkString("\n")}"
+      )
 }

@@ -7,15 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.xmlderivation.{XmlConfig, XmlFieldMode}
-import hearth.kindlings.xmlderivation.annotations.{
-  transientField,
-  xmlAttribute,
-  xmlContent,
-  xmlElement,
-  xmlName,
-  xmlWrapper
-}
+import hearth.kindlings.xmlderivation.XmlConfig
+import hearth.kindlings.xmlderivation.annotations.xmlName
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait EncoderHandleAsCaseClassRuleImpl {
@@ -39,7 +32,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
         }
       }
 
-    @scala.annotation.nowarn("msg=is never used|dead code")
+    @scala.annotation.nowarn("msg=is never used|dead code|Non local returns")
     private def encodeCaseClassFields[A: EncoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[scala.xml.Elem]] = {
@@ -47,17 +40,11 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val StringT: Type[String] = Types.String
       implicit val NodeT: Type[scala.xml.Node] = Types.Node
       implicit val XmlConfigT: Type[XmlConfig] = Types.XmlConfig
-      implicit val XmlFieldModeT: Type[XmlFieldMode] = Types.XmlFieldMode
-      implicit val ProductType: Type[Product] = Types.Product
-      implicit val IntType: Type[Int] = Types.Int
       implicit val AnyType: Type[Any] = Types.Any
       implicit val BoolType: Type[Boolean] = Types.Boolean
-      implicit val transientFieldT: Type[transientField] = Types.TransientField
+      implicit val UnitT: Type[Unit] = Types.Unit
+      implicit val NodeBufferT: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] = Types.NodeBuffer
       implicit val xmlNameT: Type[xmlName] = Types.XmlNameAnnotation
-      implicit val xmlAttributeT: Type[xmlAttribute] = Types.XmlAttributeAnnotation
-      implicit val xmlElementT: Type[xmlElement] = Types.XmlElementAnnotation
-      implicit val xmlContentT: Type[xmlContent] = Types.XmlContentAnnotation
-      implicit val xmlWrapperT: Type[xmlWrapper] = Types.XmlWrapperAnnotation
 
       val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
       val paramsByName: Map[String, Parameter] =
@@ -69,114 +56,85 @@ trait EncoderHandleAsCaseClassRuleImpl {
         !c.transientNone && !c.transientEmpty
       }
 
-      // Determine default field mode from config
-      val defaultFieldModeIsAttribute: Option[Boolean] = ectx.evaluatedConfig.map { c =>
-        c.defaultFieldMode == XmlFieldMode.Attribute
-      }
+      // Where each field goes (shared with the decoder), or what is wrong with the annotations
+      val annotatedFields = allFields.flatMap { case (fName, _) => paramsByName.get(fName).map(fName -> _) }
+      val layoutsOrErrors = xmlFieldLayouts(
+        Type[A].prettyPrint,
+        annotatedFields,
+        ectx.evaluatedConfig,
+        EncoderUseImplicitWhenAvailableRule.hasUserEncoder(ectx.derivedType)
+      )
 
-      NonEmptyList.fromList(allFields) match {
-        case Some(fieldValues) =>
-          fieldValues
-            .traverse { case (fName, fieldValue) =>
-              import fieldValue.{Underlying as Field, value as fieldExpr}
-              val paramOpt = paramsByName.get(fName)
-              val isTransient = paramOpt.exists(p => hasAnnotationType[transientField](p))
-              val customName = paramOpt.flatMap(p => getAnnotationStringArg[xmlName](p))
-              val isAttrAnnotated = paramOpt.exists(p => hasAnnotationType[xmlAttribute](p))
-              val isElemAnnotated = paramOpt.exists(p => hasAnnotationType[xmlElement](p))
-              val isContentAnnotated = paramOpt.exists(p => hasAnnotationType[xmlContent](p))
+      layoutsOrErrors match {
+        case Left(errors) =>
+          val err = EncoderDerivationError.InvalidFieldAnnotations(Type[A].prettyPrint, errors)
+          Log.error(err.message) >> MIO.fail(err)
+        case Right(layouts) =>
+          val layoutByName: Map[String, XmlFieldLayout] = annotatedFields.map(_._1).zip(layouts).toMap
+          NonEmptyList.fromList(allFields) match {
+            case Some(fieldValues) =>
+              fieldValues
+                .traverse { case (fName, fieldValue) =>
+                  import fieldValue.{Underlying as Field, value as fieldExpr}
+                  val paramOpt = paramsByName.get(fName)
+                  val customName = paramOpt.flatMap(p => getAnnotationStringArg[xmlName](p))
+                  val layout = layoutByName.getOrElse(fName, XmlFieldLayout.Element)
 
-              // Apply fieldNameMapper: annotation overrides config mapper
-              // When evaluatedConfig is available, pre-compute at compile time; otherwise use runtime call
-              val xmlFieldNameExpr: Expr[String] = customName match {
-                case Some(name) => Expr(name)
-                case None       =>
-                  ectx.evaluatedConfig match {
-                    case Some(cfg) => Expr(cfg.fieldNameMapper(fName))
-                    case None      =>
-                      Expr.quote(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
+                  // Apply fieldNameMapper: annotation overrides config mapper
+                  // When evaluatedConfig is available, pre-compute at compile time; otherwise use runtime call
+                  val xmlFieldNameExpr: Expr[String] = customName match {
+                    case Some(name) => Expr(name)
+                    case None       =>
+                      ectx.evaluatedConfig match {
+                        case Some(cfg) => Expr(cfg.fieldNameMapper(fName))
+                        case None      =>
+                          Expr.quote(Expr.splice(ectx.config).fieldNameMapper(Expr.splice(Expr(fName))))
+                      }
                   }
-              }
 
-              // Build transient skip conditions for this field
-              val skipConditions: List[Expr[Boolean]] =
-                if (noTransientChecksNeeded || isTransient) Nil
-                else buildFieldSkipConditions[Field](fieldExpr, ectx.evaluatedConfig, ectx.config)
+                  // Build transient skip conditions for this field
+                  val skipConditions: List[Expr[Boolean]] =
+                    if (noTransientChecksNeeded || layout == XmlFieldLayout.Transient) Nil
+                    else buildFieldSkipConditions[Field](fieldExpr, ectx.evaluatedConfig, ectx.config)
 
-              if (isTransient) {
-                MIO.pure(FieldEncoding.Skip)
-              } else if (isContentAnnotated) {
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr)).map { encodedExpr =>
-                  FieldEncoding.Content(encodedExpr)
-                }
-              } else if (isAttrAnnotated) {
-                MIO.pure(attributeEncoding[Field](xmlFieldNameExpr, fieldExpr, skipConditions))
-              } else if (isElemAnnotated) {
-                val wrapperName = paramOpt.flatMap(p => getAnnotationStringArg[xmlWrapper](p))
-                deriveEncoderRecursively[Field](using
-                  ectx
-                    .nest(fieldExpr)
-                    .copy(
-                      elementName = xmlFieldNameExpr
-                    )
-                ).map { encodedExpr =>
-                  wrapperName match {
-                    case Some(wrapper) => FieldEncoding.WrappedChild(wrapper, encodedExpr, skipConditions)
-                    case None          => FieldEncoding.Child(encodedExpr, skipConditions)
+                  def asElement: MIO[Expr[scala.xml.Elem]] =
+                    deriveEncoderRecursively[Field](using ectx.nest(fieldExpr).copy(elementName = xmlFieldNameExpr))
+
+                  layout match {
+                    case XmlFieldLayout.Transient      => MIO.pure(FieldEncoding.Skip: FieldEncoding)
+                    case XmlFieldLayout.Content(shape) =>
+                      contentEncoding[A, Field](shape, fieldExpr).map(append => FieldEncoding.Content(append))
+                    case XmlFieldLayout.Attribute(shape) =>
+                      attributeEncoding[A, Field](shape, xmlFieldNameExpr, fieldExpr, skipConditions)
+                        .map(attr => attr: FieldEncoding)
+                    case XmlFieldLayout.Element =>
+                      asElement.map(encodedExpr => FieldEncoding.Child(encodedExpr, skipConditions))
+                    case XmlFieldLayout.ByMode(shape, needsEnumAsStrings) =>
+                      // Not statically known — derive both paths and branch at runtime
+                      for {
+                        attr <- attributeEncoding[A, Field](shape, xmlFieldNameExpr, fieldExpr, skipConditions)
+                        encodedExpr <- asElement
+                      } yield FieldEncoding.DynamicMode(attr, encodedExpr, skipConditions, needsEnumAsStrings)
+                    case XmlFieldLayout.Repeated =>
+                      repeatedEncoding[A, Field](xmlFieldNameExpr, fieldExpr)
+                        .map(append => FieldEncoding.Repeated(append))
+                    case XmlFieldLayout.Wrapped(wrapper, true) =>
+                      repeatedEncoding[A, Field](xmlFieldNameExpr, fieldExpr)
+                        .map(append => FieldEncoding.WrappedRepeated(wrapper, append, skipConditions))
+                    case XmlFieldLayout.Wrapped(wrapper, false) =>
+                      asElement.map(encodedExpr => FieldEncoding.WrappedChild(wrapper, encodedExpr, skipConditions))
                   }
                 }
-              } else if (!isXmlAttributeValue(Type[Field])) {
-                // Not a single text value (a collection, map, case class, sealed trait...): a child element in both
-                // modes, as an attribute could not hold it
-                deriveEncoderRecursively[Field](using ectx.nest(fieldExpr).copy(elementName = xmlFieldNameExpr))
-                  .map(encodedExpr => FieldEncoding.Child(encodedExpr, skipConditions))
-              } else {
-                // Default mode from config
-                defaultFieldModeIsAttribute match {
-                  case Some(true) =>
-                    // Statically known to be attribute mode
-                    MIO.pure(attributeEncoding[Field](xmlFieldNameExpr, fieldExpr, skipConditions))
-                  case Some(false) =>
-                    // Statically known to be element mode
-                    deriveEncoderRecursively[Field](using
-                      ectx
-                        .nest(fieldExpr)
-                        .copy(
-                          elementName = xmlFieldNameExpr
-                        )
-                    ).map { encodedExpr =>
-                      FieldEncoding.Child(encodedExpr, skipConditions)
-                    }
-                  case None =>
-                    // Not statically known — derive both paths and branch at runtime
-                    deriveEncoderRecursively[Field](using
-                      ectx
-                        .nest(fieldExpr)
-                        .copy(
-                          elementName = xmlFieldNameExpr
-                        )
-                    ).map { encodedExpr =>
-                      FieldEncoding.DynamicMode(
-                        attributeEncoding[Field](xmlFieldNameExpr, fieldExpr, skipConditions),
-                        encodedExpr,
-                        skipConditions
-                      )
-                    }
+                .map { encodings =>
+                  val encodingList = encodings.toList
+                  val hasDynamicFields = encodingList.exists(_.isInstanceOf[FieldEncoding.DynamicMode])
+                  assembleElem(encodingList, hasDynamicFields)
                 }
-              }
-            }
-            .map { encodings =>
-              val encodingList = encodings.toList
-              val contentOpt: Option[Expr[scala.xml.Elem]] = encodingList.collectFirst {
-                case FieldEncoding.Content(expr) => expr
-              }
-              val hasDynamicFields = encodingList.exists(_.isInstanceOf[FieldEncoding.DynamicMode])
-              assembleElem(encodingList, contentOpt, hasDynamicFields)
-            }
-        case None =>
-          MIO.pure(Expr.quote {
-            XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName))
-          })
+            case None =>
+              MIO.pure(Expr.quote {
+                XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName))
+              })
+          }
       }
     }
 
@@ -191,15 +149,15 @@ trait EncoderHandleAsCaseClassRuleImpl {
       *   if (isAttrMode) { if (!<skip c>) attrs += (("c", <c text>)) } else { if (!<skip c>) children += <c element> }
       *   combineAttributesAndChildren(name, attrs.toList, children.toList)
       * }}}
-      * (a field's code does not contain the code of the next fields, so it stays linear in the number of fields)
+      * (a field's code does not contain the code of the next fields, so it stays linear in the number of fields; the
+      * larger statements - a field whose mode is only known at runtime, `@xmlUnwrapped` and `@xmlWrapper` fields - go
+      * into local defs of their own)
       *
-      * With an `@xmlContent` field the element holds the attributes and the content (the children of the content's
-      * element): the other fields are not written as child elements.
+      * With an `@xmlContent` field the element holds the attributes and the content (the other fields are attributes).
       */
     @scala.annotation.nowarn("msg=is never used")
     private def assembleElem[A: EncoderCtx](
         encodings: List[FieldEncoding],
-        contentOpt: Option[Expr[scala.xml.Elem]],
         hasDynamicFields: Boolean
     ): Expr[scala.xml.Elem] = {
       implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
@@ -208,6 +166,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val AnyT: Type[Any] = Types.Any
       implicit val BoolT: Type[Boolean] = Types.Boolean
       implicit val UnitT: Type[Unit] = Types.Unit
+      implicit val XmlConfigT: Type[XmlConfig] = Types.XmlConfig
       implicit val AttrBufferT: Type[scala.collection.mutable.ListBuffer[(String, String)]] = Types.AttrBuffer
       implicit val NodeBufferT: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] = Types.NodeBuffer
 
@@ -232,33 +191,63 @@ trait EncoderHandleAsCaseClassRuleImpl {
               def addAttr(attr: FieldEncoding.AttrExpr): Expr[Unit] = skipped(
                 attr.skipConditions,
                 Expr.quote {
-                  val _ = Expr.splice(attrs) += ((Expr.splice(attr.nameExpr), Expr.splice(attr.value).toString))
+                  val _ = Expr.splice(attrs) += ((Expr.splice(attr.nameExpr), Expr.splice(attr.text)))
                   ()
                 }
               )
               def addChild(elem: Expr[scala.xml.Elem], skipConditions: List[Expr[Boolean]]): Expr[Unit] =
-                if (contentOpt.isDefined) Expr.quote(()) // (only the content is written)
-                else
-                  skipped(
-                    skipConditions,
+                skipped(
+                  skipConditions,
+                  Expr.quote {
+                    val _ = Expr.splice(children) += (Expr.splice(elem): scala.xml.Node)
+                    ()
+                  }
+                )
+              // the wrapper element with what `items` appends to a buffer of its own
+              def addWrapped(
+                  wrapper: String,
+                  items: Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit],
+                  skipConditions: List[Expr[Boolean]]
+              ): Expr[Unit] = skipped(
+                skipConditions,
+                ValDefs
+                  .createVal[scala.collection.mutable.ListBuffer[scala.xml.Node]](
+                    Expr.quote(new scala.collection.mutable.ListBuffer[scala.xml.Node]),
+                    FreshName.FromPrefix("wrapped")
+                  )
+                  .use { wrapped =>
                     Expr.quote {
-                      val _ = Expr.splice(children) += (Expr.splice(elem): scala.xml.Node)
+                      Expr.splice(items(wrapped))
+                      val _ = Expr.splice(children) += (XmlDerivationUtils
+                        .makeElem(Expr.splice(Expr(wrapper)), Nil, Expr.splice(wrapped).toList): scala.xml.Node)
                       ()
                     }
-                  )
+                  }
+              )
 
-              // each statement with whether it goes into a local def of its own (the larger, runtime-mode ones)
+              // each statement with whether it goes into a local def of its own (the larger ones)
               def build(isAttrMode: Option[Expr[Boolean]]): Expr[scala.xml.Elem] = {
                 val statements: List[(Expr[Unit], Boolean)] = encodings.collect {
-                  case FieldEncoding.Attr(name, value, skipConds) =>
-                    (addAttr(FieldEncoding.AttrExpr(Expr(name), value, skipConds)), false)
-                  case attr: FieldEncoding.AttrExpr                     => (addAttr(attr), false)
-                  case FieldEncoding.Child(elem, skipConds)             => (addChild(elem, skipConds), false)
-                  case FieldEncoding.WrappedChild(_, elem, skipConds)   => (addChild(elem, skipConds), false)
-                  case FieldEncoding.DynamicMode(attr, elem, skipConds) =>
+                  case attr: FieldEncoding.AttrExpr                   => (addAttr(attr), false)
+                  case FieldEncoding.Child(elem, skipConds)           => (addChild(elem, skipConds), false)
+                  case FieldEncoding.Content(append)                  => (append(children), false)
+                  case FieldEncoding.Repeated(append)                 => (append(children), true)
+                  case FieldEncoding.WrappedRepeated(w, append, sks)  => (addWrapped(w, append, sks), true)
+                  case FieldEncoding.WrappedChild(w, elem, skipConds) =>
+                    val single: Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit] = buffer =>
+                      Expr.quote {
+                        val _ = Expr.splice(buffer) += (Expr.splice(elem): scala.xml.Node)
+                        ()
+                      }
+                    (addWrapped(w, single, skipConds), true)
+                  case FieldEncoding.DynamicMode(attr, elem, skipConds, needsEnumAsStrings) =>
                     val asAttr = addAttr(attr)
                     val asChild = addChild(elem, skipConds)
-                    (Expr.quote(if (Expr.splice(isAttrMode.get)) Expr.splice(asAttr) else Expr.splice(asChild)), true)
+                    val isAttribute: Expr[Boolean] =
+                      if (needsEnumAsStrings)
+                        Expr.quote(Expr.splice(isAttrMode.get) && Expr.splice(ectx.config).enumAsStrings)
+                      else isAttrMode.get
+                    (Expr.quote(if (Expr.splice(isAttribute)) Expr.splice(asAttr) else Expr.splice(asChild)), true)
                 }
                 def sequence(remaining: List[(Expr[Unit], Boolean)], acc: Expr[Unit]): Expr[scala.xml.Elem] =
                   remaining match {
@@ -291,27 +280,13 @@ trait EncoderHandleAsCaseClassRuleImpl {
               }
 
               def finish(all: Expr[Unit]): Expr[scala.xml.Elem] =
-                contentOpt match {
-                  case Some(contentExpr) =>
-                    Expr.quote {
-                      Expr.splice(all)
-                      val contentElem = Expr.splice(contentExpr)
-                      val _ = Expr.splice(children) ++= contentElem.child
-                      XmlDerivationUtils.combineAttributesAndChildren(
-                        Expr.splice(ectx.elementName),
-                        Expr.splice(attrs).toList,
-                        Expr.splice(children).toList
-                      )
-                    }
-                  case None =>
-                    Expr.quote {
-                      Expr.splice(all)
-                      XmlDerivationUtils.combineAttributesAndChildren(
-                        Expr.splice(ectx.elementName),
-                        Expr.splice(attrs).toList,
-                        Expr.splice(children).toList
-                      )
-                    }
+                Expr.quote {
+                  Expr.splice(all)
+                  XmlDerivationUtils.combineAttributesAndChildren(
+                    Expr.splice(ectx.elementName),
+                    Expr.splice(attrs).toList,
+                    Expr.splice(children).toList
+                  )
                 }
 
               if (hasDynamicFields)
@@ -326,37 +301,157 @@ trait EncoderHandleAsCaseClassRuleImpl {
         }
     }
 
+    /** The text of a single value: its text, the name of its enum case, or the text of the element written by its
+      * user-provided encoder.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def textOf[A: EncoderCtx, T: Type](shape: XmlTextShape, value: Expr[T]): MIO[Expr[String]] = {
+      implicit val StringT: Type[String] = Types.String
+      implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
+      shape match {
+        case XmlTextShape.BuiltIn              => MIO.pure(xmlTextOf(Type[T], value))
+        case XmlTextShape.StringEnum(subtypes) =>
+          EncoderHandleAsEnumRule.enumNameOf[T](subtypes)(using ectx.nest(value)).map(_(value, ectx.config))
+        case XmlTextShape.Custom =>
+          deriveEncoderRecursively[T](using ectx.nest(value).copy(elementName = Expr("attr"))).map { elem =>
+            Expr.quote(Expr.splice(elem).text)
+          }
+      }
+    }
+
     /** A field encoded as an attribute. An `Option` attribute is absent for `None` (how the decoder reads an absent
       * `Option` attribute) and holds the value for `Some` (not `Some(...)`).
       */
     @scala.annotation.nowarn("msg=is never used")
-    private def attributeEncoding[Field: Type](
+    private def attributeEncoding[A: EncoderCtx, Field: Type](
+        shape: XmlAttrShape,
         nameExpr: Expr[String],
         fieldExpr: Expr[Field],
         skipConditions: List[Expr[Boolean]]
-    )(implicit AnyT: Type[Any], BoolT: Type[Boolean]): FieldEncoding.AttrExpr = {
-      implicit val StringT: Type[String] = Types.String
+    ): MIO[FieldEncoding.AttrExpr] = {
+      implicit val AnyT: Type[Any] = Types.Any
+      implicit val BoolT: Type[Boolean] = Types.Boolean
       Type[Field] match {
-        // a text value (also inside an `Option`) is written as its text: a value type as its unwrapped value
-        case IsOption(isOption) if isXmlTextValue(isOption.Underlying) =>
+        case IsOption(isOption) if shape.optional =>
           import isOption.Underlying as Inner
           val option: Expr[Option[Any]] = Expr.quote(Expr.splice(fieldExpr).asInstanceOf[Option[Any]])
           val inner: Expr[Inner] = Expr.quote(Expr.splice(option).get.asInstanceOf[Inner]) // (`None`: skipped)
-          FieldEncoding.AttrExpr(
-            nameExpr,
-            xmlTextOf(Type[Inner], inner).upcast[Any],
-            skipConditions :+ Expr.quote(Expr.splice(option).isEmpty)
-          )
-        case _ if isXmlTextValue(Type[Field]) =>
-          FieldEncoding.AttrExpr(nameExpr, xmlTextOf(Type[Field], fieldExpr).upcast[Any], skipConditions)
-        case IsOption(_) =>
+          textOf[A, Inner](shape.shape, inner).map { text =>
+            FieldEncoding.AttrExpr(nameExpr, text, skipConditions :+ Expr.quote(Expr.splice(option).isEmpty))
+          }
+        case _ =>
+          textOf[A, Field](shape.shape, fieldExpr).map(text => FieldEncoding.AttrExpr(nameExpr, text, skipConditions))
+      }
+    }
+
+    /** The `@xmlContent` field: appends the element's content (nothing for `None`). */
+    @scala.annotation.nowarn("msg=is never used")
+    private def contentEncoding[A: EncoderCtx, Field: Type](
+        shape: XmlAttrShape,
+        fieldExpr: Expr[Field]
+    ): MIO[Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit]] = {
+      implicit val AnyT: Type[Any] = Types.Any
+      implicit val UnitT: Type[Unit] = Types.Unit
+      implicit val StringT: Type[String] = Types.String
+      implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
+      implicit val NodeBufferT: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] = Types.NodeBuffer
+      type Append = Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit]
+      def contentOf[T: Type](value: Expr[T]): MIO[Append] = shape.shape match {
+        case XmlTextShape.Custom =>
+          // whatever the user-provided encoder writes into its element
+          deriveEncoderRecursively[T](using ectx.nest(value)).map { elem =>
+            val append: Append = buffer =>
+              Expr.quote {
+                val _ = Expr.splice(buffer) ++= Expr.splice(elem).child
+                ()
+              }
+            append
+          }
+        case textShape =>
+          textOf[A, T](textShape, value).map { text =>
+            val append: Append = buffer =>
+              Expr.quote {
+                val _ = Expr.splice(buffer) += (scala.xml.Text(Expr.splice(text)): scala.xml.Node)
+                ()
+              }
+            append
+          }
+      }
+      Type[Field] match {
+        case IsOption(isOption) if shape.optional =>
+          import isOption.Underlying as Inner
           val option: Expr[Option[Any]] = Expr.quote(Expr.splice(fieldExpr).asInstanceOf[Option[Any]])
-          FieldEncoding.AttrExpr(
-            nameExpr,
-            Expr.quote(Expr.splice(option).getOrElse(())), // (not evaluated for `None`: skipped)
-            skipConditions :+ Expr.quote(Expr.splice(option).isEmpty)
-          )
-        case _ => FieldEncoding.AttrExpr(nameExpr, fieldExpr.upcast[Any], skipConditions)
+          val inner: Expr[Inner] = Expr.quote(Expr.splice(option).get.asInstanceOf[Inner])
+          contentOf[Inner](inner).map { append =>
+            val optional: Append =
+              buffer => Expr.quote(if (Expr.splice(option).isEmpty) () else Expr.splice(append(buffer)))
+            optional
+          }
+        case _ => contentOf[Field](fieldExpr)
+      }
+    }
+
+    /** A collection (or map) field as one element per item (per entry), all named after the field: appended in order to
+      * a buffer (the children of the element, or of the `@xmlWrapper` element).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def repeatedEncoding[A: EncoderCtx, Field: Type](
+        nameExpr: Expr[String],
+        fieldExpr: Expr[Field]
+    ): MIO[Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit]] = {
+      implicit val UnitT: Type[Unit] = Types.Unit
+      implicit val StringT: Type[String] = Types.String
+      implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
+      implicit val NodeT: Type[scala.xml.Node] = Types.Node
+      implicit val XmlConfigT: Type[XmlConfig] = Types.XmlConfig
+      implicit val NodeBufferT: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] = Types.NodeBuffer
+      type Append = Expr[scala.collection.mutable.ListBuffer[scala.xml.Node]] => Expr[Unit]
+      // the cached encode helper of the items' type: (item, element name, config) => element
+      def helperOf[T: Type]: MIO[(Expr[T], Expr[String], Expr[XmlConfig]) => Expr[scala.xml.Elem]] =
+        deriveEncoderRecursively[T](using ectx.nest[T](Expr.quote(null.asInstanceOf[T]))) >>
+          ectx.getHelper[T].flatMap {
+            case Some(helper) => MIO.pure(helper)
+            case None         => MIO.fail(new RuntimeException(s"No encode helper for ${Type[T].prettyPrint}"))
+          }
+      val configExpr = ectx.config
+      Type[Field] match {
+        case IsCollection(isCollection) =>
+          import isCollection.Underlying as Item
+          isCollection.value.asMap match {
+            case Some(isMap) =>
+              import isMap.Value
+              val iterableExpr = isMap.asIterable(fieldExpr)
+              helperOf[Value].map { helper =>
+                val append: Append = buffer =>
+                  Expr.quote {
+                    val _ = Expr.splice(buffer) ++= XmlDerivationUtils.encodeMappedPairs[Value](
+                      Expr.splice(iterableExpr).asInstanceOf[Iterable[(String, Value)]],
+                      Expr.splice(nameExpr),
+                      "key",
+                      (v: Value, n: String) => Expr.splice(helper(Expr.quote(v), Expr.quote(n), configExpr))
+                    )
+                    ()
+                  }
+                append
+              }
+            case None =>
+              val iterableExpr = isCollection.value.asIterable(fieldExpr)
+              helperOf[Item].map { helper =>
+                val append: Append = buffer =>
+                  Expr.quote {
+                    val itemName = Expr.splice(nameExpr)
+                    val items = Expr.splice(iterableExpr).iterator
+                    while (items.hasNext) {
+                      val item = items.next()
+                      val _ = Expr.splice(buffer) +=
+                        (Expr.splice(helper(Expr.quote(item), Expr.quote(itemName), configExpr)): scala.xml.Node)
+                    }
+                  }
+                append
+              }
+          }
+        case _ =>
+          MIO.fail(new RuntimeException(s"Expected a collection or a map, got ${Type[Field].prettyPrint}"))
       }
     }
 

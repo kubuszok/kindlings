@@ -10,7 +10,7 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 trait EncoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
-    with XmlTextValues
+    with XmlFieldLayouts
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -248,6 +248,26 @@ trait EncoderMacrosImpl
       } yield ()
     }
 
+    /** The cached `(value, config) => case name` helper of an enum of singletons. */
+    def getEnumNameHelper[B: Type]: MIO[Option[(Expr[B], Expr[XmlConfig]) => Expr[String]]] = {
+      implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
+      implicit val StringT: Type[String] = Types.String
+      cache.get2Ary[B, XmlConfig, String]("cached-enum-name-method")
+    }
+    def setEnumNameHelper[B: Type](helper: (Expr[B], Expr[XmlConfig]) => MIO[Expr[String]]): MIO[Unit] = {
+      implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
+      implicit val StringT: Type[String] = Types.String
+      val defBuilder = ValDefBuilder.ofDef2[B, XmlConfig, String](s"enumName_${Type[B].shortName}")
+      for {
+        _ <- cache.forwardDeclare("cached-enum-name-method", defBuilder)
+        _ <- MIO.scoped { runSafe =>
+          runSafe(cache.buildCachedWith("cached-enum-name-method", defBuilder) { case (_, (value, config)) =>
+            runSafe(helper(value, config))
+          })
+        }
+      } yield ()
+    }
+
     override def toString: String =
       s"encode[${tpe.prettyPrint}](value = ${value.prettyPrint}, elementName = ${elementName.prettyPrint}, config = ${config.prettyPrint})"
   }
@@ -335,20 +355,38 @@ trait EncoderMacrosImpl
   // Field encoding result type
   sealed trait FieldEncoding
   object FieldEncoding {
+    type NodeBuffer = scala.collection.mutable.ListBuffer[scala.xml.Node]
+
     case object Skip extends FieldEncoding
-    case class Attr(name: String, value: Expr[Any], skipConditions: List[Expr[Boolean]] = Nil) extends FieldEncoding
-    case class AttrExpr(nameExpr: Expr[String], value: Expr[Any], skipConditions: List[Expr[Boolean]] = Nil)
+    case class AttrExpr(nameExpr: Expr[String], text: Expr[String], skipConditions: List[Expr[Boolean]] = Nil)
         extends FieldEncoding
     case class Child(elem: Expr[scala.xml.Elem], skipConditions: List[Expr[Boolean]] = Nil) extends FieldEncoding
+
+    /** `@xmlWrapper` on a field that is not a collection: its element inside the wrapper element. */
     case class WrappedChild(wrapperName: String, elem: Expr[scala.xml.Elem], skipConditions: List[Expr[Boolean]] = Nil)
         extends FieldEncoding
-    case class Content(elem: Expr[scala.xml.Elem]) extends FieldEncoding
 
-    /** Dynamic mode: both attribute and element encodings; chosen at runtime by config.defaultFieldMode. */
+    /** `@xmlWrapper` on a collection: one element per item (appended by `append`) inside the wrapper element. */
+    case class WrappedRepeated(
+        wrapperName: String,
+        append: Expr[NodeBuffer] => Expr[Unit],
+        skipConditions: List[Expr[Boolean]] = Nil
+    ) extends FieldEncoding
+
+    /** `@xmlUnwrapped`: one element per item, appended to the element's children. */
+    case class Repeated(append: Expr[NodeBuffer] => Expr[Unit]) extends FieldEncoding
+
+    /** `@xmlContent`: appends the element's content. */
+    case class Content(append: Expr[NodeBuffer] => Expr[Unit]) extends FieldEncoding
+
+    /** Dynamic mode: both attribute and element encodings; chosen at runtime by config.defaultFieldMode (and
+      * `enumAsStrings` for an enum of singletons).
+      */
     case class DynamicMode(
         attrEncoding: AttrExpr,
         elemEncoding: Expr[scala.xml.Elem],
-        skipConditions: List[Expr[Boolean]] = Nil
+        skipConditions: List[Expr[Boolean]] = Nil,
+        needsEnumAsStrings: Boolean = false
     ) extends FieldEncoding
   }
 

@@ -19,6 +19,17 @@ trait DecoderUseImplicitWhenAvailableRuleImpl {
         case method if method.isImplicit => method.asUntyped
       }
 
+    private val userDecoders = scala.collection.mutable.Map.empty[String, Boolean]
+
+    /** Whether a type has a user-provided `XmlDecoder` (memoized; never the type being derived). */
+    def hasUserDecoder(derivedType: Option[??]): ?? => Boolean = { tpe =>
+      import tpe.Underlying as T
+      !derivedType.exists(_.Underlying =:= Type[T]) && userDecoders.getOrElseUpdate(
+        Type[T].plainPrint,
+        DTypes.XmlDecoder[T].summonExprIgnoring(ignoredImplicits*).toEither.isRight
+      )
+    }
+
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =
       Log.info(s"Attempting to use implicit XmlDecoder for ${Type[A].prettyPrint}") >> {
         if (dctx.derivedType.exists(_.Underlying =:= Type[A]))

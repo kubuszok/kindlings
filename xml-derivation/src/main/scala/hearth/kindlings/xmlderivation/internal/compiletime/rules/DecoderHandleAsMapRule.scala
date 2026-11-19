@@ -19,7 +19,7 @@ trait DecoderHandleAsMapRuleImpl {
         Type[A] match {
           case IsMap(isMap) =>
             import isMap.Underlying as Pair
-            decodeMapEntries[A, Pair](isMap.value)
+            decodeMapEntries[A, Pair](isMap.value, None)
 
           case _ =>
             MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a map"))
@@ -29,7 +29,8 @@ trait DecoderHandleAsMapRuleImpl {
     // Exposed so the combined collection-or-map rule can call it after a single IsCollection parse.
     @scala.annotation.nowarn("msg=is never used")
     private[rules] def decodeMapEntries[A: DecoderCtx, Pair: Type](
-        isMap: IsMapOf[A, Pair]
+        isMap: IsMapOf[A, Pair],
+        entriesNamed: Option[Expr[String]]
     ): MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] = {
       import isMap.{Key, Value, CtorResult}
       implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
@@ -50,10 +51,13 @@ trait DecoderHandleAsMapRuleImpl {
             val factoryExpr = isMap.factory
             val buildStep = isMap.build
 
+            // the entries are the `entry` child elements, or (`@xmlUnwrapped` / `@xmlWrapper`) named after the field
+            val entryName: Expr[String] = entriesNamed.getOrElse(Expr("entry"))
             val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
               hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
-                .decodeMapBuilder(
+                .decodeNamedMapBuilder(
                   Expr.splice(dctx.elem),
+                  Expr.splice(entryName),
                   Expr.splice(lambda),
                   Expr.splice(factoryExpr).asInstanceOf[scala.collection.Factory[(String, Value), CtorResult]]
                 )
