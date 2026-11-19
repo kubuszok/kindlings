@@ -111,6 +111,14 @@ inside a **class** (a test suite, a `.sc` script) whose case object lives in the
 (`object Shape { case object Empty extends Shape }`) crashes the compiler. On 0.4.0, declare the hierarchy at the top
 level or inside an `object` (e.g. the suite's companion object) instead.
 
+## Why does Scala 2.13 fail with "Internal error: unable to find the outer accessor symbol of class X"?
+
+A known Hearth bug (see `docs/research/hearth-bug-scala2-singleton-this-prefix.md` in the repository): deriving a
+decoder or codec for a sealed trait declared inside a **class** whose case object lives in the trait's companion
+(`object Shape { case object Empty extends Shape }`) fails on Scala 2.13. Encoders are not affected. Declare the
+hierarchy at the top level or inside an `object` (e.g. the suite's companion object), or put the case object next to
+the trait instead of in its companion.
+
 ## Which parts of Kindlings end up in my application at runtime? Can I remove the rest from a fat JAR?
 
 Kindlings modules are normal `Compile` dependencies, so all of their code ends up on your runtime classpath and in every
