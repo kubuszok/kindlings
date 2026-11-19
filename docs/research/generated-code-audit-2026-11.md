@@ -101,8 +101,14 @@ decoders are lazy vals of the instance.
 | yaml test class (StackMapTable) | 203 KB (128 KB) | 69 KB (2.8 KB) | 1186 KB (1115 KB) | 58 KB (2.9 KB) |
 | pureconfig reader, config known / runtime | 3735 / 5777 B | 3223 / 5259 B | 3219 / 5060 B | 3107 / 4942 B |
 | sconfig reader, config known / runtime | 3733 / 5770 B | 3224 / 5261 B | 3217 / 5053 B | 3108 / 4944 B |
+| ubjson decoder, config known (follow-up) | 3597 B | 3090 B | 5130 B | 2990 B |
+| ubjson decoder, runtime config (follow-up) | 9409 B | 3257 B | 9162 B | 3157 B |
 
 (pureconfig and sconfig already had per-field defs and an "all `Right`" check earlier in #313.)
+
+The ubjson rows come from a follow-up, as jsoniter's #330: with a runtime config, and with more than 8 keys, the
+decoder finds keys in a per-instance `UBJsonDerivationUtils.FieldIndex` (names computed once per instance), reads the
+object itself and reads/fills each field in its own local def. `UBJsonBytecodeSizeSpec` now guards both configs.
 
 ### Statically known configuration emitted as runtime branches
 

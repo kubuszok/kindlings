@@ -132,7 +132,8 @@ decode as for a field without a default (as in jsoniter-scala). The `transient*`
 
 The config is evaluated at compile time when possible (`UBJsonConfig.default`, a config passed explicitly, and on
 Scala 3 an `implicit val`/`given` initialized with such an expression), and the codec then has no runtime config
-checks; configs read from a `var` or computed at runtime are checked when the codec runs, with the same behaviour.
+checks; configs read from a `var` or computed at runtime are checked when the codec runs, with the same behaviour (the
+keys its `fieldNameMapper` gives are computed once per codec instance, on first use, not on every decode).
 
 ### Encoding (as jsoniter-derivation / jsoniter-scala)
 

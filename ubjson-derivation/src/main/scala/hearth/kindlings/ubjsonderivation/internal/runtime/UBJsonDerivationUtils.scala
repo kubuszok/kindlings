@@ -360,6 +360,55 @@ object UBJsonDerivationUtils {
       AbsentField
     } else decode(in)
 
+  /** The keys of a case class decoder whose field names are only known at runtime (a config the macro could not
+    * evaluate), built once per codec instance: a key is looked up by hash instead of being compared with every field's
+    * name (each computed with `fieldNameMapper`) on every key of every decode.
+    *
+    * @param names
+    *   the (mapped) key of each field, in the order of the decoder's field array
+    */
+  final class FieldIndex(names: Array[String]) {
+    // a few names are compared one by one (cheaper than hashing the key), more are looked up by hash
+    private val indices: java.util.HashMap[String, Integer] =
+      if (names.length <= FieldIndex.MaxNamesCompared) null
+      else {
+        val map = new java.util.HashMap[String, Integer](names.length * 2)
+        var i = names.length - 1
+        while (i >= 0) { // the first field wins when names collide, as with a chain of comparisons
+          map.put(names(i), Integer.valueOf(i))
+          i -= 1
+        }
+        map
+      }
+
+    /** The index of the field with this key, `-1` for an unknown key. */
+    def indexOf(key: String): Int =
+      if (indices eq null) {
+        var i = 0
+        while (i < names.length && names(i) != key) i += 1
+        if (i < names.length) i else -1
+      } else {
+        val i = indices.get(key)
+        if (i eq null) -1 else i.intValue
+      }
+
+    /** The key of the field at index `i`. */
+    def name(i: Int): String = names(i)
+  }
+
+  object FieldIndex {
+    private val MaxNamesCompared = 8
+  }
+
+  def fieldIndex(names: Array[String]): FieldIndex = new FieldIndex(names)
+
+  /** A field array of [[readObject]]'s shape (every slot absent), for decoders reading the object themselves. */
+  def absentFields(fieldCount: Int): Array[Any] = newFieldArray(fieldCount)
+
+  /** Fails with `unexpected field: <name>` (a key no field has, with `skipUnexpectedFields = false`). */
+  def unexpectedField(in: UBJsonReader, fieldName: String): Nothing =
+    in.decodeError("unexpected field: " + fieldName)
+
   private def newFieldArray(fieldCount: Int): Array[Any] = {
     val arr = new Array[Any](fieldCount)
     java.util.Arrays.fill(arr.asInstanceOf[Array[AnyRef]], AbsentField)

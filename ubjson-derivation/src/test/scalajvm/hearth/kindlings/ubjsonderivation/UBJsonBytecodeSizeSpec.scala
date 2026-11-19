@@ -9,9 +9,7 @@ object UBJsonWideInstances {
   val codec: UBJsonValueCodec[WideDefaults] = UBJsonValueCodec.derived[WideDefaults]
 }
 
-/** Not size-checked: with a runtime config the field-matching lambda of a 100-field decoder is ~9.4 KB (it predates the
-  * 0.4.0 work, like jsoniter's runtime-config decoder; tracked in `docs/research/generated-code-audit-2026-11.md`).
-  */
+/** The same codec with a config known only at runtime (a different, generic code path). */
 object UBJsonWideRuntimeInstances {
   // `config` is a parameter: the macro cannot evaluate it and reads it at runtime
   def codecWith(config: UBJsonConfig): UBJsonValueCodec[WideDefaults] = {
@@ -25,13 +23,21 @@ object UBJsonWideRuntimeInstances {
   */
 final class UBJsonBytecodeSizeSpec extends MacroSuite {
 
+  private def assertNoHugeMethods(cls: Class[?]): Unit = {
+    val sizes = BytecodeSizes.methodSizes(cls)
+    assert(sizes.map(_._3).sum > 5000, s"expected the derived codec's code, got: $sizes")
+    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
+    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
   test(
     "no method of the codec derived (config known at compile time) for a 100-field case class exceeds HotSpot's JIT limit"
   ) {
-    val sizes = BytecodeSizes.methodSizes(UBJsonWideInstances.getClass)
-    assert(sizes.map(_._3).sum > 5000, s"expected the derived codecs' code, got: $sizes")
-    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
-    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+    assertNoHugeMethods(UBJsonWideInstances.getClass)
+  }
+
+  test("no method of the codec derived for a 100-field case class with a runtime config exceeds the JIT limit") {
+    assertNoHugeMethods(UBJsonWideRuntimeInstances.getClass)
   }
 
   test("the codecs round-trip and fill absent fields with their defaults") {
