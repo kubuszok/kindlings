@@ -90,7 +90,8 @@ trait EncoderMacrosImpl
           // rule finds it (`cached-encode-schema-for-A`) instead of deriving a second copy.
           val schemaExpr: Expr[Schema] = runSafe {
             for {
-              schema <- deriveSelfContainedSchema[A](configExpr, evConfig)
+              // In the instance's cache: nested record schemas are shared with the schemas of the nested encoders.
+              schema <- deriveSchemaInInstanceScope[A](configExpr, evConfig, cache)
               cachedSchemaCtx = EncoderCtx[A](
                 tpe = Type[A],
                 value = Expr.quote(null.asInstanceOf[A]),
@@ -268,7 +269,7 @@ trait EncoderMacrosImpl
             Log.info(s"Using encoder-cached schema for ${Type[A].prettyPrint}") >> MIO.pure(cached)
           case None =>
             for {
-              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
+              schema <- deriveSchemaInInstanceScope[A](ctx.schemaConfig, ctx.evaluatedConfig, ctx.cache)
               _ <- ctx.setCachedSchemaForEncode[A](schema)
               result <- ctx.getCachedSchemaForEncode[A]
             } yield result.get
