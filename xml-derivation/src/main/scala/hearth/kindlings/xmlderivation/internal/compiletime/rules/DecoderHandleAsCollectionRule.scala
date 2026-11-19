@@ -16,9 +16,6 @@ trait DecoderHandleAsCollectionRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[Either[XmlDecodingError, A]]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a collection or map") >> {
-        implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
-        implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
-        implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
         Type[A] match {
           case IsCollection(isCollection) =>
             // A map is an `IsCollectionOf` whose proof is an `IsMapOf`. Parse `IsCollection` ONCE and dispatch on

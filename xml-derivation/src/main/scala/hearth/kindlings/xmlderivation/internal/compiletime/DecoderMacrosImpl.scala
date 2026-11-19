@@ -37,24 +37,12 @@ trait DecoderMacrosImpl
       configExpr: Expr[XmlConfig]
   ): Expr[Either[XmlDecodingError, A]] = {
     implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
-    implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
-    implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
-    implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
-    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]]("KindlingsXmlDecoder.decode") { fromCtx =>
-      ValDefs.createVal[scala.xml.Elem](elemExpr).use { elemVal =>
-        ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-          Expr.quote {
-            val _ = Expr.splice(elemVal)
-            val _ = Expr.splice(configVal)
-            Expr.splice {
-              fromCtx(DecoderCtx.from(elemVal, configVal, derivedType = None, evConfig))
-            }
-          }
-        }
-      }
-    }
+    deriveDecoderAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]](
+      "KindlingsXmlDecoder.decode",
+      configExpr,
+      derivedType = None
+    )(decode => decode(elemExpr, configExpr))
   }
 
   @scala.annotation.nowarn("msg=is never used")
@@ -67,165 +55,91 @@ trait DecoderMacrosImpl
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
     implicit val StringT: Type[String] = DTypes.String
-    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
-    deriveDecoderFromCtxAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]](
-      "KindlingsXmlDecoder.fromXmlString"
-    ) { fromCtx =>
-      ValDefs.createVal[String](xmlExpr).use { xmlVal =>
-        ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-          Expr.quote {
-            val x = Expr.splice(xmlVal)
-            val cfg = Expr.splice(configVal)
-            XmlDerivationUtils.parseAndDecode[A](
-              x,
-              (elem: scala.xml.Elem) => {
-                val _ = elem
-                val _ = cfg
-                Expr.splice {
-                  fromCtx(DecoderCtx.from(Expr.quote(elem), Expr.quote(cfg), derivedType = None, evConfig))
-                }
-              }
-            )
-          }
-        }
+    deriveDecoderAndAdaptForEntrypoint[A, Either[XmlDecodingError, A]](
+      "KindlingsXmlDecoder.fromXmlString",
+      configExpr,
+      derivedType = None
+    ) { decode =>
+      Expr.quote {
+        val cfg = Expr.splice(configExpr)
+        XmlDerivationUtils.parseAndDecode[A](
+          Expr.splice(xmlExpr),
+          (elem: scala.xml.Elem) => Expr.splice(decode(Expr.quote(elem), Expr.quote(cfg)))
+        )
       }
     }
   }
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveDecoderTypeClass[A: Type](configExpr: Expr[XmlConfig]): Expr[KindlingsXmlDecoder[A]] = {
-    implicit val DecoderA: Type[XmlDecoder[A]] = DTypes.XmlDecoder[A]
     implicit val KindlingsDecoderA: Type[KindlingsXmlDecoder[A]] = DTypes.KindlingsXmlDecoder[A]
     implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
     implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
     implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
-    val selfType: Option[??] = Some(Type[A].as_??)
+
+    deriveDecoderAndAdaptForEntrypoint[A, KindlingsXmlDecoder[A]](
+      "KindlingsXmlDecoder.derived",
+      configExpr,
+      derivedType = Some(Type[A].as_??)
+    ) { decode =>
+      Expr.quote {
+        val cfg = Expr.splice(configExpr)
+        hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.decoderInstance[A] {
+          (elem: scala.xml.Elem) => Expr.splice(decode(Expr.quote(elem), Expr.quote(cfg)))
+        }
+      }
+    }
+  }
+
+  /** Derives the decoder of `A` once, at the top level of the expansion (the cached defs of every type it needs, put
+    * around the result), and lets the entry point call it: `(element, config) => result`. Handles logging and error
+    * reporting.
+    *
+    * (Deriving at the top level, not inside the quote that uses the result: on Scala 3 every splice has its own
+    * `Quotes`, and expressions created by a derivation running inside one cannot be used by cached defs.)
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveDecoderAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[XmlConfig],
+      derivedType: Option[??]
+  )(
+      adapt: ((Expr[scala.xml.Elem], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, A]]) => Expr[Out]
+  ): Expr[Out] = {
+    implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
+    implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
     val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
-        s"KindlingsXmlDecoder.derived: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
-          "Provide an explicit type parameter, e.g.: KindlingsXmlDecoder.derived[MyType]\n" +
-          "or add a type ascription to the result variable."
-      )
-
-    Log
-      .namedScope(
-        s"Deriving XML decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-      ) {
-        MIO.scoped { runSafe =>
-          implicit val AnyT: Type[Any] = DTypes.Any
-
-          // Step 1: Run derivation with placeholder context to populate cache
-          val placeholderCtx = DecoderCtx.from[A](
-            elem = Expr.quote(null.asInstanceOf[scala.xml.Elem]),
-            config = Expr.quote(null.asInstanceOf[XmlConfig]),
-            derivedType = selfType,
-            evaluatedConfig = evConfig
-          )
-          runSafe {
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              _ <- deriveDecoderRecursively[A](using placeholderCtx)
-            } yield ()
-          }
-
-          // Step 2: Extract cached helper and cache
-          val helperOpt = runSafe(placeholderCtx.getHelper[A])
-          val cache = runSafe(placeholderCtx.cache.get)
-
-          helperOpt match {
-            case Some(helper) =>
-              // Type has a cached def — call it directly (no lambda allocation)
-              cache.toValDefs.use { _ =>
-                Expr.quote {
-                  hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.decoderInstance[A] {
-                    (elem: scala.xml.Elem) =>
-                      Expr.splice(helper(Expr.quote(elem), configExpr))
-                  }
-                }
-              }
-            case None =>
-              // Simple type without cached helper (value types, options, collections) —
-              // derive directly with real context. Define fromCtx outside the quote to avoid
-              // ClassTag leaks from loadStandardExtensions into the reified context.
-              val fromCtx: DecoderCtx[A] => Expr[Either[XmlDecodingError, A]] =
-                ctx =>
-                  runSafe {
-                    for {
-                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                      result <- deriveDecoderRecursively[A](using ctx)
-                      freshCache <- ctx.cache.get
-                    } yield freshCache.toValDefs.use(_ => result)
-                  }
-              Expr.quote {
-                hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.decoderInstance[A] {
-                  (elem: scala.xml.Elem) =>
-                    val _ = elem
-                    Expr.splice {
-                      fromCtx(DecoderCtx.from[A](Expr.quote(elem), configExpr, derivedType = selfType, evConfig))
-                    }
-                }
-              }
-          }
-        }
-      }
-      .flatTap { result =>
-        Log.info(s"Derived final XML decoder result: ${result.prettyPrint}")
-      }
-      .runToExprOrFail(
-        "KindlingsXmlDecoder.derived",
-        infoRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        errorRendering = if (shouldWeLogDecoderDerivation) RenderFrom(Log.Level.Info) else DontRender,
-        timeout = derivationTimeout
-      ) { (errorLogs, errors) =>
-        val errorsRendered =
-          hearth.kindlings.derivation.compiletime.DerivationErrorRendering.renderErrors(errors.toVector)
-        val hint =
-          "Enable debug logging with: import hearth.kindlings.xmlderivation.debug.logDerivationForKindlingsXmlDecoder or scalac option -Xmacro-settings:xmlDerivation.logDerivation=true"
-        if (errorLogs.nonEmpty)
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |and the following logs:
-             |${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}
-             |$hint""".stripMargin
-        else
-          s"""Macro derivation failed with the following errors:
-             |$errorsRendered
-             |$hint""".stripMargin
-      }
-  }
-
-  // Handles logging, error reporting and prepending "cached" defs and vals to the result.
-
-  def deriveDecoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (DecoderCtx[A] => Expr[Either[XmlDecodingError, A]]) => Expr[Out]
-  ): Expr[Out] = {
-    if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
-      Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
-          s"Provide an explicit type parameter, e.g.: $macroName[MyType](...)\n" +
+          s"Provide an explicit type parameter, e.g.: $macroName[MyType]\n" +
           "or add a type ascription to the result variable."
       )
+
     Log
       .namedScope(
         s"Deriving XML decoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: (DecoderCtx[A] => Expr[Either[XmlDecodingError, A]]) =
-            (ctx: DecoderCtx[A]) =>
-              runSafe {
-                for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                  result <- deriveDecoderRecursively[A](using ctx)
-                  cache <- ctx.cache.get
-                } yield cache.toValDefs.use(_ => result)
-              }
-
-          provideCtxAndAdapt(fromCtx)
-        }
+        // Run the derivation with a placeholder context to populate the cache: every type gets a cached def
+        val placeholderCtx = DecoderCtx.from[A](
+          elem = Expr.quote(null.asInstanceOf[scala.xml.Elem]),
+          config = Expr.quote(null.asInstanceOf[XmlConfig]),
+          derivedType = derivedType,
+          evaluatedConfig = evConfig
+        )
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          _ <- deriveDecoderRecursively[A](using placeholderCtx)
+          helperOpt <- placeholderCtx.getHelper[A]
+          cache <- placeholderCtx.cache.get
+          helper <- helperOpt match {
+            case Some(helper) => MIO.pure(helper)
+            case None         => MIO.fail(new RuntimeException(s"No decode helper for ${Type[A].prettyPrint}"))
+          }
+        } yield cache.toValDefs.use(_ => adapt(helper))
       }
       .flatTap { result =>
         Log.info(s"Derived final XML decoder result: ${result.prettyPrint}")

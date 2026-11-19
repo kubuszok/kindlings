@@ -82,7 +82,8 @@ trait DecoderHandleAsEnumRuleImpl {
 
       // an enum of singletons: the name read from the discriminator (or from the element inside) is the value
       def taggedSingletons: MIO[Expr[Either[XmlDecodingError, A]]] = enumFromName[A](subtypes).map { fromName =>
-        def withDiscriminator(attribute: Expr[String]): Expr[Either[XmlDecodingError, A]] = Expr.quote {
+        // (expressions are created inside the quotes using them: Scala 3 ties them to the enclosing splice)
+        def withDiscriminator(attribute: => Expr[String]): Expr[Either[XmlDecodingError, A]] = Expr.quote {
           XmlDerivationUtils.decodeDiscriminator(Expr.splice(dctx.elem), Expr.splice(attribute)) match {
             case Right(typeName) => Expr.splice(fromName(Expr.quote(typeName), dctx.config))
             case Left(error)     => Left(error): Either[XmlDecodingError, A]
@@ -208,7 +209,10 @@ trait DecoderHandleAsEnumRuleImpl {
       }
 
       def fromString: MIO[Expr[Either[XmlDecodingError, A]]] = enumFromName[A](subtypes).map { fromName =>
-        fromName(Expr.quote(Expr.splice(dctx.elem).text.trim), dctx.config)
+        Expr.quote {
+          val text = Expr.splice(dctx.elem).text.trim
+          Expr.splice(fromName(Expr.quote(text), dctx.config))
+        }
       }
 
       // With a config known at compile time only the applicable decoding is generated.
