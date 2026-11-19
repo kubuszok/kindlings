@@ -99,175 +99,176 @@ trait DecoderHandleAsCaseClassRuleImpl {
             DTypes.EitherCEFieldNodes
 
           val indexedFields = fields.toList.zipWithIndex
-          NonEmptyList
-            .fromList(indexedFields)
-            .get
-            .parTraverse { case ((fName, param), reindex) =>
-              import param.tpe.Underlying as Field
-              val nameOverride = getAnnotationStringArg[fieldName](param)
-              val defaultAsAnyOpt: Option[Expr[Any]] =
-                if (param.hasDefault)
-                  param.defaultValue.flatMap { method =>
-                    foldInstanceFree(method, "Default value")(
-                      onTypes = _ => Map.empty,
-                      onValues = _ => Map.empty
-                    ).toOption
-                      .map { ee => import ee.Underlying; ee.value.upcast[Any] }
-                  }
-                else None
-              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decoderExpr =>
-                  // Pre-compute the resolved field name when possible
-                  val resolvedFieldName: Either[Expr[String], String] = nameOverride match {
-                    case Some(customName) => Right(customName)
-                    case None             =>
-                      dctx.evaluatedConfig match {
-                        case Some(evConfig) => Right(evConfig.transformMemberNames(fName))
-                        case None           =>
-                          Left(Expr.quote(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))))
-                      }
-                  }
-                  val fieldNameExpr: Expr[String] = resolvedFieldName match {
-                    case Right(s)   => Expr(s)
-                    case Left(expr) => expr
-                  }
+          // the names: a @fieldName, constants with a configuration known at compile time, otherwise computed once per
+          // instance
+          val namesMIO: MIO[String => Expr[String]] = dctx.evaluatedConfig match {
+            case Some(evConfig) => MIO.pure((name: String) => Expr(evConfig.transformMemberNames(name)))
+            case None           =>
+              dctx.transformedMemberNames(fields.toList.collect {
+                case (fName, param) if getAnnotationStringArg[fieldName](param).isEmpty => fName
+              })
+          }
+          namesMIO.flatMap { nameOf =>
+            NonEmptyList
+              .fromList(indexedFields)
+              .get
+              .parTraverse { case ((fName, param), reindex) =>
+                import param.tpe.Underlying as Field
+                val nameOverride = getAnnotationStringArg[fieldName](param)
+                val defaultAsAnyOpt: Option[Expr[Any]] =
+                  if (param.hasDefault)
+                    param.defaultValue.flatMap { method =>
+                      foldInstanceFree(method, "Default value")(
+                        onTypes = _ => Map.empty,
+                        onValues = _ => Map.empty
+                      ).toOption
+                        .map { ee => import ee.Underlying; ee.value.upcast[Any] }
+                    }
+                  else None
+                Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
+                  deriveFieldDecoder[Field].map { decoderExpr =>
+                    val fieldNameExpr: Expr[String] = nameOverride match {
+                      case Some(customName) => Expr(customName)
+                      case None             => nameOf(fName)
+                    }
 
-                  // Check useDefaults statically when possible
-                  val useDefaultsStaticallyFalse: Boolean =
-                    dctx.evaluatedConfig.exists(!_.useDefaults)
+                    // Check useDefaults statically when possible
+                    val useDefaultsStaticallyFalse: Boolean =
+                      dctx.evaluatedConfig.exists(!_.useDefaults)
 
-                  // As scala-yaml's derived decoders, an absent `Option` field is `None` (unless its default is used).
-                  val isOptionField: Boolean = Type[Field] match {
-                    case IsOption(_) => true
-                    case _           => false
-                  }
-                  // `fields`: the mapping's value nodes by key (`YamlDerivationUtils.fieldNodes`, once per decode)
-                  def requiredFieldExpr(
-                      fields: Expr[java.util.HashMap[String, Node]]
-                  ): Expr[Either[ConstructError, Any]] =
-                    if (isOptionField)
-                      Expr.quote {
-                        YamlDerivationUtils.decodeOptionalFieldOf(
-                          Expr.splice(fields),
-                          Expr.splice(fieldNameExpr),
-                          Expr.splice(decoderExpr)
-                        )
-                      }
-                    else
-                      Expr.quote {
-                        YamlDerivationUtils.decodeRequiredFieldOf(
-                          Expr.splice(fields),
-                          Expr.splice(dctx.node),
-                          Expr.splice(fieldNameExpr),
-                          Expr.splice(decoderExpr)
-                        )
-                      }
+                    // As scala-yaml's derived decoders, an absent `Option` field is `None` (unless its default is used).
+                    val isOptionField: Boolean = Type[Field] match {
+                      case IsOption(_) => true
+                      case _           => false
+                    }
+                    // `fields`: the mapping's value nodes by key (`YamlDerivationUtils.fieldNodes`, once per decode)
+                    def requiredFieldExpr(
+                        fields: Expr[java.util.HashMap[String, Node]]
+                    ): Expr[Either[ConstructError, Any]] =
+                      if (isOptionField)
+                        Expr.quote {
+                          YamlDerivationUtils.decodeOptionalFieldOf(
+                            Expr.splice(fields),
+                            Expr.splice(fieldNameExpr),
+                            Expr.splice(decoderExpr)
+                          )
+                        }
+                      else
+                        Expr.quote {
+                          YamlDerivationUtils.decodeRequiredFieldOf(
+                            Expr.splice(fields),
+                            Expr.splice(dctx.node),
+                            Expr.splice(fieldNameExpr),
+                            Expr.splice(decoderExpr)
+                          )
+                        }
 
-                  def decodeExpr(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, Any]] =
-                    defaultAsAnyOpt match {
-                      case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
-                        // useDefaults is statically false: skip the default branch entirely
-                        requiredFieldExpr(fields)
-                      case Some(defaultAnyExpr) =>
-                        dctx.evaluatedConfig match {
-                          case Some(evConfig) if evConfig.useDefaults =>
-                            // useDefaults is statically true: always use default path
-                            Expr.quote {
-                              YamlDerivationUtils.decodeFieldWithDefaultOf(
-                                Expr.splice(fields),
-                                Expr.splice(fieldNameExpr),
-                                Expr.splice(decoderExpr),
-                                Expr.splice(defaultAnyExpr)
-                              )
-                            }
-                          case _ =>
-                            // useDefaults not statically known: runtime check
-                            Expr.quote {
-                              val config = Expr.splice(dctx.config)
-                              if (config.useDefaults)
+                    def decodeExpr(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, Any]] =
+                      defaultAsAnyOpt match {
+                        case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
+                          // useDefaults is statically false: skip the default branch entirely
+                          requiredFieldExpr(fields)
+                        case Some(defaultAnyExpr) =>
+                          dctx.evaluatedConfig match {
+                            case Some(evConfig) if evConfig.useDefaults =>
+                              // useDefaults is statically true: always use default path
+                              Expr.quote {
                                 YamlDerivationUtils.decodeFieldWithDefaultOf(
                                   Expr.splice(fields),
                                   Expr.splice(fieldNameExpr),
                                   Expr.splice(decoderExpr),
                                   Expr.splice(defaultAnyExpr)
                                 )
-                              else Expr.splice(requiredFieldExpr(fields))
-                            }
-                        }
-                      case None => requiredFieldExpr(fields)
+                              }
+                            case _ =>
+                              // useDefaults not statically known: runtime check
+                              Expr.quote {
+                                val config = Expr.splice(dctx.config)
+                                if (config.useDefaults)
+                                  YamlDerivationUtils.decodeFieldWithDefaultOf(
+                                    Expr.splice(fields),
+                                    Expr.splice(fieldNameExpr),
+                                    Expr.splice(decoderExpr),
+                                    Expr.splice(defaultAnyExpr)
+                                  )
+                                else Expr.splice(requiredFieldExpr(fields))
+                              }
+                          }
+                        case None => requiredFieldExpr(fields)
+                      }
+                    // The constructor argument: the field's value (read from its `Right`) cast to the field's type.
+                    val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
+                      (fName, castTo[Field](valExpr).as_??)
                     }
-                  // The constructor argument: the field's value (read from its `Right`) cast to the field's type.
-                  val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
-                    (fName, castTo[Field](valExpr).as_??)
+                    (decodeExpr(_), makeFieldArg)
                   }
-                  (decodeExpr(_), makeFieldArg)
                 }
               }
-            }
-            .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
-              val makeFieldArgs = fieldData.toList.map(_._2)
+              .flatMap { fieldData =>
+                val decodeExprs = fieldData.toList.map(_._1)
+                val makeFieldArgs = fieldData.toList.map(_._2)
 
-              def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
-                val nonTransientFieldMap: Map[String, Expr_??] =
-                  makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
-                val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
-                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                  onTypes = _ => Map.empty,
-                  onValues = _ => fieldMap
-                ) match {
-                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
-                  case Left(error)          =>
-                    Environment.reportErrorAndAbort(
-                      DecoderDerivationError
-                        .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
-                        .message
-                    )
-                }
-              }
-              implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
-              // Like scala-yaml, the first failing field (in field order) is reported and the later ones are not
-              // decoded: each field is decoded by its own local def, and the value is constructed when the last
-              // result is a `Right` (see FlatFieldsConstruct).
-              // The mapping is read once (`fieldNodes`); each field is then a hash lookup.
-              def construct(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, A]] =
-                constructFailFast[Either[ConstructError, Any], A, Either[ConstructError, A]](
-                  decodeExprs.map(_(fields))
-                )(
-                  isSuccess = r => Expr.quote(Expr.splice(r).isRight),
-                  valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConstructError, Any]].value),
-                  construct = constructFF,
-                  onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConstructError, A]),
-                  onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[ConstructError, A]])
-                )
-              MIO.pure(
-                ValDefs
-                  .createVal[Either[ConstructError, java.util.HashMap[String, Node]]](
-                    Expr.quote(YamlDerivationUtils.fieldNodes(Expr.splice(dctx.node))),
-                    FreshName.FromPrefix("fieldNodes")
-                  )
-                  .use { fieldNodes =>
-                    Expr.quote {
-                      if (Expr.splice(fieldNodes).isLeft)
-                        Expr.splice(fieldNodes).asInstanceOf[Either[ConstructError, A]]
-                      else
-                        Expr.splice(
-                          ValDefs
-                            .createVal[java.util.HashMap[String, Node]](
-                              Expr.quote(
-                                Expr
-                                  .splice(fieldNodes)
-                                  .asInstanceOf[Right[ConstructError, java.util.HashMap[String, Node]]]
-                                  .value
-                              ),
-                              FreshName.FromPrefix("fields")
-                            )
-                            .use(construct)
-                        )
-                    }
+                def constructFF(boundValues: List[Expr[Any]]): Expr[A] = {
+                  val nonTransientFieldMap: Map[String, Expr_??] =
+                    makeFieldArgs.zip(boundValues).map { case (mk, v) => mk(v) }.toMap
+                  val fieldMap: Map[String, Expr_??] = nonTransientFieldMap ++ transientDefaults
+                  foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                    onTypes = _ => Map.empty,
+                    onValues = _ => fieldMap
+                  ) match {
+                    case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                    case Left(error)          =>
+                      Environment.reportErrorAndAbort(
+                        DecoderDerivationError
+                          .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                          .message
+                      )
                   }
-              )
-            }
+                }
+                implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
+                // Like scala-yaml, the first failing field (in field order) is reported and the later ones are not
+                // decoded: each field is decoded by its own local def, and the value is constructed when the last
+                // result is a `Right` (see FlatFieldsConstruct).
+                // The mapping is read once (`fieldNodes`); each field is then a hash lookup.
+                def construct(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, A]] =
+                  constructFailFast[Either[ConstructError, Any], A, Either[ConstructError, A]](
+                    decodeExprs.map(_(fields))
+                  )(
+                    isSuccess = r => Expr.quote(Expr.splice(r).isRight),
+                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConstructError, Any]].value),
+                    construct = constructFF,
+                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConstructError, A]),
+                    onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[ConstructError, A]])
+                  )
+                MIO.pure(
+                  ValDefs
+                    .createVal[Either[ConstructError, java.util.HashMap[String, Node]]](
+                      Expr.quote(YamlDerivationUtils.fieldNodes(Expr.splice(dctx.node))),
+                      FreshName.FromPrefix("fieldNodes")
+                    )
+                    .use { fieldNodes =>
+                      Expr.quote {
+                        if (Expr.splice(fieldNodes).isLeft)
+                          Expr.splice(fieldNodes).asInstanceOf[Either[ConstructError, A]]
+                        else
+                          Expr.splice(
+                            ValDefs
+                              .createVal[java.util.HashMap[String, Node]](
+                                Expr.quote(
+                                  Expr
+                                    .splice(fieldNodes)
+                                    .asInstanceOf[Right[ConstructError, java.util.HashMap[String, Node]]]
+                                    .value
+                                ),
+                                FreshName.FromPrefix("fields")
+                              )
+                              .use(construct)
+                          )
+                      }
+                    }
+                )
+              }
+          }
       }
     }
 

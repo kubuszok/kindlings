@@ -69,74 +69,80 @@ trait DecoderHandleAsNamedTupleRuleImpl {
 
         case Some(fields) =>
           val indexedFields = fields.toList.zipWithIndex
-          NonEmptyList
-            .fromList(indexedFields)
-            .get
-            .parTraverse { case ((fName, param), reindex) =>
-              import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Either[ConstructError, Any]] = Expr.quote {
-                    YamlDerivationUtils
-                      .getField(
-                        Expr.splice(dctx.node),
-                        Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
-                      )
-                      .flatMap(fieldNode =>
-                        Expr.splice(decoderExpr).construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
-                      )
-                      .asInstanceOf[Either[ConstructError, Any]]
-                  }
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    val typedExpr = Expr.quote {
-                      YamlDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
-                        Expr.splice(decoderExpr)
-                      )
+          val namesMIO: MIO[String => Expr[String]] = dctx.evaluatedConfig match {
+            case Some(evConfig) => MIO.pure((name: String) => Expr(evConfig.transformMemberNames(name)))
+            case None           => dctx.transformedMemberNames(fields.toList.map(_._1))
+          }
+          namesMIO.flatMap { nameOf =>
+            NonEmptyList
+              .fromList(indexedFields)
+              .get
+              .parTraverse { case ((fName, param), reindex) =>
+                import param.tpe.Underlying as Field
+                Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                  deriveFieldDecoder[Field].map { decoderExpr =>
+                    val decodeExpr: Expr[Either[ConstructError, Any]] = Expr.quote {
+                      YamlDerivationUtils
+                        .getField(
+                          Expr.splice(dctx.node),
+                          Expr.splice(nameOf(fName))
+                        )
+                        .flatMap(fieldNode =>
+                          Expr.splice(decoderExpr).construct(fieldNode)(org.virtuslab.yaml.LoadSettings.empty)
+                        )
+                        .asInstanceOf[Either[ConstructError, Any]]
                     }
-                    (fName, typedExpr.as_??)
+                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                      val typedExpr = Expr.quote {
+                        YamlDerivationUtils.unsafeCast(
+                          Expr.splice(arrExpr)(Expr.splice(Expr(reindex))),
+                          Expr.splice(decoderExpr)
+                        )
+                      }
+                      (fName, typedExpr.as_??)
+                    }
+                    (decodeExpr, makeAccessor)
                   }
-                  (decodeExpr, makeAccessor)
                 }
               }
-            }
-            .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
+              .flatMap { fieldData =>
+                val decodeExprs = fieldData.toList.map(_._1)
+                val makeAccessors = fieldData.toList.map(_._2)
 
-              val listExpr: Expr[List[Either[ConstructError, Any]]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Either[ConstructError, Any]])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
-                }
+                val listExpr: Expr[List[Either[ConstructError, Any]]] =
+                  decodeExprs.foldRight(Expr.quote(List.empty[Either[ConstructError, Any]])) { (elem, acc) =>
+                    Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+                  }
 
-              LambdaBuilder
-                .of1[Array[Any]]("decodedValues")
-                .traverse { decodedValuesExpr =>
-                  val fieldMap: Map[String, Expr_??] =
-                    makeAccessors.map(_(decodedValuesExpr)).toMap
-                  foldInstanceFree(constructor, "Constructor")(
-                    onTypes = _ => Map.empty,
-                    onValues = _ => fieldMap
-                  ) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                    case Left(error)          =>
-                      val err = DecoderDerivationError.CannotConstructType(
-                        Type[A].prettyPrint,
-                        isSingleton = false,
-                        Some(error)
-                      )
-                      Log.error(err.message) >> MIO.fail(err)
+                LambdaBuilder
+                  .of1[Array[Any]]("decodedValues")
+                  .traverse { decodedValuesExpr =>
+                    val fieldMap: Map[String, Expr_??] =
+                      makeAccessors.map(_(decodedValuesExpr)).toMap
+                    foldInstanceFree(constructor, "Constructor")(
+                      onTypes = _ => Map.empty,
+                      onValues = _ => fieldMap
+                    ) match {
+                      case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
+                      case Left(error)          =>
+                        val err = DecoderDerivationError.CannotConstructType(
+                          Type[A].prettyPrint,
+                          isSingleton = false,
+                          Some(error)
+                        )
+                        Log.error(err.message) >> MIO.fail(err)
+                    }
                   }
-                }
-                .map { builder =>
-                  val constructLambda = builder.build[A]
-                  Expr.quote {
-                    YamlDerivationUtils
-                      .sequenceDecodeResults(Expr.splice(listExpr))
-                      .map(Expr.splice(constructLambda))
+                  .map { builder =>
+                    val constructLambda = builder.build[A]
+                    Expr.quote {
+                      YamlDerivationUtils
+                        .sequenceDecodeResults(Expr.splice(listExpr))
+                        .map(Expr.splice(constructLambda))
+                    }
                   }
-                }
-            }
+              }
+          }
       }
     }
   }

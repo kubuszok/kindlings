@@ -62,13 +62,19 @@ trait EncoderHandleAsNamedTupleRuleImpl {
                 }
               }
             }
-            .map { fieldPairs =>
-              fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) { case ((fName, fieldNode), acc) =>
-                Expr.quote {
-                  (
-                    Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                    Expr.splice(fieldNode)
-                  ) :: Expr.splice(acc)
+            .flatMap { fieldPairs =>
+              val namesMIO: MIO[String => Expr[String]] = ectx.evaluatedConfig match {
+                case Some(evConfig) => MIO.pure((name: String) => Expr(evConfig.transformMemberNames(name)))
+                case None           => ectx.transformedMemberNames(fieldPairs.toList.map(_._1))
+              }
+              namesMIO.map { nameOf =>
+                fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) { case ((fName, fieldNode), acc) =>
+                  Expr.quote {
+                    (
+                      Expr.splice(nameOf(fName)),
+                      Expr.splice(fieldNode)
+                    ) :: Expr.splice(acc)
+                  }
                 }
               }
             }
