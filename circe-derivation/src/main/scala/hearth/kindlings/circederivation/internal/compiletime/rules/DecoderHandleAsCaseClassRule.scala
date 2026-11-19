@@ -117,23 +117,11 @@ trait DecoderHandleAsCaseClassRuleImpl {
           return Log.error(err.message) >> MIO.fail(err)
         }
 
-      // Build a List[String] expression of the field names (accounting for @fieldName overrides)
-      // for strict decoding — only non-transient fields
-      val fieldNamesListExpr: Expr[List[String]] =
+      // The fields strict decoding expects (`Right`: a @fieldName, `Left`: transformed by the configuration).
+      val expectedNames: List[Either[String, String]] =
         fieldsList
           .filterNot { case (_, param) => hasAnnotationType[transientField](param) }
-          .map { case (name, param) =>
-            getAnnotationStringArg[fieldName](param).getOrElse(name)
-          }
-          .foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
-            Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
-          }
-
-      // For strict decoding with @fieldName, the names are already resolved at compile time
-      // so we need a version that doesn't apply config.transformMemberNames for those
-      val hasAnyFieldNameAnnotation = fieldsList.exists { case (_, param) =>
-        getAnnotationStringArg[fieldName](param).isDefined
-      }
+          .map { case (name, param) => getAnnotationStringArg[fieldName](param).toRight(name) }
 
       NonEmptyList.fromList(fieldsList) match {
         case None =>
@@ -231,317 +219,318 @@ trait DecoderHandleAsCaseClassRuleImpl {
 
           // Step 1: For each field, derive a decoder (cached per instance, see deriveFieldDecoder) and build its
           // fail-fast and accumulating decoding from a cursor, plus its constructor argument.
-          fields
-            .parTraverse { case (fName, param) =>
-              import param.tpe.Underlying as Field
-              val isTransient = hasAnnotationType[transientField](param)
-              val nameOverride = getAnnotationStringArg[fieldName](param)
-              Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
-                // A @transientField is not decoded (its default is used), so it needs no decoder.
-                (if (isTransient) MIO.pure(Option.empty[Expr[io.circe.Decoder[Field]]])
-                 else deriveFieldDecoder[Field].map(Some(_))).map { decoderOpt =>
-                  def decoderExpr: Expr[io.circe.Decoder[Field]] = decoderOpt.get
-                  val defaultAsAnyOpt: Option[Expr[Any]] =
-                    if (param.hasDefault)
-                      param.defaultValue.flatMap { method =>
-                        foldInstanceFree(method, "Default value")(
-                          onTypes = _ => Map.empty,
-                          onValues = _ => Map.empty
-                        ).toOption
-                          .map { ee => import ee.Underlying; ee.value.upcast[Any] }
-                      }
-                    else None
-
-                  // Pre-compute field name when evaluatedConfig is available and no @fieldName override
-                  val resolvedFieldName: Option[String] = nameOverride.orElse(
-                    dctx.evaluatedConfig.map(_.transformMemberNames(fName))
-                  )
-                  val useDefaultsStaticallyFalse: Boolean =
-                    dctx.evaluatedConfig.exists(!_.useDefaults)
-
-                  // Detect Option[_] fields at compile time — absent fields should decode as None,
-                  // not fail (bug #120: circe's .as() on a failed cursor fails immediately without
-                  // calling the decoder, so Decoder[Option[T]] never gets a chance to return None).
-                  // This holds whether or not the field has a default (with useDefaults=false circe ignores the
-                  // default, and its Option decoder still turns a missing key into None).
-                  // A value type wrapping an Option (`case class MaybeName(v: Option[String]) extends AnyVal`) is
-                  // decoded as if the absent field was `null`, so the wrapped Option decoder yields `None`.
-                  val fieldKind: FieldKind = Type[Field] match {
-                    case IsOption(_)                   => OptionField
-                    case _ if Type[Field].isNamedTuple => PlainField
-                    // Decoded with `tryDecode` like an Option: a derived (unwrapping) decoder accepts an absent key
-                    // as `null` (`nullableDecoderFromFF`), while a user-provided decoder keeps circe's semantics
-                    // (by default an absent key is a missing-field failure).
-                    case IsValueType(isValueType) =>
-                      import isValueType.Underlying as Inner
-                      Type[Inner] match {
-                        case IsOption(_) => OptionField
-                        case _           => PlainField
-                      }
-                    case _ => PlainField
-                  }
-
-                  // Field name expression: a constant when resolved at compile time, else computed from the config.
-                  def fieldNameExpr: Expr[String] = resolvedFieldName match {
-                    case Some(resolvedName) => Expr(resolvedName)
-                    case None => Expr.quote(Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName))))
-                  }
-
-                  // Decoding without using the default value.
-                  def plainFF(cursor: Expr[HCursor], name: Expr[String]): Expr[Either[DecodingFailure, Any]] =
-                    fieldKind match {
-                      case OptionField =>
-                        Expr.quote {
-                          CirceDerivationUtils.decodeOptionFieldAsAny(
-                            Expr.splice(cursor),
-                            Expr.splice(name),
-                            Expr.splice(decoderExpr)
-                          )
-                        }
-                      case PlainField =>
-                        Expr.quote {
-                          Expr
-                            .splice(cursor)
-                            .downField(Expr.splice(name))
-                            .as(Expr.splice(decoderExpr))
-                            .asInstanceOf[Either[DecodingFailure, Any]]
-                        }
-                    }
-                  def plainAcc(cursor: Expr[HCursor], name: Expr[String]): Expr[ValidatedNel[DecodingFailure, Any]] =
-                    fieldKind match {
-                      case OptionField =>
-                        Expr.quote {
-                          CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
-                            Expr.splice(cursor),
-                            Expr.splice(name),
-                            Expr.splice(decoderExpr)
-                          )
-                        }
-                      case PlainField =>
-                        Expr.quote {
-                          Expr
-                            .splice(decoderExpr)
-                            .tryDecodeAccumulating(Expr.splice(cursor).downField(Expr.splice(name)))
-                            .asInstanceOf[ValidatedNel[DecodingFailure, Any]]
-                        }
-                    }
-
-                  // --- Fail-fast decode expression ---
-                  val ffOf: Expr[HCursor] => Expr[Either[DecodingFailure, Any]] = cursor =>
-                    if (isTransient) {
-                      defaultAsAnyOpt match {
-                        case Some(d) => Expr.quote(Right(Expr.splice(d)): Either[DecodingFailure, Any])
-                        case None    => Expr.quote(Right(null): Either[DecodingFailure, Any])
-                      }
-                    } else
-                      defaultAsAnyOpt match {
-                        case Some(_) if useDefaultsStaticallyFalse =>
-                          // useDefaults is statically false — skip the defaults branch entirely
-                          plainFF(cursor, fieldNameExpr)
-                        case Some(defaultAnyExpr) =>
-                          // Missing field, or a null the decoder rejects, decodes to the default (circe parity)
-                          Expr.quote {
-                            if (Expr.splice(dctx.config).useDefaults)
-                              CirceDerivationUtils.decodeFieldUsingDefault(
-                                Expr.splice(cursor),
-                                Expr.splice(fieldNameExpr),
-                                Expr.splice(decoderExpr),
-                                Expr.splice(defaultAnyExpr)
-                              )
-                            else Expr.splice(plainFF(cursor, fieldNameExpr))
+          // the field names transformed by the configuration: constants when it is known at compile time, else
+          // computed once per instance
+          dctx.transformedNames(expectedNames.collect { case Left(name) => name }, constructorNames = false).flatMap {
+            transformedFieldName =>
+              fields
+                .parTraverse { case (fName, param) =>
+                  import param.tpe.Underlying as Field
+                  val isTransient = hasAnnotationType[transientField](param)
+                  val nameOverride = getAnnotationStringArg[fieldName](param)
+                  Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
+                    // A @transientField is not decoded (its default is used), so it needs no decoder.
+                    (if (isTransient) MIO.pure(Option.empty[Expr[io.circe.Decoder[Field]]])
+                     else deriveFieldDecoder[Field].map(Some(_))).map { decoderOpt =>
+                      def decoderExpr: Expr[io.circe.Decoder[Field]] = decoderOpt.get
+                      val defaultAsAnyOpt: Option[Expr[Any]] =
+                        if (param.hasDefault)
+                          param.defaultValue.flatMap { method =>
+                            foldInstanceFree(method, "Default value")(
+                              onTypes = _ => Map.empty,
+                              onValues = _ => Map.empty
+                            ).toOption
+                              .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                           }
-                        case None => plainFF(cursor, fieldNameExpr)
-                      }
+                        else None
 
-                  // --- Accumulating decode expression ---
-                  val accOf: Expr[HCursor] => Expr[ValidatedNel[DecodingFailure, Any]] = cursor =>
-                    if (isTransient) {
-                      defaultAsAnyOpt match {
-                        case Some(d) =>
-                          Expr.quote(Validated.valid(Expr.splice(d)): ValidatedNel[DecodingFailure, Any])
-                        case None =>
-                          Expr.quote(Validated.valid(null): ValidatedNel[DecodingFailure, Any])
-                      }
-                    } else
-                      defaultAsAnyOpt match {
-                        case Some(_) if useDefaultsStaticallyFalse =>
-                          plainAcc(cursor, fieldNameExpr)
-                        case Some(defaultAnyExpr) =>
-                          Expr.quote {
-                            if (Expr.splice(dctx.config).useDefaults)
-                              CirceDerivationUtils.decodeFieldUsingDefaultAccumulating(
-                                Expr.splice(cursor),
-                                Expr.splice(fieldNameExpr),
-                                Expr.splice(decoderExpr),
-                                Expr.splice(defaultAnyExpr)
-                              )
-                            else Expr.splice(plainAcc(cursor, fieldNameExpr))
+                      val useDefaultsStaticallyFalse: Boolean =
+                        dctx.evaluatedConfig.exists(!_.useDefaults)
+
+                      // Detect Option[_] fields at compile time — absent fields should decode as None,
+                      // not fail (bug #120: circe's .as() on a failed cursor fails immediately without
+                      // calling the decoder, so Decoder[Option[T]] never gets a chance to return None).
+                      // This holds whether or not the field has a default (with useDefaults=false circe ignores the
+                      // default, and its Option decoder still turns a missing key into None).
+                      // A value type wrapping an Option (`case class MaybeName(v: Option[String]) extends AnyVal`) is
+                      // decoded as if the absent field was `null`, so the wrapped Option decoder yields `None`.
+                      val fieldKind: FieldKind = Type[Field] match {
+                        case IsOption(_)                   => OptionField
+                        case _ if Type[Field].isNamedTuple => PlainField
+                        // Decoded with `tryDecode` like an Option: a derived (unwrapping) decoder accepts an absent key
+                        // as `null` (`nullableDecoderFromFF`), while a user-provided decoder keeps circe's semantics
+                        // (by default an absent key is a missing-field failure).
+                        case IsValueType(isValueType) =>
+                          import isValueType.Underlying as Inner
+                          Type[Inner] match {
+                            case IsOption(_) => OptionField
+                            case _           => PlainField
                           }
-                        case None => plainAcc(cursor, fieldNameExpr)
+                        case _ => PlainField
                       }
 
-                  // The constructor argument: the field's (successfully decoded) value cast to the field's type.
-                  val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
-                    (fName, castTo[Field](valExpr).as_??)
-                  }
-                  (ffOf, accOf, makeFieldArg)
-                }
-              }
-            }
-            .flatMap { fieldData =>
-              val ffOfs = fieldData.toList.map(_._1)
-              val accOfs = fieldData.toList.map(_._2)
-              val makeFieldArgs = fieldData.toList.map(_._3)
-
-              def construct(values: List[Expr[Any]]): Expr[A] = {
-                val fieldMap: Map[String, Expr_??] =
-                  makeFieldArgs.zip(values).map { case (mk, v) => mk(v) }.toMap
-                foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
-                  onTypes = _ => Map.empty,
-                  onValues = _ => fieldMap
-                ) match {
-                  case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
-                  case Left(error)          =>
-                    Environment.reportErrorAndAbort(
-                      DecoderDerivationError
-                        .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error.toString))
-                        .message
-                    )
-                }
-              }
-
-              // The fields strict decoding expects: precomputed when the config is known (or for @fieldName).
-              val resolvedFieldNames: Option[Expr[List[String]]] =
-                dctx.evaluatedConfig match {
-                  case Some(evCfg) =>
-                    val names = fieldsList
-                      .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
-                      .map { case (name, p) =>
-                        getAnnotationStringArg[fieldName](p).getOrElse(evCfg.transformMemberNames(name))
+                      // Field name expression: a @fieldName, or the name transformed by the configuration.
+                      def fieldNameExpr: Expr[String] = nameOverride match {
+                        case Some(resolvedName) => Expr(resolvedName)
+                        case None               => transformedFieldName(fName)
                       }
-                    Some(names.foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
-                      Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
-                    })
-                  case None =>
-                    if (hasAnyFieldNameAnnotation) {
-                      val resolvedList = fieldsList
-                        .filterNot { case (_, p) => hasAnnotationType[transientField](p) }
-                        .map { case (name, p) =>
-                          getAnnotationStringArg[fieldName](p) match {
-                            case Some(custom) => (custom, true)
-                            case None         => (name, false)
-                          }
-                        }
-                        .foldRight(Expr.quote(List.empty[String])) {
-                          case ((name, true), acc) =>
-                            Expr.quote(Expr.splice(Expr(name)) :: Expr.splice(acc))
-                          case ((name, false), acc) =>
+
+                      // Decoding without using the default value.
+                      def plainFF(cursor: Expr[HCursor], name: Expr[String]): Expr[Either[DecodingFailure, Any]] =
+                        fieldKind match {
+                          case OptionField =>
                             Expr.quote {
-                              Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(name))) ::
-                                Expr.splice(acc)
+                              CirceDerivationUtils.decodeOptionFieldAsAny(
+                                Expr.splice(cursor),
+                                Expr.splice(name),
+                                Expr.splice(decoderExpr)
+                              )
+                            }
+                          case PlainField =>
+                            Expr.quote {
+                              Expr
+                                .splice(cursor)
+                                .downField(Expr.splice(name))
+                                .as(Expr.splice(decoderExpr))
+                                .asInstanceOf[Either[DecodingFailure, Any]]
                             }
                         }
-                      Some(resolvedList)
-                    } else None
-                }
-              def expectedFields: Expr[List[String]] = {
-                val names = resolvedFieldNames.getOrElse(
-                  Expr.quote(Expr.splice(fieldNamesListExpr).map(Expr.splice(dctx.config).transformMemberNames))
-                )
-                Expr.quote(Expr.splice(names) ++ Expr.splice(dctx.config).discriminator)
-              }
-              val strictDecodingStatic: Option[Boolean] = dctx.evaluatedConfig.map(_.strictDecoding)
-
-              // Fail-fast (`apply`): the first failing field in field order, later fields are not decoded. A
-              // non-object fails with circe's "expecting object" (bug #235); with strict decoding the unexpected
-              // fields are reported before a field failure (as circe).
-              def failFastBody(cursor: Expr[HCursor]): Expr[Either[DecodingFailure, A]] = {
-                val decoded: Expr[Either[DecodingFailure, A]] =
-                  constructFailFast[Either[DecodingFailure, Any], A, Either[DecodingFailure, A]](ffOfs.map(_(cursor)))(
-                    isSuccess = r => Expr.quote(Expr.splice(r).isRight),
-                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[DecodingFailure, Any]].value),
-                    construct = construct,
-                    onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[DecodingFailure, A]),
-                    onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[DecodingFailure, A]])
-                  )
-                def strict(decodedVal: Expr[Either[DecodingFailure, A]]): Expr[Either[DecodingFailure, A]] =
-                  Expr.quote {
-                    CirceDerivationUtils
-                      .checkStrictDecoding(Expr.splice(cursor), Expr.splice(typeNameExpr), Expr.splice(expectedFields))
-                      .flatMap(_ => Expr.splice(decodedVal))
-                  }
-                val checked: Expr[Either[DecodingFailure, A]] = strictDecodingStatic match {
-                  case Some(false) => decoded
-                  case Some(true)  =>
-                    ValDefs.createVal[Either[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded")).use(strict)
-                  case None =>
-                    ValDefs.createVal[Either[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded")).use {
-                      decodedVal =>
-                        Expr.quote {
-                          if (Expr.splice(dctx.config).strictDecoding) Expr.splice(strict(decodedVal))
-                          else Expr.splice(decodedVal)
+                      def plainAcc(cursor: Expr[HCursor], name: Expr[String])
+                          : Expr[ValidatedNel[DecodingFailure, Any]] =
+                        fieldKind match {
+                          case OptionField =>
+                            Expr.quote {
+                              CirceDerivationUtils.decodeOptionFieldAccumulatingAsAny(
+                                Expr.splice(cursor),
+                                Expr.splice(name),
+                                Expr.splice(decoderExpr)
+                              )
+                            }
+                          case PlainField =>
+                            Expr.quote {
+                              Expr
+                                .splice(decoderExpr)
+                                .tryDecodeAccumulating(Expr.splice(cursor).downField(Expr.splice(name)))
+                                .asInstanceOf[ValidatedNel[DecodingFailure, Any]]
+                            }
                         }
-                    }
-                }
-                Expr.quote {
-                  if (Expr.splice(cursor).value.isObject) Expr.splice(checked)
-                  else Left(CirceDerivationUtils.notAnObjectFailure(Expr.splice(cursor)))
-                }
-              }
 
-              // Accumulating (`decodeAccumulating`): every field is decoded and all failures are reported in field
-              // order, after the strict-decoding failure (as circe).
-              def accumulatingBody(cursor: Expr[HCursor]): Expr[ValidatedNel[DecodingFailure, A]] = {
-                val decoded: Expr[ValidatedNel[DecodingFailure, A]] =
-                  constructAccumulating[
-                    ValidatedNel[DecodingFailure, Any],
-                    cats.data.NonEmptyList[DecodingFailure],
-                    A,
-                    ValidatedNel[DecodingFailure, A]
-                  ](accOfs.map(_(cursor)))(
-                    mergeErrors = (failures, r) =>
-                      Expr.quote(CirceDerivationUtils.mergeAccumulatedFailures(Expr.splice(failures), Expr.splice(r))),
-                    valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Validated.Valid[Any]].a),
-                    construct = construct,
-                    onSuccess = a => Expr.quote(Validated.Valid(Expr.splice(a)): ValidatedNel[DecodingFailure, A]),
-                    onFailure =
-                      failures => Expr.quote(Validated.Invalid(Expr.splice(failures)): ValidatedNel[DecodingFailure, A])
-                  )
-                def strict(decodedVal: Expr[ValidatedNel[DecodingFailure, A]]): Expr[ValidatedNel[DecodingFailure, A]] =
-                  Expr.quote {
-                    CirceDerivationUtils.withStrictFailureAccumulating(
-                      CirceDerivationUtils.checkStrictDecodingAccumulating(
-                        Expr.splice(cursor),
-                        Expr.splice(typeNameExpr),
-                        Expr.splice(expectedFields)
-                      ),
-                      Expr.splice(decodedVal)
-                    )
-                  }
-                val checked: Expr[ValidatedNel[DecodingFailure, A]] = strictDecodingStatic match {
-                  case Some(false) => decoded
-                  case Some(true)  =>
-                    ValDefs
-                      .createVal[ValidatedNel[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded"))
-                      .use(strict)
-                  case None =>
-                    ValDefs
-                      .createVal[ValidatedNel[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded"))
-                      .use { decodedVal =>
-                        Expr.quote {
-                          if (Expr.splice(dctx.config).strictDecoding) Expr.splice(strict(decodedVal))
-                          else Expr.splice(decodedVal)
-                        }
+                      // --- Fail-fast decode expression ---
+                      val ffOf: Expr[HCursor] => Expr[Either[DecodingFailure, Any]] = cursor =>
+                        if (isTransient) {
+                          defaultAsAnyOpt match {
+                            case Some(d) => Expr.quote(Right(Expr.splice(d)): Either[DecodingFailure, Any])
+                            case None    => Expr.quote(Right(null): Either[DecodingFailure, Any])
+                          }
+                        } else
+                          defaultAsAnyOpt match {
+                            case Some(_) if useDefaultsStaticallyFalse =>
+                              // useDefaults is statically false — skip the defaults branch entirely
+                              plainFF(cursor, fieldNameExpr)
+                            case Some(defaultAnyExpr) =>
+                              // Missing field, or a null the decoder rejects, decodes to the default (circe parity)
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).useDefaults)
+                                  CirceDerivationUtils.decodeFieldUsingDefault(
+                                    Expr.splice(cursor),
+                                    Expr.splice(fieldNameExpr),
+                                    Expr.splice(decoderExpr),
+                                    Expr.splice(defaultAnyExpr)
+                                  )
+                                else Expr.splice(plainFF(cursor, fieldNameExpr))
+                              }
+                            case None => plainFF(cursor, fieldNameExpr)
+                          }
+
+                      // --- Accumulating decode expression ---
+                      val accOf: Expr[HCursor] => Expr[ValidatedNel[DecodingFailure, Any]] = cursor =>
+                        if (isTransient) {
+                          defaultAsAnyOpt match {
+                            case Some(d) =>
+                              Expr.quote(Validated.valid(Expr.splice(d)): ValidatedNel[DecodingFailure, Any])
+                            case None =>
+                              Expr.quote(Validated.valid(null): ValidatedNel[DecodingFailure, Any])
+                          }
+                        } else
+                          defaultAsAnyOpt match {
+                            case Some(_) if useDefaultsStaticallyFalse =>
+                              plainAcc(cursor, fieldNameExpr)
+                            case Some(defaultAnyExpr) =>
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).useDefaults)
+                                  CirceDerivationUtils.decodeFieldUsingDefaultAccumulating(
+                                    Expr.splice(cursor),
+                                    Expr.splice(fieldNameExpr),
+                                    Expr.splice(decoderExpr),
+                                    Expr.splice(defaultAnyExpr)
+                                  )
+                                else Expr.splice(plainAcc(cursor, fieldNameExpr))
+                              }
+                            case None => plainAcc(cursor, fieldNameExpr)
+                          }
+
+                      // The constructor argument: the field's (successfully decoded) value cast to the field's type.
+                      val makeFieldArg: Expr[Any] => (String, Expr_??) = { valExpr =>
+                        (fName, castTo[Field](valExpr).as_??)
                       }
+                      (ffOf, accOf, makeFieldArg)
+                    }
+                  }
                 }
-                Expr.quote {
-                  if (Expr.splice(cursor).value.isObject) Expr.splice(checked)
-                  else Validated.invalidNel(CirceDerivationUtils.notAnObjectFailure(Expr.splice(cursor)))
-                }
-              }
+                .flatMap { fieldData =>
+                  val ffOfs = fieldData.toList.map(_._1)
+                  val accOfs = fieldData.toList.map(_._2)
+                  val makeFieldArgs = fieldData.toList.map(_._3)
 
-              MIO.pure(Right((failFastBody(_), accumulatingBody(_))))
-            }
+                  def construct(values: List[Expr[Any]]): Expr[A] = {
+                    val fieldMap: Map[String, Expr_??] =
+                      makeFieldArgs.zip(values).map { case (mk, v) => mk(v) }.toMap
+                    foldInstanceFree(caseClass.primaryConstructor, "Constructor")(
+                      onTypes = _ => Map.empty,
+                      onValues = _ => fieldMap
+                    ) match {
+                      case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+                      case Left(error)          =>
+                        Environment.reportErrorAndAbort(
+                          DecoderDerivationError
+                            .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error.toString))
+                            .message
+                        )
+                    }
+                  }
+
+                  val strictDecodingStatic: Option[Boolean] = dctx.evaluatedConfig.map(_.strictDecoding)
+                  // The fields strict decoding expects (with the discriminator): a lazy val of the instance.
+                  val expectedFieldsMIO: MIO[Expr[List[String]]] =
+                    if (strictDecodingStatic.contains(false)) MIO.pure(Expr.quote(List.empty[String])) // (unused)
+                    else
+                      dctx
+                        .transformedNames(expectedNames.collect { case Left(n) => n }, constructorNames = false)
+                        .flatMap { transformed =>
+                          val names: Expr[List[String]] =
+                            expectedNames.foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
+                              val nameExpr: Expr[String] = name.fold(transformed, custom => Expr(custom))
+                              Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
+                            }
+                          dctx.cachedLazy[List[String]](
+                            s"cached-expected-fields:${Type[A].plainPrint}",
+                            s"expectedFields_${Type[A].shortName}",
+                            Expr.quote(Expr.splice(names) ++ Expr.splice(dctx.config).discriminator)
+                          )
+                        }
+                  expectedFieldsMIO.map { expectedFields =>
+                    // Fail-fast (`apply`): the first failing field in field order, later fields are not decoded. A
+                    // non-object fails with circe's "expecting object" (bug #235); with strict decoding the unexpected
+                    // fields are reported before a field failure (as circe).
+                    def failFastBody(cursor: Expr[HCursor]): Expr[Either[DecodingFailure, A]] = {
+                      val decoded: Expr[Either[DecodingFailure, A]] =
+                        constructFailFast[Either[DecodingFailure, Any], A, Either[DecodingFailure, A]](
+                          ffOfs.map(_(cursor))
+                        )(
+                          isSuccess = r => Expr.quote(Expr.splice(r).isRight),
+                          valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[DecodingFailure, Any]].value),
+                          construct = construct,
+                          onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[DecodingFailure, A]),
+                          onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[DecodingFailure, A]])
+                        )
+                      def strict(decodedVal: Expr[Either[DecodingFailure, A]]): Expr[Either[DecodingFailure, A]] =
+                        Expr.quote {
+                          CirceDerivationUtils
+                            .checkStrictDecoding(
+                              Expr.splice(cursor),
+                              Expr.splice(typeNameExpr),
+                              Expr.splice(expectedFields)
+                            )
+                            .flatMap(_ => Expr.splice(decodedVal))
+                        }
+                      val checked: Expr[Either[DecodingFailure, A]] = strictDecodingStatic match {
+                        case Some(false) => decoded
+                        case Some(true)  =>
+                          ValDefs
+                            .createVal[Either[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded"))
+                            .use(strict)
+                        case None =>
+                          ValDefs.createVal[Either[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded")).use {
+                            decodedVal =>
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).strictDecoding) Expr.splice(strict(decodedVal))
+                                else Expr.splice(decodedVal)
+                              }
+                          }
+                      }
+                      Expr.quote {
+                        if (Expr.splice(cursor).value.isObject) Expr.splice(checked)
+                        else Left(CirceDerivationUtils.notAnObjectFailure(Expr.splice(cursor)))
+                      }
+                    }
+
+                    // Accumulating (`decodeAccumulating`): every field is decoded and all failures are reported in field
+                    // order, after the strict-decoding failure (as circe).
+                    def accumulatingBody(cursor: Expr[HCursor]): Expr[ValidatedNel[DecodingFailure, A]] = {
+                      val decoded: Expr[ValidatedNel[DecodingFailure, A]] =
+                        constructAccumulating[
+                          ValidatedNel[DecodingFailure, Any],
+                          cats.data.NonEmptyList[DecodingFailure],
+                          A,
+                          ValidatedNel[DecodingFailure, A]
+                        ](accOfs.map(_(cursor)))(
+                          mergeErrors = (failures, r) =>
+                            Expr.quote(
+                              CirceDerivationUtils.mergeAccumulatedFailures(Expr.splice(failures), Expr.splice(r))
+                            ),
+                          valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Validated.Valid[Any]].a),
+                          construct = construct,
+                          onSuccess =
+                            a => Expr.quote(Validated.Valid(Expr.splice(a)): ValidatedNel[DecodingFailure, A]),
+                          onFailure = failures =>
+                            Expr.quote(Validated.Invalid(Expr.splice(failures)): ValidatedNel[DecodingFailure, A])
+                        )
+                      def strict(
+                          decodedVal: Expr[ValidatedNel[DecodingFailure, A]]
+                      ): Expr[ValidatedNel[DecodingFailure, A]] =
+                        Expr.quote {
+                          CirceDerivationUtils.withStrictFailureAccumulating(
+                            CirceDerivationUtils.checkStrictDecodingAccumulating(
+                              Expr.splice(cursor),
+                              Expr.splice(typeNameExpr),
+                              Expr.splice(expectedFields)
+                            ),
+                            Expr.splice(decodedVal)
+                          )
+                        }
+                      val checked: Expr[ValidatedNel[DecodingFailure, A]] = strictDecodingStatic match {
+                        case Some(false) => decoded
+                        case Some(true)  =>
+                          ValDefs
+                            .createVal[ValidatedNel[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded"))
+                            .use(strict)
+                        case None =>
+                          ValDefs
+                            .createVal[ValidatedNel[DecodingFailure, A]](decoded, FreshName.FromPrefix("decoded"))
+                            .use { decodedVal =>
+                              Expr.quote {
+                                if (Expr.splice(dctx.config).strictDecoding) Expr.splice(strict(decodedVal))
+                                else Expr.splice(decodedVal)
+                              }
+                            }
+                      }
+                      Expr.quote {
+                        if (Expr.splice(cursor).value.isObject) Expr.splice(checked)
+                        else Validated.invalidNel(CirceDerivationUtils.notAnObjectFailure(Expr.splice(cursor)))
+                      }
+                    }
+
+                    val bodies: Either[
+                      Expr[Any],
+                      (
+                          Expr[HCursor] => Expr[Either[DecodingFailure, A]],
+                          Expr[HCursor] => Expr[ValidatedNel[DecodingFailure, A]]
+                      )
+                    ] = Right((failFastBody(_), accumulatingBody(_)))
+                    bodies
+                  }
+                }
+          }
       }
     }
 

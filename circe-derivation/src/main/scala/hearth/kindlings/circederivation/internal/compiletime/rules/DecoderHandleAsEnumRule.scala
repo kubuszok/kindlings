@@ -127,13 +127,14 @@ trait DecoderHandleAsEnumRuleImpl {
           def buildDispatch(
               entries: NonEmptyList[(String, ??)],
               entriesAreCaseObjects: Boolean,
-              delegateToIntermediates: Boolean
+              delegateToIntermediates: Boolean,
+              subtypeName: String => Expr[String]
           ): MIO[Expr[((String, HCursor)) => Any]] =
             entries
               .parTraverse { case (childName, child) =>
                 import child.Underlying as ChildType
                 Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
-                  deriveChildDecoder[A, ChildType](childName, entriesAreCaseObjects)
+                  deriveChildDecoder[A, ChildType](childName, entriesAreCaseObjects, subtypeName)
                 }
               }
               .flatMap { childDispatchers =>
@@ -195,27 +196,49 @@ trait DecoderHandleAsEnumRuleImpl {
                   .map(_.build[Any])
               }
 
-          val stringDispatchMIO: MIO[Option[Expr[((String, HCursor)) => Any]]] =
+          def stringDispatchMIO(subtypeName: String => Expr[String]): MIO[Option[Expr[((String, HCursor)) => Any]]] =
             if (allCaseObjects || !allLeavesSingletons) MIO.pure(None)
             else
               NonEmptyList.fromList(leafEntries) match {
                 case Some(leaves) =>
-                  buildDispatch(leaves, entriesAreCaseObjects = true, delegateToIntermediates = false).map(Some(_))
+                  buildDispatch(leaves, entriesAreCaseObjects = true, delegateToIntermediates = false, subtypeName)
+                    .map(Some(_))
                 case None => MIO.pure(None)
               }
 
+          val evaluated = dctx.evaluatedConfig
+          // Which forms are read (with a config known at compile time only the applicable one).
+          val readsByKeyOrDiscriminator = !evaluated.exists(_.enumAsStrings)
+          val readsWrapped = readsByKeyOrDiscriminator && !evaluated.exists(_.discriminator.isDefined)
+          val readsDiscriminator = readsByKeyOrDiscriminator && !evaluated.exists(_.discriminator.isEmpty)
+          implicit val SetStringT: Type[Set[String]] = DTypes.SetString
+          // Subtype names (and lists of them): constants with a config known at compile time, else computed once per
+          // instance (see `DecoderCtx.transformedNames`); lists and sets are lazy vals of the instance.
+          def namesList(names: List[String]): MIO[Expr[List[String]]] =
+            dctx.transformedNamesList(names, constructorNames = true)
+          def notRead[T: Type]: MIO[Expr[T]] = MIO.pure(Expr.quote(null.asInstanceOf[T]))
+
           for {
-            dispatchFn <- buildDispatch(children, allCaseObjects, withIntermediates)
-            stringDispatchOpt <- stringDispatchMIO
+            subtypeName <- dctx.transformedNames(
+              (knownNames ++ leafEntries.map(_._1)).distinct,
+              constructorNames = true
+            )
+            dispatchFn <- buildDispatch(children, allCaseObjects, withIntermediates, subtypeName)
+            stringDispatchOpt <- stringDispatchMIO(subtypeName)
+            directNamesExpr <- if (readsWrapped) namesList(directNames) else notRead[List[String]]
+            knownNamesExpr <- if (readsWrapped) namesList(knownNames) else notRead[List[String]]
+            nonObjectNamesExpr <-
+              if (readsDiscriminator && nonObjectNames.nonEmpty)
+                namesList(nonObjectNames).flatMap { list =>
+                  dctx.cachedLazy[Set[String]](
+                    s"cached-constructor-names-set:${nonObjectNames.mkString("\u0000")}",
+                    "constructorNamesSet",
+                    Expr.quote(Expr.splice(list).toSet)
+                  )
+                }
+              else notRead[Set[String]]
           } yield {
             val stringDispatchFn = stringDispatchOpt.getOrElse(dispatchFn)
-            val evaluated = dctx.evaluatedConfig
-            // Subtype names: constants with a config known at compile time.
-            def namesExpr(names: List[String]): Expr[List[String]] = evaluated match {
-              case Some(c) => Expr(names.map(c.transformConstructorNames))
-              case None => Expr.quote(Expr.splice(Expr(names)).map(Expr.splice(dctx.config).transformConstructorNames))
-            }
-            val nonObjectNamesExpr: Expr[Set[String]] = Expr.quote(Expr.splice(namesExpr(nonObjectNames)).toSet)
             def withDiscriminator(field: Expr[String]): Expr[Either[DecodingFailure, (String, HCursor)]] =
               if (nonObjectNames.nonEmpty)
                 Expr.quote {
@@ -240,8 +263,8 @@ trait DecoderHandleAsEnumRuleImpl {
                 Expr.splice(dctx.cursor),
                 Expr.splice(sumNameExpr),
                 Expr.splice(staticFlag(true, _.strictDecoding, Expr.quote(Expr.splice(dctx.config).strictDecoding))),
-                Expr.splice(namesExpr(directNames)),
-                Expr.splice(namesExpr(knownNames)),
+                Expr.splice(directNamesExpr),
+                Expr.splice(knownNamesExpr),
                 Expr.splice(intermediatesExpr)
               )
             }
@@ -308,15 +331,6 @@ trait DecoderHandleAsEnumRuleImpl {
         }
     }
 
-    /** The (transformed) name of a subtype: a constant with a config known at compile time. */
-    private def subtypeName[A: DecoderCtx](childName: String): Expr[String] = {
-      implicit val StringT: Type[String] = DTypes.String
-      dctx.evaluatedConfig match {
-        case Some(c) => Expr(c.transformConstructorNames(childName))
-        case None    => Expr.quote(Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))))
-      }
-    }
-
     /** Derives a decoder for a single enum child type and returns a dispatch function. The dispatch function takes
       * (typeNameExpr, innerCursorExpr, elseExpr) and produces an if-else expression that checks if the type name
       * matches and decodes accordingly. Returns Any (Either when failFast=true, ValidatedNel when failFast=false).
@@ -324,7 +338,8 @@ trait DecoderHandleAsEnumRuleImpl {
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     private def deriveChildDecoder[A: DecoderCtx, ChildType: Type](
         childName: String,
-        allCaseObjects: Boolean
+        allCaseObjects: Boolean,
+        subtypeName: String => Expr[String]
     ): MIO[(Expr[String], Expr[HCursor], Expr[Any]) => Expr[Any]] = {
       implicit val HCursorT: Type[HCursor] = DTypes.HCursor
       implicit val DecodingFailureT: Type[DecodingFailure] = DTypes.DecodingFailure
@@ -344,7 +359,7 @@ trait DecoderHandleAsEnumRuleImpl {
           Log.info(s"Found implicit Decoder[$childName], using it") >>
             MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
               Expr.quote {
-                if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
+                if (Expr.splice(subtypeName(childName)) == Expr.splice(typeNameExpr))
                   (if (Expr.splice(dctx.failFast))
                      Expr
                        .splice(decoderExpr)
@@ -367,7 +382,7 @@ trait DecoderHandleAsEnumRuleImpl {
               Log.info(s"Using singleton for $childName") >>
                 MIO.pure { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                   Expr.quote {
-                    if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr)) {
+                    if (Expr.splice(subtypeName(childName)) == Expr.splice(typeNameExpr)) {
                       // A singleton case is encoded as `{}` (wrapped) or just the discriminator, so like circe
                       // require an object - except for enumAsStrings, where the cursor focuses the name string (#235).
                       val config = Expr.splice(dctx.config)
@@ -406,7 +421,7 @@ trait DecoderHandleAsEnumRuleImpl {
                       Some { (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                         val helperCallExpr = helper(innerCursorExpr, dctx.config, dctx.failFast)
                         Expr.quote {
-                          if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
+                          if (Expr.splice(subtypeName(childName)) == Expr.splice(typeNameExpr))
                             Expr.splice(
                               helperCallExpr
                             ) // already returns Any (Either or ValidatedNel based on failFast)
@@ -428,7 +443,7 @@ trait DecoderHandleAsEnumRuleImpl {
                       decoderExpr =>
                         (typeNameExpr: Expr[String], innerCursorExpr: Expr[HCursor], elseExpr: Expr[Any]) =>
                           Expr.quote {
-                            if (Expr.splice(subtypeName[A](childName)) == Expr.splice(typeNameExpr))
+                            if (Expr.splice(subtypeName(childName)) == Expr.splice(typeNameExpr))
                               (if (Expr.splice(dctx.failFast))
                                  Expr
                                    .splice(decoderExpr)

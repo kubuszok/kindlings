@@ -97,73 +97,75 @@ trait DecoderHandleAsNamedTupleRuleImpl {
 
         case Some(fields) =>
           // Step 1: For each field, derive a decoder and build decode + accessor expressions
-          fields
-            .parTraverse { case (fName, param) =>
-              import param.tpe.Underlying as Field
-              Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
-                deriveFieldDecoder[Field].map { decoderExpr =>
-                  val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
-                    Expr
-                      .splice(dctx.cursor)
-                      .downField(
-                        Expr.splice(dctx.config).transformMemberNames(Expr.splice(Expr(fName)))
-                      )
-                      .as(Expr.splice(decoderExpr))
-                      .asInstanceOf[Either[DecodingFailure, Any]]
-                  }
-
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    val typedExpr = Expr.quote {
-                      CirceDerivationUtils.unsafeCast(
-                        Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
-                        Expr.splice(decoderExpr)
-                      )
+          dctx.transformedNames(fields.toList.map(_._1), constructorNames = false).flatMap { transformedFieldName =>
+            fields
+              .parTraverse { case (fName, param) =>
+                import param.tpe.Underlying as Field
+                Log.namedScope(s"Deriving decoder for named tuple field $fName: ${Type[Field].prettyPrint}") {
+                  deriveFieldDecoder[Field].map { decoderExpr =>
+                    val decodeExpr: Expr[Either[DecodingFailure, Any]] = Expr.quote {
+                      Expr
+                        .splice(dctx.cursor)
+                        .downField(
+                          Expr.splice(transformedFieldName(fName))
+                        )
+                        .as(Expr.splice(decoderExpr))
+                        .asInstanceOf[Either[DecodingFailure, Any]]
                     }
-                    (fName, typedExpr.as_??)
+
+                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
+                      val typedExpr = Expr.quote {
+                        CirceDerivationUtils.unsafeCast(
+                          Expr.splice(arrExpr)(Expr.splice(Expr(param.index))),
+                          Expr.splice(decoderExpr)
+                        )
+                      }
+                      (fName, typedExpr.as_??)
+                    }
+                    (decodeExpr, makeAccessor)
                   }
-                  (decodeExpr, makeAccessor)
                 }
               }
-            }
-            .flatMap { fieldData =>
-              val decodeExprs = fieldData.toList.map(_._1)
-              val makeAccessors = fieldData.toList.map(_._2)
+              .flatMap { fieldData =>
+                val decodeExprs = fieldData.toList.map(_._1)
+                val makeAccessors = fieldData.toList.map(_._2)
 
-              // Step 2: Build List literal from the decode expressions
-              val listExpr: Expr[List[Either[DecodingFailure, Any]]] =
-                decodeExprs.foldRight(Expr.quote(List.empty[Either[DecodingFailure, Any]])) { (elem, acc) =>
-                  Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
-                }
-
-              // Step 3: Build the constructor lambda using LambdaBuilder + primaryConstructor
-              LambdaBuilder
-                .of1[Array[Any]]("decodedValues")
-                .traverse { decodedValuesExpr =>
-                  val fieldMap: Map[String, Expr_??] =
-                    makeAccessors.map(_(decodedValuesExpr)).toMap
-                  foldInstanceFree(constructor, "Constructor")(
-                    onTypes = _ => Map.empty,
-                    onValues = _ => fieldMap
-                  ) match {
-                    case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                    case Left(error)          =>
-                      val err = DecoderDerivationError.CannotConstructType(
-                        Type[A].prettyPrint,
-                        isSingleton = false,
-                        Some(error.toString)
-                      )
-                      Log.error(err.message) >> MIO.fail(err)
+                // Step 2: Build List literal from the decode expressions
+                val listExpr: Expr[List[Either[DecodingFailure, Any]]] =
+                  decodeExprs.foldRight(Expr.quote(List.empty[Either[DecodingFailure, Any]])) { (elem, acc) =>
+                    Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
                   }
-                }
-                .map { builder =>
-                  val constructLambda = builder.build[A]
-                  Expr.quote {
-                    CirceDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr)).map { arr =>
-                      Expr.splice(constructLambda).apply(arr)
+
+                // Step 3: Build the constructor lambda using LambdaBuilder + primaryConstructor
+                LambdaBuilder
+                  .of1[Array[Any]]("decodedValues")
+                  .traverse { decodedValuesExpr =>
+                    val fieldMap: Map[String, Expr_??] =
+                      makeAccessors.map(_(decodedValuesExpr)).toMap
+                    foldInstanceFree(constructor, "Constructor")(
+                      onTypes = _ => Map.empty,
+                      onValues = _ => fieldMap
+                    ) match {
+                      case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
+                      case Left(error)          =>
+                        val err = DecoderDerivationError.CannotConstructType(
+                          Type[A].prettyPrint,
+                          isSingleton = false,
+                          Some(error.toString)
+                        )
+                        Log.error(err.message) >> MIO.fail(err)
                     }
                   }
-                }
-            }
+                  .map { builder =>
+                    val constructLambda = builder.build[A]
+                    Expr.quote {
+                      CirceDerivationUtils.sequenceDecodeResults(Expr.splice(listExpr)).map { arr =>
+                        Expr.splice(constructLambda).apply(arr)
+                      }
+                    }
+                  }
+              }
+          }
       }
     }
   }

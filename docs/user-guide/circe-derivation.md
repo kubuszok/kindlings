@@ -302,8 +302,9 @@ Scala 2):
   classes as objects with `unwrapValueClasses = false`.
 - **Field instances are resolved once per derived instance**, as in circe's derived instances: an `Encoder`/`Decoder` of
   a field type that is an `implicit def` is called when the derived instance is first used, not on every
-  encode/decode, and a derived encoder computes the names a configuration only known at runtime gives to fields and
-  subtypes (`transformMemberNames`/`transformConstructorNames`) once per instance too. The inline
+  encode/decode, and a derived encoder or decoder computes the names a configuration only known at runtime gives to
+  fields and subtypes (`transformMemberNames`/`transformConstructorNames`) once per instance too (a decoder of a map with
+  enum keys looks the keys up in a table built once per instance, not one transformation per key). The inline
   `KindlingsEncoder.encode`/`KindlingsDecoder.decode` have no instance, so they resolve them on every call.
 
 ## Migration notes (wire format changes)
