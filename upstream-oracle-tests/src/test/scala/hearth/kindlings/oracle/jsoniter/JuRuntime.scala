@@ -12,42 +12,86 @@ object JuRuntimeConfigs {
   @volatile var recursive: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults
   @volatile var stringified: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withStringified
   @volatile var enumId: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId
-  @volatile var enumIdStringified: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId.withStringified
-  @volatile var noDuplicationCheck: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false)
-  @volatile var javaEnumSnakeCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
-  @volatile var javaEnumSnakeThenPascalCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case.andThen(JsoniterConfig.EnforcePascalCase))
-  @volatile var javaEnumPartial: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper { case "SECONDS" => "s"; case "HALF_UP" => "r" }
+  @volatile var enumIdStringified: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId.withStringified
+  @volatile var noDuplicationCheck: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false)
+  @volatile var javaEnumSnakeCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
+  @volatile var javaEnumSnakeThenPascalCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(
+      JsoniterConfig.enforce_snake_case.andThen(JsoniterConfig.EnforcePascalCase)
+    )
+  @volatile var javaEnumPartial: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper {
+    case "SECONDS" => "s"; case "HALF_UP" => "r"
+  }
   @volatile var noTransientNone: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false)
   @volatile var noTransientEmpty: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false)
   @volatile var makeWithRequiredCollectionFields: JsoniterConfig = JsoniterConfig.makeWithRequiredCollectionFields
-  @volatile var makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName: JsoniterConfig = JsoniterConfig.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName
-  @volatile var nestedIterables: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case "b" => "value"; case "a" => "value" }.withRequireCollectionFields.copy(transientEmpty = false)
-  @volatile var eitherValueMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case "b" => "value"; case "a" => "value" }
-  @volatile var requireCollectionsNoTransientEmpty: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireCollectionFields.copy(transientEmpty = false)
+  @volatile var makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName: JsoniterConfig =
+    JsoniterConfig.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName
+  @volatile var nestedIterables: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults
+    .withFieldNameMapper { case "b" => "value"; case "a" => "value" }
+    .withRequireCollectionFields
+    .copy(transientEmpty = false)
+  @volatile var eitherValueMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
+    case "b" => "value"; case "a" => "value"
+  }
+  @volatile var requireCollectionsNoTransientEmpty: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireCollectionFields.copy(transientEmpty = false)
   @volatile var makeWithRequiredDefaultFields: JsoniterConfig = JsoniterConfig.makeWithRequiredDefaultFields
-  @volatile var requireDefaultsNoTransientDefault: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireDefaultFields.copy(transientDefault = false)
-  @volatile var requireDefaultsAndCollections: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireDefaultFields.copy(transientDefault = false).withRequireCollectionFields.copy(transientEmpty = false)
+  @volatile var requireDefaultsNoTransientDefault: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireDefaultFields.copy(transientDefault = false)
+  @volatile var requireDefaultsAndCollections: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireDefaultFields
+      .copy(transientDefault = false)
+      .withRequireCollectionFields
+      .copy(transientEmpty = false)
   @volatile var setLimit10: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSetMaxInsertNumber(10)
   @volatile var mapLimit10: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(10)
-  @volatile var mapLimit10AsArray: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(10)
+  @volatile var mapLimit10AsArray: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(10)
+  @volatile var noMapLimit: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(Int.MaxValue)
+  @volatile var noMapLimitAsArray: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(Int.MaxValue)
   @volatile var mapAsArray: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapAsArray
-  @volatile var mapAsArrayStringified: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withStringified
+  @volatile var mapAsArrayStringified: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withStringified
   @volatile var bitSetLimit1000: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBitSetValueLimit(1000)
-  @volatile var renamed: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case "camelCase" => "CMLCS"; case "kebab-1" => "KBB1" }
-  @volatile var renamedWithAlternatives: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case s @ ("camelCase" | "kebab-1") => s.toUpperCase; case s @ ("camel1" | "snake_1") => s + "_" }
-  @volatile var renamedWithGuards: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case s if s.startsWith("snake") => s + s.length }
-  @volatile var camelCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase)
-  @volatile var snakeCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case)
-  @volatile var snakeCase2: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2)
-  @volatile var kebabCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.`enforce-kebab-case`)
-  @volatile var kebabCase2: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.`enforce-kebab-case2`)
-  @volatile var pascalCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.EnforcePascalCase)
-  @volatile var suffixMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case x => x + "_" }
+  @volatile var renamed: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
+    case "camelCase" => "CMLCS"; case "kebab-1" => "KBB1"
+  }
+  @volatile var renamedWithAlternatives: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
+    case s @ ("camelCase" | "kebab-1") => s.toUpperCase; case s @ ("camel1" | "snake_1") => s + "_"
+  }
+  @volatile var renamedWithGuards: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
+    case s if s.startsWith("snake") => s + s.length
+  }
+  @volatile var camelCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase)
+  @volatile var snakeCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case)
+  @volatile var snakeCase2: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2)
+  @volatile var kebabCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.`enforce-kebab-case`)
+  @volatile var kebabCase2: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.`enforce-kebab-case2`)
+  @volatile var pascalCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.EnforcePascalCase)
+  @volatile var suffixMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case x =>
+    x + "_"
+  }
   @volatile var noTransientDefault: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false)
-  @volatile var noTransientEmptyNone: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false, transientNone = false)
+  @volatile var noTransientEmptyNone: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false, transientNone = false)
   @volatile var scalaTransient: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport
-  @volatile var scalaTransientNoTransientDefault: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport.copy(transientDefault = false)
-  @volatile var scalaTransientRequireDefaults: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport.copy(transientDefault = false).withRequireDefaultFields
+  @volatile var scalaTransientNoTransientDefault: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport.copy(transientDefault = false)
+  @volatile var scalaTransientRequireDefaults: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport
+      .copy(transientDefault = false)
+      .withRequireDefaultFields
   @volatile var strict: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false)
   @volatile var inlineOneValueClasses: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses
   @volatile var skipNestedOptionValues: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSkipNestedOptionValues
@@ -55,23 +99,33 @@ object JuRuntimeConfigs {
   @volatile var noDiscriminator: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None)
   @volatile var makeWithoutDiscriminator: JsoniterConfig = JsoniterConfig.makeWithoutDiscriminator
   @volatile var discriminatorT: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("t")
-  @volatile var discriminatorAnywhere: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(20001)
-  @volatile var discriminatorTAnywhere: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false).withDiscriminator("t")
-  @volatile var alwaysEmitDiscriminator: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator
-  @volatile var alwaysEmitDiscriminatorStrict: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator.withSkipUnexpectedFields(false)
+  @volatile var discriminatorAnywhere: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(20001)
+  @volatile var discriminatorTAnywhere: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false).withDiscriminator("t")
+  @volatile var alwaysEmitDiscriminator: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator
+  @volatile var alwaysEmitDiscriminatorStrict: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator.withSkipUnexpectedFields(false)
   @volatile var makeOpenapiLike: JsoniterConfig = JsoniterConfig.makeOpenapiLike
   @volatile var makeOpenapiLikeHint: JsoniterConfig = JsoniterConfig.makeOpenapiLike("hint")
-  @volatile var makeOpenapiLikeHintMapper: JsoniterConfig = JsoniterConfig.makeOpenapiLike("hint", { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" })
+  @volatile var makeOpenapiLikeHintMapper: JsoniterConfig =
+    JsoniterConfig.makeOpenapiLike("hint", { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" })
   @volatile var makeOpenapiLikeWithoutDiscriminator: JsoniterConfig = JsoniterConfig.makeOpenapiLikeWithoutDiscriminator
   @volatile var makeCirceLike: JsoniterConfig = JsoniterConfig.makeCirceLike
   @volatile var makeCirceLikeSnakeCased: JsoniterConfig = JsoniterConfig.makeCirceLikeSnakeCased
-  @volatile var circeLikeObjects: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
+  @volatile var circeLikeObjects: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
   @volatile var decodingOnly: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDecodingOnly
   @volatile var encodingOnly: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withEncodingOnly
-  @volatile var discriminatorTStrict: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("t").withSkipUnexpectedFields(false)
-  @volatile var leafNameMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withAdtLeafClassNameMapper(x => JsoniterConfig.simpleClassName(x) match { case "A" => "X"; case "B" => "Y" }).withSkipUnexpectedFields(false)
+  @volatile var discriminatorTStrict: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("t").withSkipUnexpectedFields(false)
+  @volatile var leafNameMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults
+    .withAdtLeafClassNameMapper(x => JsoniterConfig.simpleClassName(x) match { case "A" => "X"; case "B" => "Y" })
+    .withSkipUnexpectedFields(false)
   @volatile var fullLeafNames: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withAdtLeafClassNameMapper(x => x)
-  @volatile var nonAsciiDiscriminator: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("тип").withSkipUnexpectedFields(false)
+  @volatile var nonAsciiDiscriminator: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("тип").withSkipUnexpectedFields(false)
   @volatile var discriminatorZoneId: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("zoneId")
   @volatile var discriminatorHint: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("hint")
 }
@@ -99,14 +153,22 @@ object JuRuntime {
     lazy val jCharacterTop: JsonValueCodec[java.lang.Character] = KindlingsJsonValueCodec.derived[java.lang.Character]
     lazy val jDoubleTop: JsonValueCodec[java.lang.Double] = KindlingsJsonValueCodec.derived[java.lang.Double]
     lazy val jFloatTop: JsonValueCodec[java.lang.Float] = KindlingsJsonValueCodec.derived[java.lang.Float]
-    lazy val jByteMap: JsonValueCodec[Map[java.lang.Byte, java.lang.Byte]] = KindlingsJsonValueCodec.derived[Map[java.lang.Byte, java.lang.Byte]]
-    lazy val jShortMap: JsonValueCodec[Map[java.lang.Short, java.lang.Short]] = KindlingsJsonValueCodec.derived[Map[java.lang.Short, java.lang.Short]]
-    lazy val jIntegerMap: JsonValueCodec[Map[java.lang.Integer, java.lang.Integer]] = KindlingsJsonValueCodec.derived[Map[java.lang.Integer, java.lang.Integer]]
-    lazy val jLongMap: JsonValueCodec[Map[java.lang.Long, java.lang.Long]] = KindlingsJsonValueCodec.derived[Map[java.lang.Long, java.lang.Long]]
-    lazy val jBooleanMap: JsonValueCodec[Map[java.lang.Boolean, java.lang.Boolean]] = KindlingsJsonValueCodec.derived[Map[java.lang.Boolean, java.lang.Boolean]]
-    lazy val jCharacterMap: JsonValueCodec[Map[java.lang.Character, java.lang.Character]] = KindlingsJsonValueCodec.derived[Map[java.lang.Character, java.lang.Character]]
-    lazy val jDoubleMap: JsonValueCodec[Map[java.lang.Double, java.lang.Double]] = KindlingsJsonValueCodec.derived[Map[java.lang.Double, java.lang.Double]]
-    lazy val jFloatMap: JsonValueCodec[Map[java.lang.Float, java.lang.Float]] = KindlingsJsonValueCodec.derived[Map[java.lang.Float, java.lang.Float]]
+    lazy val jByteMap: JsonValueCodec[Map[java.lang.Byte, java.lang.Byte]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Byte, java.lang.Byte]]
+    lazy val jShortMap: JsonValueCodec[Map[java.lang.Short, java.lang.Short]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Short, java.lang.Short]]
+    lazy val jIntegerMap: JsonValueCodec[Map[java.lang.Integer, java.lang.Integer]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Integer, java.lang.Integer]]
+    lazy val jLongMap: JsonValueCodec[Map[java.lang.Long, java.lang.Long]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Long, java.lang.Long]]
+    lazy val jBooleanMap: JsonValueCodec[Map[java.lang.Boolean, java.lang.Boolean]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Boolean, java.lang.Boolean]]
+    lazy val jCharacterMap: JsonValueCodec[Map[java.lang.Character, java.lang.Character]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Character, java.lang.Character]]
+    lazy val jDoubleMap: JsonValueCodec[Map[java.lang.Double, java.lang.Double]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Double, java.lang.Double]]
+    lazy val jFloatMap: JsonValueCodec[Map[java.lang.Float, java.lang.Float]] =
+      KindlingsJsonValueCodec.derived[Map[java.lang.Float, java.lang.Float]]
     lazy val standardTypes: JsonValueCodec[JUStandardTypes] = KindlingsJsonValueCodec.derived[JUStandardTypes]
     lazy val stringTop: JsonValueCodec[String] = KindlingsJsonValueCodec.derived[String]
     lazy val bigIntTop: JsonValueCodec[BigInt] = KindlingsJsonValueCodec.derived[BigInt]
@@ -114,19 +176,30 @@ object JuRuntime {
     lazy val nonCaseClass: JsonValueCodec[JUNonCaseClass] = KindlingsJsonValueCodec.derived[JUNonCaseClass]
     lazy val javaTypes: JsonValueCodec[JUJavaTypes] = KindlingsJsonValueCodec.derived[JUJavaTypes]
     lazy val uuidTop: JsonValueCodec[java.util.UUID] = KindlingsJsonValueCodec.derived[java.util.UUID]
-    lazy val uuidMap: JsonValueCodec[Map[java.util.UUID, Int]] = KindlingsJsonValueCodec.derived[Map[java.util.UUID, Int]]
+    lazy val uuidMap: JsonValueCodec[Map[java.util.UUID, Int]] =
+      KindlingsJsonValueCodec.derived[Map[java.util.UUID, Int]]
     lazy val javaEnums: JsonValueCodec[JUJavaEnums] = KindlingsJsonValueCodec.derived[JUJavaEnums]
-    lazy val javaEnumTop: JsonValueCodec[java.util.concurrent.TimeUnit] = KindlingsJsonValueCodec.derived[java.util.concurrent.TimeUnit]
-    lazy val javaEnumMap: JsonValueCodec[Map[java.util.concurrent.TimeUnit, Int]] = KindlingsJsonValueCodec.derived[Map[java.util.concurrent.TimeUnit, Int]]
+    lazy val javaEnumTop: JsonValueCodec[java.util.concurrent.TimeUnit] =
+      KindlingsJsonValueCodec.derived[java.util.concurrent.TimeUnit]
+    lazy val javaEnumMap: JsonValueCodec[Map[java.util.concurrent.TimeUnit, Int]] =
+      KindlingsJsonValueCodec.derived[Map[java.util.concurrent.TimeUnit, Int]]
     lazy val enums: JsonValueCodec[JUEnums] = KindlingsJsonValueCodec.derived[JUEnums]
-    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] = KindlingsJsonValueCodec.derived[List[JUCelestialBody.CelestialBody]]
-    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] = KindlingsJsonValueCodec.derived[Map[JUCelestialBody.CelestialBody, Int]]
-    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] = KindlingsJsonValueCodec.derived[List[JUSpectralClass.SpectralClass]]
-    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] = KindlingsJsonValueCodec.derived[Map[JUSpectralClass.SpectralClass, Int]]
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = KindlingsJsonValueCodec.derived[JULocationType.LocationType]
-    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] = KindlingsJsonValueCodec.derived[Map[JULocationType.LocationType, Int]]
-    lazy val cardRankList: JsonValueCodec[List[JUCardRank.CardRank]] = KindlingsJsonValueCodec.derived[List[JUCardRank.CardRank]]
-    lazy val cardRankMap: JsonValueCodec[Map[JUCardRank.CardRank, Int]] = KindlingsJsonValueCodec.derived[Map[JUCardRank.CardRank, Int]]
+    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] =
+      KindlingsJsonValueCodec.derived[List[JUCelestialBody.CelestialBody]]
+    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUCelestialBody.CelestialBody, Int]]
+    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] =
+      KindlingsJsonValueCodec.derived[List[JUSpectralClass.SpectralClass]]
+    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUSpectralClass.SpectralClass, Int]]
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      KindlingsJsonValueCodec.derived[JULocationType.LocationType]
+    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JULocationType.LocationType, Int]]
+    lazy val cardRankList: JsonValueCodec[List[JUCardRank.CardRank]] =
+      KindlingsJsonValueCodec.derived[List[JUCardRank.CardRank]]
+    lazy val cardRankMap: JsonValueCodec[Map[JUCardRank.CardRank, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUCardRank.CardRank, Int]]
     lazy val birdList: JsonValueCodec[List[JUBird.Bird]] = KindlingsJsonValueCodec.derived[List[JUBird.Bird]]
     lazy val birdMap: JsonValueCodec[Map[JUBird.Bird, Int]] = KindlingsJsonValueCodec.derived[Map[JUBird.Bird, Int]]
     lazy val options: JsonValueCodec[JUOptions] = KindlingsJsonValueCodec.derived[JUOptions]
@@ -136,63 +209,83 @@ object JuRuntime {
     lazy val arrayOption: JsonValueCodec[Array[Option[Int]]] = KindlingsJsonValueCodec.derived[Array[Option[Int]]]
     lazy val listOption: JsonValueCodec[List[Option[Int]]] = KindlingsJsonValueCodec.derived[List[Option[Int]]]
     lazy val setOption: JsonValueCodec[Set[Option[Int]]] = KindlingsJsonValueCodec.derived[Set[Option[Int]]]
-    lazy val mapOption: JsonValueCodec[Map[String, Option[Int]]] = KindlingsJsonValueCodec.derived[Map[String, Option[Int]]]
+    lazy val mapOption: JsonValueCodec[Map[String, Option[Int]]] =
+      KindlingsJsonValueCodec.derived[Map[String, Option[Int]]]
     lazy val tuples: JsonValueCodec[JUTuples] = KindlingsJsonValueCodec.derived[JUTuples]
     lazy val tupleTop: JsonValueCodec[(String, Int)] = KindlingsJsonValueCodec.derived[(String, Int)]
     lazy val tupleAliases: JsonValueCodec[JUTupleAliases] = KindlingsJsonValueCodec.derived[JUTupleAliases]
-    lazy val tupleAliasTop: JsonValueCodec[(JUAlias.S, JUAlias.I)] = KindlingsJsonValueCodec.derived[(JUAlias.S, JUAlias.I)]
+    lazy val tupleAliasTop: JsonValueCodec[(JUAlias.S, JUAlias.I)] =
+      KindlingsJsonValueCodec.derived[(JUAlias.S, JUAlias.I)]
     lazy val arrays: JsonValueCodec[JUArrays] = KindlingsJsonValueCodec.derived[JUArrays]
     lazy val arrayArrayTop: JsonValueCodec[Array[Array[Int]]] = KindlingsJsonValueCodec.derived[Array[Array[Int]]]
     lazy val iterators: JsonValueCodec[JUIterators] = KindlingsJsonValueCodec.derived[JUIterators]
-    lazy val iteratorTop: JsonValueCodec[Iterator[Iterator[Int]]] = KindlingsJsonValueCodec.derived[Iterator[Iterator[Int]]]
+    lazy val iteratorTop: JsonValueCodec[Iterator[Iterator[Int]]] =
+      KindlingsJsonValueCodec.derived[Iterator[Iterator[Int]]]
     lazy val iterables: JsonValueCodec[JUIterables] = KindlingsJsonValueCodec.derived[JUIterables]
     lazy val mutableIterables: JsonValueCodec[JUMutableIterables] = KindlingsJsonValueCodec.derived[JUMutableIterables]
-    lazy val immutableIterables: JsonValueCodec[JUImmutableIterables] = KindlingsJsonValueCodec.derived[JUImmutableIterables]
+    lazy val immutableIterables: JsonValueCodec[JUImmutableIterables] =
+      KindlingsJsonValueCodec.derived[JUImmutableIterables]
     lazy val nonEmptyTop: JsonValueCodec[::[Int]] = KindlingsJsonValueCodec.derived[::[Int]]
     lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] = KindlingsJsonValueCodec.derived[JUEmptyIterables]
     lazy val emptyIterables2: JsonValueCodec[JUEmptyIterables2] = KindlingsJsonValueCodec.derived[JUEmptyIterables2]
-    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] = KindlingsJsonValueCodec.derived[collection.mutable.Set[List[BigDecimal]]]
+    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.Set[List[BigDecimal]]]
     lazy val genericMaps: JsonValueCodec[JUGenericMaps] = KindlingsJsonValueCodec.derived[JUGenericMaps]
     lazy val mutableMaps: JsonValueCodec[JUMutableMaps] = KindlingsJsonValueCodec.derived[JUMutableMaps]
     lazy val immutableMaps: JsonValueCodec[JUImmutableMaps] = KindlingsJsonValueCodec.derived[JUImmutableMaps]
     lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] = KindlingsJsonValueCodec.derived[JUEmptyMaps]
-    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] = KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]]
+    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]]
     lazy val mutableLongMaps: JsonValueCodec[JUMutableLongMaps] = KindlingsJsonValueCodec.derived[JUMutableLongMaps]
-    lazy val immutableIntLongMaps: JsonValueCodec[JUImmutableIntLongMaps] = KindlingsJsonValueCodec.derived[JUImmutableIntLongMaps]
+    lazy val immutableIntLongMaps: JsonValueCodec[JUImmutableIntLongMaps] =
+      KindlingsJsonValueCodec.derived[JUImmutableIntLongMaps]
     lazy val bitSets: JsonValueCodec[JUBitSets] = KindlingsJsonValueCodec.derived[JUBitSets]
-    lazy val longIntBitTop: JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] = KindlingsJsonValueCodec.derived[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]]
-    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] = KindlingsJsonValueCodec.derived[collection.immutable.BitSet]
-    lazy val mutableBitSetTop: JsonValueCodec[collection.mutable.BitSet] = KindlingsJsonValueCodec.derived[collection.mutable.BitSet]
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val longIntBitTop
+        : JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] =
+      KindlingsJsonValueCodec
+        .derived[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]]
+    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] =
+      KindlingsJsonValueCodec.derived[collection.immutable.BitSet]
+    lazy val mutableBitSetTop: JsonValueCodec[collection.mutable.BitSet] =
+      KindlingsJsonValueCodec.derived[collection.mutable.BitSet]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
     lazy val nameOverridden: JsonValueCodec[JUNameOverridden] = KindlingsJsonValueCodec.derived[JUNameOverridden]
     lazy val stringified: JsonValueCodec[JUStringified] = KindlingsJsonValueCodec.derived[JUStringified]
     lazy val utf8: JsonValueCodec[JUUTF8KeysAndValues] = KindlingsJsonValueCodec.derived[JUUTF8KeysAndValues]
     lazy val operators: JsonValueCodec[JUOperators] = KindlingsJsonValueCodec.derived[JUOperators]
     lazy val defaults: JsonValueCodec[JUDefaults] = KindlingsJsonValueCodec.derived[JUDefaults]
     lazy val defaults2: JsonValueCodec[JUDefaults2] = KindlingsJsonValueCodec.derived[JUDefaults2]
-    lazy val sharedEmptyMutableDefaults: JsonValueCodec[JUSharedEmptyMutableDefaults] = KindlingsJsonValueCodec.derived[JUSharedEmptyMutableDefaults]
-    lazy val polymorphicDefaults: JsonValueCodec[JUPolymorphicDefaults[Int, String]] = KindlingsJsonValueCodec.derived[JUPolymorphicDefaults[Int, String]]
-    lazy val nestedUser: JsonValueCodec[JUNestedDefaults.User] = KindlingsJsonValueCodec.derived[JUNestedDefaults.User]
-    lazy val nestedBox: JsonValueCodec[JUNestedDefaults.Box[Int]] = KindlingsJsonValueCodec.derived[JUNestedDefaults.Box[Int]]
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val defaults3: JsonValueCodec[JUDefaults3] = KindlingsJsonValueCodec.derived[JUDefaults3]
+    lazy val sharedEmptyMutableDefaults: JsonValueCodec[JUSharedEmptyMutableDefaults] =
+      KindlingsJsonValueCodec.derived[JUSharedEmptyMutableDefaults]
+    lazy val polymorphicDefaults: JsonValueCodec[JUPolymorphicDefaults[Int, String]] =
+      KindlingsJsonValueCodec.derived[JUPolymorphicDefaults[Int, String]]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
     lazy val transient: JsonValueCodec[JUTransient] = KindlingsJsonValueCodec.derived[JUTransient]
     lazy val noneValues: JsonValueCodec[JUNoneValues] = KindlingsJsonValueCodec.derived[JUNoneValues]
     lazy val noneValuesList: JsonValueCodec[List[JUNoneValues]] = KindlingsJsonValueCodec.derived[List[JUNoneValues]]
     lazy val skipUnknown: JsonValueCodec[JUSkipUnknown] = KindlingsJsonValueCodec.derived[JUSkipUnknown]
     lazy val required32: JsonValueCodec[JURequired32] = KindlingsJsonValueCodec.derived[JURequired32]
-    lazy val requiredAfterOptional: JsonValueCodec[JURequiredAfterOptionalFields] = KindlingsJsonValueCodec.derived[JURequiredAfterOptionalFields]
+    lazy val requiredAfterOptional: JsonValueCodec[JURequiredAfterOptionalFields] =
+      KindlingsJsonValueCodec.derived[JURequiredAfterOptionalFields]
     lazy val valueClassTypes: JsonValueCodec[JUValueClassTypes] = KindlingsJsonValueCodec.derived[JUValueClassTypes]
     lazy val userIds: JsonValueCodec[JUUserIds] = KindlingsJsonValueCodec.derived[JUUserIds]
     lazy val userIdTop: JsonValueCodec[JUUserId] = KindlingsJsonValueCodec.derived[JUUserId]
     lazy val orderIdTop: JsonValueCodec[JUOrderId] = KindlingsJsonValueCodec.derived[JUOrderId]
     lazy val userIdArray: JsonValueCodec[Array[JUUserId]] = KindlingsJsonValueCodec.derived[Array[JUUserId]]
     lazy val orderIdArray: JsonValueCodec[Array[JUOrderId]] = KindlingsJsonValueCodec.derived[Array[JUOrderId]]
-    lazy val orderUserMap: JsonValueCodec[Map[JUOrderId, JUUserId]] = KindlingsJsonValueCodec.derived[Map[JUOrderId, JUUserId]]
-    lazy val userOrderMap: JsonValueCodec[Map[JUUserId, JUOrderId]] = KindlingsJsonValueCodec.derived[Map[JUUserId, JUOrderId]]
+    lazy val orderUserMap: JsonValueCodec[Map[JUOrderId, JUUserId]] =
+      KindlingsJsonValueCodec.derived[Map[JUOrderId, JUUserId]]
+    lazy val userOrderMap: JsonValueCodec[Map[JUUserId, JUOrderId]] =
+      KindlingsJsonValueCodec.derived[Map[JUUserId, JUOrderId]]
     lazy val aliasUserId: JsonValueCodec[JUAlias.UserId] = KindlingsJsonValueCodec.derived[JUAlias.UserId]
     lazy val aliasOrderId: JsonValueCodec[JUAlias.OrderId] = KindlingsJsonValueCodec.derived[JUAlias.OrderId]
-    lazy val genericUserId: JsonValueCodec[JUGeneric.UserId[String]] = KindlingsJsonValueCodec.derived[JUGeneric.UserId[String]]
-    lazy val genericOrderId: JsonValueCodec[JUGeneric.OrderId[Int]] = KindlingsJsonValueCodec.derived[JUGeneric.OrderId[Int]]
+    lazy val genericUserId: JsonValueCodec[JUGeneric.UserId[String]] =
+      KindlingsJsonValueCodec.derived[JUGeneric.UserId[String]]
+    lazy val genericOrderId: JsonValueCodec[JUGeneric.OrderId[Int]] =
+      KindlingsJsonValueCodec.derived[JUGeneric.OrderId[Int]]
     lazy val nestedOptions: JsonValueCodec[JUNestedOptions] = KindlingsJsonValueCodec.derived[JUNestedOptions]
     lazy val eitherFoo: JsonValueCodec[JUEitherFoo] = KindlingsJsonValueCodec.derived[JUEitherFoo]
     lazy val javaTime: JsonValueCodec[JUJavaTimeTypes] = KindlingsJsonValueCodec.derived[JUJavaTimeTypes]
@@ -201,16 +294,19 @@ object JuRuntime {
     lazy val durationTop: JsonValueCodec[java.time.Duration] = KindlingsJsonValueCodec.derived[java.time.Duration]
     lazy val instantTop: JsonValueCodec[java.time.Instant] = KindlingsJsonValueCodec.derived[java.time.Instant]
     lazy val localDateTop: JsonValueCodec[java.time.LocalDate] = KindlingsJsonValueCodec.derived[java.time.LocalDate]
-    lazy val localDateTimeTop: JsonValueCodec[java.time.LocalDateTime] = KindlingsJsonValueCodec.derived[java.time.LocalDateTime]
+    lazy val localDateTimeTop: JsonValueCodec[java.time.LocalDateTime] =
+      KindlingsJsonValueCodec.derived[java.time.LocalDateTime]
     lazy val localTimeTop: JsonValueCodec[java.time.LocalTime] = KindlingsJsonValueCodec.derived[java.time.LocalTime]
     lazy val monthTop: JsonValueCodec[java.time.Month] = KindlingsJsonValueCodec.derived[java.time.Month]
     lazy val monthDayTop: JsonValueCodec[java.time.MonthDay] = KindlingsJsonValueCodec.derived[java.time.MonthDay]
-    lazy val offsetDateTimeTop: JsonValueCodec[java.time.OffsetDateTime] = KindlingsJsonValueCodec.derived[java.time.OffsetDateTime]
+    lazy val offsetDateTimeTop: JsonValueCodec[java.time.OffsetDateTime] =
+      KindlingsJsonValueCodec.derived[java.time.OffsetDateTime]
     lazy val offsetTimeTop: JsonValueCodec[java.time.OffsetTime] = KindlingsJsonValueCodec.derived[java.time.OffsetTime]
     lazy val periodTop: JsonValueCodec[java.time.Period] = KindlingsJsonValueCodec.derived[java.time.Period]
     lazy val yearTop: JsonValueCodec[java.time.Year] = KindlingsJsonValueCodec.derived[java.time.Year]
     lazy val yearMonthTop: JsonValueCodec[java.time.YearMonth] = KindlingsJsonValueCodec.derived[java.time.YearMonth]
-    lazy val zonedDateTimeTop: JsonValueCodec[java.time.ZonedDateTime] = KindlingsJsonValueCodec.derived[java.time.ZonedDateTime]
+    lazy val zonedDateTimeTop: JsonValueCodec[java.time.ZonedDateTime] =
+      KindlingsJsonValueCodec.derived[java.time.ZonedDateTime]
     lazy val zoneIdTop: JsonValueCodec[java.time.ZoneId] = KindlingsJsonValueCodec.derived[java.time.ZoneId]
     lazy val zoneOffsetTop: JsonValueCodec[java.time.ZoneOffset] = KindlingsJsonValueCodec.derived[java.time.ZoneOffset]
     lazy val adtList: JsonValueCodec[List[JUAdtBase]] = KindlingsJsonValueCodec.derived[List[JUAdtBase]]
@@ -219,32 +315,41 @@ object JuRuntime {
     lazy val ccc: JsonValueCodec[JUCCC] = KindlingsJsonValueCodec.derived[JUCCC]
     lazy val ddd: JsonValueCodec[JUDDD.type] = KindlingsJsonValueCodec.derived[JUDDD.type]
     lazy val extra: JsonValueCodec[JUExtra.Base] = KindlingsJsonValueCodec.derived[JUExtra.Base]
-    lazy val nonCaseLeaves: JsonValueCodec[List[JUNonCaseLeaves.X]] = KindlingsJsonValueCodec.derived[List[JUNonCaseLeaves.X]]
+    lazy val nonCaseLeaves: JsonValueCodec[List[JUNonCaseLeaves.X]] =
+      KindlingsJsonValueCodec.derived[List[JUNonCaseLeaves.X]]
     lazy val sealedClass: JsonValueCodec[List[JUSealedClass.A]] = KindlingsJsonValueCodec.derived[List[JUSealedClass.A]]
-    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] = KindlingsJsonValueCodec.derived[List[JUNamedLeaves.Base]]
+    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUNamedLeaves.Base]]
     lazy val deep: JsonValueCodec[List[JUDeep.Base]] = KindlingsJsonValueCodec.derived[List[JUDeep.Base]]
     lazy val mixed: JsonValueCodec[List[JUMixed.Base]] = KindlingsJsonValueCodec.derived[List[JUMixed.Base]]
     lazy val diamond: JsonValueCodec[List[JUDiamond.Base]] = KindlingsJsonValueCodec.derived[List[JUDiamond.Base]]
     lazy val basketApple: JsonValueCodec[JUBasket[JUApple]] = KindlingsJsonValueCodec.derived[JUBasket[JUApple]]
     lazy val basketOrange: JsonValueCodec[JUBasket[JUOrange]] = KindlingsJsonValueCodec.derived[JUBasket[JUOrange]]
-    lazy val typeAliases: JsonValueCodec[JUTypeAliases.TypeAliases] = KindlingsJsonValueCodec.derived[JUTypeAliases.TypeAliases]
-    lazy val aliasMap: JsonValueCodec[Map[JUTypeAliases.I, JUTypeAliases.S]] = KindlingsJsonValueCodec.derived[Map[JUTypeAliases.I, JUTypeAliases.S]]
+    lazy val typeAliases: JsonValueCodec[JUTypeAliases.TypeAliases] =
+      KindlingsJsonValueCodec.derived[JUTypeAliases.TypeAliases]
+    lazy val aliasMap: JsonValueCodec[Map[JUTypeAliases.I, JUTypeAliases.S]] =
+      KindlingsJsonValueCodec.derived[Map[JUTypeAliases.I, JUTypeAliases.S]]
     lazy val aliasList: JsonValueCodec[JUTypeAliases.L] = KindlingsJsonValueCodec.derived[JUTypeAliases.L]
     lazy val idArray: JsonValueCodec[Array[JUId[String]]] = KindlingsJsonValueCodec.derived[Array[JUId[String]]]
-    lazy val firstOrder: JsonValueCodec[JUFirstOrderType[Int, String]] = KindlingsJsonValueCodec.derived[JUFirstOrderType[Int, String]]
-    lazy val firstOrderId: JsonValueCodec[JUFirstOrderType[JUId[Int], JUId[String]]] = KindlingsJsonValueCodec.derived[JUFirstOrderType[JUId[Int], JUId[String]]]
+    lazy val firstOrder: JsonValueCodec[JUFirstOrderType[Int, String]] =
+      KindlingsJsonValueCodec.derived[JUFirstOrderType[Int, String]]
+    lazy val firstOrderId: JsonValueCodec[JUFirstOrderType[JUId[Int], JUId[String]]] =
+      KindlingsJsonValueCodec.derived[JUFirstOrderType[JUId[Int], JUId[String]]]
     lazy val gadt2Array: JsonValueCodec[Array[JUGADT2[?]]] = KindlingsJsonValueCodec.derived[Array[JUGADT2[?]]]
     lazy val hk: JsonValueCodec[JUHk.Foo[Option]] = KindlingsJsonValueCodec.derived[JUHk.Foo[Option]]
-    lazy val freeGadt: JsonValueCodec[List[JUFreeGadt.GADT[Int]]] = KindlingsJsonValueCodec.derived[List[JUFreeGadt.GADT[Int]]]
+    lazy val freeGadt: JsonValueCodec[List[JUFreeGadt.GADT[Int]]] =
+      KindlingsJsonValueCodec.derived[List[JUFreeGadt.GADT[Int]]]
     lazy val auxiliary: JsonValueCodec[JUAuxiliaryConstructor] = KindlingsJsonValueCodec.derived[JUAuxiliaryConstructor]
     lazy val multiList: JsonValueCodec[JUMultiListOfArgs] = KindlingsJsonValueCodec.derived[JUMultiListOfArgs]
-    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] = KindlingsJsonValueCodec.derived[JUMultiListOfArgsDefault]
+    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] =
+      KindlingsJsonValueCodec.derived[JUMultiListOfArgsDefault]
   }
   object recursive {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.recursive
     lazy val recursive: JsonValueCodec[JURecursive] = KindlingsJsonValueCodec.derived[JURecursive]
     lazy val human: JsonValueCodec[JUKingDom.Human] = KindlingsJsonValueCodec.derived[JUKingDom.Human]
-    lazy val hkOption: JsonValueCodec[JUHigherKindedType[Option]] = KindlingsJsonValueCodec.derived[JUHigherKindedType[Option]]
+    lazy val hkOption: JsonValueCodec[JUHigherKindedType[Option]] =
+      KindlingsJsonValueCodec.derived[JUHigherKindedType[Option]]
     lazy val hkSeq: JsonValueCodec[JUHigherKindedType[Seq]] = KindlingsJsonValueCodec.derived[JUHigherKindedType[Seq]]
   }
   object stringified {
@@ -267,28 +372,43 @@ object JuRuntime {
     lazy val bigDecimalTop: JsonValueCodec[BigDecimal] = KindlingsJsonValueCodec.derived[BigDecimal]
     lazy val orderIdTop: JsonValueCodec[JUOrderId] = KindlingsJsonValueCodec.derived[JUOrderId]
     lazy val optionBigInt: JsonValueCodec[Option[BigInt]] = KindlingsJsonValueCodec.derived[Option[BigInt]]
-    lazy val tuple3: JsonValueCodec[(Long, Float, BigDecimal)] = KindlingsJsonValueCodec.derived[(Long, Float, BigDecimal)]
+    lazy val tuple3: JsonValueCodec[(Long, Float, BigDecimal)] =
+      KindlingsJsonValueCodec.derived[(Long, Float, BigDecimal)]
     lazy val arrayArrayTop: JsonValueCodec[Array[Array[Int]]] = KindlingsJsonValueCodec.derived[Array[Array[Int]]]
-    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] = KindlingsJsonValueCodec.derived[collection.mutable.Set[List[BigDecimal]]]
-    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] = KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]]
-    lazy val longIntBitTop: JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] = KindlingsJsonValueCodec.derived[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]]
+    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.Set[List[BigDecimal]]]
+    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]]
+    lazy val longIntBitTop
+        : JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] =
+      KindlingsJsonValueCodec
+        .derived[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]]
   }
   object enumId {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.enumId
     lazy val enums: JsonValueCodec[JUEnums] = KindlingsJsonValueCodec.derived[JUEnums]
-    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] = KindlingsJsonValueCodec.derived[List[JUCelestialBody.CelestialBody]]
-    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] = KindlingsJsonValueCodec.derived[Map[JUCelestialBody.CelestialBody, Int]]
-    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] = KindlingsJsonValueCodec.derived[List[JUSpectralClass.SpectralClass]]
-    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] = KindlingsJsonValueCodec.derived[Map[JUSpectralClass.SpectralClass, Int]]
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = KindlingsJsonValueCodec.derived[JULocationType.LocationType]
-    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] = KindlingsJsonValueCodec.derived[Map[JULocationType.LocationType, Int]]
+    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] =
+      KindlingsJsonValueCodec.derived[List[JUCelestialBody.CelestialBody]]
+    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUCelestialBody.CelestialBody, Int]]
+    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] =
+      KindlingsJsonValueCodec.derived[List[JUSpectralClass.SpectralClass]]
+    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUSpectralClass.SpectralClass, Int]]
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      KindlingsJsonValueCodec.derived[JULocationType.LocationType]
+    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JULocationType.LocationType, Int]]
     lazy val enums2: JsonValueCodec[JUEnums2] = KindlingsJsonValueCodec.derived[JUEnums2]
-    lazy val temperatureList: JsonValueCodec[List[JUTemperature.Temperature]] = KindlingsJsonValueCodec.derived[List[JUTemperature.Temperature]]
-    lazy val temperatureMap: JsonValueCodec[Map[JUTemperature.Temperature, Int]] = KindlingsJsonValueCodec.derived[Map[JUTemperature.Temperature, Int]]
+    lazy val temperatureList: JsonValueCodec[List[JUTemperature.Temperature]] =
+      KindlingsJsonValueCodec.derived[List[JUTemperature.Temperature]]
+    lazy val temperatureMap: JsonValueCodec[Map[JUTemperature.Temperature, Int]] =
+      KindlingsJsonValueCodec.derived[Map[JUTemperature.Temperature, Int]]
   }
   object enumIdStringified {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.enumIdStringified
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = KindlingsJsonValueCodec.derived[JULocationType.LocationType]
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      KindlingsJsonValueCodec.derived[JULocationType.LocationType]
   }
   object noDuplicationCheck {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.noDuplicationCheck
@@ -323,12 +443,15 @@ object JuRuntime {
     lazy val arrays: JsonValueCodec[JUArrays] = KindlingsJsonValueCodec.derived[JUArrays]
     lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] = KindlingsJsonValueCodec.derived[JUEmptyIterables]
     lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] = KindlingsJsonValueCodec.derived[JUEmptyMaps]
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
   }
   object makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName {
-    implicit def config: JsoniterConfig = JuRuntimeConfigs.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName
+    implicit def config: JsoniterConfig =
+      JuRuntimeConfigs.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName
     lazy val arrays: JsonValueCodec[JUArrays] = KindlingsJsonValueCodec.derived[JUArrays]
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
   }
   object nestedIterables {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.nestedIterables
@@ -340,100 +463,150 @@ object JuRuntime {
   }
   object requireCollectionsNoTransientEmpty {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.requireCollectionsNoTransientEmpty
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
   }
   object makeWithRequiredDefaultFields {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.makeWithRequiredDefaultFields
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
     lazy val defaults: JsonValueCodec[JUDefaults] = KindlingsJsonValueCodec.derived[JUDefaults]
-    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] = KindlingsJsonValueCodec.derived[JUMultiListOfArgsDefault]
+    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] =
+      KindlingsJsonValueCodec.derived[JUMultiListOfArgsDefault]
   }
   object requireDefaultsNoTransientDefault {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.requireDefaultsNoTransientDefault
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
     lazy val defaults: JsonValueCodec[JUDefaults] = KindlingsJsonValueCodec.derived[JUDefaults]
     lazy val transient: JsonValueCodec[JUTransient] = KindlingsJsonValueCodec.derived[JUTransient]
   }
   object requireDefaultsAndCollections {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.requireDefaultsAndCollections
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      KindlingsJsonValueCodec.derived[JUIterablesWithDefaults]
   }
   object setLimit10 {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.setLimit10
     lazy val set: JsonValueCodec[Set[Int]] = KindlingsJsonValueCodec.derived[Set[Int]]
-    lazy val mutableSet: JsonValueCodec[collection.mutable.Set[Int]] = KindlingsJsonValueCodec.derived[collection.mutable.Set[Int]]
+    lazy val mutableSet: JsonValueCodec[collection.mutable.Set[Int]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.Set[Int]]
   }
   object mapLimit10 {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.mapLimit10
     lazy val map: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]]
-    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
   }
   object mapLimit10AsArray {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.mapLimit10AsArray
     lazy val map: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]]
-    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
+  }
+  object noMapLimit {
+    implicit def config: JsoniterConfig = JuRuntimeConfigs.noMapLimit
+    lazy val map: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]]
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
+  }
+  object noMapLimitAsArray {
+    implicit def config: JsoniterConfig = JuRuntimeConfigs.noMapLimitAsArray
+    lazy val map: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]]
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]]
   }
   object mapAsArray {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.mapAsArray
-    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.Map[Int, Boolean]]
-    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Boolean]]
-    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.mutable.LongMap[Boolean]]
-    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Boolean]]
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Boolean]]
-    lazy val stringifiedMutableLongMaps: JsonValueCodec[JUStringifiedMutableLongMaps] = KindlingsJsonValueCodec.derived[JUStringifiedMutableLongMaps]
-    lazy val stringifiedImmutableIntLongMaps: JsonValueCodec[JUStringifiedImmutableIntLongMaps] = KindlingsJsonValueCodec.derived[JUStringifiedImmutableIntLongMaps]
+    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.Map[Int, Boolean]]
+    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Boolean]]
+    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LongMap[Boolean]]
+    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Boolean]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Boolean]]
+    lazy val stringifiedMutableLongMaps: JsonValueCodec[JUStringifiedMutableLongMaps] =
+      KindlingsJsonValueCodec.derived[JUStringifiedMutableLongMaps]
+    lazy val stringifiedImmutableIntLongMaps: JsonValueCodec[JUStringifiedImmutableIntLongMaps] =
+      KindlingsJsonValueCodec.derived[JUStringifiedImmutableIntLongMaps]
   }
   object mapAsArrayStringified {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.mapAsArrayStringified
-    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.Map[Int, Boolean]]
-    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Boolean]]
-    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.mutable.LongMap[Boolean]]
-    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Boolean]]
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Boolean]]
-    lazy val mutableLongMapsList: JsonValueCodec[List[JUMutableLongMaps]] = KindlingsJsonValueCodec.derived[List[JUMutableLongMaps]]
-    lazy val immutableIntLongMapsList: JsonValueCodec[List[JUImmutableIntLongMaps]] = KindlingsJsonValueCodec.derived[List[JUImmutableIntLongMaps]]
+    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.Map[Int, Boolean]]
+    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Boolean]]
+    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.mutable.LongMap[Boolean]]
+    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Boolean]]
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] =
+      KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Boolean]]
+    lazy val mutableLongMapsList: JsonValueCodec[List[JUMutableLongMaps]] =
+      KindlingsJsonValueCodec.derived[List[JUMutableLongMaps]]
+    lazy val immutableIntLongMapsList: JsonValueCodec[List[JUImmutableIntLongMaps]] =
+      KindlingsJsonValueCodec.derived[List[JUImmutableIntLongMaps]]
   }
   object bitSetLimit1000 {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.bitSetLimit1000
-    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] = KindlingsJsonValueCodec.derived[collection.immutable.BitSet]
+    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] =
+      KindlingsJsonValueCodec.derived[collection.immutable.BitSet]
   }
   object renamed {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.renamed
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object renamedWithAlternatives {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.renamedWithAlternatives
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object renamedWithGuards {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.renamedWithGuards
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object camelCase {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.camelCase
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object snakeCase {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.snakeCase
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object snakeCase2 {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.snakeCase2
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object kebabCase {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.kebabCase
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object kebabCase2 {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.kebabCase2
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object pascalCase {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.pascalCase
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      KindlingsJsonValueCodec.derived[JUCamelPascalSnakeKebabCases]
   }
   object suffixMapper {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.suffixMapper
@@ -463,21 +636,28 @@ object JuRuntime {
   object strict {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.strict
     lazy val skipUnknown: JsonValueCodec[JUSkipUnknown] = KindlingsJsonValueCodec.derived[JUSkipUnknown]
-    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] = KindlingsJsonValueCodec.derived[List[JUNamedLeaves.Base]]
+    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUNamedLeaves.Base]]
   }
   object inlineOneValueClasses {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.inlineOneValueClasses
-    lazy val oneValueClassTypes: JsonValueCodec[JUOneValueClassTypes] = KindlingsJsonValueCodec.derived[JUOneValueClassTypes]
-    lazy val transientOneValueClassTypes: JsonValueCodec[JUTransientOneValueClassTypes] = KindlingsJsonValueCodec.derived[JUTransientOneValueClassTypes]
-    lazy val transientMap: JsonValueCodec[Map[JUTransientUserId, JUTransientOrderId]] = KindlingsJsonValueCodec.derived[Map[JUTransientUserId, JUTransientOrderId]]
-    lazy val dependentMap: JsonValueCodec[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]] = KindlingsJsonValueCodec.derived[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]]
+    lazy val oneValueClassTypes: JsonValueCodec[JUOneValueClassTypes] =
+      KindlingsJsonValueCodec.derived[JUOneValueClassTypes]
+    lazy val transientOneValueClassTypes: JsonValueCodec[JUTransientOneValueClassTypes] =
+      KindlingsJsonValueCodec.derived[JUTransientOneValueClassTypes]
+    lazy val transientMap: JsonValueCodec[Map[JUTransientUserId, JUTransientOrderId]] =
+      KindlingsJsonValueCodec.derived[Map[JUTransientUserId, JUTransientOrderId]]
+    lazy val dependentMap: JsonValueCodec[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]] =
+      KindlingsJsonValueCodec.derived[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]]
     lazy val oneUserIdTop: JsonValueCodec[JUOneUserId] = KindlingsJsonValueCodec.derived[JUOneUserId]
     lazy val oneOrderIdTop: JsonValueCodec[JUOneOrderId] = KindlingsJsonValueCodec.derived[JUOneOrderId]
     lazy val oneUserIdArray: JsonValueCodec[Array[JUOneUserId]] = KindlingsJsonValueCodec.derived[Array[JUOneUserId]]
     lazy val oneOrderIdArray: JsonValueCodec[Array[JUOneOrderId]] = KindlingsJsonValueCodec.derived[Array[JUOneOrderId]]
     lazy val oneUserIds: JsonValueCodec[JUOneUserIds] = KindlingsJsonValueCodec.derived[JUOneUserIds]
-    lazy val oneUserIdsT: JsonValueCodec[JUOneUserIdsT[List[String]]] = KindlingsJsonValueCodec.derived[JUOneUserIdsT[List[String]]]
-    lazy val oneUserIdsF: JsonValueCodec[JUOneUserIdsF[List, String]] = KindlingsJsonValueCodec.derived[JUOneUserIdsF[List, String]]
+    lazy val oneUserIdsT: JsonValueCodec[JUOneUserIdsT[List[String]]] =
+      KindlingsJsonValueCodec.derived[JUOneUserIdsT[List[String]]]
+    lazy val oneUserIdsF: JsonValueCodec[JUOneUserIdsF[List, String]] =
+      KindlingsJsonValueCodec.derived[JUOneUserIdsF[List, String]]
   }
   object skipNestedOptionValues {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.skipNestedOptionValues
@@ -553,7 +733,8 @@ object JuRuntime {
   }
   object circeLikeObjects {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.circeLikeObjects
-    lazy val enumerationList: JsonValueCodec[List[JUOpenapi.Enum]] = KindlingsJsonValueCodec.derived[List[JUOpenapi.Enum]]
+    lazy val enumerationList: JsonValueCodec[List[JUOpenapi.Enum]] =
+      KindlingsJsonValueCodec.derived[List[JUOpenapi.Enum]]
   }
   object decodingOnly {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.decodingOnly
@@ -565,23 +746,28 @@ object JuRuntime {
   }
   object discriminatorTStrict {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.discriminatorTStrict
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
   }
   object leafNameMapper {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.leafNameMapper
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUCustomName.Base]]
   }
   object fullLeafNames {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.fullLeafNames
-    lazy val nestedAdtList: JsonValueCodec[List[JUNestedAdts.Base]] = KindlingsJsonValueCodec.derived[List[JUNestedAdts.Base]]
+    lazy val nestedAdtList: JsonValueCodec[List[JUNestedAdts.Base]] =
+      KindlingsJsonValueCodec.derived[List[JUNestedAdts.Base]]
   }
   object nonAsciiDiscriminator {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.nonAsciiDiscriminator
-    lazy val nonAsciiList: JsonValueCodec[List[JUNonAscii.База]] = KindlingsJsonValueCodec.derived[List[JUNonAscii.База]]
+    lazy val nonAsciiList: JsonValueCodec[List[JUNonAscii.База]] =
+      KindlingsJsonValueCodec.derived[List[JUNonAscii.База]]
   }
   object discriminatorZoneId {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.discriminatorZoneId
-    lazy val timeZoneList: JsonValueCodec[List[JUOperatorNames.TimeZone]] = KindlingsJsonValueCodec.derived[List[JUOperatorNames.TimeZone]]
+    lazy val timeZoneList: JsonValueCodec[List[JUOperatorNames.TimeZone]] =
+      KindlingsJsonValueCodec.derived[List[JUOperatorNames.TimeZone]]
   }
   object discriminatorHint {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.discriminatorHint

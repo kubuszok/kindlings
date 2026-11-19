@@ -12,34 +12,47 @@ object JoRuntimeConfigs {
   @volatile var upstreamDefaultsRecursive: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults
   @volatile var kindlingsDefaults: JsoniterConfig = JsoniterConfig.default
   @volatile var snakeCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseFieldNames
-  @volatile var snakeCase2: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2)
+  @volatile var snakeCase2: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2)
   @volatile var kebabCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withKebabCaseFieldNames
   @volatile var pascalCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withPascalCaseFieldNames
-  @volatile var camelCase: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase)
-  @volatile var partialFieldMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case "firstName" => "given" }
+  @volatile var camelCase: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase)
+  @volatile var partialFieldMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
+    case "firstName" => "given"
+  }
   @volatile var snakeCaseLeaves: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseAdtLeafClassNames
   @volatile var discriminatorKind: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("kind")
   @volatile var noDiscriminator: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None)
-  @volatile var discriminatorAnywhere: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false)
-  @volatile var alwaysEmitDiscriminator: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator
-  @volatile var circeLike: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
+  @volatile var discriminatorAnywhere: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false)
+  @volatile var alwaysEmitDiscriminator: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator
+  @volatile var circeLike: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
   @volatile var strict: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false)
   @volatile var noTransientDefault: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false)
   @volatile var noTransientEmpty: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false)
   @volatile var noTransientNone: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false)
-  @volatile var requireCollections: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields
-  @volatile var requireDefaults: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false).withRequireDefaultFields
-  @volatile var noDuplicationCheck: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false)
+  @volatile var requireCollections: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields
+  @volatile var requireDefaults: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false).withRequireDefaultFields
+  @volatile var noDuplicationCheck: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false)
   @volatile var stringified: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withStringified
   @volatile var mapAsArray: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapAsArray
   @volatile var bigDecimalPrecision: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBigDecimalPrecision(5)
   @volatile var bigDecimalScaleLimit: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBigDecimalScaleLimit(2)
-  @volatile var bigDecimalDigitsLimit: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBigDecimalDigitsLimit(3)
+  @volatile var bigDecimalDigitsLimit: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withBigDecimalDigitsLimit(3)
   @volatile var bigIntDigitsLimit: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBigIntDigitsLimit(3)
-  @volatile var insertLimits: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2)
+  @volatile var insertLimits: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2)
   @volatile var bitSetValueLimit: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withBitSetValueLimit(10)
   @volatile var scalaEnumValueId: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId
-  @volatile var javaEnumValueNameMapper: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
+  @volatile var javaEnumValueNameMapper: JsoniterConfig =
+    JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
   @volatile var skipNestedOptionValues: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withSkipNestedOptionValues
   @volatile var inlineOneValueClasses: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses
   @volatile var scalaTransientSupport: JsoniterConfig = JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport

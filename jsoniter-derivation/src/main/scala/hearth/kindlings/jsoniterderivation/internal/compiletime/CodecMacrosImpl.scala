@@ -53,6 +53,7 @@ trait CodecMacrosImpl
     with rules.DecoderHandleAsCaseClassRuleImpl
     with rules.DecoderHandleAsEnumRuleImpl
     with rules.DecoderAbsentFieldSupport
+    with rules.HandleAsScalaEnumerationRulesImpl
     with rules.EncoderDerivationPolicyRuleImpl
     with rules.DecoderDerivationPolicyRuleImpl { this: MacroCommons & StdExtensions & AnnotationSupport =>
 
@@ -1347,6 +1348,7 @@ trait CodecMacrosImpl
           EncoderUseImplicitWhenAvailableRule,
           EncoderDerivationPolicyRule,
           EncoderHandleAsBuiltInRule,
+          EncoderHandleAsScalaEnumerationRule,
           EncoderHandleAsValueTypeRule,
           EncoderHandleAsOptionRule,
           // EncoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),
@@ -1569,6 +1571,7 @@ trait CodecMacrosImpl
           DecoderUseImplicitWhenAvailableRule,
           DecoderDerivationPolicyRule,
           DecoderHandleAsBuiltInRule,
+          DecoderHandleAsScalaEnumerationRule,
           DecoderHandleAsValueTypeRule,
           DecoderHandleAsOptionRule,
           // DecoderHandleAsCollectionRule now handles maps too (single IsCollection parse + IsMapOf dispatch),

@@ -918,6 +918,9 @@ trait DecoderHandleAsMapRuleImpl {
                         .map(builder => Some(builder.build[K]): Option[Expr[JsonReader => K]])
                     case None => MIO.pure(None)
                   }
+                case _ if Type[K].isEnumeration && enumerationObjectOf[K].isDefined =>
+                  // 3c. scala.Enumeration values: names or ids, looked up at runtime (as jsoniter-scala)
+                  scalaEnumerationKeyDecoder[K]
                 case _ =>
                   // 4. Enum (all case objects) — read key as string, match against case names
                   Enum.parse[K].toOption match {

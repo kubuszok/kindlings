@@ -31,6 +31,19 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
     else loop(TypeRepr.of[A]).map(_.map(t => UntypedType.as_??(t.asInstanceOf[UntypedType])))
   }
 
+  override protected def enumerationObjectOf[A: Type]: Option[Expr[Enumeration]] = {
+    import q.reflect.*
+    // `Obj.Value`, or `Obj.this.Value` when it is referred to through a type alias defined in the object itself.
+    TypeRepr.of[A].dealias match {
+      case TypeRef(prefix: TermRef, _) if prefix <:< TypeRepr.of[Enumeration] =>
+        Some(Ref.term(prefix).asExprOf[Enumeration])
+      case TypeRef(ThisType(module), _)
+          if module.typeSymbol.flags.is(Flags.Module) && module <:< TypeRepr.of[Enumeration] =>
+        Some(Ref(module.typeSymbol.companionModule).asExprOf[Enumeration])
+      case _ => None
+    }
+  }
+
   override protected def constructGenericTuple[A: Type](elements: List[Expr_??]): Option[Expr[A]] = {
     val boxed = elements.map { e =>
       import e.{Underlying as E, value as v}
