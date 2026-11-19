@@ -129,4 +129,13 @@ class CirceDecodeBenchmark {
 
   @Benchmark def originalAutoEvent(): Decoder.Result[Event] =
     OriginalCirceAutoInstances.eventDecoder.decodeJson(eventJson)
+
+  @Benchmark def kindlingsRuntimeConfigPerson(): Decoder.Result[Person] =
+    KindlingsCirceRuntimeConfigInstances.personDecoder.decodeJson(personJson)
+
+  @Benchmark def kindlingsRuntimeConfigSimpleADT(): Decoder.Result[SimpleADT] =
+    KindlingsCirceRuntimeConfigInstances.simpleADTDecoder.decodeJson(simpleADTJson)
+
+  @Benchmark def kindlingsRuntimeConfigEvent(): Decoder.Result[Event] =
+    KindlingsCirceRuntimeConfigInstances.eventDecoder.decodeJson(eventJson)
 }
