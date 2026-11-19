@@ -8,6 +8,7 @@ import hearth.std.*
 import hearth.kindlings.ubjsonderivation.{UBJsonConfig, UBJsonReader, UBJsonValueCodec, UBJsonWriter}
 import hearth.kindlings.ubjsonderivation.annotations.{fieldName as fieldNameAnn, named, stringified, transientField}
 import hearth.kindlings.derivation.compiletime.StableChildrenOrder
+import hearth.kindlings.ubjsonderivation.internal.runtime.UBJsonDerivationUtils
 
 trait CodecMacrosImpl
     extends hearth.kindlings.derivation.compiletime.DerivationTimeout
@@ -321,7 +322,7 @@ trait CodecMacrosImpl
               _ <- Log.info(s"Forward-declaring codec decode body for ${Type[A].prettyPrint}")
               _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
               builtDec <- defBuilder.traverse { case (_, (r, c)) =>
-                deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig))
+                deriveDecoderRecursively[A](using DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr)))
               }
               decCache <- cache.get
               _ <- cache.set(builtDec.buildCached(decCache, "codec-decode-body"))
@@ -560,8 +561,14 @@ trait CodecMacrosImpl
       config: Expr[UBJsonConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[UBJsonConfig] = None
+      evaluatedConfig: Option[UBJsonConfig] = None,
+      // The config expression of the entry point (`config` is a parameter of the cached defs): what per-instance
+      // `lazy val`s of the codec (computed once, not per call) can read when the config is only known at runtime.
+      rootConfig: Option[Expr[UBJsonConfig]] = None
   ) {
+
+    /** The config for per-instance values: the entry point's config expression ([[config]] when it is not known). */
+    def instanceConfig: Expr[UBJsonConfig] = rootConfig.getOrElse(config)
 
     def nest[B: Type](newReader: Expr[UBJsonReader]): DecoderCtx[B] = copy[B](
       tpe = Type[B],
@@ -623,14 +630,16 @@ trait CodecMacrosImpl
         config: Expr[UBJsonConfig],
         cache: MLocal[ValDefsCache],
         derivedType: Option[??],
-        evaluatedConfig: Option[UBJsonConfig] = None
+        evaluatedConfig: Option[UBJsonConfig] = None,
+        rootConfig: Option[Expr[UBJsonConfig]] = None
     ): DecoderCtx[A] = DecoderCtx(
       tpe = Type[A],
       reader = reader,
       config = config,
       cache = cache,
       derivedType = derivedType,
-      evaluatedConfig = evaluatedConfig
+      evaluatedConfig = evaluatedConfig,
+      rootConfig = rootConfig
     )
   }
 
@@ -711,6 +720,8 @@ trait CodecMacrosImpl
     val Any: Type.Lazy[Any] = Type.Lazy(Type.of[Any])
     val ArrayAny: Type.Lazy[Array[Any]] = Type.Lazy(Type.of[Array[Any]])
     val ListString: Type.Lazy[List[String]] = Type.Lazy(Type.of[List[String]])
+    val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
+    val FieldIndex: Type.Lazy[UBJsonDerivationUtils.FieldIndex] = Type.Lazy(Type.of[UBJsonDerivationUtils.FieldIndex])
     val FieldName: Type.Lazy[fieldNameAnn] = Type.Lazy(Type.of[fieldNameAnn])
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
     val Stringified: Type.Lazy[stringified] = Type.Lazy(Type.of[stringified])

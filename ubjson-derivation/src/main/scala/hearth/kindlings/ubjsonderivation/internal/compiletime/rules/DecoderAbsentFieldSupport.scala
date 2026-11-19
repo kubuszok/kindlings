@@ -112,33 +112,62 @@ trait DecoderAbsentFieldSupport {
       evaluatedConfig: Option[UBJsonConfig] = None
   ): List[Expr[Unit]] = {
     implicit val AnyT: Type[Any] = CTypes.Any
-    implicit val StringT: Type[String] = CTypes.String
     fields.map { case (fName, param, idx, nameOverride) =>
       import param.tpe.Underlying as Field
-      val mappedName: Expr[String] = (nameOverride, evaluatedConfig) match {
-        case (Some(customName), _)  => Expr(customName)
-        case (None, Some(evConfig)) => Expr(evConfig.fieldNameMapper(fName))
-        case (None, None)           => Expr.quote(Expr.splice(config).fieldNameMapper(Expr.splice(Expr(fName))))
-      }
-      val fallbacks = absentFieldFallbacks[Field](param, argumentValues)
-      // With the config known at compile time only the fallback that applies is emitted (no `require*` branches).
-      val normalFallback = evaluatedConfig match {
-        case Some(evConfig) =>
-          staticAbsentFallback[Field](fallbacks, evConfig).getOrElse(missingRequiredFieldOf[Field](reader, mappedName))
-        case None => runtimeAbsentFallback[Field](fallbacks, config, reader, mappedName)
-      }
-      // A `scala.transient` field (runtime config): its default when `scalaTransientSupport` is on
-      val fallback: Expr[Field] = fallbacks.default match {
-        case Some(default) if runtimeOnlyTransient(fName) =>
-          Expr.quote {
-            if (Expr.splice(config).scalaTransientSupport) Expr.splice(default) else Expr.splice(normalFallback)
-          }
-        case _ => normalFallback
-      }
+      val fallback: Expr[Field] = absentFieldFallbackOf[Field](
+        fName,
+        param,
+        nameOverride,
+        config,
+        reader,
+        argumentValues,
+        runtimeOnlyTransient(fName),
+        evaluatedConfig
+      )
       Expr.quote {
         if (UBJsonDerivationUtils.isAbsentField(Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx)))))
           Expr.splice(decodedValuesExpr)(Expr.splice(Expr(idx))) = Expr.splice(fallback).asInstanceOf[Any]
       }
+    }
+  }
+
+  /** The value of an absent field (or the `missing required field` failure), see [[absentFieldFillExprs]].
+    *
+    * @param runtimeOnlyTransient
+    *   whether the field is a `scala.transient` field whose transience is decided by the runtime config
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def absentFieldFallbackOf[Field: Type](
+      fName: String,
+      param: Parameter,
+      nameOverride: Option[String],
+      config: Expr[UBJsonConfig],
+      reader: Expr[UBJsonReader],
+      argumentValues: Map[String, Expr_??],
+      runtimeOnlyTransient: Boolean,
+      evaluatedConfig: Option[UBJsonConfig]
+  ): Expr[Field] = {
+    implicit val StringT: Type[String] = CTypes.String
+    // (only computed when a required field is missing)
+    val mappedName: Expr[String] = (nameOverride, evaluatedConfig) match {
+      case (Some(customName), _)  => Expr(customName)
+      case (None, Some(evConfig)) => Expr(evConfig.fieldNameMapper(fName))
+      case (None, None)           => Expr.quote(Expr.splice(config).fieldNameMapper(Expr.splice(Expr(fName))))
+    }
+    val fallbacks = absentFieldFallbacks[Field](param, argumentValues)
+    // With the config known at compile time only the fallback that applies is emitted (no `require*` branches).
+    val normalFallback = evaluatedConfig match {
+      case Some(evConfig) =>
+        staticAbsentFallback[Field](fallbacks, evConfig).getOrElse(missingRequiredFieldOf[Field](reader, mappedName))
+      case None => runtimeAbsentFallback[Field](fallbacks, config, reader, mappedName)
+    }
+    // A `scala.transient` field (runtime config): its default when `scalaTransientSupport` is on
+    fallbacks.default match {
+      case Some(default) if runtimeOnlyTransient =>
+        Expr.quote {
+          if (Expr.splice(config).scalaTransientSupport) Expr.splice(default) else Expr.splice(normalFallback)
+        }
+      case _ => normalFallback
     }
   }
 
@@ -231,11 +260,12 @@ trait DecoderAbsentFieldSupport {
           else decode
         if (!nullAsDefault) emptyAsDefault
         else
+          // as `UBJsonDerivationUtils.readNullAsDefault`, without allocating its thunk and decoder function per decode
           reader =>
             Expr.quote {
-              UBJsonDerivationUtils.readNullAsDefault[Field](Expr.splice(reader), Expr.splice(d)) { (r: UBJsonReader) =>
-                Expr.splice(emptyAsDefault(Expr.quote(r)))
-              }
+              val defaultFieldReader = Expr.splice(reader)
+              if (defaultFieldReader.isNextNull()) Expr.splice(d)
+              else Expr.splice(emptyAsDefault(Expr.quote(defaultFieldReader)))
             }
     }
   }
