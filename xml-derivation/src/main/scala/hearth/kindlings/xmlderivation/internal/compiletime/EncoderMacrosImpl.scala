@@ -35,23 +35,9 @@ trait EncoderMacrosImpl
       configExpr: Expr[XmlConfig]
   ): Expr[scala.xml.Elem] = {
     implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
-    implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
-    implicit val StringT: Type[String] = Types.String
-    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, scala.xml.Elem]("KindlingsXmlEncoder.encode") { fromCtx =>
-      ValDefs.createVal[A](valueExpr).use { valueVal =>
-        ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-          ValDefs.createVal[String](elementNameExpr).use { nameVal =>
-            Expr.quote {
-              val _ = Expr.splice(valueVal)
-              val _ = Expr.splice(configVal)
-              val _ = Expr.splice(nameVal)
-              Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None, evConfig)))
-            }
-          }
-        }
-      }
+    deriveEncoderAndAdaptForEntrypoint[A, scala.xml.Elem]("KindlingsXmlEncoder.encode", configExpr, derivedType = None) {
+      encode => encode(valueExpr, elementNameExpr, configExpr)
     }
   }
 
@@ -62,64 +48,55 @@ trait EncoderMacrosImpl
       configExpr: Expr[XmlConfig]
   ): Expr[String] = {
     implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
-    implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
     implicit val StringT: Type[String] = Types.String
-    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, String]("KindlingsXmlEncoder.toXmlString") { fromCtx =>
-      ValDefs.createVal[A](valueExpr).use { valueVal =>
-        ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-          ValDefs.createVal[String](elementNameExpr).use { nameVal =>
-            Expr.quote {
-              val _ = Expr.splice(valueVal)
-              val _ = Expr.splice(configVal)
-              val _ = Expr.splice(nameVal)
-              XmlDerivationUtils.elemToString(
-                Expr.splice(fromCtx(EncoderCtx.from(valueVal, nameVal, configVal, derivedType = None, evConfig)))
-              )
-            }
-          }
+    deriveEncoderAndAdaptForEntrypoint[A, String]("KindlingsXmlEncoder.toXmlString", configExpr, derivedType = None) {
+      encode =>
+        Expr.quote {
+          XmlDerivationUtils.elemToString(Expr.splice(encode(valueExpr, elementNameExpr, configExpr)))
         }
-      }
     }
   }
 
   @scala.annotation.nowarn("msg=is never used")
   def deriveEncoderTypeClass[A: Type](configExpr: Expr[XmlConfig]): Expr[KindlingsXmlEncoder[A]] = {
-    implicit val EncoderA: Type[XmlEncoder[A]] = Types.XmlEncoder[A]
     implicit val KindlingsEncoderA: Type[KindlingsXmlEncoder[A]] = Types.KindlingsXmlEncoder[A]
     implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
     implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
     implicit val StringT: Type[String] = Types.String
-    val selfType: Option[??] = Some(Type[A].as_??)
-    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsXmlEncoder[A]]("KindlingsXmlEncoder.derived") { fromCtx =>
-      ValDefs.createVal[XmlConfig](configExpr).use { configVal =>
-        Expr.quote {
-          val cfg = Expr.splice(configVal)
-          hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.encoderInstance[A] {
-            (value: A, elementName: String) =>
-              val _ = value
-              val _ = elementName
-              val _ = cfg
-              Expr.splice {
-                fromCtx(
-                  EncoderCtx
-                    .from(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg), derivedType = selfType, evConfig)
-                )
-              }
-          }
+    deriveEncoderAndAdaptForEntrypoint[A, KindlingsXmlEncoder[A]](
+      "KindlingsXmlEncoder.derived",
+      configExpr,
+      derivedType = Some(Type[A].as_??)
+    ) { encode =>
+      Expr.quote {
+        val cfg = Expr.splice(configExpr)
+        hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationFactories.encoderInstance[A] {
+          (value: A, elementName: String) =>
+            Expr.splice(encode(Expr.quote(value), Expr.quote(elementName), Expr.quote(cfg)))
         }
       }
     }
   }
 
-  // Handles logging, error reporting and prepending "cached" defs and vals to the result.
-
-  def deriveEncoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
-      provideCtxAndAdapt: (EncoderCtx[A] => Expr[scala.xml.Elem]) => Expr[Out]
+  /** Derives the encoder of `A` once, at the top level of the expansion (the cached defs of every type it needs, and
+    * the summoned instances, put around the result - so they are created once per instance, not per call), and lets the
+    * entry point call it: `(value, element name, config) => element`. Handles logging and error reporting.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  def deriveEncoderAndAdaptForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[XmlConfig],
+      derivedType: Option[??]
+  )(
+      adapt: ((Expr[A], Expr[String], Expr[XmlConfig]) => Expr[scala.xml.Elem]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
+    implicit val ConfigT: Type[XmlConfig] = Types.XmlConfig
+    implicit val StringT: Type[String] = Types.String
+    val evConfig: Option[XmlConfig] = configExpr.semiEval.toOption
+
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -130,18 +107,24 @@ trait EncoderMacrosImpl
       .namedScope(
         s"Deriving XML encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: (EncoderCtx[A] => Expr[scala.xml.Elem]) = (ctx: EncoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                result <- deriveEncoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          provideCtxAndAdapt(fromCtx)
-        }
+        // Run the derivation with a placeholder context to populate the cache: every type gets a cached def
+        val placeholderCtx = EncoderCtx.from[A](
+          value = Expr.quote(null.asInstanceOf[A]),
+          elementName = Expr.quote(null.asInstanceOf[String]),
+          config = Expr.quote(null.asInstanceOf[XmlConfig]),
+          derivedType = derivedType,
+          evaluatedConfig = evConfig
+        )
+        for {
+          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          _ <- deriveEncoderRecursively[A](using placeholderCtx)
+          helperOpt <- placeholderCtx.getHelper[A]
+          cache <- placeholderCtx.cache.get
+          helper <- helperOpt match {
+            case Some(helper) => MIO.pure(helper)
+            case None         => MIO.fail(new RuntimeException(s"No encode helper for ${Type[A].prettyPrint}"))
+          }
+        } yield cache.toValDefs.use(_ => adapt(helper))
       }
       .flatTap { result =>
         Log.info(s"Derived final XML encoder result: ${result.prettyPrint}")
