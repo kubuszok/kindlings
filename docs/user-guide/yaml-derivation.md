@@ -135,6 +135,13 @@ scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are al
 
 `YamlConfig.kindlings03Defaults` restores both defaults of Kindlings 0.3.x (`withoutUseDefaults.withWrappedSubtypes`).
 
+The config is evaluated at compile time when possible (`YamlConfig.default`, a config passed explicitly, and on Scala 3
+a local `implicit val`/`given`): sealed traits and enums then get only the applicable encoding and decoding
+(discriminator, wrapper, untagged or names) with constant subtype names. A config only known at runtime gives the same
+results, read when the instance runs; a derived encoder/decoder then computes the subtype names its
+`transformConstructorNames` gives once per instance, and resolves the instances of its fields and subtypes (e.g. an
+`implicit def` `YamlEncoder`) once per instance, not on every call.
+
 ## Annotations
 
 | Annotation | Description |

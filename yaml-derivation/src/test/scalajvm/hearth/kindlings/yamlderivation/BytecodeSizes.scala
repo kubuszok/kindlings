@@ -20,6 +20,34 @@ object BytecodeSizes {
       finally in.close()
     }
 
+  /** Whether the constant pool of `cls` or of its nested/anonymous classes mentions `internalName` (a class, e.g.
+    * `scala/runtime/LazyRef`, the cell of a local `lazy val`, or a member name).
+    */
+  def refersTo(cls: Class[?], internalName: String): Boolean =
+    classFileNames(cls).exists { name =>
+      val in = new DataInputStream(cls.getClassLoader.getResourceAsStream(name))
+      try {
+        def skip(n: Int): Unit = in.readFully(new Array[Byte](n))
+        skip(8) // magic, minor and major version
+        val constantPoolCount = in.readUnsignedShort()
+        var found = false
+        var i = 1
+        while (i < constantPoolCount) {
+          in.readUnsignedByte() match {
+            case 1                          => if (in.readUTF().contains(internalName)) found = true
+            case 3 | 4                      => skip(4)
+            case 5 | 6                      => skip(8); i += 1 // long and double take two entries
+            case 7 | 8 | 16 | 19 | 20       => skip(2)
+            case 9 | 10 | 11 | 12 | 17 | 18 => skip(4)
+            case 15                         => skip(3)
+            case tag                        => throw new IllegalStateException(s"Unknown constant pool tag $tag")
+          }
+          i += 1
+        }
+        found
+      } finally in.close()
+    }
+
   /** Class files of `cls` and of the classes nested in it (`Outer$...`), found next to `cls`'s class file. */
   private def classFileNames(cls: Class[?]): List[String] = {
     val path = cls.getName.replace('.', '/')

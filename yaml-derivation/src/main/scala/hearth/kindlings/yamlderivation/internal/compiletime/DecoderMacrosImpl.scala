@@ -12,6 +12,7 @@ import org.virtuslab.yaml.{ConstructError, Node, YamlDecoder, YamlError}
 
 trait DecoderMacrosImpl
     extends YamlDerivationTimeout
+    with SubtypeNamesSupport
     with YamlDerivationPolicy
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
@@ -302,6 +303,23 @@ trait DecoderMacrosImpl
           ValDefBuilder.ofLazy[YamlDecoder[B]](s"fieldDecoder_${Type[B].shortName}")
         )(_ => decoder)
     }
+
+    /** A summoned instance as a lazy val of the derived instance (resolved once, not on every decode); used as it is in
+      * the inline entry points ([[perCall]]).
+      */
+    def cachedInstance[B: Type](instance: Expr[YamlDecoder[B]]): MIO[Expr[YamlDecoder[B]]] =
+      if (perCall) MIO.pure(instance)
+      else
+        getInstance[B].flatMap {
+          case Some(cached) => MIO.pure(cached)
+          case None         => setInstance[B](instance) >> getInstance[B].map(_.get)
+        }
+
+    /** The subtype names `names` transformed by a configuration only known at runtime: computed once per instance (a
+      * lazy val holding an array), or where they are used in the inline entry points.
+      */
+    def transformedConstructorNames(names: List[String]): MIO[String => Expr[String]] =
+      transformedNamesOf(names, config, perCall, cache)
 
     def getInstance[B: Type]: MIO[Option[Expr[YamlDecoder[B]]]] = {
       implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]

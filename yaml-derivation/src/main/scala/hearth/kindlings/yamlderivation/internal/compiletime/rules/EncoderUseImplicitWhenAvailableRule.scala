@@ -35,10 +35,12 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
     private def cacheAndUse[A: EncoderCtx](
         instanceExpr: Expr[org.virtuslab.yaml.YamlEncoder[A]]
     ): MIO[Rule.Applicability[Expr[org.virtuslab.yaml.Node]]] =
-      Log.info(s"Found implicit encoder ${instanceExpr.prettyPrint}, using directly") >>
-        MIO.pure(Rule.matched(Expr.quote {
-          Expr.splice(instanceExpr).asNode(Expr.splice(ectx.value))
-        }))
+      Log.info(s"Found implicit encoder ${instanceExpr.prettyPrint}, caching it in the instance") >>
+        ectx.cachedInstance[A](instanceExpr).map { cached =>
+          Rule.matched(Expr.quote {
+            Expr.splice(cached).asNode(Expr.splice(ectx.value))
+          })
+        }
 
     private def yieldUnsupported[A: EncoderCtx](
         reason: String

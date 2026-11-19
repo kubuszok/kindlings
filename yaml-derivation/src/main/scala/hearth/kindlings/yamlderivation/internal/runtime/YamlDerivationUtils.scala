@@ -30,6 +30,40 @@ object YamlDerivationUtils {
         )
     }
 
+  /** A subtype's node tagged as a configuration only known at runtime says (a discriminator field, a single-key
+    * wrapper, or untagged: the node itself, or its name when `nameWhenUntagged`). One call per subtype keeps the
+    * generated `match` over many subtypes small.
+    */
+  def tagSubtype(
+      config: hearth.kindlings.yamlderivation.YamlConfig,
+      name: String,
+      node: Node,
+      alwaysWrapped: Boolean,
+      nameWhenUntagged: Boolean
+  ): Node =
+    config.discriminator match {
+      case Some(discriminatorField) => addDiscriminator(discriminatorField, name, node)
+      case None                     =>
+        if (config.wrappedSubtypes || alwaysWrapped) wrapWithTypeName(name, node)
+        else if (nameWhenUntagged) encodeEnumAsString(name)
+        else node
+    }
+
+  /** The `names` transformed by `transform`, computed once per derived instance for a configuration only known at
+    * runtime (the generated code reads them by index).
+    */
+  def transformNames(transform: String => String, names: List[String]): Array[String] = {
+    val result = new Array[String](names.size)
+    var i = 0
+    var rest = names
+    while (rest.nonEmpty) {
+      result(i) = transform(rest.head)
+      rest = rest.tail
+      i += 1
+    }
+    result
+  }
+
   def encodeEnumAsString(typeName: String): Node =
     ScalarNode(typeName)
 
