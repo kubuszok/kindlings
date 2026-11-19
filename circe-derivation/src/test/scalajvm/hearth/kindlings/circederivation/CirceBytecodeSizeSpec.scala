@@ -16,6 +16,14 @@ object CirceWideInstances {
     implicit val runtimeConfig: Configuration = config
     KindlingsDecoder.derived[WideDefaults]
   }
+
+  val encoder: KindlingsEncoder[WideDefaults] = KindlingsEncoder.derived[WideDefaults]
+
+  // `config` is a parameter: the transformed field names are computed once per instance
+  def encoderWith(config: Configuration): KindlingsEncoder[WideDefaults] = {
+    implicit val runtimeConfig: Configuration = config
+    KindlingsEncoder.derived[WideDefaults]
+  }
 }
 
 case class InlineNested(x: Int, label: Option[String])
@@ -24,6 +32,24 @@ case class InlineDecoded(name: String, tags: List[String], nested: Option[Inline
 /** The inline `KindlingsDecoder.decode`, in a class of its own so its bytecode can be inspected. */
 object CirceInlineDecodes {
   def decode(json: Json): Either[io.circe.DecodingFailure, InlineDecoded] = KindlingsDecoder.decode[InlineDecoded](json)
+}
+
+/** A field type whose encoder is an `implicit def` (a lazy val of a derived instance). */
+final case class InlineField(value: Int)
+object InlineField {
+  implicit def inlineFieldEncoder: io.circe.Encoder[InlineField] = io.circe.Encoder.encodeInt.contramap(_.value)
+}
+final case class InlineEncoded(counted: InlineField, other: Int)
+
+/** The inline `KindlingsEncoder.encode` of a type with a summoned field instance, in a class of its own so its bytecode
+  * can be inspected.
+  */
+object CirceInlineEncodes {
+  def encode(value: InlineEncoded): Json = KindlingsEncoder.encode[InlineEncoded](value)
+  def encodeWith(value: InlineEncoded, config: Configuration): Json = {
+    implicit val runtimeConfig: Configuration = config
+    KindlingsEncoder.encode[InlineEncoded](value)
+  }
 }
 
 /** Guards against generated methods too large to be JIT-compiled (see `docs/research/generated-code-audit-2026-11.md`).
@@ -45,6 +71,23 @@ final class CirceBytecodeSizeSpec extends MacroSuite {
     assert(!BytecodeSizes.refersTo(CirceInlineDecodes.getClass, "scala/runtime/LazyRef"))
     val value = InlineDecoded("n", List("a"), Some(InlineNested(1, None)), List(InlineNested(2, Some("l"))))
     CirceInlineDecodes.decode(KindlingsEncoder.encode[InlineDecoded](value)) ==> Right(value)
+  }
+
+  test("the inline encode allocates no lazy cell per call") {
+    // the instances' summoned field encoders and runtime-transformed names are lazy vals (positive control above)
+    assert(!BytecodeSizes.refersTo(CirceInlineEncodes.getClass, "scala/runtime/LazyRef"))
+    val value = InlineEncoded(InlineField(1), 2)
+    CirceInlineEncodes.encode(value) ==> Json.obj("counted" -> Json.fromInt(1), "other" -> Json.fromInt(2))
+    CirceInlineEncodes.encodeWith(value, Configuration.default.withTransformMemberNames(_.toUpperCase)) ==>
+      Json.obj("COUNTED" -> Json.fromInt(1), "OTHER" -> Json.fromInt(2))
+  }
+
+  test("the encoders work, with a compile-time and a runtime configuration") {
+    val value = WideDefaults(f0 = Some("x"), f1 = 1, f99 = 5L)
+    val json = KindlingsEncoder.encode[WideDefaults](value)
+    CirceWideInstances.encoder(value) ==> json
+    val upper = CirceWideInstances.encoderWith(Configuration.default.withTransformMemberNames(_.toUpperCase))(value)
+    upper.asObject.map(_.keys.toList) ==> json.asObject.map(_.keys.toList.map(_.toUpperCase))
   }
 
   test("the decoders work, fail-fast and accumulating") {

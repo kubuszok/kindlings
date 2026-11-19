@@ -7,7 +7,7 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
-import io.circe.Json
+import io.circe.{Json, KeyEncoder}
 
 trait EncoderHandleAsMapRuleImpl {
   this: EncoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -120,10 +120,20 @@ trait EncoderHandleAsMapRuleImpl {
 
         Types.KeyEncoder[K].summonExprIgnoring().toEither match {
           case Right(keyEncoderExpr) =>
+            implicit val KeyEncoderK: Type[KeyEncoder[K]] = Types.KeyEncoder[K]
+            // a lazy val of the derived instance: resolved once, not for every key
             Log.info(s"Found implicit KeyEncoder[${Type[K].prettyPrint}]") >>
-              MIO.pure(Some(Expr.quote { (k: K) =>
-                Expr.splice(keyEncoderExpr).apply(k)
-              }))
+              ctx
+                .cachedLazy[KeyEncoder[K]](
+                  "cached-key-encoder-instance",
+                  s"keyEncoder_${Type[K].shortName}",
+                  keyEncoderExpr
+                )
+                .map { cached =>
+                  Some(Expr.quote { (k: K) =>
+                    Expr.splice(cached).apply(k)
+                  })
+                }
           case Left(_) if builtIn.isDefined =>
             MIO.pure(builtIn)
           case Left(_) =>

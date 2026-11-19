@@ -117,131 +117,147 @@ trait EncoderHandleAsEnumRuleImpl {
         hasUserEncoder: ?? => Boolean
     ): MIO[Option[Expr[Json]]] = {
       implicit val JsonT: Type[Json] = Types.Json
-      enumB
-        .parMatchOn[MIO, Json](value) { matched =>
-          import matched.{value as enumCaseValue, Underlying as EnumCase}
-          Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
-            val nestedSum: Option[Enum[EnumCase]] =
-              if (
-                flattensNestedSums[A] && isNestedSum[EnumCase] && entryFor[EnumCase](entries)
-                  .forall { case (_, entry) => !(entry.Underlying =:= Type[EnumCase]) }
-              ) Enum.parse[EnumCase].toOption
-              else None
-            nestedSum match {
-              case Some(nested) =>
-                encodeCasesOf[A, EnumCase](
-                  nested,
-                  enumCaseValue,
-                  entries,
-                  allCaseObjects,
-                  isEnumerationOrJavaEnum,
-                  hasUserEncoder
-                ).flatMap {
-                  case Some(result) => MIO.pure(result)
-                  case None         =>
-                    val err = EncoderDerivationError.NoChildrenInSealedTrait(Type[EnumCase].prettyPrint)
-                    Log.error(err.message) >> MIO.fail(err)
-                }
-              case None =>
-                val (caseName, entryType) =
-                  entryFor[EnumCase](entries).getOrElse((Type[EnumCase].shortName, Type[EnumCase].as_??))
-                import entryType.Underlying as Entry
-                val userProvided = !isEnumerationOrJavaEnum && hasUserEncoder(entryType)
-                // A user-provided instance of an intermediate sum: when it was derived by Kindlings for that sum
-                // (`KindlingsSumEncoder`), its output is used as it is (circe's `ConfiguredEncoder.encodeSum`).
-                val isKindlingsSumExpr: Expr[Boolean] =
-                  if (userProvided && isNestedSum[Entry])
-                    Types
-                      .Encoder[Entry]
-                      .summonExprIgnoring(EncoderUseImplicitWhenAvailableRule.ignoredImplicits*)
-                      .toOption
-                      .fold(Expr(false)) { instance =>
-                        @scala.annotation.nowarn("msg=is never used")
-                        implicit val EncoderEntry: Type[io.circe.Encoder[Entry]] = Types.Encoder[Entry]
-                        Expr.quote(CirceDerivationUtils.isKindlingsSumEncoder(Expr.splice(instance)))
-                      }
-                  else Expr(false)
-                val caseJsonMIO: MIO[Expr[Json]] =
-                  if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(Json.obj()))
-                  else if (Type[Entry] =:= Type[EnumCase])
-                    deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
-                  else
-                    // Scala 2: a leaf under an intermediate sum with a user-provided Encoder
-                    deriveEncoderRecursively[Entry](using ectx.nest(enumCaseValue.upcast[Entry]))
-                caseJsonMIO.map { caseJson =>
-                  // With a config known at compile time the name is a constant and only the applicable encoding
-                  // (string / discriminator / wrapper) is generated; otherwise the config decides at runtime.
-                  @scala.annotation.nowarn("msg=is never used")
-                  implicit val StringT: Type[String] = Types.String
-                  val evaluated = ectx.evaluatedConfig
-                  val nameExpr: Expr[String] = evaluated match {
-                    case Some(c) => Expr(c.transformConstructorNames(caseName))
-                    case None    =>
-                      Expr.quote(Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName))))
+      // Subtype names transformed by a configuration only known at runtime: computed once per instance (with a
+      // configuration known at compile time they are constants).
+      val namesMIO: MIO[String => Expr[String]] = ectx.evaluatedConfig match {
+        case Some(_) => MIO.pure((_: String) => Expr(""): Expr[String]) // not used
+        case None    => ectx.transformedNames(entries.map(_._1), true)
+      }
+      namesMIO.flatMap { runtimeNameOf =>
+        enumB
+          .parMatchOn[MIO, Json](value) { matched =>
+            import matched.{value as enumCaseValue, Underlying as EnumCase}
+            Log.namedScope(s"Encoding enum case ${enumCaseValue.prettyPrint}: ${EnumCase.prettyPrint}") {
+              val nestedSum: Option[Enum[EnumCase]] =
+                if (
+                  flattensNestedSums[A] && isNestedSum[EnumCase] && entryFor[EnumCase](entries)
+                    .forall { case (_, entry) => !(entry.Underlying =:= Type[EnumCase]) }
+                ) Enum.parse[EnumCase].toOption
+                else None
+              nestedSum match {
+                case Some(nested) =>
+                  encodeCasesOf[A, EnumCase](
+                    nested,
+                    enumCaseValue,
+                    entries,
+                    allCaseObjects,
+                    isEnumerationOrJavaEnum,
+                    hasUserEncoder
+                  ).flatMap {
+                    case Some(result) => MIO.pure(result)
+                    case None         =>
+                      val err = EncoderDerivationError.NoChildrenInSealedTrait(Type[EnumCase].prettyPrint)
+                      Log.error(err.message) >> MIO.fail(err)
                   }
-                  val kindlingsSumPossible = userProvided && isNestedSum[Entry]
-                  def tagged(name: Expr[String], json: Expr[Json]): Expr[Json] = {
-                    def withField(field: Expr[String]): Expr[Json] =
-                      if (userProvided)
-                        Expr.quote(
-                          CirceDerivationUtils
-                            .addDiscriminatorIfAbsent(Expr.splice(field), Expr.splice(name), Expr.splice(json))
-                        )
-                      else
-                        Expr.quote(
-                          CirceDerivationUtils
-                            .addDiscriminator(Expr.splice(field), Expr.splice(name), Expr.splice(json))
-                        )
-                    val wrapped: Expr[Json] =
-                      Expr.quote(CirceDerivationUtils.wrapWithTypeName(Expr.splice(name), Expr.splice(json)))
-                    val byConfig: Expr[Json] = evaluated.map(_.discriminator) match {
-                      case Some(Some(field)) => withField(Expr(field))
-                      case Some(None)        => wrapped
-                      case None              =>
-                        Expr.quote {
-                          Expr.splice(ectx.config).discriminator match {
-                            case Some(discriminatorField) => Expr.splice(withField(Expr.quote(discriminatorField)))
-                            case None                     => Expr.splice(wrapped)
+                case None =>
+                  val (caseName, entryType) =
+                    entryFor[EnumCase](entries).getOrElse((Type[EnumCase].shortName, Type[EnumCase].as_??))
+                  import entryType.Underlying as Entry
+                  val userProvided = !isEnumerationOrJavaEnum && hasUserEncoder(entryType)
+                  // A user-provided instance of an intermediate sum: when it was derived by Kindlings for that sum
+                  // (`KindlingsSumEncoder`), its output is used as it is (circe's `ConfiguredEncoder.encodeSum`).
+                  // (the summoned instance is a lazy val of the derived instance, shared with its use for encoding)
+                  val isKindlingsSumMIO: MIO[Expr[Boolean]] =
+                    if (userProvided && isNestedSum[Entry])
+                      Types
+                        .Encoder[Entry]
+                        .summonExprIgnoring(EncoderUseImplicitWhenAvailableRule.ignoredImplicits*)
+                        .toOption
+                        .fold(MIO.pure(Expr(false))) { instance =>
+                          @scala.annotation.nowarn("msg=is never used")
+                          implicit val EncoderEntry: Type[io.circe.Encoder[Entry]] = Types.Encoder[Entry]
+                          ectx.cachedInstance[Entry](instance).map { cached =>
+                            Expr.quote(CirceDerivationUtils.isKindlingsSumEncoder(Expr.splice(cached)))
                           }
                         }
-                    }
-                    if (!kindlingsSumPossible) byConfig
-                    else Expr.quote(if (Expr.splice(isKindlingsSumExpr)) Expr.splice(json) else Expr.splice(byConfig))
-                  }
-                  def encoded: Expr[Json] =
-                    ValDefs.createVal[String](nameExpr, FreshName.FromPrefix("name")).use { name =>
-                      ValDefs.createVal[Json](caseJson, FreshName.FromPrefix("json")).use(json => tagged(name, json))
-                    }
-                  if (allCaseObjects) {
-                    def asString: Expr[Json] =
-                      Expr.quote(CirceDerivationUtils.encodeEnumAsString(Expr.splice(nameExpr)))
-                    evaluated.map(_.enumAsStrings) match {
-                      case Some(true)  => asString
-                      case Some(false) => encoded
-                      case None        =>
-                        Expr.quote(
-                          if (Expr.splice(ectx.config).enumAsStrings) Expr.splice(asString) else Expr.splice(encoded)
-                        )
-                    }
-                  } else
-                    evaluated.map(_.enumAsStrings) match {
-                      case Some(_) => encoded // (`true` is a compile-time error here)
-                      case None    =>
-                        Expr.quote {
-                          if (Expr.splice(ectx.config).enumAsStrings)
-                            // only known at runtime here (statically it is a compile-time error)
-                            throw new IllegalArgumentException(
-                              CirceDerivationUtils.enumAsStringsNotSupportedMessage(
-                                Expr.splice(Expr(Type[A].shortName))
-                              )
+                    else MIO.pure(Expr(false))
+                  val caseJsonMIO: MIO[Expr[Json]] =
+                    if (isEnumerationOrJavaEnum) MIO.pure(Expr.quote(Json.obj()))
+                    else if (Type[Entry] =:= Type[EnumCase])
+                      deriveEncoderRecursively[EnumCase](using ectx.nest(enumCaseValue))
+                    else
+                      // Scala 2: a leaf under an intermediate sum with a user-provided Encoder
+                      deriveEncoderRecursively[Entry](using ectx.nest(enumCaseValue.upcast[Entry]))
+                  caseJsonMIO
+                    .flatMap(caseJson => isKindlingsSumMIO.map(isKindlingsSumExpr => (caseJson, isKindlingsSumExpr)))
+                    .map { case (caseJson, isKindlingsSumExpr) =>
+                      // With a config known at compile time the name is a constant and only the applicable encoding
+                      // (string / discriminator / wrapper) is generated; otherwise the config decides at runtime.
+                      @scala.annotation.nowarn("msg=is never used")
+                      implicit val StringT: Type[String] = Types.String
+                      val evaluated = ectx.evaluatedConfig
+                      val nameExpr: Expr[String] = evaluated match {
+                        case Some(c) => Expr(c.transformConstructorNames(caseName))
+                        case None    => runtimeNameOf(caseName)
+                      }
+                      val kindlingsSumPossible = userProvided && isNestedSum[Entry]
+                      def tagged(name: Expr[String], json: Expr[Json]): Expr[Json] = {
+                        def withField(field: Expr[String]): Expr[Json] =
+                          if (userProvided)
+                            Expr.quote(
+                              CirceDerivationUtils
+                                .addDiscriminatorIfAbsent(Expr.splice(field), Expr.splice(name), Expr.splice(json))
                             )
-                          Expr.splice(encoded)
+                          else
+                            Expr.quote(
+                              CirceDerivationUtils
+                                .addDiscriminator(Expr.splice(field), Expr.splice(name), Expr.splice(json))
+                            )
+                        val wrapped: Expr[Json] =
+                          Expr.quote(CirceDerivationUtils.wrapWithTypeName(Expr.splice(name), Expr.splice(json)))
+                        val byConfig: Expr[Json] = evaluated.map(_.discriminator) match {
+                          case Some(Some(field)) => withField(Expr(field))
+                          case Some(None)        => wrapped
+                          case None              =>
+                            Expr.quote {
+                              Expr.splice(ectx.config).discriminator match {
+                                case Some(discriminatorField) => Expr.splice(withField(Expr.quote(discriminatorField)))
+                                case None                     => Expr.splice(wrapped)
+                              }
+                            }
+                        }
+                        if (!kindlingsSumPossible) byConfig
+                        else
+                          Expr.quote(if (Expr.splice(isKindlingsSumExpr)) Expr.splice(json) else Expr.splice(byConfig))
+                      }
+                      def encoded: Expr[Json] =
+                        ValDefs.createVal[String](nameExpr, FreshName.FromPrefix("name")).use { name =>
+                          ValDefs
+                            .createVal[Json](caseJson, FreshName.FromPrefix("json"))
+                            .use(json => tagged(name, json))
+                        }
+                      if (allCaseObjects) {
+                        def asString: Expr[Json] =
+                          Expr.quote(CirceDerivationUtils.encodeEnumAsString(Expr.splice(nameExpr)))
+                        evaluated.map(_.enumAsStrings) match {
+                          case Some(true)  => asString
+                          case Some(false) => encoded
+                          case None        =>
+                            Expr.quote(
+                              if (Expr.splice(ectx.config).enumAsStrings) Expr.splice(asString)
+                              else Expr.splice(encoded)
+                            )
+                        }
+                      } else
+                        evaluated.map(_.enumAsStrings) match {
+                          case Some(_) => encoded // (`true` is a compile-time error here)
+                          case None    =>
+                            Expr.quote {
+                              if (Expr.splice(ectx.config).enumAsStrings)
+                                // only known at runtime here (statically it is a compile-time error)
+                                throw new IllegalArgumentException(
+                                  CirceDerivationUtils.enumAsStringsNotSupportedMessage(
+                                    Expr.splice(Expr(Type[A].shortName))
+                                  )
+                                )
+                              Expr.splice(encoded)
+                            }
                         }
                     }
-                }
+              }
             }
           }
-        }
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import hearth.std.*
 
 import hearth.kindlings.circederivation.{Configuration, KindlingsEncoder, KindlingsEncoderAsObject}
 import hearth.kindlings.circederivation.annotations.{fieldName, transientField}
+import hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils
 import io.circe.{Encoder, Json, JsonObject, KeyEncoder}
 
 trait EncoderMacrosImpl
@@ -43,15 +44,25 @@ trait EncoderMacrosImpl
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Json]("KindlingsEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
         ValDefs.createVal[Configuration](configExpr).use { configVal =>
+          // the definitions are evaluated on every call: see `EncoderCtx.perCall`
+          val encoded = fromCtx(perCallEncoderCtx[A](valueVal, configVal, evConfig))
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
+            Expr.splice(encoded)
           }
         }
       }
     }
   }
+
+  /** The context of the inline `encode` (see `EncoderCtx.perCall`). */
+  private def perCallEncoderCtx[A: Type](
+      value: Expr[A],
+      config: Expr[Configuration],
+      evConfig: Option[Configuration]
+  ): EncoderCtx[A] =
+    EncoderCtx.from[A](value, config, derivedType = None, evConfig).copy(perCall = true)
 
   @scala.annotation.nowarn("msg=is never used|Non local returns")
   def deriveEncoderTypeClass[A: Type](configExpr: Expr[Configuration]): Expr[KindlingsEncoder[A]] = {
@@ -73,34 +84,26 @@ trait EncoderMacrosImpl
     // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
     val markedSum: Boolean = isMarkedSum[A]
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoder[A]]("KindlingsEncoder.derived") { fromCtx =>
-      ValDefs.createVal[Configuration](configExpr).use { configVal =>
+    deriveEncoderInstanceForEntrypoint[A, KindlingsEncoder[A]](
+      "KindlingsEncoder.derived",
+      configExpr,
+      selfType,
+      evConfig
+    ) { encode =>
+      if (markedSum)
         Expr.quote {
-          val cfg = Expr.splice(configVal)
-          Expr.splice {
-            if (markedSum)
-              Expr.quote {
-                hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.sumEncoderInstance[A] {
-                  (a: A) =>
-                    val _ = a
-                    Expr.splice {
-                      fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-                    }
-                }
-              }
-            else
-              Expr.quote {
-                hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] {
-                  (a: A) =>
-                    val _ = a
-                    Expr.splice {
-                      fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-                    }
-                }
-              }
+          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.sumEncoderInstance[A] { (a: A) =>
+            val _ = a
+            Expr.splice(encode(Expr.quote(a)))
           }
         }
-      }
+      else
+        Expr.quote {
+          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
+            val _ = a
+            Expr.splice(encode(Expr.quote(a)))
+          }
+        }
     }
   }
 
@@ -125,26 +128,29 @@ trait EncoderMacrosImpl
     val evConfig: Option[Configuration] = semiEvalConfig(configExpr)
     evaluatedConfigFlags = evConfig
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsEncoderAsObject[A]]("KindlingsEncoder.deriveAsObject") {
-      fromCtx =>
-        ValDefs.createVal[Configuration](configExpr).use { configVal =>
-          Expr.quote {
-            val cfg = Expr.splice(configVal)
-            val encodeObject: A => JsonObject = (a: A) => {
-              val _ = a
-              val json: Json = Expr.splice {
-                fromCtx(EncoderCtx.from(Expr.quote(a), Expr.quote(cfg), derivedType = selfType, evConfig))
-              }
-              hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils.asJsonObjectOrThrow(json)
-            }
-            // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
-            if (Expr.splice(Expr(isMarkedSum[A])))
-              hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                .sumEncoderAsObjectInstance[A](encodeObject)
-            else
-              hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
-                .encoderAsObjectInstance[A](encodeObject)
-          }
+    // A derived sum is marked as a KindlingsSumEncoder (flattened when used for an intermediate sealed trait).
+    val markedSum: Boolean = isMarkedSum[A]
+
+    deriveEncoderInstanceForEntrypoint[A, KindlingsEncoderAsObject[A]](
+      "KindlingsEncoder.deriveAsObject",
+      configExpr,
+      selfType,
+      evConfig
+    ) { encode =>
+      def encodeObject: Expr[A => JsonObject] = Expr.quote { (a: A) =>
+        val _ = a
+        val json: Json = Expr.splice(encode(Expr.quote(a)))
+        hearth.kindlings.circederivation.internal.runtime.CirceDerivationUtils.asJsonObjectOrThrow(json)
+      }
+      if (markedSum)
+        Expr.quote {
+          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+            .sumEncoderAsObjectInstance[A](Expr.splice(encodeObject))
+        }
+      else
+        Expr.quote {
+          hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
+            .encoderAsObjectInstance[A](Expr.splice(encodeObject))
         }
     }
   }
@@ -178,19 +184,18 @@ trait EncoderMacrosImpl
         .caseFieldValuesAt(a)
         .collectFirst { case (name, v) if name == fieldName => v.value.asInstanceOf[Expr[Field]] }
         .getOrElse(Environment.reportErrorAndAbort(s"Cannot access field $fieldName"))
-    deriveEncoderFromCtxAndAdaptForEntrypoint[Field, KindlingsEncoder[A]]("KindlingsEncoder.deriveUnwrapped") {
-      fromCtx =>
-        def encode(a: Expr[A], cfg: Expr[Configuration]): Expr[Json] =
-          fromCtx(EncoderCtx.from[Field](fieldOf(a), cfg, derivedType = None, evConfig))
-        ValDefs.createVal[Configuration](configExpr).use { configVal =>
-          Expr.quote {
-            val cfg = Expr.splice(configVal)
-            hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
-              val _ = a
-              Expr.splice(encode(Expr.quote(a), Expr.quote(cfg)))
-            }
-          }
+    deriveEncoderInstanceForEntrypoint[Field, KindlingsEncoder[A]](
+      "KindlingsEncoder.deriveUnwrapped",
+      configExpr,
+      derivedType = None,
+      evConfig
+    ) { encodeField =>
+      Expr.quote {
+        hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories.encoderInstance[A] { (a: A) =>
+          val _ = a
+          Expr.splice(encodeField(fieldOf(Expr.quote(a))))
         }
+      }
     }
   }
 
@@ -232,9 +237,63 @@ trait EncoderMacrosImpl
 
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
+  /** The inline `KindlingsEncoder.encode`: the cached definitions are put around the encoding of a single value (they
+    * are evaluated on every call, see `EncoderCtx.perCall`).
+    */
   def deriveEncoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (EncoderCtx[A] => Expr[Json]) => Expr[Out]
+  ): Expr[Out] =
+    runEncoderEntrypoint[A, Out](macroName) {
+      MIO.scoped { runSafe =>
+        val fromCtx: (EncoderCtx[A] => Expr[Json]) = (ctx: EncoderCtx[A]) =>
+          runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              result <- deriveEncoderRecursively[A](using ctx)
+              cache <- ctx.cache.get
+            } yield cache.toValDefs.use(_ => result)
+          }
+
+        provideCtxAndAdapt(fromCtx)
+      }
+    }
+
+  /** A type class instance: the configuration is a val around the whole instance, and the encoding of `A` is derived
+    * once into a cached def, with the cached defs and lazy vals (summoned instances, names transformed by a runtime
+    * configuration) around the whole instance too, so that they are created once per instance, not on every call.
+    * `adapt` builds the instance from the call of that def.
+    */
+  def deriveEncoderInstanceForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[Configuration],
+      derivedType: Option[??],
+      evConfig: Option[Configuration]
+  )(
+      adapt: (Expr[A] => Expr[Json]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ConfigT: Type[Configuration] = Types.Configuration
+    runEncoderEntrypoint[A, Out](macroName) {
+      MIO.scoped { runSafe =>
+        ValDefs.createVal[Configuration](configExpr).use { configVal =>
+          // the value is a placeholder: the encoding is derived into a cached def, called with the instance's argument
+          val ctx = EncoderCtx.from[A](Expr.quote(null.asInstanceOf[A]), configVal, derivedType, evConfig)
+          runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              _ <- deriveEncoderRecursively[A](using ctx)
+            } yield ()
+          }
+          val encode = runSafe(ctx.getHelper[A]).getOrElse {
+            Environment.reportErrorAndAbort(s"$macroName: no encoding was derived for ${Type[A].prettyPrint}")
+          }
+          val cache = runSafe(ctx.cache.get)
+          cache.toValDefs.use(_ => adapt((value: Expr[A]) => encode(value, configVal)))
+        }
+      }
+    }
+  }
+
+  private def runEncoderEntrypoint[A: Type, Out: Type](macroName: String)(derive: => MIO[Expr[Out]]): Expr[Out] = {
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -244,20 +303,7 @@ trait EncoderMacrosImpl
     Log
       .namedScope(
         s"Deriving encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-      ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: (EncoderCtx[A] => Expr[Json]) = (ctx: EncoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveEncoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          provideCtxAndAdapt(fromCtx)
-        }
-      }
+      )(derive)
       .flatTap { result =>
         Log.info(s"Derived final encoder result: ${result.prettyPrint}")
       }
@@ -305,7 +351,10 @@ trait EncoderMacrosImpl
       config: Expr[Configuration],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[Configuration] = None
+      evaluatedConfig: Option[Configuration] = None,
+      // The inline `KindlingsEncoder.encode`: the cached definitions are evaluated on every call, so summoned instances
+      // and transformed names are not cached in them (a lazy val would be a lazy cell allocated per call).
+      perCall: Boolean = false
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -313,13 +362,70 @@ trait EncoderMacrosImpl
       value = newValue
     )
 
+    /** The context of a cached helper's body. The configuration is NOT replaced by the helper's `config` parameter:
+      * every entry point binds the configuration to a value around all the cached definitions and every helper call
+      * passes that value, so referring to it directly lets the cached values (lazy vals of the instance, see
+      * [[cachedLazy]]) be built from code that does not depend on a helper's parameters.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     def nestInCache(
         newValue: Expr[A],
         newConfig: Expr[Configuration]
     ): EncoderCtx[A] = copy(
-      value = newValue,
-      config = newConfig
+      value = newValue
     )
+
+    /** `value` as a lazy val of the derived instance (evaluated once, not on every encode), shared under `key` (and its
+      * type); in the per-call inline encode ([[perCall]]) it is used as it is.
+      */
+    def cachedLazy[T: Type](key: String, name: String, value: => Expr[T]): MIO[Expr[T]] =
+      if (perCall) MIO.pure(value)
+      else
+        cache.get0Ary[T](key).flatMap {
+          case Some(cached) => MIO.pure(cached)
+          case None         =>
+            cache.buildCachedWith(key, ValDefBuilder.ofLazy[T](name))(_ => value) >>
+              cache.get0Ary[T](key).map(_.get)
+        }
+
+    /** A summoned instance as a lazy val of the derived instance: resolved once, not on every encode. */
+    def cachedInstance[B: Type](instance: Expr[Encoder[B]]): MIO[Expr[Encoder[B]]] = {
+      implicit val EncoderB: Type[Encoder[B]] = Types.Encoder[B]
+      cachedLazy[Encoder[B]]("cached-encoder-instance", s"encoder_${Type[B].shortName}", instance)
+    }
+
+    /** The names `names` transformed by the configuration's `transformMemberNames` (`constructorNames = false`) or
+      * `transformConstructorNames` (`true`), for a configuration only known at runtime: all of them are computed once
+      * per instance (a lazy val holding an array), or where they are used in the per-call inline encode.
+      */
+    def transformedNames(names: List[String], constructorNames: Boolean): MIO[String => Expr[String]] = {
+      implicit val StringT: Type[String] = Types.String
+      def transformedAtCall(name: String): Expr[String] =
+        if (constructorNames) Expr.quote(Expr.splice(config).transformConstructorNames(Expr.splice(Expr(name))))
+        else Expr.quote(Expr.splice(config).transformMemberNames(Expr.splice(Expr(name))))
+      if (perCall || names.isEmpty) MIO.pure(transformedAtCall)
+      else {
+        implicit val ArrayStringT: Type[Array[String]] = Types.ArrayString
+        val distinct = names.distinct
+        val kind = if (constructorNames) "constructor" else "member"
+        val namesExpr: Expr[List[String]] = Expr(distinct)
+        def computed: Expr[Array[String]] =
+          if (constructorNames)
+            Expr.quote(
+              CirceDerivationUtils.transformNames(Expr.splice(config).transformConstructorNames, Expr.splice(namesExpr))
+            )
+          else
+            Expr.quote(
+              CirceDerivationUtils.transformNames(Expr.splice(config).transformMemberNames, Expr.splice(namesExpr))
+            )
+        cachedLazy[Array[String]](s"cached-$kind-names:${distinct.mkString("\u0000")}", s"${kind}Names", computed)
+          .map { array => (name: String) =>
+            val index = distinct.indexOf(name)
+            if (index < 0) transformedAtCall(name)
+            else Expr.quote(Expr.splice(array)(Expr.splice(Expr(index))))
+          }
+      }
+    }
 
     def getInstance[B: Type]: MIO[Option[Expr[Encoder[B]]]] = {
       implicit val EncoderB: Type[Encoder[B]] = Types.Encoder[B]
@@ -468,5 +574,6 @@ trait EncoderMacrosImpl
     val TransientField: Type.Lazy[transientField] = Type.Lazy(Type.of[transientField])
     val Int: Type.Lazy[Int] = Type.Lazy(Type.of[Int])
     val Product: Type.Lazy[Product] = Type.Lazy(Type.of[Product])
+    val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
   }
 }
