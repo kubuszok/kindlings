@@ -5,8 +5,8 @@ package hearth.kindlings.tapirschemaderivation.internal.compiletime
   */
 private[compiletime] object PreferSchemaConfigHint {
 
-  /** One configuration found in scope: the library name accepted by the `preferConfig` setting (e.g. `"circe"`) and
-    * the fully qualified name of its configuration type.
+  /** One configuration found in scope: the library name accepted by the `preferConfig` setting (e.g. `"circe"`) and the
+    * fully qualified name of its configuration type.
     */
   final case class Found(libraryName: String, configClassName: String)
 
