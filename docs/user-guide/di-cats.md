@@ -121,9 +121,9 @@ See [Debugging & Diagnostics](debugging.md).
 
 ## Errors
 
-`wireResource` mirrors macwire's diagnostics. If no dependency provides a constructor parameter you get a
-*"Cannot find a value of type …"* compile error; if two dependencies could provide the same parameter you get an
-*"Ambiguous …"* error.
+If no dependency provides a constructor parameter you get a *"Missing dependency of type [X]"* compile error (followed
+by the path of constructors that needed it); if two dependencies could provide the same parameter you get an
+*"Ambiguous instances of types [...] for [X]"* error.
 
 ## Relationship to `kindlings-di`
 
