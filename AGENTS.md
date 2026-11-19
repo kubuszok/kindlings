@@ -26,9 +26,11 @@ Hearth skill is wrong or missing something, fix it in `agent-skills` (local clon
 This covers new/changed APIs, configuration options and defaults, settings keys, error messages, supported types,
 parity changes, fixed bugs and known gotchas. The `kindlings` skills describe the **released** version, so skill
 changes for unreleased behaviour are not pushed to `agent-skills` master: write them in an "## agent-skills" section
-of the PR description (or "none: <reason>"); the release collects them into one `agent-skills` PR that is merged after
-the release is deployed. Follow `docs/contributing/kindlings-release/SKILL.md`. Fixes to skills that are wrong about an
-already released version can go to `agent-skills` directly.
+of the PR description (or "none: <reason>"). After the PR merges, apply those changes to the running **draft**
+`agent-skills` PR (branch `kindlings-next`, titled `kindlings: next release (merge after release)`), which is kept up
+to date with Kindlings master and marked ready only after the release is deployed. Follow
+`docs/contributing/kindlings-release/SKILL.md`. Fixes to skills that are wrong about an already released version can go
+to `agent-skills` directly.
 
 ## Global Rules
 
