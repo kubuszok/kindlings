@@ -239,6 +239,8 @@ Scala 2):
   the wrapped `None` when its decoder is derived (unwrapped) - or, with `useDefaults`, as the field's default, like a
   plain `Option` field; a user-provided decoder of the value class keeps circe's semantics (by default a missing-field
   failure).
+- **Only JSON objects decode to case classes**, also when every field has a default or is an `Option` and
+  `useDefaults` is on (Scala 3 core; generic-extras on Scala 2 decodes any JSON value to the all-defaults instance then).
 - **Strict decoding**: the discriminator key is an expected field; in `decodeAccumulating` the strict failure is reported
   first, followed by the field errors; a wrapper object with more than one key is rejected (the failure lists the direct
   subtypes, like circe's `constructorNames`); a case object (in a sum, at the top level or as a field) rejects any key

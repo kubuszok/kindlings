@@ -405,6 +405,16 @@ on both versions, see "Error messages and cursor history"). The differences foun
 of a dependency), which keeps covering a since-fixed Hearth bug (`docs/research/hearth-bug-children-order-from-classpath.md`):
 the strict wrapper failure lists the constructor names in declaration order on Scala 3, like circe.
 
+The fixtures and configurations of upstream's own derivation test suites are run the same way
+(`CirceUpstreamSuitesOracleSpec`, `CirceCoreSuitesOracleSpec`): circe-generic's `SemiautoDerivedSuite`, circe-core's
+`DerivesSuite`, `SemiautoDerivationSuite`, `ConfiguredDerivesSuite` and `ConfiguredEnumDerivesSuites`, generic-extras'
+`ConfiguredSemiautoDerivedSuite`, `ConfiguredAutoDerivedSuite` and `SharedConfiguredSemiautoDerivedSuite` (every
+member/constructor name transformation, defaults with `Option`s and generic classes, discriminators, strict decoding,
+children with hand-written instances, tuples and sequences of sums, recursive types, 33-field classes, 33-case sums and
+enums, members of intersection types, hierarchies with diamonds). What those suites assert beyond values (call counts
+of the name transformations, `decodeStrict`, compile-time errors, the macro annotations) is mirrored in
+`CirceUpstreamSuitesSpec` and `JsonCodecAnnotationSpec`.
+
 ### Configuration
 
 | Feature | circe | Kindlings | Status |
@@ -440,7 +450,7 @@ the strict wrapper failure lists the constructor names in declaration order on S
 |---|---|---|---|
 | Per-field rename | `@JsonKey` (Scala 2 only! No Scala 3 equivalent) | `@fieldName` (both Scala 2+3) | Improvement |
 | Transient field | No built-in annotation | `@transientField` (requires default value) | Improvement |
-| `@JsonCodec` / `@JsonCodec(encodeOnly/decodeOnly = true)` | circe-generic, Scala 2 macro annotation (`-Ymacro-annotations`) | Same (Scala 2, `-Ymacro-annotations`); Scala 3: `derives KindlingsCodecAsObject` / `KindlingsEncoder` / `KindlingsDecoder` | Parity |
+| `@JsonCodec` / `@JsonCodec(encodeOnly/decodeOnly = true)` | circe-generic, Scala 2 macro annotation (`-Ymacro-annotations`); only one, named argument set to `true` is accepted | Same (Scala 2, `-Ymacro-annotations`; positional arguments and `= false` are accepted too, both set to `true` is rejected); Scala 3: `derives KindlingsCodecAsObject` / `KindlingsEncoder` / `KindlingsDecoder` | Parity |
 | `@ConfiguredJsonCodec` | generic-extras, Scala 2 macro annotation | Same (Scala 2, `-Ymacro-annotations`, uses the `Configuration` in scope); Scala 3: `derives` with a given `Configuration` | Parity |
 
 ### Type support
@@ -475,6 +485,7 @@ the strict wrapper failure lists the constructor names in declaration order on S
 | Strict decoding of case objects | Extra keys rejected (in sums, at the top level, as fields) | Same | Parity |
 | `Encoder.AsObject` from semiauto / `derives` | Products and sums | `KindlingsEncoder.derived` returns an `Encoder.AsObject` instance for products and sums; `deriveAsObject` on a non-object type is a compile-time error | Parity |
 | `enumAsStrings` / `ConfiguredEnumCodec` on non-singleton cases | Compile-time error | Compile-time error when the configuration is evaluable at compile time; otherwise a clear runtime failure | Parity (compile time) / Difference (runtime-only configuration) |
+| Non-object input for a case class whose fields all have defaults or are `Option`s (`useDefaults`) | Scala 3 core: rejected (`WrongTypeExpectation("object", ..)`); generic-extras on Scala 2: every field is read through a failed cursor, so any JSON (`null`, `1`, `"x"`, `[]`) decodes to the all-defaults value | Rejected on both versions | Parity (Scala 3 core) / Difference (generic-extras on Scala 2) |
 | Case classes with several parameter lists | Not derived | Compile-time error (also with an empty first list) | Parity |
 
 ### Cross-compilation
