@@ -1,7 +1,7 @@
 package hearth.kindlings.sconfigderivation
 
 import hearth.MacroSuite
-import org.ekrich.config.{ConfigFactory, ConfigValueFactory}
+import org.ekrich.config.ConfigFactory
 
 /** A field type whose reader/writer are `def`s counting how often they are created. */
 final case class CountedField(value: Int)
@@ -93,9 +93,7 @@ final class InstanceScopeSpec extends MacroSuite {
   test("ConfigWriter") {
     val writer = ConfigWriter.derived[WithCountedField]
     val value = WithCountedField(CountedField(1), 2)
-    writer.to(value) ==> ConfigValueFactory.fromMap(
-      java.util.Map.of("counted", Integer.valueOf(1), "other", Integer.valueOf(2))
-    )
+    writer.to(value) ==> ConfigFactory.parseString("{ counted = 1, other = 2 }").root
     createdByRepeatedCalls(() => writer.to(value)) ==> 0
   }
 }
