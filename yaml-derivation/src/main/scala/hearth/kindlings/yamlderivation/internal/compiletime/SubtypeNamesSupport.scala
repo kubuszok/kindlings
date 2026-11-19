@@ -9,7 +9,6 @@ import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 trait SubtypeNamesSupport {
   this: MacroCommons =>
 
-
   /** Subtype names transformed by a configuration only known at runtime, shared by the encoder and the decoder: an
     * array computed once per instance (a lazy val of the instance, `cache`), read by index; computed where used when
     * the definitions are evaluated per call.
