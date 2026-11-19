@@ -42,7 +42,7 @@ object versions {
   val refined = "0.11.4"
   val sttpApispec = "0.11.10"
   val catsEffect = "3.7.1"
-  val fs2 = "3.14.0"
+  val fs2 = "3.16.0"
   // parser benchmark baselines
   val fastparse = "3.1.1"
   val parboiled2 = "2.5.1"
