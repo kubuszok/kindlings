@@ -192,6 +192,48 @@ val str: String = writeToString(json)
 
 The codec is hand-written against jsoniter-scala's streaming `JsonReader`/`JsonWriter` API, so it gets the same parsing performance as any other jsoniter-scala codec.
 
+Numbers are read exactly (no rounding), within `JsonReader`'s default limits: at most 307 digits and a scale below 6178;
+longer numbers are rejected (`value exceeds limit for number of digits` / `for scale`).
+
+### Codec options
+
+`JsonCodec.jsonCodec(...)` creates a codec with the options of jsoniter-scala-circe's `JsoniterScalaCodec.jsonCodec`
+(all optional; with the defaults it behaves like `jsonValueCodec`):
+
+```scala
+import hearth.kindlings.jsoniterjson.codec.JsonCodec
+import com.github.plokhotnyuk.jsoniter_scala.core._
+
+val codec: JsonValueCodec[Json] = JsonCodec.jsonCodec(
+  // arrays and objects nested deeper are rejected, when reading and when writing (default: 128)
+  maxDepth = 64,
+  // object fields whose value is rejected are not written (default: all are written)
+  doSerialize = json => !json.isNull,
+  // how a JSON number is read (default: exactly, see above)
+  numberParser = JsonCodec.numberParser(mc = java.math.MathContext.DECIMAL128, scaleLimit = 100, digitsLimit = 50),
+  // how a JSON number is written (default: its text)
+  numberSerializer = JsonCodec.jsCompatibleNumberSerializer,
+  // write the fields of every object sorted by key (default: in their order)
+  sortKeys = true
+)
+```
+
+| Option | What it does |
+|---|---|
+| `maxDepth` | The depth limit (`JsonCodec.withMaxDepth(n)` is `jsonCodec(maxDepth = n)`) |
+| `doSerialize` | A `Json => Boolean` on the value of each object field; `false` drops the field when writing |
+| `numberParser` | A `JsonReader => Json` called at the first character of a number. `JsonCodec.numberParser(mc, scaleLimit, digitsLimit)` rounds with a `MathContext` and sets the (exclusive) limits; any function works, e.g. `in => Json.fromDouble(in.readDouble()).getOrElse(Json.Null)` to read numbers as `Double`s |
+| `numberSerializer` | A `(JsonWriter, JsonNumber) => Unit`. `JsonCodec.jsCompatibleNumberSerializer` writes as JSON **strings** the numbers JavaScript's `Number` cannot hold exactly: integers outside `[-2^52, 2^52)`, decimals with more than 52 bits in the unscaled value or a scale outside `[-256, 256]` |
+| `sortKeys` | Sorts the fields of every object by key (`String.compareTo`) when writing; duplicate keys keep their order |
+
+A `JsonNumber` keeps only its text, so `jsCompatibleNumberSerializer` cannot know whether a number was built from a
+`Double`: a number whose text is how a `Double` is written (e.g. `0.30000000000000004`, `1.0E300`, `-0.0`) is always
+written as a JSON number - JavaScript reads the very same `Double` back. (jsoniter-scala-circe does that for numbers
+built from a `Double` or a `Float`, and writes the same text as a string when it was parsed.)
+
+jsoniter-scala-circe's `initialSize` (a size hint for circe's map of fields) has no counterpart: a `JsonObject` is a
+vector of fields.
+
 ## Usage examples
 
 ??? example "Building JSON programmatically"

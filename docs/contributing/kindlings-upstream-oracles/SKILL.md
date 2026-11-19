@@ -40,6 +40,8 @@ Each project is tested in isolation: no downstream project (Chimney, application
   upstream's own test suites (`Cu*` fixtures, `CuCodecs` per side): when auditing parity, port upstream's test fixtures
   into the oracle rather than re-reading its docs.
 - `jsoniterjson/JsoniterJsonOracleSpec`: `kindlings-jsoniter-json` vs circe's `Json` with jsoniter-scala-circe.
+  `JsoniterJsonCodecOracleSpec`: the cases of jsoniter-scala-circe's own spec (default codec and every `jsonCodec`
+  option), with failure messages.
 - When upstream itself behaves differently on Scala 2 and 3 (pureconfig's enumeration failures, quicklens' negative
   `.index`), match each version (version-specific runtime helpers in the module) or keep the version-specific
   expectation in a small `scala-2`/`scala-3` object of the suite (e.g. `optics/QuicklensVersion`).
