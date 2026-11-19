@@ -11,6 +11,7 @@ trait EncoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
     with XmlFieldLayouts
+    with hearth.kindlings.derivation.compiletime.LoadStandardExtensionsOnce
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -116,7 +117,7 @@ trait EncoderMacrosImpl
           evaluatedConfig = evConfig
         )
         for {
-          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          _ <- ensureStandardExtensionsLoaded()
           _ <- deriveEncoderRecursively[A](using placeholderCtx)
           helperOpt <- placeholderCtx.getHelper[A]
           cache <- placeholderCtx.cache.get
