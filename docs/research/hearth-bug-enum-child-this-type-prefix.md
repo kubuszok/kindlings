@@ -1,6 +1,6 @@
 # Hearth bug: a case object in a companion of a class-nested sealed trait is typed `Shape.this.Empty$` (Scala 3)
 
-**Status:** OPEN (Hearth 0.4.5, Scala 3.8.x; Scala 2 not affected as far as tested). Found 2026-11-18 while writing the
+**Status:** FIXED in Hearth 985e5e6 (next Hearth release after 0.4.5; Kindlings uses snapshot `0.4.5-16-g985e5e6-SNAPSHOT`). Was OPEN (Hearth 0.4.5, Scala 3.8.x; Scala 2 not affected as far as tested). Found 2026-11-18 while writing the
 Kindlings testing guide (circe-derivation and diff-derivation reproduced it; any derivation that uses the type of such
 a case object in generated code is affected).
 

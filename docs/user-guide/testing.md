@@ -115,9 +115,9 @@ object Order {
 }
 ```
 
-!!! warning "Declare test-only models at the top level, not inside the suite class"
+!!! note "Kindlings 0.4.0 only: declare test-only models at the top level, not inside the suite class"
 
-    On Scala 3, with Kindlings {{ kindlings_version() }}, deriving an instance for a sealed trait whose case object
+    On Scala 3, with Kindlings 0.4.0 (fixed in later versions), deriving an instance for a sealed trait whose case object
     is nested in the companion (`object Status { case object Active extends Status }`), when the whole hierarchy is
     declared *inside a class* such as a test suite, crashes the compiler with
     `assertion failed: missing outer accessor in class MySuite`. Put such types at the top level of the file or in a
