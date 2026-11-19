@@ -136,8 +136,23 @@ object XmlDerivationUtils {
     else Right(text)
   }
 
-  /** The text of a `String` value: an empty element (or attribute value) is the empty string, not missing content. */
-  def getStringContent(elem: scala.xml.Elem): Either[XmlDecodingError, String] = Right(elem.text.trim)
+  /** The text of a `String` value, exactly (whitespace included, so that every `String` round-trips): an empty element
+    * (or attribute value) is the empty string, not missing content.
+    */
+  def getStringContent(elem: scala.xml.Elem): Either[XmlDecodingError, String] = Right(elem.text)
+
+  /** The text of a `Char` value: a single character exactly (so that `' '` round-trips), otherwise the trimmed text. */
+  def getCharContent(elem: scala.xml.Elem): Either[XmlDecodingError, Char] = {
+    val text = elem.text
+    if (text.length == 1) Right(text.charAt(0))
+    else getTextContent(elem).flatMap(parseChar(_, elem.label))
+  }
+
+  /** Whether the element has no attributes, no child elements and no text at all: the encoding of `None` for an
+    * `Option` of a `String`/`Char` value, whose blank text is a value (`Some(" ")`), unlike in [[isEmptyElement]].
+    */
+  def isEmptyStringElement(elem: scala.xml.Elem): Boolean =
+    elem.attributes.isEmpty && !elem.child.exists(_.isInstanceOf[scala.xml.Elem]) && elem.text.isEmpty
 
   /** Whether the element has no attributes, no child elements and only blank text: the encoding of `None` (and of
     * `Some("")`, which only `withTransientNone`, writing no element for `None`, tells apart).
@@ -376,10 +391,11 @@ object XmlDerivationUtils {
       }
     }
 
-  def elemToString(elem: scala.xml.Elem): String = {
-    val printer = new scala.xml.PrettyPrinter(120, 2)
-    printer.format(elem)
-  }
+  /** Indents nested elements, but writes every element without child elements (text-only, empty) or with mixed content
+    * exactly as `elem.toString` does: `scala.xml.PrettyPrinter` collapses whitespace in such text (and in attribute
+    * values) and moves text that does not fit the line onto lines of its own, which would change `String` values.
+    */
+  def elemToString(elem: scala.xml.Elem): String = new ExactTextPrettyPrinter(120, 2).format(elem)
 
   def parseXml(xml: String): Either[XmlDecodingError, scala.xml.Elem] =
     try Right(scala.xml.XML.loadString(xml))
@@ -392,6 +408,24 @@ object XmlDerivationUtils {
     parseXml(xml).flatMap(decode)
 
   def isAttributeMode(fieldMode: XmlFieldMode): Boolean = fieldMode == XmlFieldMode.Attribute
+
+  /** A `PrettyPrinter` that only indents elements whose children are all elements (or formatting whitespace). */
+  final private class ExactTextPrettyPrinter(width: Int, step: Int) extends scala.xml.PrettyPrinter(width, step) {
+    override protected def traverse(node: scala.xml.Node, pscope: scala.xml.NamespaceBinding, ind: Int): Unit =
+      node match {
+        case elem: scala.xml.Elem if !onlyElementChildren(elem) =>
+          val serialized = scala.xml.Utility
+            .serialize(elem, pscope, new StringBuilder, stripComments = false, minimizeTags = minimizeMode)
+          makeBox(ind, serialized.toString)
+        case _ => super.traverse(node, pscope, ind)
+      }
+
+    private def onlyElementChildren(elem: scala.xml.Elem): Boolean =
+      elem.child.exists(_.isInstanceOf[scala.xml.Elem]) && elem.child.forall {
+        case _: scala.xml.Elem => true
+        case other             => other.isInstanceOf[scala.xml.Text] && other.text.trim.isEmpty
+      }
+  }
 
   // --- Codec combiner ---
 

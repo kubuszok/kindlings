@@ -7,8 +7,8 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.xmlderivation.{XmlConfig, XmlDecodingError}
-import hearth.kindlings.xmlderivation.annotations.{transientField, xmlAttribute, xmlContent, xmlName}
+import hearth.kindlings.xmlderivation.{XmlConfig, XmlDecodingError, XmlFieldMode}
+import hearth.kindlings.xmlderivation.annotations.{transientField, xmlAttribute, xmlContent, xmlElement, xmlName}
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 
 trait DecoderHandleAsCaseClassRuleImpl {
@@ -44,6 +44,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val xmlNameT: Type[xmlName] = DTypes.XmlNameAnnotation
       implicit val xmlAttributeT: Type[xmlAttribute] = DTypes.XmlAttributeAnnotation
       implicit val xmlContentT: Type[xmlContent] = DTypes.XmlContentAnnotation
+      implicit val xmlElementT: Type[xmlElement] = DTypes.XmlElementAnnotation
 
       val constructor = caseClass.primaryConstructor
 
@@ -56,6 +57,7 @@ trait DecoderHandleAsCaseClassRuleImpl {
               val customName = getAnnotationStringArg[xmlName](param)
               val isAttrAnnotated = hasAnnotationType[xmlAttribute](param)
               val isContentAnnotated = hasAnnotationType[xmlContent](param)
+              val isElemAnnotated = hasAnnotationType[xmlElement](param)
               val isOptionField = Type[FieldType] match {
                 case IsOption(_) => true
                 case _           => false
@@ -103,46 +105,72 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 deriveDecoderRecursively[FieldType](using dctx.nest[FieldType](dctx.elem)).map { decodedExpr =>
                   FieldDecoding.FromContent(decodedExpr.asInstanceOf[Expr[Either[XmlDecodingError, Any]]])
                 }
-              } else if (isAttrAnnotated) {
-                // Decode from attribute; an absent `Option` attribute is `None` (as written by `withTransientNone`)
-                if (isOptionField) MIO.pure(FieldDecoding.FromOptionalAttribute(xmlFieldNameExpr, param.tpe))
-                else MIO.pure(FieldDecoding.FromAttribute(xmlFieldNameExpr, param.tpe))
               } else {
-                // Decode from child element (default)
-                // Check useDefaults: if enabled and field has a default, wrap with optional lookup
                 val hasDefault = param.hasDefault
                 val useDefaultsStaticallyTrue = dctx.evaluatedConfig.exists(_.useDefaults)
                 val useDefaultsStaticallyFalse = dctx.evaluatedConfig.exists(!_.useDefaults)
 
-                if (isOptionField) {
-                  // An absent `Option` element is `None` (as written by `withTransientNone`, and as circe & co. treat
-                  // absent optional fields) - or the field's default when `useDefaults` is enabled.
+                // An absent `Option` element/attribute is `None` (as written by `withTransientNone`, and as circe & co.
+                // treat absent optional fields) - or the field's default when `useDefaults` is enabled.
+                def optionWhenAbsent: Expr[Any] = {
                   val noneExpr: Expr[Any] = Expr.quote(None: Any)
-                  val whenAbsent: Expr[Any] =
-                    if (hasDefault && useDefaultsStaticallyTrue) resolveDefaultValue(fName, param)
-                    else if (hasDefault && !useDefaultsStaticallyFalse) {
-                      val defaultExpr = resolveDefaultValue(fName, param)
-                      Expr.quote {
-                        if (Expr.splice(dctx.config).useDefaults) Expr.splice(defaultExpr) else Expr.splice(noneExpr)
-                      }
-                    } else noneExpr
-                  MIO.pure(FieldDecoding.FromChildElementWithDefault(xmlFieldNameExpr, param.tpe, whenAbsent))
-                } else if (hasDefault && useDefaultsStaticallyTrue) {
-                  // useDefaults is statically true — use default when missing
-                  val defaultExpr: Expr[Any] = resolveDefaultValue(fName, param)
-                  MIO.pure(FieldDecoding.FromChildElementWithDefault(xmlFieldNameExpr, param.tpe, defaultExpr))
-                } else if (hasDefault && !useDefaultsStaticallyFalse) {
-                  // useDefaults is not statically known — emit runtime check
-                  val defaultExpr: Expr[Any] = resolveDefaultValue(fName, param)
-                  MIO.pure(FieldDecoding.FromChildElementWithRuntimeDefault(xmlFieldNameExpr, param.tpe, defaultExpr))
-                } else if (isCollectionField) {
-                  // No default or useDefaults is statically false. An absent collection/map element is decoded as
-                  // an empty element, i.e. an empty collection (as written by `withTransientEmpty`).
-                  MIO.pure(FieldDecoding.FromChildElementOrEmpty(xmlFieldNameExpr, param.tpe))
-                } else {
-                  // No default or useDefaults is statically false
-                  MIO.pure(FieldDecoding.FromChildElement(xmlFieldNameExpr, param.tpe))
+                  if (hasDefault && useDefaultsStaticallyTrue) resolveDefaultValue(fName, param)
+                  else if (hasDefault && !useDefaultsStaticallyFalse) {
+                    val defaultExpr = resolveDefaultValue(fName, param)
+                    Expr.quote {
+                      if (Expr.splice(dctx.config).useDefaults) Expr.splice(defaultExpr) else Expr.splice(noneExpr)
+                    }
+                  } else noneExpr
                 }
+
+                // Decode from an attribute; with `useDefaults` an absent attribute is the field's default
+                def asAttribute: FieldDecoding =
+                  if (isOptionField) FieldDecoding.FromOptionalAttribute(xmlFieldNameExpr, param.tpe, optionWhenAbsent)
+                  else if (hasDefault && useDefaultsStaticallyTrue)
+                    FieldDecoding.FromAttributeWithDefault(
+                      xmlFieldNameExpr,
+                      param.tpe,
+                      resolveDefaultValue(fName, param)
+                    )
+                  else if (hasDefault && !useDefaultsStaticallyFalse)
+                    FieldDecoding
+                      .FromAttributeWithRuntimeDefault(xmlFieldNameExpr, param.tpe, resolveDefaultValue(fName, param))
+                  else FieldDecoding.FromAttribute(xmlFieldNameExpr, param.tpe)
+
+                // Decode from a child element
+                def asElement: FieldDecoding =
+                  if (isOptionField)
+                    FieldDecoding.FromChildElementWithDefault(xmlFieldNameExpr, param.tpe, optionWhenAbsent)
+                  else if (hasDefault && useDefaultsStaticallyTrue) {
+                    // useDefaults is statically true — use default when missing
+                    FieldDecoding
+                      .FromChildElementWithDefault(xmlFieldNameExpr, param.tpe, resolveDefaultValue(fName, param))
+                  } else if (hasDefault && !useDefaultsStaticallyFalse) {
+                    // useDefaults is not statically known — emit runtime check
+                    FieldDecoding
+                      .FromChildElementWithRuntimeDefault(
+                        xmlFieldNameExpr,
+                        param.tpe,
+                        resolveDefaultValue(fName, param)
+                      )
+                  } else if (isCollectionField) {
+                    // No default or useDefaults is statically false. An absent collection/map element is decoded as
+                    // an empty element, i.e. an empty collection (as written by `withTransientEmpty`).
+                    FieldDecoding.FromChildElementOrEmpty(xmlFieldNameExpr, param.tpe)
+                  } else FieldDecoding.FromChildElement(xmlFieldNameExpr, param.tpe)
+
+                if (isAttrAnnotated) MIO.pure(asAttribute)
+                else if (isElemAnnotated || !isXmlAttributeValue(Type[FieldType])) {
+                  // `@xmlElement`, or not a single text value (a collection, map, case class, sealed trait...): the
+                  // encoder writes it as a child element in both modes
+                  MIO.pure(asElement)
+                } else
+                  // `defaultFieldMode` decides, as in the encoder: in the macro when the config is known
+                  dctx.evaluatedConfig.map(_.defaultFieldMode == XmlFieldMode.Attribute) match {
+                    case Some(true)  => MIO.pure(asAttribute)
+                    case Some(false) => MIO.pure(asElement)
+                    case None        => MIO.pure(FieldDecoding.DynamicMode(asAttribute, asElement))
+                  }
               }
             }
             .flatMap { decodings =>
@@ -176,7 +204,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
       */
     @scala.annotation.nowarn("msg=is never used")
     private def optionalAttributeDecodeExpr[A: DecoderCtx, Inner: Type](
-        attrNameExpr: Expr[String]
+        attrNameExpr: Expr[String],
+        whenAbsent: Expr[Any]
     ): MIO[Expr[Either[XmlDecodingError, Any]]] = {
       implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
       implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
@@ -207,9 +236,188 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     .splice(decodeValue(Expr.quote(attrValue)))
                     .map(value => scala.Some(value)): Either[XmlDecodingError, Any]
               case scala.None =>
-                Right(None): Either[XmlDecodingError, Any]
+                Right(Expr.splice(whenAbsent)): Either[XmlDecodingError, Any]
             }
         }
+      }
+    }
+
+    /** The decoding of one field, as `Either[XmlDecodingError, Any]`. */
+    @scala.annotation.nowarn("msg=is never used")
+    private def fieldDecodeExpr[A: DecoderCtx, FieldT: Type](
+        decoding: FieldDecoding
+    ): MIO[Expr[Either[XmlDecodingError, Any]]] = {
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
+      implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
+
+      // the cached decode helper of the field's type: (element, config) => result
+      def withHelper(
+          body: ((Expr[scala.xml.Elem], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, FieldT]]) => Expr[
+            Either[XmlDecodingError, Any]
+          ]
+      ): MIO[Expr[Either[XmlDecodingError, Any]]] = for {
+        _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
+        helperOpt <- dctx.getHelper[FieldT]
+      } yield body(helperOpt.get)
+
+      val configExpr = dctx.config
+      decoding match {
+        case FieldDecoding.Default(defaultExpr) =>
+          MIO.pure(Expr.quote(Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]))
+
+        case FieldDecoding.FromContent(decodedExpr) =>
+          MIO.pure(decodedExpr)
+
+        case FieldDecoding.FromAttribute(attrNameExpr, _) =>
+          withHelper { helper =>
+            Expr.quote {
+              XmlDerivationUtils
+                .getAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
+                .flatMap { attrValue =>
+                  Expr.splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
+                }
+                .asInstanceOf[Either[XmlDecodingError, Any]]
+            }
+          }
+
+        case FieldDecoding.FromAttributeWithDefault(attrNameExpr, _, defaultExpr) =>
+          // useDefaults is statically true — an absent attribute is the default
+          withHelper { helper =>
+            Expr.quote {
+              XmlDerivationUtils
+                .getOptionalAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
+                .flatMap {
+                  case scala.Some(attrValue) =>
+                    Expr
+                      .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
+                      .asInstanceOf[Either[XmlDecodingError, Any]]
+                  case scala.None =>
+                    Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
+                }
+            }
+          }
+
+        case FieldDecoding.FromAttributeWithRuntimeDefault(attrNameExpr, _, defaultExpr) =>
+          // useDefaults not statically known — an absent attribute is the default only when it is enabled
+          withHelper { helper =>
+            Expr.quote {
+              val attrName = Expr.splice(attrNameExpr)
+              XmlDerivationUtils
+                .getOptionalAttribute(Expr.splice(dctx.elem), attrName)
+                .flatMap {
+                  case scala.Some(attrValue) =>
+                    Expr
+                      .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
+                      .asInstanceOf[Either[XmlDecodingError, Any]]
+                  case scala.None =>
+                    if (Expr.splice(configExpr).useDefaults)
+                      Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
+                    else
+                      Left(
+                        XmlDecodingError.MissingAttribute(attrName, Expr.splice(dctx.elem).label)
+                      ): Either[XmlDecodingError, Any]
+                }
+            }
+          }
+
+        case FieldDecoding.FromOptionalAttribute(attrNameExpr, _, whenAbsent) =>
+          Type[FieldT] match {
+            case IsOption(isOption) =>
+              import isOption.Underlying as Inner
+              optionalAttributeDecodeExpr[A, Inner](attrNameExpr, whenAbsent)
+            case _ =>
+              MIO.fail(new RuntimeException(s"Expected an Option attribute, got ${Type[FieldT].prettyPrint}"))
+          }
+
+        case FieldDecoding.FromChildElementOrEmpty(childNameExpr, _) =>
+          withHelper { helper =>
+            Expr.quote {
+              val childName = Expr.splice(childNameExpr)
+              XmlDerivationUtils
+                .getOptionalChildElem(Expr.splice(dctx.elem), childName)
+                .flatMap { childElemOpt =>
+                  val childElem = childElemOpt match {
+                    case scala.Some(found) => found
+                    case scala.None        => XmlDerivationUtils.makeElem(childName, Nil, Nil)
+                  }
+                  Expr
+                    .splice(helper(Expr.quote(childElem), configExpr))
+                    .asInstanceOf[Either[XmlDecodingError, Any]]
+                }
+            }
+          }
+
+        case FieldDecoding.FromChildElement(childNameExpr, _) =>
+          withHelper { helper =>
+            Expr.quote {
+              XmlDerivationUtils
+                .getChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
+                .flatMap { childElem =>
+                  Expr
+                    .splice(helper(Expr.quote(childElem), configExpr))
+                    .asInstanceOf[Either[XmlDecodingError, Any]]
+                }
+            }
+          }
+
+        case FieldDecoding.FromChildElementWithDefault(childNameExpr, _, defaultExpr) =>
+          // useDefaults is statically true — use optional child lookup with fallback
+          withHelper { helper =>
+            Expr.quote {
+              XmlDerivationUtils
+                .getOptionalChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
+                .flatMap {
+                  case scala.Some(childElem) =>
+                    Expr
+                      .splice(helper(Expr.quote(childElem), configExpr))
+                      .asInstanceOf[Either[XmlDecodingError, Any]]
+                  case scala.None =>
+                    Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
+                }
+            }
+          }
+
+        case FieldDecoding.FromChildElementWithRuntimeDefault(childNameExpr, _, defaultExpr) =>
+          // useDefaults not statically known — emit runtime check against config
+          withHelper { helper =>
+            Expr.quote {
+              if (Expr.splice(configExpr).useDefaults) {
+                XmlDerivationUtils
+                  .getOptionalChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
+                  .flatMap {
+                    case scala.Some(childElem) =>
+                      Expr
+                        .splice(helper(Expr.quote(childElem), configExpr))
+                        .asInstanceOf[Either[XmlDecodingError, Any]]
+                    case scala.None =>
+                      Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
+                  }
+              } else {
+                XmlDerivationUtils
+                  .getChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
+                  .flatMap { childElem =>
+                    Expr
+                      .splice(helper(Expr.quote(childElem), configExpr))
+                      .asInstanceOf[Either[XmlDecodingError, Any]]
+                  }
+              }
+            }
+          }
+
+        case FieldDecoding.DynamicMode(asAttribute, asElement) =>
+          // defaultFieldMode not statically known — read it from the config
+          for {
+            fromAttribute <- fieldDecodeExpr[A, FieldT](asAttribute)
+            fromElement <- fieldDecodeExpr[A, FieldT](asElement)
+          } yield Expr.quote {
+            if (XmlDerivationUtils.isAttributeMode(Expr.splice(configExpr).defaultFieldMode))
+              Expr.splice(fromAttribute)
+            else Expr.splice(fromElement)
+          }
       }
     }
 
@@ -248,229 +456,51 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
       implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
 
-      // Build accessor types needed later
-      implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
-      implicit val IntT: Type[Int] = DTypes.Int
-
       fields
         .zip(decodings)
-        .zipWithIndex
-        .foldLeft(MIO.pure(List.empty[(Expr[Either[XmlDecodingError, Any]], Expr[Array[Any]] => (String, Expr_??))])) {
-          case (accMIO, (((fName, param), decoding), idx)) =>
+        .foldLeft(MIO.pure(List.empty[(Expr[Either[XmlDecodingError, Any]], Expr[Any] => (String, Expr_??))])) {
+          case (accMIO, ((fName, param), decoding)) =>
             import param.tpe.Underlying as FieldT
-            accMIO.flatMap { acc =>
-              decoding match {
-                case FieldDecoding.Default(defaultExpr) =>
-                  val decodeExpr: Expr[Either[XmlDecodingError, Any]] =
-                    Expr.quote(Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any])
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                  }
-                  MIO.pure(acc :+ ((decodeExpr, makeAccessor)))
-
-                case FieldDecoding.FromContent(decodedExpr) =>
-                  val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                    (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                  }
-                  MIO.pure(acc :+ ((decodedExpr, makeAccessor)))
-
-                case FieldDecoding.FromAttribute(attrNameExpr, _) =>
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      XmlDerivationUtils
-                        .getAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
-                        .flatMap { attrValue =>
-                          Expr
-                            .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
-                        }
-                        .asInstanceOf[Either[XmlDecodingError, Any]]
-                    }
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-
-                case FieldDecoding.FromOptionalAttribute(attrNameExpr, _) =>
-                  val decodeExprMIO: MIO[Expr[Either[XmlDecodingError, Any]]] = Type[FieldT] match {
-                    case IsOption(isOption) =>
-                      import isOption.Underlying as Inner
-                      optionalAttributeDecodeExpr[A, Inner](attrNameExpr)
-                    case _ =>
-                      MIO.fail(new RuntimeException(s"Expected an Option attribute, got ${Type[FieldT].prettyPrint}"))
-                  }
-                  decodeExprMIO.map { decodeExpr =>
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-
-                case FieldDecoding.FromChildElementOrEmpty(childNameExpr, _) =>
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      val childName = Expr.splice(childNameExpr)
-                      XmlDerivationUtils
-                        .getOptionalChildElem(Expr.splice(dctx.elem), childName)
-                        .flatMap { childElemOpt =>
-                          val childElem = childElemOpt match {
-                            case scala.Some(found) => found
-                            case scala.None        => XmlDerivationUtils.makeElem(childName, Nil, Nil)
-                          }
-                          Expr
-                            .splice(helper(Expr.quote(childElem), configExpr))
-                            .asInstanceOf[Either[XmlDecodingError, Any]]
-                        }
-                    }
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-
-                case FieldDecoding.FromChildElement(childNameExpr, _) =>
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      XmlDerivationUtils
-                        .getChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
-                        .flatMap { childElem =>
-                          Expr
-                            .splice(helper(Expr.quote(childElem), configExpr))
-                            .asInstanceOf[Either[XmlDecodingError, Any]]
-                        }
-                    }
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-
-                case FieldDecoding.FromChildElementWithDefault(childNameExpr, _, defaultExpr) =>
-                  // useDefaults is statically true — use optional child lookup with fallback
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      XmlDerivationUtils
-                        .getOptionalChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
-                        .flatMap {
-                          case scala.Some(childElem) =>
-                            Expr
-                              .splice(helper(Expr.quote(childElem), configExpr))
-                              .asInstanceOf[Either[XmlDecodingError, Any]]
-                          case scala.None =>
-                            Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
-                        }
-                    }
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-
-                case FieldDecoding.FromChildElementWithRuntimeDefault(childNameExpr, _, defaultExpr) =>
-                  // useDefaults not statically known — emit runtime check against config
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      if (Expr.splice(configExpr).useDefaults) {
-                        XmlDerivationUtils
-                          .getOptionalChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
-                          .flatMap {
-                            case scala.Some(childElem) =>
-                              Expr
-                                .splice(helper(Expr.quote(childElem), configExpr))
-                                .asInstanceOf[Either[XmlDecodingError, Any]]
-                            case scala.None =>
-                              Right(Expr.splice(defaultExpr)): Either[XmlDecodingError, Any]
-                          }
-                      } else {
-                        XmlDerivationUtils
-                          .getChildElem(Expr.splice(dctx.elem), Expr.splice(childNameExpr))
-                          .flatMap { childElem =>
-                            Expr
-                              .splice(helper(Expr.quote(childElem), configExpr))
-                              .asInstanceOf[Either[XmlDecodingError, Any]]
-                          }
-                      }
-                    }
-                    val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
-                      (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
-                    }
-                    acc :+ ((decodeExpr, makeAccessor))
-                  }
-              }
+            for {
+              acc <- accMIO
+              decodeExpr <- fieldDecodeExpr[A, FieldT](decoding)
+            } yield {
+              val cast: Expr[Any] => (String, Expr_??) = value => (fName, castTo[FieldT](value).as_??)
+              acc :+ ((decodeExpr, cast))
             }
         }
-        .flatMap { fieldData =>
+        .map { fieldData =>
           val fieldDecodeExprs = fieldData.map(_._1)
-          val makeAccessors = fieldData.map(_._2)
+          val fieldCasts = fieldData.map(_._2)
 
-          // Build the result list at compile time using foldRight
-          val listExpr: Expr[List[Either[XmlDecodingError, Any]]] =
-            fieldDecodeExprs.foldRight(Expr.quote(List.empty[Either[XmlDecodingError, Any]])) { (elem, acc) =>
-              Expr.quote(Expr.splice(elem) :: Expr.splice(acc))
+          val constructFF: List[Expr[Any]] => Expr[A] = { values =>
+            val fieldMap: Map[String, Expr_??] = fieldCasts.zip(values).map { case (cast, value) => cast(value) }.toMap
+            foldInstanceFree(constructor, "Constructor")(
+              onTypes = _ => Map.empty,
+              onValues = _ => fieldMap
+            ) match {
+              case Right(constructExpr) => constructExpr.value.asInstanceOf[Expr[A]]
+              case Left(error)          =>
+                Environment.reportErrorAndAbort(
+                  DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, Some(error)).message
+                )
             }
-
-          // Build the constructor lambda using LambdaBuilder + primaryConstructor
-          LambdaBuilder
-            .of1[Array[Any]]("decodedValues")
-            .traverse { decodedValuesExpr =>
-              val fieldMap: Map[String, Expr_??] =
-                makeAccessors.map(_(decodedValuesExpr)).toMap
-              foldInstanceFree(constructor, "Constructor")(
-                onTypes = _ => Map.empty,
-                onValues = _ => fieldMap
-              ) match {
-                case Right(constructExpr) => MIO.pure(constructExpr.value.asInstanceOf[Expr[A]])
-                case Left(error)          =>
-                  val err = DecoderDerivationError.CannotConstructType(Type[A].prettyPrint, Some(error))
-                  Log.error(err.message) >> MIO.fail(err)
-              }
-            }
-            .map { builder =>
-              val constructLambda = builder.build[A]
-              Expr.quote {
-                val fieldResults: List[Either[XmlDecodingError, Any]] = Expr.splice(listExpr)
-                XmlDerivationUtils.sequenceDecodeResults(fieldResults).map { arr =>
-                  Expr.splice(constructLambda).apply(arr)
-                }
-              }
-            }
+          }
+          // The first failing field (in field order) is the result and the later ones are not decoded: each field is
+          // decoded by its own local def, and the value is constructed when the last result is a `Right` (see
+          // FlatFieldsConstruct).
+          constructFailFast[Either[XmlDecodingError, Any], A, Either[XmlDecodingError, A]](fieldDecodeExprs)(
+            isSuccess = r => Expr.quote(Expr.splice(r).isRight),
+            valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[XmlDecodingError, Any]].value),
+            construct = constructFF,
+            onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[XmlDecodingError, A]),
+            onFailure = r => Expr.quote(Expr.splice(r).asInstanceOf[Either[XmlDecodingError, A]])
+          )
         }
     }
 
-    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def mkFieldAccess[F: Type](arrExpr: Expr[Array[Any]], idx: Int): Expr[F] = {
-      implicit val AnyT: Type[Any] = DTypes.Any
-      implicit val ArrayAnyT: Type[Array[Any]] = DTypes.ArrayAny
-      implicit val IntT: Type[Int] = DTypes.Int
-      Expr.quote {
-        Expr.splice(arrExpr)(Expr.splice(Expr(idx))).asInstanceOf[F]
-      }
-    }
+    /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
+    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
   }
 
 }

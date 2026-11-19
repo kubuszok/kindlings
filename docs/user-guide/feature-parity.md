@@ -1312,12 +1312,12 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 
 | Config option | Default | Description |
 |---|---|---|
-| `defaultFieldMode` | `XmlFieldMode.Element` | Default mapping for fields: `Element` (child elements) or `Attribute` (XML attributes) |
+| `defaultFieldMode` | `XmlFieldMode.Element` | Default mapping for fields: `Element` (child elements) or `Attribute` (XML attributes, for single text values: primitives, `String`, `BigDecimal`, `BigInt`, value types over them and `Option`s of these; collections, maps, case classes and sealed traits stay child elements). Encoder and decoder follow the same rule |
 | `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
 | `constructorNameMapper` | `identity` | Transform sealed trait subtype names for discriminator values |
 | `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None` to disable) |
 | `enumAsStrings` | `false` | Encode case object enums as text content strings |
-| `useDefaults` | `false` | Use constructor default values for missing fields during decoding |
+| `useDefaults` | `false` | Use constructor default values for missing fields (child elements or attributes) during decoding |
 | `transientNone` | `false` | Omit `None` fields during encoding |
 | `transientEmpty` | `false` | Omit empty collections during encoding (empty strings are still written) |
 
@@ -1337,9 +1337,9 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 
 | Type | Support |
 |---|---|
-| Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (text representation) |
-| `String` | Yes (an empty element or attribute value is `""`) |
-| `BigDecimal`, `BigInt` | Yes (text representation) |
+| Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (text representation, surrounding whitespace ignored; a `Char` is kept exactly) |
+| `String` | Yes (whitespace kept exactly; an empty element or attribute value is `""`) |
+| `BigDecimal`, `BigInt` | Yes (text representation, surrounding whitespace ignored) |
 | `Option[A]` | Yes (omitted or present) |
 | Collections (`List`, `Vector`, etc.) | Yes (via Hearth `IsCollection`) |
 | `Map[K, V]` | Yes (via Hearth `IsMap`) |

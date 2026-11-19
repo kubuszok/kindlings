@@ -10,6 +10,7 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 trait EncoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
+    with XmlTextValues
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
     with rules.EncoderHandleAsBuiltInRuleImpl
@@ -345,8 +346,7 @@ trait EncoderMacrosImpl
 
     /** Dynamic mode: both attribute and element encodings; chosen at runtime by config.defaultFieldMode. */
     case class DynamicMode(
-        nameExpr: Expr[String],
-        value: Expr[Any],
+        attrEncoding: AttrExpr,
         elemEncoding: Expr[scala.xml.Elem],
         skipConditions: List[Expr[Boolean]] = Nil
     ) extends FieldEncoding
@@ -372,6 +372,11 @@ trait EncoderMacrosImpl
     def BigDecimal: Type[BigDecimal] = Type.of[BigDecimal]
     def BigInt: Type[BigInt] = Type.of[BigInt]
     def Any: Type[Any] = Type.of[Any]
+    def Unit: Type[Unit] = Type.of[Unit]
+    def AttrBuffer: Type[scala.collection.mutable.ListBuffer[(String, String)]] =
+      Type.of[scala.collection.mutable.ListBuffer[(String, String)]]
+    def NodeBuffer: Type[scala.collection.mutable.ListBuffer[scala.xml.Node]] =
+      Type.of[scala.collection.mutable.ListBuffer[scala.xml.Node]]
     def Product: Type[Product] = Type.of[Product]
     def TransientField: Type[hearth.kindlings.xmlderivation.annotations.transientField] =
       Type.of[hearth.kindlings.xmlderivation.annotations.transientField]

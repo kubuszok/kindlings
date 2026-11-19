@@ -10,7 +10,9 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 trait DecoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
+    with XmlTextValues
     with hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
     with rules.DecoderUseImplicitWhenAvailableRuleImpl
     with rules.DecoderHandleAsBuiltInRuleImpl
@@ -418,7 +420,14 @@ trait DecoderMacrosImpl
   object FieldDecoding {
     case class Default(value: Expr[Any]) extends FieldDecoding
     case class FromAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
-    case class FromOptionalAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
+    case class FromOptionalAttribute(nameExpr: Expr[String], fieldType: ??, whenAbsent: Expr[Any]) extends FieldDecoding
+    case class FromAttributeWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+        extends FieldDecoding
+    case class FromAttributeWithRuntimeDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+        extends FieldDecoding
+
+    /** `defaultFieldMode` only known at runtime: read from an attribute in `Attribute` mode, else from an element. */
+    case class DynamicMode(asAttribute: FieldDecoding, asElement: FieldDecoding) extends FieldDecoding
     case class FromChildElement(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
     case class FromChildElementOrEmpty(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
     case class FromChildElementWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
@@ -462,6 +471,8 @@ trait DecoderMacrosImpl
       Type.of[hearth.kindlings.xmlderivation.annotations.xmlAttribute]
     def XmlContentAnnotation: Type[hearth.kindlings.xmlderivation.annotations.xmlContent] =
       Type.of[hearth.kindlings.xmlderivation.annotations.xmlContent]
+    def XmlElementAnnotation: Type[hearth.kindlings.xmlderivation.annotations.xmlElement] =
+      Type.of[hearth.kindlings.xmlderivation.annotations.xmlElement]
     def XmlDecoder[A: Type]: Type[hearth.kindlings.xmlderivation.XmlDecoder[A]] =
       Type.of[hearth.kindlings.xmlderivation.XmlDecoder[A]]
     def KindlingsXmlDecoder[A: Type]: Type[hearth.kindlings.xmlderivation.KindlingsXmlDecoder[A]] =
