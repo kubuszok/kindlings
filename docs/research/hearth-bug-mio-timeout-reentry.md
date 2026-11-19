@@ -1,6 +1,6 @@
 # Hearth bug: "MIO timeout is already set" when the Scala 2 compiler nests two independent expansions
 
-**Status:** OPEN (Hearth 0.4.5, Scala 2.13 only). Found 2026-11-18 while writing the Kindlings usage skills (reproduced
+**Status:** FIXED in Hearth 985e5e6 (next Hearth release after 0.4.5; Kindlings uses snapshot `0.4.5-16-g985e5e6-SNAPSHOT`). Was OPEN (Hearth 0.4.5, Scala 2.13 only). Found 2026-11-18 while writing the Kindlings usage skills (reproduced
 with circe-derivation and sconfig-derivation; any Hearth macro that reads the children of a sealed type is affected).
 
 ## Symptom
