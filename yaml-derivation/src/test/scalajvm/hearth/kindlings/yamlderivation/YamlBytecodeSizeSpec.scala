@@ -15,6 +15,25 @@ object YamlWideInstances {
     implicit val runtimeConfig: YamlConfig = config
     KindlingsYamlDecoder.derived[WideDefaults]
   }
+
+  val encoder: KindlingsYamlEncoder[WideDefaults] = KindlingsYamlEncoder.derived[WideDefaults]
+
+  def encoderWith(config: YamlConfig): KindlingsYamlEncoder[WideDefaults] = {
+    implicit val runtimeConfig: YamlConfig = config
+    KindlingsYamlEncoder.derived[WideDefaults]
+  }
+}
+
+/** The same with a configuration only known at runtime: the subtype names are computed once per instance. */
+object YamlWideSumRuntimeInstances {
+  def encoder(config: YamlConfig): KindlingsYamlEncoder[WideSum] = {
+    implicit val runtimeConfig: YamlConfig = config
+    KindlingsYamlEncoder.derived[WideSum]
+  }
+  def decoder(config: YamlConfig): KindlingsYamlDecoder[WideSum] = {
+    implicit val runtimeConfig: YamlConfig = config
+    KindlingsYamlDecoder.derived[WideSum]
+  }
 }
 
 /** Guards against generated methods too large to be JIT-compiled (see `docs/research/generated-code-audit-2026-11.md`).
@@ -27,6 +46,53 @@ final class YamlBytecodeSizeSpec extends MacroSuite {
     assert(sizes.map(_._3).sum > 5000, s"expected the derived decoders' code, got: $sizes")
     val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
     assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("no method of the instances derived for a sealed trait with 50 subtypes exceeds HotSpot's JIT limit") {
+    val sizes = BytecodeSizes.methodSizes(YamlWideSumStaticInstances.getClass) ++
+      BytecodeSizes.methodSizes(YamlWideSumRuntimeInstances.getClass)
+    assert(sizes.map(_._3).sum > 5000, s"expected the derived instances' code, got: $sizes")
+    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
+    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("a configuration known at compile time leaves no runtime branches on the configuration in sum dispatch") {
+    // positive control: with a runtime configuration the dispatch reads it
+    assert(BytecodeSizes.refersTo(YamlWideSumRuntimeInstances.getClass, "transformConstructorNames"))
+    assert(BytecodeSizes.refersTo(YamlWideSumRuntimeInstances.getClass, "wrappedSubtypes"))
+    List("transformConstructorNames", "wrappedSubtypes", "enumAsStrings", "discriminator").foreach { member =>
+      assert(!BytecodeSizes.refersTo(YamlWideSumStaticInstances.getClass, member), member)
+    }
+  }
+
+  test("sum instances work, with compile-time and runtime configurations") {
+    val values: List[WideSum] = List(WideSum.Case00(0), WideSum.Case47(47), WideSum.Object48, WideSum.Object49)
+    import YamlWideSumStaticInstances.*
+    List(
+      (Discriminator.encoder, Discriminator.decoder, YamlConfig(discriminator = Some("type"))),
+      (Wrapped.encoder, Wrapped.decoder, YamlConfig(wrappedSubtypes = true))
+    ).foreach { case (encoder, decoder, config) =>
+      val runtimeEncoder = YamlWideSumRuntimeInstances.encoder(config)
+      val runtimeDecoder = YamlWideSumRuntimeInstances.decoder(config)
+      values.foreach { value =>
+        val node = encoder.asNode(value)
+        runtimeEncoder.asNode(value) ==> node
+        decoder.construct(node) ==> Right(value)
+        runtimeDecoder.construct(node) ==> Right(value)
+      }
+    }
+    val untaggedNode = Untagged.encoder.asNode(WideSum.Case47(47))
+    YamlWideSumRuntimeInstances.encoder(YamlConfig()).asNode(WideSum.Case47(47)) ==> untaggedNode
+    // untagged: the first subtype that decodes wins (as in scala-yaml)
+    Untagged.decoder
+      .construct(untaggedNode) ==> YamlWideSumRuntimeInstances.decoder(YamlConfig()).construct(untaggedNode)
+  }
+
+  test("the encoders work") {
+    val value = WideDefaults(f0 = Some("x"), f1 = 1, f99 = 5L)
+    val node = YamlWideInstances.encoder.asNode(value)
+    YamlWideInstances.encoderWith(YamlConfig()).asNode(value) ==> node
+    YamlWideInstances.decoder.construct(node) ==> Right(value)
   }
 
   test("the decoders work") {

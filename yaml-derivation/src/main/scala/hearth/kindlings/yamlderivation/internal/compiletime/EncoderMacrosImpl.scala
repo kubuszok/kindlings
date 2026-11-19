@@ -11,6 +11,7 @@ import org.virtuslab.yaml.{Node, YamlEncoder}
 
 trait EncoderMacrosImpl
     extends YamlDerivationTimeout
+    with SubtypeNamesSupport
     with YamlDerivationPolicy
     with rules.EncoderUseCachedDefWhenAvailableRuleImpl
     with rules.EncoderUseImplicitWhenAvailableRuleImpl
@@ -41,10 +42,12 @@ trait EncoderMacrosImpl
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, Node]("KindlingsYamlEncoder.encode") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
         ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
+          // the definitions are evaluated on every call: see `EncoderCtx.perCall`
+          val encoded = fromCtx(perCallEncoderCtx[A](valueVal, configVal, evConfig))
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
+            Expr.splice(encoded)
           }
         }
       }
@@ -60,10 +63,12 @@ trait EncoderMacrosImpl
     deriveEncoderFromCtxAndAdaptForEntrypoint[A, String]("KindlingsYamlEncoder.toYamlString") { fromCtx =>
       ValDefs.createVal[A](valueExpr).use { valueVal =>
         ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
+          // the definitions are evaluated on every call: see `EncoderCtx.perCall`
+          val encoded = fromCtx(perCallEncoderCtx[A](valueVal, configVal, evConfig))
           Expr.quote {
             val _ = Expr.splice(valueVal)
             val _ = Expr.splice(configVal)
-            val node = Expr.splice(fromCtx(EncoderCtx.from(valueVal, configVal, derivedType = None, evConfig)))
+            val node = Expr.splice(encoded)
             YamlDerivationUtils.nodeToYaml(node, Expr.splice(configVal).emptyCollectionsAsFlow)
           }
         }
@@ -80,26 +85,90 @@ trait EncoderMacrosImpl
     val selfType: Option[??] = Some(Type[A].as_??)
     val evConfig: Option[YamlConfig] = configExpr.semiEval.toOption
 
-    deriveEncoderFromCtxAndAdaptForEntrypoint[A, KindlingsYamlEncoder[A]]("KindlingsYamlEncoder.derived") { fromCtx =>
-      ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
-        Expr.quote {
-          val cfg = Expr.splice(configVal)
-          hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.encoderInstance[A] { (obj: A) =>
-            val _ = obj
-            Expr.splice {
-              fromCtx(EncoderCtx.from(Expr.quote(obj), Expr.quote(cfg), derivedType = selfType, evConfig))
-            }
-          }
+    // The configuration is a val around the whole instance and so are the cached definitions (the encode helpers and
+    // the lazy vals of summoned instances and runtime-transformed names): they are created once per instance, not on
+    // every encode.
+    deriveEncoderInstanceForEntrypoint[A, KindlingsYamlEncoder[A]](
+      "KindlingsYamlEncoder.derived",
+      configExpr,
+      selfType,
+      evConfig
+    ) { encode =>
+      Expr.quote {
+        hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationFactories.encoderInstance[A] { (obj: A) =>
+          val _ = obj
+          Expr.splice(encode(Expr.quote(obj)))
         }
       }
     }
   }
 
+  /** The context of the inline entry points (see `EncoderCtx.perCall`). */
+  private def perCallEncoderCtx[A: Type](
+      value: Expr[A],
+      config: Expr[YamlConfig],
+      evConfig: Option[YamlConfig]
+  ): EncoderCtx[A] =
+    EncoderCtx.from[A](value, config, derivedType = None, evConfig).copy(perCall = true)
+
   // Handles logging, error reporting and prepending "cached" defs and vals to the result.
 
+  /** The inline entry points: the cached definitions are put around the encoding of a single value (they are evaluated
+    * on every call, see `EncoderCtx.perCall`).
+    */
   def deriveEncoderFromCtxAndAdaptForEntrypoint[A: Type, Out: Type](macroName: String)(
       provideCtxAndAdapt: (EncoderCtx[A] => Expr[Node]) => Expr[Out]
+  ): Expr[Out] =
+    runEncoderEntrypoint[A, Out](macroName) {
+      MIO.scoped { runSafe =>
+        val fromCtx: (EncoderCtx[A] => Expr[Node]) = (ctx: EncoderCtx[A]) =>
+          runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              result <- deriveEncoderRecursively[A](using ctx)
+              cache <- ctx.cache.get
+            } yield cache.toValDefs.use(_ => result)
+          }
+
+        provideCtxAndAdapt(fromCtx)
+      }
+    }
+
+  /** A type class instance: the configuration is a val around the whole instance, and the encoding of `A` is derived
+    * once into a cached def, with the cached definitions around the whole instance too, so that they are created once
+    * per instance, not on every call. `adapt` builds the instance from the call of that def.
+    */
+  def deriveEncoderInstanceForEntrypoint[A: Type, Out: Type](
+      macroName: String,
+      configExpr: Expr[YamlConfig],
+      derivedType: Option[??],
+      evConfig: Option[YamlConfig]
+  )(
+      adapt: (Expr[A] => Expr[Node]) => Expr[Out]
   ): Expr[Out] = {
+    implicit val ConfigT: Type[YamlConfig] = Types.YamlConfig
+    runEncoderEntrypoint[A, Out](macroName) {
+      MIO.scoped { runSafe =>
+        ValDefs.createVal[YamlConfig](configExpr).use { configVal =>
+          // the value is a placeholder: the encoding is derived into a cached def, called with the instance's argument
+          val ctx = EncoderCtx.from[A](Expr.quote(null.asInstanceOf[A]), configVal, derivedType, evConfig)
+          runSafe {
+            for {
+              _ <- ensureStandardExtensionsLoaded()
+              _ <- deriveEncoderRecursively[A](using ctx)
+            } yield ()
+          }
+          val encode = runSafe(ctx.getHelper[A]).getOrElse {
+            Environment.reportErrorAndAbort(s"$macroName: no encoding was derived for ${Type[A].prettyPrint}")
+          }
+          val cache = runSafe(ctx.cache.get)
+          cache.toValDefs.use(_ => adapt((value: Expr[A]) => encode(value, configVal)))
+        }
+      }
+    }
+  }
+
+  private def runEncoderEntrypoint[A: Type, Out: Type](macroName: String)(derive: => MIO[Expr[Out]]): Expr[Out] = {
     if (Type[A] =:= Type.of[Nothing].asInstanceOf[Type[A]] || Type[A] =:= Type.of[Any].asInstanceOf[Type[A]])
       Environment.reportErrorAndAbort(
         s"$macroName: type parameter was inferred as ${Type[A].prettyPrint}, which is likely unintended.\n" +
@@ -109,20 +178,7 @@ trait EncoderMacrosImpl
     Log
       .namedScope(
         s"Deriving encoder for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
-      ) {
-        MIO.scoped { runSafe =>
-          val fromCtx: (EncoderCtx[A] => Expr[Node]) = (ctx: EncoderCtx[A]) =>
-            runSafe {
-              for {
-                _ <- ensureStandardExtensionsLoaded()
-                result <- deriveEncoderRecursively[A](using ctx)
-                cache <- ctx.cache.get
-              } yield cache.toValDefs.use(_ => result)
-            }
-
-          provideCtxAndAdapt(fromCtx)
-        }
-      }
+      )(derive)
       .flatTap { result =>
         Log.info(s"Derived final encoder result: ${result.prettyPrint}")
       }
@@ -170,7 +226,10 @@ trait EncoderMacrosImpl
       config: Expr[YamlConfig],
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
-      evaluatedConfig: Option[YamlConfig] = None
+      evaluatedConfig: Option[YamlConfig] = None,
+      // The inline entry points evaluate the cached definitions on every call, so summoned instances and transformed
+      // names are not cached in them (a lazy val would be a lazy cell allocated per call).
+      perCall: Boolean = false
   ) {
 
     def nest[B: Type](newValue: Expr[B]): EncoderCtx[B] = copy[B](
@@ -178,13 +237,43 @@ trait EncoderMacrosImpl
       value = newValue
     )
 
+    /** The context of a cached helper's body. The configuration is NOT replaced by the helper's `config` parameter:
+      * every entry point binds the configuration to a value around all the cached definitions and every helper call
+      * passes that value, so referring to it directly lets the cached values (lazy vals of the instance, see
+      * [[cachedLazy]]) be built from code that does not depend on a helper's parameters.
+      */
+    @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
     def nestInCache(
         newValue: Expr[A],
         newConfig: Expr[YamlConfig]
     ): EncoderCtx[A] = copy(
-      value = newValue,
-      config = newConfig
+      value = newValue
     )
+
+    /** `value` as a lazy val of the derived instance (evaluated once, not on every encode), shared under `key` (and its
+      * type); in the inline entry points ([[perCall]]) it is used as it is.
+      */
+    def cachedLazy[T: Type](key: String, name: String, value: => Expr[T]): MIO[Expr[T]] =
+      if (perCall) MIO.pure(value)
+      else
+        cache.get0Ary[T](key).flatMap {
+          case Some(cached) => MIO.pure(cached)
+          case None         =>
+            cache.buildCachedWith(key, ValDefBuilder.ofLazy[T](name))(_ => value) >>
+              cache.get0Ary[T](key).map(_.get)
+        }
+
+    /** A summoned instance as a lazy val of the derived instance: resolved once, not on every encode. */
+    def cachedInstance[B: Type](instance: Expr[YamlEncoder[B]]): MIO[Expr[YamlEncoder[B]]] = {
+      implicit val EncoderB: Type[YamlEncoder[B]] = Types.YamlEncoder[B]
+      cachedLazy[YamlEncoder[B]]("cached-encoder-instance", s"encoder_${Type[B].shortName}", instance)
+    }
+
+    /** The subtype names `names` transformed by a configuration only known at runtime (`transformConstructorNames`):
+      * computed once per instance (a lazy val holding an array), or where they are used in the inline entry points.
+      */
+    def transformedConstructorNames(names: List[String]): MIO[String => Expr[String]] =
+      transformedNamesOf(names, config, perCall, cache)
 
     def getInstance[B: Type]: MIO[Option[Expr[YamlEncoder[B]]]] = {
       implicit val EncoderB: Type[YamlEncoder[B]] = Types.YamlEncoder[B]
