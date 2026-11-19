@@ -38,9 +38,8 @@ trait DecoderHandleAsBuiltInRuleImpl {
           Rule.matched(
             Expr
               .quote {
-                XmlDerivationUtils
-                  .getTextContent(Expr.splice(elem))
-                  .flatMap(v => XmlDerivationUtils.parseString(v, Expr.splice(elem).label))
+                // an empty element/attribute is the empty string (present but empty, distinct from absent)
+                XmlDerivationUtils.getStringContent(Expr.splice(elem))
               }
               .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
           )

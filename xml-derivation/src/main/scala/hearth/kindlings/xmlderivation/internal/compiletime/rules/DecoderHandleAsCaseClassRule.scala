@@ -60,7 +60,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
                 case IsOption(_) => true
                 case _           => false
               }
-              val isCollectionField = !isOptionField && (Type[FieldType] match {
+              // (`String` is an `Iterable[Char]` to `IsCollection`, but an absent `String` is missing, not empty)
+              val isCollectionField = !isOptionField && !(Type[FieldType] =:= DTypes.String) && (Type[FieldType] match {
                 case IsMap(_)        => true
                 case IsCollection(_) => true
                 case _               => false
@@ -169,6 +170,49 @@ trait DecoderHandleAsCaseClassRuleImpl {
       }
     }
 
+    /** An `Option[Inner]` attribute: absent is `None` (how `None` is written), present is `Some` of the decoded value -
+      * also when empty (`Some("")`), except that an empty value that does not decode (e.g. of an `Option[Int]`) is
+      * `None`.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def optionalAttributeDecodeExpr[A: DecoderCtx, Inner: Type](
+        attrNameExpr: Expr[String]
+    ): MIO[Expr[Either[XmlDecodingError, Any]]] = {
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val AnyT: Type[Any] = DTypes.Any
+      implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
+      for {
+        _ <- deriveDecoderRecursively[Inner](using dctx.nest[Inner](dctx.elem))
+        helperOpt <- dctx.getHelper[Inner]
+      } yield {
+        val configExpr = dctx.config
+        val helper = helperOpt.get
+        def decodeValue(attrValue: Expr[String]): Expr[Either[XmlDecodingError, Any]] = Expr.quote {
+          Expr
+            .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(Expr.splice(attrValue))), configExpr))
+            .asInstanceOf[Either[XmlDecodingError, Any]]
+        }
+        Expr.quote {
+          XmlDerivationUtils
+            .getOptionalAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
+            .flatMap {
+              case scala.Some(attrValue) =>
+                if (attrValue.trim.isEmpty)
+                  XmlDerivationUtils
+                    .decodedOrNone(Expr.splice(decodeValue(Expr.quote(attrValue)))): Either[XmlDecodingError, Any]
+                else
+                  Expr
+                    .splice(decodeValue(Expr.quote(attrValue)))
+                    .map(value => scala.Some(value)): Either[XmlDecodingError, Any]
+              case scala.None =>
+                Right(None): Either[XmlDecodingError, Any]
+            }
+        }
+      }
+    }
+
     /** Resolve a parameter's default value to an Expr[Any]. */
     private def resolveDefaultValue(fName: String, param: Parameter): Expr[Any] =
       param.defaultValue match {
@@ -253,24 +297,14 @@ trait DecoderHandleAsCaseClassRuleImpl {
                   }
 
                 case FieldDecoding.FromOptionalAttribute(attrNameExpr, _) =>
-                  for {
-                    _ <- deriveDecoderRecursively[FieldT](using dctx.nest[FieldT](dctx.elem))
-                    helperOpt <- dctx.getHelper[FieldT]
-                  } yield {
-                    val configExpr = dctx.config
-                    val helper = helperOpt.get
-                    val decodeExpr: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
-                      XmlDerivationUtils
-                        .getOptionalAttribute(Expr.splice(dctx.elem), Expr.splice(attrNameExpr))
-                        .flatMap {
-                          case scala.Some(attrValue) =>
-                            Expr
-                              .splice(helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(attrValue)), configExpr))
-                              .asInstanceOf[Either[XmlDecodingError, Any]]
-                          case scala.None =>
-                            Right(None): Either[XmlDecodingError, Any]
-                        }
-                    }
+                  val decodeExprMIO: MIO[Expr[Either[XmlDecodingError, Any]]] = Type[FieldT] match {
+                    case IsOption(isOption) =>
+                      import isOption.Underlying as Inner
+                      optionalAttributeDecodeExpr[A, Inner](attrNameExpr)
+                    case _ =>
+                      MIO.fail(new RuntimeException(s"Expected an Option attribute, got ${Type[FieldT].prettyPrint}"))
+                  }
+                  decodeExprMIO.map { decodeExpr =>
                     val makeAccessor: Expr[Array[Any]] => (String, Expr_??) = { arrExpr =>
                       (fName, mkFieldAccess[FieldT](arrExpr, idx).as_??)
                     }

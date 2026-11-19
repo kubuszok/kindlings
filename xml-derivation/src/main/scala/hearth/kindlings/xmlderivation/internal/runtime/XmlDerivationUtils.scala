@@ -105,14 +105,15 @@ object XmlDerivationUtils {
 
   // --- Decoder helpers ---
 
+  // (an attribute value is a sequence of nodes: empty for `a=""`, several with entity references)
   def getAttribute(elem: scala.xml.Elem, attrName: String): Either[XmlDecodingError, String] =
-    elem.attribute(attrName).flatMap(_.headOption).map(_.text) match {
+    elem.attribute(attrName).map(_.text) match {
       case Some(value) => Right(value)
       case None        => Left(XmlDecodingError.MissingAttribute(attrName, elem.label))
     }
 
   def getOptionalAttribute(elem: scala.xml.Elem, attrName: String): Either[XmlDecodingError, Option[String]] =
-    Right(elem.attribute(attrName).flatMap(_.headOption).map(_.text))
+    Right(elem.attribute(attrName).map(_.text))
 
   def getChildElem(elem: scala.xml.Elem, childName: String): Either[XmlDecodingError, scala.xml.Elem] =
     (elem \ childName).collectFirst { case e: scala.xml.Elem => e } match {
@@ -133,6 +134,23 @@ object XmlDerivationUtils {
     val text = elem.text.trim
     if (text.isEmpty) Left(XmlDecodingError.MissingContent(elem.label))
     else Right(text)
+  }
+
+  /** The text of a `String` value: an empty element (or attribute value) is the empty string, not missing content. */
+  def getStringContent(elem: scala.xml.Elem): Either[XmlDecodingError, String] = Right(elem.text.trim)
+
+  /** Whether the element has no attributes, no child elements and only blank text: the encoding of `None` (and of
+    * `Some("")`, which only `withTransientNone`, writing no element for `None`, tells apart).
+    */
+  def isEmptyElement(elem: scala.xml.Elem): Boolean =
+    elem.attributes.isEmpty && !elem.child.exists(_.isInstanceOf[scala.xml.Elem]) && elem.text.trim.isEmpty
+
+  /** The value of an `Option` from an empty element/attribute that cannot be the encoding of `None`: `Some` of the
+    * decoded value when the empty element decodes (e.g. `Some("")`), `None` otherwise (e.g. an empty `Option[Int]`).
+    */
+  def decodedOrNone[A](result: Either[XmlDecodingError, A]): Either[XmlDecodingError, Option[A]] = result match {
+    case Right(value) => Right(Some(value))
+    case Left(_)      => Right(None)
   }
 
   def getOptionalTextContent(elem: scala.xml.Elem): Option[String] = {

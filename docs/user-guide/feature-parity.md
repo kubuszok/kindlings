@@ -1319,7 +1319,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | `enumAsStrings` | `false` | Encode case object enums as text content strings |
 | `useDefaults` | `false` | Use constructor default values for missing fields during decoding |
 | `transientNone` | `false` | Omit `None` fields during encoding |
-| `transientEmpty` | `false` | Omit empty collections during encoding |
+| `transientEmpty` | `false` | Omit empty collections during encoding (empty strings are still written) |
 
 ### Annotations
 
@@ -1338,7 +1338,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | Type | Support |
 |---|---|
 | Primitives (`Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`) | Yes (text representation) |
-| `String` | Yes |
+| `String` | Yes (an empty element or attribute value is `""`) |
 | `BigDecimal`, `BigInt` | Yes (text representation) |
 | `Option[A]` | Yes (omitted or present) |
 | Collections (`List`, `Vector`, etc.) | Yes (via Hearth `IsCollection`) |
