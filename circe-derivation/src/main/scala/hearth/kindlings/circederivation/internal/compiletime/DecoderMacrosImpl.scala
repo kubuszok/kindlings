@@ -204,6 +204,10 @@ trait DecoderMacrosImpl
                   val namesExpr: Expr[List[String]] = sumMarker.get._1
                   val intermediatesExpr: Expr[List[Decoder[Any]]] = sumMarker.get._2
                   Expr.quote {
+                    // the transformed names are computed once per instance, not on every `kindlingsHandlesConstructor`
+                    val handledNames = CirceDerivationUtils
+                      .transformNames(Expr.splice(configVal).transformConstructorNames, Expr.splice(namesExpr))
+                      .toList
                     hearth.kindlings.circederivation.internal.runtime.CirceDerivationFactories
                       .sumDecoderWithAccInstance[A](
                         (c: HCursor) => {
@@ -217,8 +221,8 @@ trait DecoderMacrosImpl
                         (name: String) =>
                           CirceDerivationUtils.sumHandles(
                             name,
-                            Expr.splice(configVal).transformConstructorNames,
-                            Expr.splice(namesExpr),
+                            (transformed: String) => transformed,
+                            handledNames,
                             Expr.splice(intermediatesExpr)
                           )
                       )
@@ -910,6 +914,78 @@ trait DecoderMacrosImpl
       } yield ()
     }
 
+    /** `value` as a lazy val of the derived instance (evaluated once, not on every decode), shared under `key` (and its
+      * type); in the per-call inline decode ([[perCall]]) it is used as it is.
+      */
+    def cachedLazy[T: Type](key: String, name: String, value: => Expr[T]): MIO[Expr[T]] =
+      if (perCall) MIO.pure(value)
+      else
+        cache.get0Ary[T](key).flatMap {
+          case Some(cached) => MIO.pure(cached)
+          case None         =>
+            cache.buildCachedWith(key, ValDefBuilder.ofLazy[T](name))(_ => value) >>
+              cache.get0Ary[T](key).map(_.get)
+        }
+
+    /** The names `names` transformed by the configuration's `transformMemberNames` (`constructorNames = false`) or
+      * `transformConstructorNames` (`true`): constants with a configuration known at compile time; with one only known
+      * at runtime all of them are computed once per instance (a lazy val holding an array), or where they are used in
+      * the per-call inline decode.
+      */
+    def transformedNames(names: List[String], constructorNames: Boolean): MIO[String => Expr[String]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      def transformedAtCall(name: String): Expr[String] =
+        if (constructorNames) Expr.quote(Expr.splice(config).transformConstructorNames(Expr.splice(Expr(name))))
+        else Expr.quote(Expr.splice(config).transformMemberNames(Expr.splice(Expr(name))))
+      evaluatedConfig match {
+        case Some(c) =>
+          MIO.pure { (name: String) =>
+            Expr(if (constructorNames) c.transformConstructorNames(name) else c.transformMemberNames(name))
+          }
+        case None if perCall || names.isEmpty => MIO.pure(transformedAtCall)
+        case None                             =>
+          implicit val ArrayStringT: Type[Array[String]] = DTypes.ArrayString
+          val distinct = names.distinct
+          val kind = if (constructorNames) "constructor" else "member"
+          val namesExpr: Expr[List[String]] = Expr(distinct)
+          def computed: Expr[Array[String]] =
+            if (constructorNames)
+              Expr.quote(
+                CirceDerivationUtils
+                  .transformNames(Expr.splice(config).transformConstructorNames, Expr.splice(namesExpr))
+              )
+            else
+              Expr.quote(
+                CirceDerivationUtils.transformNames(Expr.splice(config).transformMemberNames, Expr.splice(namesExpr))
+              )
+          cachedLazy[Array[String]](s"cached-$kind-names:${distinct.mkString("\u0000")}", s"${kind}Names", computed)
+            .map { array => (name: String) =>
+              val index = distinct.indexOf(name)
+              if (index < 0) transformedAtCall(name)
+              else Expr.quote(Expr.splice(array)(Expr.splice(Expr(index))))
+            }
+      }
+    }
+
+    /** The list of `names` transformed as in [[transformedNames]], as a lazy val of the instance (built where it is
+      * used in the per-call inline decode).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    def transformedNamesList(names: List[String], constructorNames: Boolean): MIO[Expr[List[String]]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val ListStringT: Type[List[String]] = DTypes.ListString
+      transformedNames(names, constructorNames).flatMap { transformed =>
+        val list: Expr[List[String]] = names.foldRight(Expr.quote(List.empty[String])) { (name, acc) =>
+          Expr.quote(Expr.splice(transformed(name)) :: Expr.splice(acc))
+        }
+        if (names.isEmpty) MIO.pure(list)
+        else {
+          val kind = if (constructorNames) "constructor" else "member"
+          cachedLazy[List[String]](s"cached-$kind-names-list:${names.mkString("\u0000")}", s"${kind}NamesList", list)
+        }
+      }
+    }
+
     def getInstance[B: Type]: MIO[Option[Expr[Decoder[B]]]] = {
       implicit val DecoderB: Type[Decoder[B]] = DTypes.Decoder[B]
       cache.get0Ary[Decoder[B]]("cached-decoder-instance")
@@ -1245,6 +1321,7 @@ trait DecoderMacrosImpl
     def DecoderResult[A: Type]: Type[Either[DecodingFailure, A]] =
       Type.of[Either[DecodingFailure, A]]
     def Endo[A: Type]: Type[A => A] = Type.of[A => A]
+    def MapString[K: Type]: Type[Map[String, K]] = Type.of[Map[String, K]]
     val ArrayString: Type.Lazy[Array[String]] = Type.Lazy(Type.of[Array[String]])
     val ListDecoderAny: Type.Lazy[List[Decoder[Any]]] = Type.Lazy(Type.of[List[Decoder[Any]]])
     val DecoderAny: Type.Lazy[Decoder[Any]] = Type.Lazy(Type.of[Decoder[Any]])

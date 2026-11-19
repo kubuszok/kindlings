@@ -209,24 +209,29 @@ trait DecoderHandleAsMapRuleImpl {
                                 }
                               }
                               .flatMap { casesNel =>
-                                val lookupMapExpr: Expr[Map[String, K]] = casesNel.toList.foldRight(
-                                  Expr.quote(Map.empty[String, K])
-                                ) { case ((caseName, caseExpr), acc) =>
-                                  // no `k -> v` in generated code: Predef.ArrowAssoc is deprecated since Scala 3.10
-                                  Expr.quote {
-                                    Expr
-                                      .splice(acc)
-                                      .updated(
-                                        Expr.splice(ctx.config).transformConstructorNames(Expr.splice(Expr(caseName))),
-                                        Expr.splice(caseExpr)
-                                      )
-                                  }
-                                }
-                                MIO.pure(
-                                  Some(Expr.quote { (s: String) =>
-                                    CirceDerivationUtils.decodeEnumKey[K](s, Expr.splice(lookupMapExpr))
-                                  }): Option[Expr[String => Either[DecodingFailure, K]]]
-                                )
+                                implicit val MapStringK: Type[Map[String, K]] = DTypes.MapString[K]
+                                val caseNames = casesNel.toList.map(_._1)
+                                for {
+                                  transformed <- ctx.transformedNames(caseNames, constructorNames = true)
+                                  // the name -> case lookup is a lazy val of the instance (built once per decode in
+                                  // the inline decode), not built on every key
+                                  lookup <- ctx.cachedLazy[Map[String, K]](
+                                    s"cached-enum-key-lookup:${Type[K].plainPrint}",
+                                    s"enumKeys_${Type[K].shortName}",
+                                    casesNel.toList.foldRight(Expr.quote(Map.empty[String, K])) {
+                                      case ((caseName, caseExpr), acc) =>
+                                        // no `k -> v` in generated code: Predef.ArrowAssoc is deprecated since Scala 3.10
+                                        Expr.quote {
+                                          Expr
+                                            .splice(acc)
+                                            .updated(Expr.splice(transformed(caseName)), Expr.splice(caseExpr))
+                                        }
+                                    }
+                                  )
+                                } yield Some(Expr.quote {
+                                  val enumKeys = Expr.splice(lookup)
+                                  (s: String) => CirceDerivationUtils.decodeEnumKey[K](s, enumKeys)
+                                }): Option[Expr[String => Either[DecodingFailure, K]]]
                               }
                           case None => MIO.pure(None)
                         }
