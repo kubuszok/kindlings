@@ -125,9 +125,8 @@ trait DecoderHandleAsBuiltInRuleImpl {
           Rule.matched(
             Expr
               .quote {
-                XmlDerivationUtils
-                  .getTextContent(Expr.splice(elem))
-                  .flatMap(v => XmlDerivationUtils.parseChar(v, Expr.splice(elem).label))
+                // a single whitespace character is a value (`' '` round-trips)
+                XmlDerivationUtils.getCharContent(Expr.splice(elem))
               }
               .asInstanceOf[Expr[Either[XmlDecodingError, A]]]
           )

@@ -129,7 +129,7 @@ implicit val config: XmlConfig = XmlConfig.default
 
 | Builder method | Description |
 |---------------|-------------|
-| `withAttributesByDefault` | Encode fields as XML attributes by default |
+| `withAttributesByDefault` | Encode and decode single-value fields as XML attributes by default (see [Attribute mode](#attribute-mode)) |
 | `withElementsByDefault` | Encode fields as XML child elements by default (this is the default) |
 | `withFieldNameMapper(f)` | Custom field name transform |
 | `withConstructorNameMapper(f)` | Custom constructor name transform (for ADT discrimination) |
@@ -142,7 +142,7 @@ implicit val config: XmlConfig = XmlConfig.default
 | `withDiscriminator(attr)` | ADT discriminator attribute name (default: `"type"`) |
 | `withNoDiscriminator` | Disable discriminator (use wrapper element for ADTs) |
 | `withEnumAsStrings` | Encode Scala 3 / Java enums as strings |
-| `withUseDefaults` | Use case class default values for missing fields |
+| `withUseDefaults` | Use case class default values for missing fields (absent child elements and attributes) |
 | `withTransientNone` | Skip `None` fields during encoding |
 | `withTransientEmpty` | Skip empty collections during encoding (empty strings are still written) |
 
@@ -165,6 +165,42 @@ An empty value is present, not absent:
   `withTransientNone` (`Some("")` is written the same way, so it decodes as `None`). With `withTransientNone`, `None`
   is not written at all, so an empty element decodes as `Some("")` for an `Option[String]` (and as `None` when the
   empty element is not a value of the inner type, e.g. for an `Option[Int]`).
+
+### Attribute mode
+
+With `withAttributesByDefault` (or `withDefaultFieldMode(XmlFieldMode.Attribute)`), a field without an annotation is
+written as an attribute and read from an attribute when it holds a single text value:
+
+- `String`, `Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`, `BigDecimal`, `BigInt`,
+- a value type wrapping one of these (written as the unwrapped value: `id="5"`, not `id="UserId(5)"`),
+- an `Option` of one of these (written as the value for `Some`, omitted for `None`).
+
+Any other field cannot be an attribute, so it stays a child element in both modes: collections, maps, case classes,
+sealed traits and enums (and `Option`s of them). Nested case classes use the same configuration, so their fields are
+attributes of their own element. `@xmlElement` makes a field a child element and `@xmlAttribute` makes it an attribute
+whatever the default mode is. The decoder follows the same rule as the encoder, also when the configuration is only
+known at runtime, so the output of an encoder decodes with a decoder that uses the same configuration.
+
+An absent attribute is decoded like an absent element: `None` for an `Option` field, the default value with
+`withUseDefaults`, `MissingAttribute` otherwise. As with `withTransientNone`, `None` is written as nothing, so with
+`withUseDefaults` an `Option` field whose default is not `None` decodes an omitted `None` as its default.
+
+### Whitespace
+
+`String` values keep their whitespace exactly, in elements, attributes and `@xmlContent` text: `<name> a </name>`
+decodes as `" a "`, a blank element as a blank `String`, so every `String` round-trips (a `Char` is kept exactly too,
+so `' '` round-trips). For an `Option[String]`, only an empty element is `None`: `<name> </name>` is `Some(" ")`.
+
+Values parsed from text are trimmed first, so `<age> 42 </age>` and `age=" 42 "` decode as `42`: numbers, `Boolean`,
+`BigDecimal`, `BigInt` and value types wrapping them. Whitespace between elements is ignored.
+
+`KindlingsXmlEncoder.toXmlString` (and the `toXmlString` syntax) indents nested elements, but writes elements that hold
+text exactly, so its output decodes back to the same `String` values. `scala.xml.PrettyPrinter` does not: it collapses
+runs of whitespace in text and attribute values, and moves text that does not fit the line width onto lines of its
+own, inside the text-only element. Its output still decodes for every type parsed from text (numbers, `Boolean`, ...),
+but `String` values can change, so do not use it (or other reformatting) on documents with `String` data whose
+whitespace matters; use `toXmlString` or `elem.toString`. The XML parser also normalizes tabs and line breaks in
+attribute values to spaces (as the XML specification requires), so keep multi-line `String`s in elements.
 
 ## Annotations
 
@@ -236,12 +272,25 @@ case class Article(
     implicit val config: XmlConfig = XmlConfig.default.withAttributesByDefault
 
     case class Point(x: Int, y: Int)
+    case class Route(name: String, @xmlElement note: String, stops: List[Point])
 
-    // All fields become attributes
+    // Single-value fields become attributes
     val xml = KindlingsXmlEncoder.encode(Point(10, 20), "point")
     println(xml)
     // expected output:
     // <point x="10" y="20"/>
+
+    // A collection stays a child element, @xmlElement makes a child element
+    val route = Route("A", "scenic", List(Point(1, 2), Point(3, 4)))
+    val routeXml = KindlingsXmlEncoder.encode(route, "route")
+    println(routeXml)
+    // expected output:
+    // <route name="A"><note>scenic</note><stops><item x="1" y="2"/><item x="3" y="4"/></stops></route>
+
+    // The decoder reads the same layout back
+    println(KindlingsXmlDecoder.decode[Route](routeXml))
+    // expected output:
+    // Right(Route(A,scenic,List(Point(1,2), Point(3,4))))
     ```
 
 ??? example "Mixed attributes and elements"

@@ -50,12 +50,19 @@ trait DecoderHandleAsOptionRuleImpl {
                       }
                   }
                 }
+                // blank text is a `String`/`Char` value (`Some(" ")`): only an empty element is `None` there
                 Rule.matched(
-                  Expr.quote {
+                  if (isXmlStringValue(Type[Inner])) Expr.quote {
                     val elem = Expr.splice(dctx.elem)
-                    if (XmlDerivationUtils.isEmptyElement(elem)) Expr.splice(decodeEmpty(Expr.quote(elem)))
+                    if (XmlDerivationUtils.isEmptyStringElement(elem)) Expr.splice(decodeEmpty(Expr.quote(elem)))
                     else Expr.splice(lambda).apply(elem).map(v => Some(v).asInstanceOf[A])
                   }
+                  else
+                    Expr.quote {
+                      val elem = Expr.splice(dctx.elem)
+                      if (XmlDerivationUtils.isEmptyElement(elem)) Expr.splice(decodeEmpty(Expr.quote(elem)))
+                      else Expr.splice(lambda).apply(elem).map(v => Some(v).asInstanceOf[A])
+                    }
                 )
               }
 
