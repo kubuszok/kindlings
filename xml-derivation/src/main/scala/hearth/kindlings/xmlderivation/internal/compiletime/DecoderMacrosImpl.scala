@@ -11,6 +11,7 @@ trait DecoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
     with XmlFieldLayouts
+    with hearth.kindlings.derivation.compiletime.LoadStandardExtensionsOnce
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
@@ -131,7 +132,7 @@ trait DecoderMacrosImpl
           evaluatedConfig = evConfig
         )
         for {
-          _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+          _ <- ensureStandardExtensionsLoaded()
           _ <- deriveDecoderRecursively[A](using placeholderCtx)
           helperOpt <- placeholderCtx.getHelper[A]
           cache <- placeholderCtx.cache.get

@@ -495,7 +495,7 @@ keep the discriminator. A name that is not a case is an `UnknownDiscriminator` e
 
     // By default an enum is written like any sealed trait: with the discriminator attribute.
     // As an attribute it is always the case name.
-    println(KindlingsXmlEncoder.encode(paint, "paint"))
+    println(KindlingsXmlEncoder.encode(paint, "paint")(XmlConfig.default))
     // expected output:
     // <paint finish="Red"><color type="dark-blue"/><accents><item type="Red"/><item type="dark-blue"/></accents></paint>
 
