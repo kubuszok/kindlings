@@ -115,13 +115,14 @@ object Order {
 }
 ```
 
-!!! note "Kindlings 0.4.0 only: declare test-only models at the top level, not inside the suite class"
+!!! warning "Declare test-only models at the top level, not inside the suite class"
 
-    On Scala 3, with Kindlings 0.4.0 (fixed in later versions), deriving an instance for a sealed trait whose case object
-    is nested in the companion (`object Status { case object Active extends Status }`), when the whole hierarchy is
-    declared *inside a class* such as a test suite, crashes the compiler with
-    `assertion failed: missing outer accessor in class MySuite`. Put such types at the top level of the file or in a
-    top-level `object`.
+    Deriving an instance for a sealed trait whose case object is nested in the companion
+    (`object Status { case object Active extends Status }`), when the whole hierarchy is declared *inside a class* such
+    as a test suite, fails to compile: on Scala 3 with Kindlings 0.4.0 the compiler crashes with
+    `assertion failed: missing outer accessor in class MySuite` (fixed in later versions), and on Scala 2.13 decoders
+    and codecs fail with `unable to find the outer accessor symbol of class MySuite`. Put such types at the top level
+    of the file or in a top-level `object`.
 
 ```scala
 import hearth.kindlings.diffderivation._

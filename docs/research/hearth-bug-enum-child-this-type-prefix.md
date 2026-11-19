@@ -1,6 +1,6 @@
 # Hearth bug: a case object in a companion of a class-nested sealed trait is typed `Shape.this.Empty$` (Scala 3)
 
-**Status:** FIXED in Hearth 985e5e6 (next Hearth release after 0.4.5; Kindlings uses snapshot `0.4.5-16-g985e5e6-SNAPSHOT`). Was OPEN (Hearth 0.4.5, Scala 3.8.x; Scala 2 not affected as far as tested). Found 2026-11-18 while writing the
+**Status:** FIXED in Hearth 985e5e6 (next Hearth release after 0.4.5; Kindlings uses snapshot `0.4.5-16-g985e5e6-SNAPSHOT`). Was OPEN (Hearth 0.4.5, Scala 3.8.x; Scala 2 not affected by this TYPE bug, but see `hearth-bug-scala2-singleton-this-prefix.md`). Found 2026-11-18 while writing the
 Kindlings testing guide (circe-derivation and diff-derivation reproduced it; any derivation that uses the type of such
 a case object in generated code is affected).
 
@@ -131,6 +131,7 @@ or a separate `object Fixtures`). Documented in the FAQ.
 
 ## Kindlings test
 
-`circe-derivation/src/test/scala/hearth/kindlings/circederivation/NestedHierarchySpec.scala` covers the hierarchy nested
-in an object. The class-nested variant cannot be kept as a failing test: it crashes the compiler, which fails every
-test of the module. When Hearth is fixed, move the fixtures into the spec class.
+`circe-derivation/.../NestedHierarchySpec.scala` covers the hierarchy nested in an object and in a class, and
+`fast-show-pretty/.../NestedHierarchySpec.scala` the class-nested one. Both failed on Hearth 0.4.5 and pass on 985e5e6.
+For the class-nested hierarchy they only derive encoders, because on Scala 2 a decoder still hits a different bug, see
+`hearth-bug-scala2-singleton-this-prefix.md`.
