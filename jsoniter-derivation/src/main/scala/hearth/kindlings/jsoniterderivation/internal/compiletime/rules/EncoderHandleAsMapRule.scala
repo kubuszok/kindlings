@@ -443,6 +443,9 @@ trait EncoderHandleAsMapRuleImpl {
                         .map(builder => Some(builder.build[Unit]): Option[Expr[(K, JsonWriter) => Unit]])
                     case None => MIO.pure(None)
                   }
+                case _ if Type[K].isEnumeration && enumerationObjectOf[K].isDefined =>
+                  // 3c. scala.Enumeration values: names or ids, looked up at runtime (as jsoniter-scala)
+                  scalaEnumerationKeyEncoder[K]
                 case _ =>
                   // 4. Enum (all case objects) — write case name as key
                   Enum.parse[K].toOption match {

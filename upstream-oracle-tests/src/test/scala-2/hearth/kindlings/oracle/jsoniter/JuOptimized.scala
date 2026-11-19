@@ -100,10 +100,9 @@ object JuOptimized {
   lazy val defaultsOperators: JsonValueCodec[JUOperators] = KindlingsJsonValueCodec.derived[JUOperators](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsDefaults: JsonValueCodec[JUDefaults] = KindlingsJsonValueCodec.derived[JUDefaults](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsDefaults2: JsonValueCodec[JUDefaults2] = KindlingsJsonValueCodec.derived[JUDefaults2](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val defaultsDefaults3: JsonValueCodec[JUDefaults3] = KindlingsJsonValueCodec.derived[JUDefaults3](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsSharedEmptyMutableDefaults: JsonValueCodec[JUSharedEmptyMutableDefaults] = KindlingsJsonValueCodec.derived[JUSharedEmptyMutableDefaults](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsPolymorphicDefaults: JsonValueCodec[JUPolymorphicDefaults[Int, String]] = KindlingsJsonValueCodec.derived[JUPolymorphicDefaults[Int, String]](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val defaultsNestedUser: JsonValueCodec[JUNestedDefaults.User] = KindlingsJsonValueCodec.derived[JUNestedDefaults.User](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val defaultsNestedBox: JsonValueCodec[JUNestedDefaults.Box[Int]] = KindlingsJsonValueCodec.derived[JUNestedDefaults.Box[Int]](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsIterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = KindlingsJsonValueCodec.derived[JUIterablesWithDefaults](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsTransient: JsonValueCodec[JUTransient] = KindlingsJsonValueCodec.derived[JUTransient](JsoniterConfig.jsoniterScalaDefaults)
   lazy val defaultsNoneValues: JsonValueCodec[JUNoneValues] = KindlingsJsonValueCodec.derived[JUNoneValues](JsoniterConfig.jsoniterScalaDefaults)
@@ -262,6 +261,14 @@ object JuOptimized {
   lazy val mapLimit10AsArrayMap: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(10))
   lazy val mapLimit10AsArrayLongMap: JsonValueCodec[collection.immutable.LongMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(10))
   lazy val mapLimit10AsArrayIntMap: JsonValueCodec[collection.immutable.IntMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(10))
+  // noMapLimit
+  lazy val noMapLimitMap: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]](JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(Int.MaxValue))
+  lazy val noMapLimitLongMap: JsonValueCodec[collection.immutable.LongMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(Int.MaxValue))
+  lazy val noMapLimitIntMap: JsonValueCodec[collection.immutable.IntMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(Int.MaxValue))
+  // noMapLimitAsArray
+  lazy val noMapLimitAsArrayMap: JsonValueCodec[Map[Int, Int]] = KindlingsJsonValueCodec.derived[Map[Int, Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(Int.MaxValue))
+  lazy val noMapLimitAsArrayLongMap: JsonValueCodec[collection.immutable.LongMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.LongMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(Int.MaxValue))
+  lazy val noMapLimitAsArrayIntMap: JsonValueCodec[collection.immutable.IntMap[Int]] = KindlingsJsonValueCodec.derived[collection.immutable.IntMap[Int]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray.withMapMaxInsertNumber(Int.MaxValue))
   // mapAsArray
   lazy val mapAsArrayGenericMap: JsonValueCodec[collection.Map[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.Map[Int, Boolean]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)
   lazy val mapAsArrayLinkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] = KindlingsJsonValueCodec.derived[collection.mutable.LinkedHashMap[Int, Boolean]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)

@@ -12,7 +12,8 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodec
 object JuUpstream {
   object defaults {
     lazy val primitives: JsonValueCodec[JUPrimitives] = JsonCodecMaker.make[JUPrimitives](CodecMakerConfig)
-    lazy val boxedPrimitives: JsonValueCodec[JUBoxedPrimitives] = JsonCodecMaker.make[JUBoxedPrimitives](CodecMakerConfig)
+    lazy val boxedPrimitives: JsonValueCodec[JUBoxedPrimitives] =
+      JsonCodecMaker.make[JUBoxedPrimitives](CodecMakerConfig)
     lazy val byteTop: JsonValueCodec[Byte] = JsonCodecMaker.make[Byte](CodecMakerConfig)
     lazy val shortTop: JsonValueCodec[Short] = JsonCodecMaker.make[Short](CodecMakerConfig)
     lazy val intTop: JsonValueCodec[Int] = JsonCodecMaker.make[Int](CodecMakerConfig)
@@ -26,17 +27,26 @@ object JuUpstream {
     lazy val jIntegerTop: JsonValueCodec[java.lang.Integer] = JsonCodecMaker.make[java.lang.Integer](CodecMakerConfig)
     lazy val jLongTop: JsonValueCodec[java.lang.Long] = JsonCodecMaker.make[java.lang.Long](CodecMakerConfig)
     lazy val jBooleanTop: JsonValueCodec[java.lang.Boolean] = JsonCodecMaker.make[java.lang.Boolean](CodecMakerConfig)
-    lazy val jCharacterTop: JsonValueCodec[java.lang.Character] = JsonCodecMaker.make[java.lang.Character](CodecMakerConfig)
+    lazy val jCharacterTop: JsonValueCodec[java.lang.Character] =
+      JsonCodecMaker.make[java.lang.Character](CodecMakerConfig)
     lazy val jDoubleTop: JsonValueCodec[java.lang.Double] = JsonCodecMaker.make[java.lang.Double](CodecMakerConfig)
     lazy val jFloatTop: JsonValueCodec[java.lang.Float] = JsonCodecMaker.make[java.lang.Float](CodecMakerConfig)
-    lazy val jByteMap: JsonValueCodec[Map[java.lang.Byte, java.lang.Byte]] = JsonCodecMaker.make[Map[java.lang.Byte, java.lang.Byte]](CodecMakerConfig)
-    lazy val jShortMap: JsonValueCodec[Map[java.lang.Short, java.lang.Short]] = JsonCodecMaker.make[Map[java.lang.Short, java.lang.Short]](CodecMakerConfig)
-    lazy val jIntegerMap: JsonValueCodec[Map[java.lang.Integer, java.lang.Integer]] = JsonCodecMaker.make[Map[java.lang.Integer, java.lang.Integer]](CodecMakerConfig)
-    lazy val jLongMap: JsonValueCodec[Map[java.lang.Long, java.lang.Long]] = JsonCodecMaker.make[Map[java.lang.Long, java.lang.Long]](CodecMakerConfig)
-    lazy val jBooleanMap: JsonValueCodec[Map[java.lang.Boolean, java.lang.Boolean]] = JsonCodecMaker.make[Map[java.lang.Boolean, java.lang.Boolean]](CodecMakerConfig)
-    lazy val jCharacterMap: JsonValueCodec[Map[java.lang.Character, java.lang.Character]] = JsonCodecMaker.make[Map[java.lang.Character, java.lang.Character]](CodecMakerConfig)
-    lazy val jDoubleMap: JsonValueCodec[Map[java.lang.Double, java.lang.Double]] = JsonCodecMaker.make[Map[java.lang.Double, java.lang.Double]](CodecMakerConfig)
-    lazy val jFloatMap: JsonValueCodec[Map[java.lang.Float, java.lang.Float]] = JsonCodecMaker.make[Map[java.lang.Float, java.lang.Float]](CodecMakerConfig)
+    lazy val jByteMap: JsonValueCodec[Map[java.lang.Byte, java.lang.Byte]] =
+      JsonCodecMaker.make[Map[java.lang.Byte, java.lang.Byte]](CodecMakerConfig)
+    lazy val jShortMap: JsonValueCodec[Map[java.lang.Short, java.lang.Short]] =
+      JsonCodecMaker.make[Map[java.lang.Short, java.lang.Short]](CodecMakerConfig)
+    lazy val jIntegerMap: JsonValueCodec[Map[java.lang.Integer, java.lang.Integer]] =
+      JsonCodecMaker.make[Map[java.lang.Integer, java.lang.Integer]](CodecMakerConfig)
+    lazy val jLongMap: JsonValueCodec[Map[java.lang.Long, java.lang.Long]] =
+      JsonCodecMaker.make[Map[java.lang.Long, java.lang.Long]](CodecMakerConfig)
+    lazy val jBooleanMap: JsonValueCodec[Map[java.lang.Boolean, java.lang.Boolean]] =
+      JsonCodecMaker.make[Map[java.lang.Boolean, java.lang.Boolean]](CodecMakerConfig)
+    lazy val jCharacterMap: JsonValueCodec[Map[java.lang.Character, java.lang.Character]] =
+      JsonCodecMaker.make[Map[java.lang.Character, java.lang.Character]](CodecMakerConfig)
+    lazy val jDoubleMap: JsonValueCodec[Map[java.lang.Double, java.lang.Double]] =
+      JsonCodecMaker.make[Map[java.lang.Double, java.lang.Double]](CodecMakerConfig)
+    lazy val jFloatMap: JsonValueCodec[Map[java.lang.Float, java.lang.Float]] =
+      JsonCodecMaker.make[Map[java.lang.Float, java.lang.Float]](CodecMakerConfig)
     lazy val standardTypes: JsonValueCodec[JUStandardTypes] = JsonCodecMaker.make[JUStandardTypes](CodecMakerConfig)
     lazy val stringTop: JsonValueCodec[String] = JsonCodecMaker.make[String](CodecMakerConfig)
     lazy val bigIntTop: JsonValueCodec[BigInt] = JsonCodecMaker.make[BigInt](CodecMakerConfig)
@@ -44,368 +54,612 @@ object JuUpstream {
     lazy val nonCaseClass: JsonValueCodec[JUNonCaseClass] = JsonCodecMaker.make[JUNonCaseClass](CodecMakerConfig)
     lazy val javaTypes: JsonValueCodec[JUJavaTypes] = JsonCodecMaker.make[JUJavaTypes](CodecMakerConfig)
     lazy val uuidTop: JsonValueCodec[java.util.UUID] = JsonCodecMaker.make[java.util.UUID](CodecMakerConfig)
-    lazy val uuidMap: JsonValueCodec[Map[java.util.UUID, Int]] = JsonCodecMaker.make[Map[java.util.UUID, Int]](CodecMakerConfig)
+    lazy val uuidMap: JsonValueCodec[Map[java.util.UUID, Int]] =
+      JsonCodecMaker.make[Map[java.util.UUID, Int]](CodecMakerConfig)
     lazy val javaEnums: JsonValueCodec[JUJavaEnums] = JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig)
-    lazy val javaEnumTop: JsonValueCodec[java.util.concurrent.TimeUnit] = JsonCodecMaker.make[java.util.concurrent.TimeUnit](CodecMakerConfig)
-    lazy val javaEnumMap: JsonValueCodec[Map[java.util.concurrent.TimeUnit, Int]] = JsonCodecMaker.make[Map[java.util.concurrent.TimeUnit, Int]](CodecMakerConfig)
+    lazy val javaEnumTop: JsonValueCodec[java.util.concurrent.TimeUnit] =
+      JsonCodecMaker.make[java.util.concurrent.TimeUnit](CodecMakerConfig)
+    lazy val javaEnumMap: JsonValueCodec[Map[java.util.concurrent.TimeUnit, Int]] =
+      JsonCodecMaker.make[Map[java.util.concurrent.TimeUnit, Int]](CodecMakerConfig)
     lazy val enums: JsonValueCodec[JUEnums] = JsonCodecMaker.make[JUEnums](CodecMakerConfig)
-    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] = JsonCodecMaker.make[List[JUCelestialBody.CelestialBody]](CodecMakerConfig)
-    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] = JsonCodecMaker.make[Map[JUCelestialBody.CelestialBody, Int]](CodecMakerConfig)
-    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] = JsonCodecMaker.make[List[JUSpectralClass.SpectralClass]](CodecMakerConfig)
-    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] = JsonCodecMaker.make[Map[JUSpectralClass.SpectralClass, Int]](CodecMakerConfig)
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = JsonCodecMaker.make[JULocationType.LocationType](CodecMakerConfig)
-    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] = JsonCodecMaker.make[Map[JULocationType.LocationType, Int]](CodecMakerConfig)
-    lazy val cardRankList: JsonValueCodec[List[JUCardRank.CardRank]] = JsonCodecMaker.make[List[JUCardRank.CardRank]](CodecMakerConfig)
-    lazy val cardRankMap: JsonValueCodec[Map[JUCardRank.CardRank, Int]] = JsonCodecMaker.make[Map[JUCardRank.CardRank, Int]](CodecMakerConfig)
+    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] =
+      JsonCodecMaker.make[List[JUCelestialBody.CelestialBody]](CodecMakerConfig)
+    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] =
+      JsonCodecMaker.make[Map[JUCelestialBody.CelestialBody, Int]](CodecMakerConfig)
+    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] =
+      JsonCodecMaker.make[List[JUSpectralClass.SpectralClass]](CodecMakerConfig)
+    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] =
+      JsonCodecMaker.make[Map[JUSpectralClass.SpectralClass, Int]](CodecMakerConfig)
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      JsonCodecMaker.make[JULocationType.LocationType](CodecMakerConfig)
+    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] =
+      JsonCodecMaker.make[Map[JULocationType.LocationType, Int]](CodecMakerConfig)
+    lazy val cardRankList: JsonValueCodec[List[JUCardRank.CardRank]] =
+      JsonCodecMaker.make[List[JUCardRank.CardRank]](CodecMakerConfig)
+    lazy val cardRankMap: JsonValueCodec[Map[JUCardRank.CardRank, Int]] =
+      JsonCodecMaker.make[Map[JUCardRank.CardRank, Int]](CodecMakerConfig)
     lazy val birdList: JsonValueCodec[List[JUBird.Bird]] = JsonCodecMaker.make[List[JUBird.Bird]](CodecMakerConfig)
-    lazy val birdMap: JsonValueCodec[Map[JUBird.Bird, Int]] = JsonCodecMaker.make[Map[JUBird.Bird, Int]](CodecMakerConfig)
+    lazy val birdMap: JsonValueCodec[Map[JUBird.Bird, Int]] =
+      JsonCodecMaker.make[Map[JUBird.Bird, Int]](CodecMakerConfig)
     lazy val options: JsonValueCodec[JUOptions] = JsonCodecMaker.make[JUOptions](CodecMakerConfig)
     lazy val optionInt: JsonValueCodec[Option[Int]] = JsonCodecMaker.make[Option[Int]](CodecMakerConfig)
-    lazy val optionInner: JsonValueCodec[Option[JUOptionInner]] = JsonCodecMaker.make[Option[JUOptionInner]](CodecMakerConfig)
+    lazy val optionInner: JsonValueCodec[Option[JUOptionInner]] =
+      JsonCodecMaker.make[Option[JUOptionInner]](CodecMakerConfig)
     lazy val optionString: JsonValueCodec[Option[String]] = JsonCodecMaker.make[Option[String]](CodecMakerConfig)
     lazy val arrayOption: JsonValueCodec[Array[Option[Int]]] = JsonCodecMaker.make[Array[Option[Int]]](CodecMakerConfig)
     lazy val listOption: JsonValueCodec[List[Option[Int]]] = JsonCodecMaker.make[List[Option[Int]]](CodecMakerConfig)
     lazy val setOption: JsonValueCodec[Set[Option[Int]]] = JsonCodecMaker.make[Set[Option[Int]]](CodecMakerConfig)
-    lazy val mapOption: JsonValueCodec[Map[String, Option[Int]]] = JsonCodecMaker.make[Map[String, Option[Int]]](CodecMakerConfig)
+    lazy val mapOption: JsonValueCodec[Map[String, Option[Int]]] =
+      JsonCodecMaker.make[Map[String, Option[Int]]](CodecMakerConfig)
     lazy val tuples: JsonValueCodec[JUTuples] = JsonCodecMaker.make[JUTuples](CodecMakerConfig)
     lazy val tupleTop: JsonValueCodec[(String, Int)] = JsonCodecMaker.make[(String, Int)](CodecMakerConfig)
     lazy val tupleAliases: JsonValueCodec[JUTupleAliases] = JsonCodecMaker.make[JUTupleAliases](CodecMakerConfig)
-    lazy val tupleAliasTop: JsonValueCodec[(JUAlias.S, JUAlias.I)] = JsonCodecMaker.make[(JUAlias.S, JUAlias.I)](CodecMakerConfig)
+    lazy val tupleAliasTop: JsonValueCodec[(JUAlias.S, JUAlias.I)] =
+      JsonCodecMaker.make[(JUAlias.S, JUAlias.I)](CodecMakerConfig)
     lazy val arrays: JsonValueCodec[JUArrays] = JsonCodecMaker.make[JUArrays](CodecMakerConfig)
     lazy val arrayArrayTop: JsonValueCodec[Array[Array[Int]]] = JsonCodecMaker.make[Array[Array[Int]]](CodecMakerConfig)
     lazy val iterators: JsonValueCodec[JUIterators] = JsonCodecMaker.make[JUIterators](CodecMakerConfig)
-    lazy val iteratorTop: JsonValueCodec[Iterator[Iterator[Int]]] = JsonCodecMaker.make[Iterator[Iterator[Int]]](CodecMakerConfig)
+    lazy val iteratorTop: JsonValueCodec[Iterator[Iterator[Int]]] =
+      JsonCodecMaker.make[Iterator[Iterator[Int]]](CodecMakerConfig)
     lazy val iterables: JsonValueCodec[JUIterables] = JsonCodecMaker.make[JUIterables](CodecMakerConfig)
-    lazy val mutableIterables: JsonValueCodec[JUMutableIterables] = JsonCodecMaker.make[JUMutableIterables](CodecMakerConfig)
-    lazy val immutableIterables: JsonValueCodec[JUImmutableIterables] = JsonCodecMaker.make[JUImmutableIterables](CodecMakerConfig)
+    lazy val mutableIterables: JsonValueCodec[JUMutableIterables] =
+      JsonCodecMaker.make[JUMutableIterables](CodecMakerConfig)
+    lazy val immutableIterables: JsonValueCodec[JUImmutableIterables] =
+      JsonCodecMaker.make[JUImmutableIterables](CodecMakerConfig)
     lazy val nonEmptyTop: JsonValueCodec[::[Int]] = JsonCodecMaker.make[::[Int]](CodecMakerConfig)
     lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] = JsonCodecMaker.make[JUEmptyIterables](CodecMakerConfig)
-    lazy val emptyIterables2: JsonValueCodec[JUEmptyIterables2] = JsonCodecMaker.make[JUEmptyIterables2](CodecMakerConfig)
-    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] = JsonCodecMaker.make[collection.mutable.Set[List[BigDecimal]]](CodecMakerConfig)
+    lazy val emptyIterables2: JsonValueCodec[JUEmptyIterables2] =
+      JsonCodecMaker.make[JUEmptyIterables2](CodecMakerConfig)
+    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] =
+      JsonCodecMaker.make[collection.mutable.Set[List[BigDecimal]]](CodecMakerConfig)
     lazy val genericMaps: JsonValueCodec[JUGenericMaps] = JsonCodecMaker.make[JUGenericMaps](CodecMakerConfig)
     lazy val mutableMaps: JsonValueCodec[JUMutableMaps] = JsonCodecMaker.make[JUMutableMaps](CodecMakerConfig)
     lazy val immutableMaps: JsonValueCodec[JUImmutableMaps] = JsonCodecMaker.make[JUImmutableMaps](CodecMakerConfig)
     lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] = JsonCodecMaker.make[JUEmptyMaps](CodecMakerConfig)
-    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] = JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]](CodecMakerConfig)
-    lazy val mutableLongMaps: JsonValueCodec[JUMutableLongMaps] = JsonCodecMaker.make[JUMutableLongMaps](CodecMakerConfig)
-    lazy val immutableIntLongMaps: JsonValueCodec[JUImmutableIntLongMaps] = JsonCodecMaker.make[JUImmutableIntLongMaps](CodecMakerConfig)
+    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] =
+      JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]](CodecMakerConfig)
+    lazy val mutableLongMaps: JsonValueCodec[JUMutableLongMaps] =
+      JsonCodecMaker.make[JUMutableLongMaps](CodecMakerConfig)
+    lazy val immutableIntLongMaps: JsonValueCodec[JUImmutableIntLongMaps] =
+      JsonCodecMaker.make[JUImmutableIntLongMaps](CodecMakerConfig)
     lazy val bitSets: JsonValueCodec[JUBitSets] = JsonCodecMaker.make[JUBitSets](CodecMakerConfig)
-    lazy val longIntBitTop: JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] = JsonCodecMaker.make[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]](CodecMakerConfig)
-    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] = JsonCodecMaker.make[collection.immutable.BitSet](CodecMakerConfig)
-    lazy val mutableBitSetTop: JsonValueCodec[collection.mutable.BitSet] = JsonCodecMaker.make[collection.mutable.BitSet](CodecMakerConfig)
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig)
+    lazy val longIntBitTop
+        : JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] =
+      JsonCodecMaker
+        .make[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]](CodecMakerConfig)
+    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] =
+      JsonCodecMaker.make[collection.immutable.BitSet](CodecMakerConfig)
+    lazy val mutableBitSetTop: JsonValueCodec[collection.mutable.BitSet] =
+      JsonCodecMaker.make[collection.mutable.BitSet](CodecMakerConfig)
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig)
     lazy val nameOverridden: JsonValueCodec[JUNameOverridden] = JsonCodecMaker.make[JUNameOverridden](CodecMakerConfig)
     lazy val stringified: JsonValueCodec[JUStringified] = JsonCodecMaker.make[JUStringified](CodecMakerConfig)
     lazy val utf8: JsonValueCodec[JUUTF8KeysAndValues] = JsonCodecMaker.make[JUUTF8KeysAndValues](CodecMakerConfig)
     lazy val operators: JsonValueCodec[JUOperators] = JsonCodecMaker.make[JUOperators](CodecMakerConfig)
     lazy val defaults: JsonValueCodec[JUDefaults] = JsonCodecMaker.make[JUDefaults](CodecMakerConfig)
     lazy val defaults2: JsonValueCodec[JUDefaults2] = JsonCodecMaker.make[JUDefaults2](CodecMakerConfig)
-    lazy val sharedEmptyMutableDefaults: JsonValueCodec[JUSharedEmptyMutableDefaults] = JsonCodecMaker.make[JUSharedEmptyMutableDefaults](CodecMakerConfig)
-    lazy val polymorphicDefaults: JsonValueCodec[JUPolymorphicDefaults[Int, String]] = JsonCodecMaker.make[JUPolymorphicDefaults[Int, String]](CodecMakerConfig)
-    lazy val nestedUser: JsonValueCodec[JUNestedDefaults.User] = JsonCodecMaker.make[JUNestedDefaults.User](CodecMakerConfig)
-    lazy val nestedBox: JsonValueCodec[JUNestedDefaults.Box[Int]] = JsonCodecMaker.make[JUNestedDefaults.Box[Int]](CodecMakerConfig)
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.make[JUIterablesWithDefaults](CodecMakerConfig)
+    lazy val defaults3: JsonValueCodec[JUDefaults3] = JsonCodecMaker.make[JUDefaults3](CodecMakerConfig)
+    lazy val sharedEmptyMutableDefaults: JsonValueCodec[JUSharedEmptyMutableDefaults] =
+      JsonCodecMaker.make[JUSharedEmptyMutableDefaults](CodecMakerConfig)
+    lazy val polymorphicDefaults: JsonValueCodec[JUPolymorphicDefaults[Int, String]] =
+      JsonCodecMaker.make[JUPolymorphicDefaults[Int, String]](CodecMakerConfig)
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.make[JUIterablesWithDefaults](CodecMakerConfig)
     lazy val transient: JsonValueCodec[JUTransient] = JsonCodecMaker.make[JUTransient](CodecMakerConfig)
     lazy val noneValues: JsonValueCodec[JUNoneValues] = JsonCodecMaker.make[JUNoneValues](CodecMakerConfig)
-    lazy val noneValuesList: JsonValueCodec[List[JUNoneValues]] = JsonCodecMaker.make[List[JUNoneValues]](CodecMakerConfig)
+    lazy val noneValuesList: JsonValueCodec[List[JUNoneValues]] =
+      JsonCodecMaker.make[List[JUNoneValues]](CodecMakerConfig)
     lazy val skipUnknown: JsonValueCodec[JUSkipUnknown] = JsonCodecMaker.make[JUSkipUnknown](CodecMakerConfig)
     lazy val required32: JsonValueCodec[JURequired32] = JsonCodecMaker.make[JURequired32](CodecMakerConfig)
-    lazy val requiredAfterOptional: JsonValueCodec[JURequiredAfterOptionalFields] = JsonCodecMaker.make[JURequiredAfterOptionalFields](CodecMakerConfig)
-    lazy val valueClassTypes: JsonValueCodec[JUValueClassTypes] = JsonCodecMaker.make[JUValueClassTypes](CodecMakerConfig)
+    lazy val requiredAfterOptional: JsonValueCodec[JURequiredAfterOptionalFields] =
+      JsonCodecMaker.make[JURequiredAfterOptionalFields](CodecMakerConfig)
+    lazy val valueClassTypes: JsonValueCodec[JUValueClassTypes] =
+      JsonCodecMaker.make[JUValueClassTypes](CodecMakerConfig)
     lazy val userIds: JsonValueCodec[JUUserIds] = JsonCodecMaker.make[JUUserIds](CodecMakerConfig)
     lazy val userIdTop: JsonValueCodec[JUUserId] = JsonCodecMaker.make[JUUserId](CodecMakerConfig)
     lazy val orderIdTop: JsonValueCodec[JUOrderId] = JsonCodecMaker.make[JUOrderId](CodecMakerConfig)
     lazy val userIdArray: JsonValueCodec[Array[JUUserId]] = JsonCodecMaker.make[Array[JUUserId]](CodecMakerConfig)
     lazy val orderIdArray: JsonValueCodec[Array[JUOrderId]] = JsonCodecMaker.make[Array[JUOrderId]](CodecMakerConfig)
-    lazy val orderUserMap: JsonValueCodec[Map[JUOrderId, JUUserId]] = JsonCodecMaker.make[Map[JUOrderId, JUUserId]](CodecMakerConfig)
-    lazy val userOrderMap: JsonValueCodec[Map[JUUserId, JUOrderId]] = JsonCodecMaker.make[Map[JUUserId, JUOrderId]](CodecMakerConfig)
+    lazy val orderUserMap: JsonValueCodec[Map[JUOrderId, JUUserId]] =
+      JsonCodecMaker.make[Map[JUOrderId, JUUserId]](CodecMakerConfig)
+    lazy val userOrderMap: JsonValueCodec[Map[JUUserId, JUOrderId]] =
+      JsonCodecMaker.make[Map[JUUserId, JUOrderId]](CodecMakerConfig)
     lazy val aliasUserId: JsonValueCodec[JUAlias.UserId] = JsonCodecMaker.make[JUAlias.UserId](CodecMakerConfig)
     lazy val aliasOrderId: JsonValueCodec[JUAlias.OrderId] = JsonCodecMaker.make[JUAlias.OrderId](CodecMakerConfig)
-    lazy val genericUserId: JsonValueCodec[JUGeneric.UserId[String]] = JsonCodecMaker.make[JUGeneric.UserId[String]](CodecMakerConfig)
-    lazy val genericOrderId: JsonValueCodec[JUGeneric.OrderId[Int]] = JsonCodecMaker.make[JUGeneric.OrderId[Int]](CodecMakerConfig)
+    lazy val genericUserId: JsonValueCodec[JUGeneric.UserId[String]] =
+      JsonCodecMaker.make[JUGeneric.UserId[String]](CodecMakerConfig)
+    lazy val genericOrderId: JsonValueCodec[JUGeneric.OrderId[Int]] =
+      JsonCodecMaker.make[JUGeneric.OrderId[Int]](CodecMakerConfig)
     lazy val nestedOptions: JsonValueCodec[JUNestedOptions] = JsonCodecMaker.make[JUNestedOptions](CodecMakerConfig)
     lazy val eitherFoo: JsonValueCodec[JUEitherFoo] = JsonCodecMaker.make[JUEitherFoo](CodecMakerConfig)
     lazy val javaTime: JsonValueCodec[JUJavaTimeTypes] = JsonCodecMaker.make[JUJavaTimeTypes](CodecMakerConfig)
     lazy val javaTimeMaps: JsonValueCodec[JUJavaTimeMaps] = JsonCodecMaker.make[JUJavaTimeMaps](CodecMakerConfig)
-    lazy val dayOfWeekTop: JsonValueCodec[java.time.DayOfWeek] = JsonCodecMaker.make[java.time.DayOfWeek](CodecMakerConfig)
+    lazy val dayOfWeekTop: JsonValueCodec[java.time.DayOfWeek] =
+      JsonCodecMaker.make[java.time.DayOfWeek](CodecMakerConfig)
     lazy val durationTop: JsonValueCodec[java.time.Duration] = JsonCodecMaker.make[java.time.Duration](CodecMakerConfig)
     lazy val instantTop: JsonValueCodec[java.time.Instant] = JsonCodecMaker.make[java.time.Instant](CodecMakerConfig)
-    lazy val localDateTop: JsonValueCodec[java.time.LocalDate] = JsonCodecMaker.make[java.time.LocalDate](CodecMakerConfig)
-    lazy val localDateTimeTop: JsonValueCodec[java.time.LocalDateTime] = JsonCodecMaker.make[java.time.LocalDateTime](CodecMakerConfig)
-    lazy val localTimeTop: JsonValueCodec[java.time.LocalTime] = JsonCodecMaker.make[java.time.LocalTime](CodecMakerConfig)
+    lazy val localDateTop: JsonValueCodec[java.time.LocalDate] =
+      JsonCodecMaker.make[java.time.LocalDate](CodecMakerConfig)
+    lazy val localDateTimeTop: JsonValueCodec[java.time.LocalDateTime] =
+      JsonCodecMaker.make[java.time.LocalDateTime](CodecMakerConfig)
+    lazy val localTimeTop: JsonValueCodec[java.time.LocalTime] =
+      JsonCodecMaker.make[java.time.LocalTime](CodecMakerConfig)
     lazy val monthTop: JsonValueCodec[java.time.Month] = JsonCodecMaker.make[java.time.Month](CodecMakerConfig)
     lazy val monthDayTop: JsonValueCodec[java.time.MonthDay] = JsonCodecMaker.make[java.time.MonthDay](CodecMakerConfig)
-    lazy val offsetDateTimeTop: JsonValueCodec[java.time.OffsetDateTime] = JsonCodecMaker.make[java.time.OffsetDateTime](CodecMakerConfig)
-    lazy val offsetTimeTop: JsonValueCodec[java.time.OffsetTime] = JsonCodecMaker.make[java.time.OffsetTime](CodecMakerConfig)
+    lazy val offsetDateTimeTop: JsonValueCodec[java.time.OffsetDateTime] =
+      JsonCodecMaker.make[java.time.OffsetDateTime](CodecMakerConfig)
+    lazy val offsetTimeTop: JsonValueCodec[java.time.OffsetTime] =
+      JsonCodecMaker.make[java.time.OffsetTime](CodecMakerConfig)
     lazy val periodTop: JsonValueCodec[java.time.Period] = JsonCodecMaker.make[java.time.Period](CodecMakerConfig)
     lazy val yearTop: JsonValueCodec[java.time.Year] = JsonCodecMaker.make[java.time.Year](CodecMakerConfig)
-    lazy val yearMonthTop: JsonValueCodec[java.time.YearMonth] = JsonCodecMaker.make[java.time.YearMonth](CodecMakerConfig)
-    lazy val zonedDateTimeTop: JsonValueCodec[java.time.ZonedDateTime] = JsonCodecMaker.make[java.time.ZonedDateTime](CodecMakerConfig)
+    lazy val yearMonthTop: JsonValueCodec[java.time.YearMonth] =
+      JsonCodecMaker.make[java.time.YearMonth](CodecMakerConfig)
+    lazy val zonedDateTimeTop: JsonValueCodec[java.time.ZonedDateTime] =
+      JsonCodecMaker.make[java.time.ZonedDateTime](CodecMakerConfig)
     lazy val zoneIdTop: JsonValueCodec[java.time.ZoneId] = JsonCodecMaker.make[java.time.ZoneId](CodecMakerConfig)
-    lazy val zoneOffsetTop: JsonValueCodec[java.time.ZoneOffset] = JsonCodecMaker.make[java.time.ZoneOffset](CodecMakerConfig)
+    lazy val zoneOffsetTop: JsonValueCodec[java.time.ZoneOffset] =
+      JsonCodecMaker.make[java.time.ZoneOffset](CodecMakerConfig)
     lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig)
     lazy val aaa: JsonValueCodec[JUAAA] = JsonCodecMaker.make[JUAAA](CodecMakerConfig)
     lazy val bbb: JsonValueCodec[JUBBB] = JsonCodecMaker.make[JUBBB](CodecMakerConfig)
     lazy val ccc: JsonValueCodec[JUCCC] = JsonCodecMaker.make[JUCCC](CodecMakerConfig)
     lazy val ddd: JsonValueCodec[JUDDD.type] = JsonCodecMaker.make[JUDDD.type](CodecMakerConfig)
     lazy val extra: JsonValueCodec[JUExtra.Base] = JsonCodecMaker.make[JUExtra.Base](CodecMakerConfig)
-    lazy val nonCaseLeaves: JsonValueCodec[List[JUNonCaseLeaves.X]] = JsonCodecMaker.make[List[JUNonCaseLeaves.X]](CodecMakerConfig)
-    lazy val sealedClass: JsonValueCodec[List[JUSealedClass.A]] = JsonCodecMaker.make[List[JUSealedClass.A]](CodecMakerConfig)
-    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] = JsonCodecMaker.make[List[JUNamedLeaves.Base]](CodecMakerConfig)
+    lazy val nonCaseLeaves: JsonValueCodec[List[JUNonCaseLeaves.X]] =
+      JsonCodecMaker.make[List[JUNonCaseLeaves.X]](CodecMakerConfig)
+    lazy val sealedClass: JsonValueCodec[List[JUSealedClass.A]] =
+      JsonCodecMaker.make[List[JUSealedClass.A]](CodecMakerConfig)
+    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] =
+      JsonCodecMaker.make[List[JUNamedLeaves.Base]](CodecMakerConfig)
     lazy val deep: JsonValueCodec[List[JUDeep.Base]] = JsonCodecMaker.make[List[JUDeep.Base]](CodecMakerConfig)
     lazy val mixed: JsonValueCodec[List[JUMixed.Base]] = JsonCodecMaker.make[List[JUMixed.Base]](CodecMakerConfig)
     lazy val diamond: JsonValueCodec[List[JUDiamond.Base]] = JsonCodecMaker.make[List[JUDiamond.Base]](CodecMakerConfig)
     lazy val basketApple: JsonValueCodec[JUBasket[JUApple]] = JsonCodecMaker.make[JUBasket[JUApple]](CodecMakerConfig)
-    lazy val basketOrange: JsonValueCodec[JUBasket[JUOrange]] = JsonCodecMaker.make[JUBasket[JUOrange]](CodecMakerConfig)
-    lazy val typeAliases: JsonValueCodec[JUTypeAliases.TypeAliases] = JsonCodecMaker.make[JUTypeAliases.TypeAliases](CodecMakerConfig)
-    lazy val aliasMap: JsonValueCodec[Map[JUTypeAliases.I, JUTypeAliases.S]] = JsonCodecMaker.make[Map[JUTypeAliases.I, JUTypeAliases.S]](CodecMakerConfig)
+    lazy val basketOrange: JsonValueCodec[JUBasket[JUOrange]] =
+      JsonCodecMaker.make[JUBasket[JUOrange]](CodecMakerConfig)
+    lazy val typeAliases: JsonValueCodec[JUTypeAliases.TypeAliases] =
+      JsonCodecMaker.make[JUTypeAliases.TypeAliases](CodecMakerConfig)
+    lazy val aliasMap: JsonValueCodec[Map[JUTypeAliases.I, JUTypeAliases.S]] =
+      JsonCodecMaker.make[Map[JUTypeAliases.I, JUTypeAliases.S]](CodecMakerConfig)
     lazy val aliasList: JsonValueCodec[JUTypeAliases.L] = JsonCodecMaker.make[JUTypeAliases.L](CodecMakerConfig)
     lazy val idArray: JsonValueCodec[Array[JUId[String]]] = JsonCodecMaker.make[Array[JUId[String]]](CodecMakerConfig)
-    lazy val firstOrder: JsonValueCodec[JUFirstOrderType[Int, String]] = JsonCodecMaker.make[JUFirstOrderType[Int, String]](CodecMakerConfig)
-    lazy val firstOrderId: JsonValueCodec[JUFirstOrderType[JUId[Int], JUId[String]]] = JsonCodecMaker.make[JUFirstOrderType[JUId[Int], JUId[String]]](CodecMakerConfig)
+    lazy val firstOrder: JsonValueCodec[JUFirstOrderType[Int, String]] =
+      JsonCodecMaker.make[JUFirstOrderType[Int, String]](CodecMakerConfig)
+    lazy val firstOrderId: JsonValueCodec[JUFirstOrderType[JUId[Int], JUId[String]]] =
+      JsonCodecMaker.make[JUFirstOrderType[JUId[Int], JUId[String]]](CodecMakerConfig)
     lazy val gadt2Array: JsonValueCodec[Array[JUGADT2[?]]] = JsonCodecMaker.make[Array[JUGADT2[?]]](CodecMakerConfig)
     lazy val hk: JsonValueCodec[JUHk.Foo[Option]] = JsonCodecMaker.make[JUHk.Foo[Option]](CodecMakerConfig)
-    lazy val freeGadt: JsonValueCodec[List[JUFreeGadt.GADT[Int]]] = JsonCodecMaker.make[List[JUFreeGadt.GADT[Int]]](CodecMakerConfig)
-    lazy val auxiliary: JsonValueCodec[JUAuxiliaryConstructor] = JsonCodecMaker.make[JUAuxiliaryConstructor](CodecMakerConfig)
+    lazy val freeGadt: JsonValueCodec[List[JUFreeGadt.GADT[Int]]] =
+      JsonCodecMaker.make[List[JUFreeGadt.GADT[Int]]](CodecMakerConfig)
+    lazy val auxiliary: JsonValueCodec[JUAuxiliaryConstructor] =
+      JsonCodecMaker.make[JUAuxiliaryConstructor](CodecMakerConfig)
     lazy val multiList: JsonValueCodec[JUMultiListOfArgs] = JsonCodecMaker.make[JUMultiListOfArgs](CodecMakerConfig)
-    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] = JsonCodecMaker.make[JUMultiListOfArgsDefault](CodecMakerConfig)
+    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] =
+      JsonCodecMaker.make[JUMultiListOfArgsDefault](CodecMakerConfig)
   }
   object recursive {
-    lazy val recursive: JsonValueCodec[JURecursive] = JsonCodecMaker.make[JURecursive](CodecMakerConfig.withAllowRecursiveTypes(true))
-    lazy val human: JsonValueCodec[JUKingDom.Human] = JsonCodecMaker.make[JUKingDom.Human](CodecMakerConfig.withAllowRecursiveTypes(true))
-    lazy val hkOption: JsonValueCodec[JUHigherKindedType[Option]] = JsonCodecMaker.make[JUHigherKindedType[Option]](CodecMakerConfig.withAllowRecursiveTypes(true))
-    lazy val hkSeq: JsonValueCodec[JUHigherKindedType[Seq]] = JsonCodecMaker.make[JUHigherKindedType[Seq]](CodecMakerConfig.withAllowRecursiveTypes(true))
+    lazy val recursive: JsonValueCodec[JURecursive] =
+      JsonCodecMaker.make[JURecursive](CodecMakerConfig.withAllowRecursiveTypes(true))
+    lazy val human: JsonValueCodec[JUKingDom.Human] =
+      JsonCodecMaker.make[JUKingDom.Human](CodecMakerConfig.withAllowRecursiveTypes(true))
+    lazy val hkOption: JsonValueCodec[JUHigherKindedType[Option]] =
+      JsonCodecMaker.make[JUHigherKindedType[Option]](CodecMakerConfig.withAllowRecursiveTypes(true))
+    lazy val hkSeq: JsonValueCodec[JUHigherKindedType[Seq]] =
+      JsonCodecMaker.make[JUHigherKindedType[Seq]](CodecMakerConfig.withAllowRecursiveTypes(true))
   }
   object stringified {
     lazy val byteTop: JsonValueCodec[Byte] = JsonCodecMaker.make[Byte](CodecMakerConfig.withIsStringified(true))
     lazy val shortTop: JsonValueCodec[Short] = JsonCodecMaker.make[Short](CodecMakerConfig.withIsStringified(true))
     lazy val intTop: JsonValueCodec[Int] = JsonCodecMaker.make[Int](CodecMakerConfig.withIsStringified(true))
     lazy val longTop: JsonValueCodec[Long] = JsonCodecMaker.make[Long](CodecMakerConfig.withIsStringified(true))
-    lazy val booleanTop: JsonValueCodec[Boolean] = JsonCodecMaker.make[Boolean](CodecMakerConfig.withIsStringified(true))
+    lazy val booleanTop: JsonValueCodec[Boolean] =
+      JsonCodecMaker.make[Boolean](CodecMakerConfig.withIsStringified(true))
     lazy val doubleTop: JsonValueCodec[Double] = JsonCodecMaker.make[Double](CodecMakerConfig.withIsStringified(true))
     lazy val floatTop: JsonValueCodec[Float] = JsonCodecMaker.make[Float](CodecMakerConfig.withIsStringified(true))
-    lazy val jByteTop: JsonValueCodec[java.lang.Byte] = JsonCodecMaker.make[java.lang.Byte](CodecMakerConfig.withIsStringified(true))
-    lazy val jShortTop: JsonValueCodec[java.lang.Short] = JsonCodecMaker.make[java.lang.Short](CodecMakerConfig.withIsStringified(true))
-    lazy val jIntegerTop: JsonValueCodec[java.lang.Integer] = JsonCodecMaker.make[java.lang.Integer](CodecMakerConfig.withIsStringified(true))
-    lazy val jLongTop: JsonValueCodec[java.lang.Long] = JsonCodecMaker.make[java.lang.Long](CodecMakerConfig.withIsStringified(true))
-    lazy val jBooleanTop: JsonValueCodec[java.lang.Boolean] = JsonCodecMaker.make[java.lang.Boolean](CodecMakerConfig.withIsStringified(true))
-    lazy val jDoubleTop: JsonValueCodec[java.lang.Double] = JsonCodecMaker.make[java.lang.Double](CodecMakerConfig.withIsStringified(true))
-    lazy val jFloatTop: JsonValueCodec[java.lang.Float] = JsonCodecMaker.make[java.lang.Float](CodecMakerConfig.withIsStringified(true))
+    lazy val jByteTop: JsonValueCodec[java.lang.Byte] =
+      JsonCodecMaker.make[java.lang.Byte](CodecMakerConfig.withIsStringified(true))
+    lazy val jShortTop: JsonValueCodec[java.lang.Short] =
+      JsonCodecMaker.make[java.lang.Short](CodecMakerConfig.withIsStringified(true))
+    lazy val jIntegerTop: JsonValueCodec[java.lang.Integer] =
+      JsonCodecMaker.make[java.lang.Integer](CodecMakerConfig.withIsStringified(true))
+    lazy val jLongTop: JsonValueCodec[java.lang.Long] =
+      JsonCodecMaker.make[java.lang.Long](CodecMakerConfig.withIsStringified(true))
+    lazy val jBooleanTop: JsonValueCodec[java.lang.Boolean] =
+      JsonCodecMaker.make[java.lang.Boolean](CodecMakerConfig.withIsStringified(true))
+    lazy val jDoubleTop: JsonValueCodec[java.lang.Double] =
+      JsonCodecMaker.make[java.lang.Double](CodecMakerConfig.withIsStringified(true))
+    lazy val jFloatTop: JsonValueCodec[java.lang.Float] =
+      JsonCodecMaker.make[java.lang.Float](CodecMakerConfig.withIsStringified(true))
     lazy val bigIntTop: JsonValueCodec[BigInt] = JsonCodecMaker.make[BigInt](CodecMakerConfig.withIsStringified(true))
-    lazy val bigDecimalTop: JsonValueCodec[BigDecimal] = JsonCodecMaker.make[BigDecimal](CodecMakerConfig.withIsStringified(true))
-    lazy val orderIdTop: JsonValueCodec[JUOrderId] = JsonCodecMaker.make[JUOrderId](CodecMakerConfig.withIsStringified(true))
-    lazy val optionBigInt: JsonValueCodec[Option[BigInt]] = JsonCodecMaker.make[Option[BigInt]](CodecMakerConfig.withIsStringified(true))
-    lazy val tuple3: JsonValueCodec[(Long, Float, BigDecimal)] = JsonCodecMaker.make[(Long, Float, BigDecimal)](CodecMakerConfig.withIsStringified(true))
-    lazy val arrayArrayTop: JsonValueCodec[Array[Array[Int]]] = JsonCodecMaker.make[Array[Array[Int]]](CodecMakerConfig.withIsStringified(true))
-    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] = JsonCodecMaker.make[collection.mutable.Set[List[BigDecimal]]](CodecMakerConfig.withIsStringified(true))
-    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] = JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]](CodecMakerConfig.withIsStringified(true))
-    lazy val longIntBitTop: JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] = JsonCodecMaker.make[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]](CodecMakerConfig.withIsStringified(true))
+    lazy val bigDecimalTop: JsonValueCodec[BigDecimal] =
+      JsonCodecMaker.make[BigDecimal](CodecMakerConfig.withIsStringified(true))
+    lazy val orderIdTop: JsonValueCodec[JUOrderId] =
+      JsonCodecMaker.make[JUOrderId](CodecMakerConfig.withIsStringified(true))
+    lazy val optionBigInt: JsonValueCodec[Option[BigInt]] =
+      JsonCodecMaker.make[Option[BigInt]](CodecMakerConfig.withIsStringified(true))
+    lazy val tuple3: JsonValueCodec[(Long, Float, BigDecimal)] =
+      JsonCodecMaker.make[(Long, Float, BigDecimal)](CodecMakerConfig.withIsStringified(true))
+    lazy val arrayArrayTop: JsonValueCodec[Array[Array[Int]]] =
+      JsonCodecMaker.make[Array[Array[Int]]](CodecMakerConfig.withIsStringified(true))
+    lazy val mutableSetTop: JsonValueCodec[collection.mutable.Set[List[BigDecimal]]] =
+      JsonCodecMaker.make[collection.mutable.Set[List[BigDecimal]]](CodecMakerConfig.withIsStringified(true))
+    lazy val linkedMapTop: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]] = JsonCodecMaker
+      .make[collection.mutable.LinkedHashMap[Int, Map[Char, Boolean]]](CodecMakerConfig.withIsStringified(true))
+    lazy val longIntBitTop
+        : JsonValueCodec[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]] =
+      JsonCodecMaker.make[collection.mutable.LongMap[collection.immutable.IntMap[collection.mutable.BitSet]]](
+        CodecMakerConfig.withIsStringified(true)
+      )
   }
   object enumId {
-    lazy val enums: JsonValueCodec[JUEnums] = JsonCodecMaker.make[JUEnums](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] = JsonCodecMaker.make[List[JUCelestialBody.CelestialBody]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] = JsonCodecMaker.make[Map[JUCelestialBody.CelestialBody, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] = JsonCodecMaker.make[List[JUSpectralClass.SpectralClass]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] = JsonCodecMaker.make[Map[JUSpectralClass.SpectralClass, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = JsonCodecMaker.make[JULocationType.LocationType](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] = JsonCodecMaker.make[Map[JULocationType.LocationType, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val enums2: JsonValueCodec[JUEnums2] = JsonCodecMaker.make[JUEnums2](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val temperatureList: JsonValueCodec[List[JUTemperature.Temperature]] = JsonCodecMaker.make[List[JUTemperature.Temperature]](CodecMakerConfig.withUseScalaEnumValueId(true))
-    lazy val temperatureMap: JsonValueCodec[Map[JUTemperature.Temperature, Int]] = JsonCodecMaker.make[Map[JUTemperature.Temperature, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val enums: JsonValueCodec[JUEnums] =
+      JsonCodecMaker.make[JUEnums](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val celestialList: JsonValueCodec[List[JUCelestialBody.CelestialBody]] =
+      JsonCodecMaker.make[List[JUCelestialBody.CelestialBody]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val celestialMap: JsonValueCodec[Map[JUCelestialBody.CelestialBody, Int]] =
+      JsonCodecMaker.make[Map[JUCelestialBody.CelestialBody, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val spectralList: JsonValueCodec[List[JUSpectralClass.SpectralClass]] =
+      JsonCodecMaker.make[List[JUSpectralClass.SpectralClass]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val spectralMap: JsonValueCodec[Map[JUSpectralClass.SpectralClass, Int]] =
+      JsonCodecMaker.make[Map[JUSpectralClass.SpectralClass, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      JsonCodecMaker.make[JULocationType.LocationType](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val locationMap: JsonValueCodec[Map[JULocationType.LocationType, Int]] =
+      JsonCodecMaker.make[Map[JULocationType.LocationType, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val enums2: JsonValueCodec[JUEnums2] =
+      JsonCodecMaker.make[JUEnums2](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val temperatureList: JsonValueCodec[List[JUTemperature.Temperature]] =
+      JsonCodecMaker.make[List[JUTemperature.Temperature]](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val temperatureMap: JsonValueCodec[Map[JUTemperature.Temperature, Int]] =
+      JsonCodecMaker.make[Map[JUTemperature.Temperature, Int]](CodecMakerConfig.withUseScalaEnumValueId(true))
   }
   object enumIdStringified {
-    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] = JsonCodecMaker.make[JULocationType.LocationType](CodecMakerConfig.withUseScalaEnumValueId(true).withIsStringified(true))
+    lazy val locationTop: JsonValueCodec[JULocationType.LocationType] =
+      JsonCodecMaker.make[JULocationType.LocationType](
+        CodecMakerConfig.withUseScalaEnumValueId(true).withIsStringified(true)
+      )
   }
   object noDuplicationCheck {
-    lazy val standardTypes: JsonValueCodec[JUStandardTypes] = JsonCodecMaker.make[JUStandardTypes](CodecMakerConfig.withCheckFieldDuplication(false))
-    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withCheckFieldDuplication(false))
+    lazy val standardTypes: JsonValueCodec[JUStandardTypes] =
+      JsonCodecMaker.make[JUStandardTypes](CodecMakerConfig.withCheckFieldDuplication(false))
+    lazy val adtList: JsonValueCodec[List[JUAdtBase]] =
+      JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withCheckFieldDuplication(false))
   }
   object javaEnumSnakeCase {
-    lazy val javaEnums: JsonValueCodec[JUJavaEnums] = JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig.withJavaEnumValueNameMapper(JsonCodecMaker.enforce_snake_case))
+    lazy val javaEnums: JsonValueCodec[JUJavaEnums] =
+      JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig.withJavaEnumValueNameMapper(JsonCodecMaker.enforce_snake_case))
   }
   object javaEnumSnakeThenPascalCase {
-    lazy val javaEnums: JsonValueCodec[JUJavaEnums] = JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig.withJavaEnumValueNameMapper(JsonCodecMaker.enforce_snake_case.andThen(JsonCodecMaker.EnforcePascalCase)))
+    lazy val javaEnums: JsonValueCodec[JUJavaEnums] = JsonCodecMaker.make[JUJavaEnums](
+      CodecMakerConfig.withJavaEnumValueNameMapper(
+        JsonCodecMaker.enforce_snake_case.andThen(JsonCodecMaker.EnforcePascalCase)
+      )
+    )
   }
   object javaEnumPartial {
-    lazy val javaEnums: JsonValueCodec[JUJavaEnums] = JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig.withJavaEnumValueNameMapper { case "SECONDS" => "s"; case "HALF_UP" => "r" })
+    lazy val javaEnums: JsonValueCodec[JUJavaEnums] =
+      JsonCodecMaker.make[JUJavaEnums](CodecMakerConfig.withJavaEnumValueNameMapper {
+        case "SECONDS" => "s"; case "HALF_UP" => "r"
+      })
   }
   object noTransientNone {
-    lazy val options: JsonValueCodec[JUOptions] = JsonCodecMaker.make[JUOptions](CodecMakerConfig.withTransientNone(false))
+    lazy val options: JsonValueCodec[JUOptions] =
+      JsonCodecMaker.make[JUOptions](CodecMakerConfig.withTransientNone(false))
   }
   object noTransientEmpty {
-    lazy val arrays: JsonValueCodec[JUArrays] = JsonCodecMaker.make[JUArrays](CodecMakerConfig.withTransientEmpty(false))
-    lazy val iterators: JsonValueCodec[JUIterators] = JsonCodecMaker.make[JUIterators](CodecMakerConfig.withTransientEmpty(false))
-    lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] = JsonCodecMaker.make[JUEmptyIterables](CodecMakerConfig.withTransientEmpty(false))
-    lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] = JsonCodecMaker.make[JUEmptyMaps](CodecMakerConfig.withTransientEmpty(false))
+    lazy val arrays: JsonValueCodec[JUArrays] =
+      JsonCodecMaker.make[JUArrays](CodecMakerConfig.withTransientEmpty(false))
+    lazy val iterators: JsonValueCodec[JUIterators] =
+      JsonCodecMaker.make[JUIterators](CodecMakerConfig.withTransientEmpty(false))
+    lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] =
+      JsonCodecMaker.make[JUEmptyIterables](CodecMakerConfig.withTransientEmpty(false))
+    lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] =
+      JsonCodecMaker.make[JUEmptyMaps](CodecMakerConfig.withTransientEmpty(false))
   }
   object makeWithRequiredCollectionFields {
     lazy val arrays: JsonValueCodec[JUArrays] = JsonCodecMaker.makeWithRequiredCollectionFields[JUArrays]
-    lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] = JsonCodecMaker.makeWithRequiredCollectionFields[JUEmptyIterables]
+    lazy val emptyIterables: JsonValueCodec[JUEmptyIterables] =
+      JsonCodecMaker.makeWithRequiredCollectionFields[JUEmptyIterables]
     lazy val emptyMaps: JsonValueCodec[JUEmptyMaps] = JsonCodecMaker.makeWithRequiredCollectionFields[JUEmptyMaps]
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.makeWithRequiredCollectionFields[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.makeWithRequiredCollectionFields[JUIterablesWithDefaults]
   }
   object makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName {
-    lazy val arrays: JsonValueCodec[JUArrays] = JsonCodecMaker.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName[JUArrays]
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = JsonCodecMaker.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName[List[JUCustomName.Base]]
+    lazy val arrays: JsonValueCodec[JUArrays] =
+      JsonCodecMaker.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName[JUArrays]
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] =
+      JsonCodecMaker.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName[List[JUCustomName.Base]]
   }
   object nestedIterables {
-    lazy val nestedIterables: JsonValueCodec[JUNestedIterables] = JsonCodecMaker.make[JUNestedIterables](CodecMakerConfig.withFieldNameMapper { case "b" => "value"; case "a" => "value" }.withRequireCollectionFields(true).withTransientEmpty(false))
+    lazy val nestedIterables: JsonValueCodec[JUNestedIterables] = JsonCodecMaker.make[JUNestedIterables](
+      CodecMakerConfig
+        .withFieldNameMapper { case "b" => "value"; case "a" => "value" }
+        .withRequireCollectionFields(true)
+        .withTransientEmpty(false)
+    )
   }
   object eitherValueMapper {
-    lazy val eitherTop: JsonValueCodec[Either[Int, String]] = JsonCodecMaker.make[Either[Int, String]](CodecMakerConfig.withFieldNameMapper { case "b" => "value"; case "a" => "value" })
+    lazy val eitherTop: JsonValueCodec[Either[Int, String]] =
+      JsonCodecMaker.make[Either[Int, String]](CodecMakerConfig.withFieldNameMapper {
+        case "b" => "value"; case "a" => "value"
+      })
   }
   object requireCollectionsNoTransientEmpty {
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.make[JUIterablesWithDefaults](CodecMakerConfig.withRequireCollectionFields(true).withTransientEmpty(false))
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.make[JUIterablesWithDefaults](
+        CodecMakerConfig.withRequireCollectionFields(true).withTransientEmpty(false)
+      )
   }
   object makeWithRequiredDefaultFields {
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.makeWithRequiredDefaultFields[JUIterablesWithDefaults]
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.makeWithRequiredDefaultFields[JUIterablesWithDefaults]
     lazy val defaults: JsonValueCodec[JUDefaults] = JsonCodecMaker.makeWithRequiredDefaultFields[JUDefaults]
-    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] = JsonCodecMaker.makeWithRequiredDefaultFields[JUMultiListOfArgsDefault]
+    lazy val multiListDefault: JsonValueCodec[JUMultiListOfArgsDefault] =
+      JsonCodecMaker.makeWithRequiredDefaultFields[JUMultiListOfArgsDefault]
   }
   object requireDefaultsNoTransientDefault {
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.make[JUIterablesWithDefaults](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false))
-    lazy val defaults: JsonValueCodec[JUDefaults] = JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false))
-    lazy val transient: JsonValueCodec[JUTransient] = JsonCodecMaker.make[JUTransient](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false))
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.make[JUIterablesWithDefaults](
+        CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false)
+      )
+    lazy val defaults: JsonValueCodec[JUDefaults] =
+      JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false))
+    lazy val transient: JsonValueCodec[JUTransient] =
+      JsonCodecMaker.make[JUTransient](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false))
   }
   object requireDefaultsAndCollections {
-    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] = JsonCodecMaker.make[JUIterablesWithDefaults](CodecMakerConfig.withRequireDefaultFields(true).withTransientDefault(false).withRequireCollectionFields(true).withTransientEmpty(false))
+    lazy val iterablesWithDefaults: JsonValueCodec[JUIterablesWithDefaults] =
+      JsonCodecMaker.make[JUIterablesWithDefaults](
+        CodecMakerConfig
+          .withRequireDefaultFields(true)
+          .withTransientDefault(false)
+          .withRequireCollectionFields(true)
+          .withTransientEmpty(false)
+      )
   }
   object setLimit10 {
     lazy val set: JsonValueCodec[Set[Int]] = JsonCodecMaker.make[Set[Int]](CodecMakerConfig.withSetMaxInsertNumber(10))
-    lazy val mutableSet: JsonValueCodec[collection.mutable.Set[Int]] = JsonCodecMaker.make[collection.mutable.Set[Int]](CodecMakerConfig.withSetMaxInsertNumber(10))
+    lazy val mutableSet: JsonValueCodec[collection.mutable.Set[Int]] =
+      JsonCodecMaker.make[collection.mutable.Set[Int]](CodecMakerConfig.withSetMaxInsertNumber(10))
   }
   object mapLimit10 {
-    lazy val map: JsonValueCodec[Map[Int, Int]] = JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
-    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] = JsonCodecMaker.make[collection.immutable.LongMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] = JsonCodecMaker.make[collection.immutable.IntMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
+    lazy val map: JsonValueCodec[Map[Int, Int]] =
+      JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.LongMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.IntMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(10))
   }
   object mapLimit10AsArray {
-    lazy val map: JsonValueCodec[Map[Int, Int]] = JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
-    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] = JsonCodecMaker.make[collection.immutable.LongMap[Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] = JsonCodecMaker.make[collection.immutable.IntMap[Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
+    lazy val map: JsonValueCodec[Map[Int, Int]] =
+      JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] = JsonCodecMaker
+      .make[collection.immutable.LongMap[Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] = JsonCodecMaker
+      .make[collection.immutable.IntMap[Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(10))
+  }
+  object noMapLimit {
+    lazy val map: JsonValueCodec[Map[Int, Int]] =
+      JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapMaxInsertNumber(Int.MaxValue))
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.LongMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(Int.MaxValue))
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.IntMap[Int]](CodecMakerConfig.withMapMaxInsertNumber(Int.MaxValue))
+  }
+  object noMapLimitAsArray {
+    lazy val map: JsonValueCodec[Map[Int, Int]] =
+      JsonCodecMaker.make[Map[Int, Int]](CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(Int.MaxValue))
+    lazy val longMap: JsonValueCodec[collection.immutable.LongMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.LongMap[Int]](
+        CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(Int.MaxValue)
+      )
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Int]] =
+      JsonCodecMaker.make[collection.immutable.IntMap[Int]](
+        CodecMakerConfig.withMapAsArray(true).withMapMaxInsertNumber(Int.MaxValue)
+      )
   }
   object mapAsArray {
-    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] = JsonCodecMaker.make[collection.Map[Int, Boolean]](CodecMakerConfig.withMapAsArray(true))
-    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] = JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Boolean]](CodecMakerConfig.withMapAsArray(true))
-    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] = JsonCodecMaker.make[collection.mutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
-    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] = JsonCodecMaker.make[collection.immutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] = JsonCodecMaker.make[collection.immutable.IntMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
-    lazy val stringifiedMutableLongMaps: JsonValueCodec[JUStringifiedMutableLongMaps] = JsonCodecMaker.make[JUStringifiedMutableLongMaps](CodecMakerConfig.withMapAsArray(true))
-    lazy val stringifiedImmutableIntLongMaps: JsonValueCodec[JUStringifiedImmutableIntLongMaps] = JsonCodecMaker.make[JUStringifiedImmutableIntLongMaps](CodecMakerConfig.withMapAsArray(true))
+    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] =
+      JsonCodecMaker.make[collection.Map[Int, Boolean]](CodecMakerConfig.withMapAsArray(true))
+    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] =
+      JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Boolean]](CodecMakerConfig.withMapAsArray(true))
+    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] =
+      JsonCodecMaker.make[collection.mutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
+    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] =
+      JsonCodecMaker.make[collection.immutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] =
+      JsonCodecMaker.make[collection.immutable.IntMap[Boolean]](CodecMakerConfig.withMapAsArray(true))
+    lazy val stringifiedMutableLongMaps: JsonValueCodec[JUStringifiedMutableLongMaps] =
+      JsonCodecMaker.make[JUStringifiedMutableLongMaps](CodecMakerConfig.withMapAsArray(true))
+    lazy val stringifiedImmutableIntLongMaps: JsonValueCodec[JUStringifiedImmutableIntLongMaps] =
+      JsonCodecMaker.make[JUStringifiedImmutableIntLongMaps](CodecMakerConfig.withMapAsArray(true))
   }
   object mapAsArrayStringified {
-    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] = JsonCodecMaker.make[collection.Map[Int, Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] = JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] = JsonCodecMaker.make[collection.mutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] = JsonCodecMaker.make[collection.immutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] = JsonCodecMaker.make[collection.immutable.IntMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val mutableLongMapsList: JsonValueCodec[List[JUMutableLongMaps]] = JsonCodecMaker.make[List[JUMutableLongMaps]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
-    lazy val immutableIntLongMapsList: JsonValueCodec[List[JUImmutableIntLongMaps]] = JsonCodecMaker.make[List[JUImmutableIntLongMaps]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val genericMap: JsonValueCodec[collection.Map[Int, Boolean]] =
+      JsonCodecMaker.make[collection.Map[Int, Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val linkedMap: JsonValueCodec[collection.mutable.LinkedHashMap[Int, Boolean]] =
+      JsonCodecMaker.make[collection.mutable.LinkedHashMap[Int, Boolean]](
+        CodecMakerConfig.withMapAsArray(true).withIsStringified(true)
+      )
+    lazy val mutableLongMap: JsonValueCodec[collection.mutable.LongMap[Boolean]] = JsonCodecMaker
+      .make[collection.mutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val immutableLongMap: JsonValueCodec[collection.immutable.LongMap[Boolean]] = JsonCodecMaker
+      .make[collection.immutable.LongMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val intMap: JsonValueCodec[collection.immutable.IntMap[Boolean]] = JsonCodecMaker
+      .make[collection.immutable.IntMap[Boolean]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val mutableLongMapsList: JsonValueCodec[List[JUMutableLongMaps]] =
+      JsonCodecMaker.make[List[JUMutableLongMaps]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
+    lazy val immutableIntLongMapsList: JsonValueCodec[List[JUImmutableIntLongMaps]] =
+      JsonCodecMaker.make[List[JUImmutableIntLongMaps]](CodecMakerConfig.withMapAsArray(true).withIsStringified(true))
   }
   object bitSetLimit1000 {
-    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] = JsonCodecMaker.make[collection.immutable.BitSet](CodecMakerConfig.withBitSetValueLimit(1000))
+    lazy val immutableBitSetTop: JsonValueCodec[collection.immutable.BitSet] =
+      JsonCodecMaker.make[collection.immutable.BitSet](CodecMakerConfig.withBitSetValueLimit(1000))
   }
   object renamed {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper { case "camelCase" => "CMLCS"; case "kebab-1" => "KBB1" })
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper {
+        case "camelCase" => "CMLCS"; case "kebab-1" => "KBB1"
+      })
   }
   object renamedWithAlternatives {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper { case s @ ("camelCase" | "kebab-1") => s.toUpperCase; case s @ ("camel1" | "snake_1") => s + "_" })
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper {
+        case s @ ("camelCase" | "kebab-1") => s.toUpperCase; case s @ ("camel1" | "snake_1") => s + "_"
+      })
   }
   object renamedWithGuards {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper { case s if s.startsWith("snake") => s + s.length })
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] =
+      JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper {
+        case s if s.startsWith("snake") => s + s.length
+      })
   }
   object camelCase {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforceCamelCase))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforceCamelCase)
+    )
   }
   object snakeCase {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case)
+    )
   }
   object snakeCase2 {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
   }
   object kebabCase {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case`))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case`)
+    )
   }
   object kebabCase2 {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case2`))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case2`)
+    )
   }
   object pascalCase {
-    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.EnforcePascalCase))
+    lazy val cases: JsonValueCodec[JUCamelPascalSnakeKebabCases] = JsonCodecMaker.make[JUCamelPascalSnakeKebabCases](
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.EnforcePascalCase)
+    )
   }
   object suffixMapper {
-    lazy val stringified: JsonValueCodec[JUStringified] = JsonCodecMaker.make[JUStringified](CodecMakerConfig.withFieldNameMapper { case x => x + "_" })
+    lazy val stringified: JsonValueCodec[JUStringified] =
+      JsonCodecMaker.make[JUStringified](CodecMakerConfig.withFieldNameMapper { case x => x + "_" })
   }
   object noTransientDefault {
-    lazy val defaults: JsonValueCodec[JUDefaults] = JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withTransientDefault(false))
-    lazy val transient: JsonValueCodec[JUTransient] = JsonCodecMaker.make[JUTransient](CodecMakerConfig.withTransientDefault(false))
+    lazy val defaults: JsonValueCodec[JUDefaults] =
+      JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withTransientDefault(false))
+    lazy val transient: JsonValueCodec[JUTransient] =
+      JsonCodecMaker.make[JUTransient](CodecMakerConfig.withTransientDefault(false))
   }
   object noTransientEmptyNone {
-    lazy val defaults: JsonValueCodec[JUDefaults] = JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withTransientEmpty(false).withTransientNone(false))
+    lazy val defaults: JsonValueCodec[JUDefaults] =
+      JsonCodecMaker.make[JUDefaults](CodecMakerConfig.withTransientEmpty(false).withTransientNone(false))
   }
   object scalaTransient {
-    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] = JsonCodecMaker.make[JUScalaTransient](CodecMakerConfig.withScalaTransientSupport(true))
+    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] =
+      JsonCodecMaker.make[JUScalaTransient](CodecMakerConfig.withScalaTransientSupport(true))
   }
   object scalaTransientNoTransientDefault {
-    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] = JsonCodecMaker.make[JUScalaTransient](CodecMakerConfig.withScalaTransientSupport(true).withTransientDefault(false))
+    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] = JsonCodecMaker.make[JUScalaTransient](
+      CodecMakerConfig.withScalaTransientSupport(true).withTransientDefault(false)
+    )
   }
   object scalaTransientRequireDefaults {
-    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] = JsonCodecMaker.make[JUScalaTransient](CodecMakerConfig.withScalaTransientSupport(true).withTransientDefault(false).withRequireDefaultFields(true))
+    lazy val scalaTransient: JsonValueCodec[JUScalaTransient] = JsonCodecMaker.make[JUScalaTransient](
+      CodecMakerConfig.withScalaTransientSupport(true).withTransientDefault(false).withRequireDefaultFields(true)
+    )
   }
   object strict {
-    lazy val skipUnknown: JsonValueCodec[JUSkipUnknown] = JsonCodecMaker.make[JUSkipUnknown](CodecMakerConfig.withSkipUnexpectedFields(false))
-    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] = JsonCodecMaker.make[List[JUNamedLeaves.Base]](CodecMakerConfig.withSkipUnexpectedFields(false))
+    lazy val skipUnknown: JsonValueCodec[JUSkipUnknown] =
+      JsonCodecMaker.make[JUSkipUnknown](CodecMakerConfig.withSkipUnexpectedFields(false))
+    lazy val namedLeaves: JsonValueCodec[List[JUNamedLeaves.Base]] =
+      JsonCodecMaker.make[List[JUNamedLeaves.Base]](CodecMakerConfig.withSkipUnexpectedFields(false))
   }
   object inlineOneValueClasses {
-    lazy val oneValueClassTypes: JsonValueCodec[JUOneValueClassTypes] = JsonCodecMaker.make[JUOneValueClassTypes](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val transientOneValueClassTypes: JsonValueCodec[JUTransientOneValueClassTypes] = JsonCodecMaker.make[JUTransientOneValueClassTypes](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val transientMap: JsonValueCodec[Map[JUTransientUserId, JUTransientOrderId]] = JsonCodecMaker.make[Map[JUTransientUserId, JUTransientOrderId]](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val dependentMap: JsonValueCodec[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]] = JsonCodecMaker.make[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneUserIdTop: JsonValueCodec[JUOneUserId] = JsonCodecMaker.make[JUOneUserId](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneOrderIdTop: JsonValueCodec[JUOneOrderId] = JsonCodecMaker.make[JUOneOrderId](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneUserIdArray: JsonValueCodec[Array[JUOneUserId]] = JsonCodecMaker.make[Array[JUOneUserId]](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneOrderIdArray: JsonValueCodec[Array[JUOneOrderId]] = JsonCodecMaker.make[Array[JUOneOrderId]](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneUserIds: JsonValueCodec[JUOneUserIds] = JsonCodecMaker.make[JUOneUserIds](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneUserIdsT: JsonValueCodec[JUOneUserIdsT[List[String]]] = JsonCodecMaker.make[JUOneUserIdsT[List[String]]](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val oneUserIdsF: JsonValueCodec[JUOneUserIdsF[List, String]] = JsonCodecMaker.make[JUOneUserIdsF[List, String]](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneValueClassTypes: JsonValueCodec[JUOneValueClassTypes] =
+      JsonCodecMaker.make[JUOneValueClassTypes](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val transientOneValueClassTypes: JsonValueCodec[JUTransientOneValueClassTypes] =
+      JsonCodecMaker.make[JUTransientOneValueClassTypes](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val transientMap: JsonValueCodec[Map[JUTransientUserId, JUTransientOrderId]] =
+      JsonCodecMaker.make[Map[JUTransientUserId, JUTransientOrderId]](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val dependentMap: JsonValueCodec[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]] =
+      JsonCodecMaker.make[Map[JUDependentTransientUserId, List[JUDependentTransientUserId]]](
+        CodecMakerConfig.withInlineOneValueClasses(true)
+      )
+    lazy val oneUserIdTop: JsonValueCodec[JUOneUserId] =
+      JsonCodecMaker.make[JUOneUserId](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneOrderIdTop: JsonValueCodec[JUOneOrderId] =
+      JsonCodecMaker.make[JUOneOrderId](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneUserIdArray: JsonValueCodec[Array[JUOneUserId]] =
+      JsonCodecMaker.make[Array[JUOneUserId]](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneOrderIdArray: JsonValueCodec[Array[JUOneOrderId]] =
+      JsonCodecMaker.make[Array[JUOneOrderId]](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneUserIds: JsonValueCodec[JUOneUserIds] =
+      JsonCodecMaker.make[JUOneUserIds](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneUserIdsT: JsonValueCodec[JUOneUserIdsT[List[String]]] =
+      JsonCodecMaker.make[JUOneUserIdsT[List[String]]](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val oneUserIdsF: JsonValueCodec[JUOneUserIdsF[List, String]] =
+      JsonCodecMaker.make[JUOneUserIdsF[List, String]](CodecMakerConfig.withInlineOneValueClasses(true))
   }
   object skipNestedOptionValues {
-    lazy val modelList: JsonValueCodec[List[JUModel]] = JsonCodecMaker.make[List[JUModel]](CodecMakerConfig.withSkipNestedOptionValues(true))
+    lazy val modelList: JsonValueCodec[List[JUModel]] =
+      JsonCodecMaker.make[List[JUModel]](CodecMakerConfig.withSkipNestedOptionValues(true))
   }
   object makeWithSkipNestedOptionValues {
     lazy val modelList: JsonValueCodec[List[JUModel]] = JsonCodecMaker.makeWithSkipNestedOptionValues[List[JUModel]]
   }
   object noDiscriminator {
-    lazy val eitherFoo: JsonValueCodec[JUEitherFoo] = JsonCodecMaker.make[JUEitherFoo](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val weaponList: JsonValueCodec[List[JUWeapon]] = JsonCodecMaker.make[List[JUWeapon]](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val gadtArray: JsonValueCodec[Array[JUGadt.GADT[?]]] = JsonCodecMaker.make[Array[JUGadt.GADT[?]]](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val eitherFoo: JsonValueCodec[JUEitherFoo] =
+      JsonCodecMaker.make[JUEitherFoo](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val weaponList: JsonValueCodec[List[JUWeapon]] =
+      JsonCodecMaker.make[List[JUWeapon]](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val gadtArray: JsonValueCodec[Array[JUGadt.GADT[?]]] =
+      JsonCodecMaker.make[Array[JUGadt.GADT[?]]](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val adtList: JsonValueCodec[List[JUAdtBase]] =
+      JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withDiscriminatorFieldName(None))
   }
   object makeWithoutDiscriminator {
     lazy val weaponList: JsonValueCodec[List[JUWeapon]] = JsonCodecMaker.makeWithoutDiscriminator[List[JUWeapon]]
     lazy val extra: JsonValueCodec[JUExtra.Base] = JsonCodecMaker.makeWithoutDiscriminator[JUExtra.Base]
     lazy val versionList: JsonValueCodec[List[JUVersion]] = JsonCodecMaker.makeWithoutDiscriminator[List[JUVersion]]
-    lazy val gadtArray: JsonValueCodec[Array[JUGadt.GADT[?]]] = JsonCodecMaker.makeWithoutDiscriminator[Array[JUGadt.GADT[?]]]
+    lazy val gadtArray: JsonValueCodec[Array[JUGadt.GADT[?]]] =
+      JsonCodecMaker.makeWithoutDiscriminator[Array[JUGadt.GADT[?]]]
   }
   object discriminatorT {
-    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withDiscriminatorFieldName(Some("t")))
+    lazy val adtList: JsonValueCodec[List[JUAdtBase]] =
+      JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withDiscriminatorFieldName(Some("t")))
   }
   object discriminatorAnywhere {
-    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(20001))
+    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](
+      CodecMakerConfig.withRequireDiscriminatorFirst(false).withBigIntDigitsLimit(20001)
+    )
   }
   object discriminatorTAnywhere {
-    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](CodecMakerConfig.withRequireDiscriminatorFirst(false).withDiscriminatorFieldName(Some("t")))
+    lazy val adtList: JsonValueCodec[List[JUAdtBase]] = JsonCodecMaker.make[List[JUAdtBase]](
+      CodecMakerConfig.withRequireDiscriminatorFirst(false).withDiscriminatorFieldName(Some("t"))
+    )
   }
   object alwaysEmitDiscriminator {
     lazy val aaa: JsonValueCodec[JUAAA] = JsonCodecMaker.make[JUAAA](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
     lazy val bbb: JsonValueCodec[JUBBB] = JsonCodecMaker.make[JUBBB](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
     lazy val ccc: JsonValueCodec[JUCCC] = JsonCodecMaker.make[JUCCC](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
-    lazy val ddd: JsonValueCodec[JUDDD.type] = JsonCodecMaker.make[JUDDD.type](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
+    lazy val ddd: JsonValueCodec[JUDDD.type] =
+      JsonCodecMaker.make[JUDDD.type](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
   }
   object alwaysEmitDiscriminatorStrict {
-    lazy val aaa: JsonValueCodec[JUAAA] = JsonCodecMaker.make[JUAAA](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
-    lazy val bbb: JsonValueCodec[JUBBB] = JsonCodecMaker.make[JUBBB](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
-    lazy val ccc: JsonValueCodec[JUCCC] = JsonCodecMaker.make[JUCCC](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
-    lazy val ddd: JsonValueCodec[JUDDD.type] = JsonCodecMaker.make[JUDDD.type](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
+    lazy val aaa: JsonValueCodec[JUAAA] =
+      JsonCodecMaker.make[JUAAA](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
+    lazy val bbb: JsonValueCodec[JUBBB] =
+      JsonCodecMaker.make[JUBBB](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
+    lazy val ccc: JsonValueCodec[JUCCC] =
+      JsonCodecMaker.make[JUCCC](CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false))
+    lazy val ddd: JsonValueCodec[JUDDD.type] = JsonCodecMaker.make[JUDDD.type](
+      CodecMakerConfig.withAlwaysEmitDiscriminator(true).withSkipUnexpectedFields(false)
+    )
   }
   object makeOpenapiLike {
     lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum]
@@ -414,10 +668,14 @@ object JuUpstream {
     lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum]("hint")
   }
   object makeOpenapiLikeHintMapper {
-    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum]("hint", { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" })
+    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum](
+      "hint",
+      { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" }
+    )
   }
   object makeOpenapiLikeWithoutDiscriminator {
-    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLikeWithoutDiscriminator[JUOpenapi.Enum]
+    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] =
+      JsonCodecMaker.makeOpenapiLikeWithoutDiscriminator[JUOpenapi.Enum]
   }
   object makeCirceLike {
     lazy val base: JsonValueCodec[JUCirce.Base] = JsonCodecMaker.makeCirceLike[JUCirce.Base]
@@ -426,7 +684,9 @@ object JuUpstream {
     lazy val base: JsonValueCodec[JUCirce.Base] = JsonCodecMaker.makeCirceLikeSnakeCased[JUCirce.Base]
   }
   object circeLikeObjects {
-    lazy val enumerationList: JsonValueCodec[List[JUOpenapi.Enum]] = JsonCodecMaker.make[List[JUOpenapi.Enum]](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
+    lazy val enumerationList: JsonValueCodec[List[JUOpenapi.Enum]] = JsonCodecMaker.make[List[JUOpenapi.Enum]](
+      CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true)
+    )
   }
   object decodingOnly {
     lazy val intTop: JsonValueCodec[Int] = JsonCodecMaker.make[Int](CodecMakerConfig.withDecodingOnly(true))
@@ -435,21 +695,32 @@ object JuUpstream {
     lazy val intTop: JsonValueCodec[Int] = JsonCodecMaker.make[Int](CodecMakerConfig.withEncodingOnly(true))
   }
   object discriminatorTStrict {
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = JsonCodecMaker.make[List[JUCustomName.Base]](CodecMakerConfig.withDiscriminatorFieldName(Some("t")).withSkipUnexpectedFields(false))
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = JsonCodecMaker.make[List[JUCustomName.Base]](
+      CodecMakerConfig.withDiscriminatorFieldName(Some("t")).withSkipUnexpectedFields(false)
+    )
   }
   object leafNameMapper {
-    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = JsonCodecMaker.make[List[JUCustomName.Base]](CodecMakerConfig.withAdtLeafClassNameMapper(x => JsonCodecMaker.simpleClassName(x) match { case "A" => "X"; case "B" => "Y" }).withSkipUnexpectedFields(false))
+    lazy val customNameList: JsonValueCodec[List[JUCustomName.Base]] = JsonCodecMaker.make[List[JUCustomName.Base]](
+      CodecMakerConfig
+        .withAdtLeafClassNameMapper(x => JsonCodecMaker.simpleClassName(x) match { case "A" => "X"; case "B" => "Y" })
+        .withSkipUnexpectedFields(false)
+    )
   }
   object fullLeafNames {
-    lazy val nestedAdtList: JsonValueCodec[List[JUNestedAdts.Base]] = JsonCodecMaker.make[List[JUNestedAdts.Base]](CodecMakerConfig.withAdtLeafClassNameMapper(x => x))
+    lazy val nestedAdtList: JsonValueCodec[List[JUNestedAdts.Base]] =
+      JsonCodecMaker.make[List[JUNestedAdts.Base]](CodecMakerConfig.withAdtLeafClassNameMapper(x => x))
   }
   object nonAsciiDiscriminator {
-    lazy val nonAsciiList: JsonValueCodec[List[JUNonAscii.База]] = JsonCodecMaker.make[List[JUNonAscii.База]](CodecMakerConfig.withDiscriminatorFieldName(Some("тип")).withSkipUnexpectedFields(false))
+    lazy val nonAsciiList: JsonValueCodec[List[JUNonAscii.База]] = JsonCodecMaker.make[List[JUNonAscii.База]](
+      CodecMakerConfig.withDiscriminatorFieldName(Some("тип")).withSkipUnexpectedFields(false)
+    )
   }
   object discriminatorZoneId {
-    lazy val timeZoneList: JsonValueCodec[List[JUOperatorNames.TimeZone]] = JsonCodecMaker.make[List[JUOperatorNames.TimeZone]](CodecMakerConfig.withDiscriminatorFieldName(Some("zoneId")))
+    lazy val timeZoneList: JsonValueCodec[List[JUOperatorNames.TimeZone]] =
+      JsonCodecMaker.make[List[JUOperatorNames.TimeZone]](CodecMakerConfig.withDiscriminatorFieldName(Some("zoneId")))
   }
   object discriminatorHint {
-    lazy val hintFoo: JsonValueCodec[JUHintFoo] = JsonCodecMaker.make[JUHintFoo](CodecMakerConfig.withDiscriminatorFieldName(Some("hint")))
+    lazy val hintFoo: JsonValueCodec[JUHintFoo] =
+      JsonCodecMaker.make[JUHintFoo](CodecMakerConfig.withDiscriminatorFieldName(Some("hint")))
   }
 }

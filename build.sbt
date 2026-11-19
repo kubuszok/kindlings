@@ -1122,6 +1122,12 @@ lazy val upstreamOracleTests = projectMatrix
     name := "kindlings-upstream-oracle-tests",
     description := "Differential tests comparing Kindlings-derived instances with the upstream libraries they mirror",
     Test / scalacOptions += "-Xmacro-settings:tapirSchemaDerivation.preferConfig=circe",
+    // The fixtures of jsoniter-scala's own spec use deprecated collections (`Stream`, `ArrayStack`, `OpenHashMap`, ...)
+    // and enumerations with non-public/lazy/mutable values, which jsoniter-scala's macro warns about.
+    Test / scalacOptions ++= Seq(
+      "-Wconf:msg=(class|object) (Stream|ArrayStack|AnyRefMap|ListMap|OpenHashMap) in package .* is deprecated:s",
+      "-Wconf:msg=of Scala enumeration .* using a slower lookup:s"
+    ),
     // cats-tagless' Scala 3 `Derive.*` macros are `@experimental`.
     Test / scalacOptions ++= foldVersion(scalaVersion.value)(for3 = Seq("-experimental"), for2_13 = Seq.empty),
     // Upstream macros (tapir's Scala 3 derivation with annotations) fail -Xcheck-macros; Kindlings' own macros are

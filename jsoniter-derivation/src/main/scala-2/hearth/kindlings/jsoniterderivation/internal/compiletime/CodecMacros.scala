@@ -10,6 +10,19 @@ final private[jsoniterderivation] class CodecMacros(val c: blackbox.Context)
     with AnnotationSupport
     with CodecMacrosImpl {
 
+  override protected def enumerationObjectOf[A: Type]: Option[Expr[Enumeration]] = {
+    import c.universe.*
+    // `Obj.Value`, or `Obj.this.Value` when it is referred to through a type alias defined in the object itself.
+    Type[A].tpe.dealias match {
+      case TypeRef(ThisType(module), _, _) if module.isModuleClass && module.asClass.toType <:< typeOf[Enumeration] =>
+        Some(c.Expr[Enumeration](c.internal.gen.mkAttributedRef(module.asClass.module)))
+      case TypeRef(prefix, _, _) if prefix <:< typeOf[Enumeration] =>
+        val qualifier = c.internal.gen.mkAttributedQualifier(prefix)
+        if (qualifier.isEmpty) None else Some(c.Expr[Enumeration](qualifier))
+      case _ => None
+    }
+  }
+
   /** A config bound by [[withConfigBound]] is evaluated from its original expression. (`semiEval` refuses `var`s and
     * members of the module being compiled itself.)
     */

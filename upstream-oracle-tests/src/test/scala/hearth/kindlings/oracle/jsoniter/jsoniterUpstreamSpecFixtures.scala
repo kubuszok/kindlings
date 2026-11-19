@@ -452,3 +452,11 @@ final case class JUJavaTimeMaps(
     zi: Map[ZoneId, Int],
     zo: Map[ZoneOffset, Int]
 )
+
+final case class JUDefaults3(
+    u: UUID = new UUID(
+      java.util.concurrent.ThreadLocalRandom.current().nextLong(),
+      java.util.concurrent.ThreadLocalRandom.current().nextLong()
+    ),
+    i: Int = java.util.concurrent.ThreadLocalRandom.current().nextInt()
+)
