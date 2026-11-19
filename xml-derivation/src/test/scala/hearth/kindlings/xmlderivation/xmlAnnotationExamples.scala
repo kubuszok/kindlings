@@ -1,6 +1,13 @@
 package hearth.kindlings.xmlderivation
 
-import hearth.kindlings.xmlderivation.annotations.{xmlAttribute, xmlContent, xmlElement, xmlName, xmlUnwrapped, xmlWrapper}
+import hearth.kindlings.xmlderivation.annotations.{
+  xmlAttribute,
+  xmlContent,
+  xmlElement,
+  xmlName,
+  xmlUnwrapped,
+  xmlWrapper
+}
 
 // Enums: sealed traits of case objects, a `scala.Enumeration`
 sealed trait XmlColor
@@ -35,7 +42,14 @@ final case class XmlVersion(major: Int, minor: Int)
 object XmlVersion {
   implicit val encoder: XmlEncoder[XmlVersion] = new XmlEncoder[XmlVersion] {
     def encode(value: XmlVersion, elementName: String): scala.xml.Elem =
-      scala.xml.Elem(null, elementName, scala.xml.Null, scala.xml.TopScope, false, scala.xml.Text(s"${value.major}.${value.minor}"))
+      scala.xml.Elem(
+        null,
+        elementName,
+        scala.xml.Null,
+        scala.xml.TopScope,
+        false,
+        scala.xml.Text(s"${value.major}.${value.minor}")
+      )
   }
   implicit val decoder: XmlDecoder[XmlVersion] = new XmlDecoder[XmlVersion] {
     def decode(elem: scala.xml.Elem): Either[XmlDecodingError, XmlVersion] = elem.text.trim.split('.') match {

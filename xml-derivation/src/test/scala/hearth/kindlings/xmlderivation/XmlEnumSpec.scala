@@ -250,12 +250,18 @@ final class XmlEnumSpec extends MacroSuite {
 
     test("@xmlName renames a subtype (and is not transformed by constructorNameMapper)") {
       val codec = KindlingsXmlCodec.derived[XmlRenamedShape]
-      assertEquals(roundTripped(codec, XmlRenamedCircle(1): XmlRenamedShape).toString, """<x type="circ"><r>1</r></x>""")
+      assertEquals(
+        roundTripped(codec, XmlRenamedCircle(1): XmlRenamedShape).toString,
+        """<x type="circ"><r>1</r></x>"""
+      )
       val snake = {
         implicit val config: XmlConfig = XmlConfig().withSnakeCaseConstructorNames
         KindlingsXmlCodec.derived[XmlRenamedShape]
       }
-      assertEquals(roundTripped(snake, XmlRenamedCircle(1): XmlRenamedShape).toString, """<x type="circ"><r>1</r></x>""")
+      assertEquals(
+        roundTripped(snake, XmlRenamedCircle(1): XmlRenamedShape).toString,
+        """<x type="circ"><r>1</r></x>"""
+      )
       assertEquals(
         roundTripped(snake, XmlRenamedSquare(2): XmlRenamedShape).toString,
         """<x type="xml_renamed_square"><side>2</side></x>"""
