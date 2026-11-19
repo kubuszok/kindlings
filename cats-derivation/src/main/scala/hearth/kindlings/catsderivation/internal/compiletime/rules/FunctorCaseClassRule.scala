@@ -59,7 +59,7 @@ trait FunctorCaseClassRuleImpl {
 
           if (isSelfRecursiveNested) {
             // Self-recursive nested: summon the OUTER functor (e.g. Functor[Option])
-            summonFunctorForFieldType(fieldType) match {
+            summonFunctorForFieldType(fieldType).map(instanceScopedAny) match {
               case Some(outerFunctorExpr) =>
                 selfRecursive += name
                 selfRecursiveOuter += (name -> outerFunctorExpr)
@@ -67,7 +67,7 @@ trait FunctorCaseClassRuleImpl {
                 unsupported += name
             }
           } else {
-            summonComposedFunctorForFieldType(fieldType) match {
+            summonComposedFunctorForFieldType(fieldType).map(instanceScopedAny) match {
               case Some(functorExpr) => nestedFieldFunctors += (name -> functorExpr)
               case None              =>
                 // Also check for direct self-recursion (e.g. IList[Int] where F = IList)

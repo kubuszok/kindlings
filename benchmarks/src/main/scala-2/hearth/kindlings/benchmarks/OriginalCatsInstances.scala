@@ -21,4 +21,6 @@ object OriginalCatsSemiAutoInstances {
   implicit val eventShow: cats.Show[Event] = semiauto.show
 
   implicit val simpleCCBoxFunctor: cats.Functor[SimpleCCBox] = semiauto.functor
+  implicit val nestedCCBoxFunctor: cats.Functor[NestedCCBox] = semiauto.functor
+  implicit val nestedCCBoxTraverse: cats.Traverse[NestedCCBox] = semiauto.traverse
 }

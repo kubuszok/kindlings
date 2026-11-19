@@ -11,6 +11,9 @@ object SimpleADT {
 
 case class SimpleCCBox[A](name: String, age: Int, value: A)
 
+// Fields wrapping the type parameter: `List`'s instance and the composed `List[Option[_]]` one.
+case class NestedCCBox[A](label: String, items: List[A], nested: List[Option[A]])
+
 case class Address(street: String, city: String, zip: String, country: String)
 
 case class Person(
@@ -49,6 +52,7 @@ object BenchmarkData {
   val event: Event = Event.UserCreated(person, 1700000000000L)
 
   val simpleCCBox: SimpleCCBox[Int] = SimpleCCBox("Alice", 30, 42)
+  val nestedCCBox: NestedCCBox[Int] = NestedCCBox("Alice", List(1, 2, 3), List(Some(4), None, Some(5)))
 
   val personPair: (Person, Person) = (person, person.copy(name = "Bob", age = 31))
 

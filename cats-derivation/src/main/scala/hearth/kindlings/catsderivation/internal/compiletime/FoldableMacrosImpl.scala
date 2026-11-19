@@ -13,7 +13,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait FoldableMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -104,7 +107,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
               nestedFieldNames.foreach { name =>
                 val param = fieldsInt.find(_._1 == name).get._2
                 import param.tpe.Underlying as FieldType
-                summonFoldableForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                summonFoldableForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
                   case Some(foldableExpr) => nestedFieldFoldables += (name -> foldableExpr)
                   case None               => unsupported += name
                 }
@@ -229,6 +232,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
             }
           }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -317,7 +321,7 @@ trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                         else {
                           val param = fieldsI.find(_._1 == name).get._2
                           import param.tpe.Underlying as FT
-                          summonFoldableForFieldType(Type[FT].asInstanceOf[Type[Any]]) match {
+                          summonFoldableForFieldType(Type[FT].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
                             case Some(expr) =>
                               nested += (name -> expr)
                               MIO.void

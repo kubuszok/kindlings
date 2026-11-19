@@ -91,6 +91,7 @@ trait ContravariantKMacrosImpl
           fromCtx(ctx)
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

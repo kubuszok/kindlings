@@ -27,4 +27,6 @@ object OriginalCatsSemiAutoInstances {
   given simpleCCBoxFunctor: cats.Functor[SimpleCCBox] = semiauto.functor
   given simpleCCBoxFoldable: cats.Foldable[SimpleCCBox] = semiauto.foldable
   given simpleCCBoxTraverse: cats.Traverse[SimpleCCBox] = semiauto.traverse
+  given nestedCCBoxFunctor: cats.Functor[NestedCCBox] = semiauto.functor
+  given nestedCCBoxTraverse: cats.Traverse[NestedCCBox] = semiauto.traverse
 }

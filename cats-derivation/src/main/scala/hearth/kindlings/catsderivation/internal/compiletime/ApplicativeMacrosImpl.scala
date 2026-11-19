@@ -123,6 +123,7 @@ trait ApplicativeMacrosImpl
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -158,7 +159,11 @@ trait ApplicativeMacrosImpl
           MIO.pure((fieldName, aExpr.as_??))
         } else {
           // Invariant field: use Monoid.empty
-          ApplicativeTypes.Monoid[Field].summonExprIgnoring().toEither match {
+          ApplicativeTypes
+            .Monoid[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using ApplicativeTypes.Monoid[Field])) match {
             case Right(monoidExpr) =>
               val emptyValue: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
               MIO.pure((fieldName, emptyValue.as_??))
@@ -234,7 +239,11 @@ trait ApplicativeMacrosImpl
           )
           MIO.pure((fieldName, applied.as_??))
         } else {
-          ApplicativeTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          ApplicativeTypes
+            .Semigroup[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using ApplicativeTypes.Semigroup[Field])) match {
             case Right(sgExpr) =>
               val combined: Expr[Field] = Expr.quote(
                 Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))

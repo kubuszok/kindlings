@@ -16,7 +16,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   * (apply f) and nested fields (delegate to Traverse[G].traverse). A LambdaBuilder-built reconstruction lambda rebuilds
   * the case class from the resulting List[Any] + original invariant field values.
   */
-trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait TraverseMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -105,7 +108,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                 nestedFieldNames.foreach { name =>
                   val param = fieldsInt.find(_._1 == name).get._2
                   import param.tpe.Underlying as FieldType
-                  summonTraverseForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                  summonTraverseForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
                     case Some(traverseExpr) => nestedFieldTraverses += (name -> traverseExpr)
                     case None               => unsupported += name
                   }
@@ -238,6 +241,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
             }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -496,7 +500,7 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
                       else {
                         val param = fieldsI.find(_._1 == name).get._2
                         import param.tpe.Underlying as FT
-                        summonTraverseForFieldType(Type[FT].asInstanceOf[Type[Any]]) match {
+                        summonTraverseForFieldType(Type[FT].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
                           case Some(expr) =>
                             nested += (name -> expr)
                             MIO.void

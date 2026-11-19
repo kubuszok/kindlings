@@ -156,6 +156,7 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -182,7 +183,7 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
     val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      AltTypes.Monoid[Field].summonExprIgnoring().toEither match {
+      AltTypes.Monoid[Field].summonExprIgnoring().toEither.map(instanceScoped(_)(using AltTypes.Monoid[Field])) match {
         case Right(monoidExpr) =>
           val value: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
           MIO.pure((fieldName, value.as_??))
@@ -221,7 +222,11 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
         if (directFields.contains(fieldName)) {
           MIO.pure((fieldName, aExpr.as_??))
         } else {
-          AltTypes.Monoid[Field].summonExprIgnoring().toEither match {
+          AltTypes
+            .Monoid[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using AltTypes.Monoid[Field])) match {
             case Right(monoidExpr) =>
               val emptyValue: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
               MIO.pure((fieldName, emptyValue.as_??))
@@ -297,7 +302,11 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
           )
           MIO.pure((fieldName, applied.as_??))
         } else {
-          AltTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          AltTypes
+            .Semigroup[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using AltTypes.Semigroup[Field])) match {
             case Right(sgExpr) =>
               val combined: Expr[Field] = Expr.quote(
                 Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
@@ -337,7 +346,11 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        AltTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+        AltTypes
+          .Semigroup[Field]
+          .summonExprIgnoring()
+          .toEither
+          .map(instanceScoped(_)(using AltTypes.Semigroup[Field])) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

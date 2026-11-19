@@ -8,7 +8,8 @@ import hearth.std.*
   * `Semigroup[Option[A]]` (which would need a `Semigroup[A]` and combine the values). Other fields use the kernel type
   * class of the field type (e.g. `Semigroup[String]` for a constant field).
   */
-trait KernelFromKSupport { this: MacroCommons & StdExtensions =>
+trait KernelFromKSupport extends hearth.kindlings.derivation.compiletime.InstanceScopedVals {
+  this: MacroCommons & StdExtensions =>
 
   private type AnyKK[X] = Any
 

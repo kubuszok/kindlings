@@ -121,6 +121,7 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -192,7 +193,11 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
           MIO.pure((fieldName, applied.as_??))
         } else {
           // Invariant field: combine using Semigroup
-          ApplyTypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          ApplyTypes
+            .Semigroup[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using ApplyTypes.Semigroup[Field])) match {
             case Right(sgExpr) =>
               val combined: Expr[Field] = Expr.quote(
                 Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))

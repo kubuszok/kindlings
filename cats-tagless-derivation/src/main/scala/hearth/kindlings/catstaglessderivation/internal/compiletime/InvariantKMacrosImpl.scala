@@ -12,7 +12,8 @@ trait InvariantKMacrosImpl
     with rules.InvariantKCaseClassRuleImpl
     with rules.InvariantKTraitRuleImpl
     with CatsTaglessDerivationTimeout
-    with hearth.kindlings.derivation.compiletime.MethodFolds { this: MacroCommons & StdExtensions =>
+    with hearth.kindlings.derivation.compiletime.MethodFolds
+    with hearth.kindlings.derivation.compiletime.InstanceScopedVals { this: MacroCommons & StdExtensions =>
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
 
@@ -182,6 +183,7 @@ trait InvariantKMacrosImpl
           fromCtx(ctx)
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

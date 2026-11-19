@@ -238,3 +238,26 @@ class CatsTraverseBenchmark {
   @Benchmark def kindlingsSimpleCCBoxTraverse(): Option[SimpleCCBox[String]] =
     KindlingsCatsInstances.simpleCCBoxTraverse.traverse(box)(v => Option(v.toString))
 }
+
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.Throughput))
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
+@Fork(2)
+class CatsNestedFunctorTraverseBenchmark {
+
+  private val box = BenchmarkData.nestedCCBox
+
+  @Benchmark def kindlingsNestedCCBoxMap(): NestedCCBox[String] =
+    KindlingsCatsInstances.nestedCCBoxFunctor.map(box)(_.toString)
+
+  @Benchmark def originalSemiAutoNestedCCBoxMap(): NestedCCBox[String] =
+    OriginalCatsSemiAutoInstances.nestedCCBoxFunctor.map(box)(_.toString)
+
+  @Benchmark def kindlingsNestedCCBoxTraverse(): Option[NestedCCBox[String]] =
+    KindlingsCatsInstances.nestedCCBoxTraverse.traverse(box)(v => Option(v.toString))
+
+  @Benchmark def originalSemiAutoNestedCCBoxTraverse(): Option[NestedCCBox[String]] =
+    OriginalCatsSemiAutoInstances.nestedCCBoxTraverse.traverse(box)(v => Option(v.toString))
+}

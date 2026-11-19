@@ -16,7 +16,8 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait FunctorMacrosImpl
     extends rules.FunctorCaseClassRuleImpl
     with CatsDerivationTimeout
-    with CatsDerivationErrorSupport {
+    with CatsDerivationErrorSupport
+    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
   this: MacroCommons & StdExtensions =>
 
   /** Summon `cats.Functor[G]` for the type constructor `G` of the applied type `G[X]`, using Hearth's `Type.decompose1`
@@ -203,6 +204,7 @@ trait FunctorMacrosImpl
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -370,7 +372,9 @@ trait FunctorMacrosImpl
                         } else {
                           val param = fieldsI.find(_._1 == name).get._2
                           import param.tpe.Underlying as FieldType
-                          summonComposedFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]) match {
+                          summonComposedFunctorForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(
+                            instanceScopedAny
+                          ) match {
                             case Some(functorExpr) =>
                               nestedFunctors += (name -> functorExpr)
                               MIO.void

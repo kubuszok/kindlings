@@ -29,6 +29,23 @@ object TraitAlgebraShapesSpec {
   }
 
   type OptPair[A] = Tuple2K[Option, Option, A]
+
+  /** A result type whose `Semigroup` is an `implicit def` counting how often it is created: the derived instances must
+    * resolve it once per instance, not on every call of the method returning it.
+    */
+  final case class CountedLabel(value: String)
+  object CountedLabel {
+    @volatile var instancesCreated: Int = 0
+    implicit def semigroupCountedLabel: cats.kernel.Semigroup[CountedLabel] = {
+      instancesCreated += 1
+      cats.kernel.Semigroup.instance((x, y) => CountedLabel(x.value + y.value))
+    }
+  }
+
+  trait CountedRepo[F[_]] {
+    def get(id: Int): F[String]
+    def label(x: Int): CountedLabel
+  }
 }
 
 final class TraitAlgebraShapesSpec extends MacroSuite {
@@ -57,6 +74,34 @@ final class TraitAlgebraShapesSpec extends MacroSuite {
     val mapped = applyK.map2K(repo("a", 1), repo("b", 2))(both)
     mapped.get(1) ==> List("a1", "b1")
     mapped.label(7) ==> "a7b7"
+  }
+
+  test("SemigroupalK/ApplyK resolve the Semigroup of members without F once per instance, not per call") {
+    def countedRepo(prefix: String): CountedRepo[Option] = new CountedRepo[Option] {
+      def get(id: Int): Option[String] = Some(s"$prefix$id")
+      def label(x: Int): CountedLabel = CountedLabel(s"$prefix$x")
+    }
+    // Calls `op` three times and returns how many Semigroups the 2nd and 3rd call created.
+    def createdByRepeatedCalls(op: () => Any): Int = {
+      op()
+      val before = CountedLabel.instancesCreated
+      op()
+      op()
+      CountedLabel.instancesCreated - before
+    }
+
+    val semigroupalK: SemigroupalK[CountedRepo] = KindlingsSemigroupalK.derived[CountedRepo]
+    val product = semigroupalK.productK(countedRepo("a"), countedRepo("b"))
+    product.label(7) ==> CountedLabel("a7b7")
+    createdByRepeatedCalls(() => product.label(7)) ==> 0
+
+    val applyK: ApplyK[CountedRepo] = KindlingsApplyK.derived[CountedRepo]
+    val both = new FunctionK[OptPair, List] {
+      def apply[A](fa: OptPair[A]): List[A] = fa.first.toList ++ fa.second.toList
+    }
+    val mapped = applyK.map2K(countedRepo("a"), countedRepo("b"))(both)
+    mapped.label(7) ==> CountedLabel("a7b7")
+    createdByRepeatedCalls(() => mapped.label(7)) ==> 0
   }
 
   test("FunctorK for a polymorphic method") {
