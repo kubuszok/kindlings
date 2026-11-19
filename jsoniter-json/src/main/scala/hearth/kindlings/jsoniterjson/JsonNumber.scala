@@ -131,6 +131,9 @@ object JsonNumber {
     def encodeValue(x: Float, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit = out.writeVal(x)
   }
 
+  /** `text` must be a JSON number (what `JsonReader` or a number's `toString` produced): not validated. */
+  private[jsoniterjson] def unsafeFromJsonText(text: String): JsonNumber = new JsonNumber(text)
+
   def fromInt(n: Int): JsonNumber = new JsonNumber(n.toString)
   def fromLong(n: Long): JsonNumber = new JsonNumber(n.toString)
   def fromDouble(n: Double): Option[JsonNumber] =

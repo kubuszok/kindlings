@@ -1395,16 +1395,29 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 
 ## jsoniter-json
 
-**Replaces:** jsoniter-scala-circe's `JsoniterScalaCodec.jsonC3c` with circe's `Json` / `JsonNumber` / `JsonObject`
+**Replaces:** jsoniter-scala-circe's `JsoniterScalaCodec.jsonC3c` / `JsoniterScalaCodec.jsonCodec(...)` with circe's
+`Json` / `JsonNumber` / `JsonObject`
 
 Checked against jsoniter-scala-circe and circe's JSON model by the `upstream-oracle-tests` module
 (`JsoniterJsonOracleSpec`): parsing (accepted inputs, structure, key order, number text, nesting depth), printing
 (escaping, number formatting), numeric conversions of parsed and constructed numbers, `JsonNumber.fromString`,
-equality, and the `Json`/`JsonObject` API.
+equality, and the `Json`/`JsonObject` API. `JsoniterJsonCodecOracleSpec` runs the cases of jsoniter-scala-circe's own
+`JsoniterScalaCodecSpec` through both: the default codec and every option of `jsonCodec`, comparing the JSON written
+and the failure messages (`JsonCodecOptionsSpec` asserts upstream's expected values on JVM, Scala.js and Scala Native).
 
 | Feature | circe + jsoniter-scala-circe | Kindlings | Status |
 |---|---|---|---|
 | Parsing and printing | Numbers keep their text (also `-0`), max depth 128 | Same (`JsonCodec.withMaxDepth(n)` for another limit) | Parity |
+| Number precision and limits | Read exactly (`MathContext.UNLIMITED`); 308 or more digits, or a scale of 6178 or more, rejected | Same | Parity |
+| Failure messages | `expected JSON value`, `expected '}' or ','`, `expected ']' or ','`, `depth limit exceeded`, `value exceeds limit for ...` | Same | Parity |
+| `jsonCodec(maxDepth = ..)` | Depth limit for reading and writing | `JsonCodec.jsonCodec(maxDepth = ..)` (or `withMaxDepth`) | Parity |
+| `jsonCodec(doSerialize = ..)` | Filter of object fields (by value) when writing | `JsonCodec.jsonCodec(doSerialize = ..)` | Parity |
+| `jsonCodec(numberParser = ..)`, `numberParser(mc, scaleLimit, digitsLimit)` | Custom number parsing; rounding and limits | `JsonCodec.jsonCodec(numberParser = ..)`, `JsonCodec.numberParser(mc, scaleLimit, digitsLimit)` | Parity |
+| `jsonCodec(numberSerializer = ..)` | Custom number writing | `JsonCodec.jsonCodec(numberSerializer = ..)` | Parity |
+| JavaScript-compatible number serializer | `jsCompatibleNumberSerializer`: integers outside `[-2^52, 2^52)` and decimals with more than 52 bits or a scale outside `[-256, 256]` as strings; numbers built from a `Double`/`Float` always as numbers | `JsonCodec.jsCompatibleNumberSerializer`: same rules; "built from a `Double`" is "written the way a `Double` is written" (a `JsonNumber` is its text), so a *parsed* `0.30000000000000004` or `-0.0` is written as a number where upstream writes `"0.30000000000000004"` / `0` | Parity / Difference (parsed numbers spelled like a `Double`) |
+| `jsonCodec(sortKeys = true)` | Fields sorted by key when writing | `JsonCodec.jsonCodec(sortKeys = true)` (duplicate keys keep their order) | Parity |
+| `jsonCodec(initialSize = ..)` | Size hint for the map of fields | Not applicable (a `JsonObject` is a vector of fields) | Not applicable |
+| `CirceCodecs` (circe `Encoder`/`Decoder`s reading numbers from strings, `java.time` types, ...) | Instances of circe's type classes | Not applicable: this module has no `Encoder`/`Decoder` type classes (use `kindlings-jsoniter-derivation` codecs) | Not applicable |
 | `toInt` / `toLong` / `toBigInt` / `toBigDecimal` | Exact, for integral values however written | Same | Parity |
 | `toDouble` / `toFloat` | Plain values (infinity when out of range) | `Option` | Difference (API) |
 | Duplicate keys | One value per key (last wins) | Kept (ordered fields; `apply` returns the last value; `add` appends) | Difference (design) |
