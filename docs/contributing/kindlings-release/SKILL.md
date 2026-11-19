@@ -9,8 +9,16 @@ A release is a tag on master. `.github/workflows/release.yml` runs `sbt ci-relea
 Maven Central. Sonatype has a publishing quota: when it is exhausted, merge fixes but do not tag until it resets.
 
 The `kindlings` plugin of [kubuszok/agent-skills](https://github.com/kubuszok/agent-skills) describes the **released**
-version. Its update is prepared as a PR before the release and merged only once the release is deployed, so agents never
-read about behaviour users cannot get yet.
+version. Its update lives in one running **draft** PR (branch `kindlings-next`, titled
+`kindlings: next release (merge after release)`) that is kept up to date with Kindlings master between releases and
+merged only once the release is deployed, so agents never read about behaviour users cannot get yet.
+
+## 0. Between releases: keep the draft PR current
+
+After every Kindlings PR with user-visible changes merges, apply its "## agent-skills" section to the `kindlings-next`
+branch (create it from agent-skills master, with the draft PR, if it does not exist) and add one line to the draft PR
+body. Mark fixed bugs `fixed after <last-tag>`; do not bump versions yet. Rebase the branch on agent-skills master when
+it moves.
 
 ## 1. Inventory the changes
 
@@ -46,16 +54,16 @@ Classify every user-visible change. Internal changes (refactors, tests, CI, main
 
 In a clone of kubuszok/agent-skills (do not switch branches in a checkout another session uses — use a worktree):
 
-1. Branch `kindlings-<version>` from master (or reuse the open one collecting changes since the last release).
-2. Apply every skill change from the table. Verify each API, key and default against the Kindlings source at the
-   release commit.
+1. Check out the `kindlings-next` branch of the running draft PR (section 0); create it from master only if missing.
+2. Check every row of the step 1 inventory is applied; apply anything missing. Verify each API, key and default
+   against the Kindlings source at the release commit. Replace `fixed after <last-tag>` with `fixed in <version>`.
 3. Bump `metadata.library-version` to `<version>` in every `plugins/kindlings/skills/*/SKILL.md`, the plugin `version`
    in `plugins/kindlings/.claude-plugin/plugin.json` and `.cursor-plugin/plugin.json`, the version and docs links in
    `plugins/kindlings/README.md`, and versioned docs links (`/en/<old>/` → `/en/<version>/`).
 4. `python3 scripts/validate.py`.
-5. Open the PR as a **draft** titled `kindlings <version> (merge after release)`. The body is the classified list from
-   step 1: one line per user-visible change with its Kindlings PR or issue and the skill section updated. Every
-   new feature, parity change and fixed bug has a line; write "no skill change: <reason>" rather than omitting one.
+5. Retitle the draft PR `kindlings <version> (merge after release)`. The body is the classified list from step 1: one
+   line per user-visible change with its Kindlings PR or issue and the skill section updated. Every new feature,
+   parity change and fixed bug has a line; write "no skill change: <reason>" rather than omitting one.
 
 ## 4. Release
 
@@ -68,4 +76,5 @@ release workflow.
    `cs resolve com.kubuszok:kindlings-circe-derivation_3:<version>` (it can take a while after the workflow finishes).
 2. Publish the GitHub release notes.
 3. Rebase the agent-skills PR on master if needed, mark it ready, wait for its CI (`validate`), and merge it with
-   `git signed-merge <pr> --repo kubuszok/agent-skills`.
+   `git signed-merge <pr> --repo kubuszok/agent-skills`. The next Kindlings PR with skill changes opens a new
+   `kindlings-next` draft (section 0).
