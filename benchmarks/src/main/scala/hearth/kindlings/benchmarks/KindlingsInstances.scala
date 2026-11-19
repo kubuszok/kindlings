@@ -44,7 +44,8 @@ object KindlingsCirceRuntimeConfigInstances {
     KindlingsDecoder.derived[Event]
   }
 
-  val personDecoder: Decoder[Person] = personDecoderWith(Configuration.default)
+  // snake_case leaves the names of Person as they are, but the transformation runs (and allocates)
+  val personDecoder: Decoder[Person] = personDecoderWith(Configuration.default.withSnakeCaseMemberNames)
   val simpleADTDecoder: Decoder[SimpleADT] = simpleADTDecoderWith(Configuration.default)
   val eventDecoder: Decoder[Event] = eventDecoderWith(Configuration.default)
 }
