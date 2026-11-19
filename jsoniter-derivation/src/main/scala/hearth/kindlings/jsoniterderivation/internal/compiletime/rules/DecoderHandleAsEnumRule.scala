@@ -68,11 +68,15 @@ trait DecoderHandleAsEnumRuleImpl {
               val isSingleton = SingletonValue.unapply(Type[ChildType]).isDefined || isEnumerationOrJavaEnum
               Log.namedScope(s"Deriving decoder for enum case $childName: ${Type[ChildType].prettyPrint}") {
                 for {
+                  // (with a config known at compile time only the mode it selects: unused helpers would be
+                  // "never used" warnings in the user's code)
                   wrapper <-
-                    if (isEnumerationOrJavaEnum) MIO.pure(None)
+                    if (isEnumerationOrJavaEnum || dctx.evaluatedConfig.exists(_.discriminatorFieldName.isDefined))
+                      MIO.pure(None)
                     else deriveChildDecoder[A, ChildType](childName).map(Some(_))
                   inline <-
-                    if (isEnumerationOrJavaEnum) MIO.pure(None)
+                    if (isEnumerationOrJavaEnum || dctx.evaluatedConfig.exists(_.discriminatorFieldName.isEmpty))
+                      MIO.pure(None)
                     else deriveChildDecoderInline[A, ChildType](childName).map(Some(_))
                   stringEnum <-
                     if (isSingleton) deriveChildDecoderStringEnum[A, ChildType](childName).map(Some(_))
@@ -149,13 +153,21 @@ trait DecoderHandleAsEnumRuleImpl {
                 // As in jsoniter-scala: Java enum and Enumeration values are always JSON strings (or the
                 // Enumeration value's id with useScalaEnumValueId), whatever the discriminator settings.
                 val byName = dispatchLambda(stringDispatchers, enumValueError)
-                if (isScalaEnumeration) Expr.quote {
-                  if (Expr.splice(dctx.config).useScalaEnumValueId)
-                    JsoniterDerivationUtils
-                      .readScalaEnumValueId[A](Expr.splice(dctx.reader), Expr.splice(dctx.stringifiedExpr))(
-                        Expr.splice(intDispatchLambda)
-                      )
-                  else JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(byName))
+                def byId: Expr[A] = Expr.quote {
+                  JsoniterDerivationUtils
+                    .readScalaEnumValueId[A](Expr.splice(dctx.reader), Expr.splice(dctx.stringifiedExpr))(
+                      Expr.splice(intDispatchLambda)
+                    )
+                }
+                def byString: Expr[A] =
+                  Expr.quote(JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(byName)))
+                if (isScalaEnumeration) dctx.evaluatedConfig.map(_.useScalaEnumValueId) match {
+                  case Some(true)  => byId
+                  case Some(false) => byString
+                  case None        =>
+                    Expr.quote {
+                      if (Expr.splice(dctx.config).useScalaEnumValueId) Expr.splice(byId) else Expr.splice(byString)
+                    }
                 }
                 else
                   Expr.quote(JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(byName)))
@@ -208,63 +220,114 @@ trait DecoderHandleAsEnumRuleImpl {
                 val isLeafName: Expr[String => Boolean] = Expr.quote { (typeName: String) =>
                   Expr.splice(anyLeafName(Expr.quote(typeName)))
                 }
-                stringFn match {
-                  case Some(strings) =>
-                    Expr.quote {
-                      val config = Expr.splice(dctx.config)
-                      val reader = Expr.splice(dctx.reader)
-                      if (reader.isNextToken('"'.toByte)) {
-                        if (
-                          (config.discriminatorFieldName.isEmpty && !config.circeLikeObjectEncoding) ||
-                          Expr.splice(enumAsStringsApplies)
-                        ) {
-                          reader.rollbackToken()
-                          JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(strings))
-                        } else if (config.discriminatorFieldName.isEmpty)
-                          reader.decodeError(Expr.splice(Expr(objectOnlyError)))
-                        else reader.decodeError("expected '{'")
-                      } else {
-                        reader.rollbackToken()
-                        config.discriminatorFieldName match {
-                          case Some(field) =>
-                            JsoniterDerivationUtils
-                              .readWithDiscriminator[A](
-                                reader,
-                                field,
-                                config.requireDiscriminatorFirst,
-                                Expr.splice(markLeaves),
-                                Expr.splice(isLeafName)
-                              )(
-                                Expr.splice(inlineFn)
-                              )
-                          case None =>
-                            JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
-                              Expr.splice(wrapperFn)
-                            )
-                        }
-                      }
-                    }
-                  case None =>
-                    Expr.quote {
-                      val config = Expr.splice(dctx.config)
-                      val reader = Expr.splice(dctx.reader)
-                      config.discriminatorFieldName match {
-                        case Some(field) =>
+                // With a config known at compile time only the applicable reading is generated (no runtime branch on
+                // the discriminator, circeLikeObjectEncoding, enumAsStrings, requireDiscriminatorFirst; only the
+                // dispatch function that is used).
+                dctx.evaluatedConfig match {
+                  case Some(c) =>
+                    val readObject: Expr[A] = c.discriminatorFieldName match {
+                      case Some(field) =>
+                        Expr.quote {
                           JsoniterDerivationUtils
                             .readWithDiscriminator[A](
-                              reader,
-                              field,
-                              config.requireDiscriminatorFirst,
+                              Expr.splice(dctx.reader),
+                              Expr.splice(Expr(field)),
+                              Expr.splice(Expr(c.requireDiscriminatorFirst)),
                               Expr.splice(markLeaves),
                               Expr.splice(isLeafName)
                             )(
                               Expr.splice(inlineFn)
                             )
-                        case None =>
-                          JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
-                            Expr.splice(wrapperFn)
-                          )
-                      }
+                        }
+                      case None =>
+                        Expr.quote {
+                          JsoniterDerivationUtils.readWrapped[A](
+                            Expr.splice(dctx.reader),
+                            Expr.splice(notStringOrObjectError)
+                          )(Expr.splice(wrapperFn))
+                        }
+                    }
+                    stringFn match {
+                      case Some(strings) =>
+                        val readsStrings =
+                          (c.discriminatorFieldName.isEmpty && !c.circeLikeObjectEncoding) ||
+                            (allCaseObjects && c.enumAsStrings)
+                        val onString: Expr[A] =
+                          if (readsStrings) Expr.quote {
+                            Expr.splice(dctx.reader).rollbackToken()
+                            JsoniterDerivationUtils.readEnumAsString[A](Expr.splice(dctx.reader))(Expr.splice(strings))
+                          }
+                          else if (c.discriminatorFieldName.isEmpty)
+                            Expr.quote(Expr.splice(dctx.reader).decodeError(Expr.splice(Expr(objectOnlyError))): A)
+                          else Expr.quote(Expr.splice(dctx.reader).decodeError("expected '{'"): A)
+                        Expr.quote {
+                          if (Expr.splice(dctx.reader).isNextToken('"'.toByte)) Expr.splice(onString)
+                          else {
+                            Expr.splice(dctx.reader).rollbackToken()
+                            Expr.splice(readObject)
+                          }
+                        }
+                      case None => readObject
+                    }
+                  case None =>
+                    stringFn match {
+                      case Some(strings) =>
+                        Expr.quote {
+                          val config = Expr.splice(dctx.config)
+                          val reader = Expr.splice(dctx.reader)
+                          if (reader.isNextToken('"'.toByte)) {
+                            if (
+                              (config.discriminatorFieldName.isEmpty && !config.circeLikeObjectEncoding) ||
+                              Expr.splice(enumAsStringsApplies)
+                            ) {
+                              reader.rollbackToken()
+                              JsoniterDerivationUtils.readEnumAsString[A](reader)(Expr.splice(strings))
+                            } else if (config.discriminatorFieldName.isEmpty)
+                              reader.decodeError(Expr.splice(Expr(objectOnlyError)))
+                            else reader.decodeError("expected '{'")
+                          } else {
+                            reader.rollbackToken()
+                            config.discriminatorFieldName match {
+                              case Some(field) =>
+                                JsoniterDerivationUtils
+                                  .readWithDiscriminator[A](
+                                    reader,
+                                    field,
+                                    config.requireDiscriminatorFirst,
+                                    Expr.splice(markLeaves),
+                                    Expr.splice(isLeafName)
+                                  )(
+                                    Expr.splice(inlineFn)
+                                  )
+                              case None =>
+                                JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
+                                  Expr.splice(wrapperFn)
+                                )
+                            }
+                          }
+                        }
+                      case None =>
+                        Expr.quote {
+                          val config = Expr.splice(dctx.config)
+                          val reader = Expr.splice(dctx.reader)
+                          config.discriminatorFieldName match {
+                            case Some(field) =>
+                              JsoniterDerivationUtils
+                                .readWithDiscriminator[A](
+                                  reader,
+                                  field,
+                                  config.requireDiscriminatorFirst,
+                                  Expr.splice(markLeaves),
+                                  Expr.splice(isLeafName)
+                                )(
+                                  Expr.splice(inlineFn)
+                                )
+                            case None =>
+                              JsoniterDerivationUtils.readWrapped[A](reader, Expr.splice(notStringOrObjectError))(
+                                Expr.splice(wrapperFn)
+                              )
+                          }
+                        }
                     }
                 }
               }
