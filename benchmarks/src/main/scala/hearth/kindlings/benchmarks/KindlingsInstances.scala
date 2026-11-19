@@ -27,6 +27,28 @@ object KindlingsCirceInstances {
   val simpleADTAutoDecoder: KindlingsDecoder[SimpleADT] = KindlingsDecoder.derived[SimpleADT]
 }
 
+/** Instances derived with a configuration only known at runtime (a parameter the macro cannot evaluate). */
+object KindlingsCirceRuntimeConfigInstances {
+  import hearth.kindlings.circederivation.Configuration
+
+  private def personDecoderWith(config: Configuration): Decoder[Person] = {
+    implicit val runtimeConfig: Configuration = config
+    KindlingsDecoder.derived[Person]
+  }
+  private def simpleADTDecoderWith(config: Configuration): Decoder[SimpleADT] = {
+    implicit val runtimeConfig: Configuration = config
+    KindlingsDecoder.derived[SimpleADT]
+  }
+  private def eventDecoderWith(config: Configuration): Decoder[Event] = {
+    implicit val runtimeConfig: Configuration = config
+    KindlingsDecoder.derived[Event]
+  }
+
+  val personDecoder: Decoder[Person] = personDecoderWith(Configuration.default)
+  val simpleADTDecoder: Decoder[SimpleADT] = simpleADTDecoderWith(Configuration.default)
+  val eventDecoder: Decoder[Event] = eventDecoderWith(Configuration.default)
+}
+
 object KindlingsJsoniterInstances {
 
   val simpleCCSemiAutoCodec: JsonValueCodec[SimpleCC] = KindlingsJsonValueCodec.derived[SimpleCC]
