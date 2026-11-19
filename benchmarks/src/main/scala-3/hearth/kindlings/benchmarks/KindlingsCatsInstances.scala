@@ -26,4 +26,6 @@ object KindlingsCatsInstances {
   val simpleCCBoxFunctor: cats.Functor[SimpleCCBox] = cats.Functor.derived[SimpleCCBox]
   val simpleCCBoxFoldable: cats.Foldable[SimpleCCBox] = cats.Foldable.derived[SimpleCCBox]
   val simpleCCBoxTraverse: cats.Traverse[SimpleCCBox] = cats.Traverse.derived[SimpleCCBox]
+  val nestedCCBoxFunctor: cats.Functor[NestedCCBox] = cats.Functor.derived[NestedCCBox]
+  val nestedCCBoxTraverse: cats.Traverse[NestedCCBox] = cats.Traverse.derived[NestedCCBox]
 }

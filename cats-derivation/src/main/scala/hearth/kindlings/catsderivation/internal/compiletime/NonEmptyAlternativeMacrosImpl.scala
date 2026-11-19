@@ -151,6 +151,7 @@ trait NonEmptyAlternativeMacrosImpl
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -185,7 +186,11 @@ trait NonEmptyAlternativeMacrosImpl
         if (directFields.contains(fieldName)) {
           MIO.pure((fieldName, aExpr.as_??))
         } else {
-          NEATypes.Monoid[Field].summonExprIgnoring().toEither match {
+          NEATypes
+            .Monoid[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using NEATypes.Monoid[Field])) match {
             case Right(monoidExpr) =>
               val emptyValue: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
               MIO.pure((fieldName, emptyValue.as_??))
@@ -261,7 +266,11 @@ trait NonEmptyAlternativeMacrosImpl
           )
           MIO.pure((fieldName, applied.as_??))
         } else {
-          NEATypes.Semigroup[Field].summonExprIgnoring().toEither match {
+          NEATypes
+            .Semigroup[Field]
+            .summonExprIgnoring()
+            .toEither
+            .map(instanceScoped(_)(using NEATypes.Semigroup[Field])) match {
             case Right(sgExpr) =>
               val combined: Expr[Field] = Expr.quote(
                 Expr.splice(sgExpr).combine(Expr.splice(ffField), Expr.splice(faField))
@@ -301,7 +310,11 @@ trait NonEmptyAlternativeMacrosImpl
         val fx = fieldValueX.value.asInstanceOf[Expr[Field]]
         val fy = fieldValueY.value.asInstanceOf[Expr[Field]]
 
-        NEATypes.Semigroup[Field].summonExprIgnoring().toEither match {
+        NEATypes
+          .Semigroup[Field]
+          .summonExprIgnoring()
+          .toEither
+          .map(instanceScoped(_)(using NEATypes.Semigroup[Field])) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

@@ -46,6 +46,40 @@ object examples {
   }
   final case class WithCounted(counted: Counted, other: Int)
 
+  /** A type constructor whose instance is an `implicit def` counting how often it is created: the derived polymorphic
+    * instances (Functor, Traverse, SemigroupK, ...) must resolve it - and the composed instance of a nested field -
+    * once per instance, not on every `map` / `traverse` / `combineK` call.
+    */
+  final case class CountedBox[A](values: List[A])
+  object CountedBox {
+    @volatile var instancesCreated: Int = 0
+    abstract class Instances
+        extends cats.Traverse[CountedBox]
+        with cats.MonoidK[CountedBox]
+        with alleycats.ConsK[CountedBox]
+    implicit def countedBoxInstances: Instances = {
+      instancesCreated += 1
+      new Instances {
+        def traverse[G[_], A, B](fa: CountedBox[A])(f: A => G[B])(implicit G: cats.Applicative[G]): G[CountedBox[B]] =
+          G.map(cats.Traverse[List].traverse(fa.values)(f))(CountedBox(_))
+        def foldLeft[A, B](fa: CountedBox[A], b: B)(f: (B, A) => B): B = fa.values.foldLeft(b)(f)
+        def foldRight[A, B](fa: CountedBox[A], lb: cats.Eval[B])(f: (A, cats.Eval[B]) => cats.Eval[B]): cats.Eval[B] =
+          cats.Foldable[List].foldRight(fa.values, lb)(f)
+        def empty[A]: CountedBox[A] = CountedBox(Nil)
+        def combineK[A](x: CountedBox[A], y: CountedBox[A]): CountedBox[A] = CountedBox(x.values ++ y.values)
+        def cons[A](hd: A, tl: CountedBox[A]): CountedBox[A] = CountedBox(hd :: tl.values)
+      }
+    }
+  }
+  // A field of the counted type constructor, a nested one (composed instance) and the type parameter itself.
+  final case class WithCountedBox[A](box: CountedBox[A], boxes: List[CountedBox[A]], value: A)
+  // A field of the counted type constructor next to a constant field with a counted kernel instance.
+  final case class WithCountedBoxK[A](box: CountedBox[A], counted: Counted)
+  // The type parameter next to a constant field with a counted kernel instance.
+  final case class WithCountedConst[A](value: A, counted: Counted)
+  // Constant fields only (NonEmptyAlternative / Alternative).
+  final case class CountedConst[A](counted: Counted, other: Int)
+
   final case class Person(name: String, age: Int)
   object Person {
     implicit val showPerson: cats.Show[Person] = cats.Show.derived

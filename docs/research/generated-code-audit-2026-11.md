@@ -123,6 +123,13 @@ Fix: specialise when `evaluatedConfig` is defined. Otherwise compute names once 
   Semigroup/Monoid combine 48 → 24 B. The polymorphic type classes (Functor, Traverse, ...) have no cache to move, but
   splice nested and composed instances (`HktNestedRuntime.composeFunctor(...)`, summoned `implicit def`s) into the
   per-call body; not changed yet.
+  **Fixed in `perf-cats-hkt-instance-scope`:** Functor, Foldable, Traverse, ConsK (nested and composed field
+  instances), Apply, Applicative, NonEmptyAlternative, Alternative (the `Semigroup`/`Monoid` of constant fields),
+  SemigroupK, MonoidK, EmptyK (the kernel instances, including `SemigroupK[G].algebra`) and cats-tagless SemigroupalK /
+  ApplyK (the `Semigroup` of members without `F`) bind those instances to `lazy val`s around the instance
+  (`InstanceScopedVals` in derivation-commons). Per call: `NestedCCBox` (`List[A]` + `List[Option[A]]` fields) map
+  488 → 464 B, traverse 1928 → 1904 B (the composed instance); an `implicit def` instance is no longer re-created on
+  every call. The wrapped-fields shapes (`HktWrappedRuntime`) already built their field instances once.
 - **Avro** rebuilds schemas inside encode/decode for case-object enums, case objects in mixed sealed traits, named
   tuples and `Either`.
 - **Avro** `parseAvroName` compiles a regex on every call (`String.replaceAll`), once per candidate subtype per

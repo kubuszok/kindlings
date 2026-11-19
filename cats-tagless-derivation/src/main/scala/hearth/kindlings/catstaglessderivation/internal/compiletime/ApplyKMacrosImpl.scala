@@ -61,6 +61,7 @@ trait ApplyKMacrosImpl extends FunctorKMacrosImpl with SemigroupalKMacrosImpl { 
           fromCtx(ctx)
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

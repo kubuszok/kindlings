@@ -52,6 +52,7 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
             )
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -78,7 +79,10 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
     val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      emptyFromEmptyK[Field].map(Right(_)).getOrElse(EmptyKTypes.Empty[Field].summonExprIgnoring().toEither) match {
+      emptyFromEmptyK[Field]
+        .map(Right(_))
+        .getOrElse(EmptyKTypes.Empty[Field].summonExprIgnoring().toEither)
+        .map(instanceScoped(_)(using EmptyKTypes.Empty[Field])) match {
         case Right(emptyExpr) =>
           val value: Expr[Field] = Expr.quote(Expr.splice(emptyExpr).empty)
           MIO.pure((fieldName, value.as_??))

@@ -71,6 +71,7 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
             )
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -97,7 +98,10 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
     val fieldExprsMIO: MIO[List[(String, Expr_??)]] = fields.traverse { case (fieldName, param) =>
       import param.tpe.Underlying as Field
 
-      monoidFromMonoidK[Field].map(Right(_)).getOrElse(MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither) match {
+      monoidFromMonoidK[Field]
+        .map(Right(_))
+        .getOrElse(MonoidKTypes.Monoid[Field].summonExprIgnoring().toEither)
+        .map(instanceScoped(_)(using MonoidKTypes.Monoid[Field])) match {
         case Right(monoidExpr) =>
           val value: Expr[Field] = Expr.quote(Expr.splice(monoidExpr).empty)
           MIO.pure((fieldName, value.as_??))
@@ -136,7 +140,8 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
 
         monoidFromMonoidK[Field]
           .map(monoid => Right(monoid.asInstanceOf[Expr[cats.kernel.Semigroup[Field]]]))
-          .getOrElse(MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither) match {
+          .getOrElse(MonoidKTypes.Semigroup[Field].summonExprIgnoring().toEither)
+          .map(instanceScoped(_)(using MonoidKTypes.Semigroup[Field])) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

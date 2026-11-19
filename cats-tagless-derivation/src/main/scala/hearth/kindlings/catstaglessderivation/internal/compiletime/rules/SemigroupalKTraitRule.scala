@@ -229,7 +229,12 @@ trait SemigroupalKTraitRuleImpl {
                     val callF: Expr[RT] = Expr.quote(Expr.splice(sourceCallF).asInstanceOf[RT])
                     implicit val SemigroupRT: Type[cats.kernel.Semigroup[RT]] =
                       Type.Ctor1.of[cats.kernel.Semigroup].apply[RT]
-                    val result: Expr[RT] = Expr.summonImplicit[cats.kernel.Semigroup[RT]].toOption match {
+                    // Resolved once per instance (a `lazy val` around it), unless the result type mentions the
+                    // method's own type parameters (not in scope there).
+                    val semigroupOpt = Expr.summonImplicit[cats.kernel.Semigroup[RT]].toOption.map { semigroup =>
+                      if (octx.typeParameters.isEmpty) instanceScoped(semigroup) else semigroup
+                    }
+                    val result: Expr[RT] = semigroupOpt match {
                       case Some(semigroup) =>
                         val smG =
                           sourceMethodOptG.getOrElse(

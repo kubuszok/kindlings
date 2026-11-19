@@ -17,7 +17,10 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Uses erased approach: builds body for F[Any] with Any, wraps with asInstanceOf.
   */
-trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait ConsKMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -80,7 +83,7 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
                   // Invariant field — copy from tl
                 } else {
                   // Nested field — try to summon ConsK for its container
-                  summonConsKForFieldType(tInt.asInstanceOf[Type[Any]]) match {
+                  summonConsKForFieldType(tInt.asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
                     case Some(consKExpr) => nestedFieldConsKs += (name -> consKExpr)
                     case None            => // No ConsK available — treat as non-absorbable (copy from tl)
                   }
@@ -131,6 +134,7 @@ trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
             )
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

@@ -60,6 +60,7 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
             )
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
@@ -94,7 +95,8 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
 
         semigroupFromSemigroupK[Field]
           .map(Right(_))
-          .getOrElse(SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither) match {
+          .getOrElse(SemigroupKTypes.Semigroup[Field].summonExprIgnoring().toEither)
+          .map(instanceScoped(_)(using SemigroupKTypes.Semigroup[Field])) match {
           case Right(sgExpr) =>
             val combined: Expr[Field] = Expr.quote(Expr.splice(sgExpr).combine(Expr.splice(fx), Expr.splice(fy)))
             MIO.pure((fieldName, combined.as_??))

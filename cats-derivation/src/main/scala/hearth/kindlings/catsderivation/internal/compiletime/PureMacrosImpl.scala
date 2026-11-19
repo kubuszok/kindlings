@@ -111,6 +111,7 @@ trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSuppo
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

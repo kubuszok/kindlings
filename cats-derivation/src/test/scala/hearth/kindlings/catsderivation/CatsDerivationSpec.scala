@@ -1439,6 +1439,88 @@ final class CatsDerivationSpec extends MacroSuite {
     }
   }
 
+  group("field instances of polymorphic instances are resolved once per derived instance, not per call") {
+    import hearth.kindlings.catsderivation.extensions.*
+    import examples.{Counted, CountedBox, CountedConst, WithCountedBox, WithCountedBoxK, WithCountedConst}
+
+    // Calls `op` three times and returns how many field instances the 2nd and 3rd call created.
+    def createdByRepeatedCalls(op: () => Any): Int = {
+      op()
+      val before = Counted.instancesCreated + CountedBox.instancesCreated
+      op()
+      op()
+      Counted.instancesCreated + CountedBox.instancesCreated - before
+    }
+    val boxed = WithCountedBox(CountedBox(List(1, 2)), List(CountedBox(List(3)), CountedBox(List(4, 5))), 6)
+    val boxedK = WithCountedBoxK(CountedBox(List(1, 2)), Counted(3))
+    val const = WithCountedConst(1, Counted(2))
+    val constOnly = CountedConst[Int](Counted(1), 2)
+
+    test("Functor") {
+      val functor = cats.Functor.derived[WithCountedBox]
+      functor.map(boxed)(_ + 1) ==> WithCountedBox(
+        CountedBox(List(2, 3)),
+        List(CountedBox(List(4)), CountedBox(List(5, 6))),
+        7
+      )
+      createdByRepeatedCalls(() => functor.map(boxed)(_ + 1)) ==> 0
+    }
+    test("Foldable") {
+      val foldable = cats.Foldable.derived[WithCountedBox]
+      foldable.foldLeft(boxed, 0)(_ + _) ==> 21
+      createdByRepeatedCalls(() => foldable.foldLeft(boxed, 0)(_ + _)) ==> 0
+      createdByRepeatedCalls(() => foldable.foldRight(boxed, cats.Eval.now(0))((a, b) => b.map(_ + a)).value) ==> 0
+    }
+    test("Traverse") {
+      val traverse = cats.Traverse.derived[WithCountedBox]
+      traverse.traverse[Option, Int, Int](boxed)(a => Some(a * 2)) ==> Some(
+        WithCountedBox(CountedBox(List(2, 4)), List(CountedBox(List(6)), CountedBox(List(8, 10))), 12)
+      )
+      createdByRepeatedCalls(() => traverse.traverse[Option, Int, Int](boxed)(a => Some(a))) ==> 0
+      createdByRepeatedCalls(() => traverse.map(boxed)(_ + 1)) ==> 0
+      createdByRepeatedCalls(() => traverse.foldLeft(boxed, 0)(_ + _)) ==> 0
+    }
+    test("SemigroupK") {
+      val semigroupK = cats.SemigroupK.derived[WithCountedBoxK]
+      semigroupK.combineK(boxedK, boxedK) ==> WithCountedBoxK(CountedBox(List(1, 2, 1, 2)), Counted(6))
+      createdByRepeatedCalls(() => semigroupK.combineK(boxedK, boxedK)) ==> 0
+    }
+    test("MonoidK") {
+      val monoidK = cats.MonoidK.derived[WithCountedBoxK]
+      monoidK.empty[Int] ==> WithCountedBoxK(CountedBox(Nil), Counted(0))
+      createdByRepeatedCalls(() => monoidK.combineK(boxedK, boxedK)) ==> 0
+      createdByRepeatedCalls(() => monoidK.empty[Int]) ==> 0
+    }
+    test("ConsK") {
+      val consK = alleycats.ConsK.derived[WithCountedBoxK]
+      consK.cons(0, boxedK) ==> WithCountedBoxK(CountedBox(List(0, 1, 2)), Counted(3))
+      createdByRepeatedCalls(() => consK.cons(0, boxedK)) ==> 0
+    }
+    test("Apply") {
+      val apply = cats.Apply.derived[WithCountedConst]
+      apply.ap(WithCountedConst[Int => Int](_ + 1, Counted(1)))(const) ==> WithCountedConst(2, Counted(3))
+      createdByRepeatedCalls(() => apply.ap(WithCountedConst[Int => Int](_ + 1, Counted(1)))(const)) ==> 0
+    }
+    test("Applicative") {
+      val applicative = cats.Applicative.derived[WithCountedConst]
+      applicative.pure(1) ==> WithCountedConst(1, Counted(0))
+      createdByRepeatedCalls(() => applicative.pure(1)) ==> 0
+      createdByRepeatedCalls(() => applicative.ap(WithCountedConst[Int => Int](_ + 1, Counted(1)))(const)) ==> 0
+    }
+    test("NonEmptyAlternative") {
+      val nea = cats.NonEmptyAlternative.derived[CountedConst]
+      nea.combineK(constOnly, constOnly) ==> CountedConst[Int](Counted(2), 4)
+      createdByRepeatedCalls(() => nea.combineK(constOnly, constOnly)) ==> 0
+      createdByRepeatedCalls(() => nea.pure(1)) ==> 0
+    }
+    test("Alternative") {
+      val alternative = cats.Alternative.derived[CountedConst]
+      alternative.empty[Int] ==> CountedConst[Int](Counted(0), 0)
+      createdByRepeatedCalls(() => alternative.empty[Int]) ==> 0
+      createdByRepeatedCalls(() => alternative.combineK(constOnly, constOnly)) ==> 0
+    }
+  }
+
   group("strict derivation") {
 
     test("StrictDerivation sentinel type exists and can be instantiated") {
