@@ -50,6 +50,13 @@ Background facts:
    call, and its copy ignores the evaluated config (`outerCfg` defeats `semiEval`). As a result, `encodeSchema_Big90`
    is 9.3 KB (S3) / 8.8 KB (2.13), the only Avro method still over 8000 B. Nested ADT encoders hold every schema
    2-4 times. The duplication predates 0.4.0; the size of each copy does not.
+   **Fixed in `perf-avro-shared-nested-schemas`:** encoder and decoder instances derive every schema they need (their
+   own, those of their nested records' encoders, Either unions, named-tuple fields) into the instance's cache
+   (`deriveSchemaInInstanceScope`), so each record schema is built once per instance and the encoded nested records
+   carry the very schema object of the parent's field. Schemas derived without the implicit search (the root of each)
+   are cached apart from nested ones, so a user-provided `AvroSchemaFor` of a nested type keeps precedence; the
+   self-records are kept apart the same way. `SharedRoot` encoder+decoder: 2664 → 2729 B of code (lazy vals now at
+   instance scope), 100-field guard: 52136 → 52493 B in total, largest method 4131 → 4135 B.
 3. **The Avro decoder looks up each defaulted field twice and rebuilds its alias list.**
    `hasFieldOrAlias` + `getFieldByNameOrAlias` means two hash lookups. `List.empty`/`::` aliases are rebuilt per
    call. A ~35 B `NonFatal.unapply` handler sits in every field def. avro4s does one lookup

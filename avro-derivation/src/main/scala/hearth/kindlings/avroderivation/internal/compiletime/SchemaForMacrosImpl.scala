@@ -167,7 +167,8 @@ trait SchemaForMacrosImpl
       cache: MLocal[ValDefsCache],
       derivedType: Option[??],
       namespaceOverride: Option[String] = None,
-      evaluatedConfig: Option[AvroConfig] = None
+      evaluatedConfig: Option[AvroConfig] = None,
+      inInstanceScope: Boolean = false
   ) {
 
     def nest[B: Type]: SchemaForCtx[B] = copy[B](
@@ -183,35 +184,67 @@ trait SchemaForMacrosImpl
     private def sanitizedTypeName[B: Type]: String =
       Type[B].plainPrint.replaceAll("[^a-zA-Z0-9_]", "_")
 
+    /** Whether `B` is derived structurally without searching for its implicit (the root of `AvroSchemaFor.derived` and
+      * of the schemas encoders/decoders derive for themselves).
+      */
+    private def derivedIgnoringImplicit[B: Type]: Boolean = derivedType.exists(_.Underlying =:= Type[B])
+
+    // Schemas are cached under two keys, so that one cache can be shared by every schema an instance derives:
+    //  - `cached-schema-for-B`: B derived as a nested type, after its implicit search found nothing (a user-provided
+    //    `AvroSchemaFor[B]` is never cached, so it is found again by every lookup),
+    //  - `cached-root-schema-for-B`: B derived structurally without the implicit search (see
+    //    `derivedIgnoringImplicit`), which must not be reused for a nested B: that would skip its implicit search.
+    // A root lookup may reuse the nested schema (also structural), unless that one had a field-level namespace.
+    // The self-records (below) are kept apart the same way: a self-record is only meant for the references to a type
+    // from within its own derivation, and a cache shared by several schemas outlives those derivations.
+    private def nestedKey[B: Type]: String = s"cached-schema-for-${Type[B].plainPrint}"
+    private def rootKey[B: Type]: String = s"cached-root-schema-for-${Type[B].plainPrint}"
+    private def plainNestedSchemaMarker[B: Type]: (Int, String) = (System.identityHashCode(cache), Type[B].plainPrint)
+
     def getCachedSchema[B: Type]: MIO[Option[Expr[Schema]]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      cache.get0Ary[Schema](s"cached-schema-for-${Type[B].plainPrint}")
+      if (!derivedIgnoringImplicit[B]) cache.get0Ary[Schema](nestedKey[B])
+      else
+        cache.get0Ary[Schema](rootKey[B]).flatMap {
+          case None if plainNestedSchemas.contains(plainNestedSchemaMarker[B]) => cache.get0Ary[Schema](nestedKey[B])
+          case other                                                           => MIO.pure(other)
+        }
     }
     def setCachedSchema[B: Type](instance: Expr[Schema]): MIO[Unit] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
+      val isRoot = derivedIgnoringImplicit[B]
+      if (!isRoot && namespaceOverride.isEmpty) plainNestedSchemas += plainNestedSchemaMarker[B]
       Log.info(s"Caching schema for ${Type[B].prettyPrint}") >>
         cache.buildCachedWith(
-          s"cached-schema-for-${Type[B].plainPrint}",
+          if (isRoot) rootKey[B] else nestedKey[B],
           ValDefBuilder.ofLazy[Schema](s"schema_${sanitizedTypeName[B]}")
         )(_ => instance)
     }
 
-    /** Registers an eagerly-initialized empty record Schema (no fields yet) in the cache. Recursive field derivation
-      * finds this reference via SfCheckSelfRecordRule, breaking the cycle. After field derivation completes, the main
-      * schema lazy val calls setRecordFields on the self-record.
+    /** Registers an empty record Schema (no fields yet) in the cache. Recursive field derivation finds this reference
+      * via SfCheckSelfRecordRule, breaking the cycle. After field derivation completes, the main schema lazy val calls
+      * setRecordFields on the self-record.
+      *
+      * In the cache of an encoder or decoder instance (`inInstanceScope`) it is a `lazy val` (its initializer depends
+      * on nothing recursive): a strict val between the instance's `def`s would make their forward references illegal.
       */
+    private def selfRecordKey[B: Type]: String =
+      if (derivedIgnoringImplicit[B]) s"self-root-record-for-${Type[B].plainPrint}"
+      else s"self-record-for-${Type[B].plainPrint}"
+
     def setSelfRecordSchema[B: Type](emptyRecord: Expr[Schema]): MIO[Unit] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      Log.info(s"Registering self-record schema for ${Type[B].prettyPrint}") >>
-        cache.buildCachedWith(
-          s"self-record-for-${Type[B].plainPrint}",
-          ValDefBuilder.ofVal[Schema](s"selfRecord_${sanitizedTypeName[B]}")
-        )(_ => emptyRecord)
+      Log.info(s"Registering self-record schema for ${Type[B].prettyPrint}") >> {
+        val name = s"selfRecord_${sanitizedTypeName[B]}"
+        if (inInstanceScope)
+          cache.buildCachedWith(selfRecordKey[B], ValDefBuilder.ofLazy[Schema](name))(_ => emptyRecord)
+        else cache.buildCachedWith(selfRecordKey[B], ValDefBuilder.ofVal[Schema](name))(_ => emptyRecord)
+      }
     }
 
     def getSelfRecordSchema[B: Type]: MIO[Option[Expr[Schema]]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
-      cache.get0Ary[Schema](s"self-record-for-${Type[B].plainPrint}")
+      cache.get0Ary[Schema](selfRecordKey[B])
     }
 
     override def toString: String =
@@ -233,6 +266,9 @@ trait SchemaForMacrosImpl
   }
 
   def sfctx[A](implicit A: SchemaForCtx[A]): SchemaForCtx[A] = A
+
+  /** Nested schemas cached without a field-level namespace override (cache identity, type): see `getCachedSchema`. */
+  private val plainNestedSchemas = scala.collection.mutable.Set.empty[(Int, String)]
 
   implicit def currentSchemaValueType[A: SchemaForCtx]: Type[A] = sfctx.tpe
 
@@ -279,6 +315,28 @@ trait SchemaForMacrosImpl
       result <- deriveSchemaRecursively[B](using ctx)
       cache <- localCache.get
     } yield cache.toValDefs.use(_ => result)
+  }
+
+  /** Derives the schema of `B` (structurally, like [[deriveSelfContainedSchema]]) into the cache of the instance being
+    * derived, which the caller emits around the instance: nested record schemas are then built once and shared by all
+    * the schemas the instance derives (its own and those of its nested records), instead of a copy per schema.
+    */
+  def deriveSchemaInInstanceScope[B: Type](
+      config: Expr[AvroConfig],
+      evaluatedConfig: Option[AvroConfig],
+      cache: MLocal[ValDefsCache]
+  ): MIO[Expr[Schema]] = {
+    val evConfig: Option[AvroConfig] = evaluatedConfig.orElse(config.semiEval.toOption)
+    // `derivedType = B`: the root type is derived without the implicit search, see `deriveSelfContainedSchema`.
+    val ctx = SchemaForCtx[B](
+      Type[B],
+      config,
+      cache,
+      derivedType = Some(Type[B].as_??),
+      evaluatedConfig = evConfig,
+      inInstanceScope = true
+    )
+    ensureStandardExtensionsLoaded() >> deriveSchemaRecursively[B](using ctx)
   }
 
   // The actual derivation logic

@@ -94,7 +94,8 @@ trait DecoderMacrosImpl
 
           val schemaExpr: Expr[Schema] = runSafe {
             for {
-              schema <- deriveSelfContainedSchema[A](configExpr, evConfig)
+              // In the instance's cache: nested record schemas are shared with the other schemas the decoder needs.
+              schema <- deriveSchemaInInstanceScope[A](configExpr, evConfig, cache)
               _ <- instanceCtx.setCachedSchemaForDecode[A](schema)
               cached <- instanceCtx.getCachedSchemaForDecode[A]
             } yield cached.get
@@ -367,7 +368,7 @@ trait DecoderMacrosImpl
           case Some(cached) => MIO.pure(cached)
           case None         =>
             for {
-              schema <- deriveSelfContainedSchema[A](ctx.schemaConfig, ctx.evaluatedConfig)
+              schema <- deriveSchemaInInstanceScope[A](ctx.schemaConfig, ctx.evaluatedConfig, ctx.cache)
               _ <- ctx.setCachedSchemaForDecode[A](schema)
               result <- ctx.getCachedSchemaForDecode[A]
             } yield result.get
@@ -502,7 +503,10 @@ trait DecoderMacrosImpl
                 // With the instance's config at hand the decoder (and its schema) is a lazy val of the instance,
                 // built once; otherwise it is built where it is used, from the call site's config.
                 val configExpr: Expr[AvroConfig] = ctx.schemaConfig
-                deriveSelfContainedSchema[Field](configExpr, ctx.evaluatedConfig).flatMap { schemaExpr =>
+                val schemaMIO =
+                  if (ctx.outerConfig.isEmpty) deriveSelfContainedSchema[Field](configExpr, ctx.evaluatedConfig)
+                  else deriveSchemaInInstanceScope[Field](configExpr, ctx.evaluatedConfig, ctx.cache)
+                schemaMIO.flatMap { schemaExpr =>
                   val callerFn = helperOpt.get
                   val decoder: Expr[AvroDecoder[Field]] = Expr.quote {
                     val sch = Expr.splice(schemaExpr)
