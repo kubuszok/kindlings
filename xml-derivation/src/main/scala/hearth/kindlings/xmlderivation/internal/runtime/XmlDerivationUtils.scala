@@ -288,6 +288,75 @@ object XmlDerivationUtils {
     builder
   }
 
+  /** [[decodeCollectionBuilder]] over the child elements named `itemName` (`@xmlUnwrapped` / `@xmlWrapper` fields). */
+  def decodeNamedCollectionBuilder[Item, CtorResult](
+      parentElem: scala.xml.Elem,
+      itemName: String,
+      decodeItem: scala.xml.Elem => Either[XmlDecodingError, Item],
+      factory: scala.collection.Factory[Item, CtorResult]
+  ): scala.collection.mutable.Builder[Item, CtorResult] = {
+    val builder = factory.newBuilder
+    var errors: scala.collection.mutable.ListBuffer[XmlDecodingError] = null
+    val children = parentElem.child.iterator
+    while (children.hasNext)
+      children.next() match {
+        case childElem: scala.xml.Elem if childElem.label == itemName =>
+          decodeItem(childElem) match {
+            case Right(v) => builder += v
+            case Left(e)  =>
+              if (errors == null) errors = new scala.collection.mutable.ListBuffer[XmlDecodingError]()
+              errors += e
+          }
+        case _ => ()
+      }
+    if (errors != null) throw new XmlCollectionBuildException(errors.toList)
+    builder
+  }
+
+  /** [[decodeMapBuilder]] with the entries in the child elements named `entryName`. */
+  def decodeNamedMapBuilder[Value, CtorResult](
+      parentElem: scala.xml.Elem,
+      entryName: String,
+      decodeValue: scala.xml.Elem => Either[XmlDecodingError, Value],
+      factory: scala.collection.Factory[(String, Value), CtorResult]
+  ): scala.collection.mutable.Builder[(String, Value), CtorResult] = {
+    val builder = factory.newBuilder
+    val entries = getChildElems(parentElem, entryName)
+    val errors = new scala.collection.mutable.ListBuffer[XmlDecodingError]()
+    entries.foreach { entryElem =>
+      getAttribute(entryElem, "key") match {
+        case Right(key) =>
+          (entryElem \ "value").collectFirst { case e: scala.xml.Elem => e } match {
+            case Some(valueElem) =>
+              decodeValue(valueElem) match {
+                case Right(v) => builder += ((key, v))
+                case Left(e)  => errors += e
+              }
+            case None => errors += XmlDecodingError.MissingElement("value", entryElem.label)
+          }
+        case Left(e) => errors += e
+      }
+    }
+    if (errors.nonEmpty)
+      throw new XmlCollectionBuildException(errors.toList)
+    builder
+  }
+
+  /** The first child element named `childName`, or `null` (the `@xmlWrapper` element of a field). */
+  def childElemOrNull(elem: scala.xml.Elem, childName: String): scala.xml.Elem = {
+    val children = elem.child.iterator
+    while (children.hasNext)
+      children.next() match {
+        case childElem: scala.xml.Elem if childElem.label == childName =>
+          return childElem
+        case _ => ()
+      }
+    null
+  }
+
+  /** Whether there is a child element named `childName`. */
+  def hasChildElem(elem: scala.xml.Elem, childName: String): Boolean = childElemOrNull(elem, childName) != null
+
   def decodeCollectionFromElems[Item, Coll](
       elems: List[scala.xml.Elem],
       decodeItem: scala.xml.Elem => Either[XmlDecodingError, Item],

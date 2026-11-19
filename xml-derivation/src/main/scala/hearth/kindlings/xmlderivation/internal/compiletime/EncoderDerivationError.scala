@@ -6,4 +6,8 @@ private[compiletime] object EncoderDerivationError {
       extends EncoderDerivationError(
         s"Cannot derive XmlEncoder for type $typeName:\n${reasons.mkString("\n")}"
       )
+  final case class InvalidFieldAnnotations(typeName: String, errors: List[String])
+      extends EncoderDerivationError(
+        s"Cannot derive XmlEncoder for type $typeName:\n${errors.map(" - " + _).mkString("\n")}"
+      )
 }

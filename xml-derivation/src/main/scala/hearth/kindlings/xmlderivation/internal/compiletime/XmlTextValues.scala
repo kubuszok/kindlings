@@ -25,13 +25,19 @@ trait XmlTextValues { this: MacroCommons & StdExtensions =>
     Type.of[BigInt].as_??
   )
 
-  /** Whether `A` is a single text value: a built-in type or a value type over one. */
-  def isXmlTextValue[A](tpe: Type[A]): Boolean = {
+  /** Whether `A` is a built-in text type (not a value type over one). */
+  def isXmlBuiltInTextValue[A](tpe: Type[A]): Boolean = {
     implicit val A: Type[A] = tpe
     textValueBuiltIns.exists { builtIn =>
       import builtIn.Underlying as B
       Type[A] <:< Type[B]
-    } || (Type[A] match {
+    }
+  }
+
+  /** Whether `A` is a single text value: a built-in type or a value type over one. */
+  def isXmlTextValue[A](tpe: Type[A]): Boolean = {
+    implicit val A: Type[A] = tpe
+    isXmlBuiltInTextValue(tpe) || (Type[A] match {
       case IsValueType(isValueType) =>
         import isValueType.Underlying as Inner
         isXmlTextValue(Type[Inner])

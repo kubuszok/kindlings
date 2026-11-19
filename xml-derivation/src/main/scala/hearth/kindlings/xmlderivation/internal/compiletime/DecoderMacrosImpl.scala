@@ -10,7 +10,7 @@ import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
 trait DecoderMacrosImpl
     extends XmlDerivationTimeout
     with XmlDerivationPolicy
-    with XmlTextValues
+    with XmlFieldLayouts
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.FlatFieldsConstruct
     with rules.DecoderUseCachedDefWhenAvailableRuleImpl
@@ -333,6 +333,32 @@ trait DecoderMacrosImpl
       } yield ()
     }
 
+    /** The cached `(case name, config) => value` helper of an enum of singletons. */
+    def getEnumFromNameHelper[B: Type]
+        : MIO[Option[(Expr[String], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, B]]]] = {
+      implicit val EitherT: Type[Either[XmlDecodingError, B]] = DTypes.DecoderResult[B]
+      implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
+      implicit val StringT: Type[String] = DTypes.String
+      cache.get2Ary[String, XmlConfig, Either[XmlDecodingError, B]]("cached-enum-from-name-method")
+    }
+    def setEnumFromNameHelper[B: Type](
+        helper: (Expr[String], Expr[XmlConfig]) => MIO[Expr[Either[XmlDecodingError, B]]]
+    ): MIO[Unit] = {
+      implicit val EitherT: Type[Either[XmlDecodingError, B]] = DTypes.DecoderResult[B]
+      implicit val ConfigT: Type[XmlConfig] = DTypes.XmlConfig
+      implicit val StringT: Type[String] = DTypes.String
+      val defBuilder =
+        ValDefBuilder.ofDef2[String, XmlConfig, Either[XmlDecodingError, B]](s"enumFromName_${Type[B].shortName}")
+      for {
+        _ <- cache.forwardDeclare("cached-enum-from-name-method", defBuilder)
+        _ <- MIO.scoped { runSafe =>
+          runSafe(cache.buildCachedWith("cached-enum-from-name-method", defBuilder) { case (_, (name, config)) =>
+            runSafe(helper(name, config))
+          })
+        }
+      } yield ()
+    }
+
     override def toString: String =
       s"decode[${tpe.prettyPrint}](elem = ${elem.prettyPrint}, config = ${config.prettyPrint})"
   }
@@ -419,22 +445,45 @@ trait DecoderMacrosImpl
   sealed trait FieldDecoding
   object FieldDecoding {
     case class Default(value: Expr[Any]) extends FieldDecoding
-    case class FromAttribute(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
-    case class FromOptionalAttribute(nameExpr: Expr[String], fieldType: ??, whenAbsent: Expr[Any]) extends FieldDecoding
-    case class FromAttributeWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+    case class FromAttribute(nameExpr: Expr[String], shape: XmlTextShape) extends FieldDecoding
+    case class FromOptionalAttribute(nameExpr: Expr[String], shape: XmlTextShape, whenAbsent: Expr[Any])
         extends FieldDecoding
-    case class FromAttributeWithRuntimeDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+    case class FromAttributeWithDefault(nameExpr: Expr[String], shape: XmlTextShape, defaultValue: Expr[Any])
+        extends FieldDecoding
+    case class FromAttributeWithRuntimeDefault(nameExpr: Expr[String], shape: XmlTextShape, defaultValue: Expr[Any])
         extends FieldDecoding
 
-    /** `defaultFieldMode` only known at runtime: read from an attribute in `Attribute` mode, else from an element. */
-    case class DynamicMode(asAttribute: FieldDecoding, asElement: FieldDecoding) extends FieldDecoding
-    case class FromChildElement(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
-    case class FromChildElementOrEmpty(nameExpr: Expr[String], fieldType: ??) extends FieldDecoding
-    case class FromChildElementWithDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
+    /** The configuration is only known at runtime: read from an attribute when `defaultFieldMode` is `Attribute` (and,
+      * with `needsEnumAsStrings`, `enumAsStrings` is set), else from an element.
+      */
+    case class DynamicMode(asAttribute: FieldDecoding, asElement: FieldDecoding, needsEnumAsStrings: Boolean)
         extends FieldDecoding
-    case class FromChildElementWithRuntimeDefault(nameExpr: Expr[String], fieldType: ??, defaultValue: Expr[Any])
-        extends FieldDecoding
-    case class FromContent(decoded: Expr[Either[XmlDecodingError, Any]]) extends FieldDecoding
+    case class FromChildElement(nameExpr: Expr[String]) extends FieldDecoding
+    case class FromChildElementOrEmpty(nameExpr: Expr[String]) extends FieldDecoding
+    case class FromChildElementWithDefault(nameExpr: Expr[String], defaultValue: Expr[Any]) extends FieldDecoding
+    case class FromChildElementWithRuntimeDefault(nameExpr: Expr[String], defaultValue: Expr[Any]) extends FieldDecoding
+
+    /** `@xmlContent`: the text content of the element. */
+    case class FromContent(shape: XmlAttrShape) extends FieldDecoding
+
+    /** `@xmlUnwrapped`: every child element with that name is an item. Without any, `defaultWhenAbsent` is the value
+      * (only when `useDefaults` is set, if that is only known at runtime: `defaultNeedsUseDefaults`).
+      */
+    case class FromRepeatedChildren(
+        nameExpr: Expr[String],
+        defaultWhenAbsent: Option[Expr[Any]],
+        defaultNeedsUseDefaults: Boolean
+    ) extends FieldDecoding
+
+    /** `@xmlWrapper`: `inner` read from the wrapper element (from an empty one when it is absent, unless
+      * `defaultWhenAbsent` applies).
+      */
+    case class FromWrapper(
+        wrapperName: String,
+        inner: FieldDecoding,
+        defaultWhenAbsent: Option[Expr[Any]],
+        defaultNeedsUseDefaults: Boolean
+    ) extends FieldDecoding
   }
 
   // Types
@@ -473,6 +522,7 @@ trait DecoderMacrosImpl
       Type.of[hearth.kindlings.xmlderivation.annotations.xmlContent]
     def XmlElementAnnotation: Type[hearth.kindlings.xmlderivation.annotations.xmlElement] =
       Type.of[hearth.kindlings.xmlderivation.annotations.xmlElement]
+    lazy val Unit: Type[Unit] = Type.of[Unit]
     def XmlDecoder[A: Type]: Type[hearth.kindlings.xmlderivation.XmlDecoder[A]] =
       Type.of[hearth.kindlings.xmlderivation.XmlDecoder[A]]
     def KindlingsXmlDecoder[A: Type]: Type[hearth.kindlings.xmlderivation.KindlingsXmlDecoder[A]] =

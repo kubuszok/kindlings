@@ -15,14 +15,16 @@ trait EncoderHandleAsSingletonRuleImpl {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as a singleton") >> {
-        CaseClass.parse[A].toEither match {
-          case Right(caseClass) if caseClass.primaryConstructor.totalParameters.flatten.isEmpty =>
-            MIO.pure(Rule.matched(Expr.quote {
-              XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName))
-            }))
-          case _ =>
-            MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a singleton/empty case class"))
-        }
+        // a case object, a parameterless Scala 3 enum case, a Java enum value (not a `CaseClass`), or an empty case class
+        val isSingleton = SingletonValue.unapply(Type[A]).isDefined || (CaseClass.parse[A].toEither match {
+          case Right(caseClass) => caseClass.primaryConstructor.totalParameters.flatten.isEmpty
+          case Left(_)          => false
+        })
+        if (isSingleton)
+          MIO.pure(Rule.matched(Expr.quote {
+            XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName))
+          }))
+        else MIO.pure(Rule.yielded(s"The type ${Type[A].prettyPrint} is not a singleton/empty case class"))
       }
   }
 

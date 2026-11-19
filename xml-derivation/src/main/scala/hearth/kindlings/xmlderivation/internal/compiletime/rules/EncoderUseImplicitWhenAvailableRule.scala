@@ -19,6 +19,17 @@ trait EncoderUseImplicitWhenAvailableRuleImpl {
         case method if method.isImplicit => method.asUntyped
       }
 
+    private val userEncoders = scala.collection.mutable.Map.empty[String, Boolean]
+
+    /** Whether a type has a user-provided `XmlEncoder` (memoized; never the type being derived). */
+    def hasUserEncoder(derivedType: Option[??]): ?? => Boolean = { tpe =>
+      import tpe.Underlying as T
+      !derivedType.exists(_.Underlying =:= Type[T]) && userEncoders.getOrElseUpdate(
+        Type[T].plainPrint,
+        Types.XmlEncoder[T].summonExprIgnoring(ignoredImplicits*).toEither.isRight
+      )
+    }
+
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[scala.xml.Elem]]] =
       Log.info(s"Attempting to use implicit XmlEncoder for ${Type[A].prettyPrint}") >> {
         if (ectx.derivedType.exists(_.Underlying =:= Type[A]))

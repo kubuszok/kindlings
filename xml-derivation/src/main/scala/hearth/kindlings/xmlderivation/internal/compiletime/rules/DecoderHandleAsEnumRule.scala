@@ -9,7 +9,6 @@ import hearth.std.*
 
 import hearth.kindlings.xmlderivation.{XmlConfig, XmlDecodingError}
 import hearth.kindlings.xmlderivation.internal.runtime.XmlDerivationUtils
-import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait DecoderHandleAsEnumRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -26,6 +25,37 @@ trait DecoderHandleAsEnumRuleImpl {
         }
       }
 
+    private def hasUserDecoder[A: DecoderCtx]: ?? => Boolean =
+      DecoderUseImplicitWhenAvailableRule.hasUserDecoder(dctx.derivedType)
+
+    /** The name of a subtype: a constant with `@xmlName` or a configuration known at compile time. */
+    @scala.annotation.nowarn("msg=is never used")
+    private def nameExprOf[A: DecoderCtx](subtype: XmlSubtype, config: Expr[XmlConfig]): Expr[String] = {
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
+      (subtype.customName, dctx.evaluatedConfig) match {
+        case (Some(custom), _) => Expr(custom)
+        case (None, Some(cfg)) => Expr(cfg.constructorNameMapper(subtype.rawName))
+        case (None, None)      =>
+          Expr.quote(Expr.splice(config).constructorNameMapper(Expr.splice(Expr(subtype.rawName))))
+      }
+    }
+
+    /** The names of the subtypes, as a list (a constant with a configuration known at compile time). */
+    @scala.annotation.nowarn("msg=is never used")
+    private def namesListOf[A: DecoderCtx](subtypes: List[XmlSubtype], config: Expr[XmlConfig]): Expr[List[String]] = {
+      implicit val StringT: Type[String] = DTypes.String
+      val custom = subtypes.forall(_.customName.isDefined)
+      dctx.evaluatedConfig match {
+        case Some(cfg)      => Expr(subtypes.map(_.nameWith(cfg)))
+        case None if custom => Expr(subtypes.flatMap(_.customName))
+        case None           =>
+          subtypes.foldRight(Expr.quote(List.empty[String])) { (subtype, acc) =>
+            Expr.quote(Expr.splice(nameExprOf[A](subtype, config)) :: Expr.splice(acc))
+          }
+      }
+    }
+
     @scala.annotation.nowarn("msg=is never used")
     private def decodeEnumCases[A: DecoderCtx](
         enumType: Enum[A]
@@ -37,14 +67,46 @@ trait DecoderHandleAsEnumRuleImpl {
       implicit val AnyT: Type[Any] = DTypes.Any
       implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
       implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
-      val childrenList = StableChildrenOrder.directChildren(DecoderHandleAsEnumRuleImpl.this)(enumType)
+      // the leaves of the hierarchy (nested sealed subtypes are flattened), as the encoder writes them
+      val subtypes = xmlSubtypesOf[A](enumType)(hasUserDecoder[A])
+      val isValueEnum = Type[A].isJavaEnum || Type[A].isEnumeration
+      // an enum whose every case is a singleton can be read from the case name (`enumAsStrings`)
+      val isStringEnum = subtypes.nonEmpty && (isValueEnum || subtypes.forall { subtype =>
+        SingletonValue.unapply(subtype.tpe.Underlying).isDefined
+      })
 
       // Pre-compute discriminator attribute name from config
       val discriminatorAttr: Option[String] = dctx.evaluatedConfig.flatMap(_.discriminatorAttribute)
       val discriminatorAttrName: String = discriminatorAttr.getOrElse("type")
       val hasDiscriminator: Option[Boolean] = dctx.evaluatedConfig.map(_.discriminatorAttribute.isDefined)
 
-      NonEmptyList.fromList(childrenList) match {
+      // an enum of singletons: the name read from the discriminator (or from the element inside) is the value
+      def taggedSingletons: MIO[Expr[Either[XmlDecodingError, A]]] = enumFromName[A](subtypes).map { fromName =>
+        def withDiscriminator(attribute: Expr[String]): Expr[Either[XmlDecodingError, A]] = Expr.quote {
+          XmlDerivationUtils.decodeDiscriminator(Expr.splice(dctx.elem), Expr.splice(attribute)) match {
+            case Right(typeName) => Expr.splice(fromName(Expr.quote(typeName), dctx.config))
+            case Left(error)     => Left(error): Either[XmlDecodingError, A]
+          }
+        }
+        def wrapped: Expr[Either[XmlDecodingError, A]] = Expr.quote {
+          XmlDerivationUtils.decodeWrapped(Expr.splice(dctx.elem)) match {
+            case Right(nameAndElem) => Expr.splice(fromName(Expr.quote(nameAndElem._1), dctx.config))
+            case Left(error)        => Left(error): Either[XmlDecodingError, A]
+          }
+        }
+        hasDiscriminator match {
+          case Some(true)  => withDiscriminator(Expr(discriminatorAttrName))
+          case Some(false) => wrapped
+          case None        =>
+            Expr.quote {
+              if (Expr.splice(dctx.config).discriminatorAttribute.isDefined)
+                Expr.splice(withDiscriminator(Expr.quote(Expr.splice(dctx.config).discriminatorAttribute.get)))
+              else Expr.splice(wrapped)
+            }
+        }
+      }
+
+      def tagged: MIO[Expr[Either[XmlDecodingError, A]]] = NonEmptyList.fromList(subtypes) match {
         case None =>
           val knownNames: List[String] = Nil
           MIO.pure(Expr.quote {
@@ -56,31 +118,15 @@ trait DecoderHandleAsEnumRuleImpl {
         case Some(children) =>
           // Derive all child decoders, collecting their helpers as lambdas
           children
-            .traverse { case (childName, child) =>
-              import child.Underlying as ChildType
-              // Apply constructorNameMapper when evaluatedConfig is available
-              val mappedChildName: String = dctx.evaluatedConfig match {
-                case Some(cfg) => cfg.constructorNameMapper(childName)
-                case None      => childName
-              }
-              deriveChildDecoderLambda[A, ChildType](mappedChildName)
+            .traverse { subtype =>
+              import subtype.tpe.Underlying as ChildType
+              deriveChildDecoderLambda[A, ChildType]
             }
             .map { childLambdas =>
-              val childNames: List[String] = childLambdas.toList.map(_._1)
-              val childDecoderExprs: List[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
-                childLambdas.toList.map(_._2)
+              val childDecoderExprs: List[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] = childLambdas.toList
 
-              // When evaluatedConfig is not available, the child names are unmapped.
-              // Build a runtime-mapped names list using config.constructorNameMapper.
-              val namesListExpr: Expr[List[String]] = dctx.evaluatedConfig match {
-                case Some(_) => Expr(childNames) // Already pre-mapped at compile time
-                case None    =>
-                  // Map child names at runtime via config.constructorNameMapper
-                  val rawNamesExpr: Expr[List[String]] = Expr(childNames)
-                  Expr.quote {
-                    Expr.splice(rawNamesExpr).map(Expr.splice(dctx.config).constructorNameMapper)
-                  }
-              }
+              // With a configuration only known at runtime the names are transformed by its `constructorNameMapper`
+              val namesListExpr: Expr[List[String]] = namesListOf[A](subtypes, dctx.config)
               val decodersListExpr: Expr[List[scala.xml.Elem => Either[XmlDecodingError, Any]]] =
                 childDecoderExprs.foldRight(
                   Expr.quote(List.empty[scala.xml.Elem => Either[XmlDecodingError, Any]])
@@ -160,12 +206,77 @@ trait DecoderHandleAsEnumRuleImpl {
               }
             }
       }
+
+      def fromString: MIO[Expr[Either[XmlDecodingError, A]]] = enumFromName[A](subtypes).map { fromName =>
+        fromName(Expr.quote(Expr.splice(dctx.elem).text.trim), dctx.config)
+      }
+
+      // With a config known at compile time only the applicable decoding is generated.
+      if (!isStringEnum) tagged
+      else
+        dctx.evaluatedConfig.map(_.enumAsStrings) match {
+          case Some(true)  => fromString
+          case Some(false) => taggedSingletons
+          case None        =>
+            for {
+              string <- fromString
+              element <- taggedSingletons
+            } yield Expr.quote {
+              if (Expr.splice(dctx.config).enumAsStrings) Expr.splice(string) else Expr.splice(element)
+            }
+        }
+    }
+
+    /** The cached `(case name, config) => value` def of an enum whose cases are all singletons: how it is read from the
+      * text of its element with `enumAsStrings`, and from an attribute value.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    def enumFromName[A: DecoderCtx](
+        subtypes: List[XmlSubtype]
+    ): MIO[(Expr[String], Expr[XmlConfig]) => Expr[Either[XmlDecodingError, A]]] = {
+      implicit val EitherT: Type[Either[XmlDecodingError, A]] = DTypes.DecoderResult[A]
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
+      dctx.getEnumFromNameHelper[A].flatMap {
+        case Some(helper) => MIO.pure(helper)
+        case None         =>
+          dctx.setEnumFromNameHelper[A] { (name, config) =>
+            val unknown: Expr[Either[XmlDecodingError, A]] = Expr.quote {
+              Left(
+                XmlDerivationUtils
+                  .failedToMatchSubtype(Expr.splice(name), Expr.splice(namesListOf[A](subtypes, config)))
+              ): Either[XmlDecodingError, A]
+            }
+            // (the singletons are created here, in the scope of the cached def)
+            subtypes.foldRight(MIO.pure(unknown)) { (subtype, otherwiseMIO) =>
+              import subtype.tpe.Underlying as Leaf
+              otherwiseMIO.flatMap { otherwise =>
+                Expr.singletonOf[Leaf] match {
+                  case Some(singleton) =>
+                    // (not typed as the leaf: an `Enumeration` value has the type of all its values)
+                    val value: Expr[A] = singleton.asInstanceOf[Expr[A]]
+                    MIO.pure(Expr.quote {
+                      if (Expr.splice(name) == Expr.splice(nameExprOf[A](subtype, config)))
+                        Right(Expr.splice(value)): Either[XmlDecodingError, A]
+                      else Expr.splice(otherwise)
+                    })
+                  case None =>
+                    val err = DecoderDerivationError.SingletonDisappeared(Type[Leaf].prettyPrint)
+                    Log.error(err.message) >> MIO.fail(err)
+                }
+              }
+            }
+          } >> dctx.getEnumFromNameHelper[A].flatMap {
+            case Some(helper) => MIO.pure(helper)
+            case None         => MIO.fail(new RuntimeException(s"No enum name helper for ${Type[A].prettyPrint}"))
+          }
+      }
     }
 
     @scala.annotation.nowarn("msg=is never used")
-    private def deriveChildDecoderLambda[A: DecoderCtx, ChildType: Type](
-        childName: String
-    ): MIO[(String, Expr[scala.xml.Elem => Either[XmlDecodingError, Any]])] = {
+    private def deriveChildDecoderLambda[A: DecoderCtx, ChildType: Type]
+        : MIO[Expr[scala.xml.Elem => Either[XmlDecodingError, Any]]] = {
       implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
       implicit val ElemT: Type[scala.xml.Elem] = DTypes.Elem
       implicit val AnyT: Type[Any] = DTypes.Any
@@ -184,7 +295,7 @@ trait DecoderHandleAsEnumRuleImpl {
                   .splice(helper(Expr.quote(childElem), configExpr))
                   .asInstanceOf[Either[XmlDecodingError, Any]]
               }
-            MIO.pure((childName, lambda))
+            MIO.pure(lambda)
           case None =>
             MIO.fail(
               new RuntimeException(s"No helper found for enum case ${Type[ChildType].prettyPrint}")
