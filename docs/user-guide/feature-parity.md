@@ -1315,8 +1315,8 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | `defaultFieldMode` | `XmlFieldMode.Element` | Default mapping for fields: `Element` (child elements) or `Attribute` (XML attributes, for single text values: primitives, `String`, `BigDecimal`, `BigInt`, value types over them and `Option`s of these; collections, maps, case classes and sealed traits stay child elements). Encoder and decoder follow the same rule |
 | `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
 | `constructorNameMapper` | `identity` | Transform sealed trait subtype names for discriminator values |
-| `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None` to disable) |
-| `enumAsStrings` | `false` | Encode case object enums as text content strings |
+| `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None`: the subtype is an element named after it, inside the value's element) |
+| `enumAsStrings` | `false` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or - with `defaultFieldMode = Attribute` - an attribute. Sealed traits with case classes keep the discriminator |
 | `useDefaults` | `false` | Use constructor default values for missing fields (child elements or attributes) during decoding |
 | `transientNone` | `false` | Omit `None` fields during encoding |
 | `transientEmpty` | `false` | Omit empty collections during encoding (empty strings are still written) |
@@ -1325,13 +1325,13 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 
 | Annotation | Description |
 |---|---|
-| `@xmlName(name)` | Rename a field/subtype in the XML representation |
+| `@xmlName(name)` | Rename a field/subtype in the XML representation (not transformed by the name mappers) |
 | `@transientField` | Exclude a field from encoding/decoding (requires default value) |
-| `@xmlAttribute` | Force a field to be encoded/decoded as an XML attribute |
+| `@xmlAttribute` | Force a field to be encoded/decoded as an XML attribute. Needs a single text value (a text type, a value type over one, an enum of singletons, a type with a user-provided instance, or an `Option` of these); anything else is a compile-time error |
 | `@xmlElement` | Force a field to be encoded/decoded as a child XML element |
-| `@xmlContent` | Map a field to the text content of the enclosing element |
-| `@xmlWrapper(name)` | Wrap a collection field in an additional element with the given name |
-| `@xmlUnwrapped` | Inline collection elements directly without a wrapper element |
+| `@xmlContent` | Map a field to the text content of the enclosing element (a single text value, as for `@xmlAttribute`); the other fields are attributes |
+| `@xmlWrapper(name)` | Put the field inside an additional element with the given name: a collection as one element per item named after the field (`<items><item>..</item><item>..</item></items>`), any other field as its element |
+| `@xmlUnwrapped` | Write a collection (or a map) as one element per item named after the field, directly in the enclosing element |
 
 ### Type support
 
@@ -1345,9 +1345,9 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | `Map[K, V]` | Yes (via Hearth `IsMap`) |
 | Case classes | Yes (fields as child elements or attributes) |
 | Value classes | Yes (automatic unwrapping) |
-| Sealed traits | Yes (discriminator attribute) |
-| Case object enums | Yes (object or string encoding via `enumAsStrings`) |
-| Singletons (case objects) | Yes |
+| Sealed traits | Yes (discriminator attribute, or an element named after the subtype; nested sealed traits are flattened) |
+| Enums of singletons (case objects, Scala 3 enums, Java enums, `Enumeration`) | Yes (discriminator / element encoding, or the case name via `enumAsStrings`, `@xmlAttribute`, `@xmlContent`) |
+| Singletons (case objects) | Yes (an empty element) |
 | Generic types (`Box[A]`, `Pair[A, B]`) | Yes |
 | Nested structures (arbitrary depth) | Yes |
 
@@ -1360,7 +1360,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | `MissingAttribute` | Required XML attribute not found |
 | `MissingElement` | Required child element not found |
 | `InvalidValue` | Text content cannot be parsed to expected type |
-| `UnexpectedElement` | Unknown child element encountered |
+| `UnexpectedElement` | Unknown child element encountered (for hand-written decoders: derived decoders ignore unknown elements) |
 | `MissingContent` | Element has no text content |
 | `UnknownDiscriminator` | Discriminator value doesn't match any known subtype |
 | `MissingDiscriminator` | Discriminator attribute not found on element |

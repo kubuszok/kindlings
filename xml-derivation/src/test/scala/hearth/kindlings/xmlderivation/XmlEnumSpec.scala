@@ -284,14 +284,14 @@ final class XmlEnumSpec extends MacroSuite {
       implicit val config: XmlConfig = XmlConfig().withNoDiscriminator
       val codec = KindlingsXmlCodec.derived[Shape]
       assertEquals(
-        roundTripped(codec, Circle(5.0): Shape).toString,
-        "<x><Circle><radius>5.0</radius></Circle></x>"
+        roundTripped(codec, Circle(5.5): Shape).toString,
+        "<x><Circle><radius>5.5</radius></Circle></x>"
       )
       val shapes = KindlingsXmlCodec.derived[ShapeCollection]
       assertEquals(
-        roundTripped(shapes, ShapeCollection(List(Circle(1.0), Rectangle(2.0, 3.0)))).toString,
-        "<x><shapes><item><Circle><radius>1.0</radius></Circle></item>" +
-          "<item><Rectangle><width>2.0</width><height>3.0</height></Rectangle></item></shapes></x>"
+        roundTripped(shapes, ShapeCollection(List(Circle(1.5), Rectangle(2.5, 3.5)))).toString,
+        "<x><shapes><item><Circle><radius>1.5</radius></Circle></item>" +
+          "<item><Rectangle><width>2.5</width><height>3.5</height></Rectangle></item></shapes></x>"
       )
     }
 

@@ -109,7 +109,7 @@ and Scala 3:
 | `MissingAttribute` | Required XML attribute not found |
 | `MissingElement` | Required child element not found |
 | `InvalidValue` | Value could not be parsed as the expected type |
-| `UnexpectedElement` | Unknown child element encountered |
+| `UnexpectedElement` | Unknown child element encountered (available for hand-written decoders: derived decoders ignore child elements and attributes they do not know) |
 | `MissingContent` | Expected text content not found |
 | `UnknownDiscriminator` | ADT discriminator value not recognized |
 | `MissingDiscriminator` | ADT discriminator attribute not found |
@@ -140,8 +140,8 @@ implicit val config: XmlConfig = XmlConfig.default
 | `withSnakeCaseConstructorNames` | `MyType` -> `my_type` in discriminator |
 | `withKebabCaseConstructorNames` | `MyType` -> `my-type` in discriminator |
 | `withDiscriminator(attr)` | ADT discriminator attribute name (default: `"type"`) |
-| `withNoDiscriminator` | Disable discriminator (use wrapper element for ADTs) |
-| `withEnumAsStrings` | Encode Scala 3 / Java enums as strings |
+| `withNoDiscriminator` | Disable the discriminator: the subtype is an element named after it, inside the value's element (see [Sealed traits and enums](#sealed-traits-and-enums)) |
+| `withEnumAsStrings` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or an attribute value (see [Sealed traits and enums](#sealed-traits-and-enums)) |
 | `withUseDefaults` | Use case class default values for missing fields (absent child elements and attributes) |
 | `withTransientNone` | Skip `None` fields during encoding |
 | `withTransientEmpty` | Skip empty collections during encoding (empty strings are still written) |
@@ -173,12 +173,14 @@ written as an attribute and read from an attribute when it holds a single text v
 
 - `String`, `Int`, `Long`, `Double`, `Float`, `Boolean`, `Byte`, `Short`, `Char`, `BigDecimal`, `BigInt`,
 - a value type wrapping one of these (written as the unwrapped value: `id="5"`, not `id="UserId(5)"`),
+- with `withEnumAsStrings`: an enum whose cases are all singletons (written as the case name),
 - an `Option` of one of these (written as the value for `Some`, omitted for `None`).
 
-Any other field cannot be an attribute, so it stays a child element in both modes: collections, maps, case classes,
-sealed traits and enums (and `Option`s of them). Nested case classes use the same configuration, so their fields are
-attributes of their own element. `@xmlElement` makes a field a child element and `@xmlAttribute` makes it an attribute
-whatever the default mode is. The decoder follows the same rule as the encoder, also when the configuration is only
+Any other field stays a child element in both modes: collections, maps, case classes, sealed traits (and enums without
+`withEnumAsStrings`), types with a user-provided `XmlEncoder`/`XmlDecoder`, and `Option`s of them. Nested case classes
+use the same configuration, so their fields are attributes of their own element. `@xmlElement` makes a field a child
+element and `@xmlAttribute` makes it an attribute whatever the default mode is (see [Annotations](#annotations) for what
+`@xmlAttribute` accepts). Fields with `@xmlWrapper` or `@xmlUnwrapped` are child elements too. The decoder follows the same rule as the encoder, also when the configuration is only
 known at runtime, so the output of an encoder decodes with a decoder that uses the same configuration.
 
 An absent attribute is decoded like an absent element: `None` for an `Option` field, the default value with
@@ -204,15 +206,17 @@ attribute values to spaces (as the XML specification requires), so keep multi-li
 
 ## Annotations
 
-| Annotation | Package | Description |
-|-----------|---------|-------------|
-| `@xmlAttribute` | `hearth.kindlings.xmlderivation.annotations` | Encode field as an XML attribute |
-| `@xmlElement` | `hearth.kindlings.xmlderivation.annotations` | Encode field as an XML child element (overrides `withAttributesByDefault`) |
-| `@xmlContent` | `hearth.kindlings.xmlderivation.annotations` | Encode field as the text content of the element |
-| `@xmlName("name")` | `hearth.kindlings.xmlderivation.annotations` | Override the XML element/attribute name |
-| `@xmlWrapper("name")` | `hearth.kindlings.xmlderivation.annotations` | Wrap field in an outer element |
-| `@xmlUnwrapped` | `hearth.kindlings.xmlderivation.annotations` | Flatten nested structure |
-| `@transientField` | `hearth.kindlings.xmlderivation.annotations` | Exclude field from encoding/decoding (must have default) |
+All in `hearth.kindlings.xmlderivation.annotations`.
+
+| Annotation | Description |
+|-----------|-------------|
+| `@xmlAttribute` | The field is an XML attribute |
+| `@xmlElement` | The field is a child element (overrides `withAttributesByDefault`) |
+| `@xmlContent` | The field is the text content of the element; the other fields are attributes |
+| `@xmlName("name")` | The name of the field's element/attribute, or of a sealed trait's subtype (used as it is: not transformed by `fieldNameMapper` / `constructorNameMapper`) |
+| `@xmlWrapper("name")` | The field goes inside an outer element `name`; a collection is written there as one element per item, named after the field |
+| `@xmlUnwrapped` | A collection is written as one element per item, named after the field, directly in the element (no element for the collection itself) |
+| `@transientField` | The field is not written; when decoding it gets its default value (it must have one) |
 
 ```scala
 import hearth.kindlings.xmlderivation.annotations._
@@ -223,6 +227,88 @@ case class Article(
 )
 // Encodes as: <article id="42">The article body text</article>
 ```
+
+The encoder and the decoder place every field the same way, with a configuration known at compile time or only at
+runtime, so the output of an encoder decodes with a decoder that uses the same configuration. Annotations that cannot
+work are compile-time errors (listing every such field of the case class).
+
+### Attributes and text content
+
+`@xmlAttribute` and `@xmlContent` need a single text value:
+
+- `String`, the numeric types, `Boolean`, `Char`, `BigDecimal`, `BigInt`, and value types wrapping them,
+- an enum whose cases are all singletons, written as the case name (whatever `enumAsStrings` is: there is no other way
+  to put it in an attribute),
+- a type with a user-provided `XmlEncoder`/`XmlDecoder` in scope: the attribute holds the text of the element the
+  encoder writes, and the decoder gets an element with that text,
+- an `Option` of one of these: `None` is an absent attribute / no text.
+
+Anything else - a case class, a collection, a map, a sealed trait with case classes - is a compile-time error:
+
+```
+Field 'address' of Person: @xmlAttribute needs a single text value, Address is not one (an XML attribute cannot hold a
+collection, a map or a case class). ... Remove @xmlAttribute to write the field as a child element
+```
+
+An element with text content has no child elements, so next to an `@xmlContent` field every other field is an
+attribute (as with `@xmlAttribute`, whatever the default field mode is); a field that cannot be one, or that is
+annotated with `@xmlElement`, `@xmlWrapper` or `@xmlUnwrapped`, is a compile-time error. Combining `@xmlAttribute`,
+`@xmlElement`, `@xmlContent`, `@xmlWrapper` and `@xmlUnwrapped` on one field is an error too, except `@xmlElement` with
+`@xmlWrapper`.
+
+### Collections: default, `@xmlWrapper`, `@xmlUnwrapped`
+
+| Field | XML |
+|-------|-----|
+| `tags: List[String]` | `<tags><item>a</item><item>b</item></tags>` |
+| `@xmlWrapper("tags") tag: List[String]` | `<tags><tag>a</tag><tag>b</tag></tags>` |
+| `@xmlUnwrapped tag: List[String]` | `<tag>a</tag><tag>b</tag>` |
+| `props: Map[String, Int]` | `<props><entry key="a"><value>1</value></entry></props>` |
+| `@xmlWrapper("props") prop: Map[String, Int]` | `<props><prop key="a"><value>1</value></prop></props>` |
+| `@xmlUnwrapped prop: Map[String, Int]` | `<prop key="a"><value>1</value></prop>` |
+
+- The item elements are named after the field: `@xmlName` or the field name transformed by `fieldNameMapper`. The
+  wrapper name is used as it is. Only the elements with that name are items; they are read in document order.
+- `@xmlWrapper` on a field that is not a collection puts its element inside the wrapper:
+  `@xmlWrapper("meta") note: Option[String]` is `<meta><note>n</note></meta>`. A wrapped field is always a child
+  element, also with `withAttributesByDefault`; the items inside use the configuration as everywhere else. Each
+  wrapper holds one field (two fields with the same wrapper name are a compile-time error).
+- An empty wrapped collection is an empty wrapper (`<tags/>`), a wrapped `None` an empty element in the wrapper
+  (`<meta><note/></meta>`); `withTransientEmpty` / `withTransientNone` skip the wrapper instead.
+- When decoding, an absent wrapper is an empty collection / `None` (a required field inside it is a
+  `MissingElement`). With `withUseDefaults`, an absent wrapper is the field's default value; a wrapper that is present
+  is what it holds, so an empty collection written as `<tags/>` is read back as empty, not as the default.
+- An unwrapped collection without any item is an empty collection - or, with `withUseDefaults`, the field's default
+  value (an empty unwrapped collection writes nothing, so it cannot be told apart from an absent one).
+- `@xmlUnwrapped` needs a collection or a map (with `String` keys); anything else is a compile-time error.
+
+### Sealed traits and enums
+
+A sealed trait is written as the element of the subtype plus its name:
+
+| Configuration | `Circle(5.0): Shape` as `shape` |
+|---------------|--------------------------------|
+| default | `<shape type="Circle"><radius>5.0</radius></shape>` |
+| `withDiscriminator("kind")` | `<shape kind="Circle"><radius>5.0</radius></shape>` |
+| `withNoDiscriminator` | `<shape><Circle><radius>5.0</radius></Circle></shape>` |
+
+The name is the subtype's name transformed by `constructorNameMapper`, or the one set with `@xmlName` on the subtype.
+Nested sealed traits are flattened: a leaf is written under its own name, whatever intermediate sealed traits it
+extends (unless an intermediate type has a user-provided instance, which is then used).
+
+An enum whose cases are all singletons - a sealed trait of case objects, a Scala 3 enum without parameters, a Java
+enum, a `scala.Enumeration` - is written the same way by default, and as the case name with `withEnumAsStrings`:
+
+| Configuration | `Red: Color` as `color` |
+|---------------|-------------------------|
+| default | `<color type="Red"/>` |
+| `withNoDiscriminator` | `<color><Red/></color>` |
+| `withEnumAsStrings` | `<color>Red</color>` |
+| `@xmlAttribute`, or `withEnumAsStrings` with `withAttributesByDefault` | `color="Red"` |
+| `@xmlContent` | the text `Red` |
+
+`withEnumAsStrings` does not change sealed traits that have a case class (or a Scala 3 enum case with parameters): they
+keep the discriminator. A name that is not a case is an `UnknownDiscriminator` error listing the known names.
 
 ## Usage examples
 
@@ -345,6 +431,117 @@ case class Article(
     println(decoded)
     // expected output:
     // Right(Link(https://scala-lang.org,Scala))
+    ```
+
+??? example "Wrapped and unwrapped collections"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
+    //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
+    //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
+
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
+
+    case class Item(@xmlAttribute sku: String, name: String)
+    case class Order(
+      @xmlAttribute id: Int,
+      @xmlWrapper("items") item: List[Item],
+      @xmlUnwrapped tag: List[String]
+    )
+
+    val codec: KindlingsXmlCodec[Order] = KindlingsXmlCodec.derived[Order]
+
+    val order = Order(1, List(Item("A1", "Keyboard"), Item("B2", "Mouse")), List("gift", "express"))
+    val xml = codec.encode(order, "order")
+    println(xml)
+    // expected output:
+    // <order id="1"><items><item sku="A1"><name>Keyboard</name></item><item sku="B2"><name>Mouse</name></item></items><tag>gift</tag><tag>express</tag></order>
+
+    println(codec.decode(xml))
+    // expected output:
+    // Right(Order(1,List(Item(A1,Keyboard), Item(B2,Mouse)),List(gift, express)))
+
+    // an empty wrapped collection is an empty wrapper, an empty unwrapped one writes nothing
+    println(codec.encode(Order(2, Nil, Nil), "order"))
+    // expected output:
+    // <order id="2"><items/></order>
+
+    // an absent wrapper is an empty collection
+    println(codec.decode(<order id="3"/>))
+    // expected output:
+    // Right(Order(3,List(),List()))
+    ```
+
+??? example "Enums as strings"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
+    //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
+    //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
+
+    import hearth.kindlings.xmlderivation._
+    import hearth.kindlings.xmlderivation.annotations._
+
+    sealed trait Color
+    case object Red extends Color
+    @xmlName("dark-blue") case object DarkBlue extends Color
+
+    case class Paint(@xmlAttribute finish: Color, color: Color, accents: List[Color])
+
+    val paint = Paint(Red, DarkBlue, List(Red, DarkBlue))
+
+    // By default an enum is written like any sealed trait: with the discriminator attribute.
+    // As an attribute it is always the case name.
+    println(KindlingsXmlEncoder.encode(paint, "paint"))
+    // expected output:
+    // <paint finish="Red"><color type="dark-blue"/><accents><item type="Red"/><item type="dark-blue"/></accents></paint>
+
+    implicit val config: XmlConfig = XmlConfig.default.withEnumAsStrings
+
+    val xml = KindlingsXmlEncoder.encode(paint, "paint")
+    println(xml)
+    // expected output:
+    // <paint finish="Red"><color>dark-blue</color><accents><item>Red</item><item>dark-blue</item></accents></paint>
+
+    println(KindlingsXmlDecoder.decode[Paint](xml))
+    // expected output:
+    // Right(Paint(Red,DarkBlue,List(Red, DarkBlue)))
+
+    println(KindlingsXmlDecoder.decode[Color](<color>Pink</color>).isLeft)
+    // expected output:
+    // true
+    ```
+
+??? example "Sealed trait without a discriminator"
+
+    ```scala
+    //> using scala {{ scala.2_13 }}
+    //> using dep com.kubuszok::kindlings-xml-derivation:{{ kindlings_version() }}
+    //> using dep org.scala-lang.modules::scala-xml:{{ libraries.scalaXml }}
+    //> using dep com.kubuszok::scala-sax-parser:{{ libraries.scalaSaxParser }}
+
+    import hearth.kindlings.xmlderivation._
+
+    sealed trait Shape
+    case class Circle(radius: Double) extends Shape
+    case class Rectangle(width: Double, height: Double) extends Shape
+    case class Drawing(shapes: List[Shape])
+
+    implicit val config: XmlConfig = XmlConfig.default.withNoDiscriminator
+
+    val codec: KindlingsXmlCodec[Drawing] = KindlingsXmlCodec.derived[Drawing]
+
+    val xml = codec.encode(Drawing(List(Circle(1.0), Rectangle(2.0, 3.0))), "drawing")
+    println(xml)
+    // expected output:
+    // <drawing><shapes><item><Circle><radius>1.0</radius></Circle></item><item><Rectangle><width>2.0</width><height>3.0</height></Rectangle></item></shapes></drawing>
+
+    println(codec.decode(xml))
+    // expected output:
+    // Right(Drawing(List(Circle(1.0), Rectangle(2.0,3.0))))
     ```
 
 ??? example "Recursive data types"
