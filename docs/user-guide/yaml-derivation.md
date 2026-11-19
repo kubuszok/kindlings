@@ -138,8 +138,9 @@ scala-yaml's `Cannot parse ...`). Union types (no scala-yaml counterpart) are al
 The config is evaluated at compile time when possible (`YamlConfig.default`, a config passed explicitly, and on Scala 3
 a local `implicit val`/`given`): sealed traits and enums then get only the applicable encoding and decoding
 (discriminator, wrapper, untagged or names) with constant subtype names. A config only known at runtime gives the same
-results, read when the instance runs; a derived encoder/decoder then computes the subtype names its
-`transformConstructorNames` gives once per instance, and resolves the instances of its fields and subtypes (e.g. an
+results, read when the instance runs; a derived encoder/decoder then computes the field and subtype names its
+`transformMemberNames`/`transformConstructorNames` give once per instance (the inline `KindlingsYamlEncoder.encode`/
+`KindlingsYamlDecoder.decode` have no instance and compute them on every call), and resolves the instances of its fields and subtypes (e.g. an
 `implicit def` `YamlEncoder`) once per instance, not on every call.
 
 ## Annotations

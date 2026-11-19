@@ -321,6 +321,12 @@ trait DecoderMacrosImpl
     def transformedConstructorNames(names: List[String]): MIO[String => Expr[String]] =
       transformedNamesOf(names, config, perCall, cache)
 
+    /** The field names `names` transformed by a configuration only known at runtime (`transformMemberNames`): computed
+      * once per instance (a lazy val holding an array), or where they are used in the inline entry points.
+      */
+    def transformedMemberNames(names: List[String]): MIO[String => Expr[String]] =
+      transformedNamesOf(names, config, perCall, cache, constructorNames = false)
+
     def getInstance[B: Type]: MIO[Option[Expr[YamlDecoder[B]]]] = {
       implicit val DecoderB: Type[YamlDecoder[B]] = DTypes.YamlDecoder[B]
       cache.get0Ary[YamlDecoder[B]]("cached-decoder-instance")

@@ -66,36 +66,29 @@ trait EncoderHandleAsCaseClassRuleImpl {
                     }
                   }
                 }
-                .map { fieldPairs =>
-                  fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) {
-                    case ((fName, fieldNode, Some(customName)), acc) =>
-                      Expr.quote {
-                        (
-                          Expr.splice(Expr(customName)),
-                          Expr.splice(fieldNode)
-                        ) ::
-                          Expr.splice(acc)
-                      }
-                    case ((fName, fieldNode, None), acc) =>
-                      ectx.evaluatedConfig match {
-                        case Some(evConfig) =>
-                          val mappedName = evConfig.transformMemberNames(fName)
-                          Expr.quote {
-                            (
-                              Expr.splice(Expr(mappedName)),
-                              Expr.splice(fieldNode)
-                            ) ::
-                              Expr.splice(acc)
-                          }
-                        case None =>
-                          Expr.quote {
-                            (
-                              Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                              Expr.splice(fieldNode)
-                            ) ::
-                              Expr.splice(acc)
-                          }
-                      }
+                .flatMap { fieldPairs =>
+                  // the names: a @fieldName, constants with a configuration known at compile time, otherwise computed
+                  // once per instance
+                  val toTransform = fieldPairs.toList.collect { case (fName, _, None) => fName }
+                  val namesMIO: MIO[String => Expr[String]] = ectx.evaluatedConfig match {
+                    case Some(evConfig) => MIO.pure((name: String) => Expr(evConfig.transformMemberNames(name)))
+                    case None           => ectx.transformedMemberNames(toTransform)
+                  }
+                  namesMIO.map { nameOf =>
+                    fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Node)])) {
+                      case ((fName, fieldNode, nameOverride), acc) =>
+                        val nameExpr: Expr[String] = nameOverride match {
+                          case Some(customName) => Expr(customName)
+                          case None             => nameOf(fName)
+                        }
+                        Expr.quote {
+                          (
+                            Expr.splice(nameExpr),
+                            Expr.splice(fieldNode)
+                          ) ::
+                            Expr.splice(acc)
+                        }
+                    }
                   }
                 }
                 .map { fieldsListExpr =>
