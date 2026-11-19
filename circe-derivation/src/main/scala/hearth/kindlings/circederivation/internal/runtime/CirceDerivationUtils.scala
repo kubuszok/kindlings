@@ -180,6 +180,21 @@ object CirceDerivationUtils {
   def jsonFromFields(fields: List[(String, Json)]): Json =
     Json.fromJsonObject(JsonObject.fromIterable(fields))
 
+  /** The `names` transformed by `transform`, computed once per derived instance for a configuration only known at
+    * runtime (the generated code reads them by index).
+    */
+  def transformNames(transform: String => String, names: List[String]): Array[String] = {
+    val result = new Array[String](names.size)
+    var i = 0
+    var rest = names
+    while (rest.nonEmpty) {
+      result(i) = transform(rest.head)
+      rest = rest.tail
+      i += 1
+    }
+    result
+  }
+
   def wrapWithTypeName(typeName: String, inner: Json): Json =
     Json.obj(typeName -> inner)
 

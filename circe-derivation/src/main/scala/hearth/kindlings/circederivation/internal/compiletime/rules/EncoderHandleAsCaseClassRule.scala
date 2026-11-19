@@ -79,25 +79,26 @@ trait EncoderHandleAsCaseClassRuleImpl {
                       }
                     }
                   }
-                  .map { fieldPairs =>
-                    fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) {
-                      case ((fName, fieldJson, Some(resolvedName)), acc) =>
-                        Expr.quote {
-                          (
-                            Expr.splice(Expr(resolvedName)),
-                            Expr.splice(fieldJson)
-                          ) ::
-                            Expr.splice(acc)
+                  .flatMap { fieldPairs =>
+                    // names transformed by a configuration only known at runtime: computed once per instance
+                    ectx
+                      .transformedNames(fieldPairs.toList.collect { case (fName, _, None) => fName }, false)
+                      .map { transformed =>
+                        fieldPairs.toList.foldRight(Expr.quote(List.empty[(String, Json)])) {
+                          case ((fName, fieldJson, resolvedName), acc) =>
+                            val nameExpr: Expr[String] = resolvedName match {
+                              case Some(name) => Expr(name)
+                              case None       => transformed(fName)
+                            }
+                            Expr.quote {
+                              (
+                                Expr.splice(nameExpr),
+                                Expr.splice(fieldJson)
+                              ) ::
+                                Expr.splice(acc)
+                            }
                         }
-                      case ((fName, fieldJson, None), acc) =>
-                        Expr.quote {
-                          (
-                            Expr.splice(ectx.config).transformMemberNames(Expr.splice(Expr(fName))),
-                            Expr.splice(fieldJson)
-                          ) ::
-                            Expr.splice(acc)
-                        }
-                    }
+                      }
                   }
                   .map { fieldsListExpr =>
                     Expr.quote {
