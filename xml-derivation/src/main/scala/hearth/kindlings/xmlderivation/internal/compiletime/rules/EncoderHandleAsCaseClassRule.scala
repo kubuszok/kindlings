@@ -110,7 +110,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
                   FieldEncoding.Content(encodedExpr)
                 }
               } else if (isAttrAnnotated) {
-                MIO.pure(FieldEncoding.AttrExpr(xmlFieldNameExpr, fieldExpr.upcast[Any], skipConditions))
+                MIO.pure(attributeEncoding[Field](xmlFieldNameExpr, fieldExpr, skipConditions))
               } else if (isElemAnnotated) {
                 val wrapperName = paramOpt.flatMap(p => getAnnotationStringArg[xmlWrapper](p))
                 deriveEncoderRecursively[Field](using
@@ -130,7 +130,7 @@ trait EncoderHandleAsCaseClassRuleImpl {
                 defaultFieldModeIsAttribute match {
                   case Some(true) =>
                     // Statically known to be attribute mode
-                    MIO.pure(FieldEncoding.AttrExpr(xmlFieldNameExpr, fieldExpr.upcast[Any], skipConditions))
+                    MIO.pure(attributeEncoding[Field](xmlFieldNameExpr, fieldExpr, skipConditions))
                   case Some(false) =>
                     // Statically known to be element mode
                     deriveEncoderRecursively[Field](using
@@ -294,6 +294,26 @@ trait EncoderHandleAsCaseClassRuleImpl {
       }
     }
 
+    /** A field encoded as an attribute. An `Option` attribute is absent for `None` (how the decoder reads an absent
+      * `Option` attribute) and holds the value for `Some` (not `Some(...)`).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def attributeEncoding[Field: Type](
+        nameExpr: Expr[String],
+        fieldExpr: Expr[Field],
+        skipConditions: List[Expr[Boolean]]
+    )(implicit AnyT: Type[Any], BoolT: Type[Boolean]): FieldEncoding =
+      Type[Field] match {
+        case IsOption(_) =>
+          val option: Expr[Option[Any]] = Expr.quote(Expr.splice(fieldExpr).asInstanceOf[Option[Any]])
+          FieldEncoding.AttrExpr(
+            nameExpr,
+            Expr.quote(Expr.splice(option).getOrElse(())), // (not evaluated for `None`: skipped)
+            skipConditions :+ Expr.quote(Expr.splice(option).isEmpty)
+          )
+        case _ => FieldEncoding.AttrExpr(nameExpr, fieldExpr.upcast[Any], skipConditions)
+      }
+
     /** Build transient skip conditions for a single encoder field. Returns empty list when no conditions apply. */
     @scala.annotation.nowarn("msg=is never used")
     private def buildFieldSkipConditions[Field: Type](
@@ -305,12 +325,12 @@ trait EncoderHandleAsCaseClassRuleImpl {
         case IsOption(_) => true
         case _           => false
       }
-      val isCollectionField = !isOptionField && {
+      // (`String` is an `Iterable[Char]` to `IsCollection`: not a collection here)
+      val isCollectionField = !isOptionField && !(Type[Field] =:= Types.String) && {
         val isMap = Type[Field] match { case IsMap(_) => true; case _ => false }
         val isColl = Type[Field] match { case IsCollection(_) => true; case _ => false }
         isMap || isColl
       }
-      val isStringField = Type[Field] =:= Types.String
 
       val conditions = List.newBuilder[Expr[Boolean]]
 
@@ -333,32 +353,19 @@ trait EncoderHandleAsCaseClassRuleImpl {
         }
       }
 
-      // transientEmpty: skip empty collections and strings
-      if (isCollectionField || isStringField) {
+      // transientEmpty: skip empty collections (an empty `String` is still written: it is not an absent value)
+      if (isCollectionField) {
         val staticallyFalse = evaluatedConfig.exists(!_.transientEmpty)
         if (!staticallyFalse) {
           val staticallyTrue = evaluatedConfig.exists(_.transientEmpty)
-          if (isStringField) {
-            if (staticallyTrue) {
-              conditions += Expr.quote {
-                Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
-              }
-            } else {
-              conditions += Expr.quote {
-                Expr.splice(configExpr).transientEmpty &&
-                Expr.splice(fieldExpr).asInstanceOf[String].isEmpty
-              }
+          if (staticallyTrue) {
+            conditions += Expr.quote {
+              Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
             }
           } else {
-            if (staticallyTrue) {
-              conditions += Expr.quote {
-                Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
-              }
-            } else {
-              conditions += Expr.quote {
-                Expr.splice(configExpr).transientEmpty &&
-                Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
-              }
+            conditions += Expr.quote {
+              Expr.splice(configExpr).transientEmpty &&
+              Expr.splice(fieldExpr).asInstanceOf[Iterable[Any]].isEmpty
             }
           }
         }

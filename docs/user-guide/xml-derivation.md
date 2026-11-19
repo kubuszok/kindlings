@@ -144,7 +144,7 @@ implicit val config: XmlConfig = XmlConfig.default
 | `withEnumAsStrings` | Encode Scala 3 / Java enums as strings |
 | `withUseDefaults` | Use case class default values for missing fields |
 | `withTransientNone` | Skip `None` fields during encoding |
-| `withTransientEmpty` | Skip empty collections during encoding |
+| `withTransientEmpty` | Skip empty collections during encoding (empty strings are still written) |
 
 Decoding is lenient about absent optional data, so the output of `withTransientNone` / `withTransientEmpty` decodes
 back to the same value whatever decoder configuration is used:
@@ -154,6 +154,17 @@ back to the same value whatever decoder configuration is used:
 - an absent child element of a collection or map field decodes as an empty collection (unless `withUseDefaults` and a
   default value apply),
 - any other absent element or attribute is still an error (`MissingElement` / `MissingAttribute`).
+
+An empty value is present, not absent:
+
+- an empty element or attribute value of a `String` field (`<name/>`, `label=""`) decodes as `""`, so `""` round-trips
+  (an absent `String` element or attribute is still an error);
+- an `Option` attribute is written as its value for `Some` (`Some("")` as `label=""`) and omitted for `None`, so both
+  round-trip;
+- an empty element of an `Option` field decodes as `None`, because that is how `None` is written without
+  `withTransientNone` (`Some("")` is written the same way, so it decodes as `None`). With `withTransientNone`, `None`
+  is not written at all, so an empty element decodes as `Some("")` for an `Option[String]` (and as `None` when the
+  empty element is not a value of the inner type, e.g. for an `Option[Int]`).
 
 ## Annotations
 
