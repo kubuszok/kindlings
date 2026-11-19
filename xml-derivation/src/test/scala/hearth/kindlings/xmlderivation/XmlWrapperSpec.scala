@@ -55,7 +55,7 @@ final class XmlWrapperSpec extends MacroSuite {
     Map("k" -> 1),
     Some("z"),
     SimplePerson("p", 3),
-    List(Circle(1.0), Rectangle(2.0, 3.0))
+    List(Circle(1.5), Rectangle(2.5, 3.5))
   )
   private val manyEmpty = XmlWrapMany(Nil, Vector.empty, Map.empty, None, SimplePerson("p", 3), Nil)
 
@@ -86,8 +86,8 @@ final class XmlWrapperSpec extends MacroSuite {
         "<x><tags><tag>x</tag><tag>y</tag></tags><scores><score>1</score><score>2</score></scores>" +
           """<props><prop key="k"><value>1</value></prop></props><meta><note>z</note></meta>""" +
           "<owner><person><name>p</name><age>3</age></person></owner>" +
-          """<shapes><shape type="Circle"><radius>1.0</radius></shape>""" +
-          """<shape type="Rectangle"><width>2.0</width><height>3.0</height></shape></shapes></x>"""
+          """<shapes><shape type="Circle"><radius>1.5</radius></shape>""" +
+          """<shape type="Rectangle"><width>2.5</width><height>3.5</height></shape></shapes></x>"""
       )
     }
 
