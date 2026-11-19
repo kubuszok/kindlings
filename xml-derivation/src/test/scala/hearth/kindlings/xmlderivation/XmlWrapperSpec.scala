@@ -300,23 +300,35 @@ final class XmlWrapperSpec extends MacroSuite {
   group("invalid annotations are compile-time errors") {
 
     test("@xmlUnwrapped on a field that is not a collection") {
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadUnwrappedString]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadUnwrappedString]"
+      )
         .check("Field 'name' of", "@xmlUnwrapped needs a collection or a map")
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlDecoder.derived[hearth.kindlings.xmlderivation.XmlBadUnwrappedOption]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlDecoder.derived[hearth.kindlings.xmlderivation.XmlBadUnwrappedOption]"
+      )
         .check("@xmlUnwrapped needs a collection or a map")
     }
 
     test("@xmlWrapper together with @xmlAttribute / @xmlUnwrapped, and a wrapper name used twice") {
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedAttribute]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedAttribute]"
+      )
         .check("@xmlAttribute and @xmlWrapper cannot be combined")
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlDecoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedUnwrapped]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlDecoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedUnwrapped]"
+      )
         .check("@xmlUnwrapped and @xmlWrapper cannot be combined")
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlCodec.derived[hearth.kindlings.xmlderivation.XmlBadWrapperTwice]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlCodec.derived[hearth.kindlings.xmlderivation.XmlBadWrapperTwice]"
+      )
         .check("more than one field with @xmlWrapper(\"w\")")
     }
 
     test("a map whose keys are not Strings") {
-      compileErrors("hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedMap]")
+      compileErrors(
+        "hearth.kindlings.xmlderivation.KindlingsXmlEncoder.derived[hearth.kindlings.xmlderivation.XmlBadWrappedMap]"
+      )
         .check("a map with scala.Int keys is not supported")
     }
   }

@@ -68,6 +68,32 @@ trait EncoderHandleAsEnumRuleImpl {
             val err = EncoderDerivationError.UnsupportedType(Type[A].prettyPrint, List("Enum has no children"))
             Log.error(err.message) >> MIO.fail(err)
         }
+      // an enum of singletons: an empty element tagged with the case name (one `match`, in the cached name def)
+      def taggedSingletons: MIO[Expr[scala.xml.Elem]] = enumNameOf[A](subtypes).map { nameOf =>
+        def withDiscriminator(attribute: Expr[String]): Expr[scala.xml.Elem] = Expr.quote {
+          XmlDerivationUtils.addDiscriminator(
+            XmlDerivationUtils.makeEmptyElem(Expr.splice(ectx.elementName)),
+            Expr.splice(attribute),
+            Expr.splice(nameOf(ectx.value, ectx.config))
+          )
+        }
+        def wrapped: Expr[scala.xml.Elem] = Expr.quote {
+          XmlDerivationUtils.wrapWithTypeName(
+            Expr.splice(ectx.elementName),
+            XmlDerivationUtils.makeEmptyElem(Expr.splice(nameOf(ectx.value, ectx.config)))
+          )
+        }
+        ectx.evaluatedConfig.map(_.discriminatorAttribute) match {
+          case Some(Some(attribute)) => withDiscriminator(Expr(attribute))
+          case Some(None)            => wrapped
+          case None                  =>
+            Expr.quote {
+              if (Expr.splice(ectx.config).discriminatorAttribute.isDefined)
+                Expr.splice(withDiscriminator(Expr.quote(Expr.splice(ectx.config).discriminatorAttribute.get)))
+              else Expr.splice(wrapped)
+            }
+        }
+      }
       def asString: MIO[Expr[scala.xml.Elem]] = enumNameOf[A](subtypes).map { nameOf =>
         Expr.quote {
           XmlDerivationUtils
@@ -80,11 +106,11 @@ trait EncoderHandleAsEnumRuleImpl {
        else
          ectx.evaluatedConfig.map(_.enumAsStrings) match {
            case Some(true)  => asString
-           case Some(false) => tagged
+           case Some(false) => taggedSingletons
            case None        =>
              for {
                string <- asString
-               element <- tagged
+               element <- taggedSingletons
              } yield Expr.quote {
                if (Expr.splice(ectx.config).enumAsStrings) Expr.splice(string) else Expr.splice(element)
              }
