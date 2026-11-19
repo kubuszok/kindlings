@@ -5,6 +5,10 @@ config only known at runtime (JoRuntime), one from jsoniter-scala's JsonCodecMak
 (JoCases), for every (config, fixture) pair of the table below. Each case also needs a test in JsoniterOracleSpec (with
 the samples JoSamples.<fixture>).
 
+The second table (`spec_groups`, in gen-jsoniter-oracle-spec-table.py) does the same for the cases ported from
+jsoniter-scala's own JsonCodecMakerSpec (JuOptimized / JuRuntime / JuUpstream / JuCases, tested by
+JsoniterUpstreamSpecOracleSpec with JuSamples).
+
 Run from the repository root, then format with scalafmt:
 
     python3 scripts/gen-jsoniter-oracle-codecs.py
@@ -75,63 +79,75 @@ groups = [
  ("makeCirceLikeSnakeCased", "JsoniterConfig.makeCirceLikeSnakeCased", mk(None,"makeCirceLikeSnakeCased"), [("camel","JOCamel"),("shape","JOShape"),("enums","JOEnums")]),
  ("makeOpenapiLike", "JsoniterConfig.makeOpenapiLike", mk(None,"makeOpenapiLike"), [("shape","JOShape"),("defaults","JODefaults"),("emptyable","JOEmptyable")]),
 ]
+exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-jsoniter-oracle-spec-table.py")).read())
+
+NOWARN = '@scala.annotation.nowarn("msg=deprecated|never used|unused")'
+
 def ident(g, c): return g + c[0].upper() + c[1:]
-for ver in ("2", "3"):
-    using = "using " if ver == "3" else ""
-    other = "3" if ver == "2" else "2.13"
+
+def emit(P, groups, spec, annotate):
+    """P: object prefix (Jo / Ju); spec: the suite using them; annotate: add @nowarn to the Kindlings objects."""
+    ann = [NOWARN] if annotate else []
+    for ver in ("2", "3"):
+        using = "using " if ver == "3" else ""
+        other = "3" if ver == "2" else "2.13"
+        out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
+               "import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec",
+               "import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}", "",
+               "/** Kindlings codecs derived with configs known at compile time (the optimized codegen), one per oracle case of",
+               f"  * `{spec}`. Kept in sync with the Scala {other} version of this file and with `{P}Runtime`/`{P}Upstream`:",
+               "  * the only difference between the versions is the syntax of passing the config explicitly.", "  */"] + ann + [
+               f"object {P}Optimized {{"]
+        for g, k, u, cases in groups:
+            out.append(f"  // {g}")
+            for c, T in cases:
+                out.append(f"  lazy val {ident(g,c)}: JsonValueCodec[{T}] = KindlingsJsonValueCodec.derived[{T}]({using}{k})")
+        out.append("}")
+        p = f"{root}/src/test/scala-{ver}/hearth/kindlings/oracle/jsoniter/{P}Optimized.scala"
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w").write("\n".join(out) + "\n")
+    # runtime
     out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
            "import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec",
            "import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}", "",
-           "/** Kindlings codecs derived with configs known at compile time (the optimized codegen), one per oracle case of",
-           f"  * `JsoniterOracleSpec`. Kept in sync with the Scala {other} version of this file and with `JoRuntime`/`JoUpstream`:",
-           "  * the only difference between the versions is the syntax of passing the config explicitly.", "  */",
-           "object JoOptimized {"]
+           f"/** The configs of `{P}Optimized`, only known at runtime (`@volatile var`s), so that the codecs of `{P}Runtime` use the",
+           "  * generic codegen.", "  */",
+           f"object {P}RuntimeConfigs {{"]
     for g, k, u, cases in groups:
-        out.append(f"  // {g}")
+        out.append(f"  @volatile var {g}: JsoniterConfig = {k}")
+    out += ["}", "", f"/** Kindlings codecs derived with the configs of `{P}RuntimeConfigs` (the generic codegen). */"] + ann + [f"object {P}Runtime {{"]
+    for g, k, u, cases in groups:
+        out.append(f"  object {g} {{")
+        out.append(f"    implicit def config: JsoniterConfig = {P}RuntimeConfigs.{g}")
         for c, T in cases:
-            out.append(f"  lazy val {ident(g,c)}: JsonValueCodec[{T}] = KindlingsJsonValueCodec.derived[{T}]({using}{k})")
+            out.append(f"    lazy val {c}: JsonValueCodec[{T}] = KindlingsJsonValueCodec.derived[{T}]")
+        out.append("  }")
     out.append("}")
-    p = f"{root}/src/test/scala-{ver}/hearth/kindlings/oracle/jsoniter/JoOptimized.scala"
-    os.makedirs(os.path.dirname(p), exist_ok=True)
-    open(p, "w").write("\n".join(out) + "\n")
-# runtime
-out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
-       "import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec",
-       "import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}", "",
-       "/** The configs of `JoOptimized`, only known at runtime (`@volatile var`s), so that the codecs of `JoRuntime` use the",
-       "  * generic codegen.", "  */",
-       "object JoRuntimeConfigs {"]
-for g, k, u, cases in groups:
-    out.append(f"  @volatile var {g}: JsoniterConfig = {k}")
-out += ["}", "", "/** Kindlings codecs derived with the configs of `JoRuntimeConfigs` (the generic codegen). */", "object JoRuntime {"]
-for g, k, u, cases in groups:
-    out.append(f"  object {g} {{")
-    out.append(f"    implicit def config: JsoniterConfig = JoRuntimeConfigs.{g}")
-    for c, T in cases:
-        out.append(f"    lazy val {c}: JsonValueCodec[{T}] = KindlingsJsonValueCodec.derived[{T}]")
-    out.append("  }")
-out.append("}")
-open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/JoRuntime.scala","w").write("\n".join(out)+"\n")
-out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
-       "import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec",
-       "import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}", "",
-       "/** jsoniter-scala's codecs (`JsonCodecMaker.make` with the `CodecMakerConfig` equivalent to each Kindlings config, or",
-       "  * the `makeXxx` entry point equivalent to each preset). Recursive types need `allowRecursiveTypes` upstream.", "  */",
-       "// jsoniter-scala's Scala 2 macro leaves unused local vars in some ADT decoders.", "@scala.annotation.nowarn(\"msg=is never used\")", "object JoUpstream {"]
-for g, k, u, cases in groups:
-    out.append(f"  object {g} {{")
-    for c, T in cases:
-        out.append(f"    lazy val {c}: JsonValueCodec[{T}] = {u(T)}")
-    out.append("  }")
-out.append("}")
-open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/JoUpstream.scala","w").write("\n".join(out)+"\n")
-out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
-       "/** The three codecs of every oracle case: `JoCases.<config>.<fixture>`. */",
-       "object JoCases {"]
-for g, k, u, cases in groups:
-    out.append(f"  object {g} {{")
-    for c, T in cases:
-        out.append(f"    def {c}: JoCodecs[{T}] = JoCodecs(JoOptimized.{ident(g,c)}, JoRuntime.{g}.{c}, JoUpstream.{g}.{c})")
-    out.append("  }")
-out.append("}")
-open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/JoCases.scala","w").write("\n".join(out)+"\n")
+    open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/{P}Runtime.scala","w").write("\n".join(out)+"\n")
+    out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
+           "import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec",
+           "import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}", "",
+           "/** jsoniter-scala's codecs (`JsonCodecMaker.make` with the `CodecMakerConfig` equivalent to each Kindlings config, or",
+           "  * the `makeXxx` entry point equivalent to each preset). Recursive types need `allowRecursiveTypes` upstream.", "  */",
+           "// jsoniter-scala's Scala 2 macro leaves unused local vars in some ADT decoders.",
+           NOWARN if annotate else "@scala.annotation.nowarn(\"msg=is never used\")", f"object {P}Upstream {{"]
+    for g, k, u, cases in groups:
+        out.append(f"  object {g} {{")
+        for c, T in cases:
+            out.append(f"    lazy val {c}: JsonValueCodec[{T}] = {u(T)}")
+        out.append("  }")
+    out.append("}")
+    open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/{P}Upstream.scala","w").write("\n".join(out)+"\n")
+    out = [GENERATED, "package hearth.kindlings.oracle.jsoniter", "",
+           "/** The three codecs of every oracle case: `" + P + "Cases.<config>.<fixture>`. */",
+           f"object {P}Cases {{"]
+    for g, k, u, cases in groups:
+        out.append(f"  object {g} {{")
+        for c, T in cases:
+            out.append(f"    def {c}: JoCodecs[{T}] = JoCodecs({P}Optimized.{ident(g,c)}, {P}Runtime.{g}.{c}, {P}Upstream.{g}.{c})")
+        out.append("  }")
+    out.append("}")
+    open(f"{root}/src/test/scala/hearth/kindlings/oracle/jsoniter/{P}Cases.scala","w").write("\n".join(out)+"\n")
+
+emit("Jo", groups, "JsoniterOracleSpec", False)
+emit("Ju", spec_groups, "JsoniterUpstreamSpecOracleSpec", True)

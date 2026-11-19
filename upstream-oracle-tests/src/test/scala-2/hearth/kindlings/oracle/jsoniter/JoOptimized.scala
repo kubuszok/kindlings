@@ -5,289 +5,163 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCodec}
 
 /** Kindlings codecs derived with configs known at compile time (the optimized codegen), one per oracle case of
-  * `JsoniterOracleSpec`. Kept in sync with the Scala 3 version of this file and with `JoRuntime`/`JoUpstream`: the only
-  * difference between the versions is the syntax of passing the config explicitly.
+  * `JsoniterOracleSpec`. Kept in sync with the Scala 3 version of this file and with `JoRuntime`/`JoUpstream`:
+  * the only difference between the versions is the syntax of passing the config explicitly.
   */
 object JoOptimized {
   // upstreamDefaults
-  lazy val upstreamDefaultsPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsNestedOption: JsonValueCodec[JONestedOption] =
-    KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsPrimitives: JsonValueCodec[JOPrimitives] =
-    KindlingsJsonValueCodec.derived[JOPrimitives](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsBoxed: JsonValueCodec[JOBoxed] =
-    KindlingsJsonValueCodec.derived[JOBoxed](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsBig: JsonValueCodec[JOBig] =
-    KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsWrapped: JsonValueCodec[JOWrapped] =
-    KindlingsJsonValueCodec.derived[JOWrapped](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsMaps: JsonValueCodec[JOMaps] =
-    KindlingsJsonValueCodec.derived[JOMaps](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsCollections: JsonValueCodec[JOCollections] =
-    KindlingsJsonValueCodec.derived[JOCollections](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsNonEmpty: JsonValueCodec[JONonEmpty] =
-    KindlingsJsonValueCodec.derived[JONonEmpty](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsTuples: JsonValueCodec[JOTuples] =
-    KindlingsJsonValueCodec.derived[JOTuples](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsTime: JsonValueCodec[JOTime] =
-    KindlingsJsonValueCodec.derived[JOTime](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsEither: JsonValueCodec[JOEither] =
-    KindlingsJsonValueCodec.derived[JOEither](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsCircle: JsonValueCodec[JOCircle] =
-    KindlingsJsonValueCodec.derived[JOCircle](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsDrawing: JsonValueCodec[JODrawing] =
-    KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsShapeHolder: JsonValueCodec[JOShapeHolder] =
-    KindlingsJsonValueCodec.derived[JOShapeHolder](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsColour: JsonValueCodec[JOColour] =
-    KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsEnums: JsonValueCodec[JOEnums] =
-    KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsAnnotated: JsonValueCodec[JOAnnotated] =
-    KindlingsJsonValueCodec.derived[JOAnnotated](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsUser: JsonValueCodec[JOUser] =
-    KindlingsJsonValueCodec.derived[JOUser](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsScalaTransient: JsonValueCodec[JOScalaTransient] =
-    KindlingsJsonValueCodec.derived[JOScalaTransient](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsStringy: JsonValueCodec[JOStringy] =
-    KindlingsJsonValueCodec.derived[JOStringy](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsListInt: JsonValueCodec[List[Int]] =
-    KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsSetInt: JsonValueCodec[Set[Int]] =
-    KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsMapIntString: JsonValueCodec[Map[Int, String]] =
-    KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsOptionInt: JsonValueCodec[Option[Int]] =
-    KindlingsJsonValueCodec.derived[Option[Int]](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsTupleTop: JsonValueCodec[(Int, Boolean)] =
-    KindlingsJsonValueCodec.derived[(Int, Boolean)](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsLiteral: JsonValueCodec[JOLiteral] =
-    KindlingsJsonValueCodec.derived[JOLiteral](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsNestedOption: JsonValueCodec[JONestedOption] = KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsPrimitives: JsonValueCodec[JOPrimitives] = KindlingsJsonValueCodec.derived[JOPrimitives](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsBoxed: JsonValueCodec[JOBoxed] = KindlingsJsonValueCodec.derived[JOBoxed](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsBig: JsonValueCodec[JOBig] = KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsWrapped: JsonValueCodec[JOWrapped] = KindlingsJsonValueCodec.derived[JOWrapped](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsMaps: JsonValueCodec[JOMaps] = KindlingsJsonValueCodec.derived[JOMaps](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsCollections: JsonValueCodec[JOCollections] = KindlingsJsonValueCodec.derived[JOCollections](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsNonEmpty: JsonValueCodec[JONonEmpty] = KindlingsJsonValueCodec.derived[JONonEmpty](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsTuples: JsonValueCodec[JOTuples] = KindlingsJsonValueCodec.derived[JOTuples](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsTime: JsonValueCodec[JOTime] = KindlingsJsonValueCodec.derived[JOTime](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsEither: JsonValueCodec[JOEither] = KindlingsJsonValueCodec.derived[JOEither](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsCircle: JsonValueCodec[JOCircle] = KindlingsJsonValueCodec.derived[JOCircle](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsDrawing: JsonValueCodec[JODrawing] = KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsShapeHolder: JsonValueCodec[JOShapeHolder] = KindlingsJsonValueCodec.derived[JOShapeHolder](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsEnums: JsonValueCodec[JOEnums] = KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsAnnotated: JsonValueCodec[JOAnnotated] = KindlingsJsonValueCodec.derived[JOAnnotated](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsUser: JsonValueCodec[JOUser] = KindlingsJsonValueCodec.derived[JOUser](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsScalaTransient: JsonValueCodec[JOScalaTransient] = KindlingsJsonValueCodec.derived[JOScalaTransient](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsStringy: JsonValueCodec[JOStringy] = KindlingsJsonValueCodec.derived[JOStringy](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsListInt: JsonValueCodec[List[Int]] = KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsSetInt: JsonValueCodec[Set[Int]] = KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsMapIntString: JsonValueCodec[Map[Int, String]] = KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsOptionInt: JsonValueCodec[Option[Int]] = KindlingsJsonValueCodec.derived[Option[Int]](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsTupleTop: JsonValueCodec[(Int, Boolean)] = KindlingsJsonValueCodec.derived[(Int, Boolean)](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsLiteral: JsonValueCodec[JOLiteral] = KindlingsJsonValueCodec.derived[JOLiteral](JsoniterConfig.jsoniterScalaDefaults)
   // upstreamDefaultsRecursive
-  lazy val upstreamDefaultsRecursiveTree: JsonValueCodec[JOTree] =
-    KindlingsJsonValueCodec.derived[JOTree](JsoniterConfig.jsoniterScalaDefaults)
-  lazy val upstreamDefaultsRecursiveExpr: JsonValueCodec[JOExpr] =
-    KindlingsJsonValueCodec.derived[JOExpr](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsRecursiveTree: JsonValueCodec[JOTree] = KindlingsJsonValueCodec.derived[JOTree](JsoniterConfig.jsoniterScalaDefaults)
+  lazy val upstreamDefaultsRecursiveExpr: JsonValueCodec[JOExpr] = KindlingsJsonValueCodec.derived[JOExpr](JsoniterConfig.jsoniterScalaDefaults)
   // kindlingsDefaults
-  lazy val kindlingsDefaultsPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.default)
-  lazy val kindlingsDefaultsDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.default)
-  lazy val kindlingsDefaultsEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.default)
-  lazy val kindlingsDefaultsNestedOption: JsonValueCodec[JONestedOption] =
-    KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.default)
-  lazy val kindlingsDefaultsShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.default)
-  lazy val kindlingsDefaultsDrawing: JsonValueCodec[JODrawing] =
-    KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.default)
-  lazy val kindlingsDefaultsColour: JsonValueCodec[JOColour] =
-    KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.default)
-  lazy val kindlingsDefaultsSetInt: JsonValueCodec[Set[Int]] =
-    KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.default)
-  lazy val kindlingsDefaultsMapIntString: JsonValueCodec[Map[Int, String]] =
-    KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.default)
+  lazy val kindlingsDefaultsPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.default)
+  lazy val kindlingsDefaultsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.default)
+  lazy val kindlingsDefaultsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.default)
+  lazy val kindlingsDefaultsNestedOption: JsonValueCodec[JONestedOption] = KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.default)
+  lazy val kindlingsDefaultsShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.default)
+  lazy val kindlingsDefaultsDrawing: JsonValueCodec[JODrawing] = KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.default)
+  lazy val kindlingsDefaultsColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.default)
+  lazy val kindlingsDefaultsSetInt: JsonValueCodec[Set[Int]] = KindlingsJsonValueCodec.derived[Set[Int]](JsoniterConfig.default)
+  lazy val kindlingsDefaultsMapIntString: JsonValueCodec[Map[Int, String]] = KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.default)
   // snakeCase
-  lazy val snakeCaseCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseFieldNames)
+  lazy val snakeCaseCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseFieldNames)
   // snakeCase2
-  lazy val snakeCase2Camel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](
-    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2)
-  )
+  lazy val snakeCase2Camel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforce_snake_case2))
   // kebabCase
-  lazy val kebabCaseCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withKebabCaseFieldNames)
+  lazy val kebabCaseCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withKebabCaseFieldNames)
   // pascalCase
-  lazy val pascalCaseCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withPascalCaseFieldNames)
+  lazy val pascalCaseCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withPascalCaseFieldNames)
   // camelCase
-  lazy val camelCaseCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](
-    JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase)
-  )
+  lazy val camelCaseCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper(JsoniterConfig.enforceCamelCase))
   // partialFieldMapper
-  lazy val partialFieldMapperCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper {
-      case "firstName" => "given"
-    })
+  lazy val partialFieldMapperCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.jsoniterScalaDefaults.withFieldNameMapper { case "firstName" => "given" })
   // snakeCaseLeaves
-  lazy val snakeCaseLeavesShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseAdtLeafClassNames)
-  lazy val snakeCaseLeavesColour: JsonValueCodec[JOColour] =
-    KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseAdtLeafClassNames)
+  lazy val snakeCaseLeavesShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseAdtLeafClassNames)
+  lazy val snakeCaseLeavesColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults.withSnakeCaseAdtLeafClassNames)
   // discriminatorKind
-  lazy val discriminatorKindShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("kind"))
-  lazy val discriminatorKindDrawing: JsonValueCodec[JODrawing] =
-    KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("kind"))
+  lazy val discriminatorKindShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("kind"))
+  lazy val discriminatorKindDrawing: JsonValueCodec[JODrawing] = KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults.withDiscriminator("kind"))
   // noDiscriminator
-  lazy val noDiscriminatorShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
-  lazy val noDiscriminatorDrawing: JsonValueCodec[JODrawing] =
-    KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
-  lazy val noDiscriminatorShapeHolder: JsonValueCodec[JOShapeHolder] = KindlingsJsonValueCodec.derived[JOShapeHolder](
-    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None)
-  )
-  lazy val noDiscriminatorColour: JsonValueCodec[JOColour] =
-    KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
-  lazy val noDiscriminatorEither: JsonValueCodec[JOEither] =
-    KindlingsJsonValueCodec.derived[JOEither](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
+  lazy val noDiscriminatorShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
+  lazy val noDiscriminatorDrawing: JsonValueCodec[JODrawing] = KindlingsJsonValueCodec.derived[JODrawing](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
+  lazy val noDiscriminatorShapeHolder: JsonValueCodec[JOShapeHolder] = KindlingsJsonValueCodec.derived[JOShapeHolder](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
+  lazy val noDiscriminatorColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
+  lazy val noDiscriminatorEither: JsonValueCodec[JOEither] = KindlingsJsonValueCodec.derived[JOEither](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None))
   // discriminatorAnywhere
-  lazy val discriminatorAnywhereShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false))
+  lazy val discriminatorAnywhereShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withRequireDiscriminatorFirst(false))
   // alwaysEmitDiscriminator
-  lazy val alwaysEmitDiscriminatorShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator)
-  lazy val alwaysEmitDiscriminatorCircle: JsonValueCodec[JOCircle] =
-    KindlingsJsonValueCodec.derived[JOCircle](JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator)
+  lazy val alwaysEmitDiscriminatorShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator)
+  lazy val alwaysEmitDiscriminatorCircle: JsonValueCodec[JOCircle] = KindlingsJsonValueCodec.derived[JOCircle](JsoniterConfig.jsoniterScalaDefaults.withAlwaysEmitDiscriminator)
   // circeLike
-  lazy val circeLikeShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](
-    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
-  )
-  lazy val circeLikeShapeHolder: JsonValueCodec[JOShapeHolder] = KindlingsJsonValueCodec.derived[JOShapeHolder](
-    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
-  )
-  lazy val circeLikeColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](
-    JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding
-  )
+  lazy val circeLikeShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding)
+  lazy val circeLikeShapeHolder: JsonValueCodec[JOShapeHolder] = KindlingsJsonValueCodec.derived[JOShapeHolder](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding)
+  lazy val circeLikeColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.jsoniterScalaDefaults.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding)
   // strict
-  lazy val strictPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false))
-  lazy val strictShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false))
+  lazy val strictPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false))
+  lazy val strictShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.jsoniterScalaDefaults.withSkipUnexpectedFields(false))
   // noTransientDefault
-  lazy val noTransientDefaultDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false))
+  lazy val noTransientDefaultDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false))
   // noTransientEmpty
-  lazy val noTransientEmptyEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false))
-  lazy val noTransientEmptyDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false))
+  lazy val noTransientEmptyEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false))
+  lazy val noTransientEmptyDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false))
   // noTransientNone
-  lazy val noTransientNoneEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false))
-  lazy val noTransientNoneNestedOption: JsonValueCodec[JONestedOption] =
-    KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false))
+  lazy val noTransientNoneEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false))
+  lazy val noTransientNoneNestedOption: JsonValueCodec[JONestedOption] = KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults.copy(transientNone = false))
   // requireCollections
-  lazy val requireCollectionsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](
-    JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields
-  )
-  lazy val requireCollectionsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](
-    JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields
-  )
+  lazy val requireCollectionsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields)
+  lazy val requireCollectionsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientEmpty = false).withRequireCollectionFields)
   // requireDefaults
-  lazy val requireDefaultsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](
-    JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false).withRequireDefaultFields
-  )
+  lazy val requireDefaultsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(transientDefault = false).withRequireDefaultFields)
   // noDuplicationCheck
-  lazy val noDuplicationCheckPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false))
-  lazy val noDuplicationCheckDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](
-    JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false)
-  )
+  lazy val noDuplicationCheckPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false))
+  lazy val noDuplicationCheckDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.jsoniterScalaDefaults.copy(checkFieldDuplication = false))
   // stringified
-  lazy val stringifiedStringy: JsonValueCodec[JOStringy] =
-    KindlingsJsonValueCodec.derived[JOStringy](JsoniterConfig.jsoniterScalaDefaults.withStringified)
-  lazy val stringifiedListInt: JsonValueCodec[List[Int]] =
-    KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
-  lazy val stringifiedOptionInt: JsonValueCodec[Option[Int]] =
-    KindlingsJsonValueCodec.derived[Option[Int]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
-  lazy val stringifiedTupleTop: JsonValueCodec[(Int, Boolean)] =
-    KindlingsJsonValueCodec.derived[(Int, Boolean)](JsoniterConfig.jsoniterScalaDefaults.withStringified)
-  lazy val stringifiedMapIntString: JsonValueCodec[Map[Int, String]] =
-    KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
-  lazy val stringifiedWrapped: JsonValueCodec[JOWrapped] =
-    KindlingsJsonValueCodec.derived[JOWrapped](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedStringy: JsonValueCodec[JOStringy] = KindlingsJsonValueCodec.derived[JOStringy](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedListInt: JsonValueCodec[List[Int]] = KindlingsJsonValueCodec.derived[List[Int]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedOptionInt: JsonValueCodec[Option[Int]] = KindlingsJsonValueCodec.derived[Option[Int]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedTupleTop: JsonValueCodec[(Int, Boolean)] = KindlingsJsonValueCodec.derived[(Int, Boolean)](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedMapIntString: JsonValueCodec[Map[Int, String]] = KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults.withStringified)
+  lazy val stringifiedWrapped: JsonValueCodec[JOWrapped] = KindlingsJsonValueCodec.derived[JOWrapped](JsoniterConfig.jsoniterScalaDefaults.withStringified)
   // mapAsArray
-  lazy val mapAsArrayMaps: JsonValueCodec[JOMaps] =
-    KindlingsJsonValueCodec.derived[JOMaps](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)
-  lazy val mapAsArrayMapIntString: JsonValueCodec[Map[Int, String]] =
-    KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)
+  lazy val mapAsArrayMaps: JsonValueCodec[JOMaps] = KindlingsJsonValueCodec.derived[JOMaps](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)
+  lazy val mapAsArrayMapIntString: JsonValueCodec[Map[Int, String]] = KindlingsJsonValueCodec.derived[Map[Int, String]](JsoniterConfig.jsoniterScalaDefaults.withMapAsArray)
   // bigDecimalPrecision
-  lazy val bigDecimalPrecisionBig: JsonValueCodec[JOBig] =
-    KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalPrecision(5))
+  lazy val bigDecimalPrecisionBig: JsonValueCodec[JOBig] = KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalPrecision(5))
   // bigDecimalScaleLimit
-  lazy val bigDecimalScaleLimitBig: JsonValueCodec[JOBig] =
-    KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalScaleLimit(2))
+  lazy val bigDecimalScaleLimitBig: JsonValueCodec[JOBig] = KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalScaleLimit(2))
   // bigDecimalDigitsLimit
-  lazy val bigDecimalDigitsLimitBig: JsonValueCodec[JOBig] =
-    KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalDigitsLimit(3))
+  lazy val bigDecimalDigitsLimitBig: JsonValueCodec[JOBig] = KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigDecimalDigitsLimit(3))
   // bigIntDigitsLimit
-  lazy val bigIntDigitsLimitBig: JsonValueCodec[JOBig] =
-    KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigIntDigitsLimit(3))
+  lazy val bigIntDigitsLimitBig: JsonValueCodec[JOBig] = KindlingsJsonValueCodec.derived[JOBig](JsoniterConfig.jsoniterScalaDefaults.withBigIntDigitsLimit(3))
   // insertLimits
-  lazy val insertLimitsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](
-    JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2)
-  )
-  lazy val insertLimitsMaps: JsonValueCodec[JOMaps] = KindlingsJsonValueCodec.derived[JOMaps](
-    JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2)
-  )
+  lazy val insertLimitsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
+  lazy val insertLimitsMaps: JsonValueCodec[JOMaps] = KindlingsJsonValueCodec.derived[JOMaps](JsoniterConfig.jsoniterScalaDefaults.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
   // bitSetValueLimit
-  lazy val bitSetValueLimitCollections: JsonValueCodec[JOCollections] =
-    KindlingsJsonValueCodec.derived[JOCollections](JsoniterConfig.jsoniterScalaDefaults.withBitSetValueLimit(10))
+  lazy val bitSetValueLimitCollections: JsonValueCodec[JOCollections] = KindlingsJsonValueCodec.derived[JOCollections](JsoniterConfig.jsoniterScalaDefaults.withBitSetValueLimit(10))
   // scalaEnumValueId
-  lazy val scalaEnumValueIdEnums: JsonValueCodec[JOEnums] =
-    KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId)
+  lazy val scalaEnumValueIdEnums: JsonValueCodec[JOEnums] = KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.jsoniterScalaDefaults.withUseScalaEnumValueId)
   // javaEnumValueNameMapper
-  lazy val javaEnumValueNameMapperEnums: JsonValueCodec[JOEnums] = KindlingsJsonValueCodec.derived[JOEnums](
-    JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case)
-  )
+  lazy val javaEnumValueNameMapperEnums: JsonValueCodec[JOEnums] = KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.jsoniterScalaDefaults.withJavaEnumValueNameMapper(JsoniterConfig.enforce_snake_case))
   // skipNestedOptionValues
-  lazy val skipNestedOptionValuesNestedOption: JsonValueCodec[JONestedOption] =
-    KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults.withSkipNestedOptionValues)
+  lazy val skipNestedOptionValuesNestedOption: JsonValueCodec[JONestedOption] = KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.jsoniterScalaDefaults.withSkipNestedOptionValues)
   // inlineOneValueClasses
-  lazy val inlineOneValueClassesUser: JsonValueCodec[JOUser] =
-    KindlingsJsonValueCodec.derived[JOUser](JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses)
-  lazy val inlineOneValueClassesNameMap: JsonValueCodec[JONameMap] =
-    KindlingsJsonValueCodec.derived[JONameMap](JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses)
+  lazy val inlineOneValueClassesUser: JsonValueCodec[JOUser] = KindlingsJsonValueCodec.derived[JOUser](JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses)
+  lazy val inlineOneValueClassesNameMap: JsonValueCodec[JONameMap] = KindlingsJsonValueCodec.derived[JONameMap](JsoniterConfig.jsoniterScalaDefaults.withInlineOneValueClasses)
   // scalaTransientSupport
-  lazy val scalaTransientSupportScalaTransient: JsonValueCodec[JOScalaTransient] =
-    KindlingsJsonValueCodec.derived[JOScalaTransient](JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport)
+  lazy val scalaTransientSupportScalaTransient: JsonValueCodec[JOScalaTransient] = KindlingsJsonValueCodec.derived[JOScalaTransient](JsoniterConfig.jsoniterScalaDefaults.withScalaTransientSupport)
   // decodingOnly
-  lazy val decodingOnlyPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withDecodingOnly)
+  lazy val decodingOnlyPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withDecodingOnly)
   // encodingOnly
-  lazy val encodingOnlyPerson: JsonValueCodec[JOPerson] =
-    KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withEncodingOnly)
+  lazy val encodingOnlyPerson: JsonValueCodec[JOPerson] = KindlingsJsonValueCodec.derived[JOPerson](JsoniterConfig.jsoniterScalaDefaults.withEncodingOnly)
   // makeWithoutDiscriminator
-  lazy val makeWithoutDiscriminatorShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeWithoutDiscriminator)
+  lazy val makeWithoutDiscriminatorShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeWithoutDiscriminator)
   // makeWithRequiredCollectionFields
-  lazy val makeWithRequiredCollectionFieldsEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeWithRequiredCollectionFields)
+  lazy val makeWithRequiredCollectionFieldsEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeWithRequiredCollectionFields)
   // makeWithRequiredDefaultFields
-  lazy val makeWithRequiredDefaultFieldsDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.makeWithRequiredDefaultFields)
+  lazy val makeWithRequiredDefaultFieldsDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.makeWithRequiredDefaultFields)
   // makeWithSkipNestedOptionValues
-  lazy val makeWithSkipNestedOptionValuesNestedOption: JsonValueCodec[JONestedOption] =
-    KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.makeWithSkipNestedOptionValues)
+  lazy val makeWithSkipNestedOptionValuesNestedOption: JsonValueCodec[JONestedOption] = KindlingsJsonValueCodec.derived[JONestedOption](JsoniterConfig.makeWithSkipNestedOptionValues)
   // makeCirceLike
-  lazy val makeCirceLikeShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeCirceLike)
-  lazy val makeCirceLikeColour: JsonValueCodec[JOColour] =
-    KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.makeCirceLike)
-  lazy val makeCirceLikeEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeCirceLike)
+  lazy val makeCirceLikeShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeCirceLike)
+  lazy val makeCirceLikeColour: JsonValueCodec[JOColour] = KindlingsJsonValueCodec.derived[JOColour](JsoniterConfig.makeCirceLike)
+  lazy val makeCirceLikeEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeCirceLike)
   // makeCirceLikeSnakeCased
-  lazy val makeCirceLikeSnakeCasedCamel: JsonValueCodec[JOCamel] =
-    KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.makeCirceLikeSnakeCased)
-  lazy val makeCirceLikeSnakeCasedShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeCirceLikeSnakeCased)
-  lazy val makeCirceLikeSnakeCasedEnums: JsonValueCodec[JOEnums] =
-    KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.makeCirceLikeSnakeCased)
+  lazy val makeCirceLikeSnakeCasedCamel: JsonValueCodec[JOCamel] = KindlingsJsonValueCodec.derived[JOCamel](JsoniterConfig.makeCirceLikeSnakeCased)
+  lazy val makeCirceLikeSnakeCasedShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeCirceLikeSnakeCased)
+  lazy val makeCirceLikeSnakeCasedEnums: JsonValueCodec[JOEnums] = KindlingsJsonValueCodec.derived[JOEnums](JsoniterConfig.makeCirceLikeSnakeCased)
   // makeOpenapiLike
-  lazy val makeOpenapiLikeShape: JsonValueCodec[JOShape] =
-    KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeOpenapiLike)
-  lazy val makeOpenapiLikeDefaults: JsonValueCodec[JODefaults] =
-    KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.makeOpenapiLike)
-  lazy val makeOpenapiLikeEmptyable: JsonValueCodec[JOEmptyable] =
-    KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeOpenapiLike)
+  lazy val makeOpenapiLikeShape: JsonValueCodec[JOShape] = KindlingsJsonValueCodec.derived[JOShape](JsoniterConfig.makeOpenapiLike)
+  lazy val makeOpenapiLikeDefaults: JsonValueCodec[JODefaults] = KindlingsJsonValueCodec.derived[JODefaults](JsoniterConfig.makeOpenapiLike)
+  lazy val makeOpenapiLikeEmptyable: JsonValueCodec[JOEmptyable] = KindlingsJsonValueCodec.derived[JOEmptyable](JsoniterConfig.makeOpenapiLike)
 }

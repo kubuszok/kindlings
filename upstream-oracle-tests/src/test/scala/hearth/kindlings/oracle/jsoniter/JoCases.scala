@@ -4,531 +4,202 @@ package hearth.kindlings.oracle.jsoniter
 /** The three codecs of every oracle case: `JoCases.<config>.<fixture>`. */
 object JoCases {
   object upstreamDefaults {
-    def person: JoCodecs[JOPerson] = JoCodecs(
-      JoOptimized.upstreamDefaultsPerson,
-      JoRuntime.upstreamDefaults.person,
-      JoUpstream.upstreamDefaults.person
-    )
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.upstreamDefaultsDefaults,
-      JoRuntime.upstreamDefaults.defaults,
-      JoUpstream.upstreamDefaults.defaults
-    )
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.upstreamDefaultsEmptyable,
-      JoRuntime.upstreamDefaults.emptyable,
-      JoUpstream.upstreamDefaults.emptyable
-    )
-    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(
-      JoOptimized.upstreamDefaultsNestedOption,
-      JoRuntime.upstreamDefaults.nestedOption,
-      JoUpstream.upstreamDefaults.nestedOption
-    )
-    def primitives: JoCodecs[JOPrimitives] = JoCodecs(
-      JoOptimized.upstreamDefaultsPrimitives,
-      JoRuntime.upstreamDefaults.primitives,
-      JoUpstream.upstreamDefaults.primitives
-    )
-    def boxed: JoCodecs[JOBoxed] =
-      JoCodecs(JoOptimized.upstreamDefaultsBoxed, JoRuntime.upstreamDefaults.boxed, JoUpstream.upstreamDefaults.boxed)
-    def big: JoCodecs[JOBig] =
-      JoCodecs(JoOptimized.upstreamDefaultsBig, JoRuntime.upstreamDefaults.big, JoUpstream.upstreamDefaults.big)
-    def wrapped: JoCodecs[JOWrapped] = JoCodecs(
-      JoOptimized.upstreamDefaultsWrapped,
-      JoRuntime.upstreamDefaults.wrapped,
-      JoUpstream.upstreamDefaults.wrapped
-    )
-    def maps: JoCodecs[JOMaps] =
-      JoCodecs(JoOptimized.upstreamDefaultsMaps, JoRuntime.upstreamDefaults.maps, JoUpstream.upstreamDefaults.maps)
-    def collections: JoCodecs[JOCollections] = JoCodecs(
-      JoOptimized.upstreamDefaultsCollections,
-      JoRuntime.upstreamDefaults.collections,
-      JoUpstream.upstreamDefaults.collections
-    )
-    def nonEmpty: JoCodecs[JONonEmpty] = JoCodecs(
-      JoOptimized.upstreamDefaultsNonEmpty,
-      JoRuntime.upstreamDefaults.nonEmpty,
-      JoUpstream.upstreamDefaults.nonEmpty
-    )
-    def tuples: JoCodecs[JOTuples] = JoCodecs(
-      JoOptimized.upstreamDefaultsTuples,
-      JoRuntime.upstreamDefaults.tuples,
-      JoUpstream.upstreamDefaults.tuples
-    )
-    def time: JoCodecs[JOTime] =
-      JoCodecs(JoOptimized.upstreamDefaultsTime, JoRuntime.upstreamDefaults.time, JoUpstream.upstreamDefaults.time)
-    def either: JoCodecs[JOEither] = JoCodecs(
-      JoOptimized.upstreamDefaultsEither,
-      JoRuntime.upstreamDefaults.either,
-      JoUpstream.upstreamDefaults.either
-    )
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.upstreamDefaultsShape, JoRuntime.upstreamDefaults.shape, JoUpstream.upstreamDefaults.shape)
-    def circle: JoCodecs[JOCircle] = JoCodecs(
-      JoOptimized.upstreamDefaultsCircle,
-      JoRuntime.upstreamDefaults.circle,
-      JoUpstream.upstreamDefaults.circle
-    )
-    def drawing: JoCodecs[JODrawing] = JoCodecs(
-      JoOptimized.upstreamDefaultsDrawing,
-      JoRuntime.upstreamDefaults.drawing,
-      JoUpstream.upstreamDefaults.drawing
-    )
-    def shapeHolder: JoCodecs[JOShapeHolder] = JoCodecs(
-      JoOptimized.upstreamDefaultsShapeHolder,
-      JoRuntime.upstreamDefaults.shapeHolder,
-      JoUpstream.upstreamDefaults.shapeHolder
-    )
-    def colour: JoCodecs[JOColour] = JoCodecs(
-      JoOptimized.upstreamDefaultsColour,
-      JoRuntime.upstreamDefaults.colour,
-      JoUpstream.upstreamDefaults.colour
-    )
-    def enums: JoCodecs[JOEnums] =
-      JoCodecs(JoOptimized.upstreamDefaultsEnums, JoRuntime.upstreamDefaults.enums, JoUpstream.upstreamDefaults.enums)
-    def annotated: JoCodecs[JOAnnotated] = JoCodecs(
-      JoOptimized.upstreamDefaultsAnnotated,
-      JoRuntime.upstreamDefaults.annotated,
-      JoUpstream.upstreamDefaults.annotated
-    )
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.upstreamDefaultsCamel, JoRuntime.upstreamDefaults.camel, JoUpstream.upstreamDefaults.camel)
-    def user: JoCodecs[JOUser] =
-      JoCodecs(JoOptimized.upstreamDefaultsUser, JoRuntime.upstreamDefaults.user, JoUpstream.upstreamDefaults.user)
-    def scalaTransient: JoCodecs[JOScalaTransient] = JoCodecs(
-      JoOptimized.upstreamDefaultsScalaTransient,
-      JoRuntime.upstreamDefaults.scalaTransient,
-      JoUpstream.upstreamDefaults.scalaTransient
-    )
-    def stringy: JoCodecs[JOStringy] = JoCodecs(
-      JoOptimized.upstreamDefaultsStringy,
-      JoRuntime.upstreamDefaults.stringy,
-      JoUpstream.upstreamDefaults.stringy
-    )
-    def listInt: JoCodecs[List[Int]] = JoCodecs(
-      JoOptimized.upstreamDefaultsListInt,
-      JoRuntime.upstreamDefaults.listInt,
-      JoUpstream.upstreamDefaults.listInt
-    )
-    def setInt: JoCodecs[Set[Int]] = JoCodecs(
-      JoOptimized.upstreamDefaultsSetInt,
-      JoRuntime.upstreamDefaults.setInt,
-      JoUpstream.upstreamDefaults.setInt
-    )
-    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(
-      JoOptimized.upstreamDefaultsMapIntString,
-      JoRuntime.upstreamDefaults.mapIntString,
-      JoUpstream.upstreamDefaults.mapIntString
-    )
-    def optionInt: JoCodecs[Option[Int]] = JoCodecs(
-      JoOptimized.upstreamDefaultsOptionInt,
-      JoRuntime.upstreamDefaults.optionInt,
-      JoUpstream.upstreamDefaults.optionInt
-    )
-    def tupleTop: JoCodecs[(Int, Boolean)] = JoCodecs(
-      JoOptimized.upstreamDefaultsTupleTop,
-      JoRuntime.upstreamDefaults.tupleTop,
-      JoUpstream.upstreamDefaults.tupleTop
-    )
-    def literal: JoCodecs[JOLiteral] = JoCodecs(
-      JoOptimized.upstreamDefaultsLiteral,
-      JoRuntime.upstreamDefaults.literal,
-      JoUpstream.upstreamDefaults.literal
-    )
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.upstreamDefaultsPerson, JoRuntime.upstreamDefaults.person, JoUpstream.upstreamDefaults.person)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.upstreamDefaultsDefaults, JoRuntime.upstreamDefaults.defaults, JoUpstream.upstreamDefaults.defaults)
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.upstreamDefaultsEmptyable, JoRuntime.upstreamDefaults.emptyable, JoUpstream.upstreamDefaults.emptyable)
+    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(JoOptimized.upstreamDefaultsNestedOption, JoRuntime.upstreamDefaults.nestedOption, JoUpstream.upstreamDefaults.nestedOption)
+    def primitives: JoCodecs[JOPrimitives] = JoCodecs(JoOptimized.upstreamDefaultsPrimitives, JoRuntime.upstreamDefaults.primitives, JoUpstream.upstreamDefaults.primitives)
+    def boxed: JoCodecs[JOBoxed] = JoCodecs(JoOptimized.upstreamDefaultsBoxed, JoRuntime.upstreamDefaults.boxed, JoUpstream.upstreamDefaults.boxed)
+    def big: JoCodecs[JOBig] = JoCodecs(JoOptimized.upstreamDefaultsBig, JoRuntime.upstreamDefaults.big, JoUpstream.upstreamDefaults.big)
+    def wrapped: JoCodecs[JOWrapped] = JoCodecs(JoOptimized.upstreamDefaultsWrapped, JoRuntime.upstreamDefaults.wrapped, JoUpstream.upstreamDefaults.wrapped)
+    def maps: JoCodecs[JOMaps] = JoCodecs(JoOptimized.upstreamDefaultsMaps, JoRuntime.upstreamDefaults.maps, JoUpstream.upstreamDefaults.maps)
+    def collections: JoCodecs[JOCollections] = JoCodecs(JoOptimized.upstreamDefaultsCollections, JoRuntime.upstreamDefaults.collections, JoUpstream.upstreamDefaults.collections)
+    def nonEmpty: JoCodecs[JONonEmpty] = JoCodecs(JoOptimized.upstreamDefaultsNonEmpty, JoRuntime.upstreamDefaults.nonEmpty, JoUpstream.upstreamDefaults.nonEmpty)
+    def tuples: JoCodecs[JOTuples] = JoCodecs(JoOptimized.upstreamDefaultsTuples, JoRuntime.upstreamDefaults.tuples, JoUpstream.upstreamDefaults.tuples)
+    def time: JoCodecs[JOTime] = JoCodecs(JoOptimized.upstreamDefaultsTime, JoRuntime.upstreamDefaults.time, JoUpstream.upstreamDefaults.time)
+    def either: JoCodecs[JOEither] = JoCodecs(JoOptimized.upstreamDefaultsEither, JoRuntime.upstreamDefaults.either, JoUpstream.upstreamDefaults.either)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.upstreamDefaultsShape, JoRuntime.upstreamDefaults.shape, JoUpstream.upstreamDefaults.shape)
+    def circle: JoCodecs[JOCircle] = JoCodecs(JoOptimized.upstreamDefaultsCircle, JoRuntime.upstreamDefaults.circle, JoUpstream.upstreamDefaults.circle)
+    def drawing: JoCodecs[JODrawing] = JoCodecs(JoOptimized.upstreamDefaultsDrawing, JoRuntime.upstreamDefaults.drawing, JoUpstream.upstreamDefaults.drawing)
+    def shapeHolder: JoCodecs[JOShapeHolder] = JoCodecs(JoOptimized.upstreamDefaultsShapeHolder, JoRuntime.upstreamDefaults.shapeHolder, JoUpstream.upstreamDefaults.shapeHolder)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.upstreamDefaultsColour, JoRuntime.upstreamDefaults.colour, JoUpstream.upstreamDefaults.colour)
+    def enums: JoCodecs[JOEnums] = JoCodecs(JoOptimized.upstreamDefaultsEnums, JoRuntime.upstreamDefaults.enums, JoUpstream.upstreamDefaults.enums)
+    def annotated: JoCodecs[JOAnnotated] = JoCodecs(JoOptimized.upstreamDefaultsAnnotated, JoRuntime.upstreamDefaults.annotated, JoUpstream.upstreamDefaults.annotated)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.upstreamDefaultsCamel, JoRuntime.upstreamDefaults.camel, JoUpstream.upstreamDefaults.camel)
+    def user: JoCodecs[JOUser] = JoCodecs(JoOptimized.upstreamDefaultsUser, JoRuntime.upstreamDefaults.user, JoUpstream.upstreamDefaults.user)
+    def scalaTransient: JoCodecs[JOScalaTransient] = JoCodecs(JoOptimized.upstreamDefaultsScalaTransient, JoRuntime.upstreamDefaults.scalaTransient, JoUpstream.upstreamDefaults.scalaTransient)
+    def stringy: JoCodecs[JOStringy] = JoCodecs(JoOptimized.upstreamDefaultsStringy, JoRuntime.upstreamDefaults.stringy, JoUpstream.upstreamDefaults.stringy)
+    def listInt: JoCodecs[List[Int]] = JoCodecs(JoOptimized.upstreamDefaultsListInt, JoRuntime.upstreamDefaults.listInt, JoUpstream.upstreamDefaults.listInt)
+    def setInt: JoCodecs[Set[Int]] = JoCodecs(JoOptimized.upstreamDefaultsSetInt, JoRuntime.upstreamDefaults.setInt, JoUpstream.upstreamDefaults.setInt)
+    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(JoOptimized.upstreamDefaultsMapIntString, JoRuntime.upstreamDefaults.mapIntString, JoUpstream.upstreamDefaults.mapIntString)
+    def optionInt: JoCodecs[Option[Int]] = JoCodecs(JoOptimized.upstreamDefaultsOptionInt, JoRuntime.upstreamDefaults.optionInt, JoUpstream.upstreamDefaults.optionInt)
+    def tupleTop: JoCodecs[(Int, Boolean)] = JoCodecs(JoOptimized.upstreamDefaultsTupleTop, JoRuntime.upstreamDefaults.tupleTop, JoUpstream.upstreamDefaults.tupleTop)
+    def literal: JoCodecs[JOLiteral] = JoCodecs(JoOptimized.upstreamDefaultsLiteral, JoRuntime.upstreamDefaults.literal, JoUpstream.upstreamDefaults.literal)
   }
   object upstreamDefaultsRecursive {
-    def tree: JoCodecs[JOTree] = JoCodecs(
-      JoOptimized.upstreamDefaultsRecursiveTree,
-      JoRuntime.upstreamDefaultsRecursive.tree,
-      JoUpstream.upstreamDefaultsRecursive.tree
-    )
-    def expr: JoCodecs[JOExpr] = JoCodecs(
-      JoOptimized.upstreamDefaultsRecursiveExpr,
-      JoRuntime.upstreamDefaultsRecursive.expr,
-      JoUpstream.upstreamDefaultsRecursive.expr
-    )
+    def tree: JoCodecs[JOTree] = JoCodecs(JoOptimized.upstreamDefaultsRecursiveTree, JoRuntime.upstreamDefaultsRecursive.tree, JoUpstream.upstreamDefaultsRecursive.tree)
+    def expr: JoCodecs[JOExpr] = JoCodecs(JoOptimized.upstreamDefaultsRecursiveExpr, JoRuntime.upstreamDefaultsRecursive.expr, JoUpstream.upstreamDefaultsRecursive.expr)
   }
   object kindlingsDefaults {
-    def person: JoCodecs[JOPerson] = JoCodecs(
-      JoOptimized.kindlingsDefaultsPerson,
-      JoRuntime.kindlingsDefaults.person,
-      JoUpstream.kindlingsDefaults.person
-    )
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.kindlingsDefaultsDefaults,
-      JoRuntime.kindlingsDefaults.defaults,
-      JoUpstream.kindlingsDefaults.defaults
-    )
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.kindlingsDefaultsEmptyable,
-      JoRuntime.kindlingsDefaults.emptyable,
-      JoUpstream.kindlingsDefaults.emptyable
-    )
-    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(
-      JoOptimized.kindlingsDefaultsNestedOption,
-      JoRuntime.kindlingsDefaults.nestedOption,
-      JoUpstream.kindlingsDefaults.nestedOption
-    )
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.kindlingsDefaultsShape,
-      JoRuntime.kindlingsDefaults.shape,
-      JoUpstream.kindlingsDefaults.shape
-    )
-    def drawing: JoCodecs[JODrawing] = JoCodecs(
-      JoOptimized.kindlingsDefaultsDrawing,
-      JoRuntime.kindlingsDefaults.drawing,
-      JoUpstream.kindlingsDefaults.drawing
-    )
-    def colour: JoCodecs[JOColour] = JoCodecs(
-      JoOptimized.kindlingsDefaultsColour,
-      JoRuntime.kindlingsDefaults.colour,
-      JoUpstream.kindlingsDefaults.colour
-    )
-    def setInt: JoCodecs[Set[Int]] = JoCodecs(
-      JoOptimized.kindlingsDefaultsSetInt,
-      JoRuntime.kindlingsDefaults.setInt,
-      JoUpstream.kindlingsDefaults.setInt
-    )
-    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(
-      JoOptimized.kindlingsDefaultsMapIntString,
-      JoRuntime.kindlingsDefaults.mapIntString,
-      JoUpstream.kindlingsDefaults.mapIntString
-    )
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.kindlingsDefaultsPerson, JoRuntime.kindlingsDefaults.person, JoUpstream.kindlingsDefaults.person)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.kindlingsDefaultsDefaults, JoRuntime.kindlingsDefaults.defaults, JoUpstream.kindlingsDefaults.defaults)
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.kindlingsDefaultsEmptyable, JoRuntime.kindlingsDefaults.emptyable, JoUpstream.kindlingsDefaults.emptyable)
+    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(JoOptimized.kindlingsDefaultsNestedOption, JoRuntime.kindlingsDefaults.nestedOption, JoUpstream.kindlingsDefaults.nestedOption)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.kindlingsDefaultsShape, JoRuntime.kindlingsDefaults.shape, JoUpstream.kindlingsDefaults.shape)
+    def drawing: JoCodecs[JODrawing] = JoCodecs(JoOptimized.kindlingsDefaultsDrawing, JoRuntime.kindlingsDefaults.drawing, JoUpstream.kindlingsDefaults.drawing)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.kindlingsDefaultsColour, JoRuntime.kindlingsDefaults.colour, JoUpstream.kindlingsDefaults.colour)
+    def setInt: JoCodecs[Set[Int]] = JoCodecs(JoOptimized.kindlingsDefaultsSetInt, JoRuntime.kindlingsDefaults.setInt, JoUpstream.kindlingsDefaults.setInt)
+    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(JoOptimized.kindlingsDefaultsMapIntString, JoRuntime.kindlingsDefaults.mapIntString, JoUpstream.kindlingsDefaults.mapIntString)
   }
   object snakeCase {
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.snakeCaseCamel, JoRuntime.snakeCase.camel, JoUpstream.snakeCase.camel)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.snakeCaseCamel, JoRuntime.snakeCase.camel, JoUpstream.snakeCase.camel)
   }
   object snakeCase2 {
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.snakeCase2Camel, JoRuntime.snakeCase2.camel, JoUpstream.snakeCase2.camel)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.snakeCase2Camel, JoRuntime.snakeCase2.camel, JoUpstream.snakeCase2.camel)
   }
   object kebabCase {
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.kebabCaseCamel, JoRuntime.kebabCase.camel, JoUpstream.kebabCase.camel)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.kebabCaseCamel, JoRuntime.kebabCase.camel, JoUpstream.kebabCase.camel)
   }
   object pascalCase {
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.pascalCaseCamel, JoRuntime.pascalCase.camel, JoUpstream.pascalCase.camel)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.pascalCaseCamel, JoRuntime.pascalCase.camel, JoUpstream.pascalCase.camel)
   }
   object camelCase {
-    def camel: JoCodecs[JOCamel] =
-      JoCodecs(JoOptimized.camelCaseCamel, JoRuntime.camelCase.camel, JoUpstream.camelCase.camel)
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.camelCaseCamel, JoRuntime.camelCase.camel, JoUpstream.camelCase.camel)
   }
   object partialFieldMapper {
-    def camel: JoCodecs[JOCamel] = JoCodecs(
-      JoOptimized.partialFieldMapperCamel,
-      JoRuntime.partialFieldMapper.camel,
-      JoUpstream.partialFieldMapper.camel
-    )
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.partialFieldMapperCamel, JoRuntime.partialFieldMapper.camel, JoUpstream.partialFieldMapper.camel)
   }
   object snakeCaseLeaves {
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.snakeCaseLeavesShape, JoRuntime.snakeCaseLeaves.shape, JoUpstream.snakeCaseLeaves.shape)
-    def colour: JoCodecs[JOColour] =
-      JoCodecs(JoOptimized.snakeCaseLeavesColour, JoRuntime.snakeCaseLeaves.colour, JoUpstream.snakeCaseLeaves.colour)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.snakeCaseLeavesShape, JoRuntime.snakeCaseLeaves.shape, JoUpstream.snakeCaseLeaves.shape)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.snakeCaseLeavesColour, JoRuntime.snakeCaseLeaves.colour, JoUpstream.snakeCaseLeaves.colour)
   }
   object discriminatorKind {
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.discriminatorKindShape,
-      JoRuntime.discriminatorKind.shape,
-      JoUpstream.discriminatorKind.shape
-    )
-    def drawing: JoCodecs[JODrawing] = JoCodecs(
-      JoOptimized.discriminatorKindDrawing,
-      JoRuntime.discriminatorKind.drawing,
-      JoUpstream.discriminatorKind.drawing
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.discriminatorKindShape, JoRuntime.discriminatorKind.shape, JoUpstream.discriminatorKind.shape)
+    def drawing: JoCodecs[JODrawing] = JoCodecs(JoOptimized.discriminatorKindDrawing, JoRuntime.discriminatorKind.drawing, JoUpstream.discriminatorKind.drawing)
   }
   object noDiscriminator {
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.noDiscriminatorShape, JoRuntime.noDiscriminator.shape, JoUpstream.noDiscriminator.shape)
-    def drawing: JoCodecs[JODrawing] = JoCodecs(
-      JoOptimized.noDiscriminatorDrawing,
-      JoRuntime.noDiscriminator.drawing,
-      JoUpstream.noDiscriminator.drawing
-    )
-    def shapeHolder: JoCodecs[JOShapeHolder] = JoCodecs(
-      JoOptimized.noDiscriminatorShapeHolder,
-      JoRuntime.noDiscriminator.shapeHolder,
-      JoUpstream.noDiscriminator.shapeHolder
-    )
-    def colour: JoCodecs[JOColour] =
-      JoCodecs(JoOptimized.noDiscriminatorColour, JoRuntime.noDiscriminator.colour, JoUpstream.noDiscriminator.colour)
-    def either: JoCodecs[JOEither] =
-      JoCodecs(JoOptimized.noDiscriminatorEither, JoRuntime.noDiscriminator.either, JoUpstream.noDiscriminator.either)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.noDiscriminatorShape, JoRuntime.noDiscriminator.shape, JoUpstream.noDiscriminator.shape)
+    def drawing: JoCodecs[JODrawing] = JoCodecs(JoOptimized.noDiscriminatorDrawing, JoRuntime.noDiscriminator.drawing, JoUpstream.noDiscriminator.drawing)
+    def shapeHolder: JoCodecs[JOShapeHolder] = JoCodecs(JoOptimized.noDiscriminatorShapeHolder, JoRuntime.noDiscriminator.shapeHolder, JoUpstream.noDiscriminator.shapeHolder)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.noDiscriminatorColour, JoRuntime.noDiscriminator.colour, JoUpstream.noDiscriminator.colour)
+    def either: JoCodecs[JOEither] = JoCodecs(JoOptimized.noDiscriminatorEither, JoRuntime.noDiscriminator.either, JoUpstream.noDiscriminator.either)
   }
   object discriminatorAnywhere {
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.discriminatorAnywhereShape,
-      JoRuntime.discriminatorAnywhere.shape,
-      JoUpstream.discriminatorAnywhere.shape
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.discriminatorAnywhereShape, JoRuntime.discriminatorAnywhere.shape, JoUpstream.discriminatorAnywhere.shape)
   }
   object alwaysEmitDiscriminator {
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.alwaysEmitDiscriminatorShape,
-      JoRuntime.alwaysEmitDiscriminator.shape,
-      JoUpstream.alwaysEmitDiscriminator.shape
-    )
-    def circle: JoCodecs[JOCircle] = JoCodecs(
-      JoOptimized.alwaysEmitDiscriminatorCircle,
-      JoRuntime.alwaysEmitDiscriminator.circle,
-      JoUpstream.alwaysEmitDiscriminator.circle
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.alwaysEmitDiscriminatorShape, JoRuntime.alwaysEmitDiscriminator.shape, JoUpstream.alwaysEmitDiscriminator.shape)
+    def circle: JoCodecs[JOCircle] = JoCodecs(JoOptimized.alwaysEmitDiscriminatorCircle, JoRuntime.alwaysEmitDiscriminator.circle, JoUpstream.alwaysEmitDiscriminator.circle)
   }
   object circeLike {
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.circeLikeShape, JoRuntime.circeLike.shape, JoUpstream.circeLike.shape)
-    def shapeHolder: JoCodecs[JOShapeHolder] =
-      JoCodecs(JoOptimized.circeLikeShapeHolder, JoRuntime.circeLike.shapeHolder, JoUpstream.circeLike.shapeHolder)
-    def colour: JoCodecs[JOColour] =
-      JoCodecs(JoOptimized.circeLikeColour, JoRuntime.circeLike.colour, JoUpstream.circeLike.colour)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.circeLikeShape, JoRuntime.circeLike.shape, JoUpstream.circeLike.shape)
+    def shapeHolder: JoCodecs[JOShapeHolder] = JoCodecs(JoOptimized.circeLikeShapeHolder, JoRuntime.circeLike.shapeHolder, JoUpstream.circeLike.shapeHolder)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.circeLikeColour, JoRuntime.circeLike.colour, JoUpstream.circeLike.colour)
   }
   object strict {
-    def person: JoCodecs[JOPerson] =
-      JoCodecs(JoOptimized.strictPerson, JoRuntime.strict.person, JoUpstream.strict.person)
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.strictPerson, JoRuntime.strict.person, JoUpstream.strict.person)
     def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.strictShape, JoRuntime.strict.shape, JoUpstream.strict.shape)
   }
   object noTransientDefault {
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.noTransientDefaultDefaults,
-      JoRuntime.noTransientDefault.defaults,
-      JoUpstream.noTransientDefault.defaults
-    )
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.noTransientDefaultDefaults, JoRuntime.noTransientDefault.defaults, JoUpstream.noTransientDefault.defaults)
   }
   object noTransientEmpty {
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.noTransientEmptyEmptyable,
-      JoRuntime.noTransientEmpty.emptyable,
-      JoUpstream.noTransientEmpty.emptyable
-    )
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.noTransientEmptyDefaults,
-      JoRuntime.noTransientEmpty.defaults,
-      JoUpstream.noTransientEmpty.defaults
-    )
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.noTransientEmptyEmptyable, JoRuntime.noTransientEmpty.emptyable, JoUpstream.noTransientEmpty.emptyable)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.noTransientEmptyDefaults, JoRuntime.noTransientEmpty.defaults, JoUpstream.noTransientEmpty.defaults)
   }
   object noTransientNone {
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.noTransientNoneEmptyable,
-      JoRuntime.noTransientNone.emptyable,
-      JoUpstream.noTransientNone.emptyable
-    )
-    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(
-      JoOptimized.noTransientNoneNestedOption,
-      JoRuntime.noTransientNone.nestedOption,
-      JoUpstream.noTransientNone.nestedOption
-    )
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.noTransientNoneEmptyable, JoRuntime.noTransientNone.emptyable, JoUpstream.noTransientNone.emptyable)
+    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(JoOptimized.noTransientNoneNestedOption, JoRuntime.noTransientNone.nestedOption, JoUpstream.noTransientNone.nestedOption)
   }
   object requireCollections {
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.requireCollectionsEmptyable,
-      JoRuntime.requireCollections.emptyable,
-      JoUpstream.requireCollections.emptyable
-    )
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.requireCollectionsDefaults,
-      JoRuntime.requireCollections.defaults,
-      JoUpstream.requireCollections.defaults
-    )
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.requireCollectionsEmptyable, JoRuntime.requireCollections.emptyable, JoUpstream.requireCollections.emptyable)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.requireCollectionsDefaults, JoRuntime.requireCollections.defaults, JoUpstream.requireCollections.defaults)
   }
   object requireDefaults {
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.requireDefaultsDefaults,
-      JoRuntime.requireDefaults.defaults,
-      JoUpstream.requireDefaults.defaults
-    )
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.requireDefaultsDefaults, JoRuntime.requireDefaults.defaults, JoUpstream.requireDefaults.defaults)
   }
   object noDuplicationCheck {
-    def person: JoCodecs[JOPerson] = JoCodecs(
-      JoOptimized.noDuplicationCheckPerson,
-      JoRuntime.noDuplicationCheck.person,
-      JoUpstream.noDuplicationCheck.person
-    )
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.noDuplicationCheckDefaults,
-      JoRuntime.noDuplicationCheck.defaults,
-      JoUpstream.noDuplicationCheck.defaults
-    )
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.noDuplicationCheckPerson, JoRuntime.noDuplicationCheck.person, JoUpstream.noDuplicationCheck.person)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.noDuplicationCheckDefaults, JoRuntime.noDuplicationCheck.defaults, JoUpstream.noDuplicationCheck.defaults)
   }
   object stringified {
-    def stringy: JoCodecs[JOStringy] =
-      JoCodecs(JoOptimized.stringifiedStringy, JoRuntime.stringified.stringy, JoUpstream.stringified.stringy)
-    def listInt: JoCodecs[List[Int]] =
-      JoCodecs(JoOptimized.stringifiedListInt, JoRuntime.stringified.listInt, JoUpstream.stringified.listInt)
-    def optionInt: JoCodecs[Option[Int]] =
-      JoCodecs(JoOptimized.stringifiedOptionInt, JoRuntime.stringified.optionInt, JoUpstream.stringified.optionInt)
-    def tupleTop: JoCodecs[(Int, Boolean)] =
-      JoCodecs(JoOptimized.stringifiedTupleTop, JoRuntime.stringified.tupleTop, JoUpstream.stringified.tupleTop)
-    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(
-      JoOptimized.stringifiedMapIntString,
-      JoRuntime.stringified.mapIntString,
-      JoUpstream.stringified.mapIntString
-    )
-    def wrapped: JoCodecs[JOWrapped] =
-      JoCodecs(JoOptimized.stringifiedWrapped, JoRuntime.stringified.wrapped, JoUpstream.stringified.wrapped)
+    def stringy: JoCodecs[JOStringy] = JoCodecs(JoOptimized.stringifiedStringy, JoRuntime.stringified.stringy, JoUpstream.stringified.stringy)
+    def listInt: JoCodecs[List[Int]] = JoCodecs(JoOptimized.stringifiedListInt, JoRuntime.stringified.listInt, JoUpstream.stringified.listInt)
+    def optionInt: JoCodecs[Option[Int]] = JoCodecs(JoOptimized.stringifiedOptionInt, JoRuntime.stringified.optionInt, JoUpstream.stringified.optionInt)
+    def tupleTop: JoCodecs[(Int, Boolean)] = JoCodecs(JoOptimized.stringifiedTupleTop, JoRuntime.stringified.tupleTop, JoUpstream.stringified.tupleTop)
+    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(JoOptimized.stringifiedMapIntString, JoRuntime.stringified.mapIntString, JoUpstream.stringified.mapIntString)
+    def wrapped: JoCodecs[JOWrapped] = JoCodecs(JoOptimized.stringifiedWrapped, JoRuntime.stringified.wrapped, JoUpstream.stringified.wrapped)
   }
   object mapAsArray {
-    def maps: JoCodecs[JOMaps] =
-      JoCodecs(JoOptimized.mapAsArrayMaps, JoRuntime.mapAsArray.maps, JoUpstream.mapAsArray.maps)
-    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(
-      JoOptimized.mapAsArrayMapIntString,
-      JoRuntime.mapAsArray.mapIntString,
-      JoUpstream.mapAsArray.mapIntString
-    )
+    def maps: JoCodecs[JOMaps] = JoCodecs(JoOptimized.mapAsArrayMaps, JoRuntime.mapAsArray.maps, JoUpstream.mapAsArray.maps)
+    def mapIntString: JoCodecs[Map[Int, String]] = JoCodecs(JoOptimized.mapAsArrayMapIntString, JoRuntime.mapAsArray.mapIntString, JoUpstream.mapAsArray.mapIntString)
   }
   object bigDecimalPrecision {
-    def big: JoCodecs[JOBig] = JoCodecs(
-      JoOptimized.bigDecimalPrecisionBig,
-      JoRuntime.bigDecimalPrecision.big,
-      JoUpstream.bigDecimalPrecision.big
-    )
+    def big: JoCodecs[JOBig] = JoCodecs(JoOptimized.bigDecimalPrecisionBig, JoRuntime.bigDecimalPrecision.big, JoUpstream.bigDecimalPrecision.big)
   }
   object bigDecimalScaleLimit {
-    def big: JoCodecs[JOBig] = JoCodecs(
-      JoOptimized.bigDecimalScaleLimitBig,
-      JoRuntime.bigDecimalScaleLimit.big,
-      JoUpstream.bigDecimalScaleLimit.big
-    )
+    def big: JoCodecs[JOBig] = JoCodecs(JoOptimized.bigDecimalScaleLimitBig, JoRuntime.bigDecimalScaleLimit.big, JoUpstream.bigDecimalScaleLimit.big)
   }
   object bigDecimalDigitsLimit {
-    def big: JoCodecs[JOBig] = JoCodecs(
-      JoOptimized.bigDecimalDigitsLimitBig,
-      JoRuntime.bigDecimalDigitsLimit.big,
-      JoUpstream.bigDecimalDigitsLimit.big
-    )
+    def big: JoCodecs[JOBig] = JoCodecs(JoOptimized.bigDecimalDigitsLimitBig, JoRuntime.bigDecimalDigitsLimit.big, JoUpstream.bigDecimalDigitsLimit.big)
   }
   object bigIntDigitsLimit {
-    def big: JoCodecs[JOBig] =
-      JoCodecs(JoOptimized.bigIntDigitsLimitBig, JoRuntime.bigIntDigitsLimit.big, JoUpstream.bigIntDigitsLimit.big)
+    def big: JoCodecs[JOBig] = JoCodecs(JoOptimized.bigIntDigitsLimitBig, JoRuntime.bigIntDigitsLimit.big, JoUpstream.bigIntDigitsLimit.big)
   }
   object insertLimits {
-    def emptyable: JoCodecs[JOEmptyable] =
-      JoCodecs(JoOptimized.insertLimitsEmptyable, JoRuntime.insertLimits.emptyable, JoUpstream.insertLimits.emptyable)
-    def maps: JoCodecs[JOMaps] =
-      JoCodecs(JoOptimized.insertLimitsMaps, JoRuntime.insertLimits.maps, JoUpstream.insertLimits.maps)
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.insertLimitsEmptyable, JoRuntime.insertLimits.emptyable, JoUpstream.insertLimits.emptyable)
+    def maps: JoCodecs[JOMaps] = JoCodecs(JoOptimized.insertLimitsMaps, JoRuntime.insertLimits.maps, JoUpstream.insertLimits.maps)
   }
   object bitSetValueLimit {
-    def collections: JoCodecs[JOCollections] = JoCodecs(
-      JoOptimized.bitSetValueLimitCollections,
-      JoRuntime.bitSetValueLimit.collections,
-      JoUpstream.bitSetValueLimit.collections
-    )
+    def collections: JoCodecs[JOCollections] = JoCodecs(JoOptimized.bitSetValueLimitCollections, JoRuntime.bitSetValueLimit.collections, JoUpstream.bitSetValueLimit.collections)
   }
   object scalaEnumValueId {
-    def enums: JoCodecs[JOEnums] =
-      JoCodecs(JoOptimized.scalaEnumValueIdEnums, JoRuntime.scalaEnumValueId.enums, JoUpstream.scalaEnumValueId.enums)
+    def enums: JoCodecs[JOEnums] = JoCodecs(JoOptimized.scalaEnumValueIdEnums, JoRuntime.scalaEnumValueId.enums, JoUpstream.scalaEnumValueId.enums)
   }
   object javaEnumValueNameMapper {
-    def enums: JoCodecs[JOEnums] = JoCodecs(
-      JoOptimized.javaEnumValueNameMapperEnums,
-      JoRuntime.javaEnumValueNameMapper.enums,
-      JoUpstream.javaEnumValueNameMapper.enums
-    )
+    def enums: JoCodecs[JOEnums] = JoCodecs(JoOptimized.javaEnumValueNameMapperEnums, JoRuntime.javaEnumValueNameMapper.enums, JoUpstream.javaEnumValueNameMapper.enums)
   }
   object skipNestedOptionValues {
-    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(
-      JoOptimized.skipNestedOptionValuesNestedOption,
-      JoRuntime.skipNestedOptionValues.nestedOption,
-      JoUpstream.skipNestedOptionValues.nestedOption
-    )
+    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(JoOptimized.skipNestedOptionValuesNestedOption, JoRuntime.skipNestedOptionValues.nestedOption, JoUpstream.skipNestedOptionValues.nestedOption)
   }
   object inlineOneValueClasses {
-    def user: JoCodecs[JOUser] = JoCodecs(
-      JoOptimized.inlineOneValueClassesUser,
-      JoRuntime.inlineOneValueClasses.user,
-      JoUpstream.inlineOneValueClasses.user
-    )
-    def nameMap: JoCodecs[JONameMap] = JoCodecs(
-      JoOptimized.inlineOneValueClassesNameMap,
-      JoRuntime.inlineOneValueClasses.nameMap,
-      JoUpstream.inlineOneValueClasses.nameMap
-    )
+    def user: JoCodecs[JOUser] = JoCodecs(JoOptimized.inlineOneValueClassesUser, JoRuntime.inlineOneValueClasses.user, JoUpstream.inlineOneValueClasses.user)
+    def nameMap: JoCodecs[JONameMap] = JoCodecs(JoOptimized.inlineOneValueClassesNameMap, JoRuntime.inlineOneValueClasses.nameMap, JoUpstream.inlineOneValueClasses.nameMap)
   }
   object scalaTransientSupport {
-    def scalaTransient: JoCodecs[JOScalaTransient] = JoCodecs(
-      JoOptimized.scalaTransientSupportScalaTransient,
-      JoRuntime.scalaTransientSupport.scalaTransient,
-      JoUpstream.scalaTransientSupport.scalaTransient
-    )
+    def scalaTransient: JoCodecs[JOScalaTransient] = JoCodecs(JoOptimized.scalaTransientSupportScalaTransient, JoRuntime.scalaTransientSupport.scalaTransient, JoUpstream.scalaTransientSupport.scalaTransient)
   }
   object decodingOnly {
-    def person: JoCodecs[JOPerson] =
-      JoCodecs(JoOptimized.decodingOnlyPerson, JoRuntime.decodingOnly.person, JoUpstream.decodingOnly.person)
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.decodingOnlyPerson, JoRuntime.decodingOnly.person, JoUpstream.decodingOnly.person)
   }
   object encodingOnly {
-    def person: JoCodecs[JOPerson] =
-      JoCodecs(JoOptimized.encodingOnlyPerson, JoRuntime.encodingOnly.person, JoUpstream.encodingOnly.person)
+    def person: JoCodecs[JOPerson] = JoCodecs(JoOptimized.encodingOnlyPerson, JoRuntime.encodingOnly.person, JoUpstream.encodingOnly.person)
   }
   object makeWithoutDiscriminator {
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.makeWithoutDiscriminatorShape,
-      JoRuntime.makeWithoutDiscriminator.shape,
-      JoUpstream.makeWithoutDiscriminator.shape
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.makeWithoutDiscriminatorShape, JoRuntime.makeWithoutDiscriminator.shape, JoUpstream.makeWithoutDiscriminator.shape)
   }
   object makeWithRequiredCollectionFields {
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.makeWithRequiredCollectionFieldsEmptyable,
-      JoRuntime.makeWithRequiredCollectionFields.emptyable,
-      JoUpstream.makeWithRequiredCollectionFields.emptyable
-    )
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.makeWithRequiredCollectionFieldsEmptyable, JoRuntime.makeWithRequiredCollectionFields.emptyable, JoUpstream.makeWithRequiredCollectionFields.emptyable)
   }
   object makeWithRequiredDefaultFields {
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.makeWithRequiredDefaultFieldsDefaults,
-      JoRuntime.makeWithRequiredDefaultFields.defaults,
-      JoUpstream.makeWithRequiredDefaultFields.defaults
-    )
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.makeWithRequiredDefaultFieldsDefaults, JoRuntime.makeWithRequiredDefaultFields.defaults, JoUpstream.makeWithRequiredDefaultFields.defaults)
   }
   object makeWithSkipNestedOptionValues {
-    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(
-      JoOptimized.makeWithSkipNestedOptionValuesNestedOption,
-      JoRuntime.makeWithSkipNestedOptionValues.nestedOption,
-      JoUpstream.makeWithSkipNestedOptionValues.nestedOption
-    )
+    def nestedOption: JoCodecs[JONestedOption] = JoCodecs(JoOptimized.makeWithSkipNestedOptionValuesNestedOption, JoRuntime.makeWithSkipNestedOptionValues.nestedOption, JoUpstream.makeWithSkipNestedOptionValues.nestedOption)
   }
   object makeCirceLike {
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.makeCirceLikeShape, JoRuntime.makeCirceLike.shape, JoUpstream.makeCirceLike.shape)
-    def colour: JoCodecs[JOColour] =
-      JoCodecs(JoOptimized.makeCirceLikeColour, JoRuntime.makeCirceLike.colour, JoUpstream.makeCirceLike.colour)
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.makeCirceLikeEmptyable,
-      JoRuntime.makeCirceLike.emptyable,
-      JoUpstream.makeCirceLike.emptyable
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.makeCirceLikeShape, JoRuntime.makeCirceLike.shape, JoUpstream.makeCirceLike.shape)
+    def colour: JoCodecs[JOColour] = JoCodecs(JoOptimized.makeCirceLikeColour, JoRuntime.makeCirceLike.colour, JoUpstream.makeCirceLike.colour)
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.makeCirceLikeEmptyable, JoRuntime.makeCirceLike.emptyable, JoUpstream.makeCirceLike.emptyable)
   }
   object makeCirceLikeSnakeCased {
-    def camel: JoCodecs[JOCamel] = JoCodecs(
-      JoOptimized.makeCirceLikeSnakeCasedCamel,
-      JoRuntime.makeCirceLikeSnakeCased.camel,
-      JoUpstream.makeCirceLikeSnakeCased.camel
-    )
-    def shape: JoCodecs[JOShape] = JoCodecs(
-      JoOptimized.makeCirceLikeSnakeCasedShape,
-      JoRuntime.makeCirceLikeSnakeCased.shape,
-      JoUpstream.makeCirceLikeSnakeCased.shape
-    )
-    def enums: JoCodecs[JOEnums] = JoCodecs(
-      JoOptimized.makeCirceLikeSnakeCasedEnums,
-      JoRuntime.makeCirceLikeSnakeCased.enums,
-      JoUpstream.makeCirceLikeSnakeCased.enums
-    )
+    def camel: JoCodecs[JOCamel] = JoCodecs(JoOptimized.makeCirceLikeSnakeCasedCamel, JoRuntime.makeCirceLikeSnakeCased.camel, JoUpstream.makeCirceLikeSnakeCased.camel)
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.makeCirceLikeSnakeCasedShape, JoRuntime.makeCirceLikeSnakeCased.shape, JoUpstream.makeCirceLikeSnakeCased.shape)
+    def enums: JoCodecs[JOEnums] = JoCodecs(JoOptimized.makeCirceLikeSnakeCasedEnums, JoRuntime.makeCirceLikeSnakeCased.enums, JoUpstream.makeCirceLikeSnakeCased.enums)
   }
   object makeOpenapiLike {
-    def shape: JoCodecs[JOShape] =
-      JoCodecs(JoOptimized.makeOpenapiLikeShape, JoRuntime.makeOpenapiLike.shape, JoUpstream.makeOpenapiLike.shape)
-    def defaults: JoCodecs[JODefaults] = JoCodecs(
-      JoOptimized.makeOpenapiLikeDefaults,
-      JoRuntime.makeOpenapiLike.defaults,
-      JoUpstream.makeOpenapiLike.defaults
-    )
-    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(
-      JoOptimized.makeOpenapiLikeEmptyable,
-      JoRuntime.makeOpenapiLike.emptyable,
-      JoUpstream.makeOpenapiLike.emptyable
-    )
+    def shape: JoCodecs[JOShape] = JoCodecs(JoOptimized.makeOpenapiLikeShape, JoRuntime.makeOpenapiLike.shape, JoUpstream.makeOpenapiLike.shape)
+    def defaults: JoCodecs[JODefaults] = JoCodecs(JoOptimized.makeOpenapiLikeDefaults, JoRuntime.makeOpenapiLike.defaults, JoUpstream.makeOpenapiLike.defaults)
+    def emptyable: JoCodecs[JOEmptyable] = JoCodecs(JoOptimized.makeOpenapiLikeEmptyable, JoRuntime.makeOpenapiLike.emptyable, JoUpstream.makeOpenapiLike.emptyable)
   }
 }
