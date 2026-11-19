@@ -59,135 +59,87 @@ object JoUpstream {
     lazy val mapIntString: JsonValueCodec[Map[Int, String]] = JsonCodecMaker.make[Map[Int, String]]
   }
   object snakeCase {
-    lazy val camel: JsonValueCodec[JOCamel] =
-      JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case))
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case))
   }
   object snakeCase2 {
-    lazy val camel: JsonValueCodec[JOCamel] =
-      JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2))
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2))
   }
   object kebabCase {
-    lazy val camel: JsonValueCodec[JOCamel] =
-      JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case`))
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.`enforce-kebab-case`))
   }
   object pascalCase {
-    lazy val camel: JsonValueCodec[JOCamel] =
-      JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.EnforcePascalCase))
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.EnforcePascalCase))
   }
   object camelCase {
-    lazy val camel: JsonValueCodec[JOCamel] =
-      JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforceCamelCase))
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforceCamelCase))
   }
   object partialFieldMapper {
-    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper {
-      case "firstName" => "given"
-    })
+    lazy val camel: JsonValueCodec[JOCamel] = JsonCodecMaker.make[JOCamel](CodecMakerConfig.withFieldNameMapper { case "firstName" => "given" })
   }
   object snakeCaseLeaves {
-    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](
-      CodecMakerConfig.withAdtLeafClassNameMapper(x =>
-        JsonCodecMaker.enforce_snake_case(JsonCodecMaker.simpleClassName(x))
-      )
-    )
-    lazy val colour: JsonValueCodec[JOColour] = JsonCodecMaker.make[JOColour](
-      CodecMakerConfig.withAdtLeafClassNameMapper(x =>
-        JsonCodecMaker.enforce_snake_case(JsonCodecMaker.simpleClassName(x))
-      )
-    )
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withAdtLeafClassNameMapper(x => JsonCodecMaker.enforce_snake_case(JsonCodecMaker.simpleClassName(x))))
+    lazy val colour: JsonValueCodec[JOColour] = JsonCodecMaker.make[JOColour](CodecMakerConfig.withAdtLeafClassNameMapper(x => JsonCodecMaker.enforce_snake_case(JsonCodecMaker.simpleClassName(x))))
   }
   object discriminatorKind {
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(Some("kind")))
-    lazy val drawing: JsonValueCodec[JODrawing] =
-      JsonCodecMaker.make[JODrawing](CodecMakerConfig.withDiscriminatorFieldName(Some("kind")))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(Some("kind")))
+    lazy val drawing: JsonValueCodec[JODrawing] = JsonCodecMaker.make[JODrawing](CodecMakerConfig.withDiscriminatorFieldName(Some("kind")))
   }
   object noDiscriminator {
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val drawing: JsonValueCodec[JODrawing] =
-      JsonCodecMaker.make[JODrawing](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val shapeHolder: JsonValueCodec[JOShapeHolder] =
-      JsonCodecMaker.make[JOShapeHolder](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val colour: JsonValueCodec[JOColour] =
-      JsonCodecMaker.make[JOColour](CodecMakerConfig.withDiscriminatorFieldName(None))
-    lazy val either: JsonValueCodec[JOEither] =
-      JsonCodecMaker.make[JOEither](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val drawing: JsonValueCodec[JODrawing] = JsonCodecMaker.make[JODrawing](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val shapeHolder: JsonValueCodec[JOShapeHolder] = JsonCodecMaker.make[JOShapeHolder](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val colour: JsonValueCodec[JOColour] = JsonCodecMaker.make[JOColour](CodecMakerConfig.withDiscriminatorFieldName(None))
+    lazy val either: JsonValueCodec[JOEither] = JsonCodecMaker.make[JOEither](CodecMakerConfig.withDiscriminatorFieldName(None))
   }
   object discriminatorAnywhere {
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withRequireDiscriminatorFirst(false))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withRequireDiscriminatorFirst(false))
   }
   object alwaysEmitDiscriminator {
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
-    lazy val circle: JsonValueCodec[JOCircle] =
-      JsonCodecMaker.make[JOCircle](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
+    lazy val circle: JsonValueCodec[JOCircle] = JsonCodecMaker.make[JOCircle](CodecMakerConfig.withAlwaysEmitDiscriminator(true))
   }
   object circeLike {
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
-    lazy val shapeHolder: JsonValueCodec[JOShapeHolder] = JsonCodecMaker.make[JOShapeHolder](
-      CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true)
-    )
-    lazy val colour: JsonValueCodec[JOColour] =
-      JsonCodecMaker.make[JOColour](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
+    lazy val shapeHolder: JsonValueCodec[JOShapeHolder] = JsonCodecMaker.make[JOShapeHolder](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
+    lazy val colour: JsonValueCodec[JOColour] = JsonCodecMaker.make[JOColour](CodecMakerConfig.withDiscriminatorFieldName(None).withCirceLikeObjectEncoding(true))
   }
   object strict {
-    lazy val person: JsonValueCodec[JOPerson] =
-      JsonCodecMaker.make[JOPerson](CodecMakerConfig.withSkipUnexpectedFields(false))
-    lazy val shape: JsonValueCodec[JOShape] =
-      JsonCodecMaker.make[JOShape](CodecMakerConfig.withSkipUnexpectedFields(false))
+    lazy val person: JsonValueCodec[JOPerson] = JsonCodecMaker.make[JOPerson](CodecMakerConfig.withSkipUnexpectedFields(false))
+    lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.make[JOShape](CodecMakerConfig.withSkipUnexpectedFields(false))
   }
   object noTransientDefault {
-    lazy val defaults: JsonValueCodec[JODefaults] =
-      JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientDefault(false))
+    lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientDefault(false))
   }
   object noTransientEmpty {
-    lazy val emptyable: JsonValueCodec[JOEmptyable] =
-      JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientEmpty(false))
-    lazy val defaults: JsonValueCodec[JODefaults] =
-      JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientEmpty(false))
+    lazy val emptyable: JsonValueCodec[JOEmptyable] = JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientEmpty(false))
+    lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientEmpty(false))
   }
   object noTransientNone {
-    lazy val emptyable: JsonValueCodec[JOEmptyable] =
-      JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientNone(false))
-    lazy val nestedOption: JsonValueCodec[JONestedOption] =
-      JsonCodecMaker.make[JONestedOption](CodecMakerConfig.withTransientNone(false))
+    lazy val emptyable: JsonValueCodec[JOEmptyable] = JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientNone(false))
+    lazy val nestedOption: JsonValueCodec[JONestedOption] = JsonCodecMaker.make[JONestedOption](CodecMakerConfig.withTransientNone(false))
   }
   object requireCollections {
-    lazy val emptyable: JsonValueCodec[JOEmptyable] =
-      JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientEmpty(false).withRequireCollectionFields(true))
-    lazy val defaults: JsonValueCodec[JODefaults] =
-      JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientEmpty(false).withRequireCollectionFields(true))
+    lazy val emptyable: JsonValueCodec[JOEmptyable] = JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withTransientEmpty(false).withRequireCollectionFields(true))
+    lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientEmpty(false).withRequireCollectionFields(true))
   }
   object requireDefaults {
-    lazy val defaults: JsonValueCodec[JODefaults] =
-      JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientDefault(false).withRequireDefaultFields(true))
+    lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.make[JODefaults](CodecMakerConfig.withTransientDefault(false).withRequireDefaultFields(true))
   }
   object noDuplicationCheck {
-    lazy val person: JsonValueCodec[JOPerson] =
-      JsonCodecMaker.make[JOPerson](CodecMakerConfig.withCheckFieldDuplication(false))
-    lazy val defaults: JsonValueCodec[JODefaults] =
-      JsonCodecMaker.make[JODefaults](CodecMakerConfig.withCheckFieldDuplication(false))
+    lazy val person: JsonValueCodec[JOPerson] = JsonCodecMaker.make[JOPerson](CodecMakerConfig.withCheckFieldDuplication(false))
+    lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.make[JODefaults](CodecMakerConfig.withCheckFieldDuplication(false))
   }
   object stringified {
-    lazy val stringy: JsonValueCodec[JOStringy] =
-      JsonCodecMaker.make[JOStringy](CodecMakerConfig.withIsStringified(true))
-    lazy val listInt: JsonValueCodec[List[Int]] =
-      JsonCodecMaker.make[List[Int]](CodecMakerConfig.withIsStringified(true))
-    lazy val optionInt: JsonValueCodec[Option[Int]] =
-      JsonCodecMaker.make[Option[Int]](CodecMakerConfig.withIsStringified(true))
-    lazy val tupleTop: JsonValueCodec[(Int, Boolean)] =
-      JsonCodecMaker.make[(Int, Boolean)](CodecMakerConfig.withIsStringified(true))
-    lazy val mapIntString: JsonValueCodec[Map[Int, String]] =
-      JsonCodecMaker.make[Map[Int, String]](CodecMakerConfig.withIsStringified(true))
-    lazy val wrapped: JsonValueCodec[JOWrapped] =
-      JsonCodecMaker.make[JOWrapped](CodecMakerConfig.withIsStringified(true))
+    lazy val stringy: JsonValueCodec[JOStringy] = JsonCodecMaker.make[JOStringy](CodecMakerConfig.withIsStringified(true))
+    lazy val listInt: JsonValueCodec[List[Int]] = JsonCodecMaker.make[List[Int]](CodecMakerConfig.withIsStringified(true))
+    lazy val optionInt: JsonValueCodec[Option[Int]] = JsonCodecMaker.make[Option[Int]](CodecMakerConfig.withIsStringified(true))
+    lazy val tupleTop: JsonValueCodec[(Int, Boolean)] = JsonCodecMaker.make[(Int, Boolean)](CodecMakerConfig.withIsStringified(true))
+    lazy val mapIntString: JsonValueCodec[Map[Int, String]] = JsonCodecMaker.make[Map[Int, String]](CodecMakerConfig.withIsStringified(true))
+    lazy val wrapped: JsonValueCodec[JOWrapped] = JsonCodecMaker.make[JOWrapped](CodecMakerConfig.withIsStringified(true))
   }
   object mapAsArray {
     lazy val maps: JsonValueCodec[JOMaps] = JsonCodecMaker.make[JOMaps](CodecMakerConfig.withMapAsArray(true))
-    lazy val mapIntString: JsonValueCodec[Map[Int, String]] =
-      JsonCodecMaker.make[Map[Int, String]](CodecMakerConfig.withMapAsArray(true))
+    lazy val mapIntString: JsonValueCodec[Map[Int, String]] = JsonCodecMaker.make[Map[Int, String]](CodecMakerConfig.withMapAsArray(true))
   }
   object bigDecimalPrecision {
     lazy val big: JsonValueCodec[JOBig] = JsonCodecMaker.make[JOBig](CodecMakerConfig.withBigDecimalPrecision(5))
@@ -202,36 +154,27 @@ object JoUpstream {
     lazy val big: JsonValueCodec[JOBig] = JsonCodecMaker.make[JOBig](CodecMakerConfig.withBigIntDigitsLimit(3))
   }
   object insertLimits {
-    lazy val emptyable: JsonValueCodec[JOEmptyable] =
-      JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
-    lazy val maps: JsonValueCodec[JOMaps] =
-      JsonCodecMaker.make[JOMaps](CodecMakerConfig.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
+    lazy val emptyable: JsonValueCodec[JOEmptyable] = JsonCodecMaker.make[JOEmptyable](CodecMakerConfig.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
+    lazy val maps: JsonValueCodec[JOMaps] = JsonCodecMaker.make[JOMaps](CodecMakerConfig.withMapMaxInsertNumber(2).withSetMaxInsertNumber(2))
   }
   object bitSetValueLimit {
-    lazy val collections: JsonValueCodec[JOCollections] =
-      JsonCodecMaker.make[JOCollections](CodecMakerConfig.withBitSetValueLimit(10))
+    lazy val collections: JsonValueCodec[JOCollections] = JsonCodecMaker.make[JOCollections](CodecMakerConfig.withBitSetValueLimit(10))
   }
   object scalaEnumValueId {
-    lazy val enums: JsonValueCodec[JOEnums] =
-      JsonCodecMaker.make[JOEnums](CodecMakerConfig.withUseScalaEnumValueId(true))
+    lazy val enums: JsonValueCodec[JOEnums] = JsonCodecMaker.make[JOEnums](CodecMakerConfig.withUseScalaEnumValueId(true))
   }
   object javaEnumValueNameMapper {
-    lazy val enums: JsonValueCodec[JOEnums] =
-      JsonCodecMaker.make[JOEnums](CodecMakerConfig.withJavaEnumValueNameMapper(JsonCodecMaker.enforce_snake_case))
+    lazy val enums: JsonValueCodec[JOEnums] = JsonCodecMaker.make[JOEnums](CodecMakerConfig.withJavaEnumValueNameMapper(JsonCodecMaker.enforce_snake_case))
   }
   object skipNestedOptionValues {
-    lazy val nestedOption: JsonValueCodec[JONestedOption] =
-      JsonCodecMaker.make[JONestedOption](CodecMakerConfig.withSkipNestedOptionValues(true))
+    lazy val nestedOption: JsonValueCodec[JONestedOption] = JsonCodecMaker.make[JONestedOption](CodecMakerConfig.withSkipNestedOptionValues(true))
   }
   object inlineOneValueClasses {
-    lazy val user: JsonValueCodec[JOUser] =
-      JsonCodecMaker.make[JOUser](CodecMakerConfig.withInlineOneValueClasses(true))
-    lazy val nameMap: JsonValueCodec[JONameMap] =
-      JsonCodecMaker.make[JONameMap](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val user: JsonValueCodec[JOUser] = JsonCodecMaker.make[JOUser](CodecMakerConfig.withInlineOneValueClasses(true))
+    lazy val nameMap: JsonValueCodec[JONameMap] = JsonCodecMaker.make[JONameMap](CodecMakerConfig.withInlineOneValueClasses(true))
   }
   object scalaTransientSupport {
-    lazy val scalaTransient: JsonValueCodec[JOScalaTransient] =
-      JsonCodecMaker.make[JOScalaTransient](CodecMakerConfig.withScalaTransientSupport(true))
+    lazy val scalaTransient: JsonValueCodec[JOScalaTransient] = JsonCodecMaker.make[JOScalaTransient](CodecMakerConfig.withScalaTransientSupport(true))
   }
   object decodingOnly {
     lazy val person: JsonValueCodec[JOPerson] = JsonCodecMaker.make[JOPerson](CodecMakerConfig.withDecodingOnly(true))
@@ -249,8 +192,7 @@ object JoUpstream {
     lazy val defaults: JsonValueCodec[JODefaults] = JsonCodecMaker.makeWithRequiredDefaultFields[JODefaults]
   }
   object makeWithSkipNestedOptionValues {
-    lazy val nestedOption: JsonValueCodec[JONestedOption] =
-      JsonCodecMaker.makeWithSkipNestedOptionValues[JONestedOption]
+    lazy val nestedOption: JsonValueCodec[JONestedOption] = JsonCodecMaker.makeWithSkipNestedOptionValues[JONestedOption]
   }
   object makeCirceLike {
     lazy val shape: JsonValueCodec[JOShape] = JsonCodecMaker.makeCirceLike[JOShape]
