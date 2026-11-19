@@ -36,6 +36,9 @@ Each project is tested in isolation: no downstream project (Chimney, application
   predicates (each with its documented reason) and `CirceOracle.unexplained` reports both unexplained differences and
   expected ones that matched nothing. Their fixtures live in `src/main/scala` so the tests always read them from the
   classpath, as users deriving for another module's types do (Hearth orders subtypes differently otherwise).
+  `CirceUpstreamSuitesOracleSpec` / `scala-3/CirceCoreSuitesOracleSpec` run the fixtures and configurations of
+  upstream's own test suites (`Cu*` fixtures, `CuCodecs` per side): when auditing parity, port upstream's test fixtures
+  into the oracle rather than re-reading its docs.
 - `jsoniterjson/JsoniterJsonOracleSpec`: `kindlings-jsoniter-json` vs circe's `Json` with jsoniter-scala-circe.
 - When upstream itself behaves differently on Scala 2 and 3 (pureconfig's enumeration failures, quicklens' negative
   `.index`), match each version (version-specific runtime helpers in the module) or keep the version-specific
