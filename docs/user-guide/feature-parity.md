@@ -375,7 +375,7 @@ Kindlings' SemigroupalK/ApplyK still keep the first algebra's members without `F
 |---|---|
 | Implicit `Diff` for a field type overrides derivation | Yes |
 | Approximate numeric comparison | `Diff.approximate(epsilon)` |
-| Ignoring fields | Top-level fields only: `ignoreField(name)` / `modifyField(name).ignore` |
+| Ignoring fields | Top-level fields only: `ignoreField(name)` / `modifyField(name).ignore` (and `modifyField(name).using(diff)` to replace a field's comparison) |
 | Key-matched sequence diff | `Diff.seqDiff(elementDiff, ObjectMatcher.by(key))` |
 | Assertions | `Diff.assertNoDiff` / `Diff.assertDiff` (throw `AssertionError`, framework-agnostic) |
 

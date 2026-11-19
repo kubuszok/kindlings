@@ -145,8 +145,8 @@ differences in it do not make the values differ:
 
 The name refers to a field of the outermost case class (or of the matched subtype, for a sealed trait); fields of nested
 types are not reached. To ignore a nested field, put an adjusted instance of the nested type in implicit scope before
-deriving the outer one. `modifyField(name).using(diff)` exists as well, but it currently does not replace the field's
-comparison.
+deriving the outer one. `modifyField(name).using(diff)` replaces the comparison of the named field with `diff` (also
+inside sealed-trait variants).
 
 ### Comparing collection elements by key
 
@@ -394,7 +394,7 @@ Supported formats: `30` (seconds), `30s`, `5000ms`, `1m`.
 | Set diff | Yes | Yes | Yes |
 | Option diff | Yes | Yes | Yes |
 | Recursive types | Yes | Yes | Yes |
-| Path-based configuration | Yes (`ignoreAt`, `replace`) | Yes (`modify(_.field).ignore`) | Top-level fields only (`ignoreField(name)`, `modifyField(name).ignore`) |
+| Path-based configuration | Yes (`ignoreAt`, `replace`) | Yes (`modify(_.field).ignore`) | Top-level fields only (`ignoreField(name)`, `modifyField(name).ignore`, `modifyField(name).using(diff)`) |
 | Test framework integrations | MUnit, ScalaTest, Weaver | MUnit, ScalaTest, Weaver, Specs2, utest | Framework-agnostic `Diff.assertNoDiff` / `Diff.assertDiff` only |
 | Cats collection support | Yes | Yes | Yes (with `kindlings-cats-integration`) |
 | Custom equality (`useEquals`) | Yes | Yes | Via an implicit `Diff` for the type (no `useEquals` helper) |
