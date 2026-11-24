@@ -28,9 +28,9 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
-      - uses: coursier/setup-action@v3.1.0
+      - uses: coursier/setup-action@v3.1.1
         with:
-          jvm: "temurin:1.17.0.15"
+          jvm: "temurin:17.0.15"
           apps: sbt
       # sbt 2's `sbt` launcher defaults to a thin client that starts a background server. On a runner that server keeps
       # the environment of the step that started it and can fail to start (`failed to connect to server`). `--server`
