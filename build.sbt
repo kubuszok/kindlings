@@ -51,7 +51,7 @@ val useCrossQuotes = versions.scalas.flatMap { scalaVersion =>
 }
 
 // On Scala Native, scalacheck 1.19.0 still depends on `test-interface_native0.5` 0.5.8 while the
-// rest of the build (hearth, scala-native 0.5.12) pulls 0.5.12; the two are binary-compatible but
+// rest of the build (hearth, scala-native 0.5.13) pulls 0.5.12; the two are binary-compatible but
 // sbt's strict eviction check fails the `update` task. Downgrade the eviction error to a warning on
 // the native rows only (JVM/JS keep the strict check).
 val nativeEvictionWarn = List(
