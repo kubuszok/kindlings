@@ -28,7 +28,8 @@ object KindlingsJsoniterJsonInstances {
   val default: JsonValueCodec[Json] = JsonCodec.jsonValueCodec
   val sortKeys: JsonValueCodec[Json] = JsonCodec.jsonCodec(sortKeys = true)
   val dropNulls: JsonValueCodec[Json] = JsonCodec.jsonCodec(doSerialize = json => !json.isNull)
-  val jsCompatible: JsonValueCodec[Json] = JsonCodec.jsonCodec(numberSerializer = JsonCodec.jsCompatibleNumberSerializer)
+  val jsCompatible: JsonValueCodec[Json] =
+    JsonCodec.jsonCodec(numberSerializer = JsonCodec.jsCompatibleNumberSerializer)
   val rounding: JsonValueCodec[Json] =
     JsonCodec.jsonCodec(numberParser = JsonCodec.numberParser(mc = JsonReader.bigDecimalMathContext))
 

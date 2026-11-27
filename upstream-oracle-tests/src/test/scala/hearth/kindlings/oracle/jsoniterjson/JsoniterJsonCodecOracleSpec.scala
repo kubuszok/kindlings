@@ -30,7 +30,11 @@ final class JsoniterJsonCodecOracleSpec extends MacroSuite {
   }
 
   private def check(differences: List[String], expected: List[String] = Nil): Unit =
-    assertEquals(differences, expected, s"Kindlings vs jsoniter-scala-circe differences:\n${differences.mkString("\n")}")
+    assertEquals(
+      differences,
+      expected,
+      s"Kindlings vs jsoniter-scala-circe differences:\n${differences.mkString("\n")}"
+    )
 
   private val pi = "3.14159265358979323846264338327950288419716939937510"
   private val longDecimal = "0." + "1234567890" * 30 + "123456" // 307 digits, including the leading zero
