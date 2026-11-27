@@ -12,6 +12,20 @@ final private[tapirschemaderivation] class SchemaMacros(q: Quotes)
       JsonSchemaConfigs,
       SchemaMacrosImpl {
 
+  /** The Scala 3 compiler lists annotations in reverse declaration order (tapir's derivation reverses them likewise).
+    */
+  override protected def annotationsInDeclarationOrder[X](annotations: List[X]): List[X] = annotations.reverse
+
+  /** `Obj.Value` of a `scala.Enumeration`: the type of `Obj`. */
+  override protected def enumerationObjectOf[A: Type]: Option[??] = {
+    import q.reflect.*
+    TypeRepr.of[A].dealias match {
+      case TypeRef(qual, "Value") if qual.termSymbol.flags.is(Flags.Module) =>
+        Some(UntypedType.as_??(qual.asInstanceOf[UntypedType]))
+      case _ => None
+    }
+  }
+
   /** `T | Null`: `T` without the `Null` member(s) (as jsoniter-derivation's `CodecMacros.nullableUnionUnderlying`). */
   override protected def nullableUnionUnderlying[A: Type]: Option[??] = {
     import q.reflect.*

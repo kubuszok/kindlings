@@ -12,6 +12,16 @@ final private[tapirschemaderivation] class SchemaMacros(val c: blackbox.Context)
     with JsonSchemaConfigs
     with SchemaMacrosImpl {
 
+  /** `Obj.Value` of a `scala.Enumeration`: the type of `Obj`. */
+  override protected def enumerationObjectOf[A: Type]: Option[??] = {
+    import c.universe.*
+    UntypedType.fromTyped[A].dealias match {
+      case TypeRef(pre, sym, Nil) if sym.name.toString == "Value" && pre.termSymbol.isModule =>
+        Some(UntypedType.as_??(pre.asInstanceOf[UntypedType]))
+      case _ => None
+    }
+  }
+
   def deriveSchemaImpl[A: c.WeakTypeTag]: c.Expr[Schema[A]] = deriveSchema[A]
 
   def deriveKindlingsSchemaImpl[A: c.WeakTypeTag]: c.Expr[KindlingsSchema[A]] = deriveKindlingsSchema[A]

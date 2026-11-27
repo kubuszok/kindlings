@@ -51,6 +51,7 @@ trait SchemaMacrosImpl
     lazy val ListAnyType: Type[List[Any]] = Type.of[List[Any]]
     lazy val StringType: Type[String] = Type.of[String]
     lazy val BooleanType: Type[Boolean] = Type.of[Boolean]
+    lazy val IntType: Type[Int] = Type.of[Int]
   }
 
   /** `T | Null` (a Scala 3 nullable type): `T` without the `Null` member(s). `None` on Scala 2 and for other types. */
@@ -372,7 +373,7 @@ trait SchemaMacrosImpl
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
 
     val sNameExpr = computeSNameExpr[A](sctx.derivedType)
-    val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
+    val typeAnnsExpr: Expr[List[Any]] = productTypeAnnotationsExpr[A]
 
     val rawSchemaExpr = Expr.quote {
       TapirSchemaUtils.productSchema[A](Expr.splice(sNameExpr), TapirSchemaUtils.emptyFieldList[A])
@@ -407,7 +408,7 @@ trait SchemaMacrosImpl
         }
       }
 
-    val typeAnnsExpr: Expr[List[Any]] = typeAnnotationsExpr[A]
+    val typeAnnsExpr: Expr[List[Any]] = productTypeAnnotationsExpr[A]
 
     for {
       fieldExprs <- fieldsResult
@@ -435,7 +436,7 @@ trait SchemaMacrosImpl
 
     val fieldIndex = param.index
     val encodedNameExpr: Expr[String] = sctx.jsonCfg.resolveFieldName(param, fieldName)
-    val annsExpr: Expr[List[Any]] = fieldAnnotationsExpr(param)
+    val annsExpr: Expr[List[Any]] = fieldAnnotationsExpr[A](fieldName, param)
 
     // Compile-time type checks for field enrichment (C5, C6, C8)
     val isNumeric: Boolean = isNumericFieldType[Field]
@@ -653,9 +654,11 @@ trait SchemaMacrosImpl
         Expr.quote(Expr.splice(nameExpr) :: Expr.splice(acc))
       }
 
+    val validatorNameExpr = enumerationValidatorNameExpr[A]
     val rawSchemaExpr = Expr.quote {
-      TapirSchemaUtils.stringEnumSchema[A](
+      TapirSchemaUtils.stringEnumSchemaNamed[A](
         Expr.splice(sNameExpr),
+        Expr.splice(validatorNameExpr),
         Expr.splice(singletonValuesExpr),
         Expr.splice(namesListExpr)
       )
@@ -766,6 +769,17 @@ trait SchemaMacrosImpl
         }
       }
 
+    // Chooses the subtype of a value by a pattern match (SCoproduct.subtypeSchema, used by Schema.applyValidation);
+    // union types (whose members may need a user-provided TypeTest) are matched by their subtypes' names.
+    val childTypes: List[??] = children.map { case (_, child) => child.Underlying.as_?? }
+    val subtypeIndexFn: Option[Expr[A => Int]] =
+      if (Type[A].isUnionType) None
+      else
+        Some(Expr.quote { (value: A) =>
+          Expr.splice(subtypeIndexExpr[A](Expr.quote(value), childTypes))
+        })
+    val validatorNameExpr = enumerationValidatorNameExpr[A]
+
     for {
       childSchemaExprs <- childSchemasResult
       // Build subtypes list
@@ -774,17 +788,34 @@ trait SchemaMacrosImpl
       ) { (schemaExpr, acc) =>
         Expr.quote(Expr.splice(schemaExpr).asInstanceOf[Schema[Any]] :: Expr.splice(acc))
       }
-      coproductExpr = Expr.quote {
-        TapirSchemaUtils.coproductSchemaWithEncoding[A](
-          Expr.splice(sNameExpr),
-          Expr.splice(subtypesListExpr),
-          Expr.splice(discriminatorExpr),
-          Expr.splice(resolvedNamesListExpr),
-          Expr.splice(singletonFlagsExpr),
-          Expr.splice(singletonsAsStringsExpr),
-          Expr.splice(wrappedExpr),
-          Expr.splice(Expr(wrapNonObjects))
-        )
+      coproductExpr = subtypeIndexFn match {
+        case Some(subtypeIndex) =>
+          Expr.quote {
+            TapirSchemaUtils.coproductSchemaWithSubtypeIndex[A](
+              Expr.splice(sNameExpr),
+              Expr.splice(subtypesListExpr),
+              Expr.splice(discriminatorExpr),
+              Expr.splice(resolvedNamesListExpr),
+              Expr.splice(singletonFlagsExpr),
+              Expr.splice(singletonsAsStringsExpr),
+              Expr.splice(wrappedExpr),
+              Expr.splice(Expr(wrapNonObjects)),
+              Expr.splice(subtypeIndex)
+            )
+          }
+        case None =>
+          Expr.quote {
+            TapirSchemaUtils.coproductSchemaWithEncoding[A](
+              Expr.splice(sNameExpr),
+              Expr.splice(subtypesListExpr),
+              Expr.splice(discriminatorExpr),
+              Expr.splice(resolvedNamesListExpr),
+              Expr.splice(singletonFlagsExpr),
+              Expr.splice(singletonsAsStringsExpr),
+              Expr.splice(wrappedExpr),
+              Expr.splice(Expr(wrapNonObjects))
+            )
+          }
       }
       rawSchemaExpr = singletonValuesOpt match {
         // Java enum / scala.Enumeration values — at runtime, branch on valueEnumsAsStrings (and Enumeration ids)
@@ -794,10 +825,15 @@ trait SchemaMacrosImpl
           val asStringsExpr: Expr[Boolean] = sctx.jsonCfg.valueEnumsAsStrings
           Expr.quote {
             if (Expr.splice(asIdsExpr))
-              TapirSchemaUtils.enumerationIdSchema[A](Expr.splice(sNameExpr), Expr.splice(singletonValuesExpr))
-            else if (Expr.splice(asStringsExpr))
-              TapirSchemaUtils.stringEnumSchema[A](
+              TapirSchemaUtils.enumerationIdSchemaNamed[A](
                 Expr.splice(sNameExpr),
+                Expr.splice(validatorNameExpr),
+                Expr.splice(singletonValuesExpr)
+              )
+            else if (Expr.splice(asStringsExpr))
+              TapirSchemaUtils.stringEnumSchemaNamed[A](
+                Expr.splice(sNameExpr),
+                Expr.splice(validatorNameExpr),
                 Expr.splice(singletonValuesExpr),
                 Expr.splice(resolvedNamesListExpr)
               )
@@ -807,8 +843,9 @@ trait SchemaMacrosImpl
         case Some(singletonValuesExpr) =>
           Expr.quote {
             if (Expr.splice(enumAsStringsExpr))
-              TapirSchemaUtils.stringEnumSchema[A](
+              TapirSchemaUtils.stringEnumSchemaNamed[A](
                 Expr.splice(sNameExpr),
+                Expr.splice(validatorNameExpr),
                 Expr.splice(singletonValuesExpr),
                 Expr.splice(resolvedNamesListExpr)
               )
@@ -898,8 +935,80 @@ trait SchemaMacrosImpl
   protected def computeSNameExpr[A: Type](derivedType: Option[??]): Expr[SName] = {
     implicit val SNameT: Type[SName] = TsTypes.SNameType
     implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
-    val fullNameExpr: Expr[String] = computeFullNameExpr[A](derivedType)
+    val fullNameExpr: Expr[String] = (enumerationObjectName[A] orElse unionTypeName[A]) match {
+      case Some(name) => Expr(name)
+      case None       => computeFullNameExpr[A](derivedType)
+    }
+    val parsed = Expr.quote(TapirSchemaUtils.parseSName(Expr.splice(fullNameExpr)))
+    // As tapir: `@encodedName` on the type (not inherited) replaces its name, without type parameters
+    val encodedNames = ownTypeAnnotations[A].filter(ann => annotationClass(ann) == EncodedNameAnnotation)
+    if (encodedNames.isEmpty) parsed
+    else {
+      val annsExpr = collectAnnotationsExpr(encodedNames.map(_.asUntyped))
+      Expr.quote(TapirSchemaUtils.sNameWithEncodedName(Expr.splice(parsed), Expr.splice(annsExpr)))
+    }
+  }
+
+  /** The name tapir's `Validator.derivedEnumeration` / `Schema.derivedEnumerationValue` give the enumeration validator:
+    * the type's full name (the `scala.Enumeration` object's for its values), never `@encodedName`.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def enumerationValidatorNameExpr[A: Type]: Expr[SName] = {
+    implicit val SNameT: Type[SName] = TsTypes.SNameType
+    implicit val Utils: Type[TapirSchemaUtils.type] = TsTypes.SchemaTypeUtils
+    val fullNameExpr: Expr[String] = enumerationObjectName[A] match {
+      case Some(objectName) => Expr(objectName)
+      case None             => computeFullNameExpr[A](derivedType = None)
+    }
     Expr.quote(TapirSchemaUtils.parseSName(Expr.splice(fullNameExpr)))
+  }
+
+  /** For a value of a `scala.Enumeration` (`Obj.Value`): the type of the enumeration object (`Obj.type`), which tapir
+    * names the schema after and reads the annotations of. Platform-specific, `None` otherwise.
+    */
+  protected def enumerationObjectOf[A: Type]: Option[??] = None
+
+  private def enumerationObjectName[A: Type]: Option[String] =
+    if (Type[A].isEnumeration) enumerationObjectOf[A].map { obj =>
+      Type.plainPrint(using obj.Underlying).stripSuffix(".type")
+    }
+    else None
+
+  /** A Scala 3 union type is named like tapir's `Schema.derivedUnion` does: its members' full names joined with `_or_`
+    * (`java.lang.String_or_scala.Int`).
+    */
+  private def unionTypeName[A: Type]: Option[String] =
+    if (!Type[A].isUnionType) None
+    else
+      Enum.parse[A].toOption.map { e =>
+        e.directChildren.toList.map { case (_, member) => Type.plainPrint(using member.Underlying) }.mkString("_or_")
+      }
+
+  /** Where the annotations of `A`'s schema are read from: `A`, or the enumeration object for its values. */
+  private def annotationSourceOf[A: Type]: ?? =
+    (if (Type[A].isEnumeration) enumerationObjectOf[A] else None).getOrElse(Type[A].as_??)
+
+  /** The index of the subtype of `value` among `leaves` (the subtypes of the coproduct schema of `B`, disjoint and
+    * covering `B`): a flat `match` with one case per leaf - a value match for Scala 3 parameterless enum cases and Java
+    * enum values, a type match otherwise.
+    */
+  protected def subtypeIndexExpr[B: Type](value: Expr[B], leaves: List[??]): Expr[Int] = {
+    implicit val IntT: Type[Int] = TsTypes.IntType
+    val cases = leaves.zipWithIndex.map { case (leaf, index) =>
+      import leaf.Underlying as L
+      val matchCase: MatchCase[Expr[L]] =
+        if (Type.isVal[L] && !Type.isObject[L])
+          Expr.singletonOf[L] match {
+            case Some(singleton) => MatchCase.eqValue[L](singleton)
+            case None            => MatchCase.typeMatch[L]()
+          }
+        else MatchCase.typeMatch[L]()
+      MatchCaseTraverse.map(matchCase)(_ => Expr(index))
+    }
+    cases match {
+      case head :: tail => value.matchOn[Int](head, tail*)
+      case Nil          => Expr(-1)
+    }
   }
 
   /** Fully-qualified type name, with type parameters which are not known at compile time (e.g. `A` in `Box[A]`) named
@@ -964,9 +1073,83 @@ trait SchemaMacrosImpl
     }
   }
 
-  private def fieldAnnotationsExpr(param: Parameter): Expr[List[Any]] =
-    collectAnnotationsExpr(allParamAnnotations(param))
+  /** The annotations as the compiler returns them in declaration order: Hearth returns the compiler's own list, in
+    * declaration order on Scala 2 and in reverse declaration order on Scala 3 (overridden there).
+    */
+  protected def annotationsInDeclarationOrder[X](annotations: List[X]): List[X] = annotations
 
+  private val EncodedNameAnnotation = "sttp.tapir.Schema.annotations.encodedName"
+
+  /** The class of an annotation (its type without type arguments), compared like tapir compares annotation classes. */
+  private def annotationClass(ann: Expr_??): String = {
+    val name = Type.plainPrint(using ann.Underlying)
+    name.indexOf('[') match {
+      case -1    => name
+      case index => name.substring(0, index)
+    }
+  }
+
+  private def isTapirAnnotation(ann: Expr_??): Boolean =
+    annotationClass(ann).startsWith("sttp.tapir.Schema.annotations.")
+
+  /** As tapir's (magnolia's) `mergeAnnotations`: the element's own annotations, then the inherited (tapir) ones of a
+    * class the element does not have.
+    */
+  private def mergeInherited(own: List[Expr_??], inherited: List[Expr_??]): List[Expr_??] = {
+    val ownClasses = own.map(annotationClass).toSet
+    own ++ inherited.filter(ann => isTapirAnnotation(ann) && !ownClasses(annotationClass(ann)))
+  }
+
+  private val ignoredBaseTypes: Set[String] = Set(
+    "scala.Any",
+    "scala.AnyRef",
+    "scala.AnyVal",
+    "scala.Matchable",
+    "java.lang.Object",
+    "scala.Product",
+    "scala.Equals",
+    "scala.Serializable",
+    "java.io.Serializable"
+  )
+
+  /** The base classes of `A` (linearized, without `A` itself and the universal ones), whose annotations its schema
+    * inherits.
+    */
+  private def baseTypesOf[A: Type]: List[??] =
+    Type[A].baseClasses.drop(1).filterNot(base => ignoredBaseTypes(Type.plainPrint(using base.Underlying)))
+
+  private def ownTypeAnnotations[A: Type]: List[Expr_??] = {
+    val source = annotationSourceOf[A]
+    import source.Underlying as Source
+    annotationsInDeclarationOrder(Type[Source].annotations)
+  }
+
+  /** A field's annotations: its own, then the ones of the members with the same name in the base classes (tapir's
+    * inherited annotations, e.g. a `@description` on `def name: String` of a sealed trait).
+    */
+  private def fieldAnnotationsExpr[A: Type](fieldName: String, param: Parameter): Expr[List[Any]] = {
+    val own = annotationsInDeclarationOrder(param.annotations)
+    lazy val inherited = baseTypesOf[A].flatMap { base =>
+      import base.Underlying as B
+      Type[B].unsortedMethodsNamed(fieldName).filter(_.isDeclared).flatMap { method =>
+        annotationsInDeclarationOrder(method.annotations)
+      }
+    }
+    collectAnnotationsExpr(mergeInherited(own, inherited).map(_.asUntyped))
+  }
+
+  /** The annotations of a sum type (or enumeration) itself, in declaration order. */
   protected def typeAnnotationsExpr[A: Type]: Expr[List[Any]] =
-    collectAnnotationsExpr(allTypeAnnotations[A])
+    collectAnnotationsExpr(ownTypeAnnotations[A].map(_.asUntyped))
+
+  /** The annotations of a product (case class, case object): its own, then the ones of its base classes (as tapir's
+    * derivation, e.g. a `@description` on a sealed trait describes each subtype).
+    */
+  protected def productTypeAnnotationsExpr[A: Type]: Expr[List[Any]] = {
+    val inherited = baseTypesOf[A].flatMap { base =>
+      import base.Underlying as B
+      annotationsInDeclarationOrder(Type[B].annotations)
+    }
+    collectAnnotationsExpr(mergeInherited(ownTypeAnnotations[A], inherited).map(_.asUntyped))
+  }
 }
