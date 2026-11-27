@@ -104,8 +104,9 @@ json.fold(
 
 ### `JsonNumber` -- precision-preserving numbers
 
-Numbers are stored as strings internally to avoid precision loss from `Double`/`Float` conversions, and written as
-they are. `JsonNumber.fromString` accepts only JSON numbers (`-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`).
+A number keeps what it was made from (a `Long`, a `Float`, a `Double`, an exact `BigDecimal` or the text of a JSON
+number, like circe's `JsonNumber`), so nothing is lost to `Double`/`Float` conversions; `value` / `toString` is its
+text, and two numbers are equal when their texts are. `JsonNumber.fromString` accepts only JSON numbers (`-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`).
 Conversion methods return `Option` to signal when the value doesn't fit (`toInt`/`toLong`/`toBigInt` accept any integral
 value, also written with a fraction or an exponent, like `1.0` or `1e3`):
 
@@ -223,13 +224,15 @@ val codec: JsonValueCodec[Json] = JsonCodec.jsonCodec(
 | `maxDepth` | The depth limit (`JsonCodec.withMaxDepth(n)` is `jsonCodec(maxDepth = n)`) |
 | `doSerialize` | A `Json => Boolean` on the value of each object field; `false` drops the field when writing |
 | `numberParser` | A `JsonReader => Json` called at the first character of a number. `JsonCodec.numberParser(mc, scaleLimit, digitsLimit)` rounds with a `MathContext` and sets the (exclusive) limits; any function works, e.g. `in => Json.fromDouble(in.readDouble()).getOrElse(Json.Null)` to read numbers as `Double`s |
-| `numberSerializer` | A `(JsonWriter, JsonNumber) => Unit`. `JsonCodec.jsCompatibleNumberSerializer` writes as JSON **strings** the numbers JavaScript's `Number` cannot hold exactly: integers outside `[-2^52, 2^52)`, decimals with more than 52 bits in the unscaled value or a scale outside `[-256, 256]` |
+| `numberSerializer` | A `(JsonWriter, JsonNumber) => Unit`. `JsonCodec.jsCompatibleNumberSerializer` writes as JSON **strings** the numbers JavaScript's `Number` cannot hold exactly: integers outside `[-2^52, 2^52)`, decimals with more than 52 bits in the unscaled value or a scale outside `[-256, 256]`; numbers made from a `Double` or a `Float` are always written as numbers |
 | `sortKeys` | Sorts the fields of every object by key (`String.compareTo`) when writing; duplicate keys keep their order |
 
-A `JsonNumber` keeps only its text, so `jsCompatibleNumberSerializer` cannot know whether a number was built from a
-`Double`: a number whose text is how a `Double` is written (e.g. `0.30000000000000004`, `1.0E300`, `-0.0`) is always
-written as a JSON number - JavaScript reads the very same `Double` back. (jsoniter-scala-circe does that for numbers
-built from a `Double` or a `Float`, and writes the same text as a string when it was parsed.)
+A `JsonNumber` keeps what it was made from, like circe's: a `Long`, a `Float`, a `Double`, a `BigDecimal` or the text
+of a number (`JsonNumber.fromString`), and the parser makes a `Long` for an integer that fits one and an exact
+`BigDecimal` otherwise. The serializers write each kind as jsoniter-scala-circe does - e.g. with
+`jsCompatibleNumberSerializer` a number made from a `Double` or a `Float` is always a JSON number, while a parsed
+`0.30000000000000004` (a decimal with more than 52 bits) is written as a string. `value` / `toString` (the text of the
+number) and equality (by text) do not depend on the kind.
 
 jsoniter-scala-circe's `initialSize` (a size hint for circe's map of fields) has no counterpart: a `JsonObject` is a
 vector of fields.

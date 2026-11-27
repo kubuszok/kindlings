@@ -157,4 +157,46 @@ final class JsonNumberSpec extends Suite {
       n.toBigInt ==> None
     }
   }
+
+  group("a number keeps what it was made from; its text is its identity") {
+
+    test("text of every kind") {
+      JsonNumber.fromInt(-5).value ==> "-5"
+      JsonNumber.fromLong(Long.MinValue).toString ==> "-9223372036854775808"
+      JsonNumber.fromDouble(0.1 + 0.2).get.value ==> "0.30000000000000004"
+      JsonNumber.fromDouble(-0.0).get.value ==> "-0.0"
+      JsonNumber.fromFloat(1.1f).get.value ==> "1.1"
+      JsonNumber.fromBigDecimal(BigDecimal("1.50")).value ==> "1.50"
+      JsonNumber.fromBigDecimal(BigDecimal("1e1000")).value ==> "1E+1000"
+      JsonNumber.fromBigInt(BigInt("123456789012345678901234567890")).value ==> "123456789012345678901234567890"
+      num("1e3").value ==> "1e3"
+    }
+
+    test("numbers made differently are equal when their texts are") {
+      JsonNumber.fromInt(1) ==> num("1")
+      JsonNumber.fromLong(1L) ==> JsonNumber.fromBigInt(BigInt(1))
+      JsonNumber.fromDouble(1.5).get ==> JsonNumber.fromBigDecimal(BigDecimal("1.5"))
+      JsonNumber.fromInt(1).hashCode ==> num("1").hashCode
+      assert(JsonNumber.fromInt(1) != num("1.0"))
+      assert(JsonNumber.fromDouble(1.0).get != JsonNumber.fromInt(1)) // "1.0" vs "1"
+    }
+
+    test("conversions do not depend on what the number was made from") {
+      JsonNumber.fromDouble(3.0).get.toInt ==> Some(3)
+      JsonNumber.fromBigDecimal(BigDecimal("1e3")).toLong ==> Some(1000L)
+      JsonNumber.fromLong(7L).toBigDecimal ==> Some(BigDecimal(7))
+      JsonNumber.fromFloat(1.5f).get.toDouble ==> Some(1.5)
+      JsonNumber.fromLong(Long.MaxValue).toInt ==> None
+    }
+
+    test("the members of the former case class: pattern matching, copy, Product") {
+      val text = JsonNumber.fromLong(42L) match { case JsonNumber(t) => t }
+      text ==> "42"
+      JsonNumber.fromLong(42L).copy() ==> num("42")
+      JsonNumber.fromLong(42L).copy(value = "7").value ==> "7"
+      JsonNumber.fromLong(42L).productArity ==> 1
+      JsonNumber.fromLong(42L).productElement(0) ==> "42"
+      JsonNumber.fromLong(42L).productPrefix ==> "JsonNumber"
+    }
+  }
 }
