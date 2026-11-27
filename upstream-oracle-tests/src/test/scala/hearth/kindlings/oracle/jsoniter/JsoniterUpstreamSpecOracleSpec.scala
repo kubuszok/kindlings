@@ -12,10 +12,12 @@ import hearth.MacroSuite
   * As in `JsoniterOracleSpec`, each case lists the *exact* differences it expects, each a documented one
   * (`docs/user-guide/feature-parity.md`, "jsoniter-derivation").
   *
-  * Not ported: tests of user-written codecs (`JsoniterUpstreamSpecCustomCodecsOracleSpec` has those), of the name
-  * mapper functions (`JsoniterConfigNameMappersSpec` in jsoniter-derivation uses upstream's vectors), of compile-time
-  * errors (`CompileTimeValidationSpec` and the parity specs in jsoniter-derivation) and of
-  * `WriterConfig`/`ReaderConfig` (jsoniter-scala-core's, not the codecs').
+  * Not ported (yet): the tests of user-written codecs injected as implicits (the parity specs of jsoniter-derivation
+  * cover user-provided field, leaf and key codecs, not as an oracle), of the name mapper functions
+  * (`JsoniterConfigNameMappersSpec` in jsoniter-derivation uses upstream's vectors), of compile-time errors
+  * (`CompileTimeValidationSpec` and the parity specs in jsoniter-derivation), of `WriterConfig`/`ReaderConfig`
+  * (jsoniter-scala-core's, not the codecs'), and upstream's Scala-version-specific specs (new types, new enums, literal
+  * types, generic tuples: see `JsoniterScala3OracleSpec` and jsoniter-derivation's `JsoniterScala3ParitySpec`).
   */
 final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
 
@@ -31,10 +33,6 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
       case c if c < ' ' => f"\\u${c.toInt}%04x"
       case c            => c.toString
     } + "\""
-
-  /** A difference whose upstream side differs between jsoniter-scala's Scala 3 and Scala 2 macros. */
-  @scala.annotation.nowarn("msg=unused|never used")
-  private def scala3or2(scala3: String, scala2: String): String = if (JoScalaVersion.isScala3) scala3 else scala2
 
   private def check[A](codecs: => JoCodecs[A], samples: JoSamples[A])(expectedDifferences: String*): Unit = {
     val differences = JsoniterOracle.differences(codecs, samples.values, samples.inputs)

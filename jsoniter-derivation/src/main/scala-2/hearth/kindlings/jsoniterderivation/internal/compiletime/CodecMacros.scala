@@ -10,6 +10,16 @@ final private[jsoniterderivation] class CodecMacros(val c: blackbox.Context)
     with AnnotationSupport
     with CodecMacrosImpl {
 
+  override protected def hasScalaTransientField[A: Type](name: String): Boolean = {
+    import c.universe.*
+    Type[A].tpe.members.exists { member =>
+      member.isTerm && member.name.decodedName.toString.trim == name && {
+        val _ = member.info // completes the annotations
+        member.annotations.exists(_.tree.tpe =:= typeOf[scala.transient])
+      }
+    }
+  }
+
   override protected def enumerationObjectOf[A: Type]: Option[Expr[Enumeration]] = {
     import c.universe.*
     // `Obj.Value`, or `Obj.this.Value` when it is referred to through a type alias defined in the object itself.
