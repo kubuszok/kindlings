@@ -905,7 +905,7 @@ two upstreams disagree Kindlings follows scalacheck-derived. Documented differen
 
 **Original type class** — no replacement target. PureConfig's underlying parser, `com.typesafe:config`, is JVM-only, which locks PureConfig out of Scala.js and Scala Native projects. `sconfig-derivation` fills that gap by deriving config readers/writers/codecs against [`org.ekrich:sconfig`](https://github.com/ekrich/sconfig) — a Scala port of typesafe-config that runs on JVM, Scala.js, and Scala Native — while sharing the same HOCON syntax, the same `Config` / `ConfigValue` shape, and the same derivation knobs as `kindlings-pureconfig-derivation` (so users can mentally swap between the two depending on their target platform).
 
-Because no upstream library does derivation against sconfig today, this module is "exceeds upstream" by definition: there is no upstream oracle to compare against. Its **behaviour follows upstream PureConfig's**, as matched by `kindlings-pureconfig-derivation` (which is checked against PureConfig by `PureConfigOracleSpec`). The regression net is `UpstreamSemanticsSpec` in sconfig-derivation's shared tests: it runs the scenarios of pureconfig-derivation's `UpstreamSemanticsSpec` and asserts the same outcomes (values read, failure kinds and paths, written output), with sconfig's own failure types. The tables below describe the surface area we ship.
+Because no upstream library does derivation against sconfig today, this module is "exceeds upstream" by definition: there is no upstream oracle to compare against. Its **behaviour follows upstream PureConfig's**, as matched by `kindlings-pureconfig-derivation` (which is checked against PureConfig by `PureConfigOracleSpec`). The regression net is `UpstreamSemanticsSpec` and `UpstreamSuitesSpec` in sconfig-derivation's shared tests: they run the scenarios of pureconfig-derivation's specs of the same names (the latter: the cases of upstream's own derivation suites) and assert the same outcomes (values read, failure kinds and paths, written output), with sconfig's own failure types. The tables below describe the surface area we ship.
 
 ### Semantics shared with PureConfig
 
@@ -919,6 +919,10 @@ Because no upstream library does derivation against sconfig today, this module i
 | No discriminator | A family of case objects is read only from strings (like `deriveEnumerationReader`; an unknown string fails with `CannotConvert`), other families from single-key objects |
 | `CoproductHint.FirstSuccess` | Subtypes are attempted in the alphabetical order of their names (upstream's order), the first success wins; when none succeeds, `NoValidCoproductOptionFound` lists every attempt; written without disambiguation |
 | Empty `Option` fields | Omitted when writing (upstream's `WritesMissingKeys`), not written as `null` |
+| Readers / writers of missing keys | The instance in scope for a field's type decides, as upstream: a `ReadsMissingKeys` reader (the built-in `Option` reader, user-provided ones) is given the missing key (`null`), any other reader - also a user-provided plain reader of an `Option` type - gets `KeyNotFound`; a `WritesMissingKeys` writer (the built-in `Option` writer, user-provided ones) decides whether the key is written (`toOpt`), any other writer is always written |
+| Tuples (`TupleN`) | Read from and written as lists (`(true, 5)` is `[true, 5]`); a list of another size fails with `WrongSizeList`, every failing element is reported under its index, a value that is neither a list nor an object with `WrongType` (expecting a list). A value that is an object is read from the product representation (`{ _1 = ..., _2 = ... }`), as upstream's Scala 2 derivation does (on both Scala versions). Unlike PureConfig's cursors, an object with numeric keys (`{ "0" = ..., "1" = ... }`) is not treated as a list (sconfig-derivation's collections do not either) |
+| Types without fields | A case object or a case class without parameters is read only from an object; with `allowUnknownKeys = false` every key of it is an `UnknownKey` (for a subtype of a sealed family: every key but the discriminator) |
+| Default values | Evaluated only when the key is missing |
 
 The unknown-string failure of a case-object family differs between PureConfig's Scala versions (`NoValidCoproductOptionFound` on 2.13, `CannotConvert` on 3); sconfig-derivation reports `CannotConvert` on both.
 
@@ -943,6 +947,7 @@ Owned by the kindlings module — no extending of any third-party type, just a c
 | `ConfigDecodingError.Missing(path, key)` | Required key absent; kept for hand-written readers, derived readers report `KeyNotFound` |
 | `ConfigDecodingError.WrongType(path, expected, actual)` | Value present but the wrong `ConfigValueType` (upstream `WrongType`) |
 | `ConfigDecodingError.CannotConvert(path, message, cause)` | Catch-all for `String => A` conversion failures (parse errors, refined-type validation, unknown enumeration strings, …) |
+| `ConfigDecodingError.WrongSizeList(path, expected, found)` | A tuple read from a list of another size (upstream `WrongSizeList`) |
 | `ConfigDecodingError.UnknownKey(path, key)` | Unknown key of a strict case class, at the key (upstream `UnknownKey`) |
 | `ConfigDecodingError.UnexpectedValueForFieldCoproductHint(path, value)` | Discriminator value naming no subtype, at the discriminator (upstream's failure of the same name) |
 | `ConfigDecodingError.NoValidCoproductOptionFound(path, value, optionFailures)` | No subtype of a `FirstSuccess` family could be read (upstream's failure of the same name) |
@@ -1012,7 +1017,7 @@ Defined directly in the `ConfigReader` and `ConfigWriter` companion bodies (not 
 | `Float` / `Double` | Yes | Yes | |
 | `Char` | Yes | Yes | Single-character string |
 | `BigDecimal` / `BigInt` | Yes | Yes | Reader accepts both `NUMBER` and `STRING` upstream values |
-| `Option[A]` | Yes | Yes | `null` / `ConfigValueType.NULL` ↔ `None`; otherwise recurses into `inner`. The reader is a `ReadsMissingKeys` (a missing key reads as `None`) |
+| `Option[A]` | Yes | Yes | `null` / `ConfigValueType.NULL` ↔ `None`; otherwise recurses into `inner`. The reader is a `ReadsMissingKeys` (a missing key reads as `None`), the writer a `WritesMissingKeys` (the key of an empty `Option` is not written) |
 
 Collection (`List`, `Vector`, `Seq`, `Set`) and `Map[String, A]` readers / writers are deliberately **not** exposed as companion-level implicits because generic `def iterableReader[A, Coll](implicit …): ConfigReader[Coll]` would cause Scala 2's implicit search to diverge whenever it tries to resolve any unrelated `ConfigReader[T]`. Instead, the macro's `HandleAsCollectionRule` and `HandleAsMapRule` synthesise collection codecs directly from the structural pattern, which works for all standard collection types (and any user-defined `IsCollection` / `IsMap` provider) without needing companion-level implicits.
 

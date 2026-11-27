@@ -409,22 +409,49 @@ trait ReaderHandleAsEnumRuleImpl {
         case Left(_) =>
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
+              implicit val BooleanT: Type[Boolean] = RTypes.Boolean
+              val (staticAllowUnknownKeys, allowUnknownKeysExpr) =
+                ReaderHandleAsCaseClassRule.allowUnknownKeysOf[ChildType]
               Log.info(s"Using singleton for $childName") >>
                 MIO.pure(
-                  ChildReader[A](
-                    childName,
-                    transformedNameExpr,
-                    (_: Expr[ConfigValue]) =>
-                      Expr.quote(Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigDecodingError, A]),
-                    (innerValueExpr: Expr[ConfigValue]) =>
-                      Expr.quote {
-                        SConfigDerivationUtils.readObjectAs[A](
-                          Expr.splice(innerValueExpr),
-                          Expr.splice(singleton).asInstanceOf[A]
-                        )
-                      },
-                    needsDiscriminatorRemoved = false // `read` ignores the value
-                  )
+                  // A case object that does not allow unknown keys (upstream's `ProductHint[Obj.type](allowUnknownKeys =
+                  // false)`) reports every key of the object it is read from (without the discriminator).
+                  if (!staticAllowUnknownKeys.contains(true))
+                    ChildReader[A](
+                      childName,
+                      transformedNameExpr,
+                      (innerValueExpr: Expr[ConfigValue]) =>
+                        Expr.quote {
+                          SConfigDerivationUtils.checkNoKeys[A](
+                            Expr.splice(innerValueExpr),
+                            Expr.splice(singleton).asInstanceOf[A],
+                            Expr.splice(allowUnknownKeysExpr)
+                          )
+                        },
+                      (innerValueExpr: Expr[ConfigValue]) =>
+                        Expr.quote {
+                          SConfigDerivationUtils.readEmptyProduct[A](
+                            Expr.splice(innerValueExpr),
+                            Expr.splice(singleton).asInstanceOf[A],
+                            Expr.splice(allowUnknownKeysExpr)
+                          )
+                        }
+                    )
+                  else
+                    ChildReader[A](
+                      childName,
+                      transformedNameExpr,
+                      (_: Expr[ConfigValue]) =>
+                        Expr.quote(Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigDecodingError, A]),
+                      (innerValueExpr: Expr[ConfigValue]) =>
+                        Expr.quote {
+                          SConfigDerivationUtils.readObjectAs[A](
+                            Expr.splice(innerValueExpr),
+                            Expr.splice(singleton).asInstanceOf[A]
+                          )
+                        },
+                      needsDiscriminatorRemoved = false // `read` ignores the value
+                    )
                 )
             case None =>
               deriveReaderRecursively[ChildType](using rctx.nest[ChildType](rctx.value)).flatMap { _ =>

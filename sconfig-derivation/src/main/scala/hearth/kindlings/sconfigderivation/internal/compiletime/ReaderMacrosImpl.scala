@@ -7,7 +7,7 @@ import hearth.std.*
 import hearth.kindlings.sconfigderivation.{ConfigDecodingError, ConfigReader, CoproductHint, ProductHint, SConfig}
 import hearth.kindlings.sconfigderivation.annotations.{configKey, transientField}
 import hearth.kindlings.sconfigderivation.internal.runtime.SConfigDerivationUtils
-import org.ekrich.config.{ConfigObject, ConfigValue}
+import org.ekrich.config.{ConfigList, ConfigObject, ConfigValue}
 
 trait ReaderMacrosImpl
     extends SconfigDerivationTimeout
@@ -22,6 +22,7 @@ trait ReaderMacrosImpl
     with rules.ReaderHandleAsMapRuleImpl
     with rules.ReaderHandleAsCollectionRuleImpl
     with rules.ReaderHandleAsNamedTupleRuleImpl
+    with rules.ReaderHandleAsTupleRuleImpl
     with rules.ReaderHandleAsSingletonRuleImpl
     with rules.ReaderHandleAsCaseClassRuleImpl
     with rules.ReaderHandleAsEnumRuleImpl
@@ -284,6 +285,7 @@ trait ReaderMacrosImpl
           // proof is an `IsMapOf`, so we parse `IsCollection` once and dispatch via `.asMap`.
           ReaderHandleAsCollectionRule,
           ReaderHandleAsNamedTupleRule,
+          ReaderHandleAsTupleRule,
           ReaderHandleAsSingletonRule,
           ReaderHandleAsCaseClassRule,
           ReaderHandleAsEnumRule
@@ -311,6 +313,7 @@ trait ReaderMacrosImpl
       Type.of[hearth.kindlings.sconfigderivation.ConfigReader.LogDerivation]
     val ConfigValue: Type.Lazy[ConfigValue] = Type.Lazy(Type.of[ConfigValue])
     val ConfigObject: Type.Lazy[ConfigObject] = Type.Lazy(Type.of[ConfigObject])
+    val ConfigList: Type.Lazy[ConfigList] = Type.Lazy(Type.of[ConfigList])
     val ConfigDecodingError: Type.Lazy[ConfigDecodingError] = Type.Lazy(Type.of[ConfigDecodingError])
     val SConfig: Type.Lazy[SConfig] = Type.Lazy(Type.of[SConfig])
     val String: Type.Lazy[String] = Type.Lazy(Type.of[String])

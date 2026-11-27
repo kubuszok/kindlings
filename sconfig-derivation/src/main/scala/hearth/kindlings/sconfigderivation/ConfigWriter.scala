@@ -58,10 +58,15 @@ object ConfigWriter extends ConfigWriterCompanionCompat {
   }
 
   implicit def optionWriter[A](implicit inner: ConfigWriter[A]): ConfigWriter[Option[A]] =
-    new ConfigWriter[Option[A]] {
+    // `WritesMissingKeys`: the key of an empty `Option` field is not written (as upstream's `Option` writer).
+    new ConfigWriter[Option[A]] with WritesMissingKeys[Option[A]] {
       def to(opt: Option[A]): ConfigValue = opt match {
         case Some(a) => inner.to(a)
         case None    => ConfigValueFactory.fromAnyRef(null)
+      }
+      def toOpt(opt: Option[A]): Option[ConfigValue] = opt match {
+        case Some(a) => Some(inner.to(a))
+        case None    => None
       }
     }
 
