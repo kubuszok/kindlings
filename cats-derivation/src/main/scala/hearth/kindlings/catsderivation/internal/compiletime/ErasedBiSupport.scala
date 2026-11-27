@@ -12,8 +12,8 @@ import hearth.std.*
   *   - `G[X]` with an implicit `Functor` / `Foldable` / `Traverse` of `G` (kittens' `Left1` / `Right1`, generalised to
   *     any part `X`, e.g. `List[Either[A, B]]`),
   *   - `G[X, Y]` with an implicit `Bifunctor` / `Bifoldable` / `Bitraverse` of `G` (e.g. `Either[A, B]`),
-  *   - otherwise a case class field by field, a sealed trait / enum by subtype (so nested data types need no instance in
-  *     scope, and recursive types refer to the instance being derived).
+  *   - otherwise a case class field by field, a sealed trait / enum by subtype (so nested data types need no instance
+  *     in scope, and recursive types refer to the instance being derived).
   *
   * A type is represented by its application to the probes `(Int, Int)`, `(String, Int)`, `(Int, String)` and to
   * `(Any, Any)`, the last one being what the generated (erased) code works with. The instances are assembled at runtime
@@ -180,7 +180,7 @@ trait ErasedBiSupport
               decomposeAll2(lam) match {
                 // The type being derived itself (`F[A, B]`) is not summoned (it would find the instance being defined).
                 case Some((_, first, second)) if isTop && first.isLeft && second.isRight => None
-                case Some((ctor, first, second)) =>
+                case Some((ctor, first, second))                                         =>
                   summonBi2(tc, ctor).map { outer =>
                     attempt(for {
                       x <- plan(first, isTop = false)
@@ -219,9 +219,8 @@ trait ErasedBiSupport
             coproductParts(lam) match {
               case Some(Right((ordinal, variants))) =>
                 val results = variants.map { case (name, variantLam) =>
-                  plan(variantLam, isTop = false).left.map(reasons =>
-                    s"subtype $name of ${lam.show}:" :: reasons.map("  " + _)
-                  )
+                  plan(variantLam, isTop = false).left
+                    .map(reasons => s"subtype $name of ${lam.show}:" :: reasons.map("  " + _))
                 }
                 val errors = results.collect { case Left(reasons) => reasons }.flatten
                 if (errors.nonEmpty) Left(errors)
@@ -373,10 +372,14 @@ trait ErasedBiSupport
   private def biArrayOf(values: List[Expr[Any]]): Expr[Array[Any]] = {
     implicit val AnyType: Type[Any] = BiAnyType
     implicit val ArrayAnyType: Type[Array[Any]] = BiArrayAnyType
-    val list = values.foldRight(Expr.quote(List.empty[Any])) { (value, acc) =>
-      Expr.quote(Expr.splice(value) :: Expr.splice(acc))
+    implicit val IntType: Type[Int] = BiIntType
+    val empty: Expr[Array[Any]] = Expr.quote(new Array[Any](Expr.splice(Expr(values.size))))
+    values.zipWithIndex.foldLeft(empty) { case (array, (value, index)) =>
+      Expr.quote(
+        hearth.kindlings.catsderivation.internal.runtime.HktGenericRuntime
+          .arraySet(Expr.splice(array), Expr.splice(Expr(index)), Expr.splice(value))
+      )
     }
-    Expr.quote(Expr.splice(list).toArray[Any])
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter|unused explicit parameter")
@@ -390,8 +393,8 @@ trait ErasedBiSupport
     implicit val RegistryType: Type[hearth.kindlings.catsderivation.internal.runtime.HktGenericRuntime.Registry] =
       BiRegistryType
     plan match {
-      case BiPlan.Ready(instance)   => instance
-      case BiPlan.Self(id)          => Expr.quote(Expr.splice(registry).get(Expr.splice(Expr(id))))
+      case BiPlan.Ready(instance)    => instance
+      case BiPlan.Self(id)           => Expr.quote(Expr.splice(registry).get(Expr.splice(Expr(id))))
       case BiPlan.Map1(outer, inner) =>
         val in = emitBiPlan(inner, registry)
         Expr.quote(
@@ -444,7 +447,11 @@ trait ErasedBiSupport
   protected def biFieldsAreDirect[F[_, _]](implicit FCtor: Type.Ctor2[F]): Boolean = {
     val lam = lam2Of(FCtor)
     def fieldsDirect(ii: Type[Any], si: Type[Any], is: Type[Any]): Boolean =
-      (CaseClass.parse(using ii).toOption, CaseClass.parse(using si).toOption, CaseClass.parse(using is).toOption) match {
+      (
+        CaseClass.parse(using ii).toOption,
+        CaseClass.parse(using si).toOption,
+        CaseClass.parse(using is).toOption
+      ) match {
         case (Some(cII), Some(cSI), Some(cIS)) =>
           val pII = cII.primaryConstructor.totalParameters.flatten.toList
           val pSI = cSI.primaryConstructor.totalParameters.flatten.toList

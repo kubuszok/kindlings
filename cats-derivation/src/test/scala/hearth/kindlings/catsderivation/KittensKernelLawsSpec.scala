@@ -31,12 +31,13 @@ import cats.kernel.laws.discipline.{
   SemilatticeTests,
   SerializableTests
 }
+import alleycats.Empty
 import hearth.kindlings.catsderivation.extensions.*
 
 /** The law checks of kittens' `EqSuite`, `HashSuite`, `OrderSuite`, `PartialOrderSuite`, `SemigroupSuite`,
   * `MonoidSuite`, `CommutativeSemigroupSuite`, `CommutativeMonoidSuite`, `BandSuite`, `SemilatticeSuite`,
-  * `BoundedSemilatticeSuite`, `GroupSuite` and `CommutativeGroupSuite` (their `semiauto` instances), plus their
-  * "respects existing instances" tests, on Kindlings-derived instances.
+  * `BoundedSemilatticeSuite`, `GroupSuite`, `CommutativeGroupSuite` and `EmptySuite` (their `semiauto` instances), plus
+  * their "respects existing instances" tests, on Kindlings-derived instances.
   */
 final class KittensKernelLawsSpec extends KittensLawsSuite {
   import KittensAdts.*
@@ -173,6 +174,29 @@ final class KittensKernelLawsSpec extends KittensLawsSuite {
   )
   checkAll("BoundedSemilattice is Serializable", SerializableTests.serializable(lattices.boundedSemilattice))
 
+  // EmptySuite (no laws: the expected empty values, and the shapes kittens rejects)
+  test("Empty[Foo]")(assertEquals(empties.foo.empty, Foo(0, None)))
+  test("Empty[Outer]")(assertEquals(empties.outer.empty, Outer(Inner(0))))
+  test("Empty[Interleaved[String]]")(assertEquals(empties.interleaved.empty, Interleaved.empty("")))
+  test("Empty[Recursive]")(assertEquals(empties.recursive.empty, Recursive(0, None)))
+  test("Empty[IList[Dummy]]")(assertEquals(empties.iListDummy.empty, INil[Dummy](): IList[Dummy]))
+  test("Empty[Snoc[Dummy]]")(assertEquals(empties.snocDummy.empty, SNil[Dummy](): Snoc[Dummy]))
+  test("Empty respects existing instances")(assertEquals(empties.boxMask.empty, Box(Mask(0xffffffff))))
+  checkAll("Empty is Serializable", SerializableTests.serializable(empties.foo))
+  test("Empty is not derived when several subtypes form one (Rgb)") {
+    val errors = compileErrors("""
+      import hearth.kindlings.catsderivation.extensions.*
+      alleycats.Empty.derived[hearth.kindlings.catsderivation.KittensAdts.Rgb]
+    """)
+    assert(errors.contains("Macro derivation failed"), errors)
+  }
+  test("Empty[IList[Int]] / Empty[Snoc[Int]]: the non-recursive subtype (kittens rejects them)") {
+    // The cons case would need the empty value of the type being derived (an infinite value), so only the nil case
+    // forms an Empty. kittens 3 rejects these two types (EmptySuite.testNoInstance): an Improvement.
+    assertEquals(Empty.derived[IList[Int]].empty, INil[Int](): IList[Int])
+    assertEquals(Empty.derived[Snoc[Int]].empty, SNil[Int](): Snoc[Int])
+  }
+
   // GroupSuite, CommutativeGroupSuite
   checkAll("Group[Slice]", GroupTests[Slice](groups.slice).group)
   checkAll("Group[Compared]", GroupTests[Compared](groups.compared).group)
@@ -259,6 +283,16 @@ object KittensKernelLawsSpec {
     val band: Band[Masked[String]] = Band.derived[Masked[String]]
     val semilattice: Semilattice[Masked[String]] = Semilattice.derived[Masked[String]]
     val boundedSemilattice: BoundedSemilattice[Masked[String]] = BoundedSemilattice.derived[Masked[String]]
+  }
+
+  object empties {
+    val foo: Empty[Foo] = Empty.derived[Foo]
+    val outer: Empty[Outer] = Empty.derived[Outer]
+    val interleaved: Empty[Interleaved[String]] = Empty.derived[Interleaved[String]]
+    val recursive: Empty[Recursive] = Empty.derived[Recursive]
+    val iListDummy: Empty[IList[Dummy]] = Empty.derived[IList[Dummy]]
+    val snocDummy: Empty[Snoc[Dummy]] = Empty.derived[Snoc[Dummy]]
+    val boxMask: Empty[Box[Mask]] = Empty.derived[Box[Mask]]
   }
 
   object groups {

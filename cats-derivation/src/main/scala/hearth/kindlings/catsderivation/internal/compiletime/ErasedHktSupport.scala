@@ -851,10 +851,14 @@ trait ErasedHktSupport
   private def erasedArrayOf(values: List[Expr[Any]]): Expr[Array[Any]] = {
     implicit val AnyType: Type[Any] = ErasedAnyType
     implicit val ArrayAnyType: Type[Array[Any]] = ErasedArrayAnyType
-    val list = values.foldRight(Expr.quote(List.empty[Any])) { (value, acc) =>
-      Expr.quote(Expr.splice(value) :: Expr.splice(acc))
+    implicit val IntType: Type[Int] = ErasedIntType
+    val empty: Expr[Array[Any]] = Expr.quote(new Array[Any](Expr.splice(Expr(values.size))))
+    values.zipWithIndex.foldLeft(empty) { case (array, (value, index)) =>
+      Expr.quote(
+        hearth.kindlings.catsderivation.internal.runtime.HktGenericRuntime
+          .arraySet(Expr.splice(array), Expr.splice(Expr(index)), Expr.splice(value))
+      )
     }
-    Expr.quote(Expr.splice(list).toArray[Any])
   }
 
   /** The code creating the instance a [[Plan]] describes; `registry` is where recursive instances are looked up. */

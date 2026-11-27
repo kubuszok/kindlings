@@ -393,18 +393,22 @@ final class KittensHktLawsSpec extends KittensLawsSuite {
   test("Pure respects existing instances")(assertEquals(pures.boxColor.pure(()), Box(Color[Unit](255, 255, 255))))
   checkAll("Pure is Serializable", SerializableTests.serializable(pures.interleaved))
   test("Pure is not derived for types with a subtype not wrapping the parameter (IList, Snoc)") {
-    assert(compileErrors(
-      """
+    assert(
+      compileErrors(
+        """
       import hearth.kindlings.catsderivation.extensions.*
       alleycats.Pure.derived[hearth.kindlings.catsderivation.KittensAdts.IList]
       """
-          ).contains("Macro derivation failed"))
-    assert(compileErrors(
-      """
+      ).contains("Macro derivation failed")
+    )
+    assert(
+      compileErrors(
+        """
       import hearth.kindlings.catsderivation.extensions.*
       alleycats.Pure.derived[hearth.kindlings.catsderivation.KittensAdts.Snoc]
       """
-          ).contains("Macro derivation failed"))
+      ).contains("Macro derivation failed")
+    )
   }
 
   // EmptyKSuite
