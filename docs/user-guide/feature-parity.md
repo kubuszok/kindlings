@@ -920,6 +920,13 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 | `Shrink` for collections | ScalaCheck's `shrinkContainer` | Same algorithm (same candidates, same order) | Parity |
 | `Cogen` for products, `Option`, collections | ScalaCheck's instances; case classes: every field, then `Cogen[Unit]` | Same perturbation (same seeds) | Parity |
 | User-provided implicits | Implicit search | Yes (checked before derivation) | Parity |
+| Literal types (`"foo"`, `42`) | scalacheck-shapeless: `Witness` singleton types; scalacheck-derived-extras: `arbLiteral` / `cogenLiteral` | Yes (`Gen.const`, `Cogen` reseeding with `0L`, on Scala 2.13 and 3) | Parity |
+| Union types (Scala 3) | scalacheck-derived-extras: `arbUnion` / `cogenUnion` / `shrinkUnion` | Yes (same values, seeds and shrinks) | Parity |
+| Nested sealed traits (incl. diamonds) | scalacheck-derived: flattened, every leaf subtype once with the same chance | Same | Parity |
+| Same generated values for the same seed | scalacheck-derived: same as hand-written generators from ScalaCheck's instances; scalacheck-shapeless: splits the size among fields | Same as scalacheck-derived and ScalaCheck's own instances (containers of recursive types excepted) | Parity (Scala 3) / Difference (Scala 2, see below) |
+| `RecursionFallback[T]` / `Recursive[T]` (what to generate when the size runs out) | Yes | Not needed: at size 0 only the subtypes that cannot recurse are generated | Difference: derivation mechanism |
+| `ArbitraryDeriving.buildSumGen` (custom combination of a sum type's subtype generators, scalacheck-derived 0.10+) | Yes | No | Not supported |
+| `deriveArbitraryShallow` / `deriveArbitraryExtraShallow` | Yes | No (one `derived`, missing instances are derived) | Not applicable: derivation mechanism |
 
 ### Upstream oracle
 
@@ -927,11 +934,16 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 [scalacheck-derived](https://github.com/martinhh/scalacheck-derived) (the Scala 3 equivalent) on Scala 3, each used as
 documented (`Recursive` / `RecursionFallback` for the recursive type). Generators are random, so it compares properties:
 subtype coverage, collection/string sizes within `Gen.size`, generation at every size including 0, termination of
-recursive types; `Shrink` streams and `Cogen` seeds are deterministic and compared exactly for fixed values. Where the
-two upstreams disagree Kindlings follows scalacheck-derived. Documented differences:
+recursive types - and the generated values themselves for 200 fixed seeds and sizes (what both upstream suites check
+against hand-written generators); `Shrink` streams and `Cogen` seeds are deterministic and compared exactly for fixed
+values. Where the two upstreams disagree Kindlings follows scalacheck-derived. Documented differences:
 
 - **Size 0** (Scala 3): scalacheck-derived returns `Gen.fail` for some sealed-trait-based types once the size is
   exhausted (even with a `RecursionFallback`); Kindlings still generates a value.
+- **Generated values** (Scala 2): scalacheck-shapeless gives each case class field about `1 / (n + 1)` of the size and
+  picks subtypes through nested `Gen.frequency`s; Kindlings, like scalacheck-derived and hand-written generators, gives
+  every field the whole size and picks a subtype with `Gen.oneOf`, so the values generated for a seed differ (on
+  Scala 3 they are the same as scalacheck-derived's).
 - **Shrinking sealed traits** (Scala 2): scalacheck-shapeless also shrinks a value into the other subtypes (e.g. a
   `Circle` into a case object); Kindlings, like scalacheck-derived, shrinks only within the value's subtype.
 - **`Cogen` for sealed traits** (Scala 2): scalacheck-shapeless advances the seed once per preceding subtype; Kindlings,

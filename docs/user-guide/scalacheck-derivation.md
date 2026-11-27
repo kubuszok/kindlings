@@ -81,6 +81,10 @@ No configuration class is needed -- derivation is fully automatic based on the t
   shrinks with depth, and at size 0 only the cases of a sealed trait that cannot recurse are generated
 - **Named tuples** -- supported on Scala 3
 - **Opaque types** -- supported when the underlying type has an instance
+- **Literal types** (`"foo"`, `42`, `true`, ...) -- always generate their value, and all their values perturb a seed
+  alike (like scalacheck-derived-extras' literal instances)
+- **Union types** (Scala 3) -- `Int | String`, `"a" | "b" | "c"`, unions of case classes: a member is picked with
+  `Gen.oneOf`, and `Cogen`/`Shrink` dispatch on the member (like scalacheck-derived-extras' union instances)
 - **Value types with smart constructors** -- refined / Iron types, opaque types or custom `IsValueType` providers whose
   constructor returns an `Either` are generated from the underlying type's generator: a value the constructor rejects
   is regenerated (up to 100 candidates, then the generator fails with `Gen.fail`, which `forAll` counts as discarded),
@@ -97,7 +101,13 @@ No configuration class is needed -- derivation is fully automatic based on the t
   `NonEmptyList`, `NonEmptyMap`, `Chain` from `kindlings-cats-integration`) is built through the provider's smart
   constructor: `Arbitrary` regenerates a rejected (e.g. empty) candidate with at least one element, and `Shrink` drops
   candidates the constructor rejects, so a non-empty container never shrinks to an empty one
-- **Same results as ScalaCheck and the upstream derivations** -- collections shrink with ScalaCheck's own algorithm, and
+- **Same results as ScalaCheck and the upstream derivations** -- for the same seed, `Arbitrary` generates exactly the
+  values that ScalaCheck's own instances and scalacheck-derived generate: case classes generate their fields in order,
+  sealed traits pick a subtype with `Gen.oneOf` at the size minus one (nested sealed traits are flattened: every
+  subtype has the same chance, also one reachable through several sealed traits), and `Option`, `Either`, `Try`, collections and
+  maps use ScalaCheck's own generators (`Gen.option`, `Gen.either`, `Gen.buildableOf`, ...). Only containers of a
+  recursive type (e.g. `children: List[Tree]`) deviate: they halve the size at each level so that generation
+  terminates. Collections shrink with ScalaCheck's own algorithm, and
   `Cogen` perturbs seeds like ScalaCheck's instances and like scalacheck-shapeless / scalacheck-derived do for case
   classes (every field, then `Cogen[Unit]`); a sealed-trait value shrinks only within its own subtype and its `Cogen`
   perturbs with the subtype's `Cogen` and then its index (like scalacheck-derived). See

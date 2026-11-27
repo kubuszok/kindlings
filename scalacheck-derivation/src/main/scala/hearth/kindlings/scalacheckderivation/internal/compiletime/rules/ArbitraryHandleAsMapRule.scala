@@ -40,10 +40,17 @@ trait ArbitraryHandleAsMapRuleImpl { this: ArbitraryMacrosImpl & MacroCommons & 
                 v <- Expr.splice(valueGen)
               } yield Expr.splice(isMap.pair(Expr.quote(k), Expr.quote(v)))
             }
-            Rule.matched(Expr.quote {
-              hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
-                .genCollection(Expr.splice(pairGen), Expr.splice(buildFn))
-            })
+            if (!canContainItself(Type[Key].as_??) && !canContainItself(Type[Value].as_??))
+              // ScalaCheck's own `Gen.buildableOf` sizing (what both upstream derivations use)
+              Rule.matched(Expr.quote {
+                hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                  .genContainer(Expr.splice(pairGen), Expr.splice(buildFn))
+              })
+            else
+              Rule.matched(Expr.quote {
+                hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                  .genCollection(Expr.splice(pairGen), Expr.splice(buildFn))
+              })
           }
         case None =>
           MIO.pure(Rule.yielded(unsupportedCollectionBuild[A](isMap)))

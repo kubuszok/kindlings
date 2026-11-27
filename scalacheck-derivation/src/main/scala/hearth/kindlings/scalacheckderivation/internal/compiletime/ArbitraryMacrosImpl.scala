@@ -12,6 +12,8 @@ trait ArbitraryMacrosImpl
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with ScalacheckCollectionSupport
     with ScalacheckFunctionSupport
+    with ScalacheckLiteralSupport
+    with rules.ArbitraryHandleAsLiteralTypeRuleImpl
     with rules.ArbitraryUseCachedRuleImpl
     with rules.ArbitraryUseImplicitRuleImpl
     with rules.ArbitraryBuiltInRuleImpl
@@ -140,6 +142,7 @@ trait ArbitraryMacrosImpl
         ArbitraryHandleAsCollectionRule,
         ArbitraryHandleAsFunctionRule,
         ArbitraryHandleAsFutureOrGenRule,
+        ArbitraryHandleAsLiteralTypeRule,
         ArbitraryHandleAsSingletonRule,
         ArbitraryHandleAsCaseClassRule,
         ArbitraryHandleAsEnumRule
@@ -159,6 +162,44 @@ trait ArbitraryMacrosImpl
           Log.error(err.message) >> MIO.fail(err)
       }
     }
+
+  /** The types a value of `tpe` is made of: the elements of a collection, map or `Option` (not the structure of e.g.
+    * `::`, which would make every `List` look recursive), otherwise the type arguments and the fields of a case class
+    * or the subtypes of a sealed hierarchy.
+    */
+  private def componentTypes(tpe: ??): List[??] = {
+    import tpe.Underlying as T
+    val typeArgs = Type.typeArguments[T]
+    Type[T] match {
+      case IsCollection(_) | IsMap(_) | IsOption(_) => typeArgs
+      case _                                        =>
+        typeArgs ++ (CaseClass.parse[T].toOption match {
+          case Some(caseClass) => caseClass.primaryConstructor.totalParameters.flatten.map(_._2.tpe)
+          case None => Enum.parse[T].toOption.toList.flatMap(_.directChildren.toList.map(_._2.Underlying.as_??))
+        })
+    }
+  }
+
+  /** Whether `tpe` can contain a value of `target`: it is `target`, or (up to a bounded depth) one of the types it is
+    * made of can.
+    */
+  protected def mentionsType(tpe: ??, target: ??, visited: Set[String], depth: Int): Boolean = {
+    import tpe.Underlying as T
+    import target.Underlying as Target
+    val key = Type[T].plainPrint
+    if (Type[T] =:= Type[Target]) true
+    else if (visited(key) || depth > 8) false
+    else componentTypes(tpe).exists(mentionsType(_, target, visited + key, depth + 1))
+  }
+
+  /** Whether a value of `tpe` can contain another value of `tpe` (it is on a cycle of the type graph): a container
+    * whose elements cannot is generated exactly like ScalaCheck's own instance, one whose elements can needs the size
+    * to shrink with depth so that generation terminates.
+    */
+  protected def canContainItself(tpe: ??): Boolean = {
+    import tpe.Underlying as T
+    componentTypes(tpe).exists(mentionsType(_, tpe, Set(Type[T].plainPrint), 1))
+  }
 
   protected object ArbitraryTypes {
     def Arbitrary: Type.Ctor1[org.scalacheck.Arbitrary] = Type.Ctor1.of[org.scalacheck.Arbitrary]

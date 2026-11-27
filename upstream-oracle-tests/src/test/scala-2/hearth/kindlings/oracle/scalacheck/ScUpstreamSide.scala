@@ -15,6 +15,7 @@ object ScUpstreamSide extends ScInstances {
   val arbShape: Arbitrary[ScShape] = implicitly[Arbitrary[ScShape]]
   val arbTree: Arbitrary[ScTree] = implicitly[Arbitrary[ScTree]]
   val arbWrapper: Arbitrary[ScWrapper] = implicitly[Arbitrary[ScWrapper]]
+  val arbContainers: Arbitrary[ScContainers] = implicitly[Arbitrary[ScContainers]]
   val shrinkPerson: Shrink[ScPerson] = implicitly[Shrink[ScPerson]]
   val shrinkShape: Shrink[ScShape] = implicitly[Shrink[ScShape]]
   val shrinkTree: Shrink[ScTree] = implicitly[Shrink[ScTree]]
