@@ -222,38 +222,52 @@ object JsonCodec {
         val depthM1 = depth - 1
         if (depthM1 < 0) out.encodeError("depth limit exceeded")
         out.writeArrayStart()
-        val iter = vs.iterator
-        while (iter.hasNext) encode(iter.next(), out, depthM1)
+        // (by index: a `Vector`'s iterator is a large object, allocated once per array / object otherwise)
+        val size = vs.length
+        var i = 0
+        while (i < size) {
+          encode(vs(i), out, depthM1)
+          i += 1
+        }
         out.writeArrayEnd()
       case Json.Obj(obj) =>
         val depthM1 = depth - 1
         if (depthM1 < 0) out.encodeError("depth limit exceeded")
         out.writeObjectStart()
         if (sortKeys) encodeSortedFields(obj, out, depthM1)
-        else if (doSerialize eq null) {
-          val iter = obj.fields.iterator
-          while (iter.hasNext) {
-            val kv = iter.next()
-            out.writeKey(kv._1)
-            encode(kv._2, out, depthM1)
-          }
-        } else {
-          val iter = obj.fields.iterator
-          while (iter.hasNext) {
-            val kv = iter.next()
-            if (doSerialize(kv._2)) {
+        else {
+          val fields = obj.fields
+          val size = fields.length
+          var i = 0
+          if (doSerialize eq null)
+            while (i < size) {
+              val kv = fields(i)
               out.writeKey(kv._1)
               encode(kv._2, out, depthM1)
+              i += 1
             }
-          }
+          else
+            while (i < size) {
+              val kv = fields(i)
+              if (doSerialize(kv._2)) {
+                out.writeKey(kv._1)
+                encode(kv._2, out, depthM1)
+              }
+              i += 1
+            }
         }
         out.writeObjectEnd()
       case Json.Null => out.writeNull()
     }
 
     private def encodeSortedFields(obj: JsonObject, out: JsonWriter, depthM1: Int): Unit = {
-      val fields = new Array[(String, Json)](obj.fields.size)
-      val _ = obj.fields.copyToArray(fields, 0)
+      val source = obj.fields
+      val fields = new Array[(String, Json)](source.length)
+      var j = 0
+      while (j < fields.length) {
+        fields(j) = source(j)
+        j += 1
+      }
       java.util.Arrays.sort(fields, KeyComparator) // stable: fields with the same key keep their order
       var i = 0
       while (i < fields.length) {
