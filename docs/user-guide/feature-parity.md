@@ -13,6 +13,17 @@ build did not recompile. Upstream Scala 2 derivations (shapeless, Magnolia) sort
 except for numbered names (`Item2` before `Item10` vs after it) and subtypes declared in different scopes. Java enum
 constants keep their declaration order.
 
+**Collections typed as an abstract collection type** (every module that builds collections: decoders, generators,
+`Monoid`/`Empty` and the like): a collection is built with the `scala.collection.Factory` that Scala's implicit search
+finds for the declared type. When the *element* type is itself a collection which is a subtype of the declared type,
+the element type's companion is in the implicit scope too and its more specific factory wins:
+`mutable.Map[String, mutable.ListMap[String, Int]]` is built as a `mutable.ListMap`,
+`mutable.Map[String, mutable.LinkedHashMap[String, Int]]` as a `mutable.LinkedHashMap` and
+`mutable.IndexedSeq[mutable.ArrayStack[Int]]` as a `mutable.Stack`; with immutable or non-collection elements the
+declared type's default is used (`mutable.HashMap`, `ArrayBuffer`). Upstream libraries which map each abstract
+collection type to a fixed implementation (jsoniter-scala) build the declared type's default there. To get a specific
+implementation, declare that type (`mutable.HashMap[String, mutable.ListMap[String, Int]]`).
+
 ---
 
 ## avro-derivation
@@ -623,7 +634,7 @@ types).
 
 **Design decisions** (not gaps; each one is an expected difference of the oracle suites):
 - `allowRecursiveTypes` — upstream gates recursive types behind a flag (default `false`); Kindlings always allows them, so no flag is needed.
-- Without a discriminator, a case object is also read from `{"Leaf":{}}` (a superset; errors for objects given where
+- Without a discriminator, a case object is also read from `{"Leaf":{}}` or `{"Leaf":null}` (a superset; errors for objects given where
   upstream expects a string of an ADT of case objects only are Kindlings' then).
 - A Scala 3 `T | Null` field holding `null` is written as `null` without `transientNull` (upstream throws a
   `NullPointerException`).
@@ -631,11 +642,10 @@ types).
   the earlier occurrence).
 - Error messages for a value of another JSON type in a field with a default value do not say `or null`
   (`expected '{'`; upstream: `expected '{' or null`).
-- Collections are built with the `Factory` the compiler finds for the field's type; for an abstract collection type
-  whose *element* type is a collection which is a subtype of it (`mutable.Map[K, mutable.ListMap[..]]`,
-  `mutable.IndexedSeq[mutable.Stack[A]]`) that is the element type's implementation, where jsoniter-scala builds the
-  declared type's default one (a Hearth issue, see `docs/research/hearth-findings-jsoniter-parity-2026-11.md`).
-- A `null` Java enum value fails with a `MatchError` when written (upstream: `NullPointerException`).
+- A field typed as an abstract collection type whose *element* type is a collection which is a subtype of it
+  (`mutable.Map[K, mutable.ListMap[..]]`, `mutable.IndexedSeq[mutable.Stack[A]]`) is built as the element type's
+  implementation, where jsoniter-scala builds the declared type's default one: see "Collections typed as an abstract
+  collection type" at the top of this page.
 - Where upstream's Scala 2 and Scala 3 macros report different errors (ADTs without case objects, or with
   `circeLikeObjectEncoding`, given something else than an object: `expected '{'` / `expected '"' or '{'`), Kindlings
   reports what upstream reports on the same Scala version.
