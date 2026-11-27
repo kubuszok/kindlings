@@ -19,6 +19,24 @@ When the mocked type is a class, its primary constructor is invoked with a `Defa
 (`0`, `""`, `None`, …, `null` for other reference types), so constructor side effects run and constructor `val`s hold
 those defaults.
 
+An abstract `val` is not mocked either (as in ScalaMock): it is initialized while the mock is constructed, before any
+expectation could be set, so it holds its `Defaultable` default (`null` for most reference types) in a mock and in a
+stub alike. An abstract `lazy val` or `def` is mocked.
+
+### Compared with ScalaMock
+
+The members ScalaMock's own test suite (7.6.3, `MockTest`, `OrderingTest`, `ReturnTest`, `CallCountTest`,
+`MatchersTest`, stubs) exercises are supported — overloads (also polymorphic ones), curried and polymorphic methods,
+bounds and context bounds, `ClassTag` parameters, varargs and `Seq` parameters, by-name and implicit parameters, default
+arguments, operators, `this.type`, final and protected members, classes with constructor parameters — with these
+differences:
+
+- **Concrete members are not mocked** (ScalaMock mocks them too); mock an abstract type, or the abstract members.
+- **A member whose type is an inner type of the mocked trait** (`trait T { trait Embedded; def e(): Embedded }`) cannot
+  be mocked yet (a Hearth limitation).
+- No ScalaMock "new API" (`org.scalamock.stubs`), no `mockFunction`/`stubFunction` (mock a `FunctionN` trait instead:
+  `Mock.mock[Int => String]`), no call log, no `ZIO`/`cats-effect` integrations, no Java-reflection proxy mocks.
+
 ## Installation
 
 !!! example "sbt"
