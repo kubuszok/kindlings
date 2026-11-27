@@ -15,7 +15,10 @@ trait ArbitraryHandleAsSingletonRuleImpl { this: ArbitraryMacrosImpl & MacroComm
         case Right(sv) =>
           Log.info(s"Handling ${Type[A].prettyPrint} as singleton") >>
             MIO.pure(Rule.matched(Expr.quote {
-              _root_.org.scalacheck.Gen.const[A](Expr.splice(sv.singletonExpr))
+              // through `Any`: on Scala 2 a `scala.Enumeration` value `Mon` is typed `Value`, not `Mon.type`, so
+              // `Gen.const[Mon.type](Mon)` would not compile
+              hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                .constSingleton[A](Expr.splice(sv.singletonExpr))
             }))
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason))

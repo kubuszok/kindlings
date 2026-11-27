@@ -33,6 +33,32 @@ object ScalaCheckUtils {
       }
     }
 
+  /** Like [[genCollection]], but with ScalaCheck's own sizing (`Gen.buildableOf`: up to `size` elements), for elements
+    * that cannot contain the collection again: a standard collection gets exactly the values `Arbitrary.arbContainer`
+    * generates for the same seed.
+    */
+  def genContainer[Item, A](elemGen: Gen[Item], build: List[Item] => Either[Any, A]): Gen[A] =
+    Gen.listOf(elemGen).flatMap { items =>
+      safeBuild(build, items) match {
+        case Right(value) => Gen.const(value)
+        case Left(_)      =>
+          Gen.nonEmptyListOf(elemGen).flatMap { nonEmptyItems =>
+            safeBuild(build, nonEmptyItems) match {
+              case Right(value) => Gen.const(value)
+              case Left(_)      => Gen.fail[A]
+            }
+          }
+      }
+    }
+
+  /** `Gen.const(value)` for a singleton (case object, enum case, `Enumeration` value), typed as the singleton's type: a
+    * Scala 2 `Enumeration` value `Mon` is typed `Value`, not `Mon.type`.
+    */
+  def constSingleton[A](value: Any): Gen[A] = Gen.const(value.asInstanceOf[A])
+
+  /** `Gen.oneOf(first, second, rest*)`, for the subtypes of a sealed trait / enum. */
+  def oneOfGens[A](first: Gen[A], second: Gen[A], rest: List[Gen[A]]): Gen[A] = Gen.oneOf(first, second, rest*)
+
   /** How many candidates [[genValueType]] generates before giving up. */
   final val MaxValueTypeCandidates = 100
 

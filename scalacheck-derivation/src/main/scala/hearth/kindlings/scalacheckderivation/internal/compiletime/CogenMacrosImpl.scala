@@ -11,6 +11,8 @@ trait CogenMacrosImpl
     with ScalacheckDerivationPolicy
     with ScalacheckCollectionSupport
     with ScalacheckFunctionSupport
+    with ScalacheckLiteralSupport
+    with rules.CogenHandleAsLiteralTypeRuleImpl
     with rules.CogenUseCachedRuleImpl
     with rules.CogenUseImplicitRuleImpl
     with rules.CogenBuiltInRuleImpl
@@ -116,6 +118,7 @@ trait CogenMacrosImpl
         CogenHandleAsMapRule,
         CogenHandleAsCollectionRule,
         CogenHandleAsFunctionRule,
+        CogenHandleAsLiteralTypeRule,
         CogenHandleAsSingletonRule,
         CogenHandleAsCaseClassRule,
         CogenHandleAsEnumRule

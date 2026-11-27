@@ -15,6 +15,12 @@ object CogenUtils {
   def cogenNoFields[A]: Cogen[A] =
     Cogen((seed, _) => Cogen.cogenUnit.perturb(seed, ()))
 
+  /** A literal type's only value perturbs the seed like scalacheck-derived-extras' `cogenLiteral` (`Cogen(_ => 0L)`):
+    * reseeded with `0L`.
+    */
+  def cogenLiteral[A]: Cogen[A] =
+    Cogen((seed, _) => seed.reseed(0L))
+
   /** Like ScalaCheck's `Cogen.cogenOption`. */
   def cogenOption[A](innerCogen: Cogen[A]): Cogen[Option[A]] =
     Cogen((seed, opt) => opt.fold(seed)(a => innerCogen.perturb(seed.next, a)))

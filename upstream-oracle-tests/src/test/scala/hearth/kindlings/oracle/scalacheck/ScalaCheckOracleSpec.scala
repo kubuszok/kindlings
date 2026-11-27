@@ -14,6 +14,15 @@ sealed trait ScTree
 final case class ScLeaf(value: Int) extends ScTree
 final case class ScNode(left: ScTree, right: ScTree) extends ScTree
 final case class ScWrapper(shape: ScShape, people: List[ScPerson])
+// Mirrors scalacheck-derived's `CaseClassWithContainers` (core/src/test/scala/io/github/martinhh/test_classes.scala)
+final case class ScContainers(
+    set: Set[Int],
+    list: List[Boolean],
+    option: Option[String],
+    either: Either[String, Double],
+    map: Map[Int, String],
+    vector: Vector[ScShape]
+)
 
 /** What both sides of the oracle provide. */
 trait ScInstances {
@@ -21,6 +30,7 @@ trait ScInstances {
   def arbShape: Arbitrary[ScShape]
   def arbTree: Arbitrary[ScTree]
   def arbWrapper: Arbitrary[ScWrapper]
+  def arbContainers: Arbitrary[ScContainers]
   def shrinkPerson: Shrink[ScPerson]
   def shrinkShape: Shrink[ScShape]
   def shrinkTree: Shrink[ScTree]
@@ -84,6 +94,25 @@ final class ScalaCheckOracleSpec extends MacroSuite {
           List(10, 100).map(n => samples(i.arbTree.arbitrary, n).forall(depth(_) < 1000))
         ),
       ScPlatformExpectations.arbitrary
+    )
+  }
+
+  // Both upstreams check that a derived generator produces exactly what the equivalent hand-written `Gen` (built from
+  // ScalaCheck's own instances) produces for the same seeds: scalacheck-derived's ArbitraryDerivingSuite ("Generates
+  // same values as non-derived Gen") and scalacheck-shapeless' ArbitraryTests (`compareArbitrary`). Here the reference
+  // is the upstream derivation itself. Size 0 is left out: see "generates at every size" above.
+  test("Arbitrary: same values as upstream for the same seeds") {
+    def values[A](gen: Gen[A]): List[Option[A]] =
+      for { size <- sizes.filter(_ > 0); i <- (0 until 50).toList } yield gen(
+        Gen.Parameters.default.withSize(size),
+        Seed(i.toLong)
+      )
+    check(
+      same("person values")(i => values(i.arbPerson.arbitrary)) ++
+        same("shape values")(i => values(i.arbShape.arbitrary)) ++
+        same("wrapper values")(i => values(i.arbWrapper.arbitrary)) ++
+        same("containers values")(i => values(i.arbContainers.arbitrary)),
+      ScPlatformExpectations.values
     )
   }
 
@@ -151,6 +180,7 @@ object ScKindlingsSide extends ScInstances {
   val arbShape: Arbitrary[ScShape] = DeriveArbitrary.derived[ScShape]
   val arbTree: Arbitrary[ScTree] = DeriveArbitrary.derived[ScTree]
   val arbWrapper: Arbitrary[ScWrapper] = DeriveArbitrary.derived[ScWrapper]
+  val arbContainers: Arbitrary[ScContainers] = DeriveArbitrary.derived[ScContainers]
   val shrinkPerson: Shrink[ScPerson] = DeriveShrink.derived[ScPerson]
   val shrinkShape: Shrink[ScShape] = DeriveShrink.derived[ScShape]
   val shrinkTree: Shrink[ScTree] = DeriveShrink.derived[ScTree]

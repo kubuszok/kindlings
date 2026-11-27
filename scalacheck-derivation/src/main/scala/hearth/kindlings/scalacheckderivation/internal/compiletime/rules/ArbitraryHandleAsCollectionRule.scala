@@ -22,10 +22,17 @@ trait ArbitraryHandleAsCollectionRuleImpl { this: ArbitraryMacrosImpl & MacroCom
             case Some(buildFn) =>
               Log.info(s"Handling ${Type[A].prettyPrint} as Collection with element type ${ElemType.prettyPrint}") >>
                 deriveArbitraryRecursively[ElemType](using arbctx.nest[ElemType]).map { elemGen =>
-                  Rule.matched(Expr.quote {
-                    hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
-                      .genCollection(Expr.splice(elemGen), Expr.splice(buildFn))
-                  })
+                  if (!canContainItself(Type[ElemType].as_??))
+                    // ScalaCheck's own `Gen.buildableOf` sizing (what both upstream derivations use)
+                    Rule.matched(Expr.quote {
+                      hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                        .genContainer(Expr.splice(elemGen), Expr.splice(buildFn))
+                    })
+                  else
+                    Rule.matched(Expr.quote {
+                      hearth.kindlings.scalacheckderivation.internal.runtime.ScalaCheckUtils
+                        .genCollection(Expr.splice(elemGen), Expr.splice(buildFn))
+                    })
                 }
             case None =>
               MIO.pure(Rule.yielded(unsupportedCollectionBuild[A](isCollection.value)))

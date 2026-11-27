@@ -12,6 +12,8 @@ object ScPlatformExpectations {
     "generates at every size [0]._5: kindlings=true upstream=false"
   )
 
+  val values: List[String] = Nil
+
   val shrink: List[String] = Nil
 
   val cogen: List[String] = Nil
