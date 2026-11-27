@@ -29,28 +29,29 @@ trait EnumAlgebraSupport { this: InvariantKMacrosImpl & MacroCommons & StdExtens
       algCtorK1.apply[CatsTaglessFactories.WCtor2](using mkWCtor2)
     parsedOrFail(Enum.parse(using AlgW1).toEither, "Alg[WCtor1]").flatMap { enumm =>
       enumm
-        .matchOn[MIO, Alg[CatsTaglessFactories.WCtor2]](afExpr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor1]]]) { matched =>
-          import matched.{value as childValue, Underlying as Child}
-          val childType = UntypedType.dealias(Type[Child].asUntyped)
-          UntypedType.typeArguments(childType) match {
-            case _ :: Nil =>
-              val childCtor =
-                Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](UntypedType.typeConstructor(childType))
-              // The Expr keeps the subtype's static type (only the Scala-level wrapper is cast).
-              // The subtype's transformed value (e.g. `Leaf[G]`) conforms to `Alg[G]`.
-              childBody(childCtor, childValue.asInstanceOf[Expr[Any]])
-                .map(_.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
-            case _ =>
-              failCannotConstruct[Expr[Alg[CatsTaglessFactories.WCtor2]]](
-                typeClass,
-                s"subtype ${Type[Child].prettyPrint} of a sealed algebra has to take the algebra's effect as its " +
-                  "only type parameter"
-              )
-          }
+        .matchOn[MIO, Alg[CatsTaglessFactories.WCtor2]](afExpr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor1]]]) {
+          matched =>
+            import matched.{value as childValue, Underlying as Child}
+            val childType = UntypedType.dealias(Type[Child].asUntyped)
+            UntypedType.typeArguments(childType) match {
+              case _ :: Nil =>
+                val childCtor =
+                  Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](UntypedType.typeConstructor(childType))
+                // The Expr keeps the subtype's static type (only the Scala-level wrapper is cast).
+                // The subtype's transformed value (e.g. `Leaf[G]`) conforms to `Alg[G]`.
+                childBody(childCtor, childValue.asInstanceOf[Expr[Any]])
+                  .map(_.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
+              case _ =>
+                failCannotConstruct[Expr[Alg[CatsTaglessFactories.WCtor2]]](
+                  typeClass,
+                  s"subtype ${Type[Child].prettyPrint} of a sealed algebra has to take the algebra's effect as its " +
+                    "only type parameter"
+                )
+            }
         }
         .flatMap {
           case Some(result) => MIO.pure(result)
-          case None => failCannotConstruct(typeClass, s"sealed algebra ${AlgW1.prettyPrint} has no subtypes")
+          case None         => failCannotConstruct(typeClass, s"sealed algebra ${AlgW1.prettyPrint} has no subtypes")
         }
     }
   }
@@ -91,7 +92,10 @@ trait FunctorKEnumRuleImpl { this: FunctorKMacrosImpl & MacroCommons & StdExtens
       (childCtor, child) => {
         val childCtx = FunctorKCtx[CatsTaglessFactories.DummyHKT](
           childCtor,
-          applyTypeClassToAlgebra[Any, cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]](anchor, childCtor.asUntyped),
+          applyTypeClassToAlgebra[Any, cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]](
+            anchor,
+            childCtor.asUntyped
+          ),
           ctx.cache,
           ctx.derivedType
         )
@@ -118,7 +122,9 @@ trait FunctorKEnumRuleImpl { this: FunctorKMacrosImpl & MacroCommons & StdExtens
             val _ = fk
             Expr.splice {
               runSafe {
-                enumAlgebraBody[Alg]("FunctorK", ctx.algCtorK1, Expr.quote(af))(childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]]))
+                enumAlgebraBody[Alg]("FunctorK", ctx.algCtorK1, Expr.quote(af))(
+                  childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]])
+                )
               }
             }
         }
@@ -158,7 +164,10 @@ trait ContravariantKEnumRuleImpl { this: ContravariantKMacrosImpl & MacroCommons
       (childCtor, child) => {
         val childCtx = ContravariantKCtx[CatsTaglessFactories.DummyHKT](
           childCtor,
-          applyTypeClassToAlgebra[Any, cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]](anchor, childCtor.asUntyped),
+          applyTypeClassToAlgebra[Any, cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]](
+            anchor,
+            childCtor.asUntyped
+          ),
           ctx.cache,
           ctx.derivedType
         )
@@ -185,7 +194,9 @@ trait ContravariantKEnumRuleImpl { this: ContravariantKMacrosImpl & MacroCommons
             val _ = fk
             Expr.splice {
               runSafe {
-                enumAlgebraBody[Alg]("ContravariantK", ctx.algCtorK1, Expr.quote(af))(childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]]))
+                enumAlgebraBody[Alg]("ContravariantK", ctx.algCtorK1, Expr.quote(af))(
+                  childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]])
+                )
               }
             }
         }
@@ -223,7 +234,10 @@ trait InvariantKEnumRuleImpl { this: InvariantKMacrosImpl & MacroCommons & StdEx
       (childCtor, child) => {
         val childCtx = InvariantKCtx[CatsTaglessFactories.DummyHKT](
           childCtor,
-          applyTypeClassToAlgebra[Any, cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]](anchor, childCtor.asUntyped),
+          applyTypeClassToAlgebra[Any, cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]](
+            anchor,
+            childCtor.asUntyped
+          ),
           ctx.cache,
           ctx.derivedType
         )
@@ -253,7 +267,9 @@ trait InvariantKEnumRuleImpl { this: InvariantKMacrosImpl & MacroCommons & StdEx
             val _ = gk
             Expr.splice {
               runSafe {
-                enumAlgebraBody[Alg]("InvariantK", ctx.algCtorK1, Expr.quote(af))(childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]], Expr.quote(gk).asInstanceOf[Expr[Any]]))
+                enumAlgebraBody[Alg]("InvariantK", ctx.algCtorK1, Expr.quote(af))(
+                  childBodyFor[Alg](Expr.quote(fk).asInstanceOf[Expr[Any]], Expr.quote(gk).asInstanceOf[Expr[Any]])
+                )
               }
             }
         }
