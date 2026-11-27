@@ -71,7 +71,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
 
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+        case (name, param) if hasAnnotationType[transientField](param) && transientFieldHasNoFallback(param) => name
       } match {
         case Some(name) =>
           val err = SchemaDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
@@ -142,7 +142,11 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
               .parTraverse { case (fName, param) =>
                 import param.tpe.Underlying as Field
                 val nameOverride = getAnnotationStringArg[fieldName](param)
-                val fieldDoc = getAnnotationStringArg[avroDoc](param)
+                // as avro4s: the @avroDoc of a value class documents the fields of that type (it has no schema of
+                // its own to carry the doc)
+                val fieldDoc = getAnnotationStringArg[avroDoc](param).orElse {
+                  if (Type[Field] <:< Type.of[AnyVal]) getTypeAnnotationStringArg[avroDoc, Field] else None
+                }
                 val fieldDefault =
                   if (hasAnnotationType[avroNoDefault](param)) None
                   else getAnnotationStringArg[avroDefault](param)
@@ -167,7 +171,7 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                     }
                 Log.namedScope(s"Deriving schema for field $fName: ${Type[Field].prettyPrint}") {
                   (avroFixedSize, decimalOverride) match {
-                    case (Some(_), _) if !(Type[Field] =:= Type.of[Array[Byte]]) =>
+                    case (Some(_), _) if !(Type[Field] =:= Type.of[Array[Byte]] || Type[Field] =:= Type.of[String]) =>
                       val err = SchemaDerivationError.AvroFixedOnNonByteArray(
                         fName,
                         Type[A].prettyPrint,
@@ -220,11 +224,24 @@ trait AvroSchemaForHandleAsCaseClassRuleImpl {
                         )
                       }
                     case _ =>
-                      val nestedCtx: SchemaForCtx[Field] = fieldNamespaceOverride match {
-                        case Some(ns) => cleanCtx.nestWithNamespaceOverride[Field](ns)
-                        case None     => cleanCtx.nest[Field]
-                      }
-                      deriveSchemaRecursively[Field](using nestedCtx).map { fieldSchema =>
+                      // as avro4s: the field's schema is derived as usual and then every named type in it is moved
+                      // to the field's namespace (at runtime: the types' names are not all known before)
+                      deriveSchemaRecursively[Field](using cleanCtx.nest[Field]).map { derivedFieldSchema =>
+                        val namespacedFieldSchema: Expr[Schema] = fieldNamespaceOverride match {
+                          case Some(ns) =>
+                            Expr.quote {
+                              AvroDerivationUtils.overrideNamespace(
+                                Expr.splice(derivedFieldSchema),
+                                Expr.splice(Expr(ns))
+                              )
+                            }
+                          case None => derivedFieldSchema
+                        }
+                        // as avro4s 5: @avroError on a field makes the field's record an error record
+                        val fieldSchema: Expr[Schema] =
+                          if (hasAnnotationType[avroError](param))
+                            Expr.quote(AvroDerivationUtils.asErrorRecord(Expr.splice(namespacedFieldSchema)))
+                          else namespacedFieldSchema
                         (
                           fName,
                           fieldSchema,

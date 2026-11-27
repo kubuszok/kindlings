@@ -115,11 +115,19 @@ private[avroderivation] object AvroScalaDefaults {
     }
   }
 
+  // A default out of the range of a long (e.g. `Instant.MIN`/`Instant.MAX`) saturates, as avro4s' defaults do.
   private def timestamp(epochSecond: Long, nano: Int, logicalType: org.apache.avro.LogicalType): AnyRef =
-    logicalType match {
-      case _: LogicalTypes.TimestampMicros => java.lang.Long.valueOf(epochSecond * 1000000L + nano / 1000)
-      case _: LogicalTypes.TimestampNanos  => java.lang.Long.valueOf(epochSecond * 1000000000L + nano)
-      case _                               => java.lang.Long.valueOf(epochSecond * 1000L + nano / 1000000)
+    try
+      logicalType match {
+        case _: LogicalTypes.TimestampMicros =>
+          java.lang.Long.valueOf(Math.addExact(Math.multiplyExact(epochSecond, 1000000L), (nano / 1000).toLong))
+        case _: LogicalTypes.TimestampNanos =>
+          java.lang.Long.valueOf(Math.addExact(Math.multiplyExact(epochSecond, 1000000000L), nano.toLong))
+        case _ =>
+          java.lang.Long.valueOf(Math.addExact(Math.multiplyExact(epochSecond, 1000L), (nano / 1000000).toLong))
+      }
+    catch {
+      case _: ArithmeticException => java.lang.Long.valueOf(if (epochSecond < 0) Long.MinValue else Long.MaxValue)
     }
 
   private def enumSymbol(name: String, schema: Schema): Option[AnyRef] =

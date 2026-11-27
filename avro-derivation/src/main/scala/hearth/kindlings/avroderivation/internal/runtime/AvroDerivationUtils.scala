@@ -274,13 +274,85 @@ object AvroDerivationUtils {
 
   def wrapByteSeq(bytes: Seq[Byte]): ByteBuffer = ByteBuffer.wrap(bytes.toArray)
 
-  def wrapByteArrayAsFixed(bytes: Array[Byte], expectedSize: Int): GenericData.Fixed = {
-    if (bytes.length != expectedSize)
-      throw new org.apache.avro.AvroRuntimeException(
-        s"@avroFixed($expectedSize): expected $expectedSize bytes but got ${bytes.length}"
-      )
-    new GenericData.Fixed(Schema.createFixed("fixed", null, null, expectedSize), bytes)
+  // The schema of the FIXED values of fields annotated with `@avroFixed(size)`, one per size: built once, not for every
+  // encoded value.
+  private val anonymousFixedSchemas = new java.util.concurrent.ConcurrentHashMap[Integer, Schema]()
+  private def anonymousFixedSchema(size: Int): Schema = {
+    val key = Integer.valueOf(size)
+    val cached = anonymousFixedSchemas.get(key)
+    if (cached != null) cached
+    else {
+      val created = Schema.createFixed("fixed", null, null, size)
+      val previous = anonymousFixedSchemas.putIfAbsent(key, created)
+      if (previous != null) previous else created
+    }
   }
+
+  /** A FIXED value of `expectedSize` bytes: shorter input is padded with zeros (as avro4s does), longer is rejected. */
+  def wrapByteArrayAsFixed(bytes: Array[Byte], expectedSize: Int): GenericData.Fixed = {
+    if (bytes.length > expectedSize)
+      throw new org.apache.avro.AvroRuntimeException(
+        s"@avroFixed($expectedSize): expected at most $expectedSize bytes but got ${bytes.length}"
+      )
+    val padded = if (bytes.length == expectedSize) bytes else util.Arrays.copyOf(bytes, expectedSize)
+    new GenericData.Fixed(anonymousFixedSchema(expectedSize), padded)
+  }
+
+  /** A FIXED value of `schema` (a named FIXED type, e.g. of a value class annotated with `@avroFixed`). */
+  def wrapByteArrayAsFixed(bytes: Array[Byte], schema: Schema): GenericData.Fixed = {
+    val size = schema.getFixedSize
+    if (bytes.length > size)
+      throw new org.apache.avro.AvroRuntimeException(
+        s"@avroFixed($size): expected at most $size bytes but got ${bytes.length}"
+      )
+    new GenericData.Fixed(schema, if (bytes.length == size) bytes else util.Arrays.copyOf(bytes, size))
+  }
+
+  def wrapStringAsFixed(value: String, schema: Schema): GenericData.Fixed =
+    wrapByteArrayAsFixed(value.getBytes(java.nio.charset.StandardCharsets.UTF_8), schema)
+
+  /** The ENUM schema of a Java enum: `name`, `namespace` and no default, unless the enum carries the Java annotations
+    * `@AvroJavaName`, `@AvroJavaNamespace`, `@AvroJavaProp` or (on a constant) `@AvroJavaEnumDefault` - read by
+    * reflection, as avro4s reads its own (a Java enum cannot carry the Scala annotations). `symbols` are the symbols of
+    * the constants, in the order of their ordinals.
+    */
+  def createJavaEnum(anyConstant: Any, name: String, namespace: String, symbols: util.List[String]): Schema = {
+    import hearth.kindlings.avroderivation.annotations.{
+      AvroJavaEnumDefault,
+      AvroJavaName,
+      AvroJavaNamespace,
+      AvroJavaProp
+    }
+    val clazz: Class[?] = anyConstant.asInstanceOf[java.lang.Enum[?]].getDeclaringClass
+    val nameAnnotation = clazz.getAnnotation(classOf[AvroJavaName])
+    val namespaceAnnotation = clazz.getAnnotation(classOf[AvroJavaNamespace])
+    val constants: Array[AnyRef] = clazz.getEnumConstants.asInstanceOf[Array[AnyRef]]
+    var default: String = null
+    var i = 0
+    while (default == null && i < constants.length && i < symbols.size) {
+      val constantName: String = constants(i).asInstanceOf[java.lang.Enum[?]].name
+      if (clazz.getField(constantName).getAnnotation(classOf[AvroJavaEnumDefault]) != null) default = symbols.get(i)
+      i += 1
+    }
+    val schema = Schema.createEnum(
+      if (nameAnnotation != null) nameAnnotation.value else name,
+      null,
+      if (namespaceAnnotation != null) namespaceAnnotation.value else namespace,
+      symbols,
+      default
+    )
+    val propAnnotation = clazz.getAnnotation(classOf[AvroJavaProp])
+    if (propAnnotation != null) schema.addProp(propAnnotation.key, propAnnotation.value: AnyRef)
+    schema
+  }
+
+  /** The symbols of a `scala.Enumeration` in the order of their ids (the declaration order), as avro4s lists them. */
+  def symbolsInIdOrder(values: List[Enumeration#Value], symbols: List[String]): List[String] =
+    values.zip(symbols).sortBy(_._1.id).map(_._2)
+
+  /** A String as a FIXED value: its UTF-8 bytes padded with zeros to `expectedSize` (as avro4s does). */
+  def wrapStringAsFixed(value: String, expectedSize: Int): GenericData.Fixed =
+    wrapByteArrayAsFixed(value.getBytes(java.nio.charset.StandardCharsets.UTF_8), expectedSize)
 
   def encodeBigDecimal(bd: BigDecimal, scale: Int): ByteBuffer = {
     val scaled = bd.bigDecimal.setScale(scale)
@@ -397,12 +469,35 @@ object AvroDerivationUtils {
   def decodeOption[A](value: Any, decode: Any => A): Option[A] =
     if (value == null) None else Some(decode(value))
 
+  /** The items of an Avro ARRAY value: Avro's readers produce a `java.util.Collection`; hand-built records may hold a
+    * Java array or a Scala collection instead (accepted as avro4s' decoders accept them).
+    */
+  def asCollection(value: Any): util.Collection[Any] = value match {
+    case collection: util.Collection[?] => collection.asInstanceOf[util.Collection[Any]]
+    case array: Array[AnyRef]           => util.Arrays.asList(array*).asInstanceOf[util.Collection[Any]]
+    case array: Array[?]                =>
+      val list = new util.ArrayList[Any](array.length)
+      var i = 0
+      while (i < array.length) {
+        val _ = list.add(array(i))
+        i += 1
+      }
+      list
+    case iterable: Iterable[?] =>
+      val list = new util.ArrayList[Any]()
+      iterable.foreach { item =>
+        val _ = list.add(item)
+      }
+      list
+    case other => cannotDecode(other, "ARRAY")
+  }
+
   def decodeCollection[Item, Coll](
       value: Any,
       decodeItem: Any => Item,
       factory: scala.collection.Factory[Item, Coll]
   ): Coll = {
-    val list = value.asInstanceOf[util.Collection[Any]]
+    val list = asCollection(value)
     val builder = factory.newBuilder
     val iter = list.iterator()
     while (iter.hasNext)
@@ -433,43 +528,37 @@ object AvroDerivationUtils {
     fixed.bytes().clone()
   }
 
-  def decodeToByteBuffer(value: Any): ByteBuffer =
-    value.asInstanceOf[ByteBuffer]
+  /** A String field annotated with `@avroFixed`: the FIXED value's bytes as UTF-8 (padding included, as avro4s). */
+  def decodeFixedString(value: Any): String = decodeCharSequence(value)
 
-  def decodeByteBuffer(value: Any): Array[Byte] = {
-    val bb = value.asInstanceOf[ByteBuffer]
-    val bytes = new Array[Byte](bb.remaining())
-    bb.get(bytes)
-    bytes
+  // Bytes are decoded from whatever Avro (or a hand-built record) holds them in - a ByteBuffer, a byte array or a
+  // FIXED value - regardless of the schema, as avro4s' decoders do.
+
+  def decodeToByteBuffer(value: Any): ByteBuffer = value match {
+    case buffer: ByteBuffer                          => buffer
+    case array: Array[Byte]                          => ByteBuffer.wrap(array)
+    case fixed: org.apache.avro.generic.GenericFixed => ByteBuffer.wrap(fixed.bytes())
+    case other                                       => cannotDecode(other, "BYTES")
   }
 
-  def decodeByteBufferToSeq(value: Any): Seq[Byte] = {
-    val bb = value.asInstanceOf[ByteBuffer]
-    val bytes = new Array[Byte](bb.remaining())
-    bb.get(bytes)
-    bytes.toSeq
+  def decodeByteBuffer(value: Any): Array[Byte] = value match {
+    case bb: ByteBuffer =>
+      val bytes = new Array[Byte](bb.remaining())
+      bb.duplicate().get(bytes) // the decoded value keeps its position, so it can be decoded again
+      bytes
+    case array: Array[Byte]                          => array
+    case fixed: org.apache.avro.generic.GenericFixed => fixed.bytes().clone()
+    case other                                       => cannotDecode(other, "BYTES")
   }
 
-  def decodeByteBufferToList(value: Any): List[Byte] = {
-    val bb = value.asInstanceOf[ByteBuffer]
-    val bytes = new Array[Byte](bb.remaining())
-    bb.get(bytes)
-    bytes.toList
-  }
+  def decodeByteBufferToSeq(value: Any): Seq[Byte] = decodeByteBuffer(value).toSeq
 
-  def decodeByteBufferToVector(value: Any): Vector[Byte] = {
-    val bb = value.asInstanceOf[ByteBuffer]
-    val bytes = new Array[Byte](bb.remaining())
-    bb.get(bytes)
-    bytes.toVector
-  }
+  def decodeByteBufferToList(value: Any): List[Byte] = decodeByteBuffer(value).toList
 
-  def decodeBigDecimal(value: Any, scale: Int): BigDecimal = {
-    val bb = value.asInstanceOf[ByteBuffer]
-    val bytes = new Array[Byte](bb.remaining())
-    bb.get(bytes)
-    BigDecimal(new java.math.BigDecimal(new java.math.BigInteger(bytes), scale))
-  }
+  def decodeByteBufferToVector(value: Any): Vector[Byte] = decodeByteBuffer(value).toVector
+
+  def decodeBigDecimal(value: Any, scale: Int): BigDecimal =
+    BigDecimal(new java.math.BigDecimal(new java.math.BigInteger(decodeByteBuffer(value)), scale))
 
   def decodeEither[L, R](
       value: Any,
@@ -482,16 +571,75 @@ object AvroDerivationUtils {
     else Right(decodeRight(value))
   }
 
-  def decodeCharSequence(value: Any): String =
-    value.toString
+  /** Decodes an Either whose union was flattened from `leftSchema` and the right side's schema (either of which can be
+    * a union itself, e.g. `Either[String, Option[Int]]` is `["null", "string", "int"]`): the value is a `Left` when the
+    * union branch it resolves to comes from `leftSchema`.
+    */
+  def decodeEither[L, R](
+      value: Any,
+      unionSchema: Schema,
+      leftSchema: Schema,
+      decodeLeft: Any => L,
+      decodeRight: Any => R
+  ): Either[L, R] = {
+    val branch = unionSchema.getTypes.get(GenericData.get().resolveUnion(unionSchema, value))
+    if (isBranchOf(branch, leftSchema)) Left(decodeLeft(value))
+    else Right(decodeRight(value))
+  }
+
+  private def sameBranch(a: Schema, b: Schema): Boolean =
+    (a eq b) || (a.getType == b.getType && (a.getType match {
+      case Schema.Type.RECORD | Schema.Type.ENUM | Schema.Type.FIXED => a.getFullName == b.getFullName
+      case _                                                         => true
+    }))
+
+  private def isBranchOf(branch: Schema, schema: Schema): Boolean =
+    if (schema.getType != Schema.Type.UNION) sameBranch(branch, schema)
+    else {
+      val types = schema.getTypes
+      var i = 0
+      var found = false
+      while (!found && i < types.size) {
+        found = sameBranch(branch, types.get(i))
+        i += 1
+      }
+      found
+    }
+
+  /** A String from whatever holds it - a `CharSequence` (`Utf8`, `String`), or its UTF-8 bytes in a byte array, a
+    * ByteBuffer or a FIXED value - regardless of the schema, as avro4s' decoder does. Anything else is rejected.
+    */
+  def decodeCharSequence(value: Any): String = value match {
+    case chars: CharSequence => chars.toString
+    case bytes: Array[Byte]  => new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+    case buffer: ByteBuffer  =>
+      val bytes = new Array[Byte](buffer.remaining())
+      buffer.duplicate().get(bytes)
+      new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+    case fixed: org.apache.avro.generic.GenericFixed =>
+      new String(fixed.bytes(), java.nio.charset.StandardCharsets.UTF_8)
+    case other => cannotDecode(other, "STRING")
+  }
+
+  /** An Avro `Utf8` from a `Utf8` (as it is), a `String`, or UTF-8 bytes (as avro4s' decoder). */
+  def decodeUtf8(value: Any): org.apache.avro.util.Utf8 = value match {
+    case utf8: org.apache.avro.util.Utf8 => utf8
+    case other                           => new org.apache.avro.util.Utf8(decodeCharSequence(other))
+  }
+
+  /** A `CharSequence`: a `CharSequence` as it is (so a `Utf8` stays a `Utf8`, as with avro4s), bytes as a `Utf8`. */
+  def decodeAsCharSequence(value: Any): CharSequence = value match {
+    case chars: CharSequence => chars
+    case other               => new org.apache.avro.util.Utf8(decodeCharSequence(other))
+  }
 
   // Logical type decoders
   def decodeUUID(value: Any): java.util.UUID = java.util.UUID.fromString(value.toString)
   def decodeInstant(value: Any): java.time.Instant = java.time.Instant.ofEpochMilli(value.asInstanceOf[Long])
   def decodeLocalDate(value: Any): java.time.LocalDate =
-    java.time.LocalDate.ofEpochDay(value.asInstanceOf[Int].toLong)
+    java.time.LocalDate.ofEpochDay(decodeInt(value).toLong)
   def decodeLocalTime(value: Any): java.time.LocalTime =
-    java.time.LocalTime.ofNanoOfDay(value.asInstanceOf[Long] * 1000)
+    java.time.LocalTime.ofNanoOfDay(decodeLong(value) * 1000)
   def decodeLocalDateTime(value: Any): java.time.LocalDateTime =
     java.time.LocalDateTime
       .ofInstant(java.time.Instant.ofEpochMilli(value.asInstanceOf[Long]), java.time.ZoneOffset.UTC)
@@ -578,10 +726,11 @@ object AvroDerivationUtils {
     schema
   }
 
+  // Overflow is an ArithmeticException (as avro4s, which uses `Instant.toEpochMilli`), not a silently wrapped value.
   private def epochToLong(epochSecond: Long, nano: Int, precision: TimestampPrecision): Long = precision match {
-    case TimestampPrecision.Millis => epochSecond * 1000L + nano / 1000000
-    case TimestampPrecision.Micros => epochSecond * 1000000L + nano / 1000
-    case TimestampPrecision.Nanos  => epochSecond * 1000000000L + nano
+    case TimestampPrecision.Millis => Math.addExact(Math.multiplyExact(epochSecond, 1000L), (nano / 1000000).toLong)
+    case TimestampPrecision.Micros => Math.addExact(Math.multiplyExact(epochSecond, 1000000L), (nano / 1000).toLong)
+    case TimestampPrecision.Nanos  => Math.addExact(Math.multiplyExact(epochSecond, 1000000000L), nano.toLong)
   }
 
   private def longToInstant(value: Any, precision: TimestampPrecision): java.time.Instant = {
@@ -726,4 +875,190 @@ object AvroDerivationUtils {
 
   // compiled once (`String.replaceAll` compiles its regex on every call)
   private val NonAvroNameChars: java.util.regex.Pattern = java.util.regex.Pattern.compile("[^A-Za-z0-9_]")
+
+  // --- Field-level @avroNamespace ---
+
+  /** `schema` with the namespace of every named type in it (records, enums, fixed - through unions, arrays, maps and
+    * record fields) replaced by `namespace`, as avro4s does for a field annotated with `@AvroNamespace`
+    * (`SchemaHelper.overrideNamespace`). Unlike avro4s, docs, defaults, aliases, properties and logical types are all
+    * kept, and recursive schemas are supported.
+    */
+  def overrideNamespace(schema: Schema, namespace: String): Schema =
+    overrideNamespace(schema, namespace, new util.IdentityHashMap[Schema, Schema]())
+
+  private def copyProps(from: org.apache.avro.JsonProperties, to: org.apache.avro.JsonProperties): Unit = {
+    val it = from.getObjectProps.entrySet().iterator()
+    while (it.hasNext) {
+      val e = it.next()
+      if (to.getObjectProp(e.getKey) == null) to.addProp(e.getKey, e.getValue)
+    }
+  }
+
+  private def copyNamedExtras(from: Schema, to: Schema): Schema = {
+    val logicalType = from.getLogicalType
+    if (logicalType != null) { val _ = logicalType.addToSchema(to) }
+    copyProps(from, to)
+    val aliases = from.getAliases.iterator()
+    while (aliases.hasNext) to.addAlias(aliases.next())
+    to
+  }
+
+  private def hasFields(record: Schema): Boolean =
+    try { record.getFields; true }
+    catch { case _: org.apache.avro.AvroRuntimeException => false }
+
+  private def overrideNamespace(schema: Schema, namespace: String, seen: util.IdentityHashMap[Schema, Schema]): Schema =
+    schema.getType match {
+      case Schema.Type.RECORD =>
+        val done = seen.get(schema)
+        if (done != null) done
+        // a reference to a record that is still being built (a recursive type): left as it is
+        else if (!hasFields(schema)) schema
+        else {
+          val copy = Schema.createRecord(schema.getName, schema.getDoc, namespace, schema.isError)
+          val _ = seen.put(schema, copy)
+          val fields = new util.ArrayList[Schema.Field](schema.getFields.size)
+          val it = schema.getFields.iterator()
+          while (it.hasNext) {
+            val f = it.next()
+            val field =
+              new Schema.Field(f.name, overrideNamespace(f.schema, namespace, seen), f.doc, f.defaultVal(), f.order)
+            copyProps(f, field)
+            val aliases = f.aliases.iterator()
+            while (aliases.hasNext) field.addAlias(aliases.next())
+            val _ = fields.add(field)
+          }
+          copy.setFields(fields)
+          copyNamedExtras(schema, copy)
+        }
+      case Schema.Type.UNION =>
+        val types = new util.ArrayList[Schema](schema.getTypes.size)
+        val it = schema.getTypes.iterator()
+        while (it.hasNext) { val _ = types.add(overrideNamespace(it.next(), namespace, seen)) }
+        Schema.createUnion(types)
+      case Schema.Type.ENUM =>
+        copyNamedExtras(
+          schema,
+          Schema.createEnum(schema.getName, schema.getDoc, namespace, schema.getEnumSymbols, schema.getEnumDefault)
+        )
+      case Schema.Type.FIXED =>
+        copyNamedExtras(schema, Schema.createFixed(schema.getName, schema.getDoc, namespace, schema.getFixedSize))
+      case Schema.Type.MAP =>
+        val copy = Schema.createMap(overrideNamespace(schema.getValueType, namespace, seen))
+        copyProps(schema, copy)
+        copy
+      case Schema.Type.ARRAY =>
+        val copy = Schema.createArray(overrideNamespace(schema.getElementType, namespace, seen))
+        copyProps(schema, copy)
+        copy
+      case _ => schema
+    }
+
+  /** `schema` as an error record (`@avroError` on a field, as avro4s' `@AvroError`): a record is copied with the error
+    * flag set; any other schema is returned as it is.
+    */
+  def asErrorRecord(schema: Schema): Schema =
+    if (schema.getType != Schema.Type.RECORD || schema.isError || !hasFields(schema)) schema
+    else {
+      val copy = Schema.createRecord(schema.getName, schema.getDoc, schema.getNamespace, true)
+      val fields = new util.ArrayList[Schema.Field](schema.getFields.size)
+      val it = schema.getFields.iterator()
+      while (it.hasNext) {
+        val f = it.next()
+        val _ = fields.add(new Schema.Field(f, f.schema))
+      }
+      copy.setFields(fields)
+      copyNamedExtras(schema, copy)
+    }
+
+  /** Rebinds an encoded value to `schema`: the records, enum symbols and fixed values in it (built with the schemas of
+    * their own types) are re-created with the corresponding schemas found in `schema`, matched by simple name. Used for
+    * fields annotated with `@avroNamespace`, whose named types live in another namespace than the one their encoders
+    * know: Avro resolves union branches by the full name of the datum's schema.
+    */
+  def rebindToSchema(value: Any, schema: Schema): Any =
+    if (value == null) null
+    else
+      schema.getType match {
+        case Schema.Type.RECORD =>
+          value match {
+            case record: GenericRecord if record.getSchema ne schema =>
+              val fields = schema.getFields
+              val copy = new GenericData.Record(schema)
+              var i = 0
+              while (i < fields.size) {
+                copy.put(i, rebindToSchema(record.get(i), fields.get(i).schema))
+                i += 1
+              }
+              copy
+            case _ => value
+          }
+        case Schema.Type.ENUM =>
+          value match {
+            case symbol: GenericData.EnumSymbol if symbol.getSchema ne schema =>
+              new GenericData.EnumSymbol(schema, symbol.toString)
+            case _ => value
+          }
+        case Schema.Type.FIXED =>
+          value match {
+            case fixed: org.apache.avro.generic.GenericFixed if fixed.getSchema ne schema =>
+              new GenericData.Fixed(schema, fixed.bytes())
+            case _ => value
+          }
+        case Schema.Type.ARRAY =>
+          value match {
+            case items: util.Collection[?] =>
+              val copy = new util.ArrayList[Any](items.size)
+              val it = items.iterator()
+              while (it.hasNext) { val _ = copy.add(rebindToSchema(it.next(), schema.getElementType)) }
+              copy
+            case _ => value
+          }
+        case Schema.Type.MAP =>
+          value match {
+            case entries: util.Map[?, ?] =>
+              val copy = new util.HashMap[Any, Any](entries.size * 2)
+              val it = entries.entrySet().iterator()
+              while (it.hasNext) {
+                val e = it.next()
+                val _ = copy.put(e.getKey, rebindToSchema(e.getValue, schema.getValueType))
+              }
+              copy
+            case _ => value
+          }
+        case Schema.Type.UNION =>
+          val branch = unionBranchFor(value, schema)
+          if (branch == null) value else rebindToSchema(value, branch)
+        case _ => value
+      }
+
+  /** The branch of `union` a container value belongs to (named types by simple name), or null for other values. */
+  private def unionBranchFor(value: Any, union: Schema): Schema = {
+    val (tpe, name) = value match {
+      case c: org.apache.avro.generic.GenericContainer if c.getSchema.getType == Schema.Type.RECORD =>
+        (Schema.Type.RECORD, c.getSchema.getName)
+      case c: org.apache.avro.generic.GenericContainer if c.getSchema.getType == Schema.Type.ENUM =>
+        (Schema.Type.ENUM, c.getSchema.getName)
+      case c: org.apache.avro.generic.GenericContainer if c.getSchema.getType == Schema.Type.FIXED =>
+        (Schema.Type.FIXED, c.getSchema.getName)
+      case _: util.Collection[?] => (Schema.Type.ARRAY, null)
+      case _: util.Map[?, ?]     => (Schema.Type.MAP, null)
+      case _                     => (null, null)
+    }
+    if (tpe == null) null
+    else {
+      val types = union.getTypes
+      var i = 0
+      var found: Schema = null
+      while (found == null && i < types.size) {
+        val candidate = types.get(i)
+        if (candidate.getType == tpe && (name == null || candidate.getName == name)) found = candidate
+        i += 1
+      }
+      found
+    }
+  }
+
+  /** Reads a case class field that has no accessor (`private val`) through `Product`. */
+  def productElement(value: Any, index: Int): Any = value.asInstanceOf[Product].productElement(index)
 }

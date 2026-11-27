@@ -43,16 +43,15 @@ trait AvroEncoderHandleAsEnumRuleImpl {
           enumm
             .parMatchOn[MIO, Any](ectx.value) { matched =>
               import matched.Underlying as EnumCase
-              val caseName: String = childrenList
-                .find { case (_, child) =>
+              val nameExpr: Expr[String] = childrenList.find { case (_, child) =>
+                import child.Underlying as ChildType
+                Type[EnumCase] <:< Type[ChildType]
+              } match {
+                case Some((childName, child)) =>
                   import child.Underlying as ChildType
-                  Type[EnumCase] <:< Type[ChildType]
-                }
-                .map(_._1)
-                .getOrElse(Type[EnumCase].shortName)
-              val nameExpr: Expr[String] = ectx.evaluatedConfig match {
-                case Some(cfg) => Expr(cfg.transformConstructorNames(caseName))
-                case None => Expr.quote(Expr.splice(ectx.config).transformConstructorNames(Expr.splice(Expr(caseName))))
+                  enumSymbolExpr[ChildType](childName, ectx.config, ectx.evaluatedConfig)
+                case None =>
+                  enumSymbolExpr[EnumCase](Type[EnumCase].shortName, ectx.config, ectx.evaluatedConfig)
               }
               MIO.pure(
                 Expr.quote(AvroDerivationUtils.encodeEnumSymbol(Expr.splice(schemaExpr), Expr.splice(nameExpr)): Any)

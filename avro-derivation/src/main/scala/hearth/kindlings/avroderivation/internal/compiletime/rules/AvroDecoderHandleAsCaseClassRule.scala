@@ -15,6 +15,9 @@ import org.apache.avro.generic.GenericRecord
 trait AvroDecoderHandleAsCaseClassRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & SchemaForMacrosImpl & AnnotationSupport =>
 
+  // in a method of its own: a path-dependent type (`param.tpe.Underlying`) cannot be referred to inside a quote
+  private def noneAs[Field: Type]: Expr[Field] = Expr.quote(None.asInstanceOf[Field])
+
   object AvroDecoderHandleAsCaseClassRule extends DecoderDerivationRule("handle as case class when possible") {
 
     def apply[A: DecoderCtx]: MIO[Rule.Applicability[Expr[A]]] =
@@ -45,7 +48,7 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
 
       // Validate: @transientField on fields without defaults is a compile error
       fieldsList.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+        case (name, param) if hasAnnotationType[transientField](param) && transientFieldHasNoFallback(param) => name
       } match {
         case Some(name) =>
           val err = DecoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
@@ -59,15 +62,21 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
 
       // Build transient defaults map
       val transientDefaults: Map[String, Expr_??] = transientFields.flatMap { case (fName, param) =>
-        param.defaultValue.flatMap { method =>
-          foldInstanceFree(method, "Default value")(
-            onTypes = _ => Map.empty,
-            onValues = _ => Map.empty
-          ).toOption
-            .map { defaultExpr =>
-              (fName, defaultExpr)
-            }
-        }
+        param.defaultValue
+          .flatMap { method =>
+            foldInstanceFree(method, "Default value")(
+              onTypes = _ => Map.empty,
+              onValues = _ => Map.empty
+            ).toOption
+              .map { defaultExpr =>
+                (fName, defaultExpr)
+              }
+          }
+          .orElse {
+            // no default: an Option field is None (as avro4s decodes transient fields)
+            import param.tpe.Underlying as Field
+            if (transientFieldIsOptional(param)) Some((fName, noneAs[Field].as_??)) else None
+          }
       }.toMap
 
       NonEmptyList.fromList(nonTransientFields) match {
@@ -178,6 +187,13 @@ trait AvroDecoderHandleAsCaseClassRuleImpl {
 
               Log.namedScope(s"Deriving decoder for field $fName: ${Type[Field].prettyPrint}") {
                 (avroFixedSize, decimalOverride) match {
+                  case (Some(_), _) if Type[Field] =:= Type.of[String] =>
+                    MIO.pure {
+                      val decodedExpr: Expr_?? = Expr.quote {
+                        AvroDerivationUtils.decodeFixedString(Expr.splice(fieldByNameOrAlias(recordExpr))): String
+                      }.as_??
+                      (fName, decodedExpr, false)
+                    }
                   case (Some(_), _) =>
                     val arrayByteType: Type[Array[Byte]] = DecTypes.ArrayByte
                     MIO.pure {

@@ -8,13 +8,15 @@ import hearth.fp.syntax.*
 import hearth.std.*
 
 import hearth.kindlings.avroderivation.AvroConfig
-import hearth.kindlings.avroderivation.annotations.{avroEnumDefault, avroNamespace, avroSortPriority}
+import hearth.kindlings.avroderivation.annotations.{avroEnumDefault, avroNamespace, avroSortPriority, avroUnionPosition}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 
 trait AvroSchemaForHandleAsEnumRuleImpl {
   this: SchemaForMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
+
+  private lazy val EnumerationValueType: Type[Enumeration#Value] = Type.of[Enumeration#Value]
 
   object AvroSchemaForHandleAsEnumRule extends SchemaDerivationRule("handle as enum when possible") {
 
@@ -48,6 +50,13 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
     ): MIO[Expr[Schema]] = {
       implicit val SchemaT: Type[Schema] = SfTypes.Schema
       implicit val avroSortPriorityT: Type[avroSortPriority] = SfTypes.AvroSortPriority
+      implicit val avroUnionPositionT: Type[avroUnionPosition] = SfTypes.AvroUnionPosition
+      // as avro4s: @AvroSortPriority, else @AvroUnionPosition as the priority `999999 - position` (so subtypes are in
+      // ascending position), else 0
+      def sortPriorityOf[C: Type]: Int =
+        getTypeAnnotationIntArg[avroSortPriority, C]
+          .orElse(getTypeAnnotationIntArg[avroUnionPosition, C].map(position => 999999 - position))
+          .getOrElse(0)
       implicit val avroEnumDefaultT: Type[avroEnumDefault] = SfTypes.AvroEnumDefault
       implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
       implicit val StringT: Type[String] = SfTypes.String
@@ -84,20 +93,56 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
               StableChildrenOrder.inStableOrder(AvroSchemaForHandleAsEnumRuleImpl.this)(children.toList)
             val symbolsWithPriority = childrenInOrder.map { case (name, child) =>
               import child.Underlying as ChildType
-              val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
-              (name, priority.getOrElse(0))
+              (enumSymbolExpr[ChildType](name, sfctx.config, sfctx.evaluatedConfig), sortPriorityOf[ChildType])
             }
-            val sortedSymbolNames = symbolsWithPriority.sortBy(-_._2).map(_._1)
-            val symbolsListExpr = sortedSymbolNames.foldRight(
+            val sortedSymbols = symbolsWithPriority.sortBy(-_._2).map(_._1)
+            val unorderedSymbolsExpr = sortedSymbols.foldRight(
               Expr.quote(List.empty[String])
-            ) { (name, acc) =>
-              Expr.quote {
-                Expr.splice(sfctx.config).transformConstructorNames(Expr.splice(Expr(name))) ::
-                  Expr.splice(acc)
-              }
+            ) { (symbol, acc) =>
+              Expr.quote(Expr.splice(symbol) :: Expr.splice(acc))
             }
-            val createEnumExpr: Expr[Schema] = enumDefault match {
-              case Some(default) =>
+            // scala.Enumeration: Hearth lists the values by name; avro4s (and the wire format) uses their ids
+            val enumerationValues: Option[List[Expr[Enumeration#Value]]] =
+              if (!Type[A].isEnumeration) None
+              else {
+                val values = childrenInOrder.flatMap { case (_, child) =>
+                  SingletonValue.unapply(child.Underlying).map(_.singletonExpr.asInstanceOf[Expr[Enumeration#Value]])
+                }
+                if (values.size == childrenInOrder.size) Some(values) else None
+              }
+            val symbolsListExpr: Expr[List[String]] = enumerationValues match {
+              case Some(values) =>
+                implicit val EnumerationValueT: Type[Enumeration#Value] = EnumerationValueType
+                val valuesExpr = values.foldRight(Expr.quote(List.empty[Enumeration#Value])) { (value, acc) =>
+                  Expr.quote(Expr.splice(value) :: Expr.splice(acc))
+                }
+                Expr.quote {
+                  AvroDerivationUtils.symbolsInIdOrder(Expr.splice(valuesExpr), Expr.splice(unorderedSymbolsExpr))
+                }
+              case None => unorderedSymbolsExpr
+            }
+            // a Java enum: its name, namespace, default and properties can be set with Java annotations (read at
+            // runtime, as the constants' annotations are not visible here)
+            val javaEnumConstant: Option[Expr[A]] =
+              if (!Type[A].isJavaEnum) None
+              else
+                childrenInOrder.headOption.flatMap { case (_, child) =>
+                  SingletonValue.unapply(child.Underlying).map(_.singletonExpr.asInstanceOf[Expr[A]])
+                }
+            val createEnumExpr: Expr[Schema] = (javaEnumConstant, enumDefault) match {
+              case (Some(constant), None) =>
+                Expr.quote {
+                  val symbols = Expr.splice(symbolsListExpr)
+                  val javaSymbols = new java.util.ArrayList[String](symbols.size)
+                  symbols.foreach(javaSymbols.add)
+                  AvroDerivationUtils.createJavaEnum(
+                    Expr.splice(constant),
+                    Expr.splice(typeNameExpr),
+                    Expr.splice(namespaceExpr),
+                    javaSymbols
+                  )
+                }
+              case (_, Some(default)) =>
                 Expr.quote {
                   val symbols = Expr.splice(symbolsListExpr)
                   val javaSymbols = new java.util.ArrayList[String](symbols.size)
@@ -109,7 +154,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
                     Expr.splice(Expr(default))
                   )
                 }
-              case None =>
+              case (_, None) =>
                 Expr.quote {
                   val symbols = Expr.splice(symbolsListExpr)
                   val javaSymbols = new java.util.ArrayList[String](symbols.size)
@@ -127,8 +172,7 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
             // Sort children by @avroSortPriority
             val childrenWithPriority = children.toList.map { case (name, child) =>
               import child.Underlying as ChildType
-              val priority = getTypeAnnotationIntArg[avroSortPriority, ChildType]
-              (name, child, priority.getOrElse(0))
+              (name, child, sortPriorityOf[ChildType])
             }
             val childrenNel = NonEmptyList(childrenWithPriority.head, childrenWithPriority.tail)
             childrenNel
