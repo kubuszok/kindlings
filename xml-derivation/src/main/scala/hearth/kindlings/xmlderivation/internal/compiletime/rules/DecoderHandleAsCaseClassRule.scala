@@ -214,6 +214,8 @@ trait DecoderHandleAsCaseClassRuleImpl {
           DecoderHandleAsEnumRule.enumFromName[T](subtypes)(using dctx.nest[T](dctx.elem)).map {
             fromName => (text: Expr[String]) => fromName(Expr.quote(Expr.splice(text).trim), configExpr)
           }
+        case XmlTextShape.BuiltIn if builtInAttributeDecoder[T].isDefined =>
+          MIO.pure(builtInAttributeDecoder[T].get)
         case _ =>
           for {
             _ <- deriveDecoderRecursively[T](using dctx.nest[T](dctx.elem))
@@ -223,6 +225,35 @@ trait DecoderHandleAsCaseClassRuleImpl {
             (text: Expr[String]) => helper(Expr.quote(XmlDerivationUtils.wrapAttrAsElem(Expr.splice(text))), configExpr)
           }
       }
+    }
+
+    /** The attribute value of exactly a built-in type, decoded from its text by a runtime helper (the same result as
+      * its decoder gives for an element holding the text, without building that element).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def builtInAttributeDecoder[T: Type]: Option[Expr[String] => Expr[Either[XmlDecodingError, T]]] = {
+      implicit val XmlDecodingErrorT: Type[XmlDecodingError] = DTypes.XmlDecodingError
+      implicit val StringT: Type[String] = DTypes.String
+      implicit val EitherT: Type[Either[XmlDecodingError, T]] = DTypes.DecoderResult[T]
+      def as(decode: Expr[String] => Expr[Either[XmlDecodingError, Any]]): Expr[String] => Expr[
+        Either[XmlDecodingError, T]
+      ] = text => decode(text).asInstanceOf[Expr[Either[XmlDecodingError, T]]]
+      if (Type[T] =:= DTypes.String) Some(as(t => Expr.quote(XmlDerivationUtils.attributeString(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Int) Some(as(t => Expr.quote(XmlDerivationUtils.attributeInt(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Long) Some(as(t => Expr.quote(XmlDerivationUtils.attributeLong(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Double)
+        Some(as(t => Expr.quote(XmlDerivationUtils.attributeDouble(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Float) Some(as(t => Expr.quote(XmlDerivationUtils.attributeFloat(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Boolean)
+        Some(as(t => Expr.quote(XmlDerivationUtils.attributeBoolean(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Short) Some(as(t => Expr.quote(XmlDerivationUtils.attributeShort(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Byte) Some(as(t => Expr.quote(XmlDerivationUtils.attributeByte(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.Char) Some(as(t => Expr.quote(XmlDerivationUtils.attributeChar(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.BigDecimal)
+        Some(as(t => Expr.quote(XmlDerivationUtils.attributeBigDecimal(Expr.splice(t)))))
+      else if (Type[T] =:= DTypes.BigInt)
+        Some(as(t => Expr.quote(XmlDerivationUtils.attributeBigInt(Expr.splice(t)))))
+      else None
     }
 
     /** An `Option[Inner]` attribute: absent is `None` (how `None` is written), present is `Some` of the decoded value -

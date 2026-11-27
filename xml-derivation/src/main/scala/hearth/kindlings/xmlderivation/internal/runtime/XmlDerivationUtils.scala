@@ -176,6 +176,59 @@ object XmlDerivationUtils {
   def wrapAttrAsElem(attrValue: String): scala.xml.Elem =
     scala.xml.Elem(null, "attr", scala.xml.Null, scala.xml.TopScope, false, scala.xml.Text(attrValue))
 
+  // Attribute values of the built-in types, decoded from the text exactly as their decoders decode the element
+  // `wrapAttrAsElem` would build around it (trimmed, blank is missing content, errors name `attr`), without building it.
+
+  private def attributeText(value: String): String = {
+    val text = value.trim
+    if (text.isEmpty) null else text
+  }
+  private def missingAttributeContent[A]: Either[XmlDecodingError, A] = Left(XmlDecodingError.MissingContent("attr"))
+
+  def attributeString(value: String): Either[XmlDecodingError, String] = Right(value)
+  def attributeChar(value: String): Either[XmlDecodingError, Char] =
+    if (value.length == 1) Right(value.charAt(0))
+    else {
+      val text = attributeText(value)
+      if (text == null) missingAttributeContent else parseChar(text, "attr")
+    }
+  def attributeInt(value: String): Either[XmlDecodingError, Int] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseInt(text, "attr")
+  }
+  def attributeLong(value: String): Either[XmlDecodingError, Long] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseLong(text, "attr")
+  }
+  def attributeDouble(value: String): Either[XmlDecodingError, Double] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseDouble(text, "attr")
+  }
+  def attributeFloat(value: String): Either[XmlDecodingError, Float] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseFloat(text, "attr")
+  }
+  def attributeBoolean(value: String): Either[XmlDecodingError, Boolean] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseBoolean(text, "attr")
+  }
+  def attributeShort(value: String): Either[XmlDecodingError, Short] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseShort(text, "attr")
+  }
+  def attributeByte(value: String): Either[XmlDecodingError, Byte] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseByte(text, "attr")
+  }
+  def attributeBigDecimal(value: String): Either[XmlDecodingError, BigDecimal] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseBigDecimal(text, "attr")
+  }
+  def attributeBigInt(value: String): Either[XmlDecodingError, BigInt] = {
+    val text = attributeText(value)
+    if (text == null) missingAttributeContent else parseBigInt(text, "attr")
+  }
+
   def parseString(value: String, @scala.annotation.unused context: String): Either[XmlDecodingError, String] =
     Right(value)
 
