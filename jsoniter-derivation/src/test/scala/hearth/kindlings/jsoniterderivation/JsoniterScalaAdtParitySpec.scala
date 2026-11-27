@@ -117,6 +117,8 @@ final class JsoniterScalaAdtParitySpec extends MacroSuite {
           readFromString[List[ParityAdt]]("""[{"ParityAAA":{"a":1}},"ParityDDD"]""")(c) ==> adts
           // Kindlings superset (NOT upstream parity): the circe-like form is accepted on decoding too
           readFromString[List[ParityAdt]]("""[{"ParityDDD":{}}]""")(c) ==> List(ParityDDD)
+          // (the content of the wrapper is not read for a case object: also `null`)
+          readFromString[List[ParityAdt]]("""[{"ParityDDD":null}]""")(c) ==> List(ParityDDD)
           decodeError("illegal discriminator")(readFromString[List[ParityAdt]]("""["XXX"]""")(c))
           decodeError("illegal discriminator")(readFromString[List[ParityAdt]]("""[{"XXX":{}}]""")(c))
         }

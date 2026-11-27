@@ -107,8 +107,8 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("arrays")(check(JuCases.defaults.arrays, JuSamples.arrays)())
     test("arrayArrayTop")(check(JuCases.defaults.arrayArrayTop, JuSamples.arrayArrayTop)())
     test("iterables")(check(JuCases.defaults.iterables, JuSamples.iterables)())
-    // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): the `Factory` Hearth summons for an
-    // abstract collection type is the one of its *element* type's companion when that is a subtype of it
+    // Documented difference (feature-parity.md, "Collections typed as an abstract collection type"): Scala's implicit
+    // search finds the `Factory` of the *element* type's companion when that is a subtype of the declared type
     // (`mutable.IndexedSeq[mutable.ArrayStack[Float]]` is built as a `mutable.Stack`, jsoniter-scala: an `ArrayBuffer`).
     test("mutableIterables")(
       check(JuCases.defaults.mutableIterables, JuSamples.mutableIterables)(
@@ -124,8 +124,8 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("emptyIterables2")(check(JuCases.defaults.emptyIterables2, JuSamples.emptyIterables2)())
     test("mutableSetTop")(check(JuCases.defaults.mutableSetTop, JuSamples.mutableSetTop)())
     test("genericMaps")(check(JuCases.defaults.genericMaps, JuSamples.genericMaps)())
-    // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): the `Factory` Hearth summons for an
-    // abstract collection type is the one of its *element* type's companion when that is a subtype of it
+    // Documented difference (feature-parity.md, "Collections typed as an abstract collection type"): Scala's implicit
+    // search finds the `Factory` of the *element* type's companion when that is a subtype of the declared type
     // (`mutable.Map[Float, mutable.ListMap[BigInt, String]]` is built as a `mutable.ListMap`, jsoniter-scala: a `HashMap`).
     test("mutableMaps")(
       check(JuCases.defaults.mutableMaps, JuSamples.mutableMaps)(
@@ -662,11 +662,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
       all(JuCases.defaults.standardTypes)(thrown(JUStandardTypes("s", null, BigDecimal(1))))
       all(JuCases.defaults.standardTypes)(thrown(JUStandardTypes("s", BigInt(1), null)))
       all(JuCases.defaults.javaTypes)(thrown(JUJavaTypes(null)))
-      // Known difference: a `null` Java enum value fails with a `MatchError` (jsoniter-scala: `NullPointerException`).
-      val javaEnumNull = thrown(JUJavaEnums(null, null)) _
-      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.upstream), "java.lang.NullPointerException")
-      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.optimized), "scala.MatchError")
-      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.runtime), "scala.MatchError")
+      all(JuCases.defaults.javaEnums)(thrown(JUJavaEnums(null, null)))
       all(JuCases.defaults.enums)(thrown(JUEnums(null)))
     }
   }
@@ -873,8 +869,8 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ub.head.getClass.getName
         )
       }
-      // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): `mutable.IndexedSeq[ArrayStack[_]]`
-      // is built with the `Factory` of its element type's companion (`mutable.Stack`).
+      // Documented difference (feature-parity.md, "Collections typed as an abstract collection type"):
+      // `mutable.IndexedSeq[ArrayStack[_]]` is built with the `Factory` of its element type's companion (`mutable.Stack`).
       assertEquals(
         differences,
         List("_11: kindlings=scala.collection.mutable.Stack upstream=scala.collection.mutable.ArrayBuffer")
@@ -894,8 +890,8 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ohm.head._2.getClass.getName
         )
       }
-      // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): `mutable.Map[_, mutable.ListMap[_, _]]`
-      // is built with the `Factory` of its value type's companion (`mutable.ListMap`).
+      // Documented difference (feature-parity.md, "Collections typed as an abstract collection type"):
+      // `mutable.Map[_, mutable.ListMap[_, _]]` is built with the `Factory` of its value type's companion (`mutable.ListMap`).
       assertEquals(
         differences,
         List("_3: kindlings=scala.collection.mutable.ListMap upstream=scala.collection.mutable.HashMap")

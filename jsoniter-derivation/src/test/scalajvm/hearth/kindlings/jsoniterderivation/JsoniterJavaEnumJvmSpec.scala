@@ -26,5 +26,13 @@ final class JsoniterJavaEnumJvmSpec extends MacroSuite {
       writeToString(read)(c) ==> """{"mode":"WRITE"}"""
       decodeError(c, """{"mode":"write"}""") ==> "illegal enum value \"write\", offset: 0x0000000e"
     }
+
+    // as jsoniter-scala (JsonCodecMakerSpec: "serialize and deserialize Java enums" - `null` values)
+    test("a null value is a NullPointerException when written (not a MatchError)") {
+      val c = KindlingsJsonValueCodec.derived[SpsUnreferencedEnum]
+      val _ = intercept[NullPointerException](writeToString(SpsUnreferencedEnum(null))(c))
+      val list = KindlingsJsonValueCodec.derived[List[java.nio.file.AccessMode]]
+      intercept[NullPointerException](writeToString(List[java.nio.file.AccessMode](null))(list))
+    }
   }
 }

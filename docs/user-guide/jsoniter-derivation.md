@@ -202,7 +202,8 @@ As in jsoniter-scala:
 | tuple `(1, "a")` (also generic tuples and arity > 22 on Scala 3) | `[1,"a"]` | `[1,"a"]` |
 | named tuple `(i = 1, s = "a")` | `{"i":1,"s":"a"}` | `{"i":1,"s":"a"}` |
 
-Decoding also accepts `{"Leaf":{}}` for a case object without a discriminator (a Kindlings superset). The same names
+Decoding also accepts `{"Leaf":{}}` (and `{"Leaf":null}`, the content of the object is not read) for a case object
+without a discriminator (a Kindlings superset). The same names
 are used for enum map keys.
 
 As in jsoniter-scala, the values of a `scala.Enumeration` are looked up among the values the enumeration has at
