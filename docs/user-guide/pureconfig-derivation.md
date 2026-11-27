@@ -117,6 +117,16 @@ Declare a coproduct hint with its concrete variant as the type (`implicit val hi
 
 Derived readers report failures like upstream's derivation: every failing field of a case class (then each unknown key of a strict one), every failing item of a collection and value of a map, with upstream's failure reasons (`KeyNotFound` with candidate keys, `WrongType`, `UnknownKey`, `UnexpectedValueForFieldCoproductHint` for an unknown discriminator value, `NoValidCoproductOptionFound` when no subtype of a first-success family can be read).
 
+### Tuples
+
+Tuples (`(A, B)`, ... up to `Tuple22`) are read from and written as HOCON **lists**, like upstream's derivations: `(true, 5)` is `[true, 5]`. A list of another size fails with `WrongSizeList`, every failing element is reported at its index, and a value that is neither a list nor an object fails with `WrongType` (expecting a list). A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = true, _2 = 5 }`), as upstream's Scala 2 derivation does (upstream's Scala 3 derivation reads only lists; Kindlings accepts the object form on both).
+
+### Missing keys and types without fields
+
+- The instance in scope for a field's type decides how a missing key is handled, as upstream: a reader that is a `pureconfig.ReadsMissingKeys` (upstream's `Option` reader, your own) is given the missing key, any other reader gets a `KeyNotFound`; a writer that is a `pureconfig.WritesMissingKeys` (upstream's `Option` writer, your own) decides whether the key is written at all. So an empty `Option` is omitted by default, but a custom `ConfigWriter[Option[A]]` that is not a `WritesMissingKeys` is used as is (and a custom `ConfigReader[Option[A]]` that is not a `ReadsMissingKeys` requires the key).
+- Default values are evaluated only when the key is missing.
+- A case object or a case class without parameters is read only from an object, and with `allowUnknownKeys = false` (the global config or a `KindlingsProductHint` for it) every key of that object is an `UnknownKey` (for a subtype of a sealed family: every key but the discriminator).
+
 ## Annotations
 
 | Annotation | Description |
@@ -295,6 +305,8 @@ This enables the `LogDerivation` implicits of `KindlingsConfigReader` and `Kindl
 | Sanely-automatic derivation | No | No | Yes |
 | `derives` support (Scala 3) | N/A | `ConfigReader` only (Writer/Convert via semiauto) | `KindlingsConfigReader`, `KindlingsConfigWriter`, `KindlingsConfigConvert` |
 | Recursive types | Needs `Lazy` | Yes | Just works |
+| Tuples as lists | Yes (also read from `{ _1, _2 }` objects) | Yes (lists only) | Yes (also read from `{ _1, _2 }` objects) |
+| `ReadsMissingKeys` / `WritesMissingKeys` instances of field types | Yes | Yes | Yes |
 | Named tuples | No | No | Yes |
 | Opaque types | No | Partial | Yes |
 | Scala 3 enums | No | Yes | Yes |
@@ -323,6 +335,17 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17.
 | SimpleCC | 3 | 17.2M | 1.4M | **12.5x faster** |
 | Person | 2.13 | 1.0M | 216K | **4.8x faster** |
 | Person | 3 | 1.0M | 197K | **5.3x faster** |
+
+#### Tuples and `Option` fields
+
+`PureconfigParityBenchmark` (Scala 3, `-prof gc`; a busy machine, so throughput is approximate, allocation is exact):
+
+| Case | Kindlings | Original semi | Kindlings B/op | Original B/op |
+|------|-----------|---------------|----------------|---------------|
+| Tuples (as lists): read | 1.2M | 293K | 3824 | 8736 |
+| Tuples (as lists): write | 1.6M | 538K | 1912 | 3700 |
+| `Option` fields: read | 6.4M | 157K | 536 | 5212 |
+| `Option` fields: write | 4.8M | 545K | 744 | 2260 |
 
 !!! note
     Kindlings is 4.7--12.5x faster across the board, for both reads and writes, on both Scala versions and type complexities.

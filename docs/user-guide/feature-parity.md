@@ -759,6 +759,9 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 |---|---|---|---|
 | Primitives, `String`, `BigDecimal`, `BigInt` | Yes (via `BasicReaders`) | Reused from upstream | Parity |
 | `Option[A]` (missing key → `None`) | Yes (via `optionReader`) | Reused from upstream | Parity |
+| `ReadsMissingKeys` readers of field types | A reader that is a `ReadsMissingKeys` is given the missing key; any other reader (also a user-provided one of an `Option` type) gets `KeyNotFound` | Same | Parity |
+| `WritesMissingKeys` writers of field types | A writer that is a `WritesMissingKeys` decides whether the key is written (`toOpt`); any other writer (also a user-provided one of an `Option` type) is always written | Same | Parity |
+| Lazily evaluated default values | Scala 3: defaults are evaluated only for missing keys; Scala 2 (Shapeless) evaluates every default on every read | Evaluated only for missing keys, on both | Parity (Scala 3); Improvement (Scala 2) |
 | `List`/`Vector`/`Seq`/`Set`/`Array` | Yes (via `CollectionReaders`) | Reused from upstream | Parity |
 | `Map[String, A]` | Yes | Reused from upstream | Parity |
 | `URL`, `URI`, `Path`, `File`, `UUID`, `Pattern`, `Regex` | Yes | Reused from upstream | Parity |
@@ -769,6 +772,8 @@ Type-class instances for primitives, collections, java.time, `java.net`, `java.n
 | Sealed traits → single-key wrapping | Via custom `CoproductHint` | Via macro + `withWrappedSubtypes` | Parity |
 | Case-object enums (`North`/`South`/…) → HOCON string | `deriveEnumerationReader[E]` (separate API) | Same `KindlingsConfigReader.derived[E]` / `KindlingsConfigWriter.derived[E]` with `withWrappedSubtypes` (no discriminator): case-object families read and write strings, as `deriveEnumerationReader`/`Writer`; with the default discriminator they are `{ type = north }` objects, as upstream's default `FieldCoproductHint` | Improvement |
 | Singleton (`case object`) members | Yes | Yes | Parity |
+| Tuples (`TupleN`) | Lists: `(true, 5)` is `[true, 5]`; `WrongSizeList` for another size. Scala 2 (Shapeless) also reads the product representation `{ _1 = ..., _2 = ... }` when the value is an object and not a list; Scala 3 reads only lists | Read from and written as lists, same failures; the product representation is read on both Scala versions (as upstream on Scala 2) | Parity (Scala 2); Difference (Scala 3: also reads `{ _1, _2 }` objects) |
+| Case objects / case classes without parameters read on their own | Must be an object; `ProductHint(allowUnknownKeys = false)` reports every key | Same (`KindlingsProductHint` or the global `allowUnknownKeys`); for a subtype of a sealed family every key but the discriminator | Parity |
 | Value classes / `AnyVal` wrappers | Manual `ConfigReader.fromString` per type | Automatic unwrapping via `IsValueType` (covers `AnyVal`, `extends AnyVal`, refined types via `refined-integration`, opaque types) | Improvement |
 | Refined types (`eu.timepit.refined`) | Separate `pureconfig-refined` module | Automatic via `kindlings-refined-integration` (`Either[String, A]` wrap detected by `IsValueType`) | Improvement |
 | Iron (Scala 3 opaque types with constraints) | Separate `pureconfig-iron` module | Automatic via `kindlings-iron-integration` | Improvement |
@@ -808,7 +813,7 @@ To prevent infinite macro expansion, the kindlings macro filters out its own `de
 derivation (`pureconfig.generic.semiauto`: Shapeless on Scala 2, the hint-aware `pureconfig-generic-scala3` on Scala 3,
 with the equivalent `ProductHint` / `FieldCoproductHint` / `FirstSuccessCoproductHint`, and `deriveEnumerationReader` /
 `deriveEnumerationWriter` for case-object enumerations), and compares the values read from HOCON — including every
-failure, its reason and path — and the config values written. There are **no expected differences**:
+failure, its reason, path and origin — and the config values written. There are **no expected differences**:
 
 - every failure is reported, not only the first one: every field of a case class (then the unknown keys of a strict
   product), every item of a collection and every value of a map;
@@ -820,7 +825,18 @@ failure, its reason and path — and the config values written. There are **no e
   subtype that has a field named like the discriminator throws upstream's `CoproductHintException`;
 - without a discriminator, a family of case objects reads only strings (upstream's `deriveEnumerationReader`; an
   unknown value is `NoValidCoproductOptionFound` on Scala 2 and `CannotConvert` on Scala 3, as upstream on each);
-- an empty `Option` field is omitted when writing (upstream's `WritesMissingKeys`), not written as `null`.
+- an empty `Option` field is omitted when writing (upstream's `WritesMissingKeys`), not written as `null`; a
+  user-provided writer of a field's type is asked (`WritesMissingKeys.toOpt`) or, when it is a plain writer, always
+  written;
+- tuples are lists; case objects and case classes without parameters are read only from objects and honour
+  `allowUnknownKeys = false`.
+
+`PureConfigUpstreamSuitesOracleSpec` and (Scala 3) `PureConfigScala3OracleSpec` run the cases of upstream's own
+derivation suites (`ProductHintSuite`, `CoproductHintSuite`, `ProductConvertersSuite` / `ProductConvertDerivationSuite`,
+`CoproductConvertersSuite` / `CoproductConvertDerivationSuite`, `TupleConvertersSuite`, `EnumerationsSuite` /
+`EnumDerivationSuite`, `ValueClassSuite`, `DerivationModesSuite`) through both libraries, failures' origins included.
+The **only expected difference**: on Scala 3 Kindlings also reads a tuple from its product representation
+(`{ _1 = ..., _2 = ... }`), which upstream reads on Scala 2 only.
 
 The Kindlings-only additions stay opt-in: `withWrappedSubtypes` for families that are not all case objects (single-key
 objects, no upstream counterpart), `@configKey`, `@transientField`.
@@ -833,6 +849,7 @@ objects, no upstream counterpart), `@configKey`, `@transientField`.
 | `pureconfig-yaml` / `pureconfig-circe` etc. format adapters | Out of scope — kindlings ships separate `kindlings-yaml-derivation` and `kindlings-circe-derivation` modules. |
 | `ConfigSource` API (`ConfigSource.file`, `ConfigSource.url`, …) | Not duplicated — users keep using `pureconfig.ConfigSource.*` and pass our derived instances to it. |
 | Custom `FailureReason` subtypes | Inherited from upstream when summoning user-provided `ConfigReader`s. The kindlings macro itself reports upstream's failure reasons (`KeyNotFound`, `WrongType`, `UnknownKey`, `UnexpectedValueForFieldCoproductHint`, `NoValidCoproductOptionFound`, …; the sealed-family ones come from the small `pureconfig-generic-base` module, now a dependency). |
+| Shapeless `HList` / `Coproduct` instances (`pureconfig.generic.hlist`) | Not applicable: no Shapeless (derivation mechanism). |
 | Custom `ProductHint` / `CoproductHint` implementations | Kindlings reads its own `KindlingsProductHint` / `KindlingsCoproductHint` (the configuration of upstream's built-in hints), not arbitrary `from`/`to` implementations. |
 
 ---
