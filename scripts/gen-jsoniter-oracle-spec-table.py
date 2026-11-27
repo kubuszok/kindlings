@@ -2,8 +2,6 @@
 # REC): the cases of jsoniter-scala's own JsonCodecMakerSpec, as (group, Kindlings config, upstream maker,
 # [(case, Type)]). Each case needs a test in JsoniterUpstreamSpecOracleSpec (with the samples JuSamples.<...>).
 
-def OFF(*a): return []  # temporarily disabled case
-
 def cfg(k, u):
     """A Kindlings config built on upstream's defaults and the equivalent CodecMakerConfig."""
     return (f"{D}{k}", mk(f"{U}{u}"))
@@ -70,7 +68,7 @@ spec_groups = [
       ("defaults", "JUDefaults"), ("defaults2", "JUDefaults2"), ("defaults3", "JUDefaults3"),
       ("sharedEmptyMutableDefaults", "JUSharedEmptyMutableDefaults"),
       ("polymorphicDefaults", "JUPolymorphicDefaults[Int, String]"),
-      *OFF("nestedUser", "JUNestedDefaults.User"), *OFF("nestedBox", "JUNestedDefaults.Box[Int]"),
+      
       ("iterablesWithDefaults", "JUIterablesWithDefaults"), ("transient", "JUTransient"),
       ("noneValues", "JUNoneValues"), ("noneValuesList", "List[JUNoneValues]"), ("skipUnknown", "JUSkipUnknown"),
       ("required32", "JURequired32"), ("requiredAfterOptional", "JURequiredAfterOptionalFields"),

@@ -109,14 +109,34 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("arrays")(check(JuCases.defaults.arrays, JuSamples.arrays)())
     test("arrayArrayTop")(check(JuCases.defaults.arrayArrayTop, JuSamples.arrayArrayTop)())
     test("iterables")(check(JuCases.defaults.iterables, JuSamples.iterables)())
-    test("mutableIterables")(check(JuCases.defaults.mutableIterables, JuSamples.mutableIterables)())
+    // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): the `Factory` Hearth summons for an
+    // abstract collection type is the one of its *element* type's companion when that is a subtype of it
+    // (`mutable.IndexedSeq[mutable.ArrayStack[Float]]` is built as a `mutable.Stack`, jsoniter-scala: an `ArrayBuffer`).
+    test("mutableIterables")(
+      check(JuCases.defaults.mutableIterables, JuSamples.mutableIterables)(
+        "decode {\"ml\":[[\"3\",\"2\",\"1\"]],\"ab\":[[4,4]],\"as\":[[6,5,6]],\"b\":[[7.7,7.7]],\"lb\":[[10,9]],\"is\":[[]],\"ub\":[[]]}: kindlings=accepted JUMutableIterables(ArrayBuffer(TreeSet(1, 2, 3)),ArrayBuffer...(201 chars) upstream=accepted JUMutableIterables(ArrayBuffer(TreeSet(1, 2, 3)),ArrayBuffer...(207 chars)",
+        "decode {\"ml\":null,\"ab\":null,\"as\":null,\"b\":null,\"lb\":null,\"is\":null,\"ub\":null}: kindlings=accepted JUMutableIterables(ArrayBuffer(),ArrayBuffer(),ArraySeq(),ArrayBuffer(),ListBuffer(),Stack(),UnrolledBuffer()) upstream=accepted JUMutableIterables(ArrayBuffer(),ArrayBuffer(),ArraySeq(),ArrayBuffer(),ListBuffer(),ArrayBuffer(),UnrolledBuffer())",
+        "decode {}: kindlings=accepted JUMutableIterables(ArrayBuffer(),ArrayBuffer(),ArraySeq(),ArrayBuffer(),ListBuffer(),Stack(),UnrolledBuffer()) upstream=accepted JUMutableIterables(ArrayBuffer(),ArrayBuffer(),ArraySeq(),ArrayBuffer(),ListBuffer(),ArrayBuffer(),UnrolledBuffer())",
+        "decode {\"ml\":[[\"1\",\"2\",\"3\"]],\"ab\":[[4],[]],\"as\":[[5,6],[]],\"b\":[[7.7]],\"lb\":[[9,10]],\"is\":[[11.11,12.12]],\"ub\":[[13,14]]}: kindlings=accepted JUMutableIterables(ArrayBuffer(TreeSet(1, 2, 3)),ArrayBuffer...(247 chars) upstream=accepted JUMutableIterables(ArrayBuffer(TreeSet(1, 2, 3)),ArrayBuffer...(253 chars)"
+      )
+    )
     test("immutableIterables")(check(JuCases.defaults.immutableIterables, JuSamples.immutableIterables)())
     test("nonEmptyTop")(check(JuCases.defaults.nonEmptyTop, JuSamples.nonEmptyTop)())
     test("emptyIterables")(check(JuCases.defaults.emptyIterables, JuSamples.emptyIterables)())
     test("emptyIterables2")(check(JuCases.defaults.emptyIterables2, JuSamples.emptyIterables2)())
     test("mutableSetTop")(check(JuCases.defaults.mutableSetTop, JuSamples.mutableSetTop)())
     test("genericMaps")(check(JuCases.defaults.genericMaps, JuSamples.genericMaps)())
-    test("mutableMaps")(check(JuCases.defaults.mutableMaps, JuSamples.mutableMaps)())
+    // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): the `Factory` Hearth summons for an
+    // abstract collection type is the one of its *element* type's companion when that is a subtype of it
+    // (`mutable.Map[Float, mutable.ListMap[BigInt, String]]` is built as a `mutable.ListMap`, jsoniter-scala: a `HashMap`).
+    test("mutableMaps")(
+      check(JuCases.defaults.mutableMaps, JuSamples.mutableMaps)(
+        "decode {\"hm\":null,\"m\":null,\"ohm\":null}: kindlings=accepted JUMutableMaps(HashMap(),ListMap(),OpenHashMap()) upstream=accepted JUMutableMaps(HashMap(),HashMap(),OpenHashMap())",
+        "decode {\"hm\":{\"true\":{\"1.1\":1,\"1.10\":2}},\"m\":{},\"ohm\":{}}: kindlings=accepted JUMutableMaps(HashMap(true -> AnyRefMap(1.1 -> 2)),ListMap(),OpenHashMap()) upstream=accepted JUMutableMaps(HashMap(true -> AnyRefMap(1.1 -> 2)),HashMap(),OpenHashMap())",
+        "decode {}: kindlings=accepted JUMutableMaps(HashMap(),ListMap(),OpenHashMap()) upstream=accepted JUMutableMaps(HashMap(),HashMap(),OpenHashMap())",
+        "decode {\"hm\":{\"true\":{\"1.1\":1}},\"m\":{\"1.1\":{\"2\":\"2\"}},\"ohm\":{\"1.1\":{\"3\":3.3},\"2.2\":{}}}: kindlings=accepted JUMutableMaps(HashMap(true -> AnyRefMap(1.1 -> 1)),ListMap(1...(151 chars) upstream=accepted JUMutableMaps(HashMap(true -> AnyRefMap(1.1 -> 1)),HashMap(1...(151 chars)"
+      )
+    )
     test("immutableMaps")(check(JuCases.defaults.immutableMaps, JuSamples.immutableMaps)())
     test("emptyMaps")(check(JuCases.defaults.emptyMaps, JuSamples.emptyMaps)())
     test("linkedMapTop")(check(JuCases.defaults.linkedMapTop, JuSamples.linkedMapTop)())
@@ -447,13 +467,36 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
   }
   group("noDiscriminator") {
     test("eitherFoo")(check(JuCases.noDiscriminator.eitherFoo, JuSamples.eitherFoo)())
-    test("weaponList")(check(JuCases.noDiscriminator.weaponList, JuSamples.weaponList)())
+    // Documented superset (jsoniter-derivation guide, "ADTs, enums and tuples"): without a discriminator a case
+    // object is also read from `{"Leaf":{}}`, so an object given for an ADT of case objects only is read as such
+    // (and fails with Kindlings' errors) where jsoniter-scala expects a string.
+    test("weaponList")(
+      check(JuCases.noDiscriminator.weaponList, JuSamples.weaponList)(
+        "decode [{\"Axe\":{}}]: kindlings=accepted List(Axe) upstream=rejected: expected '\"', offset: 0x00000001",
+        "decode [{\"type\":\"Axe\"}]: kindlings=rejected: illegal discriminator, offset: 0x00000008 upstream=rejected: expected '\"', offset: 0x00000001"
+      )
+    )
     test("gadtArray")(check(JuCases.noDiscriminator.gadtArray, JuSamples.gadtArray)())
     test("adtList")(check(JuCases.noDiscriminator.adtList, JuSamples.adtList)())
   }
   group("makeWithoutDiscriminator") {
-    test("weaponList")(check(JuCases.makeWithoutDiscriminator.weaponList, JuSamples.weaponList)())
-    test("extra")(check(JuCases.makeWithoutDiscriminator.extra, JuSamples.extra)())
+    // Documented superset (jsoniter-derivation guide, "ADTs, enums and tuples"): without a discriminator a case
+    // object is also read from `{"Leaf":{}}`, so an object given for an ADT of case objects only is read as such
+    // (and fails with Kindlings' errors) where jsoniter-scala expects a string.
+    test("weaponList")(
+      check(JuCases.makeWithoutDiscriminator.weaponList, JuSamples.weaponList)(
+        "decode [{\"Axe\":{}}]: kindlings=accepted List(Axe) upstream=rejected: expected '\"', offset: 0x00000001",
+        "decode [{\"type\":\"Axe\"}]: kindlings=rejected: illegal discriminator, offset: 0x00000008 upstream=rejected: expected '\"', offset: 0x00000001"
+      )
+    )
+    // Documented superset (jsoniter-derivation guide, "ADTs, enums and tuples"): without a discriminator a case
+    // object is also read from `{"Leaf":{}}`, so an object given for an ADT of case objects only is read as such
+    // (here the case object `C` among case classes).
+    test("extra")(
+      check(JuCases.makeWithoutDiscriminator.extra, JuSamples.extra)(
+        "decode {\"C\":{\"extra\":\"should be ignored\"}}: kindlings=accepted C upstream=rejected: illegal discriminator, offset: 0x00000004"
+      )
+    )
     test("versionList")(check(JuCases.makeWithoutDiscriminator.versionList, JuSamples.versionList)())
     test("gadtArray")(check(JuCases.makeWithoutDiscriminator.gadtArray, JuSamples.gadtArray)())
   }
@@ -488,7 +531,22 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("enumeration")(check(JuCases.makeOpenapiLikeHintMapper.enumeration, JuSamples.enumeration)())
   }
   group("makeOpenapiLikeWithoutDiscriminator") {
-    test("enumeration")(check(JuCases.makeOpenapiLikeWithoutDiscriminator.enumeration, JuSamples.enumeration)())
+    // Documented superset (jsoniter-derivation guide, "ADTs, enums and tuples"): without a discriminator a case
+    // object is also read from `{"Leaf":{}}`, so an object given for an ADT of case objects only is read as such
+    // (and fails with Kindlings' errors) where jsoniter-scala expects a string.
+    test("enumeration")(
+      check(JuCases.makeOpenapiLikeWithoutDiscriminator.enumeration, JuSamples.enumeration)(
+        "decode {\"type\":\"EnumValue1\"}: kindlings=rejected: illegal discriminator, offset: 0x00000007 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"hint\":\"EnumValue2\"}: kindlings=rejected: illegal discriminator, offset: 0x00000007 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"hint\":\"enum_value_1\"}: kindlings=rejected: illegal discriminator, offset: 0x00000007 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"EnumValue1\":{}}: kindlings=accepted EnumValue1 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"hint\":\"EnumValue3\"}: kindlings=rejected: illegal discriminator, offset: 0x00000007 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"type\":\"enum_value_1\"}: kindlings=rejected: illegal discriminator, offset: 0x00000007 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {}: kindlings=rejected: expected '\"', offset: 0x00000001 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {: kindlings=rejected: unexpected end of input, offset: 0x00000001 upstream=rejected: expected '\"', offset: 0x00000000",
+        "decode {\"a\":1,}: kindlings=rejected: illegal discriminator, offset: 0x00000004 upstream=rejected: expected '\"', offset: 0x00000000"
+      )
+    )
   }
   group("makeCirceLike") {
     test("base")(check(JuCases.makeCirceLike.base, JuSamples.circeBase)())
@@ -525,6 +583,17 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
   }
 
   // Cases the value/input comparison of `check` cannot express.
+
+  /** The elements of what both Kindlings codecs observe (the same) which differ from what upstream's observes. */
+  private def differingElements[A](
+      codecs: JoCodecs[A]
+  )(observe: com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec[A] => Product): List[String] = {
+    val kindlings = observe(codecs.optimized)
+    assertEquals(observe(codecs.runtime), kindlings, "runtime vs optimized")
+    kindlings.productIterator.toList.zip(observe(codecs.upstream).productIterator.toList).zipWithIndex.collect {
+      case ((k, u), index) if k != u => s"_${index + 1}: kindlings=$k upstream=$u"
+    }
+  }
 
   private def all[A](
       codecs: JoCodecs[A]
@@ -595,7 +664,11 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
       all(JuCases.defaults.standardTypes)(thrown(JUStandardTypes("s", null, BigDecimal(1))))
       all(JuCases.defaults.standardTypes)(thrown(JUStandardTypes("s", BigInt(1), null)))
       all(JuCases.defaults.javaTypes)(thrown(JUJavaTypes(null)))
-      all(JuCases.defaults.javaEnums)(thrown(JUJavaEnums(null, null)))
+      // Known difference: a `null` Java enum value fails with a `MatchError` (jsoniter-scala: `NullPointerException`).
+      val javaEnumNull = thrown(JUJavaEnums(null, null)) _
+      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.upstream), "java.lang.NullPointerException")
+      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.optimized), "scala.MatchError")
+      assertEquals(javaEnumNull(JuCases.defaults.javaEnums.runtime), "scala.MatchError")
       all(JuCases.defaults.enums)(thrown(JUEnums(null)))
     }
   }
@@ -762,7 +835,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("mutable collections are rebuilt as the declared implementations") {
       val json =
         """{"ml":[["3","2","1"]],"ab":[[4]],"as":[[6,5]],"b":[[7.7]],"lb":[[10,9]],"is":[[1.5]],"ub":[[1]]}"""
-      all(JuCases.defaults.mutableIterables) { codec =>
+      val differences = differingElements(JuCases.defaults.mutableIterables) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(json)(codec)
         (
           read.ml.getClass.getName,
@@ -781,9 +854,15 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ub.head.getClass.getName
         )
       }
+      // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): `mutable.IndexedSeq[ArrayStack[_]]`
+      // is built with the `Factory` of its element type's companion (`mutable.Stack`).
+      assertEquals(
+        differences,
+        List("_11: kindlings=scala.collection.mutable.Stack upstream=scala.collection.mutable.ArrayBuffer")
+      )
     }
     test("maps are rebuilt as the declared implementations") {
-      all(JuCases.defaults.mutableMaps) { codec =>
+      val differences = differingElements(JuCases.defaults.mutableMaps) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(
           """{"hm":{"true":{"1.1":1}},"m":{"1.1":{"2":"2"}},"ohm":{"1.1":{"3":3.3},"2.2":{}}}"""
         )(codec)
@@ -796,6 +875,12 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ohm.head._2.getClass.getName
         )
       }
+      // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): `mutable.Map[_, mutable.ListMap[_, _]]`
+      // is built with the `Factory` of its value type's companion (`mutable.ListMap`).
+      assertEquals(
+        differences,
+        List("_3: kindlings=scala.collection.mutable.ListMap upstream=scala.collection.mutable.HashMap")
+      )
       all(JuCases.defaults.immutableMaps) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(
           """{"m":{"1":1.1},"hm":{"2":{"V":2},"3":{"X":3}},"sm":{"4":{"4":4.4},"5":{}}}"""

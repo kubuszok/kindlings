@@ -38,7 +38,7 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
     if symbol.flags.is(Flags.JavaDefined) && tpe <:< TypeRepr.of[java.lang.Enum[?]] then {
       // the constants are static fields: members of the companion module
       val module = symbol.companionModule
-      module.declaredFields.foreach { field =>
+      if module.isTerm then module.declaredFields.foreach { field =>
         val _ = module.termRef.memberType(field)
       }
     }
