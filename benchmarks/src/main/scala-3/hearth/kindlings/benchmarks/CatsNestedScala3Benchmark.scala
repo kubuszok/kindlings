@@ -60,7 +60,7 @@ class CatsNestedBenchmark {
   private def bimapAll(bf: Bifunctor[BenchResult]): Int = {
     var acc = 0
     var i = 0
-    while (i < results.length) {
+    while i < results.length do {
       acc += bf.bimap(results(i))(_ + 1, _.length).hashCode
       i += 1
     }
@@ -69,7 +69,7 @@ class CatsNestedBenchmark {
   private def bifoldAll(bf: Bifoldable[BenchResult]): Int = {
     var acc = 0
     var i = 0
-    while (i < results.length) {
+    while i < results.length do {
       acc += bf.bifoldLeft(results(i), 0)(_ + _, _ + _.length)
       i += 1
     }
@@ -78,7 +78,7 @@ class CatsNestedBenchmark {
   private def bitraverseAll(bt: Bitraverse[BenchResult]): Int = {
     var acc = 0
     var i = 0
-    while (i < results.length) {
+    while i < results.length do {
       acc += bt.bitraverse(results(i))(a => Option(a + 1), b => Option(b.length)).hashCode
       i += 1
     }
