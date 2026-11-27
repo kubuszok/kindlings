@@ -99,7 +99,18 @@ object YamlDerivationUtils {
     MappingNode(pairs.map(toPair).toMap)
 
   /** A `String` map key, as scala-yaml's `YamlEncoder.forString` writes it (non-printable characters escaped). */
-  def stringKeyNode(key: String): Node = org.virtuslab.yaml.YamlEncoder.forString.asNode(key)
+  def stringKeyNode(key: String): Node = {
+    // only a key with a character outside the printable ranges takes scala-yaml's (allocating) escaping
+    var i = 0
+    var plain = true
+    while (plain && i < key.length) {
+      val c = key.charAt(i)
+      if (c < ' ' || (c >= '\u007F' && c <= '\u009F') || c >= '\uD800') plain = false
+      i += 1
+    }
+    if (plain) ScalarNode(key)
+    else ScalarNode(org.virtuslab.yaml.YamlEncoder.escapeSpecialCharacters(key))
+  }
 
   /** A case class field that is not accessible from the derived code (a `private val` constructor parameter): read by
     * its position, as scala-yaml's derived encoders read every field (`productIterator`).
