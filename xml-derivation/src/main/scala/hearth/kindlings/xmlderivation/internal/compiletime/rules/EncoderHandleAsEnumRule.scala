@@ -83,7 +83,7 @@ trait EncoderHandleAsEnumRuleImpl {
             XmlDerivationUtils.makeEmptyElem(Expr.splice(nameOf(ectx.value, ectx.config)))
           )
         }
-        ectx.evaluatedConfig.map(_.discriminatorAttribute) match {
+        xmlStaticDiscriminatorOf[A](ectx.evaluatedConfig) match {
           case Some(Some(attribute)) => withDiscriminator(Expr(attribute))
           case Some(None)            => wrapped
           case None                  =>
@@ -182,7 +182,7 @@ trait EncoderHandleAsEnumRuleImpl {
               def wrapped: MIO[Expr[scala.xml.Elem]] = caseElem(nameExpr).map { elem =>
                 Expr.quote(XmlDerivationUtils.wrapWithTypeName(Expr.splice(ectx.elementName), Expr.splice(elem)))
               }
-              ectx.evaluatedConfig.map(_.discriminatorAttribute) match {
+              xmlStaticDiscriminatorOf[A](ectx.evaluatedConfig) match {
                 case Some(Some(attribute)) => withDiscriminator(Expr(attribute))
                 case Some(None)            => wrapped
                 case None                  =>

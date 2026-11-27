@@ -1,12 +1,17 @@
 package hearth.kindlings.xmlderivation
 
 import hearth.MacroSuite
-import hearth.kindlings.xmlderivation.annotations.{xmlAttribute, xmlContent, xmlName}
+import hearth.kindlings.xmlderivation.annotations.{xmlAttribute, xmlContent, xmlDiscriminator, xmlName}
 
 enum XmlPlanet {
   case Mercury
   @xmlName("terra") case Earth
   case Mars
+}
+
+@xmlDiscriminator("op") enum XmlOperation {
+  case Noop
+  case Move(by: Int)
 }
 
 enum XmlFigure {
@@ -109,6 +114,20 @@ final class XmlScala3EnumSpec extends MacroSuite {
     }
     val _ = intercept[IllegalArgumentException](runtime.encode(XmlFigure.Dot, "x"))
     assert(runtime.decode(<x type="Dot"/>).isLeft)
+  }
+
+  test("@xmlDiscriminator on an enum: its attribute, whatever the configuration says") {
+    val codec = KindlingsXmlCodec.derived[XmlOperation]
+    assertEquals(roundTripped(codec, XmlOperation.Noop).toString, """<x op="Noop"/>""")
+    assertEquals(roundTripped(codec, XmlOperation.Move(2)).toString, """<x op="Move"><by>2</by></x>""")
+    val none = KindlingsXmlCodec.derived[XmlOperation](using XmlConfig().withNoDiscriminator)
+    assertEquals(roundTripped(none, XmlOperation.Move(2)).toString, """<x op="Move"><by>2</by></x>""")
+    val runtime = {
+      given XmlConfig = XmlScala3EnumRuntimeConfigs.default
+      KindlingsXmlCodec.derived[XmlOperation]
+    }
+    assertEquals(roundTripped(runtime, XmlOperation.Noop).toString, """<x op="Noop"/>""")
+    assertEquals(runtime.decode(<x type="Noop"/>), Left(XmlDecodingError.MissingDiscriminator("op", "x")))
   }
 
   test("derives") {

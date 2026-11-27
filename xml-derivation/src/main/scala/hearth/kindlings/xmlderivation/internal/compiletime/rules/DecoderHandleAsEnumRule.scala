@@ -76,9 +76,11 @@ trait DecoderHandleAsEnumRuleImpl {
       })
 
       // Pre-compute discriminator attribute name from config
-      val discriminatorAttr: Option[String] = dctx.evaluatedConfig.flatMap(_.discriminatorAttribute)
+      // (`@xmlDiscriminator` on the type wins over the configuration)
+      val staticDiscriminator: Option[Option[String]] = xmlStaticDiscriminatorOf[A](dctx.evaluatedConfig)
+      val discriminatorAttr: Option[String] = staticDiscriminator.flatten
       val discriminatorAttrName: String = discriminatorAttr.getOrElse("type")
-      val hasDiscriminator: Option[Boolean] = dctx.evaluatedConfig.map(_.discriminatorAttribute.isDefined)
+      val hasDiscriminator: Option[Boolean] = staticDiscriminator.map(_.isDefined)
 
       // an enum of singletons: the name read from the discriminator (or from the element inside) is the value
       def taggedSingletons: MIO[Expr[Either[XmlDecodingError, A]]] = enumFromName[A](subtypes).map { fromName =>
