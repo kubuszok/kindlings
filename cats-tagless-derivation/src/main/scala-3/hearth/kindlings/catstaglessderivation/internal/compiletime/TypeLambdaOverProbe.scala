@@ -5,7 +5,7 @@ import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactor
 /** Builds `[F[_]] =>> T[F]` from `T[KProbe]`: every occurrence of the probe constructor becomes the lambda's parameter.
   *
   * Hearth has no cross-platform API for building type lambdas (see
-  * `docs/research/hearth-gap-type-lambda-construction.md`), so this is the per-version part of the derivation; it is
+  * `docs/research/hearth-gap-cats-tagless-trait-algebras.md`), so this is the per-version part of the derivation; it is
   * what cats-tagless' own macros do (`summonLambda` on Scala 3, `polyType` on Scala 2) to look up e.g.
   * `FunctorK[[F[_]] =>> EitherT[F, E, A]]`.
   */

@@ -19,7 +19,9 @@ object UpstreamParitySpec {
 final class UpstreamParitySpec extends MacroSuite {
   import UpstreamAlgebras.*
 
-  private val fk: FunctionK[Try, Option] = new FunctionK[Try, Option] { def apply[A](fa: Try[A]): Option[A] = fa.toOption }
+  private val fk: FunctionK[Try, Option] = new FunctionK[Try, Option] {
+    def apply[A](fa: Try[A]): Option[A] = fa.toOption
+  }
   private val gk: FunctionK[Option, Try] = new FunctionK[Option, Try] {
     def apply[A](fa: Option[A]): Try[A] = Try(fa.get)
   }
@@ -66,7 +68,8 @@ final class UpstreamParitySpec extends MacroSuite {
       fCurry.mapK(new AlgWithCurryMethod[Try] { def a(t: Int)(b: String) = Try(s"$t$b") })(fk).a()("x") ==> Some("42x")
 
       val fDefault: FunctorK[AlgWithDefaultParameter] = KindlingsFunctorK.derived
-      val greeter = fDefault.mapK(new AlgWithDefaultParameter[Try] { def greet(name: String) = Try(s"Hello $name") })(fk)
+      val greeter =
+        fDefault.mapK(new AlgWithDefaultParameter[Try] { def greet(name: String) = Try(s"Hello $name") })(fk)
       greeter.greet() ==> Some("Hello World")
       greeter.greet("John Doe") ==> Some("Hello John Doe")
     }
@@ -238,8 +241,12 @@ final class UpstreamParitySpec extends MacroSuite {
       }
       val p = applyK.productK(alg(true), alg(false))
       p.parseInt("2") ==> Tuple2K[Option, Option, Int](Some(2), None)
-      p.parseDouble("1.5").value ==> Tuple2K[Option, Option, Either[String, Double]](Some(Right(1.5)), Some(Left("nope")))
-      applyK.mapK(alg(true))(new FunctionK[Option, List] { def apply[A](fa: Option[A]) = fa.toList })
+      p.parseDouble("1.5").value ==> Tuple2K[Option, Option, Either[String, Double]](
+        Some(Right(1.5)),
+        Some(Left("nope"))
+      )
+      applyK
+        .mapK(alg(true))(new FunctionK[Option, List] { def apply[A](fa: Option[A]) = fa.toList })
         .parseDouble("2.5")
         .value ==> List(Right(2.5))
     }
