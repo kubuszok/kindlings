@@ -17,6 +17,7 @@ final class CatsDerivationScala2OracleSpec extends MacroSuite {
   private object KindlingsSide {
     import hearth.kindlings.catsderivation.extensions.*
     val consKNel: ConsK[CtNel] = ConsK.derived[CtNel]
+    val consKIList: ConsK[CtIList] = ConsK.derived[CtIList]
     val orderOne: Order[CtOne] = Order.derived[CtOne]
   }
 
@@ -31,16 +32,12 @@ final class CatsDerivationScala2OracleSpec extends MacroSuite {
     assertEquals(differences, Nil, s"$label: Kindlings vs kittens differences:\n${differences.mkString("\n")}")
   }
 
-  test("ConsK: kittens and Kindlings support different shapes (documented)") {
-    // kittens 2 derives ConsK for list-like sealed traits (a cons case `(head: A, tail: F[A])`); Kindlings derives it for
-    // case classes (prepending to a nested collection, e.g. `CtNel(head: A, tail: List[A])`). Neither supports the
-    // other's shape - documented in docs/user-guide/feature-parity.md (cats-derivation): Gap / Improvement.
+  test("ConsK: list-like sealed traits like kittens, plus case classes prepending to a collection (documented)") {
+    // kittens 2 derives ConsK for list-like sealed traits (a cons case `(head: A, tail: F[A])`); Kindlings derives it
+    // for those too, and also for case classes (prepending to a nested collection, e.g. `CtNel(head: A, tail: List[A])`),
+    // which kittens rejects - documented in docs/user-guide/feature-parity.md (cats-derivation): Improvement.
     val lists: List[CtIList[Int]] = List(CtINil(), CtICons(1, CtICons(2, CtINil())))
-    assertEquals(lists.map(KittensSide.consKIList.cons(0, _)), lists.map(CtICons(0, _)))
-    assert(compileErrors("""
-      import hearth.kindlings.catsderivation.extensions._
-      alleycats.ConsK.derived[hearth.kindlings.oracle.catsderivation.CtIList]
-    """).contains("Macro derivation failed"))
+    check("consK ilist")(lists.map(KindlingsSide.consKIList.cons(0, _)), lists.map(KittensSide.consKIList.cons(0, _)))
 
     assertEquals(KindlingsSide.consKNel.cons(0, CtNel(1, List(2))), CtNel(0, List(1, 2)))
     assert(compileErrors("""

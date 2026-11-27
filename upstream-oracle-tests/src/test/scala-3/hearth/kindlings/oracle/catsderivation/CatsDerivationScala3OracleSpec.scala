@@ -10,6 +10,20 @@ final case class CtSets(a: Set[Int], b: Set[String])
 final case class CtGroup(a: Int, b: Long)
 final case class CtBi[A, B](a: A, b: B, label: String)
 
+// kittens' `ADTs.Result`: fields nesting the type parameters in other type constructors (`List[E]`, `Either[A, E]`).
+sealed trait CtResult[+A, +E]
+case object CtDone extends CtResult[Nothing, Nothing]
+final case class CtMaybeR[+A, +E](either: Either[A, E]) extends CtResult[A, E]
+final case class CtOk[+A](value: A, code: Int) extends CtResult[A, Nothing]
+final case class CtErr[+E](err: E, errs: List[E]) extends CtResult[Nothing, E]
+// kittens' `BifunctorSuite.Nested`: an alias nesting type constructors.
+type CtNestedEither[A, B] = Either[Option[A], Either[A, B]]
+
+// kittens' `ADTs.AtLeastOne`: recursion through another type constructor (`Option`).
+sealed trait CtAtLeastOne[+A]
+final case class CtSingle[+A](value: A) extends CtAtLeastOne[A]
+final case class CtMore[+A](value: A, rest: Option[CtAtLeastOne[A]]) extends CtAtLeastOne[A]
+
 /** Type classes kittens derives only on Scala 3: Order for sealed traits with several subtypes, Band, Semilattice,
   * BoundedSemilattice, Group, CommutativeGroup, Bifunctor, Bifoldable, Bitraverse.
   */
@@ -28,6 +42,15 @@ final class CatsDerivationScala3OracleSpec extends MacroSuite {
     val bifunctor: Bifunctor[CtBi] = Bifunctor.derived[CtBi]
     val bifoldable: Bifoldable[CtBi] = Bifoldable.derived[CtBi]
     val bitraverse: Bitraverse[CtBi] = Bitraverse.derived[CtBi]
+    val bifunctorResult: Bifunctor[CtResult] = Bifunctor.derived[CtResult]
+    val bifoldableResult: Bifoldable[CtResult] = Bifoldable.derived[CtResult]
+    val bitraverseResult: Bitraverse[CtResult] = Bitraverse.derived[CtResult]
+    val bifunctorNested: Bifunctor[CtNestedEither] = Bifunctor.derived[CtNestedEither]
+    val bifoldableNested: Bifoldable[CtNestedEither] = Bifoldable.derived[CtNestedEither]
+    val bitraverseNested: Bitraverse[CtNestedEither] = Bitraverse.derived[CtNestedEither]
+    val functorAtLeastOne: cats.Functor[CtAtLeastOne] = cats.Functor.derived[CtAtLeastOne]
+    val foldableAtLeastOne: cats.Foldable[CtAtLeastOne] = cats.Foldable.derived[CtAtLeastOne]
+    val traverseAtLeastOne: cats.Traverse[CtAtLeastOne] = cats.Traverse.derived[CtAtLeastOne]
   }
 
   private object KittensSide {
@@ -42,6 +65,15 @@ final class CatsDerivationScala3OracleSpec extends MacroSuite {
     val bifunctor: Bifunctor[CtBi] = semiauto.bifunctor[CtBi]
     val bifoldable: Bifoldable[CtBi] = semiauto.bifoldable[CtBi]
     val bitraverse: Bitraverse[CtBi] = semiauto.bitraverse[CtBi]
+    val bifunctorResult: Bifunctor[CtResult] = semiauto.bifunctor[CtResult]
+    val bifoldableResult: Bifoldable[CtResult] = semiauto.bifoldable[CtResult]
+    val bitraverseResult: Bitraverse[CtResult] = semiauto.bitraverse[CtResult]
+    val bifunctorNested: Bifunctor[CtNestedEither] = semiauto.bifunctor[CtNestedEither]
+    val bifoldableNested: Bifoldable[CtNestedEither] = semiauto.bifoldable[CtNestedEither]
+    val bitraverseNested: Bitraverse[CtNestedEither] = semiauto.bitraverse[CtNestedEither]
+    val functorAtLeastOne: cats.Functor[CtAtLeastOne] = semiauto.functor[CtAtLeastOne]
+    val foldableAtLeastOne: cats.Foldable[CtAtLeastOne] = semiauto.foldable[CtAtLeastOne]
+    val traverseAtLeastOne: cats.Traverse[CtAtLeastOne] = semiauto.traverse[CtAtLeastOne]
   }
 
   private def check[R](label: String)(kindlings: R, kittens: R): Unit = {
@@ -133,5 +165,64 @@ final class CatsDerivationScala3OracleSpec extends MacroSuite {
     assert(compileErrors("""
       cats.derived.semiauto.nonEmptyAlternative[hearth.kindlings.oracle.catsderivation.CtProd]
     """).nonEmpty)
+  }
+
+  test("Bifunctor, Bifoldable, Bitraverse: fields nesting the type parameters (kittens' Result and Nested)") {
+    val results: List[CtResult[Int, String]] = List(
+      CtDone,
+      CtMaybeR(Left(1)),
+      CtMaybeR(Right("ab")),
+      CtOk(2, 7),
+      CtErr("x", List("yy", "zzz"))
+    )
+    val nesteds: List[CtNestedEither[Int, String]] =
+      List(Left(Some(1)), Left(None), Right(Left(2)), Right(Right("abc")))
+    def observe[F[_, _]](values: List[F[Int, String]])(bf: Bifunctor[F], bfo: Bifoldable[F], bt: Bitraverse[F]) = (
+      values.map(bf.bimap(_)(_ * 10, _.length)),
+      values.map(bfo.bifoldLeft(_, List.empty[String])((acc, a) => acc :+ s"a$a", (acc, b) => acc :+ s"b$b")),
+      values.map(
+        bfo
+          .bifoldRight(_, Eval.now(List.empty[String]))(
+            (a, acc) => acc.map(s"a$a" :: _),
+            (b, acc) => acc.map(s"b$b" :: _)
+          )
+          .value
+      ),
+      values.map(fa =>
+        bt.bitraverse[CtLog, Int, String, String, Int](fa)(
+          a => State((log: List[String]) => (log :+ s"a$a", s"<$a>")),
+          b => State((log: List[String]) => (log :+ s"b$b", b.length))
+        ).run(Nil)
+          .value
+      ),
+      values.map(bt.bimap(_)(_ + 1, _.reverse))
+    )
+    check("bi result")(
+      observe(results)(KindlingsSide.bifunctorResult, KindlingsSide.bifoldableResult, KindlingsSide.bitraverseResult),
+      observe(results)(KittensSide.bifunctorResult, KittensSide.bifoldableResult, KittensSide.bitraverseResult)
+    )
+    check("bi nested")(
+      observe(nesteds)(KindlingsSide.bifunctorNested, KindlingsSide.bifoldableNested, KindlingsSide.bitraverseNested),
+      observe(nesteds)(KittensSide.bifunctorNested, KittensSide.bifoldableNested, KittensSide.bitraverseNested)
+    )
+  }
+
+  test("Functor, Foldable, Traverse: recursion through another type constructor (kittens' AtLeastOne)") {
+    val values: List[CtAtLeastOne[Int]] =
+      List(CtSingle(1), CtMore(1, None), CtMore(1, Some(CtMore(2, Some(CtSingle(3))))))
+    def observe(f: cats.Functor[CtAtLeastOne], fo: cats.Foldable[CtAtLeastOne], t: cats.Traverse[CtAtLeastOne]) = (
+      values.map(f.map(_)(_ * 10)),
+      values.map(fo.foldLeft(_, List.empty[Int])(_ :+ _)),
+      values.map(fo.foldRight(_, Eval.now(List.empty[Int]))((a, acc) => acc.map(a :: _)).value),
+      values.map(fa =>
+        t.traverse[CtLog, Int, String](fa)(a => State((log: List[String]) => (log :+ s"visit $a", s"<$a>")))
+          .run(Nil)
+          .value
+      )
+    )
+    check("at least one")(
+      observe(KindlingsSide.functorAtLeastOne, KindlingsSide.foldableAtLeastOne, KindlingsSide.traverseAtLeastOne),
+      observe(KittensSide.functorAtLeastOne, KittensSide.foldableAtLeastOne, KittensSide.traverseAtLeastOne)
+    )
   }
 }
