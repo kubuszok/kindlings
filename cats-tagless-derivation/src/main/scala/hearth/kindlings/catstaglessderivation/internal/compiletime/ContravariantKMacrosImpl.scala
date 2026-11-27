@@ -13,6 +13,25 @@ trait ContravariantKMacrosImpl
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
 
+  /** Derives `ContravariantK` (and `InvariantK`) for algebras nested in a trait algebra's methods. */
+  protected def contravariantKNestedDeriver(
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  ): NestedAlgebraDeriver = {
+    case (NestedTc.ContravariantKTc, ctor) =>
+      val (nestedCtorK1, nestedType) = nestedAlgebra(NestedTc.ContravariantKTc, ctor)
+      val nestedCtx = ContravariantKCtx[CatsTaglessFactories.DummyHKT](
+        nestedCtorK1,
+        nestedType.asInstanceOf[Type[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]],
+        cache,
+        derivedType
+      )
+      Some(
+        deriveContravariantKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map(_.asInstanceOf[Expr[Any]])
+      )
+    case (tc, ctor) => invariantKNestedDeriver(cache, derivedType)(tc, ctor)
+  }
+
   // --- Context ---
 
   final case class ContravariantKCtx[Alg[_[_]]](

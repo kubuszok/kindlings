@@ -44,4 +44,37 @@ object CatsTaglessRuntime {
 
   def mkInstrumentation(value: Any, algebraName: String, methodName: String): Any =
     Instrumentation[IdK, Any](value, algebraName, methodName)
+
+  // --- Trait algebras: varargs, Tuple2K projections, instances for types nesting `F` (since 0.2.x) ---
+  //
+  // A vararg parameter mentioning `F` is transformed element by element (like cats-tagless). The `F ~> G` /
+  // `*K` instances are erased: the macro checks the types, these only forward.
+
+  def applyFkAll(fk: Any, values: Seq[Any]): Seq[Any] = {
+    val f = fk.asInstanceOf[FunctionK[IdK, IdK]]
+    values.map(v => f.apply(v))
+  }
+
+  def imapKAll(invariantK: Any, values: Seq[Any], fk: Any, gk: Any): Seq[Any] =
+    values.map(v => imapK(invariantK, v, fk, gk))
+
+  def mapKAll(functorK: Any, values: Seq[Any], fk: Any): Seq[Any] =
+    values.map(v => mapK(functorK, v, fk))
+
+  def contramapKAll(contravariantK: Any, values: Seq[Any], fk: Any): Seq[Any] =
+    values.map(v => contramapK(contravariantK, v, fk))
+
+  def tuple2KFirst(value: Any): Any = value.asInstanceOf[Tuple2K[IdK, IdK, Any]].first
+
+  def tuple2KSecond(value: Any): Any = value.asInstanceOf[Tuple2K[IdK, IdK, Any]].second
+
+  def tuple2KFirstAll(values: Seq[Any]): Seq[Any] = values.map(tuple2KFirst)
+
+  def tuple2KSecondAll(values: Seq[Any]): Seq[Any] = values.map(tuple2KSecond)
+
+  /** `SemigroupalK.firstK`: `Tuple2K[F, G, *] ~> F`. */
+  val firstK: Any = cats.tagless.SemigroupalK.firstK[IdK, IdK]
+
+  /** `SemigroupalK.secondK`: `Tuple2K[F, G, *] ~> G`. */
+  val secondK: Any = cats.tagless.SemigroupalK.secondK[IdK, IdK]
 }

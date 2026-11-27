@@ -20,14 +20,13 @@ trait ContravariantKTraitRuleImpl {
           implicit val CKAlgType: Type[cats.tagless.ContravariantK[Alg]] = ckctx.contravariantKAlgType
           for {
             _ <- MIO.scoped { runSafe =>
-              val instanceExpr = buildContravariantKTraitExpr[Alg](runSafe)
               runSafe {
                 ckctx.cache.buildCachedWith(
                   "cached-contravariantk-instance",
                   ValDefBuilder.ofLazy[cats.tagless.ContravariantK[Alg]](
                     s"contravariantK_${ckctx.contravariantKAlgType.shortName}"
                   )
-                )(_ => instanceExpr)
+                )(_ => buildContravariantKTraitExpr[Alg](runSafe))
               }
             }
             result <- ContravariantKUseCachedRule[Alg]
@@ -70,204 +69,13 @@ trait ContravariantKTraitRuleImpl {
       fkExpr0: Expr[Any]
   )(implicit ctx: ContravariantKCtx[Alg]): MIO[Expr[Alg[CatsTaglessFactories.WCtor2]]] = {
     val AlgCtorK1 = ctx.algCtorK1
-
-    val WCtor1Ctor = mkWCtor1
-    val WCtor2Ctor = mkWCtor2
-
-    val AlgWCtor1Type = AlgCtorK1.apply[CatsTaglessFactories.WCtor1](using WCtor1Ctor)
-    val AlgWCtor2Type = AlgCtorK1.apply[CatsTaglessFactories.WCtor2](using WCtor2Ctor)
-
-    buildContravariantKTraitInstance[Alg](
-      afExpr0.asInstanceOf[Expr[Any]],
-      fkExpr0,
-      AlgWCtor1Type.asInstanceOf[Type[Any]],
-      AlgWCtor2Type.asInstanceOf[Type[Any]]
-    )
-  }
-
-  @scala.annotation.nowarn("msg=is never used|unused implicit parameter|unused explicit parameter")
-  private def buildContravariantKTraitInstance[Alg[_[_]]](
-      afExpr: Expr[Any],
-      fkExpr: Expr[Any],
-      AlgWCtor1Type: Type[Any],
-      AlgWCtor2Type: Type[Any]
-  )(implicit ctx: ContravariantKCtx[Alg]): MIO[Expr[Alg[CatsTaglessFactories.WCtor2]]] = {
-    implicit val AnyType: Type[Any] = InvariantKTypes.Any
-    val AlgCtorK1 = ctx.algCtorK1
-
-    val OptionCtor = Type.Ctor1.of[Option]
-    val ListCtor = Type.Ctor1.of[List]
-    val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
-    val AlgListType = AlgCtorK1.apply[List](using ListCtor)
-
-    parsedOrFail(
-      AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither,
-      "Alg[WCtor2] as anonymous instance"
-    )
-      .parTuple(
-        parsedOrFail(
-          AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither,
-          "Alg[WCtor1] as anonymous instance"
-        )
-      )
-      .parTuple(
-        parsedOrFail(AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither, "Alg[Option]")
-      )
-      .parTuple(parsedOrFail(AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither, "Alg[List]"))
-      .flatMap { case (((anonInstance, anonInstanceSource), aiOption), aiList) =>
-        val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
-        val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
-
-        // Pre-validate method shapes and source-method presence so the OverrideBody callbacks below
-        // cannot run into unsupported methods.
-        val validationErrors: List[CatsTaglessDerivationError] = anonInstance.mustOverride.flatMap { cm =>
-          val methodName = cm.method.name
-
-          val missingSource =
-            if (anonInstanceSource.mustOverride.exists(_.method.name == methodName)) Nil
-            else List(CatsTaglessDerivationError.SourceMethodNotFound(methodName))
-
-          // Check if this method returns F[X] — covariant returns are NOT allowed for ContravariantK
-          val isCovariantReturn: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
-            case (Some(om), Some(lm)) =>
-              (knownReturningOfProbe(om.method), knownReturningOfProbe(lm.method)) match {
-                case (Some(or), Some(lr)) =>
-                  (
-                    OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
-                    ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
-                  ) match {
-                    case (Some(io), Some(il)) =>
-                      import io.Underlying as IO; import il.Underlying as IL
-                      IO =:= IL
-                    case _ => false
-                  }
-                case _ => false
-              }
-            case _ => false
-          }
-          val unsupportedMethod =
-            if (isCovariantReturn)
-              List(
-                CatsTaglessDerivationError.UnsupportedMethod(
-                  "ContravariantK",
-                  methodName,
-                  "returns F[X] " +
-                    "(covariant in the type constructor parameter). ContravariantK can only handle " +
-                    "methods with F[_] in parameter position or invariant methods. " +
-                    "Consider using InvariantK or FunctorK instead."
-                )
-              )
-            else Nil
-
-          missingSource ++ unsupportedMethod
-        }
-
-        validationErrors match {
-          case head :: tail =>
-            Log.error((head :: tail).map(_.message).mkString("\n")) >> MIO.fail(head, tail*)
-          case Nil =>
-
-            val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
-              val methodName = cm.method.name
-              val sourceMethodOpt = anonInstanceSource.mustOverride.find(_.method.name == methodName)
-
-              // Classify parameters: which params contain F[X] (contravariant position)
-              val contravariantParamIndices: Set[Int] =
-                (optionMethods.get(methodName), listMethods.get(methodName)) match {
-                  case (Some(om), Some(lm)) =>
-                    val optParams = om.method.totalParameters.flatten.toList
-                    val listParams = lm.method.totalParameters.flatten.toList
-                    optParams
-                      .zip(listParams)
-                      .zipWithIndex
-                      .collect {
-                        case (((_, optP), (_, listP)), idx)
-                            if !(optP.tpe.Underlying =:= listP.tpe.Underlying) && optP.tpe.plainPrint != listP.tpe.plainPrint =>
-                          idx
-                      }
-                      .toSet
-                  case _ => Set.empty
-                }
-
-              val body: OverrideBody = new OverrideBody {
-                def apply(octx: OverrideContext): Expr_?? = {
-                  val returnT = octx.returnType
-
-                  // Build params for the source call, transforming contravariant params with fk (G ~> F)
-                  val transformedParams: List[Expr_??] = octx.parameters.zipWithIndex.map { case (paramExpr, idx) =>
-                    if (contravariantParamIndices.contains(idx)) {
-                      // Cast to the source method's parameter type (`F[X]`): the overriding method's (`G[X]`) is
-                      // wrong, and on Scala 2 it was reified as `Nothing` ("dead code following this construct").
-                      val sourceParamType: ?? = sourceMethodOpt
-                        .flatMap(_.method.totalParameters.flatten.toList.lift(idx).map(_._2.tpe))
-                        .getOrElse(paramExpr.Underlying.as_??)
-                      import paramExpr.Underlying as P
-                      val param: Expr[Any] = paramExpr.value.upcast[Any]
-                      import sourceParamType.Underlying as S
-                      mkApplyFk[S](fkExpr, param)(sourceParamType.Underlying)
-                        .as_??(sourceParamType.Underlying)
-                    } else {
-                      paramExpr
-                    }
-                  }
-
-                  // Call the same method on the source (af) instance with transformed params.
-                  // OverrideBody is a synchronous callback invoked inside `anonInstance.construct`; it cannot
-                  // return MIO. Typed errors thrown here are caught by the MIO block wrapping `construct`
-                  // below and routed into the MIO error channel.
-                  val sourceCall: Expr[Any] = sourceMethodOpt match {
-                    case Some(sourceCM) =>
-                      val sm = sourceCM.method
-                      try
-                        sm.fold(
-                          onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                          onTypes = at =>
-                            at.typeParams.flatten.zip(octx.typeParameters).toMap, // forward the override's type params
-                          onValues = av => {
-                            val paramNames = av.totalParameters.flatten.toList.map(_._1)
-                            paramNames.zip(transformedParams).toMap
-                          }
-                        ) match {
-                          case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
-                          case Left(e)      =>
-                            throw CatsTaglessDerivationError.MethodForwardingFailed(
-                              methodName,
-                              s"fold returned Left: $e"
-                            )
-                        }
-                      catch {
-                        case e: CatsTaglessDerivationError  => throw e
-                        case scala.util.control.NonFatal(e) =>
-                          throw CatsTaglessDerivationError.MethodForwardingFailed(
-                            methodName,
-                            s"fold crashed (${sm.getClass.getSimpleName}, " +
-                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf(e)}"
-                          )
-                      }
-                    case None =>
-                      // Unreachable: validated via validationErrors before building overrides.
-                      throw CatsTaglessDerivationError.SourceMethodNotFound(methodName)
-                  }
-
-                  {
-                    import returnT.Underlying as RT
-                    Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
-                  }
-                }
-              }
-
-              cm.method.asUntyped -> body
-            }.toMap
-
-            // The MIO wrapper captures typed errors thrown from the OverrideBody callbacks invoked
-            // synchronously inside `construct` and routes them into the error channel.
-            MIO(anonInstance.construct(None, Map.empty, overrides)).flatMap {
-              case Right(expr) =>
-                MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
-              case Left(errors) =>
-                failCannotConstruct("ContravariantK", s"trait instance: ${errors.toVector.mkString(", ")}")
-            }
-        }
-      }
+    buildTraitAlgebra[Alg](
+      "ContravariantK",
+      AlgCtorK1,
+      AlgCtorK1.apply[CatsTaglessFactories.WCtor2](using mkWCtor2).asInstanceOf[Type[Any]],
+      List(AlgCtorK1.apply[CatsTaglessFactories.WCtor1](using mkWCtor1).asInstanceOf[Type[Any]]),
+      TraitOp.ContramapK(afExpr0.asInstanceOf[Expr[Any]], fkExpr0),
+      contravariantKNestedDeriver(ctx.cache, ctx.derivedType)
+    ).map(_.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
   }
 }
