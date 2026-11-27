@@ -40,7 +40,7 @@ object versions {
   val quicklens = "1.9.15"
   val tapir = "1.13.33"
   val refined = "0.11.4"
-  val sttpApispec = "0.11.10"
+  val sttpApispec = "0.12.1"
   val catsEffect = "3.7.1"
   val fs2 = "3.16.0"
   // parser benchmark baselines
