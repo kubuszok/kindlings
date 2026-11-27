@@ -1244,6 +1244,7 @@ lazy val benchmarks = projectMatrix
     circeDerivation,
     jsoniterDerivation,
     catsDerivation,
+    catsTaglessDerivation,
     scalacheckDerivation,
     ubjsonDerivation,
     yamlDerivation,
@@ -1274,6 +1275,7 @@ lazy val benchmarks = projectMatrix
       // tapir-openapi-jsoniter baseline: sttp-apispec's circe codecs (which the module avoids depending on)
       "com.softwaremill.sttp.apispec" %% "openapi-circe" % versions.sttpApispec,
       "org.typelevel" %% "kittens" % versions.kittens,
+      "org.typelevel" %% "cats-tagless-core" % versions.catsTagless,
       // parser baselines
       "com.lihaoyi" %% "fastparse" % versions.fastparse,
       "org.parboiled" %% "parboiled" % versions.parboiled2,
@@ -1285,7 +1287,9 @@ lazy val benchmarks = projectMatrix
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for2_13 = Seq(
         compilerPlugin("org.typelevel" % "kind-projector" % versions.kindProjector cross CrossVersion.full),
-        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig
+        "com.github.pureconfig" %% "pureconfig-generic" % versions.pureconfig,
+        // cats-tagless baseline (`Derive.*` macros; on Scala 3 they are @experimental, so benchmarked on 2.13)
+        "org.typelevel" %% "cats-tagless-macros" % versions.catsTagless
       ),
       for3 = Seq(
         "com.github.pureconfig" %% "pureconfig-generic-scala3" % versions.pureconfig
