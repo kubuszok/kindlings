@@ -46,7 +46,7 @@ trait DecoderHandleAsMapRuleImpl {
         val mapAsArrayStaticallyFalse = dctx.evaluatedConfig.exists(!_.mapAsArray)
         val mapAsArrayStaticallyTrue = dctx.evaluatedConfig.exists(_.mapAsArray)
         if (mapAsArrayStaticallyFalse)
-          decodeStringKeyedMapInline[A, Pair, Key, Value](isMap)
+          decodeStringKeyedMapInline[A, Pair, Key, Value](isMap, None)
         else if (mapAsArrayStaticallyTrue)
           decodeStringKeyedMapAsArrayInline[A, Pair, Key, Value](isMap)
         else
@@ -54,6 +54,8 @@ trait DecoderHandleAsMapRuleImpl {
       } else {
         // Non-String keys — try to derive key decoding for object mode
         deriveKeyDecoding[Key].flatMap {
+          case Some(keyDecoderLambda) if dctx.evaluatedConfig.exists(!_.mapAsArray) =>
+            decodeStringKeyedMapInline[A, Pair, Key, Value](isMap, Some(keyDecoderLambda))
           case Some(keyDecoderLambda) =>
             // Derive value decoder
             LambdaBuilder
@@ -343,7 +345,10 @@ trait DecoderHandleAsMapRuleImpl {
 
     @scala.annotation.nowarn("msg=is never used")
     private def decodeStringKeyedMapInline[A: DecoderCtx, Pair: Type, Key: Type, Value: Type](
-        isMap: IsMapOf[A, Pair]
+        isMap: IsMapOf[A, Pair],
+        // `None`: `String` keys (`readKeyAsString`); otherwise the derived key decoder (one local function value per
+        // map, no runtime helper and no closure for the values)
+        keyDecoder: Option[Expr[JsonReader => Key]]
     )(implicit
         StringT: Type[String],
         JsonReaderT: Type[JsonReader],
@@ -360,7 +365,9 @@ trait DecoderHandleAsMapRuleImpl {
         val factoryExpr = isMap.factory
         val buildStep = isMap.build
 
-        val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
+        def readLoopWith(
+            decodeKey: Option[Expr[JsonReader => Key]]
+        ): Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
           val reader = Expr.splice(dctx.reader)
           val mapBuilder = Expr.splice(factoryExpr).newBuilder
           if (
@@ -370,7 +377,12 @@ trait DecoderHandleAsMapRuleImpl {
             reader.rollbackToken()
             // as jsoniter-scala: checked after every insert (so a limit of 0 rejects the first entry)
             var count: Int = 1
-            val key = reader.readKeyAsString()
+            val key = Expr.splice {
+              decodeKey match {
+                case None         => Expr.quote(reader.readKeyAsString().asInstanceOf[Key])
+                case Some(decode) => Expr.quote(Expr.splice(decode).apply(reader))
+              }
+            }
             mapBuilder += Expr.splice(
               isMap.pair(
                 Expr.quote(key).asInstanceOf[Expr[isMap.Key]],
@@ -379,7 +391,12 @@ trait DecoderHandleAsMapRuleImpl {
             )
             if (count > Expr.splice(Expr(maxInserts))) reader.decodeError("too many map inserts")
             while (reader.isNextToken(','.toByte)) {
-              val k = reader.readKeyAsString()
+              val k = Expr.splice {
+                decodeKey match {
+                  case None         => Expr.quote(reader.readKeyAsString().asInstanceOf[Key])
+                  case Some(decode) => Expr.quote(Expr.splice(decode).apply(reader))
+                }
+              }
               mapBuilder += Expr.splice(
                 isMap.pair(
                   Expr.quote(k).asInstanceOf[Expr[isMap.Key]],
@@ -392,6 +409,14 @@ trait DecoderHandleAsMapRuleImpl {
             if (!reader.isCurrentToken('}'.toByte)) reader.decodeError("expected '}' or ','")
           }
           mapBuilder
+        }
+        val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = keyDecoder match {
+          case None          => readLoopWith(None)
+          case Some(decoder) =>
+            implicit val KeyDecoderT: Type[JsonReader => Key] = Type.of[JsonReader => Key]
+            ValDefs
+              .createVal[JsonReader => Key](decoder, FreshName.FromPrefix("decodeKey"))
+              .use(decodeKey => readLoopWith(Some(decodeKey)))
         }
         val buildResultExpr = buildStep.ctor(readLoop)
 
