@@ -8,7 +8,6 @@ import hearth.std.*
 
 import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{ConstructError, LoadSettings, Node}
-import org.virtuslab.yaml.Node.SequenceNode
 
 trait DecoderHandleAsCollectionRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -42,25 +41,21 @@ trait DecoderHandleAsCollectionRuleImpl {
                     val decodeFn = builder.build[Either[ConstructError, Item]]
                     val factoryExpr = isCollection.value.factory
                     val buildStep = isCollection.value.build
+                    val classNameExpr: Expr[String] = Expr(runtimeClassName[A])
 
                     val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
                       val collBuilder = Expr.splice(factoryExpr).newBuilder
                       val decoder = YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
-                      Expr.splice(dctx.node) match {
-                        case SequenceNode(nodes, _) =>
-                          val iter = nodes.iterator
-                          while (iter.hasNext)
-                            decoder.construct(iter.next())(LoadSettings.empty) match {
-                              case Right(item) => collBuilder += item
-                              case Left(err)   =>
-                                throw new YamlDerivationUtils.CollectionBuildException(err)
-                            }
-                        case other =>
-                          throw new YamlDerivationUtils.CollectionBuildException(
-                            ConstructError
-                              .from(s"Expected sequence node but got ${other.getClass.getSimpleName}", other)
-                          )
-                      }
+                      // anything but a sequence (a null included) fails as scala-yaml's collection decoders
+                      val iter = YamlDerivationUtils
+                        .sequenceNodes(Expr.splice(dctx.node), Expr.splice(classNameExpr))
+                        .iterator
+                      while (iter.hasNext)
+                        decoder.construct(iter.next())(LoadSettings.empty) match {
+                          case Right(item) => collBuilder += item
+                          case Left(err)   =>
+                            throw new YamlDerivationUtils.CollectionBuildException(err)
+                        }
                       collBuilder
                     }
                     val buildResultExpr = buildStep.ctor(readLoop)

@@ -28,6 +28,14 @@ trait EncoderHandleAsCaseClassRuleImpl {
       }
 
     @scala.annotation.nowarn("msg=is never used")
+    private def productFieldAt[A: Type, Field: Type](value: Expr[A], index: Int): Expr[Field] = {
+      implicit val IntT: Type[Int] = Types.Int
+      Expr.quote {
+        YamlDerivationUtils.productField(Expr.splice(value), Expr.splice(Expr(index))).asInstanceOf[Field]
+      }
+    }
+
+    @scala.annotation.nowarn("msg=is never used")
     private def encodeCaseClassFields[A: EncoderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[Node]] = {
@@ -36,7 +44,26 @@ trait EncoderHandleAsCaseClassRuleImpl {
       implicit val fieldNameT: Type[fieldName] = Types.FieldName
       implicit val transientFieldT: Type[transientField] = Types.TransientField
 
-      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      val accessibleFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      // `caseFieldValuesAt` has no `private val` constructor parameters: they are read by their position (scala-yaml
+      // writes every field, and the decoder needs every constructor parameter).
+      val allFields: List[(String, Expr_??)] =
+        if (!(Type[A] <:< Type.of[Product])) accessibleFields
+        else {
+          val accessible = accessibleFields.toMap
+          val firstParameterList = caseClass.primaryConstructor.totalParameters.headOption.toList.flatMap(_.toList)
+          val inConstructor: List[(String, Expr_??)] = firstParameterList.zipWithIndex.map {
+            case ((name, param), index) =>
+              accessible.get(name) match {
+                case Some(value) => name -> value
+                case None        =>
+                  import param.tpe.Underlying as Field
+                  name -> productFieldAt[A, Field](ectx.value, index).as_??
+              }
+          }
+          val constructorNames = inConstructor.map(_._1).toSet
+          inConstructor ++ accessibleFields.filterNot { case (name, _) => constructorNames(name) }
+        }
 
       val paramsByName: Map[String, Parameter] =
         if (allFields.isEmpty) Map.empty

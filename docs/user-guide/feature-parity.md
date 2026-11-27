@@ -1264,8 +1264,15 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 | Sealed trait handling | Untagged: encoded without type info, decoded by trying each subtype in order (ambiguous for overlapping subtypes, #363) | The same by default; opt-in `withWrappedSubtypes` / `withDiscriminator` keep the type | Parity (default) / Improvement (opt-in) |
 | Enum support | Buggy ([#363](https://github.com/VirtusLab/scala-yaml/issues/363)) | Works | Improvement |
 | Option encoding | Buggy (documented) | Works | Improvement |
-| Recursive types | Undocumented | Yes | Improvement |
-| Value classes | Not documented | Automatic unwrapping | Improvement |
+| Recursive types | No: `derives` / a `given` for a recursive type never finishes initializing (the derived encoder summons its fields' instances, i.e. itself, in its constructor) | Yes | Improvement |
+| Value classes | No: not derivable (no `Mirror` for a value class) | Automatic unwrapping | Improvement |
+| `private val` constructor fields | Written and read | Written (read by position) and read | Parity |
+| Collections, `Option`s and maps of derived types | Through the element's `given` instance | Derived in place; same nodes and same failures (`Could't construct scala.collection.immutable.List from ...`, also for a null) | Parity |
+| Map keys | Any type with an instance (`forMap[K, V]`); `String` keys reject a null and non-scalars, and are written with non-printable characters escaped | The same; keys without an instance are derived (e.g. value classes) | Parity / Improvement |
+| `Char` fields | Encoder only | Encoder and decoder | Improvement |
+| `BigInt` / `BigDecimal` fields | Decoder only | Decoder (scala-yaml's) and encoder | Improvement |
+| `Any`, `Map[Any, Any]` fields | Decoder only (`YamlDecoder.forAny`: tags, aliases, precise doubles) | The same instance is used | Parity |
+| Tuples, `Either` | Derived as the case classes they are (`_1`/`_2`, `value`) | Same | Parity |
 | Java enums | No (Mirror-based derivation cannot) | Yes | Improvement |
 | Scala 3 named tuples | No | Yes | Improvement |
 | `Map[K, V]` | No special-casing | Yes (via Hearth `IsMap`) | Improvement |
@@ -1277,7 +1284,22 @@ with Kindlings (default `YamlConfig`) and with scala-yaml's `YamlCodec.derived`,
 (values and tags) and the decoded values of valid and invalid inputs, including failure messages. Products, `Option`
 fields (an absent one is `None`), constructor defaults, primitives, collections, maps, nested case classes, sealed traits
 (untagged, overlapping subtypes and case objects attempted in declaration order) and Scala 3 enums have **no
-differences**. The suite also checks that the opt-ins differ as intended:
+differences**.
+
+`scala-3/YamlUpstreamSuitesOracleSpec` runs scala-yaml's own derivation tests (`DecoderSuite`, `DecoderErrorsSuite`,
+`DockerYamlDecoderSuite`, `ConstructSuite`, `BaseYamlEncoderSuite`, `YamlEncoderSuite`) through both, comparing the
+nodes (values, tags, order of the keys), the printed YAML, the decoded values and the complete failures (message with
+the position, `expected`): numbers (ranges, octal/hexadecimal, underscores, non-finite), `Option`s and nulls
+(`!!null` for a non-optional field), sequences, mappings, nested case classes, user-provided codecs, default
+parameters (evaluated lazily, on every use), `Any`, more than 4 fields, collections / options / maps of derived types
+with nodes of the wrong kind, maps with `Int` keys, big numbers, generic case classes, private constructor fields,
+tuples and `Either`. The only difference:
+
+| Difference | scala-yaml | Kindlings | Status |
+|---|---|---|---|
+| Fields after a failing field | Every field is decoded (and the defaults of absent fields are evaluated), then the first failure is reported | The same failure; later fields are not decoded and their defaults are not evaluated | Design decision (no work after a failure) |
+
+The suites also check that the opt-ins differ as intended:
 
 | Opt-in | scala-yaml | Kindlings |
 |---|---|---|
