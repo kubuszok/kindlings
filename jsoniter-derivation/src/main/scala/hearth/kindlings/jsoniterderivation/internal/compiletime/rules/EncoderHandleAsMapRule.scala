@@ -48,6 +48,8 @@ trait EncoderHandleAsMapRuleImpl {
       } else {
         // Non-String keys — try to derive key encoding for object mode
         deriveKeyEncoding[Key].flatMap {
+          case Some(keyEncoderLambda) if ectx.evaluatedConfig.exists(!_.mapAsArray) =>
+            deriveKeyedMapInline[A, Pair, Key, Value](isMap, keyEncoderLambda)
           case Some(keyEncoderLambda) =>
             // Derive value encoder for V
             LambdaBuilder
@@ -162,6 +164,43 @@ trait EncoderHandleAsMapRuleImpl {
             Expr.splice(writeEntries)
             out.writeObjectEnd()
           })
+        }
+      }
+    }
+
+    /** As [[deriveStringKeyedMapInline]], for keys written by a derived key encoder: one loop over the entries, no
+      * runtime helper and no closure per value (the key encoder is one local function value per map, which the JIT
+      * scalar-replaces after inlining its `apply`).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def deriveKeyedMapInline[A: EncoderCtx, Pair: Type, Key: Type, Value: Type](
+        isMap: IsMapOf[A, Pair],
+        keyEncoder: Expr[(Key, JsonWriter) => Unit]
+    ): MIO[Rule.Applicability[Expr[Unit]]] = {
+      val dummyValue: Expr[Value] = Expr.quote(null.asInstanceOf[Value])
+      deriveEncoderRecursively[Value](using ectx.nest(dummyValue)).flatMap { _ =>
+        ectx.getHelper[Value].map { helperOpt =>
+          val helper = helperOpt.get
+          implicit val KeyEncoderT: Type[(Key, JsonWriter) => Unit] = Type.of[(Key, JsonWriter) => Unit]
+          Rule.matched(
+            ValDefs
+              .createVal[(Key, JsonWriter) => Unit](keyEncoder, FreshName.FromPrefix("encodeKey"))
+              .use { encodeKey =>
+                val writeEntries = isMap.foreach(ectx.value) { pairExpr =>
+                  Expr.quote {
+                    val entry = Expr.splice(pairExpr).asInstanceOf[(Key, Value)]
+                    Expr.splice(encodeKey).apply(entry._1, Expr.splice(ectx.writer))
+                    Expr.splice(helper(Expr.quote(entry._2), ectx.writer, ectx.config))
+                  }
+                }
+                Expr.quote {
+                  val out = Expr.splice(ectx.writer)
+                  out.writeObjectStart()
+                  Expr.splice(writeEntries)
+                  out.writeObjectEnd()
+                }
+              }
+          )
         }
       }
     }
