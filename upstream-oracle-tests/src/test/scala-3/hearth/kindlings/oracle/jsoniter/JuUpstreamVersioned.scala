@@ -3,8 +3,9 @@ package hearth.kindlings.oracle.jsoniter
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
-/** jsoniter-scala codecs of `JuUpstream` whose source differs between its Scala 2 and Scala 3 macros: the Scala 3 one evaluates only a bare
-  * partial function literal. */
+/** jsoniter-scala codecs of `JuUpstream` whose source differs between its Scala 2 and Scala 3 macros: the Scala 3 one
+  * evaluates only a bare partial function literal.
+  */
 object JuUpstreamVersioned {
   lazy val openapiHintMapper: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum](
     "hint",

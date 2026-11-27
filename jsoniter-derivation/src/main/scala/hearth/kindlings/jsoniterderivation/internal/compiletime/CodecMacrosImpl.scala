@@ -174,8 +174,13 @@ trait CodecMacrosImpl
     def onCaseField: Boolean = CaseClass.parse[A].toOption.exists { cc =>
       cc.caseFields.exists(f => f.name.trim == param.name && f.hasAnnotationOfType[scala.transient])
     } || Type[A].unsortedMethodsNamed(param.name).exists(_.hasAnnotationOfType[scala.transient])
-    hasAnnotationType[scala.transient](param) || onCaseField
+    hasAnnotationType[scala.transient](param) || onCaseField || hasScalaTransientField[A](param.name)
   }
+
+  /** Scala 2: for a class read from a class file (another module, or an earlier incremental compilation) the annotation
+    * is only on the backing field of the parameter, which is neither a case field accessor nor a method.
+    */
+  protected def hasScalaTransientField[A: Type](name: String): Boolean = false
 
   /** A `scala.transient` (and not `@transientField`) parameter with a config known only at runtime: transient only when
     * `config.scalaTransientSupport` is on, so the generic codegen checks the flag (skip on write, default on read).

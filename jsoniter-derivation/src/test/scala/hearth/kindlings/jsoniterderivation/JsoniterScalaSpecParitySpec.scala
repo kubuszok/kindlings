@@ -67,11 +67,15 @@ final class JsoniterScalaSpecParitySpec extends MacroSuite {
 
       test("private, lazy and later-added values, as values and as map keys") {
         byName.foreach { c =>
-          val stable = SpsBodies(SpsBody.Sun, List(SpsBody.Moon, SpsBody.hidden, SpsBody.Halley), Map(SpsBody.hidden -> 1))
+          val stable =
+            SpsBodies(SpsBody.Sun, List(SpsBody.Moon, SpsBody.hidden, SpsBody.Halley), Map(SpsBody.hidden -> 1))
           val json = """{"main":"Sun","all":["Moon","Vesta","Halley"],"byBody":{"Vesta":1}}"""
           writeToString(stable)(c) ==> json
           readFromString[SpsBodies](json)(c) ==> stable
-          decodeError(c, """{"main":"Ceres","all":[],"byBody":{}}""") ==> "illegal enum value \"Ceres\", offset: 0x0000000e"
+          decodeError(
+            c,
+            """{"main":"Ceres","all":[],"byBody":{}}"""
+          ) ==> "illegal enum value \"Ceres\", offset: 0x0000000e"
           val ceres = SpsBody.extra("Ceres" + System.nanoTime())
           val added = SpsBodies(ceres, List(ceres), Map(ceres -> 2))
           readFromString[SpsBodies](writeToString(added)(c))(c) ==> added
@@ -107,7 +111,10 @@ final class JsoniterScalaSpecParitySpec extends MacroSuite {
     group("null at the top level (Spec: 'top-level Java primitives', 'top-level options')") {
       test("the boxes of primitives are read like primitives") {
         decodeError(KindlingsJsonValueCodec.derived[java.lang.Integer], "null") ==> "illegal number, offset: 0x00000000"
-        decodeError(KindlingsJsonValueCodec.derived[java.lang.Boolean], "null") ==> "illegal boolean, offset: 0x00000000"
+        decodeError(
+          KindlingsJsonValueCodec.derived[java.lang.Boolean],
+          "null"
+        ) ==> "illegal boolean, offset: 0x00000000"
         readFromString[java.lang.Integer]("3")(KindlingsJsonValueCodec.derived[java.lang.Integer]) ==>
           java.lang.Integer.valueOf(3)
       }
