@@ -20,6 +20,7 @@ import hearth.kindlings.avroderivation.annotations.{
   avroProp,
   avroScalePrecision,
   avroSortPriority,
+  avroUnionPosition,
   fieldName,
   transientField
 }
@@ -417,6 +418,30 @@ trait SchemaForMacrosImpl
       if (fqcn.endsWith(".type") || lastDot < 0) None else Some(fqcn.substring(0, lastDot))
     }
 
+  /** The `@avroNamespace` of the closest sealed supertype of `A` that has one. */
+  private def sealedParentNamespace[A: Type]: Option[String] = {
+    implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
+    Type[A].baseClasses.iterator
+      .flatMap { base =>
+        import base.Underlying as Base
+        if (Type[Base] =:= Type[A] || !Type[Base].isSealed) None
+        else getTypeAnnotationStringArg[avroNamespace, Base]
+      }
+      .nextOption()
+  }
+
+  /** The type arguments of `A` (at any depth) that carry `@avroName`, as (printed type, name): avro4s uses the
+    * annotated name of a type argument in the generic name (`Generic__renamed`).
+    */
+  private def renamedTypeArguments[A: Type]: List[(String, String)] = {
+    implicit val avroNameT: Type[avroName] = SfTypes.AvroName
+    Type.typeArguments[A].flatMap { arg =>
+      import arg.Underlying as Arg
+      getTypeAnnotationStringArg[avroName, Arg].map(name => Type.plainPrint[Arg] -> name).toList :::
+        renamedTypeArguments[Arg]
+    }
+  }
+
   /** Computes the namespace expression for a record or enum type with the following priority:
     *   1. Field-level `@avroNamespace` override from the parent context (highest priority)
     *   2. Type-level `@avroNamespace` annotation on the type itself
@@ -434,7 +459,10 @@ trait SchemaForMacrosImpl
     sfctx.namespaceOverride match {
       case Some(ns) => Expr(ns)
       case None     =>
-        val classNamespace: Option[String] = getTypeAnnotationStringArg[avroNamespace, A]
+        // as avro4s: the type's own @avroNamespace, else the one of its sealed parent (a subtype then has the same
+        // name whether its schema is derived on its own - e.g. by its encoder - or as a member of the parent's union)
+        val classNamespace: Option[String] =
+          getTypeAnnotationStringArg[avroNamespace, A].orElse(sealedParentNamespace[A])
         val packageNamespace: String = extractPackageNamespace[A]
 
         classNamespace match {
@@ -444,6 +472,52 @@ trait SchemaForMacrosImpl
             Expr.quote {
               Expr.splice(sfctx.config).namespace.getOrElse(Expr.splice(packageNsExpr))
             }
+        }
+    }
+  }
+
+  // @avroFixed on a value class
+
+  /** The size of the FIXED type a value class `A` wrapping `Inner` (bytes or a String) is annotated to be. */
+  protected def fixedValueTypeSize[A: Type, Inner: Type]: Option[Int] = {
+    implicit val avroFixedT: Type[avroFixed] = SfTypes.AvroFixed
+    if (Type[Inner] =:= Type.of[Array[Byte]] || Type[Inner] =:= Type.of[String])
+      getTypeAnnotationIntArg[avroFixed, A]
+    else None
+  }
+
+  // @transientField
+
+  /** A `@transientField` is left out of the schema and decoded as its default value; an `Option` field without a
+    * default is decoded as `None` (as avro4s decodes `@AvroTransient` fields). Any other field needs a default.
+    */
+  protected def transientFieldIsOptional(param: Parameter): Boolean = {
+    import param.tpe.Underlying as Field
+    Type[Field] <:< Type.of[Option[Any]]
+  }
+  protected def transientFieldHasNoFallback(param: Parameter): Boolean =
+    !param.hasDefault && !transientFieldIsOptional(param)
+
+  // Avro ENUM symbols
+
+  /** The ENUM symbol of a case object (enum value) `Child`: its `@avroName` when present (used as it is, as avro4s
+    * does), otherwise the constructor name passed through `AvroConfig.transformConstructorNames`.
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def enumSymbolExpr[Child: Type](
+      childName: String,
+      config: Expr[AvroConfig],
+      evaluatedConfig: Option[AvroConfig]
+  ): Expr[String] = {
+    implicit val avroNameT: Type[avroName] = SfTypes.AvroName
+    implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+    implicit val StringT: Type[String] = SfTypes.String
+    getTypeAnnotationStringArg[avroName, Child] match {
+      case Some(explicitName) => Expr(explicitName)
+      case None               =>
+        evaluatedConfig match {
+          case Some(cfg) => Expr(cfg.transformConstructorNames(childName))
+          case None      => Expr.quote(Expr.splice(config).transformConstructorNames(Expr.splice(Expr(childName))))
         }
     }
   }
@@ -470,6 +544,8 @@ trait SchemaForMacrosImpl
         val fullNameExpr: Expr[String] = Type[A].runtimePlainPrint { tpe =>
           import tpe.Underlying
           if (tpe.Underlying =:= Type[A]) None
+          else if (getTypeAnnotationStringArg[avroName, tpe.Underlying].isDefined)
+            Some(Expr(getTypeAnnotationStringArg[avroName, tpe.Underlying].get))
           else if (sfctx.derivedType.exists(_.Underlying =:= tpe.Underlying)) None
           else {
             implicit val AvroSchemaForT: Type[AvroSchemaFor[tpe.Underlying]] = SfTypes.AvroSchemaFor[tpe.Underlying]
@@ -493,7 +569,13 @@ trait SchemaForMacrosImpl
         if (!nameReadAtRuntime) {
           // Every part of the name is known now: compute the Avro name at compile time instead of parsing the type
           // name (with regex replacements) every time the expression is evaluated, e.g. per subtype per decode.
-          val fullName = Type.plainPrint[A]
+          // longest first, so a renamed type is replaced before any shorter name it contains
+          val fullName = renamedTypeArguments[A].distinct.sortBy(-_._1.length).foldLeft(Type.plainPrint[A]) {
+            case (printed, (argument, name)) =>
+              val bracket = printed.indexOf('[')
+              if (bracket < 0) printed
+              else printed.substring(0, bracket) + printed.substring(bracket).replace(argument, name)
+          }
           Expr(
             if (useFqn) AvroDerivationUtils.parseAvroNameFqn(fullName) else AvroDerivationUtils.parseAvroName(fullName)
           )
@@ -561,6 +643,7 @@ trait SchemaForMacrosImpl
     val AvroProp: Type.Lazy[avroProp] = Type.Lazy(Type.of[avroProp])
     val AvroAlias: Type.Lazy[avroAlias] = Type.Lazy(Type.of[avroAlias])
     val AvroSortPriority: Type.Lazy[avroSortPriority] = Type.Lazy(Type.of[avroSortPriority])
+    val AvroUnionPosition: Type.Lazy[avroUnionPosition] = Type.Lazy(Type.of[avroUnionPosition])
     val AvroNoDefault: Type.Lazy[avroNoDefault] = Type.Lazy(Type.of[avroNoDefault])
     val AvroEnumDefault: Type.Lazy[avroEnumDefault] = Type.Lazy(Type.of[avroEnumDefault])
     val AvroErasedName: Type.Lazy[avroErasedName] = Type.Lazy(Type.of[avroErasedName])

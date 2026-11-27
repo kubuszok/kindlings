@@ -49,6 +49,8 @@ trait AvroSchemaForUseBuiltInSupportRuleImpl {
         Some(Expr.quote(AvroDerivationUtils.stringSchema))
       else if (tpe =:= Type.of[String])
         Some(Expr.quote(AvroDerivationUtils.stringSchema))
+      else if (tpe =:= Type.of[org.apache.avro.util.Utf8] || tpe =:= Type.of[CharSequence])
+        Some(Expr.quote(AvroDerivationUtils.stringSchema))
       else if (tpe =:= Type.of[Array[Byte]])
         Some(Expr.quote(AvroDerivationUtils.bytesSchema))
       else if (tpe =:= Type.of[java.nio.ByteBuffer])

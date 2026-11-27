@@ -51,7 +51,8 @@ trait AvroDecoderHandleAsCollectionRuleImpl {
           val readLoop: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = Expr.quote {
             val collBuilder = Expr.splice(factoryExpr).newBuilder
             val decodeFnVal = Expr.splice(decodeFn)
-            val rawCollection = Expr.splice(dctx.avroValue).asInstanceOf[java.util.Collection[Any]]
+            val rawCollection = hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
+              .asCollection(Expr.splice(dctx.avroValue))
             val iter = rawCollection.iterator()
             while (iter.hasNext)
               collBuilder += decodeFnVal(iter.next())

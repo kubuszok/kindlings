@@ -14,7 +14,7 @@ private[compiletime] object DecoderDerivationError {
   }
   final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends DecoderDerivationError {
     override def message: String =
-      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+      s"@transientField on field '$fieldName' of $tpeName requires a default value (or an Option type, decoded as None)"
   }
   final case class CannotConstructType(tpeName: String, isSingleton: Boolean, constructorError: Option[String] = None)
       extends DecoderDerivationError {

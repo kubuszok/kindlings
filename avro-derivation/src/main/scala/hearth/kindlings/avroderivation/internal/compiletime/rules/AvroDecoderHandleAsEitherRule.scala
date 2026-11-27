@@ -35,6 +35,12 @@ trait AvroDecoderHandleAsEitherRuleImpl {
                   deriveDecoderRecursively[RightValue](using dctx.nest[RightValue](rightRawExpr))
                 }
               unionSchemaExpr <- cachedDecodeSchema[A]
+              // The left side's schema as it is inside the union: a nested type (so a user-provided instance is used),
+              // which the schema of a collection of it gives.
+              leftItemsSchemaExpr <- {
+                implicit val LeftItemsT: Type[List[LeftValue]] = Type.of[List[LeftValue]]
+                cachedDecodeSchema[List[LeftValue]](using LeftItemsT, dctx.nest[List[LeftValue]](dctx.avroValue))
+              }
             } yield {
               val leftDecodeFn = leftDecoderBuilder.build[LeftValue]
               val rightDecodeFn = rightDecoderBuilder.build[RightValue]
@@ -43,6 +49,7 @@ trait AvroDecoderHandleAsEitherRuleImpl {
                   .decodeEither(
                     Expr.splice(dctx.avroValue),
                     Expr.splice(unionSchemaExpr),
+                    Expr.splice(leftItemsSchemaExpr).getElementType,
                     Expr.splice(leftDecodeFn),
                     Expr.splice(rightDecodeFn)
                   )

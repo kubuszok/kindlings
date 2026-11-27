@@ -48,6 +48,9 @@ trait AvroDecoderHandleAsEnumRuleImpl {
           if (allCaseObjects) {
             // Pure enum → decode from GenericData.EnumSymbol string
             val knownNames: List[String] = children.toList.map(_._1)
+            // the symbol as the schema and the encoder name it (`@avroName`, else the transformed constructor name)
+            def symbolOf[C: Type](childName: String): Expr[String] =
+              enumSymbolExpr[C](childName, dctx.config, dctx.evaluatedConfig)
 
             // Build dispatch chain: if name matches → return case object singleton
             children
@@ -56,7 +59,7 @@ trait AvroDecoderHandleAsEnumRuleImpl {
                 Log.namedScope(s"Deriving decoder for enum case $childName") {
                   SingletonValue.unapply(Type[ChildType]) match {
                     case Some(sv) =>
-                      MIO.pure((childName, sv.singletonExpr.asInstanceOf[Expr[A]]))
+                      MIO.pure((symbolOf[ChildType](childName), sv.singletonExpr.asInstanceOf[Expr[A]]))
                     case None =>
                       // Fallback to construct for non-singleton zero-arg case classes
                       CaseClass.parse[ChildType].toOption match {
@@ -68,7 +71,7 @@ trait AvroDecoderHandleAsEnumRuleImpl {
                               Log.error(err.message) >> MIO.fail(err)
                             }
                           }).flatMap {
-                            case Some(expr) => MIO.pure((childName, expr.asInstanceOf[Expr[A]]))
+                            case Some(expr) => MIO.pure((symbolOf[ChildType](childName), expr.asInstanceOf[Expr[A]]))
                             case None       =>
                               val err = DecoderDerivationError.EnumChildError(childName, "Cannot construct")
                               Log.error(err.message) >> MIO.fail(err)
@@ -91,12 +94,7 @@ trait AvroDecoderHandleAsEnumRuleImpl {
                     val errorExpr: Expr[A] = Expr.quote {
                       AvroDerivationUtils.failedToMatchSubtype(Expr.splice(symbol), Expr.splice(Expr(knownNames)))
                     }
-                    dispatchers.toList.foldRight(errorExpr) { case ((childName, childExpr), elseExpr) =>
-                      val caseNameExpr: Expr[String] = dctx.evaluatedConfig match {
-                        case Some(cfg) => Expr(cfg.transformConstructorNames(childName))
-                        case None      =>
-                          Expr.quote(Expr.splice(dctx.config).transformConstructorNames(Expr.splice(Expr(childName))))
-                      }
+                    dispatchers.toList.foldRight(errorExpr) { case ((caseNameExpr, childExpr), elseExpr) =>
                       Expr.quote {
                         if (Expr.splice(caseNameExpr) == Expr.splice(symbol)) Expr.splice(childExpr)
                         else Expr.splice(elseExpr)

@@ -7,7 +7,13 @@ import hearth.fp.effect.*
 import hearth.fp.syntax.*
 import hearth.std.*
 
-import hearth.kindlings.avroderivation.annotations.{avroFixed, avroScalePrecision, fieldName, transientField}
+import hearth.kindlings.avroderivation.annotations.{
+  avroFixed,
+  avroNamespace,
+  avroScalePrecision,
+  fieldName,
+  transientField
+}
 import hearth.kindlings.avroderivation.internal.runtime.AvroDerivationUtils
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericData
@@ -27,6 +33,10 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
     else if (Type[Field] =:= Type.of[Double]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
     else if (Type[Field] =:= Type.of[String]) Some(Expr.quote(Expr.splice(value).asInstanceOf[Any]))
     else None
+
+  // in a method of its own: a path-dependent type (`param.tpe.Underlying`) cannot be referred to inside a quote
+  private def productElementAs[A: Type, Field: Type](value: Expr[A], index: Int): Expr[Field] =
+    Expr.quote(AvroDerivationUtils.productElement(Expr.splice(value), Expr.splice(Expr(index))).asInstanceOf[Field])
 
   object AvroEncoderHandleAsCaseClassRule extends EncoderDerivationRule("handle as case class when possible") {
 
@@ -53,17 +63,35 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
       implicit val avroFixedT: Type[avroFixed] = EncTypes.AvroFixed
       implicit val avroScalePrecisionT: Type[avroScalePrecision] = SfTypes.AvroScalePrecision
 
-      val allFields = caseClass.caseFieldValuesAt(ectx.value).toList
+      implicit val avroNamespaceT: Type[avroNamespace] = SfTypes.AvroNamespace
+
+      val accessibleFields = caseClass.caseFieldValuesAt(ectx.value)
 
       // Singletons (case objects, parameterless enum cases) have no primary constructor.
       // Only access primaryConstructor when there are actual fields to process.
+      val isSingleton = accessibleFields.isEmpty && SingletonValue.unapply(Type[A]).isDefined
+      val constructorParams: List[(String, Parameter)] =
+        if (isSingleton) Nil else caseClass.primaryConstructor.totalParameters.headOption.toList.flatten
       val paramsByName: Map[String, Parameter] =
-        if (allFields.isEmpty) Map.empty
-        else caseClass.primaryConstructor.totalParameters.flatten.toMap
+        if (isSingleton) Map.empty else caseClass.primaryConstructor.totalParameters.flatten.toMap
+
+      // Fields without an accessor (`private val`) are still part of the record (as with avro4s): they are read
+      // through `Product`, by position.
+      val allFields: List[(String, Expr_??)] =
+        if (constructorParams.forall { case (name, _) => accessibleFields.contains(name) }) accessibleFields.toList
+        else
+          constructorParams.zipWithIndex.map { case ((name, param), index) =>
+            accessibleFields.get(name) match {
+              case Some(fieldValue) => name -> fieldValue
+              case None             =>
+                import param.tpe.Underlying as Field
+                name -> productElementAs[A, Field](ectx.value, index).as_??
+            }
+          }
 
       // Validate: @transientField on fields without defaults is a compile error
       paramsByName.collectFirst {
-        case (name, param) if hasAnnotationType[transientField](param) && !param.hasDefault => name
+        case (name, param) if hasAnnotationType[transientField](param) && transientFieldHasNoFallback(param) => name
       } match {
         case Some(name) =>
           val err = EncoderDerivationError.TransientFieldMissingDefault(name, Type[A].prettyPrint)
@@ -83,6 +111,13 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                   val decimalOverride = param.flatMap(p => getAnnotationTwoIntArgs[avroScalePrecision](p))
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
                     val encodeMIO: MIO[Expr[Any]] = (avroFixedSize, decimalOverride) match {
+                      case (Some(size), _) if Type[Field] =:= Type.of[String] =>
+                        MIO.pure(Expr.quote {
+                          AvroDerivationUtils.wrapStringAsFixed(
+                            Expr.splice(fieldExpr).asInstanceOf[String],
+                            Expr.splice(Expr(size))
+                          ): Any
+                        })
                       case (Some(size), _) =>
                         MIO.pure(Expr.quote {
                           AvroDerivationUtils.wrapByteArrayAsFixed(
@@ -104,24 +139,40 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                         }
                     }
                     encodeMIO.map { fieldEncoded =>
-                      val nameOverride = param.flatMap(p => getAnnotationStringArg[fieldName](p))
-                      (fName, fieldEncoded, nameOverride)
+                      // the named types of a field with @avroNamespace live in that namespace in the record's schema
+                      val movedToNamespace =
+                        avroFixedSize.isEmpty && param.exists(p => getAnnotationStringArg[avroNamespace](p).isDefined)
+                      (fName, fieldEncoded, movedToNamespace)
                     }
                   }
                 }
                 .flatMap { fieldPairs =>
-                  val fieldPutExprs: List[(Int, Expr[Any])] =
-                    fieldPairs.toList.zipWithIndex.map { case ((_, fieldEncoded, _), idx) =>
-                      (idx, fieldEncoded)
+                  val fieldPutExprs: List[(Int, Expr[Any], Boolean)] =
+                    fieldPairs.toList.zipWithIndex.map { case ((_, fieldEncoded, movedToNamespace), idx) =>
+                      (idx, fieldEncoded, movedToNamespace)
                     }
 
                   cachedSchemaForEncode[A].map { schemaExpr =>
                     val recordPuts: Expr[GenericData.Record] => Expr[Unit] = { recordExpr =>
-                      fieldPutExprs.foldLeft(Expr.quote(()): Expr[Unit]) { case (acc, (idx, fieldEncoded)) =>
-                        Expr.quote {
-                          Expr.splice(acc)
-                          Expr.splice(recordExpr).put(Expr.splice(Expr(idx)), Expr.splice(fieldEncoded))
-                        }
+                      fieldPutExprs.foldLeft(Expr.quote(()): Expr[Unit]) {
+                        case (acc, (idx, fieldEncoded, false)) =>
+                          Expr.quote {
+                            Expr.splice(acc)
+                            Expr.splice(recordExpr).put(Expr.splice(Expr(idx)), Expr.splice(fieldEncoded))
+                          }
+                        case (acc, (idx, fieldEncoded, true)) =>
+                          Expr.quote {
+                            Expr.splice(acc)
+                            Expr
+                              .splice(recordExpr)
+                              .put(
+                                Expr.splice(Expr(idx)),
+                                AvroDerivationUtils.rebindToSchema(
+                                  Expr.splice(fieldEncoded),
+                                  Expr.splice(recordExpr).getSchema.getFields.get(Expr.splice(Expr(idx))).schema
+                                )
+                              )
+                          }
                       }
                     }
                     Expr.quote {

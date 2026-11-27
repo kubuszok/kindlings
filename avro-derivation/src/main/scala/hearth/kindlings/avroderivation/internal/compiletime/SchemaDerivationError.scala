@@ -14,7 +14,7 @@ private[compiletime] object SchemaDerivationError {
   }
   final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends SchemaDerivationError {
     override def message: String =
-      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+      s"@transientField on field '$fieldName' of $tpeName requires a default value (or an Option type, decoded as None)"
   }
   final case class NoChildrenInSealedTrait(tpeName: String) extends SchemaDerivationError {
     override def message: String =
@@ -23,7 +23,7 @@ private[compiletime] object SchemaDerivationError {
   final case class AvroFixedOnNonByteArray(fieldName: String, tpeName: String, fieldType: String)
       extends SchemaDerivationError {
     override def message: String =
-      s"@avroFixed on field '$fieldName' of $tpeName requires Array[Byte], but field type is $fieldType"
+      s"@avroFixed on field '$fieldName' of $tpeName requires Array[Byte] or String, but field type is $fieldType"
   }
   final case class ConflictingDefaultAnnotations(fieldName: String, tpeName: String) extends SchemaDerivationError {
     override def message: String =

@@ -14,7 +14,7 @@ private[compiletime] object EncoderDerivationError {
   }
   final case class TransientFieldMissingDefault(fieldName: String, tpeName: String) extends EncoderDerivationError {
     override def message: String =
-      s"@transientField on field '$fieldName' of $tpeName requires a default value"
+      s"@transientField on field '$fieldName' of $tpeName requires a default value (or an Option type, decoded as None)"
   }
   final case class NoChildrenInSealedTrait(tpeName: String) extends EncoderDerivationError {
     override def message: String =
