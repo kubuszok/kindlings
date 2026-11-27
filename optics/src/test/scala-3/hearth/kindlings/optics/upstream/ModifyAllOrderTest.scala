@@ -1,11 +1,11 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala-3/com/softwaremill/quicklens/test/ModifyAllOrderTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
 class ModifyAllOrderTest extends QuicklensSuite {
-  import ModifyAllOrderTest._
+  import ModifyAllOrderTest.*
 
   it should "apply modifications in the correct order if child is first" in {
     val lst: Cons = Cons.fromList(List(1, 2, 3)).get
@@ -143,7 +143,7 @@ object ModifyAllOrderTest {
 
   object Cons {
     def fromList(list: List[Int]): Option[Cons] = list match {
-      case Nil => None
+      case Nil          => None
       case head :: tail =>
         Some(Cons(head, fromList(tail)))
     }

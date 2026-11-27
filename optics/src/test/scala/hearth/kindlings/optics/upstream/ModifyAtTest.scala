@@ -1,10 +1,10 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/ModifyAtTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
-import TestData._
+import TestData.*
 
 class ModifyAtTest extends QuicklensSuite {
 
@@ -28,8 +28,7 @@ class ModifyAtTest extends QuicklensSuite {
   }
 
   it should "throw an exception if there's no element at the given index" in {
-    an[IndexOutOfBoundsException] should be thrownBy {
+    an[IndexOutOfBoundsException] should be thrownBy
       modify(l1)(_.at(10).a4.a5.name).using(duplicate)
-    }
   }
 }

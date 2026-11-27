@@ -1,10 +1,10 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/ModifySelfThisTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
-import ModifySelfThisTest._
+import ModifySelfThisTest.*
 
 @scala.annotation.nowarn // upstream declares a side-effecting nullary method
 object ModifySelfThisTest {

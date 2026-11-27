@@ -1,6 +1,6 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/SealedTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
@@ -49,7 +49,7 @@ object SealedTestData {
 }
 
 class SealedTest extends QuicklensSuite {
-  import SealedTestData._
+  import SealedTestData.*
 
   it should "modify a field in a sealed trait" in {
     modify(p1)(_.x).using(duplicate) should be(p1dup)

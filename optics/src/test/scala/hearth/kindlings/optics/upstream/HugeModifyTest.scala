@@ -1,11 +1,11 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/HugeModifyTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
 class HugeModifyTest extends QuicklensSuite {
-  import HugeModifyTestData._
+  import HugeModifyTestData.*
 
   it should "expand a huge function" in {
     val c5 = C5(1)
