@@ -51,7 +51,16 @@ final class JsonCodecOptionsSpec extends Suite {
     writeToString(number("3.14159265358979323846264338327950288419716939937510"))(codec) ==>
       """"3.14159265358979323846264338327950288419716939937510""""
     writeToString(number("4e+297"))(codec) ==> """"4E+297""""
-    // numbers written the way a Double is written are always JSON numbers (upstream: the ones built from a Double)
+    // parsed numbers are integers or exact decimals, whatever their spelling
+    writeToString(readFromString[Json]("[0.30000000000000004,1e300,1.0E300,-0.0,-0,1.50,100]"))(codec) ==>
+      """["0.30000000000000004","1E+300","1.0E+300",0,0,1.50,100]"""
+    writeToString(readFromString[Json]("[4503599627370495,4503599627370496,-4503599627370496,-4503599627370497]"))(
+      codec
+    ) ==> """[4503599627370495,"4503599627370496",-4503599627370496,"-4503599627370497"]"""
+    // numbers made from their text: as their decimal value
+    writeToString(Json.arr(number("1.50"), number("100"), number("-0.0"), number("0.00"), number("1e2")))(codec) ==>
+      "[1.50,100,0,0,1E+2]"
+    // numbers made from a Double or a Float are always JSON numbers
     writeToString(Json.fromDouble(0.1 + 0.2).get)(codec) ==> "0.30000000000000004"
     writeToString(Json.fromDouble(1.0e300).get)(codec) ==> "1.0E300"
     writeToString(Json.fromDouble(-0.0).get)(codec) ==> "-0.0"

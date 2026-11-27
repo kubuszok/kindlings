@@ -1,11 +1,51 @@
 package hearth.kindlings.jsoniterjson
 
-/** String-backed number representation to preserve precision.
-  *
-  * Numbers are stored as their string representation to avoid precision loss that can occur with Double/Float
-  * conversions. Conversion methods are provided to extract values in specific numeric types.
+/** A JSON number that keeps what it was made from, like circe's `JsonNumber`: a `Long`, a `Float`, a `Double`, a
+  * `java.math.BigDecimal` (exact) or the text of a JSON number. Nothing is converted until asked for, so no precision
+  * is lost; [[value]] (also `toString`) is the text of the number, and two numbers are equal when their texts are.
   */
-final case class JsonNumber private (value: String) {
+final class JsonNumber private (
+    private[jsoniterjson] val kind: Int,
+    private val bits: Long, // the `Long`, or the bits of the `Double` / `Float`
+    private val big: java.math.BigDecimal,
+    private var text: String // the text, once it is known
+) extends Product
+    with Serializable {
+
+  /** The text of the number, as it is written by default. */
+  def value: String = {
+    var t = text
+    if (t eq null) {
+      t = (kind: @scala.annotation.switch) match {
+        case JsonNumber.LongKind   => java.lang.Long.toString(bits)
+        case JsonNumber.DoubleKind =>
+          com.github.plokhotnyuk.jsoniter_scala.core.writeToStringReentrant(doubleValue)(JsonNumber.DoubleText)
+        case JsonNumber.FloatKind =>
+          com.github.plokhotnyuk.jsoniter_scala.core.writeToStringReentrant(floatValue)(JsonNumber.FloatText)
+        case _ => big.toString
+      }
+      text = t // (a benign race: every thread computes the same immutable text)
+    }
+    t
+  }
+
+  private[jsoniterjson] def longValue: Long = bits
+  private[jsoniterjson] def doubleValue: Double = java.lang.Double.longBitsToDouble(bits)
+  private[jsoniterjson] def floatValue: Float = java.lang.Float.intBitsToFloat(bits.toInt)
+  private[jsoniterjson] def bigDecimalValue: java.math.BigDecimal = big
+
+  // (what the former `case class JsonNumber(value: String)` provided)
+  def copy(value: String = this.value): JsonNumber = JsonNumber.unsafeFromJsonText(value)
+  def _1: String = value
+  override def productPrefix: String = "JsonNumber"
+  def productArity: Int = 1
+  def productElement(n: Int): Any = if (n == 0) value else throw new IndexOutOfBoundsException(n.toString)
+  def canEqual(that: Any): Boolean = that.isInstanceOf[JsonNumber]
+  override def equals(that: Any): Boolean = that match {
+    case n: JsonNumber => (this eq n) || value == n.value
+    case _             => false
+  }
+  override def hashCode: Int = value.hashCode
 
   /** `Some` whenever the number is an integer within the `Int` range, however it is written (`-546`, `-546.0`, `1e3`,
     * `1.5e1`); `None` for non-integral or out-of-range values. Like circe's `JsonNumber.toInt`.
@@ -64,7 +104,7 @@ final case class JsonNumber private (value: String) {
 
   override def toString: String = value
 }
-object JsonNumber {
+object JsonNumber extends JsonNumberCompanionCompat {
 
   /** The largest number of integer digits [[JsonNumber.toBigInt]] materializes for a number written with a fraction or
     * an exponent (the same limit as circe's).
@@ -131,19 +171,30 @@ object JsonNumber {
     def encodeValue(x: Float, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit = out.writeVal(x)
   }
 
-  /** `text` must be a JSON number (what `JsonReader` or a number's `toString` produced): not validated. */
-  private[jsoniterjson] def unsafeFromJsonText(text: String): JsonNumber = new JsonNumber(text)
+  // What a number was made from (as circe's `JsonLong`, `JsonFloat`, `JsonDouble`, `JsonBigDecimal`, `JsonDecimal`).
+  final private[jsoniterjson] val LongKind = 0
+  final private[jsoniterjson] val FloatKind = 1
+  final private[jsoniterjson] val DoubleKind = 2
+  final private[jsoniterjson] val BigDecimalKind = 3
+  final private[jsoniterjson] val TextKind = 4
 
-  def fromInt(n: Int): JsonNumber = new JsonNumber(n.toString)
-  def fromLong(n: Long): JsonNumber = new JsonNumber(n.toString)
+  /** `text` must be a JSON number (what `JsonReader` or a number's `toString` produced): not validated. */
+  private[jsoniterjson] def unsafeFromJsonText(text: String): JsonNumber =
+    new JsonNumber(TextKind, 0L, null, text)
+
+  private[jsoniterjson] def fromJavaBigDecimal(n: java.math.BigDecimal): JsonNumber =
+    new JsonNumber(BigDecimalKind, 0L, n, null)
+
+  def fromInt(n: Int): JsonNumber = new JsonNumber(LongKind, n.toLong, null, null)
+  def fromLong(n: Long): JsonNumber = new JsonNumber(LongKind, n, null, null)
   def fromDouble(n: Double): Option[JsonNumber] =
     if (n.isNaN || n.isInfinite) None
-    else Some(new JsonNumber(com.github.plokhotnyuk.jsoniter_scala.core.writeToStringReentrant(n)(DoubleText)))
+    else Some(new JsonNumber(DoubleKind, java.lang.Double.doubleToRawLongBits(n), null, null))
   def fromFloat(n: Float): Option[JsonNumber] =
     if (n.isNaN || n.isInfinite) None
-    else Some(new JsonNumber(com.github.plokhotnyuk.jsoniter_scala.core.writeToStringReentrant(n)(FloatText)))
-  def fromBigDecimal(n: BigDecimal): JsonNumber = new JsonNumber(n.toString)
-  def fromBigInt(n: BigInt): JsonNumber = new JsonNumber(n.toString)
+    else Some(new JsonNumber(FloatKind, java.lang.Float.floatToRawIntBits(n).toLong, null, null))
+  def fromBigDecimal(n: BigDecimal): JsonNumber = fromJavaBigDecimal(n.bigDecimal)
+  def fromBigInt(n: BigInt): JsonNumber = fromJavaBigDecimal(new java.math.BigDecimal(n.bigInteger))
 
   /** `Some` if `s` is a JSON number (`-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`), like circe's
     * `JsonNumber.fromString`: e.g. `+1`, `1.`, `.5`, `01`, `NaN` and surrounding whitespace are rejected. The text is
@@ -151,7 +202,7 @@ object JsonNumber {
     * `None` when the scale does not fit an `Int`, and `toDouble` is `0.0` or `None`).
     */
   def fromString(s: String): Option[JsonNumber] =
-    if (isJsonNumber(s)) Some(new JsonNumber(s)) else None
+    if (isJsonNumber(s)) Some(unsafeFromJsonText(s)) else None
 
   private def isJsonNumber(s: String): Boolean = {
     val len = s.length

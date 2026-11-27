@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets
   * jsoniter-scala-circe's `JsoniterScalaCodec.jsonC3c` for circe's `Json`:
   *
   *   - numbers are read exactly, to preserve precision (a negative zero keeps its sign: `-0`, `-0.0`), and written as
-  *     their text (`JsonNumber.toString`);
+  *     the value they were made from (their text, `JsonNumber.toString`);
   *   - nested arrays and objects deeper than [[DefaultMaxDepth]] are rejected when reading and writing (use
   *     [[withMaxDepth]] for another limit).
   *
@@ -30,38 +30,39 @@ object JsonCodec {
   val defaultNumberParser: JsonReader => Json = in =>
     readNumber(in, java.math.MathContext.UNLIMITED, JsonReader.bigDecimalScaleLimit, JsonReader.bigDecimalDigitsLimit)
 
-  /** The default number serializer: the text of the number as it is. */
-  val defaultNumberSerializer: (JsonWriter, JsonNumber) => Unit = (out, n) => writeNumberText(out, n)
+  /** The default number serializer, like jsoniter-scala-circe's: a number made from a `Long`, a `Float`, a `Double` or
+    * a `BigDecimal` is written by the writer as that value, another one as its text.
+    */
+  val defaultNumberSerializer: (JsonWriter, JsonNumber) => Unit = (out, n) => writeNumber(out, n)
 
   /** A number serializer for JavaScript clients, like jsoniter-scala-circe's `jsCompatibleNumberSerializer`: numbers
     * that lose precision when JavaScript parses them to `Number` are written as JSON strings - integers outside
-    * `[-2^52, 2^52)`, decimals with more than 52 bits in the unscaled value or a scale outside `[-256, 256]`. A number
-    * whose text is the text of a `Double` (as [[JsonNumber.fromDouble]] and [[JsonNumber.fromFloat]] write it) is
-    * always written as a JSON number.
+    * `[-2^52, 2^52)`, decimals with more than 52 bits in the unscaled value or a scale outside `[-256, 256]`. Numbers
+    * made from a `Double` or a `Float` are always written as JSON numbers.
     */
-  val jsCompatibleNumberSerializer: (JsonWriter, JsonNumber) => Unit = (out, n) => {
-    val text = n.toString
-    val long = plainLong(text)
-    if (long != NotALong) {
-      if (long >= -4503599627370496L && long < 4503599627370496L) out.writeVal(long)
-      else out.writeValAsString(long)
-    } else if (isShortPlainDecimal(text)) writeRawText(out, text) // (what upstream writes for its `BigDecimal`)
-    else
-      n.toBigDecimal match {
-        case Some(bd) =>
-          val u = bd.bigDecimal
-          val scale = u.scale
-          val fits = u.unscaledValue.bitLength <= 52 && scale >= -256 && scale <= 256
-          // Only texts a `Double` could have (an exponent, a negative zero, more than 52 bits) are compared with the
-          // `Double`'s text; the others are written as upstream writes the `BigDecimal` (also when `fromString` got
-          // another spelling of it).
-          val maybeDoubleText = !fits || u.signum == 0 || text.indexOf('E') >= 0
-          if (maybeDoubleText && isDoubleText(n, text)) writeRawText(out, text)
-          else if (u.signum == 0 && text.charAt(0) == '-') out.writeVal(0) // upstream: a negative zero is written as 0
-          else if (fits) out.writeVal(u)
-          else out.writeValAsString(u)
-        case None => out.writeNonEscapedAsciiVal(text)
-      }
+  val jsCompatibleNumberSerializer: (JsonWriter, JsonNumber) => Unit = (out, n) =>
+    (n.kind: @scala.annotation.switch) match {
+      case JsonNumber.LongKind =>
+        val v = n.longValue
+        if (v >= -4503599627370496L && v < 4503599627370496L) out.writeVal(v)
+        else out.writeValAsString(v)
+      case JsonNumber.FloatKind      => out.writeVal(n.floatValue)
+      case JsonNumber.DoubleKind     => out.writeVal(n.doubleValue)
+      case JsonNumber.BigDecimalKind => writeJsCompatible(out, n.bigDecimalValue)
+      case _                         =>
+        n.toBigDecimal match {
+          // (as circe's `toBigDecimal`: a zero of any sign and scale is `0`)
+          case Some(bd) =>
+            val v = bd.bigDecimal
+            writeJsCompatible(out, if (v.signum == 0) java.math.BigDecimal.ZERO else v)
+          case None => out.writeNonEscapedAsciiVal(n.toString)
+        }
+    }
+
+  private def writeJsCompatible(out: JsonWriter, v: java.math.BigDecimal): Unit = {
+    val scale = v.scale
+    if (v.unscaledValue.bitLength <= 52 && scale >= -256 && scale <= 256) out.writeVal(v)
+    else out.writeValAsString(v)
   }
 
   implicit val jsonValueCodec: JsonValueCodec[Json] = withMaxDepth(DefaultMaxDepth)
@@ -115,74 +116,32 @@ object JsonCodec {
       digitsLimit: Int = JsonReader.bigDecimalDigitsLimit
   ): JsonReader => Json = in => readNumber(in, mc, scaleLimit, digitsLimit)
 
-  /** The text of the number as it is (always a valid JSON number, see `JsonNumber.fromString`). */
-  private def writeNumberText(out: JsonWriter, n: JsonNumber): Unit = writeRawText(out, n.toString)
+  private def writeNumber(out: JsonWriter, n: JsonNumber): Unit =
+    (n.kind: @scala.annotation.switch) match {
+      case JsonNumber.LongKind       => out.writeVal(n.longValue)
+      case JsonNumber.FloatKind      => out.writeVal(n.floatValue)
+      case JsonNumber.DoubleKind     => out.writeVal(n.doubleValue)
+      case JsonNumber.BigDecimalKind => out.writeVal(n.bigDecimalValue)
+      // the text of a `JsonNumber` is always a valid JSON number (see `JsonNumber.fromString`)
+      case _ => out.writeRawVal(n.toString.getBytes(StandardCharsets.ISO_8859_1))
+    }
 
-  private def writeRawText(out: JsonWriter, text: String): Unit =
-    out.writeRawVal(text.getBytes(StandardCharsets.ISO_8859_1)) // (ASCII)
-
-  /** A decimal written without an exponent, with at most 15 digits (so less than 2^52 unscaled, and a scale within
-    * `[0, 256]`) and a non-zero digit in its integer part or its first 6 fraction digits: `java.math.BigDecimal` (and
-    * so upstream's serializer) writes such a number exactly as this text, as a JSON number.
+  /** The kinds of numbers jsoniter-scala-circe's parser makes: a `Long` when the number is an integer that fits one,
+    * else an exact `BigDecimal`; neither has a negative zero, which is kept as its text (as circe does).
     */
-  private def isShortPlainDecimal(text: String): Boolean = {
-    val len = text.length
-    if (len > 17) false // sign + 15 digits + point
-    else {
-      var i = if (text.charAt(0) == '-') 1 else 0
-      var digits = 0
-      var point = -1
-      var significantAt = -1 // the first non-zero digit
-      var plain = true
-      while (plain && i < len) {
-        val c = text.charAt(i)
-        if (c >= '0' && c <= '9') {
-          digits += 1
-          if (significantAt < 0 && c != '0') significantAt = i
-        } else if (c == '.') point = i
-        else plain = false
-        i += 1
-      }
-      plain && point >= 0 && digits <= 15 && significantAt >= 0 && significantAt <= point + 6
-    }
-  }
-
-  // (`Long.MinValue` itself is then handled as a decimal: it is outside of the JS-safe range either way)
-  final private val NotALong = Long.MinValue
-
-  /** The value of a number written as plain digits (`-?[0-9]+`) that fits a `Long`, or [[NotALong]]. */
-  private def plainLong(text: String): Long = {
-    val len = text.length
-    if (len > 20) NotALong
-    else {
-      var i = if (text.charAt(0) == '-') 1 else 0
-      while (i < len && text.charAt(i) >= '0' && text.charAt(i) <= '9') i += 1
-      if (i != len) NotALong
-      else
-        try text.toLong
-        catch { case _: NumberFormatException => NotALong }
-    }
-  }
-
-  /** Whether `text` is how a `Double` is written (then JavaScript reads the very same `Double` back). */
-  private def isDoubleText(n: JsonNumber, text: String): Boolean = n.toDouble match {
-    case Some(d) => JsonNumber.fromDouble(d).exists(_.toString == text)
-    case None    => false
-  }
-
   private def readNumber(in: JsonReader, mc: java.math.MathContext, scaleLimit: Int, digitsLimit: Int): Json = {
     val isNegative = in.isNextToken('-'.toByte)
     in.rollbackToken()
-    // a `Long`, a `java.math.BigDecimal` or a `java.math.BigInteger`; none has a negative zero: its sign is kept in
-    // the text, as circe does
-    val number = in.readNumber(null, mc, scaleLimit, digitsLimit)
-    val text = number.toString
-    val isZero = number match {
-      case l: java.lang.Long        => l.longValue == 0L
-      case bd: java.math.BigDecimal => bd.signum == 0
-      case _                        => false
-    }
-    Json.Num(JsonNumber.unsafeFromJsonText(if (isNegative && isZero) "-" + text else text))
+    Json.Num(in.readNumber(null, mc, scaleLimit, digitsLimit) match {
+      case l: java.lang.Long =>
+        val v = l.longValue
+        if (v != 0L || !isNegative) JsonNumber.fromLong(v) else JsonNumber.unsafeFromJsonText("-0")
+      case bd: java.math.BigDecimal =>
+        if (bd.signum != 0 || !isNegative) JsonNumber.fromJavaBigDecimal(bd)
+        else JsonNumber.unsafeFromJsonText("-" + bd.toString)
+      case bi: java.math.BigInteger => JsonNumber.fromJavaBigDecimal(new java.math.BigDecimal(bi))
+      case other                    => JsonNumber.unsafeFromJsonText(other.toString)
+    })
   }
 
   private val EmptyArray: Json = Json.Arr(Vector.empty)
@@ -258,7 +217,7 @@ object JsonCodec {
       case Json.Str(s)  => out.writeVal(s)
       case Json.Bool(b) => out.writeVal(b)
       case Json.Num(n)  =>
-        if (numberSerializer eq null) writeNumberText(out, n) else numberSerializer(out, n)
+        if (numberSerializer eq null) writeNumber(out, n) else numberSerializer(out, n)
       case Json.Arr(vs) =>
         val depthM1 = depth - 1
         if (depthM1 < 0) out.encodeError("depth limit exceeded")

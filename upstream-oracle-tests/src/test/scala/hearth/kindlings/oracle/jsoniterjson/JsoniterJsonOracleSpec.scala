@@ -19,6 +19,9 @@ object JjBuild {
   final case class FloatN(n: Float) extends JjBuild
   final case class BigDec(n: BigDecimal) extends JjBuild
   final case class BigI(n: BigInt) extends JjBuild
+
+  /** A number made from its text (`JsonNumber.fromString`). */
+  final case class NumText(s: String) extends JjBuild
   final case class Bool(b: Boolean) extends JjBuild
   case object Null extends JjBuild
   final case class Arr(values: List[JjBuild]) extends JjBuild
@@ -34,6 +37,7 @@ object JjBuild {
     case FloatN(n)   => KJson.fromFloat(n).getOrElse(KJson.Null)
     case BigDec(n)   => KJson.fromBigDecimal(n)
     case BigI(n)     => KJson.fromBigInt(n)
+    case NumText(t)  => KJson.Num(KNumber.fromString(t).get)
     case Bool(v)     => KJson.fromBoolean(v)
     case Null        => KJson.Null
     case Arr(values) => KJson.fromValues(values.map(kindlings))
@@ -48,6 +52,7 @@ object JjBuild {
     case FloatN(n)   => CJson.fromFloat(n).getOrElse(CJson.Null)
     case BigDec(n)   => CJson.fromBigDecimal(n)
     case BigI(n)     => CJson.fromBigInt(n)
+    case NumText(t)  => CJson.fromJsonNumber(CNumber.fromString(t).get)
     case Bool(v)     => CJson.fromBoolean(v)
     case Null        => CJson.Null
     case Arr(values) => CJson.fromValues(values.map(circe))

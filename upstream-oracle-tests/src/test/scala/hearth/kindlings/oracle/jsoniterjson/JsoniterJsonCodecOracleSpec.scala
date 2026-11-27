@@ -75,6 +75,11 @@ final class JsoniterJsonCodecOracleSpec extends MacroSuite {
     "1.234567890",
     "1234567890",
     "1e-10",
+    "0.30000000000000004",
+    "1e300",
+    "1.0E300",
+    "-0.0E0",
+    "[1.50,100,0.0000001,9007199254740993,-9007199254740993.0]",
     "[4503599627370495,4503599627370496,-4503599627370496,-4503599627370497,0.30000000000000004,1.0E300,1e-300]",
     """{"b":{"z":1,"a":null},"a":[{"d":null,"c":2}],"":0}""",
     // not JSON values
@@ -124,17 +129,7 @@ final class JsoniterJsonCodecOracleSpec extends MacroSuite {
         JsonCodec.jsonCodec(numberSerializer = JsonCodec.jsCompatibleNumberSerializer),
         JsoniterScalaCodec.jsonCodec(numberSerializer = io.circe.JsoniterScalaCodec.jsCompatibleNumberSerializer)
       ),
-      // Documented (feature-parity.md jsoniter-json "JavaScript-compatible number serializer"): a `JsonNumber` is its
-      // text, so a parsed number written like a `Double` cannot be told from one built from a `Double` (which
-      // upstream always writes as a number, `-0.0` included): it is written as a number, where upstream (which parsed
-      // it to a `BigDecimal`) writes a string, or `0` for a negative zero.
-      List(
-        """-0.0: kindlings=-0.0 upstream=0""",
-        """{"n":-0.0}: kindlings={"n":-0.0} upstream={"n":0}""",
-        "[4503599627370495,4503599627370496,-4503599627370496,-450359: " +
-          """kindlings=[4503599627370495,"4503599627370496",-4503599627370496,"-4503599627370497",0.30000000000000004,"1.0E+300","1E-300"] """ +
-          """upstream=[4503599627370495,"4503599627370496",-4503599627370496,"-4503599627370497","0.30000000000000004","1.0E+300","1E-300"]"""
-      )
+      Nil
     )
   }
 
@@ -179,6 +174,21 @@ final class JsoniterJsonCodecOracleSpec extends MacroSuite {
       BigDec(BigDecimal("123456789012345.6")),
       BigDec(BigDecimal("12345678901234.5")),
       BigDec(BigDecimal("0.000000123456789")),
+      NumText("1.50"),
+      NumText("100"),
+      NumText("-0"),
+      NumText("-0.0"),
+      NumText("0.00"),
+      NumText("1e2"),
+      NumText("0.30000000000000004"),
+      NumText("4e+297"),
+      NumText("1e3000000000"),
+      NumText("123456789012345678"),
+      NumText("3.141592653589793"),
+      NumText("1.0E300"),
+      NumText("0.0000001"),
+      NumText("4503599627370496"),
+      NumText("-4503599627370496"),
       arr(IntN(1), obj("a" -> LongN(Long.MaxValue)))
     )
     check(built.flatMap { b =>
@@ -221,7 +231,29 @@ final class JsoniterJsonCodecOracleSpec extends MacroSuite {
       Str("\ud800"),
       nest(64, arr()),
       nest(63, arr()),
-      arr(FloatN(1.0f), DoubleN(2.0), LongN(3L), BigDec(BigDecimal("777e+777")))
+      arr(FloatN(1.0f), DoubleN(2.0), LongN(3L), BigDec(BigDecimal("777e+777"))),
+      NumText("1.50"),
+      NumText("100"),
+      NumText("-0"),
+      NumText("-0.0"),
+      NumText("0.00"),
+      NumText("1e2"),
+      NumText("0.30000000000000004"),
+      NumText("4e+297"),
+      NumText("1e3000000000"),
+      NumText("123456789012345678"),
+      NumText("3.141592653589793"),
+      NumText("1.0E300"),
+      NumText("0.0000001"),
+      NumText("4503599627370496"),
+      NumText("-4503599627370496"),
+      DoubleN(0.1 + 0.2),
+      DoubleN(1.0e300),
+      DoubleN(-0.0),
+      FloatN(3.0e38f),
+      BigDec(BigDecimal("0.0000001")),
+      BigDec(BigDecimal("1.50")),
+      BigI(BigInt("123456789012345678901234567890"))
     )
     check(built.flatMap { b =>
       val kOut = outcome(writeToString(JjBuild.kindlings(b))(JsonCodec.jsonValueCodec))
