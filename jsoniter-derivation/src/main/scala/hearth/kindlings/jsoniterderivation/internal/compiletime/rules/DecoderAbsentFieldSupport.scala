@@ -320,6 +320,9 @@ trait DecoderAbsentFieldSupport {
   protected def emptyCollectionOf[Field: Type]: Option[Expr[Field]] =
     if (Type[Field] =:= CTypes.String) None
     else if (Type[Field] <:< Type.of[scala.collection.immutable.::[Any]]) None
+    // `scala.collection.BitSet` has no `Factory` of its own: it is read as an immutable one (as in jsoniter-scala).
+    else if (Type[Field] =:= CTypes.CollectionBitSet)
+      Some(Expr.quote(scala.collection.immutable.BitSet.empty.asInstanceOf[Field]))
     else
       Type[Field] match {
         case IsCollection(isCollection) =>

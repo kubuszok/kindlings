@@ -137,11 +137,24 @@ trait CodecMacrosImpl
       fieldName: String,
       value: Expr_??
   ): Either[String, Expr[A]] = {
-    val others = product.params.filterNot(_._1 == fieldName).foldLeft(Map(fieldName -> value)) {
-      case (acc, (name, param)) => parameterDefault(param, acc).fold(acc)(d => acc + (name -> d))
+    def construct(fieldValue: Expr_??): Either[String, Expr[A]] = {
+      val others = product.params.filterNot(_._1 == fieldName).foldLeft(Map(fieldName -> fieldValue)) {
+        case (acc, (name, param)) => parameterDefault(param, acc).fold(acc)(d => acc + (name -> d))
+      }
+      foldInstanceFree(product.primaryConstructor, "Constructor")(onTypes = _ => Map.empty, onValues = _ => others)
+        .map(_.value.asInstanceOf[Expr[A]])
     }
-    foldInstanceFree(product.primaryConstructor, "Constructor")(onTypes = _ => Map.empty, onValues = _ => others)
-      .map(_.value.asInstanceOf[Expr[A]])
+    construct(value).map { direct =>
+      // The defaults of transient parameters may read the field (`C(value: String)(val length: Int = value.length)`):
+      // the field's value (e.g. the expression decoding it) is evaluated once.
+      if (product.params.forall(_._1 == fieldName)) direct
+      else {
+        import value.{Underlying as FieldValue, value as fieldValue}
+        ValDefs
+          .createVal[FieldValue](fieldValue, FreshName.FromPrefix("value"))
+          .use(local => construct(local.as_??).fold(_ => direct, identity))
+      }
+    }
   }
 
   /** `@transientField`, or `scala.transient` with `scalaTransientSupport` (only known with a compile-time config). */
@@ -203,6 +216,18 @@ trait CodecMacrosImpl
       .orElse(of(Type.FloatCodec))
       .orElse(of(Type.ShortCodec))
       .orElse(of(Type.ByteCodec))
+  }
+
+  /** Scala 3 only sees the values of a Java enum read from a class file once the infos of its constants were completed:
+    * an enum none of whose constants is referred to by the code being compiled would have no children (and would not be
+    * an enum for Hearth). See docs/research/hearth-bug-java-enum-children-not-completed.md.
+    */
+  protected def completeJavaEnum[A: Type]: Unit = ()
+
+  /** `Enum.parse`, after [[completeJavaEnum]]. */
+  private[compiletime] def parseEnum[A: Type] = {
+    completeJavaEnum[A]
+    Enum.parse[A]
   }
 
   /** Java enums, including Scala 3 enums extending `java.lang.Enum` (which Hearth's `isJavaEnum` does not report). */
@@ -424,9 +449,11 @@ trait CodecMacrosImpl
             if (Expr.splice(configExpr).encodingOnly)
               throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
             // as jsoniter-scala: a JSON `null` is the `default` argument (when it is not `null`)
-            JsoniterDerivationUtils.readNullAsDefaultArgument[A](in, default, Expr.splice(nullAsDefaultApplies[A]))(r =>
-              Expr.splice(decodeFn(Expr.quote(r), configExpr))
-            )
+            JsoniterDerivationUtils.readNullAsDefaultArgument[A](
+              in,
+              default,
+              Expr.splice(nullAsDefaultApplies[A](configExpr))
+            )(r => Expr.splice(decodeFn(Expr.quote(r), configExpr)))
           },
           (x: A, out: JsonWriter) =>
             if (Expr.splice(configExpr).decodingOnly)
@@ -740,9 +767,11 @@ trait CodecMacrosImpl
                 val _ = default
                 if (Expr.splice(configExpr).encodingOnly)
                   throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
-                JsoniterDerivationUtils.readNullAsDefaultArgument[A](in, default, Expr.splice(nullAsDefaultApplies[A]))(
-                  r => Expr.splice(decFn(Expr.quote(r), configExpr))
-                )
+                JsoniterDerivationUtils.readNullAsDefaultArgument[A](
+                  in,
+                  default,
+                  Expr.splice(nullAsDefaultApplies[A](configExpr))
+                )(r => Expr.splice(decFn(Expr.quote(r), configExpr)))
               },
               (x: A, out: JsonWriter) =>
                 if (Expr.splice(configExpr).decodingOnly)
@@ -1106,14 +1135,39 @@ trait CodecMacrosImpl
   @scala.annotation.nowarn("msg=is never used")
   /** Whether a top-level JSON `null` may decode as `decodeValue`'s `default` (reference types; not primitives). */
   @scala.annotation.nowarn("msg=is never used")
-  private def nullAsDefaultApplies[A: Type]: Expr[Boolean] = {
+  private def nullAsDefaultApplies[A: Type](configExpr: Expr[JsoniterConfig]): Expr[Boolean] = {
     implicit val BooleanT: Type[Boolean] = CTypes.Boolean
-    Expr(Type[A] <:< Type.of[AnyRef])
+    // As in jsoniter-scala, the boxes of primitives are read like the primitives (a `null` is an error, although their
+    // `nullValue` is a boxed zero), and with `inlineOneValueClasses` a one-value class is read like its field.
+    def applies[B: Type]: Boolean = Type[B] <:< Type.of[AnyRef] && !isBoxedPrimitive[B]
+    val plain = applies[A]
+    oneValueClassField[A](None) match {
+      case Some((_, _, param)) if plain =>
+        import param.tpe.Underlying as Field
+        val inlined = applies[Field] && hasNonNullNullValue[Field]
+        if (inlined) Expr(true)
+        else Expr.quote(!Expr.splice(configExpr).inlineOneValueClasses)
+      case _ => Expr(plain)
+    }
   }
+
+  private def isBoxedPrimitive[A: Type]: Boolean =
+    Type[A] =:= CTypes.JavaBoolean || Type[A] =:= CTypes.JavaByte || Type[A] =:= CTypes.JavaShort ||
+      Type[A] =:= CTypes.JavaInteger || Type[A] =:= CTypes.JavaLong || Type[A] =:= CTypes.JavaFloat ||
+      Type[A] =:= CTypes.JavaDouble || Type[A] =:= CTypes.JavaCharacter
+
+  /** Whether [[nullValueOf]] of a reference type is not `null` (options, collections, maps, bit sets). */
+  private def hasNonNullNullValue[A: Type]: Boolean =
+    !(Type[A] =:= CTypes.String) && nullableUnionUnderlying[A].isEmpty && (Type[A] match {
+      case IsOption(_) => true
+      case _           =>
+        Type[A] <:< CTypes.ImmutableBitSet || Type[A] =:= CTypes.CollectionBitSet || Type[A] <:< CTypes.MutableBitSet ||
+        emptyCollectionOf[A].isDefined
+    })
 
   /** The codec's `nullValue` (also passed as `default` to the decoders of top-level values), as jsoniter-scala's
     * `genNullValue`: `None` for `Option`s, empty collections/maps/arrays, zero for primitives and their boxes, a value
-    * class wrapping its value's `nullValue`, `null` otherwise.
+    * class wrapping its value's `nullValue`, a singleton itself, `null` otherwise.
     */
   @scala.annotation.nowarn("msg=is never used")
   // (lazy: it inspects IsCollection & co., which must run after the standard extensions are loaded)
@@ -1186,7 +1240,16 @@ trait CodecMacrosImpl
           if (Type[A] <:< CTypes.ImmutableBitSet || Type[A] =:= CTypes.CollectionBitSet)
             Expr.quote(scala.collection.immutable.BitSet.empty.asInstanceOf[A])
           else if (Type[A] <:< CTypes.MutableBitSet) Expr.quote(new scala.collection.mutable.BitSet().asInstanceOf[A])
-          else emptyCollectionOf[A].getOrElse(Expr.quote(null.asInstanceOf[A]))
+          else
+            emptyCollectionOf[A].getOrElse {
+              // As in jsoniter-scala: a singleton (case object, parameterless enum case) is its own `nullValue`.
+              if (Type[A].isEnumeration || isJavaEnumType[A]) Expr.quote(null.asInstanceOf[A])
+              else
+                SingletonValue.parse[A].toOption match {
+                  case Some(singleton) => singleton.singletonExpr
+                  case None            => Expr.quote(null.asInstanceOf[A])
+                }
+            }
       }
 
   /** Cache keys / def names of helpers derived in the different stringified modes (see `EncoderCtx.stringified`). */

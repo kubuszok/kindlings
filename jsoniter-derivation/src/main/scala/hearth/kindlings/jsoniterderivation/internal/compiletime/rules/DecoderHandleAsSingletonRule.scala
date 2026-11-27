@@ -20,7 +20,7 @@ trait DecoderHandleAsSingletonRuleImpl {
           case Right(sv) =>
             implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
             MIO.pure(Rule.matched(Expr.quote {
-              JsoniterDerivationUtils.readEmptyObject(Expr.splice(dctx.reader))
+              JsoniterDerivationUtils.readSingletonObject(Expr.splice(dctx.reader))
               Expr.splice(sv.singletonExpr)
             }))
           case Left(reason) =>

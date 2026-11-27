@@ -448,7 +448,7 @@ trait EncoderHandleAsMapRuleImpl {
                   scalaEnumerationKeyEncoder[K]
                 case _ =>
                   // 4. Enum (all case objects) — write case name as key
-                  Enum.parse[K].toOption match {
+                  parseEnum[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = StableChildrenOrder.directChildren(EncoderHandleAsMapRuleImpl.this)(enumm)
                       val allCaseObjects = Type[K].isEnumeration || isJavaEnumType[K] || childrenList.forall {

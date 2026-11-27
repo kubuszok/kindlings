@@ -31,6 +31,19 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
     else loop(TypeRepr.of[A]).map(_.map(t => UntypedType.as_??(t.asInstanceOf[UntypedType])))
   }
 
+  override protected def completeJavaEnum[A: Type]: Unit = {
+    import q.reflect.*
+    val tpe = TypeRepr.of[A]
+    val symbol = tpe.typeSymbol
+    if symbol.flags.is(Flags.JavaDefined) && tpe <:< TypeRepr.of[java.lang.Enum[?]] then {
+      // the constants are static fields: members of the companion module
+      val module = symbol.companionModule
+      module.declaredFields.foreach { field =>
+        val _ = module.termRef.memberType(field)
+      }
+    }
+  }
+
   override protected def enumerationObjectOf[A: Type]: Option[Expr[Enumeration]] = {
     import q.reflect.*
     // `Obj.Value`, or `Obj.this.Value` when it is referred to through a type alias defined in the object itself.

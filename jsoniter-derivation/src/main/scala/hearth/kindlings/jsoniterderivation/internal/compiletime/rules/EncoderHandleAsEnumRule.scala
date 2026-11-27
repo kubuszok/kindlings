@@ -17,7 +17,7 @@ trait EncoderHandleAsEnumRuleImpl {
 
     def apply[A: EncoderCtx]: MIO[Rule.Applicability[Expr[Unit]]] =
       Log.info(s"Attempting to handle ${Type[A].prettyPrint} as an enum") >> {
-        Enum.parse[A].toEither match {
+        parseEnum[A].toEither match {
           case Right(enumm) =>
             // Note: caching is handled by deriveEncoderRecursively — do NOT call setHelper here.
             encodeEnumCases[A](enumm).map(Rule.matched)

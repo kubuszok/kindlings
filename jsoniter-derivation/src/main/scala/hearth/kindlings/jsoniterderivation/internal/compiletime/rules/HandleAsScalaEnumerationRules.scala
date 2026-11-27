@@ -31,7 +31,7 @@ trait HandleAsScalaEnumerationRulesImpl {
     if (!Type[A].isEnumeration) MIO.pure(None)
     else
       enumerationObjectOf[A] match {
-        case None            => MIO.pure(None)
+        case None             => MIO.pure(None)
         case Some(enumObject) =>
           implicit val SupportT: Type[JsoniterScalaEnumeration[A]] = Type.of[JsoniterScalaEnumeration[A]]
           val key = "cached-scala-enumeration"

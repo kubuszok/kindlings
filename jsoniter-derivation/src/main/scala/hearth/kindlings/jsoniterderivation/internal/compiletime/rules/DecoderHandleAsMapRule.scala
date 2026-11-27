@@ -923,7 +923,7 @@ trait DecoderHandleAsMapRuleImpl {
                   scalaEnumerationKeyDecoder[K]
                 case _ =>
                   // 4. Enum (all case objects) — read key as string, match against case names
-                  Enum.parse[K].toOption match {
+                  parseEnum[K].toOption match {
                     case Some(enumm) =>
                       val childrenList = StableChildrenOrder.directChildren(DecoderHandleAsMapRuleImpl.this)(enumm)
                       val allCaseObjects = Type[K].isEnumeration || isJavaEnumType[K] || childrenList.forall {
