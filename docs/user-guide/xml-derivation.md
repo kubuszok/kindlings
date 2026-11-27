@@ -139,9 +139,9 @@ implicit val config: XmlConfig = XmlConfig.default
 | `withScreamingSnakeCaseFieldNames` | `fieldName` -> `FIELD_NAME` |
 | `withSnakeCaseConstructorNames` | `MyType` -> `my_type` in discriminator |
 | `withKebabCaseConstructorNames` | `MyType` -> `my-type` in discriminator |
-| `withDiscriminator(attr)` | ADT discriminator attribute name (default: `"type"`) |
+| `withDiscriminator(attr)` | ADT discriminator attribute name (default: `"type"`); `@xmlDiscriminator(attr)` on a sealed type sets it for that type only |
 | `withNoDiscriminator` | Disable the discriminator: the subtype is an element named after it, inside the value's element (see [Sealed traits and enums](#sealed-traits-and-enums)) |
-| `withEnumAsStrings` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or an attribute value (see [Sealed traits and enums](#sealed-traits-and-enums)) |
+| `withEnumAsStrings` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or an attribute value. A sealed trait with a case class is then an error (see [Sealed traits and enums](#sealed-traits-and-enums)) |
 | `withUseDefaults` | Use case class default values for missing fields (absent child elements and attributes) |
 | `withTransientNone` | Skip `None` fields during encoding |
 | `withTransientEmpty` | Skip empty collections during encoding (empty strings are still written) |
@@ -213,6 +213,7 @@ All in `hearth.kindlings.xmlderivation.annotations`.
 | `@xmlAttribute` | The field is an XML attribute |
 | `@xmlElement` | The field is a child element (overrides `withAttributesByDefault`) |
 | `@xmlContent` | The field is the text content of the element; the other fields are attributes |
+| `@xmlDiscriminator("name")` | On a sealed trait / Scala 3 enum: the name of its discriminator attribute, whatever the configuration says |
 | `@xmlName("name")` | The name of the field's element/attribute, or of a sealed trait's subtype (used as it is: not transformed by `fieldNameMapper` / `constructorNameMapper`) |
 | `@xmlWrapper("name")` | The field goes inside an outer element `name`; a collection is written there as one element per item, named after the field |
 | `@xmlUnwrapped` | A collection is written as one element per item, named after the field, directly in the element (no element for the collection itself) |
@@ -237,8 +238,10 @@ work are compile-time errors (listing every such field of the case class).
 `@xmlAttribute` and `@xmlContent` need a single text value:
 
 - `String`, the numeric types, `Boolean`, `Char`, `BigDecimal`, `BigInt`, and value types wrapping them,
-- an enum whose cases are all singletons, written as the case name (whatever `enumAsStrings` is: there is no other way
-  to put it in an attribute),
+- with `withEnumAsStrings`: an enum whose cases are all singletons, written as the case name. Without
+  `withEnumAsStrings` an enum is an element with a discriminator attribute (`<color type="Red"/>`), which neither an
+  attribute nor text can hold, so `@xmlAttribute` / `@xmlContent` on an enum is then a compile-time error (enable
+  `withEnumAsStrings`, or remove the annotation),
 - a type with a user-provided `XmlEncoder`/`XmlDecoder` in scope: the attribute holds the text of the element the
   encoder writes, and the decoder gets an element with that text,
 - an `Option` of one of these: `None` is an absent attribute / no text.
@@ -296,6 +299,23 @@ The name is the subtype's name transformed by `constructorNameMapper`, or the on
 Nested sealed traits are flattened: a leaf is written under its own name, whatever intermediate sealed traits it
 extends (unless an intermediate type has a user-provided instance, which is then used).
 
+`@xmlDiscriminator("kind")` on a sealed trait (or a Scala 3 enum) sets the discriminator attribute of that type, for
+encoding and decoding, whatever the configuration says: `withDiscriminator(name)` does not rename it, and with
+`withNoDiscriminator` the type keeps its attribute. Errors (`MissingDiscriminator`, `UnknownDiscriminator`) name the
+attribute that is used.
+
+```scala
+@xmlDiscriminator("kind") sealed trait Shape
+case class Circle(radius: Double) extends Shape
+// Circle(5.0): Shape as shape: <shape kind="Circle"><radius>5.0</radius></shape>
+```
+
+It is the annotation of the type a value is encoded or decoded as that counts: with
+`sealed trait Node; @xmlDiscriminator("inner") sealed trait Inner extends Node`, a field of type `Inner` uses `inner`,
+while a field of type `Node` holding the same value uses the discriminator of `Node` (the configured one) - the decoder
+has to know which attribute to read before it knows the subtype. A Java enum cannot carry the annotation (it is a Scala
+annotation); it uses the configured discriminator.
+
 An enum whose cases are all singletons - a sealed trait of case objects, a Scala 3 enum without parameters, a Java
 enum, a `scala.Enumeration` - is written the same way by default, and as the case name with `withEnumAsStrings`:
 
@@ -304,11 +324,24 @@ enum, a `scala.Enumeration` - is written the same way by default, and as the cas
 | default | `<color type="Red"/>` |
 | `withNoDiscriminator` | `<color><Red/></color>` |
 | `withEnumAsStrings` | `<color>Red</color>` |
-| `@xmlAttribute`, or `withEnumAsStrings` with `withAttributesByDefault` | `color="Red"` |
-| `@xmlContent` | the text `Red` |
+| `withEnumAsStrings` with `@xmlAttribute` or `withAttributesByDefault` | `color="Red"` |
+| `withEnumAsStrings` with `@xmlContent` | the text `Red` |
 
-`withEnumAsStrings` does not change sealed traits that have a case class (or a Scala 3 enum case with parameters): they
-keep the discriminator. A name that is not a case is an `UnknownDiscriminator` error listing the known names.
+A name that is not a case is an `UnknownDiscriminator` error listing the known names.
+
+`withEnumAsStrings` is only for such enums. Two things are errors:
+
+- deriving, with `withEnumAsStrings`, an instance for a sealed trait that has a case class (or a Scala 3 enum case
+  with parameters): `enumAsStrings is enabled but Shape has cases that are not singletons (Circle, Rectangle); ...`.
+  A model that has both kinds needs an instance for such a type derived with a configuration without
+  `enumAsStrings`, put in the implicit scope: user-provided instances are used as they are;
+- `@xmlAttribute` / `@xmlContent` on an enum without `withEnumAsStrings` (see
+  [Attributes and text content](#attributes-and-text-content)).
+
+Both are compile-time errors when the macro knows the configuration. When the configuration is only known at runtime
+(a parameter, a `var`, or - for Scala 2 macros - an `implicit val` defined in the code being compiled), the instance
+is derived and fails when it is used with such a configuration: the encoder throws an `IllegalArgumentException`, the
+decoder returns `Left(XmlDecodingError.General(...))`, both with the same message.
 
 ## Usage examples
 
@@ -489,18 +522,18 @@ keep the discriminator. A name that is not a case is an `UnknownDiscriminator` e
     case object Red extends Color
     @xmlName("dark-blue") case object DarkBlue extends Color
 
+    case class Swatch(color: Color, accents: List[Color])
     case class Paint(@xmlAttribute finish: Color, color: Color, accents: List[Color])
 
-    val paint = Paint(Red, DarkBlue, List(Red, DarkBlue))
-
     // By default an enum is written like any sealed trait: with the discriminator attribute.
-    // As an attribute it is always the case name.
-    println(KindlingsXmlEncoder.encode(paint, "paint")(XmlConfig.default))
+    println(KindlingsXmlEncoder.encode(Swatch(DarkBlue, List(Red, DarkBlue)), "swatch")(XmlConfig.default))
     // expected output:
-    // <paint finish="Red"><color type="dark-blue"/><accents><item type="Red"/><item type="dark-blue"/></accents></paint>
+    // <swatch><color type="dark-blue"/><accents><item type="Red"/><item type="dark-blue"/></accents></swatch>
 
+    // With withEnumAsStrings it is the case name, which can also be an attribute (@xmlAttribute on an enum needs it).
     implicit val config: XmlConfig = XmlConfig.default.withEnumAsStrings
 
+    val paint = Paint(Red, DarkBlue, List(Red, DarkBlue))
     val xml = KindlingsXmlEncoder.encode(paint, "paint")
     println(xml)
     // expected output:
