@@ -109,7 +109,7 @@ object HktWrappedRuntime {
       val construct: Array[Any] => Any,
       fieldInstances: Any => Array[Any],
       self: Any
-  ) {
+  ) extends Serializable { // the derived instances are Serializable, like cats' (kittens checks it)
     lazy val instances: Array[Any] = fieldInstances(self)
     def mapFields(fa: Any)(f: (Any, Int) => Any): Any = {
       val values = fields(fa)

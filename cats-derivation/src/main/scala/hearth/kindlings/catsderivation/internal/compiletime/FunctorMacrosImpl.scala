@@ -31,19 +31,23 @@ trait FunctorMacrosImpl
     // `List[Option[Int]]`) gets the composed instance, like kittens; it used to get the outer instance only, which
     // applied the function to the inner containers (ClassCastException).
     Type.decompose1(using fieldType).flatMap { case (_, arg) =>
-      summonFunctorForFieldType(fieldType).map { outer =>
+      summonFunctorForFieldType(fieldType).flatMap { outer =>
         val inner = arg.Underlying.asInstanceOf[Type[Any]]
         implicit val AnyType: Type[Any] = FunctorTypes.Any
         val IntType: Type[Int] = FunctorTypes.Int
-        if (inner =:= IntType) outer
+        if (inner =:= IntType) Some(outer)
         else
           summonComposedFunctorForFieldType(inner) match {
             case Some(innerInstance) =>
-              Expr.quote {
+              Some(Expr.quote {
                 hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
                   .composeFunctor(Expr.splice(outer), Expr.splice(innerInstance))
-              }
-            case None => outer
+              })
+            // The inner type wraps the type parameter in a type constructor without an instance in scope (e.g. the
+            // derived type itself: `Option[AtLeastOne[A]]`): applying the outer instance alone would hand the inner
+            // values to the function (ClassCastException), so the field is not supported here and the general
+            // derivation (which derives the inner instance recursively) takes over.
+            case None => None
           }
       }
     }

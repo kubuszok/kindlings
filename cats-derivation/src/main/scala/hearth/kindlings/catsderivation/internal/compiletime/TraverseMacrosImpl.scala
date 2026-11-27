@@ -39,19 +39,23 @@ trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorS
     Type.decompose1(using fieldType).flatMap { case (gCtor, arg) =>
       implicit val TraverseOfG: Type[cats.Traverse[AnyK]] =
         CatsTraverseCtor.apply(using gCtor).asInstanceOf[Type[cats.Traverse[AnyK]]]
-      Expr.summonImplicit[cats.Traverse[AnyK]].toOption.map { outer =>
+      Expr.summonImplicit[cats.Traverse[AnyK]].toOption.flatMap { outer =>
         val inner = arg.Underlying.asInstanceOf[Type[Any]]
         implicit val AnyType: Type[Any] = TraverseTypes.Any
         val IntType: Type[Int] = TraverseTypes.Int
-        if (inner =:= IntType) outer.asInstanceOf[Expr[Any]]
+        if (inner =:= IntType) Some(outer.asInstanceOf[Expr[Any]])
         else
           summonTraverseForFieldType(inner) match {
             case Some(innerInstance) =>
-              Expr.quote {
+              Some(Expr.quote {
                 hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
                   .composeTraverse(Expr.splice(outer.asInstanceOf[Expr[Any]]), Expr.splice(innerInstance))
-              }
-            case None => outer.asInstanceOf[Expr[Any]]
+              })
+            // The inner type wraps the type parameter in a type constructor without an instance in scope (e.g. the
+            // derived type itself: `Option[AtLeastOne[A]]`): applying the outer instance alone would hand the inner
+            // values to the function (ClassCastException), so the field is not supported here and the general
+            // derivation (which derives the inner instance recursively) takes over.
+            case None => None
           }
       }
     }
