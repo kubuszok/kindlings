@@ -157,7 +157,8 @@ object KittensAdts {
     implicit def cogen[A: Cogen]: Cogen[IList[A]] = Cogen[List[A]].contramap(toList)
     def fromSeq[T](ts: Seq[T]): IList[T] = ts.foldRight[IList[T]](INil())(ICons(_, _))
     def toList[T](list: IList[T]): List[T] = {
-      @scala.annotation.tailrec def loop(list: IList[T], acc: List[T]): List[T] = list match {
+      @scala.annotation.tailrec
+      def loop(list: IList[T], acc: List[T]): List[T] = list match {
         case INil()            => acc.reverse
         case ICons(head, tail) => loop(tail, head :: acc)
       }
@@ -173,7 +174,8 @@ object KittensAdts {
     implicit def arbitrary[A: Arbitrary]: Arbitrary[Snoc[A]] = Arbitrary(Arbitrary.arbitrary[List[A]].map(fromSeq))
     def fromSeq[T](ts: Seq[T]): Snoc[T] = ts.foldLeft[Snoc[T]](SNil())(SCons(_, _))
     def toList[T](snoc: Snoc[T]): List[T] = {
-      @scala.annotation.tailrec def loop(snoc: Snoc[T], acc: List[T]): List[T] = snoc match {
+      @scala.annotation.tailrec
+      def loop(snoc: Snoc[T], acc: List[T]): List[T] = snoc match {
         case SNil()            => acc
         case SCons(init, last) => loop(init, last :: acc)
       }
@@ -311,7 +313,10 @@ object KittensAdts {
         val single: Gen[AtLeastOne[A]] = Arbitrary.arbitrary[A].map(Single(_))
         if (depth <= 0) single
         else
-          Gen.oneOf(single, Gen.zip(Arbitrary.arbitrary[A], Gen.option(gen(depth - 1))).map { case (v, r) => More(v, r) })
+          Gen.oneOf(
+            single,
+            Gen.zip(Arbitrary.arbitrary[A], Gen.option(gen(depth - 1))).map { case (v, r) => More(v, r) }
+          )
       }
       Arbitrary(Gen.choose(0, 4).flatMap(gen))
     }
@@ -383,9 +388,7 @@ object KittensAdts {
   final case class KeyValue(key: String, value: Int)
   object KeyValue {
     implicit val partialOrder: cats.kernel.PartialOrder[KeyValue] =
-      cats.kernel.PartialOrder.from((x, y) =>
-        if (x.key == y.key) x.value.toDouble - y.value.toDouble else Double.NaN
-      )
+      cats.kernel.PartialOrder.from((x, y) => if (x.key == y.key) x.value.toDouble - y.value.toDouble else Double.NaN)
     implicit val arbitrary: Arbitrary[KeyValue] = Arbitrary(
       Gen.zip(Gen.oneOf("a", "b", "c"), Gen.choose(-3, 3)).map { case (k, v) => KeyValue(k, v) }
     )

@@ -26,6 +26,8 @@ object versions {
   val avro4s3 = "5.0.15"
   val cats = "2.13.0"
   val circe = "0.14.17"
+  // cats-derivation law tests (test-only)
+  val disciplineMunit = "2.0.0"
   // circe-generic-extras (upstream oracle only): the last releases per Scala version.
   val circeGenericExtras213 = "0.14.4"
   val circeGenericExtras3 = "0.14.5-RC1"

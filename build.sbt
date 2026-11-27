@@ -936,7 +936,10 @@ lazy val catsDerivation = projectMatrix
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-core" % versions.cats,
       "org.typelevel" %% "alleycats-core" % versions.cats,
-      "org.scalacheck" %% "scalacheck" % versions.scalacheck % Test
+      "org.scalacheck" %% "scalacheck" % versions.scalacheck % Test,
+      // The discipline law checks kittens runs on its derived instances (`Kittens*LawsSpec`).
+      "org.typelevel" %% "cats-laws" % versions.cats % Test,
+      "org.typelevel" %% "discipline-munit" % versions.disciplineMunit % Test
     )
   )
 
