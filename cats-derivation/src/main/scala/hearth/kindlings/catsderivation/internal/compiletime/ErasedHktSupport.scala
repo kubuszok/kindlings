@@ -557,6 +557,16 @@ trait ErasedHktSupport
 
     def registrySize: Int = nextId
 
+    /** Runs a planning attempt, forgetting the instance-scoped vals it recorded when it fails (an alternative is tried
+      * next): otherwise they would be emitted unused (an "is never used" warning at the expansion site).
+      */
+    private def attempt[A](body: => Either[List[String], A]): Either[List[String], A] = {
+      val snapshot = instanceScopedValsSnapshot()
+      val result = body
+      if (result.isLeft) restoreInstanceScopedVals(snapshot)
+      result
+    }
+
     def plan(tc: ErasedTC, lam: Lam, isTop: Boolean): Either[List[String], Plan] =
       if (lam.isId) idInstance(tc).map(Plan.Ready(_)).left.map(List(_))
       else if (lam.isConst)
@@ -571,7 +581,7 @@ trait ErasedHktSupport
         } match {
           case Some(id) => Right(Plan.Self(id))
           case None     =>
-            val applied: Either[List[String], Plan] = outerAndInner(lam) match {
+            val applied: Either[List[String], Plan] = attempt(outerAndInner(lam) match {
               case Some((outer, inner)) if inner.isId =>
                 if (isTop) Left(Nil)
                 else
@@ -581,7 +591,7 @@ trait ErasedHktSupport
                     .toRight(List(s"no implicit ${tc.name} for ${lam.show}"))
               case Some((outer, inner)) => nested(tc, outer, inner, lam)
               case None                 => Left(Nil)
-            }
+            })
             applied match {
               case Right(found) => Right(found)
               case Left(errors) => generic(tc, lam).left.map(errors ++ _)
@@ -596,13 +606,13 @@ trait ErasedHktSupport
     ): Either[List[String], Plan] = {
       val outerLam = lamOf(outer)
       val attempts = nestedRules(tc).iterator.map { case (outerTc, innerTc, compose) =>
-        for {
+        attempt(for {
           outerPlan <- plan(outerTc, outerLam, isTop = false)
           result <- innerTc match {
             case None       => Right(outerPlan)
             case Some(inTc) => plan(inTc, inner, isTop = false).map(Plan.Composed(compose, outerPlan, _))
           }
-        } yield result
+        } yield result)
       }
       val errors = List.newBuilder[String]
       var found: Option[Plan] = None
@@ -649,7 +659,7 @@ trait ErasedHktSupport
         case other                     => (other, None)
       }
       val results: List[Either[List[String], (Plan, Boolean)]] = fields.map { case (name, fieldLam) =>
-        val nonEmpty = nonEmptyTc.flatMap(plan(_, fieldLam, isTop = false).toOption)
+        val nonEmpty = nonEmptyTc.flatMap(nonEmpty => attempt(plan(nonEmpty, fieldLam, isTop = false)).toOption)
         nonEmpty match {
           case Some(p) => Right((p, true))
           case None    =>
@@ -695,7 +705,7 @@ trait ErasedHktSupport
         case EmptyK =>
           // Like kittens: exactly one subtype forms an EmptyK.
           variants.flatMap { case (name, variantLam) =>
-            plan(tc, variantLam, isTop = false).toOption.map(name -> _)
+            attempt(plan(tc, variantLam, isTop = false)).toOption.map(name -> _)
           } match {
             case (_, only) :: Nil => Right(Plan.Alias(id, only))
             case Nil              => Left(List(s"no subtype of ${lam.show} forms an EmptyK (exactly one has to)"))

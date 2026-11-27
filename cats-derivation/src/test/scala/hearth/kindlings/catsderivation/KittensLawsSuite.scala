@@ -26,6 +26,9 @@ abstract class KittensLawsSuite extends DisciplineSuite {
     .withMaxSize(if (isJvm) 10 else 5)
     .withMinSize(0)
 
+  // Like kittens' KittensSuite: Arbitrary.arbContainer is not found for List[X] behind type aliases (ListSnoc, ...).
+  implicit def arbitraryList[A: Arbitrary]: Arbitrary[List[A]] = Arbitrary(Gen.listOf(Arbitrary.arbitrary[A]))
+
   // The default Arbitrary[Duration] causes overflow.
   implicit val arbitraryDuration: Arbitrary[Duration] =
     Arbitrary(Gen.chooseNum(-750.days.toNanos, 750.days.toNanos).map(Duration.fromNanos))
