@@ -11,6 +11,7 @@ trait InvariantKMacrosImpl
     with rules.InvariantKUseImplicitRuleImpl
     with rules.InvariantKCaseClassRuleImpl
     with rules.InvariantKTraitRuleImpl
+    with TraitAlgebraBodies
     with CatsTaglessDerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
     with hearth.kindlings.derivation.compiletime.InstanceScopedVals { this: MacroCommons & StdExtensions =>
@@ -97,6 +98,30 @@ trait InvariantKMacrosImpl
   private[compiletime] def failCannotConstruct[A](typeClass: String, reason: String): MIO[A] = {
     val err = CatsTaglessDerivationError.CannotConstructResult(typeClass, reason)
     Log.error(err.message) >> MIO.fail(err)
+  }
+
+  /** `TC[X]` and `X` as an algebra constructor, for deriving `TC` for another algebra `X` used by this one. */
+  protected def nestedAlgebra(
+      tc: NestedTc,
+      ctor: UntypedType
+  ): (Type.CtorK1[CatsTaglessFactories.DummyHKT], Type[Any]) =
+    (
+      Type.CtorK1.fromUntyped[CatsTaglessFactories.DummyHKT](ctor),
+      applyTypeClassToAlgebra[Any, Any](tc.anchor, ctor)
+    )
+
+  /** Derives `InvariantK` for algebras nested in a trait algebra's methods. */
+  protected def invariantKNestedDeriver(cache: MLocal[ValDefsCache], derivedType: Option[??]): NestedAlgebraDeriver = {
+    case (NestedTc.InvariantKTc, ctor) =>
+      val (nestedCtorK1, nestedType) = nestedAlgebra(NestedTc.InvariantKTc, ctor)
+      val nestedCtx = InvariantKCtx[CatsTaglessFactories.DummyHKT](
+        nestedCtorK1,
+        nestedType.asInstanceOf[Type[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]],
+        cache,
+        derivedType
+      )
+      Some(deriveInvariantKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map(_.asInstanceOf[Expr[Any]]))
+    case _ => None
   }
 
   // --- Context ---

@@ -278,143 +278,15 @@ trait InstrumentMacrosImpl extends FunctorKMacrosImpl { this: MacroCommons & Std
       algebraName: String
   )(implicit ctx: InstrumentCtx[Alg]): MIO[Expr[Alg[CatsTaglessFactories.WCtor2]]] = {
     val AlgCtorK1 = ctx.algCtorK1
-    implicit val AnyType: Type[Any] = InvariantKTypes.Any
-
-    val WCtor1Ctor = mkWCtor1
-    val WCtor2Ctor = mkWCtor2
-
-    val AlgWCtor1Type = AlgCtorK1.apply[CatsTaglessFactories.WCtor1](using WCtor1Ctor)
-    val AlgWCtor2Type = AlgCtorK1.apply[CatsTaglessFactories.WCtor2](using WCtor2Ctor)
-
-    val afExpr = afExpr0.asInstanceOf[Expr[Any]]
-
-    val OptionCtor = Type.Ctor1.of[Option]
-    val ListCtor = Type.Ctor1.of[List]
-    val AlgOptionType = AlgCtorK1.apply[Option](using OptionCtor)
-    val AlgListType = AlgCtorK1.apply[List](using ListCtor)
-
-    parsedOrFail(
-      AnonymousInstance.parse(using AlgWCtor2Type.asInstanceOf[Type[Any]]).toEither,
-      "Alg[WCtor2] as anonymous instance"
-    )
-      .parTuple(
-        parsedOrFail(
-          AnonymousInstance.parse(using AlgWCtor1Type.asInstanceOf[Type[Any]]).toEither,
-          "Alg[WCtor1] as anonymous instance"
-        )
-      )
-      .parTuple(
-        parsedOrFail(AnonymousInstance.parse(using AlgOptionType.asInstanceOf[Type[Any]]).toEither, "Alg[Option]")
-      )
-      .parTuple(parsedOrFail(AnonymousInstance.parse(using AlgListType.asInstanceOf[Type[Any]]).toEither, "Alg[List]"))
-      .flatMap { case (((anonInstance, anonInstanceSource), aiOption), aiList) =>
-        val optionMethods = aiOption.mustOverride.map(cm => cm.method.name -> cm).toMap
-        val listMethods = aiList.mustOverride.map(cm => cm.method.name -> cm).toMap
-
-        // Pre-validate that every method we must override exists on the source instance, so that the
-        // OverrideBody callbacks below can never hit a missing source method.
-        val missingSourceMethods: List[CatsTaglessDerivationError] = anonInstance.mustOverride
-          .map(_.method.name)
-          .filterNot(n => anonInstanceSource.mustOverride.exists(_.method.name == n))
-          .map(n => CatsTaglessDerivationError.SourceMethodNotFound(n))
-
-        missingSourceMethods match {
-          case head :: tail =>
-            Log.error((head :: tail).map(_.message).mkString("\n")) >> MIO.fail(head, tail*)
-          case Nil =>
-
-            val overrides: Map[UntypedMethod, OverrideBody] = anonInstance.mustOverride.map { cm =>
-              val methodName = cm.method.name
-              val sourceMethodOpt = anonInstanceSource.mustOverride.find(_.method.name == methodName)
-
-              val isDirectF: Boolean = (optionMethods.get(methodName), listMethods.get(methodName)) match {
-                case (Some(om), Some(lm)) =>
-                  (knownReturningOfProbe(om.method), knownReturningOfProbe(lm.method)) match {
-                    case (Some(or), Some(lr)) =>
-                      (
-                        OptionCtor.unapply(or.Underlying.asInstanceOf[Type[Any]]),
-                        ListCtor.unapply(lr.Underlying.asInstanceOf[Type[Any]])
-                      ) match {
-                        case (Some(io), Some(il)) =>
-                          import io.Underlying as IO; import il.Underlying as IL
-                          // `plainPrint`: a polymorphic method's type parameters are distinct symbols per instance
-                          IO =:= IL || IO.plainPrint == IL.plainPrint
-                        case _ => false
-                      }
-                    case _ => false
-                  }
-                case _ => false
-              }
-
-              val body: OverrideBody = new OverrideBody {
-                def apply(octx: OverrideContext): Expr_?? = {
-                  val returnT = octx.returnType
-
-                  // Call the same method on the source (af) instance
-                  // OverrideBody is a synchronous callback invoked inside `anonInstance.construct`; it cannot
-                  // return MIO. Typed errors thrown here are caught by the MIO block wrapping `construct`
-                  // below and routed into the MIO error channel.
-                  val sourceCall: Expr[Any] = sourceMethodOpt match {
-                    case Some(sourceCM) =>
-                      val sm = sourceCM.method
-                      try
-                        sm.fold(
-                          onInstance = oi => afExpr.as_??(oi.Instance.asInstanceOf[Type[Any]]),
-                          onTypes = at => at.typeParams.flatten.zip(octx.typeParameters).toMap,
-                          onValues = av => {
-                            val paramNames = av.totalParameters.flatten.toList.map(_._1)
-                            paramNames.zip(octx.parameters).toMap
-                          }
-                        ) match {
-                          case Right(exprE) => import exprE.Underlying; exprE.value.upcast[Any]
-                          case Left(e)      =>
-                            throw CatsTaglessDerivationError.MethodForwardingFailed(
-                              methodName,
-                              s"fold returned Left: $e"
-                            )
-                        }
-                      catch {
-                        case e: CatsTaglessDerivationError  => throw e
-                        case scala.util.control.NonFatal(e) =>
-                          throw CatsTaglessDerivationError.MethodForwardingFailed(
-                            methodName,
-                            s"fold crashed (${sm.getClass.getSimpleName}, " +
-                              s"expectations=${sm.expectations}, isNullary=${sm.isNullary}): ${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf(e)}"
-                          )
-                      }
-                    case None =>
-                      // Unreachable: validated via missingSourceMethods before building overrides.
-                      throw CatsTaglessDerivationError.SourceMethodNotFound(methodName)
-                  }
-
-                  if (isDirectF) {
-                    import returnT.Underlying as RT
-                    mkInstrumentation[RT](sourceCall, algebraName, methodName)(returnT.Underlying).as_??(
-                      returnT.Underlying
-                    )
-                  } else {
-                    import returnT.Underlying as RT
-                    Expr.quote(Expr.splice(sourceCall).asInstanceOf[RT]).as_??(returnT.Underlying)
-                  }
-                }
-              }
-
-              cm.method.asUntyped -> body
-            }.toMap
-
-            // The MIO wrapper captures typed errors thrown from the OverrideBody callbacks invoked
-            // synchronously inside `construct` and routes them into the error channel.
-            MIO(anonInstance.construct(None, Map.empty, overrides)).flatMap {
-              case Right(expr) =>
-                MIO.pure(expr.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
-              case Left(errors) =>
-                failCannotConstruct("Instrument", s"trait instance: ${errors.toVector.mkString(", ")}")
-            }
-        }
-      }
+    buildTraitAlgebra[Alg](
+      "Instrument",
+      AlgCtorK1,
+      AlgCtorK1.apply[CatsTaglessFactories.WCtor2](using mkWCtor2).asInstanceOf[Type[Any]],
+      List(AlgCtorK1.apply[CatsTaglessFactories.WCtor1](using mkWCtor1).asInstanceOf[Type[Any]]),
+      TraitOp.Instrument(afExpr0.asInstanceOf[Expr[Any]], algebraName),
+      (_, _) => None
+    ).map(_.asInstanceOf[Expr[Alg[CatsTaglessFactories.WCtor2]]])
   }
-
-  // --- Helpers ---
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")
   private[compiletime] def mkInstrumentation[Result](

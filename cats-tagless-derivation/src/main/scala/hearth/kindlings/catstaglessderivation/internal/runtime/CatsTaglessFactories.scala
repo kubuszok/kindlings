@@ -12,6 +12,12 @@ object CatsTaglessFactories {
 
   type DummyHKT[F[_]] = Any
 
+  /** A type constructor that only the macros apply an algebra to (`Alg[KProbe]`): unlike `WCtor1`/`WCtor2` it is not an
+    * alias, so it survives dealiasing and marks every occurrence of the algebra's `F` in its methods' signatures. Never
+    * instantiated and never referred to by generated code.
+    */
+  sealed trait KProbe[A]
+
   // --- Kind (* -> *) -> *, erasure-based ---
   //
   // WCtor1/WCtor2 are type constructors (kind * -> *) that only appear as type ARGUMENTS

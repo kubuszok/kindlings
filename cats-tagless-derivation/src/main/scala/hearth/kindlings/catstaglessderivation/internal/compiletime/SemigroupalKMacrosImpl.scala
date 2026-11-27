@@ -15,6 +15,25 @@ trait SemigroupalKMacrosImpl
 
   protected def mkWCtor3: Type.Ctor1[CatsTaglessFactories.WCtor3] = Type.Ctor1.of[CatsTaglessFactories.WCtor3]
 
+  /** Derives `SemigroupalK` (and `InvariantK`) for algebras nested in a trait algebra's methods. */
+  protected def semigroupalKNestedDeriver(
+      cache: MLocal[ValDefsCache],
+      derivedType: Option[??]
+  ): NestedAlgebraDeriver = {
+    case (NestedTc.SemigroupalKTc, ctor) =>
+      val (nestedCtorK1, nestedType) = nestedAlgebra(NestedTc.SemigroupalKTc, ctor)
+      val nestedCtx = SemigroupalKCtx[CatsTaglessFactories.DummyHKT](
+        nestedCtorK1,
+        nestedType.asInstanceOf[Type[cats.tagless.SemigroupalK[CatsTaglessFactories.DummyHKT]]],
+        cache,
+        derivedType
+      )
+      Some(
+        deriveSemigroupalKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map(_.asInstanceOf[Expr[Any]])
+      )
+    case (tc, ctor) => invariantKNestedDeriver(cache, derivedType)(tc, ctor)
+  }
+
   // --- Context ---
 
   final case class SemigroupalKCtx[Alg[_[_]]](

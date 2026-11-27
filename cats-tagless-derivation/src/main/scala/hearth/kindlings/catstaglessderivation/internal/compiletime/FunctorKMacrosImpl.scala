@@ -13,6 +13,20 @@ trait FunctorKMacrosImpl
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
 
+  /** Derives `FunctorK` (and `InvariantK`) for algebras nested in a trait algebra's methods. */
+  protected def functorKNestedDeriver(cache: MLocal[ValDefsCache], derivedType: Option[??]): NestedAlgebraDeriver = {
+    case (NestedTc.FunctorKTc, ctor) =>
+      val (nestedCtorK1, nestedType) = nestedAlgebra(NestedTc.FunctorKTc, ctor)
+      val nestedCtx = FunctorKCtx[CatsTaglessFactories.DummyHKT](
+        nestedCtorK1,
+        nestedType.asInstanceOf[Type[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]],
+        cache,
+        derivedType
+      )
+      Some(deriveFunctorKRecursively[CatsTaglessFactories.DummyHKT](using nestedCtx).map(_.asInstanceOf[Expr[Any]]))
+    case (tc, ctor) => invariantKNestedDeriver(cache, derivedType)(tc, ctor)
+  }
+
   // --- Context ---
 
   final case class FunctorKCtx[Alg[_[_]]](
