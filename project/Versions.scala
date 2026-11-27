@@ -58,5 +58,5 @@ object versions {
   // upstream oracles for scalacheck-derivation (test-only)
   val scalacheckShapeless = "1.3.2"
   val scalacheckDerived = "0.11.0"
-  val sconfig = "2.0.0"
+  val sconfig = "2.1.0"
 }
