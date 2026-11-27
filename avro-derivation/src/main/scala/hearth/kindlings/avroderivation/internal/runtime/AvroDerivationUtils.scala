@@ -346,9 +346,19 @@ object AvroDerivationUtils {
     schema
   }
 
-  /** The symbols of a `scala.Enumeration` in the order of their ids (the declaration order), as avro4s lists them. */
-  def symbolsInIdOrder(values: List[Enumeration#Value], symbols: List[String]): List[String] =
-    values.zip(symbols).sortBy(_._1.id).map(_._2)
+  /** The symbols of a `scala.Enumeration` or of a Java enum in the declaration order of `values` - the ids of the
+    * enumeration's values, the ordinals of the enum's constants - as avro4s lists them. The order the macro sees the
+    * values in is not reliable (by name for an enumeration; for a Java enum it can change between compilations).
+    */
+  def symbolsInDeclarationOrder(values: List[Any], symbols: List[String]): List[String] =
+    values
+      .zip(symbols)
+      .sortBy {
+        case (value: Enumeration#Value, _) => value.id
+        case (value: java.lang.Enum[?], _) => value.ordinal
+        case _                             => Int.MaxValue
+      }
+      .map(_._2)
 
   /** A String as a FIXED value: its UTF-8 bytes padded with zeros to `expectedSize` (as avro4s does). */
   def wrapStringAsFixed(value: String, expectedSize: Int): GenericData.Fixed =
