@@ -217,6 +217,18 @@ object OptimizedCodecs {
     KindlingsJsonValueCodec.derived[UofShape](using JsoniterConfig.default.withCirceLikeObjectEncoding)
   val uofScalaEnumValueId: KindlingsJsonValueCodec[UofLevelHolder] =
     KindlingsJsonValueCodec.derived[UofLevelHolder](using JsoniterConfig.default.withUseScalaEnumValueId)
+
+  // JsoniterScalaSpecParitySpec
+  val spsBodiesById: KindlingsJsonValueCodec[SpsBodies] =
+    KindlingsJsonValueCodec.derived[SpsBodies](using JsoniterConfig.default.withUseScalaEnumValueId)
+  val spsTemperaturesById: KindlingsJsonValueCodec[List[SpsTemperature.Value]] =
+    KindlingsJsonValueCodec.derived[List[SpsTemperature.Value]](using JsoniterConfig.default.withUseScalaEnumValueId)
+  val spsNameInlined: KindlingsJsonValueCodec[UofName] =
+    KindlingsJsonValueCodec.derived[UofName](using JsoniterConfig.default.withInlineOneValueClasses)
+  val spsDependentInlined: KindlingsJsonValueCodec[List[SpsDependent]] =
+    KindlingsJsonValueCodec.derived[List[SpsDependent]](using JsoniterConfig.default.withInlineOneValueClasses)
+  val spsZoneWithDiscriminator: KindlingsJsonValueCodec[SpsZone] =
+    KindlingsJsonValueCodec.derived[SpsZone](using JsoniterConfig.default.withDiscriminator("zoneId"))
 }
 object OptimizedCodecsHelpers {
   // (a partial-function literal inside the config argument is duplicated by the Scala 2 macro expansion: keep it in a

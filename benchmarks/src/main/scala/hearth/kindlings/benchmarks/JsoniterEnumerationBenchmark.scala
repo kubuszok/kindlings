@@ -20,7 +20,12 @@ final case class EnumerationData(
 )
 
 /** `scala.Enumeration` values as fields only (no collection or map around them). */
-final case class EnumerationFields(a: BenchPlanet.Planet, b: BenchPlanet.Planet, c: BenchPlanet.Planet, d: BenchPlanet.Planet)
+final case class EnumerationFields(
+    a: BenchPlanet.Planet,
+    b: BenchPlanet.Planet,
+    c: BenchPlanet.Planet,
+    d: BenchPlanet.Planet
+)
 
 object EnumerationBenchmarkData {
   val fields: EnumerationFields =
@@ -79,8 +84,13 @@ class JsoniterEnumerationBenchmark {
   def setup(): Unit = {
     byNameBytes = writeToArray(EnumerationBenchmarkData.value)(OriginalEnumerationCodecs.byName)
     byIdBytes = writeToArray(EnumerationBenchmarkData.value)(OriginalEnumerationCodecs.byId)
-    require(java.util.Arrays.equals(byNameBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byName)))
-    require(java.util.Arrays.equals(byIdBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byId)))
+    require(
+      java.util.Arrays
+        .equals(byNameBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byName))
+    )
+    require(
+      java.util.Arrays.equals(byIdBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byId))
+    )
   }
 
   @Benchmark def kindlingsWriteByName(): Array[Byte] =
