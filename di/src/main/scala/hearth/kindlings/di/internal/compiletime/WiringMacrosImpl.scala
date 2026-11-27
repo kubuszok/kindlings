@@ -274,13 +274,18 @@ private[di] trait WiringMacrosImpl
   /** Resolve a single constructor/apply parameter: implicit parameters go through implicit search, everything else is
     * resolved from the collected scope candidates.
     */
-  protected def resolveParameter(scopes: List[List[Candidate]], recursive: Boolean, breadcrumb: List[??])(
+  protected def resolveParameter(
+      scopes: List[List[Candidate]],
+      recursive: Boolean,
+      breadcrumb: List[??],
+      implicitClause: Boolean = true
+  )(
       parameter: Parameter
   ): Either[String, Expr_??] = {
     // For a by-name parameter (`=> A`) the declared type is the `<byname>[A]` wrapper; we resolve a strict `A` from
     // scope and let the method application thunk it (mirroring macwire's `wireByNameParameters` handling).
     val effectiveType = effectiveParamType(parameter)
-    if (parameter.isImplicit) {
+    if (parameter.isImplicit && implicitClause) {
       import effectiveType.Underlying as P
       Expr.summonImplicit[P].toOption match {
         case Some(found) => Right(found.as_??)
@@ -391,7 +396,7 @@ private[di] trait WiringMacrosImpl
       recursive: Boolean,
       breadcrumb: List[??]
   ): Either[CtorFailure, Expr[A]] =
-    Type[A].primaryConstructor.filter(_ => isInstantiable[A]).filter(_.isAvailable(AtCallSite)) match {
+    wiringConstructor[A] match {
       case None       => Left(NoPublicCtor(s"No public primary constructor found for [${Type.prettyPrint[A]}]"))
       case Some(ctor) =>
         DirectStyle[Either[String, *]]
@@ -453,8 +458,14 @@ private[di] trait WiringMacrosImpl
       runSafe: DirectStyle.RunSafe[Either[String, *]],
       breadcrumb: List[??]
   ): Map[String, Expr_??] =
-    method.totalParameters.flatten.toList.map { case (name, parameter) =>
-      name -> runSafe(resolveParameter(scopes, recursive, breadcrumb)(parameter))
+    method.totalParameters.toList.flatMap { clause =>
+      // A clause is implicit (`implicit`/`using`) when all its parameters are; a parameter flagged `implicit` in an
+      // ordinary clause (`class S(val a: A, implicit val b: B)`) is an implicit MEMBER, wired from scope like the
+      // others (macwire's `valsFlaggedImplicit`).
+      val implicitClause = clause.nonEmpty && clause.forall(_._2.isImplicit)
+      clause.toList.map { case (name, parameter) =>
+        name -> runSafe(resolveParameter(scopes, recursive, breadcrumb, implicitClause)(parameter))
+      }
     }.toMap
 
   /** Apply resolved arguments to a callable [[Method]] step (constructor or `apply`) and build the result. Implicit
@@ -559,17 +570,24 @@ private[di] trait WiringMacrosImpl
                       WiringGraph.RawNode(key, displayOf(t), NodeKind.Provided("factory"), Storage.Val, depKeys)
                     valNode[T](built)
                   case None =>
-                    providerCallable[T] match {
-                      case Some(method) =>
-                        val (built, depKeys) = buildViaMethod(t, method, breadcrumb)
-                        graphNodes(key) =
-                          WiringGraph.RawNode(key, displayOf(t), NodeKind.Constructed, Storage.Val, depKeys)
-                        valNode[T](built)
-                      case None =>
-                        Environment.reportErrorAndAbort(
-                          s"cannot find a provided dependency, public constructor or public apply method for: ${Type
-                              .prettyPrint[T]}; ${wiringPath(breadcrumb :+ t)}"
-                        )
+                    val classProvider = findClassProvider(t, rawDeps)
+                    classProvider.foreach { case (_, i) => used += i }
+                    classProvider match {
+                      // `classOf[Impl]`: a `T` is built as an `Impl` (wired like any other type, shared once)
+                      case Some((impl, _)) if !(impl.Underlying =:= Type[T]) => expand(impl, breadcrumb :+ t)
+                      case _                                                 =>
+                        providerCallable[T] match {
+                          case Some(method) =>
+                            val (built, depKeys) = buildViaMethod(t, method, breadcrumb)
+                            graphNodes(key) =
+                              WiringGraph.RawNode(key, displayOf(t), NodeKind.Constructed, Storage.Val, depKeys)
+                            valNode[T](built)
+                          case None =>
+                            Environment.reportErrorAndAbort(
+                              s"cannot find a provided dependency, public constructor or public apply method for: ${Type
+                                  .prettyPrint[T]}; ${wiringPath(breadcrumb :+ t)}"
+                            )
+                        }
                     }
                 }
             }
@@ -894,10 +912,38 @@ private[di] trait WiringMacrosImpl
     Type.functionComponents[D].orElse(Type.contextFunctionComponents[D]).map(_._2)
   }
 
+  /** macwire's `autowire[A](classOf[Impl])`: the class `Impl` (a subtype of `t`) is to be constructed wherever a `t` is
+    * needed.
+    */
+  private def findClassProvider(t: ??, rawDeps: List[Expr_??]): Option[(??, Int)] = {
+    import t.Underlying as T
+    rawDeps.zipWithIndex.iterator
+      .flatMap { case (dep, i) =>
+        classProvided(dep)
+          .filter { impl =>
+            import impl.Underlying as I
+            Type[I] <:< Type[T]
+          }
+          .map(impl => (impl, i))
+      }
+      .nextOption()
+  }
+
+  /** `Some(Impl)` for a `classOf[Impl]` dependency (a `java.lang.Class[Impl]`). */
+  private def classProvided(dep: Expr_??): Option[??] = {
+    import dep.Underlying as D
+    Type[D] match {
+      case ClassCtor(impl) => Some(impl)
+      case _               => None
+    }
+  }
+
+  private lazy val ClassCtor = Type.Ctor1.of[java.lang.Class]
+
   private def findInstanceProvider(t: ??, rawDeps: List[Expr_??]): Option[(Expr_??, Int)] = {
     import t.Underlying as T
     rawDeps.zipWithIndex.find { case (dep, _) =>
-      !isFunctionExpr(dep) && {
+      !isFunctionExpr(dep) && classProvided(dep).isEmpty && {
         import dep.Underlying as D
         Type[D] <:< Type[T]
       }
@@ -922,10 +968,32 @@ private[di] trait WiringMacrosImpl
     * (already applied to the companion module).
     */
   private def providerCallable[T: Type]: Option[Method] =
-    Type[T].primaryConstructor
-      .filter(_ => isInstantiable[T])
-      .filter(_.isAvailable(AtCallSite))
-      .orElse(companionAppliedMethod[T])
+    wiringConstructor[T].orElse(companionAppliedMethod[T])
+
+  /** The constructor `wire`/`autowire` call, as in macwire: the public constructor annotated with
+    * `@javax.inject.Inject` / `@jakarta.inject.Inject` if there is one (it may be a secondary constructor), otherwise
+    * the public primary constructor. Two annotated constructors are an error.
+    */
+  private def wiringConstructor[T: Type]: Option[Method] =
+    if (!isInstantiable[T]) None
+    else
+      Type[T].constructors.filter(_.isAvailable(AtCallSite)).filter(isInjectAnnotated) match {
+        case single :: Nil => Some(single)
+        case Nil           => Type[T].primaryConstructor.filter(_.isAvailable(AtCallSite))
+        case _             =>
+          Environment.reportErrorAndAbort(
+            s"Ambiguous constructors annotated with @javax.inject.Inject or @jakarta.inject.Inject for type [${Type
+                .prettyPrint[T]}]"
+          )
+      }
+
+  /** Recognized by name: neither `javax.inject` nor `jakarta.inject` is a dependency of kindlings-di. */
+  private val InjectAnnotations: Set[String] = Set("javax.inject.Inject", "jakarta.inject.Inject")
+
+  private def isInjectAnnotated(constructor: Method): Boolean = constructor.annotations.exists { annotation =>
+    import annotation.Underlying as Ann
+    InjectAnnotations.contains(Type.fqcn[Ann])
+  }
 
   /** A type can be built via its primary constructor only when it is concrete — not a `trait` and not `abstract`
     * (mirroring macwire, which refuses to instantiate abstract types and reports them as un-constructible).

@@ -379,7 +379,12 @@ lazy val di = projectMatrix
   .settings(dependencies *)
   .settings(publishSettings *)
   .settings(
-    libraryDependencies += "com.softwaremill.common" %% "tagging" % versions.tagging
+    libraryDependencies += "com.softwaremill.common" %% "tagging" % versions.tagging,
+    // macwire's @javax.inject.Inject test cases (a JVM-only artifact)
+    libraryDependencies ++= {
+      if (virtualAxes.value.contains(VirtualAxis.jvm)) Seq("javax.inject" % "javax.inject" % "1" % Test)
+      else Nil
+    }
   )
 
 lazy val diCats = projectMatrix

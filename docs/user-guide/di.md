@@ -57,9 +57,13 @@ class UserModule {
 
 `wire` builds an `A` by, in order:
 
-1. resolving each parameter of `A`'s **public primary constructor** from the enclosing scope;
+1. resolving each parameter of `A`'s **public primary constructor** from the enclosing scope — or of the public
+   constructor annotated with `@javax.inject.Inject` / `@jakarta.inject.Inject`, if there is one (also a secondary
+   constructor; two annotated constructors are an error), as in macwire;
 2. if the primary constructor is inaccessible, falling back to a **single matching companion `apply`**;
-3. resolving **implicit parameters** through normal implicit search rather than from the scope.
+3. resolving **implicit parameters** (an `implicit`/`using` parameter clause) through normal implicit search rather
+   than from the scope. A parameter merely flagged `implicit` in an ordinary clause (`class S(val a: A, implicit val
+   b: B)`) is an implicit member, wired from the scope like the others.
 
 Candidates are gathered from:
 
@@ -164,6 +168,9 @@ val finder: UserFinder = DI.autowire[UserFinder](db, sf)
 val finder2 = DI.autowire[UserFinder](db, sf, (d: DatabaseAccess, s: SecurityFilter) => new UserFinder(d, s))
 ```
 
+A `classOf[Impl]` dependency tells `autowire` to construct `Impl` wherever one of its supertypes is needed
+(`DI.autowire[B](classOf[AImpl])` with `class B(a: A)` and `class AImpl extends A`), as in macwire.
+
 A dependency is a **factory** when its static type is a function type itself — `(A, B) => C`, also through a type
 alias — or, on Scala 3, a context function (`(A, B) ?=> C`, whose `using` parameters are wired from the graph like
 ordinary ones). Pass a context function as a literal: a reference to a `val f: A ?=> C` is applied by the compiler
@@ -178,7 +185,8 @@ before the macro sees it. A value whose class merely *extends* a function type (
 
 ### `autowireMembersOf` — a module's members as dependencies
 
-`DI.autowireMembersOf(instance)`, passed as an argument of `autowire`, adds every public, parameterless member (`val`,
+`DI.autowireMembersOf(instance)` (or the bare `autowireMembersOf(instance)` with `import hearth.kindlings.di.*`, the
+macwire spelling), passed as an argument of `autowire`, adds every public, parameterless member (`val`,
 `lazy val`, no-arg `def`) of `instance` as a dependency, each matched by its declared type (macwire's
 `autowireMembersOf`). A module usually has more members than one graph needs, so its unused members are not errors;
 only a module none of whose members is used is reported, as `unused dependencies: DI.autowireMembersOf(module)`.
@@ -371,3 +379,20 @@ To also see the full generation log (the resolution logic **and** the generated 
   the call site are discovered on Scala 2 only.
 - Only the **immediately**-enclosing class exposes a usable `this`; members of *outer* enclosing classes are not
   reachable (enclosing **objects** always are, since they have a stable path).
+- **Scala 2: annotate the members holding a `wire`.** On Scala 2.13 `val c = wire[C]` (or `def make(b: B) = wire[D]`)
+  without a type fails with `recursive value c needs type`: write `val c: C = wire[C]`. macwire's examples leave the
+  type out; Kindlings reads the enclosing scope through Hearth, which forces those types on Scala 2.
+- **Not candidates (macwire: candidates):** members brought in by an `import`, constructor parameters of the enclosing
+  class that are not `val`s, values bound by a pattern, local `val`s of a nested block (`if` branches), and on Scala 3
+  any local `val`.
+- **Inherited members** are in the same scope as the members declared in the class itself: a declared and an inherited
+  value of the same type are an ambiguity (macwire prefers the declared one). For `wireList`, declared members come
+  before inherited ones (macwire: inherited first).
+- **Error wording** differs in places (same information), e.g. `unused dependencies: C()` (macwire: `C.apply()`),
+  `No public primary constructor found for [T]` + `Companion object for [T] has no apply methods ...` (macwire:
+  `Cannot find a public constructor ... for [T]`).
+- On Scala 2, `wireWith` of a method with a by-name parameter eta-expanded with `_` (`wireWith(Component.create _)`) is
+  not supported.
+
+macwire's own test cases (2.6.7) run against Kindlings in `di/src/test/scala*/hearth/kindlings/di/upstream/`; the
+cases for the differences above assert the compilation error (or the different result), so a fix shows up there.
