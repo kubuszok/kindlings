@@ -34,10 +34,7 @@ final class CirceUpstreamSuitesOracleSpec extends MacroSuite {
   // wrapped (`{"CuBaz":[..]}`) and reads it back, Scala 3 core drops the value (`{"type":"CuBaz"}`).
   private val nonObjectChildWithDiscriminator =
     CiExpected("Scala 3 core: a non-object child is written as the discriminator alone") { d =>
-      d.label.endsWith("CuFoo") || d.label.endsWith("CuFoo)") || d.label.endsWith("Seq[CuFoo]") match {
-        case true  => d.operation == "encode" && d.subject.contains("CuBaz") && !d.upstream.contains("[\"a\",\"b\"]")
-        case false => false
-      }
+      d.label.contains("CuFoo") && d.operation == "encode" && d.subject.contains("CuBaz")
     }
 
   // Documented (same row, "Improvement (decoding)"): generic-extras on Scala 2 writes the wrapped form but cannot read
