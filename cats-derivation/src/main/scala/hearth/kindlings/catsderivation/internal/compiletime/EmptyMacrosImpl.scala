@@ -76,9 +76,12 @@ trait EmptyMacrosImpl
   final case class EmptyCtx[A](
       tpe: Type[A],
       cache: MLocal[ValDefsCache],
-      derivedType: Option[??]
+      derivedType: Option[??],
+      enclosing: Set[String] = Set.empty
   ) {
-    def nestType[B: Type]: EmptyCtx[B] = EmptyCtx(Type[B], cache, derivedType)
+
+    /** The context of a part of `A` (a field or a subtype); `A` is recorded as being derived. */
+    def nestType[B: Type]: EmptyCtx[B] = EmptyCtx(Type[B], cache, derivedType, enclosing + tpe.plainPrint)
   }
   object EmptyCtx {
     def from[A: Type](derivedType: Option[??]): EmptyCtx[A] =

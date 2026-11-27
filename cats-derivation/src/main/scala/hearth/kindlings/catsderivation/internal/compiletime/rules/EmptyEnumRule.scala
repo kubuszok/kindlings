@@ -37,18 +37,24 @@ trait EmptyEnumRuleImpl {
           if (withImplicit.nonEmpty) selectSingle[A](withImplicit.map(MIO.pure(_)))
           else
             selectSingle[A](
-              children.filter(child => formsEmpty(child.Underlying.as_??, Set.empty, 0)).map { (child: ??<:[A]) =>
-                implicit val ct: Type[child.Underlying] = child.Underlying
-                SingletonValue.unapply(child.Underlying) match {
-                  case Some(sv) =>
-                    val singletonExpr = sv.singletonExpr
-                    MIO.pure(Expr.quote(Expr.splice(singletonExpr).asInstanceOf[A]))
-                  case None =>
-                    deriveEmptyRecursively[child.Underlying](using ectx.nestType[child.Underlying]).map { childEmpty =>
-                      Expr.quote(Expr.splice(childEmpty).asInstanceOf[A])
-                    }
+              children
+                .filter { child =>
+                  // A subtype whose empty value would need the empty value of a type being derived (e.g. `Some[Recursive]`
+                  // in `Recursive(i: Int, is: Option[Recursive])`) does not form one: it would be infinite. Like kittens.
+                  formsEmpty(child.Underlying.as_??, ectx.enclosing + Type[A].plainPrint, 0)
                 }
-              }
+                .map { (child: ??<:[A]) =>
+                  implicit val ct: Type[child.Underlying] = child.Underlying
+                  SingletonValue.unapply(child.Underlying) match {
+                    case Some(sv) =>
+                      val singletonExpr = sv.singletonExpr
+                      MIO.pure(Expr.quote(Expr.splice(singletonExpr).asInstanceOf[A]))
+                    case None =>
+                      deriveEmptyRecursively[child.Underlying](using ectx.nestType[child.Underlying]).map { childEmpty =>
+                        Expr.quote(Expr.splice(childEmpty).asInstanceOf[A])
+                      }
+                  }
+                }
             )
         case Left(reason) =>
           MIO.pure(Rule.yielded(reason.toString))

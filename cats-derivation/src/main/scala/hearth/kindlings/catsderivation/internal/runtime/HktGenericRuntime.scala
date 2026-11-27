@@ -41,25 +41,47 @@ object HktGenericRuntime {
 
   def recursive(size: Int, build: Registry => Any): Any = build(new Registry(size))
 
+  /** `array(index) = value; array`: generated code fills the arrays of field values with chained calls (no `List`). */
+  def arraySet(array: Array[Any], index: Int, value: Any): Array[Any] = { array(index) = value; array }
+
+  /** The field values of a case class value: the value itself when it is a `Product` of the expected arity (no array
+    * allocated - case classes, case objects, tuples and enum cases are), otherwise the array `values` builds.
+    */
+  def elementsOf(fa: Any, arity: Int, values: Any => Array[Any]): Product = fa match {
+    case p: Product if p.productArity == arity => p
+    case _                                     => new ArrayElements(values(fa))
+  }
+
+  final class ArrayElements(array: Array[Any]) extends Product {
+    def productArity: Int = array.length
+    def productElement(n: Int): Any = array(n)
+    def canEqual(that: Any): Boolean = false
+  }
+
   /** Field accessors and constructor of a case class (erased), plus its field instances (evaluated on first use). */
   final class Fields(val values: Any => Array[Any], val construct: Array[Any] => Any, fieldInstances: Any => Array[Any])
       extends Serializable {
     lazy val instances: Array[Any] = fieldInstances(null)
 
+    def elements(fa: Any): Product = elementsOf(fa, instances.length, values)
+
+    /** Which fields are the type parameter itself (cats' `Id` instance): handled in place, without the instance. */
+    lazy val isId: Array[Boolean] = instances.map(_.asInstanceOf[AnyRef] eq cats.catsInstancesForId)
+
     def map(fa: Any)(f: (Any, Int) => Any): Any = {
-      val in = values(fa)
-      val out = new Array[Any](in.length)
+      val in = elements(fa)
+      val out = new Array[Any](in.productArity)
       var i = 0
-      while (i < in.length) { out(i) = f(in(i), i); i += 1 }
+      while (i < out.length) { out(i) = f(in.productElement(i), i); i += 1 }
       construct(out)
     }
 
     def zip(x: Any, y: Any)(f: (Any, Any, Int) => Any): Any = {
-      val xs = values(x)
-      val ys = values(y)
-      val out = new Array[Any](xs.length)
+      val xs = elements(x)
+      val ys = elements(y)
+      val out = new Array[Any](xs.productArity)
       var i = 0
-      while (i < xs.length) { out(i) = f(xs(i), ys(i), i); i += 1 }
+      while (i < out.length) { out(i) = f(xs.productElement(i), ys.productElement(i), i); i += 1 }
       construct(out)
     }
 
@@ -156,8 +178,12 @@ object HktGenericRuntime {
   def productFunctor(values: Any => Array[Any], construct: Array[Any] => Any, instances: Any => Array[Any]): Any =
     new Functor[AnyF] {
       private val fields = new Fields(values, construct, instances)
-      def map[A, B](fa: Any)(f: A => B): Any =
-        fields.map(fa)((v, i) => fields.instances(i).asInstanceOf[Functor[AnyF]].map[A, B](v)(f))
+      def map[A, B](fa: Any)(f: A => B): Any = {
+        val ids = fields.isId
+        fields.map(fa) { (v, i) =>
+          if (ids(i)) f(v.asInstanceOf[A]) else fields.instances(i).asInstanceOf[Functor[AnyF]].map[A, B](v)(f)
+        }
+      }
     }
 
   def productContravariant(values: Any => Array[Any], construct: Array[Any] => Any, instances: Any => Array[Any]): Any =
@@ -179,17 +205,24 @@ object HktGenericRuntime {
     protected def fields: Fields
     private def inst(i: Int): Foldable[AnyF] = fields.instances(i).asInstanceOf[Foldable[AnyF]]
     def foldLeft[A, B](fa: Any, b: B)(f: (B, A) => B): B = {
-      val values = fields.values(fa)
+      val values = fields.elements(fa)
+      val ids = fields.isId
+      val n = values.productArity
       var acc = b
       var i = 0
-      while (i < values.length) { acc = inst(i).foldLeft(values(i), acc)(f); i += 1 }
+      while (i < n) {
+        val v = values.productElement(i)
+        acc = if (ids(i)) f(acc, v.asInstanceOf[A]) else inst(i).foldLeft(v, acc)(f)
+        i += 1
+      }
       acc
     }
     def foldRight[A, B](fa: Any, lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = {
-      val values = fields.values(fa)
+      val values = fields.elements(fa)
+      val n = values.productArity
       def loop(i: Int): Eval[B] =
-        if (i >= values.length) lb
-        else Eval.defer(inst(i).foldRight(values(i), Eval.defer(loop(i + 1)))(f))
+        if (i >= n) lb
+        else Eval.defer(inst(i).foldRight(values.productElement(i), Eval.defer(loop(i + 1)))(f))
       loop(0)
     }
   }
@@ -204,17 +237,24 @@ object HktGenericRuntime {
       protected val fields: Fields = new Fields(values, construct, instances)
       private def inst(i: Int): Traverse[AnyF] = fields.instances(i).asInstanceOf[Traverse[AnyF]]
 
-      // Like kittens' product: field by field, left to right, combined with `ap`.
+      // Like kittens' product: field by field, left to right (effects collected in reverse, no intermediate lambdas).
       def traverse[G[_], A, B](fa: Any)(f: A => G[B])(implicit G: Applicative[G]): G[Any] = {
-        val values = fields.values(fa)
+        val values = fields.elements(fa)
+        val n = values.productArity
         var acc: G[List[Any]] = G.pure(Nil)
         var i = 0
-        while (i < values.length) {
-          val field: G[Any] = inst(i).traverse[G, A, B](values(i))(f)
-          acc = G.ap(G.map(acc)(done => (value: Any) => value :: done))(field)
+        while (i < n) {
+          val field: G[Any] = inst(i).traverse[G, A, B](values.productElement(i))(f)
+          acc = G.map2(acc, field)((done, value) => value :: done)
           i += 1
         }
-        G.map(acc)(done => fields.construct(done.reverse.toArray))
+        G.map(acc) { done =>
+          val out = new Array[Any](n)
+          var rest = done
+          var j = n - 1
+          while (j >= 0) { out(j) = rest.head; rest = rest.tail; j -= 1 }
+          fields.construct(out)
+        }
       }
 
       override def map[A, B](fa: Any)(f: A => B): Any =
