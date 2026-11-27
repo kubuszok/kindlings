@@ -57,6 +57,26 @@ final private[jsoniterderivation] class CodecMacros(q: Quotes)
     }
   }
 
+  override protected def enumerationStableValuesOf[A: Type]: List[(String, Expr[A])] = {
+    import q.reflect.*
+    // as jsoniter-scala: public, non-lazy, immutable fields of the enumeration object of type `A`
+    val tpe = TypeRepr.of[A]
+    enumerationObjectOf[A].toList.flatMap { obj =>
+      val term = obj.asTerm
+      val eTpe = term.tpe
+      val eSym = eTpe.termSymbol
+      if !eSym.exists || !eSym.moduleClass.exists then Nil
+      else
+        eSym.moduleClass.declaredFields.flatMap { f =>
+          val flags = f.flags
+          if eTpe.memberType(f) <:< tpe && !flags.is(Flags.Lazy) && !flags.is(Flags.Mutable) &&
+          !flags.is(Flags.Private) && !flags.is(Flags.Protected) && f.privateWithin.isEmpty
+          then List(f.name -> Select(term, f).asExprOf[A])
+          else Nil
+        }
+    }
+  }
+
   override protected def constructGenericTuple[A: Type](elements: List[Expr_??]): Option[Expr[A]] = {
     val boxed = elements.map { e =>
       import e.{Underlying as E, value as v}

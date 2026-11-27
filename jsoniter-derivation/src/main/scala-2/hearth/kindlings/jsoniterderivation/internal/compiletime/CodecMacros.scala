@@ -33,6 +33,24 @@ final private[jsoniterderivation] class CodecMacros(val c: blackbox.Context)
     }
   }
 
+  override protected def enumerationStableValuesOf[A: Type]: List[(String, Expr[A])] = {
+    import c.universe.*
+    // as jsoniter-scala: public, stable, non-lazy getters of the enumeration object returning `A`
+    val tpe = Type[A].tpe.dealias
+    enumerationObjectOf[A].toList.flatMap { obj =>
+      val module = obj.tree.symbol
+      if (module == null || module == NoSymbol) Nil
+      else
+        module.typeSignature.decls.toList.flatMap {
+          case t: TermSymbol
+              if t.isMethod && t.asMethod.isGetter && t.asMethod.returnType <:< tpe && !t.isLazy && t.isStable &&
+                t.isPublic =>
+            List(t.name.decodedName.toString -> c.Expr[A](q"${obj.tree}.${t.name}"))
+          case _ => Nil
+        }
+    }
+  }
+
   /** A config bound by [[withConfigBound]] is evaluated from its original expression. (`semiEval` refuses `var`s and
     * members of the module being compiled itself.)
     */

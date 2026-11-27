@@ -10,11 +10,87 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonWriter}
   * may be created while the enumeration object is still being initialized). Lookups go through immutable snapshots
   * (names by id for writing, values by name hash and by id for reading) which are rebuilt when a value is missing; a
   * JSON name / id which is still missing after that is an illegal enum value.
+  *
+  * As in jsoniter-scala, the public non-lazy `val`s of the enumeration known at compile time (`stableValues`, with the
+  * names of their `val`s in `stableNames`) are written by generated code with constant names: [[stableIndex]] gives the
+  * position of a value among them (from 1; 0 for any other value, or a value whose name is not the name of its `val`),
+  * and the generated code writes the name of that position.
   */
-final class JsoniterScalaEnumeration[E](enumeration: => Enumeration) {
+final class JsoniterScalaEnumeration[E](
+    enumeration: => Enumeration,
+    stableValues: => Array[AnyRef],
+    stableNames: Array[String]
+) {
   import JsoniterScalaEnumeration.*
 
+  /** No stable values. */
+  def this(enumeration: => Enumeration) = this(enumeration, new Array[AnyRef](0), new Array[String](0))
+
   private lazy val enumObject: Enumeration = enumeration
+
+  // Positions (from 1) of the stable values, indexed by their ids. Not volatile (as `snapshot`): an array read before
+  // its elements are visible gives 0, which writes the name looked up at runtime.
+  private var stableIndexes: Array[Int] = null
+  // Whether the stable value at each position (from 0) has the name of its `val`.
+  private var stableFlags: Array[Boolean] = null
+
+  /** The position (from 1) of `x` among the stable values, or 0. */
+  def stableIndex(x: E): Int = {
+    var is = stableIndexes
+    if (is eq null) is = initStableIndexes()
+    val id = x.asInstanceOf[Enumeration#Value].id
+    if ((is ne null) && id >= 0 && id < is.length) is(id) else 0
+  }
+
+  /** Whether the stable value at position `i` (from 0) has the name of its `val`, so that the generated code can read
+    * it by that name (as jsoniter-scala, which compares the name read with the names of the stable values first).
+    */
+  def isStableName(i: Int): Boolean = {
+    var fs = stableFlags
+    if (fs eq null) {
+      val _ = initStableIndexes()
+      fs = stableFlags
+    }
+    (fs ne null) && fs(i)
+  }
+
+  /** The value whose name is the `l` characters read into `in`'s buffer, looked up at runtime (an illegal enum value
+    * error when there is none).
+    */
+  def readName(in: JsonReader, l: Int): E = byName(in, l)
+
+  // As in jsoniter-scala: only once all stable values are initialized (a codec can be used while the enumeration
+  // object is being initialized); a value whose name is not the name of its `val` (`val A = Value("a")`) gets no
+  // position, nor do any values with ids much larger than their number.
+  private def initStableIndexes(): Array[Int] = {
+    val vs = stableValues
+    var i = 0
+    while (i < vs.length && (vs(i) ne null)) i += 1
+    if (i < vs.length) null
+    else {
+      var maxId = -1
+      i = 0
+      while (i < vs.length) {
+        val id = vs(i).asInstanceOf[Enumeration#Value].id
+        if (id > maxId) maxId = id
+        i += 1
+      }
+      if (maxId > (vs.length << 2) + 64) maxId = -1
+      val is = new Array[Int](maxId + 1)
+      val fs = new Array[Boolean](vs.length)
+      i = 0
+      while (i < vs.length) {
+        val v = vs(i)
+        val id = v.asInstanceOf[Enumeration#Value].id
+        fs(i) = v.toString == stableNames(i)
+        if (id >= 0 && id <= maxId && fs(i)) is(id) = i + 1
+        i += 1
+      }
+      stableFlags = fs
+      stableIndexes = is
+      is
+    }
+  }
 
   // Not volatile: a `Snapshot` is immutable (final fields), so a racy read sees either the previous one or the new
   // one, and a miss rebuilds it.
