@@ -6,7 +6,7 @@ package hearth.kindlings.optics.upstream
 @scala.annotation.nowarn // upstream's tests discard values and keep unused definitions
 class SecondParamListTest extends QuicklensSuite {
   it should "modify an object with second implicit param list" in {
-    import hearth.kindlings.optics._
+    import hearth.kindlings.optics.*
 
     case class State(inside: Boolean)(implicit d: Double)
 

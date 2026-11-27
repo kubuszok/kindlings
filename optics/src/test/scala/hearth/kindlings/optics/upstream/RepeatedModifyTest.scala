@@ -1,11 +1,11 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/RepeatedModifyTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
 class RepeatedModifyTest extends QuicklensSuite {
-  import RepeatedModifyTest._
+  import RepeatedModifyTest.*
 
   it should "properly handle repeated modify invocations for different fields" in {
     val c = C(B(1, 1, 1, 1, 1))

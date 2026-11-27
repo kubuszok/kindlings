@@ -1,11 +1,10 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala-3/com/softwaremill/quicklens/test/ModifyEnumTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
 import TestData.duplicate
-
 
 object EnumTestData {
   enum P3(val a: String) {
@@ -18,7 +17,7 @@ object EnumTestData {
 }
 
 class ModifyEnumTest extends QuicklensSuite {
-  import EnumTestData._
+  import EnumTestData.*
 
   it should "modify a field in an enum case" in {
     modify(p3)(_.a).using(duplicate) should be(p3dup)

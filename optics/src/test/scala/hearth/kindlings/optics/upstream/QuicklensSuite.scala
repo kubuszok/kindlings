@@ -5,8 +5,8 @@ import scala.reflect.ClassTag
 /** Base of the suites in this package: quicklens' own test suite (1.9.15), run against Kindlings' optics.
   *
   * The suites are ported verbatim: the import (`hearth.kindlings.optics._` instead of `com.softwaremill.quicklens._`)
-  * and the test framework are the only differences. This trait provides the few ScalaTest spellings they use
-  * (`it should "..." in { ... }`, `a should be(b)`, `a shouldBe b`, `an[E] should be thrownBy { ... }`, ...) on top of
+  * and the test framework are the only differences. This trait provides the few ScalaTest spellings they use (`it
+  * should "..." in { ... }`, `a should be(b)`, `a shouldBe b`, `an[E] should be thrownBy { ... }`, ...) on top of
   * munit, so that the bodies of the tests stay as upstream wrote them and can be diffed against a newer quicklens.
   *
   * Not ported (see `docs/user-guide/feature-parity.md`, optics): the suites for user-defined `QuicklensFunctor`s
@@ -32,9 +32,9 @@ trait QuicklensSuite extends hearth.MacroSuite {
 
   // ScalaTest's default equality compares arrays structurally, also with other sequences.
   private def normalized(value: Any): Any = value match {
-    case array: Array[?]           => array.toList.map(normalized)
+    case array: Array[?]              => array.toList.map(normalized)
     case seq: scala.collection.Seq[?] => seq.toList.map(normalized)
-    case other                     => other
+    case other                        => other
   }
   private def assertSame(actual: Any, expected: Any)(implicit loc: munit.Location): Unit =
     assert(normalized(actual) == normalized(expected), s"$actual was not equal to $expected")
@@ -42,9 +42,11 @@ trait QuicklensSuite extends hearth.MacroSuite {
   implicit final protected class ShouldOps(private val actual: Any) {
     def should(matcher: BeMatcher)(implicit loc: munit.Location): Unit = assertSame(actual, matcher.expected)
     def should(matcher: ContainMatcher)(implicit loc: munit.Location): Unit = actual match {
-      case map: scala.collection.Map[?, ?]   => assert(map.toList.contains(matcher.element), s"$map did not contain ${matcher.element}")
-      case it: scala.collection.Iterable[?] => assert(it.toList.contains(matcher.element), s"$it did not contain ${matcher.element}")
-      case other                            => fail(s"$other is not a collection")
+      case map: scala.collection.Map[?, ?] =>
+        assert(map.toList.contains(matcher.element), s"$map did not contain ${matcher.element}")
+      case it: scala.collection.Iterable[?] =>
+        assert(it.toList.contains(matcher.element), s"$it did not contain ${matcher.element}")
+      case other => fail(s"$other is not a collection")
     }
     def shouldBe(expected: Any)(implicit loc: munit.Location): Unit = assertSame(actual, expected)
     def shouldEqual(expected: Any)(implicit loc: munit.Location): Unit = assertSame(actual, expected)

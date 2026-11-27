@@ -1,6 +1,6 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala-3/com/softwaremill/quicklens/test/ExplicitCopyTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
@@ -84,7 +84,7 @@ class ExplicitCopyTest extends QuicklensSuite {
     accessed shouldEqual 0
   }
 
-  it should "not compile when modifying a field which is not present as a copy parameter" in {
+  it should "not compile when modifying a field which is not present as a copy parameter" in
     compileErrors("""
     case class Content(x: String)
 
@@ -95,7 +95,6 @@ class ExplicitCopyTest extends QuicklensSuite {
     val a = new A(Content("A"))
     val am = a.modify(_.c).setTo(Content("B"))
     """).arePresent()
-  }
 
   // TODO: Would be nice to be able to handle this case. Based on the types, it
   // is obvious, that the explicit copy should be picked, but I'm not sure if we

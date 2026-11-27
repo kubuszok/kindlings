@@ -1,16 +1,15 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala-3/com/softwaremill/quicklens/test/ModifyAllOptimizedTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
 @scala.annotation.nowarn // upstream's tests discard values and keep unused definitions
 class ModifyAllOptimizedTest extends QuicklensSuite {
-  import ModifyAllOptimizedTest._
+  import ModifyAllOptimizedTest.*
 
-  override def beforeEach(context: BeforeEach): Unit = {
+  override def beforeEach(context: BeforeEach): Unit =
     Cons.copyCount = 0
-  }
 
   it should "Have a correct number of copy calls with single focus" in {
     val lst: Cons = Cons.fromList(List(1, 2, 3, 4, 5, 6)).get
@@ -137,7 +136,7 @@ object ModifyAllOptimizedTest {
   object Cons {
     var copyCount = 0
     def fromList(list: List[Int]): Option[Cons] = list match {
-      case Nil => None
+      case Nil          => None
       case head :: tail =>
         Some(Cons(head, fromList(tail)))
     }

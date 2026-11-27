@@ -1,10 +1,10 @@
 package hearth.kindlings.optics.upstream
 
-import hearth.kindlings.optics._
+import hearth.kindlings.optics.*
 
 // Ported from quicklens 1.9.15 (Apache License 2.0), scala/com/softwaremill/quicklens/ModifyMapAtTest.scala.
 // Only the imports and the test framework differ, see [[QuicklensSuite]].
-import TestData._
+import TestData.*
 
 @scala.annotation.nowarn // `???` as a default is dead code for Scala 2
 class ModifyMapAtTest extends QuicklensSuite {
@@ -56,9 +56,8 @@ class ModifyMapAtTest extends QuicklensSuite {
   }
 
   it should "throw an exception if there's no such element" in {
-    an[NoSuchElementException] should be thrownBy {
+    an[NoSuchElementException] should be thrownBy
       modify(m1)(_.at("K0").a5.name).using(duplicate)
-    }
   }
 
   it should "modify a map using at with a derived class" in {

@@ -1147,6 +1147,122 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       at: PathStep.At,
       rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import PathStep.AtKind
+    implicit val seqOfItem: Type[scala.collection.Seq[Item]] = Type.of[scala.collection.Seq[Item]]
+    implicit val arrayOfItem: Type[Array[Item]] = Type.of[Array[Item]]
+    def idxExpr: Expr[Int] = at.idx
+      .getOrElse(abort("`modify`: `.at`/`.index`/`.atOrElse` over a Seq needs an index"))
+      .value
+      .asInstanceOf[Expr[Int]]
+    def tx(itemExpr: Expr[Item]): Expr[Item] = transformElementExpr[S, Item](itemExpr, rest, None)(transformLeaf)
+    def default: Expr[Item] = defaultAs[Item](at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")))
+    // Scala's own sequences and arrays are updated in place of a full rebuild, exactly as quicklens does it
+    // (`seq.updated(i, f(seq(i)))`): `Vector`/`Map` updates stay O(log n) and a missing index throws what `seq(i)`
+    // throws. Other containers (cats' `NonEmptyList`, java collections, ...) only promise iteration and a factory.
+    if (Type.isSubtypeOf[S, scala.collection.Seq[Item]])
+      at.kind match {
+        case AtKind.At =>
+          Expr.quote {
+            val seq = Expr.splice(sExpr).asInstanceOf[scala.collection.Seq[Item]]
+            val index = Expr.splice(idxExpr)
+            Expr.splice {
+              bindFresh[Item, S](Expr.quote(seq(index)), "item") { item =>
+                Expr.quote(seq.updated(index, Expr.splice(tx(item))).asInstanceOf[S])
+              }
+            }
+          }
+        case AtKind.Index =>
+          Expr.quote {
+            val seq = Expr.splice(sExpr).asInstanceOf[scala.collection.Seq[Item]]
+            val index = Expr.splice(idxExpr)
+            if (seq.isDefinedAt(index)) {
+              Expr.splice {
+                bindFresh[Item, S](Expr.quote(seq(index)), "item") { item =>
+                  Expr.quote(seq.updated(index, Expr.splice(tx(item))).asInstanceOf[S])
+                }
+              }
+            } else seq.asInstanceOf[S]
+          }
+        case AtKind.AtOrElse =>
+          Expr.quote {
+            val seq = Expr.splice(sExpr).asInstanceOf[scala.collection.Seq[Item]]
+            val index = Expr.splice(idxExpr)
+            if (seq.isDefinedAt(index)) {
+              Expr.splice {
+                bindFresh[Item, S](Expr.quote(seq(index)), "item") { item =>
+                  Expr.quote(seq.updated(index, Expr.splice(tx(item))).asInstanceOf[S])
+                }
+              }
+            } else (seq :+ Expr.splice(tx(default))).asInstanceOf[S]
+          }
+      }
+    else if (Type[S] =:= Type[Array[Item]])
+      at.kind match {
+        case AtKind.At =>
+          Expr.quote {
+            val array = Expr.splice(sExpr).asInstanceOf[Array[Item]]
+            val index = Expr.splice(idxExpr)
+            Expr.splice {
+              bindFresh[Item, S](Expr.quote(array(index)), "item") { item =>
+                Expr.quote {
+                  val copy = array.clone()
+                  copy(index) = Expr.splice(tx(item))
+                  copy.asInstanceOf[S]
+                }
+              }
+            }
+          }
+        case AtKind.Index =>
+          Expr.quote {
+            val array = Expr.splice(sExpr).asInstanceOf[Array[Item]]
+            val index = Expr.splice(idxExpr)
+            if (index >= 0 && index < array.length) {
+              Expr.splice {
+                bindFresh[Item, S](Expr.quote(array(index)), "item") { item =>
+                  Expr.quote {
+                    val copy = array.clone()
+                    copy(index) = Expr.splice(tx(item))
+                    copy.asInstanceOf[S]
+                  }
+                }
+              }
+            } else array.asInstanceOf[S]
+          }
+        // appending needs a `ClassTag`: an absent index goes through the provider's builder
+        case AtKind.AtOrElse =>
+          Expr.quote {
+            val array = Expr.splice(sExpr).asInstanceOf[Array[Item]]
+            val index = Expr.splice(idxExpr)
+            if (index >= 0 && index < array.length) {
+              Expr.splice {
+                bindFresh[Item, S](Expr.quote(array(index)), "item") { item =>
+                  Expr.quote {
+                    val copy = array.clone()
+                    copy(index) = Expr.splice(tx(item))
+                    copy.asInstanceOf[S]
+                  }
+                }
+              }
+            } else Expr.splice(buildAtSeqByRebuilding[S, Item](sExpr, isColl, at, rest)(transformLeaf))
+          }
+      }
+    else buildAtSeqByRebuilding[S, Item](sExpr, isColl, at, rest)(transformLeaf)
+  }
+
+  /** `use(value)` with `value` bound to a `val` with a fresh name. A fixed name would not do for nested steps
+    * (`_.at(2).at(1)`): on Scala 2 quotes are not hygienic, so the inner step's `val` would capture the reference to
+    * the outer one.
+    */
+  private def bindFresh[T: Type, R: Type](value: Expr[T], prefix: String)(use: Expr[T] => Expr[R]): Expr[R] =
+    ValDefs.createVal[T](value, FreshName.FromPrefix(prefix)).use(use)
+
+  /** The indexed steps over any `IsCollection`: iterate with an index counter and rebuild through the provider. */
+  private def buildAtSeqByRebuilding[S: Type, Item: Type](
+      sExpr: Expr[S],
+      isColl: IsCollectionOf[S, Item],
+      at: PathStep.At,
+      rest: PathTree
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import isColl.CtorResult
     import PathStep.AtKind
     val factoryExpr = isColl.factory
@@ -1230,6 +1346,71 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * f(default))`.
     */
   private def buildAtMap[S: Type, Pair: Type](
+      sExpr: Expr[S],
+      isMap: IsMapOf[S, Pair],
+      at: PathStep.At,
+      rest: PathTree
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
+    import isMap.{Key, Value}
+    buildAtStdMap[S, Key, Value](sExpr, at, rest)(transformLeaf)
+      .getOrElse(buildAtMapByRebuilding[S, Pair](sExpr, isMap, at, rest)(transformLeaf))
+  }
+
+  /** The keyed steps over Scala's immutable `Map`s, as quicklens does them (`map.updated(k, f(map(k)))`): no rebuild of
+    * the whole map, and a missing key throws what `map(k)` throws. `None` for any other map-like type.
+    */
+  private def buildAtStdMap[S: Type, K: Type, V: Type](sExpr: Expr[S], at: PathStep.At, rest: PathTree)(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Option[Expr[S]] = {
+    import PathStep.AtKind
+    implicit val mapType: Type[scala.collection.immutable.Map[K, V]] = Type.of[scala.collection.immutable.Map[K, V]]
+    if (!Type.isSubtypeOf[S, scala.collection.immutable.Map[K, V]]) None
+    else {
+      val keyExpr = at.idx
+        .getOrElse(abort("`modify`: `.at`/`.index`/`.atOrElse` over a Map needs a key"))
+        .value
+        .asInstanceOf[Expr[K]]
+      def tx(valueExpr: Expr[V]): Expr[V] = transformElementExpr[S, V](valueExpr, rest, None)(transformLeaf)
+      Some(at.kind match {
+        case AtKind.At =>
+          Expr.quote {
+            val map = Expr.splice(sExpr).asInstanceOf[scala.collection.immutable.Map[K, V]]
+            val key = Expr.splice(keyExpr)
+            Expr.splice {
+              bindFresh[V, S](Expr.quote(map(key)), "value") { value =>
+                Expr.quote(map.updated(key, Expr.splice(tx(value))).asInstanceOf[S])
+              }
+            }
+          }
+        case AtKind.Index =>
+          Expr.quote {
+            val map = Expr.splice(sExpr).asInstanceOf[scala.collection.immutable.Map[K, V]]
+            val key = Expr.splice(keyExpr)
+            if (map.contains(key)) {
+              Expr.splice {
+                bindFresh[V, S](Expr.quote(map(key)), "value") { value =>
+                  Expr.quote(map.updated(key, Expr.splice(tx(value))).asInstanceOf[S])
+                }
+              }
+            } else map.asInstanceOf[S]
+          }
+        case AtKind.AtOrElse =>
+          val default = defaultAs[V](at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")))
+          Expr.quote {
+            val map = Expr.splice(sExpr).asInstanceOf[scala.collection.immutable.Map[K, V]]
+            val key = Expr.splice(keyExpr)
+            Expr.splice {
+              bindFresh[V, S](Expr.quote(map.getOrElse(key, Expr.splice(default))), "value") { value =>
+                Expr.quote(map.updated(key, Expr.splice(tx(value))).asInstanceOf[S])
+              }
+            }
+          }
+      })
+    }
+  }
+
+  /** The keyed steps over any `IsMap`: iterate the entries and rebuild through the provider. */
+  private def buildAtMapByRebuilding[S: Type, Pair: Type](
       sExpr: Expr[S],
       isMap: IsMapOf[S, Pair],
       at: PathStep.At,
