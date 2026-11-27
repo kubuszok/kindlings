@@ -8,7 +8,7 @@ import hearth.std.*
 
 import hearth.kindlings.catsderivation.LogDerivation
 
-trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedBiSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -29,246 +29,253 @@ trait BitraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
 
     Log
       .namedScope(s"Deriving Bitraverse at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any, Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              implicit val IntType: Type[Int] = BitraverseTypes.Int
-              implicit val StringType: Type[String] = BitraverseTypes.String
+        // Fields nesting the type parameters (`List[B]`, `Either[A, B]`, ...) or recursive types: kittens' general rules.
+        if (!biFieldsAreDirect[F]) deriveErasedBiInstance[F, cats.Bitraverse[F]](ErasedBiTC.Bitraverse)
+        else {
+          CaseClass.parse[F[Any, Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                implicit val IntType: Type[Int] = BitraverseTypes.Int
+                implicit val StringType: Type[String] = BitraverseTypes.String
 
-              val ccIntInt = runSafe(parseCaseClassMIO[F[Int, Int]]("F[Int, Int]")(using FCtor.apply[Int, Int]))
-              val ccStringInt =
-                runSafe(parseCaseClassMIO[F[String, Int]]("F[String, Int]")(using FCtor.apply[String, Int]))
-              val ccIntString =
-                runSafe(parseCaseClassMIO[F[Int, String]]("F[Int, String]")(using FCtor.apply[Int, String]))
+                val ccIntInt = runSafe(parseCaseClassMIO[F[Int, Int]]("F[Int, Int]")(using FCtor.apply[Int, Int]))
+                val ccStringInt =
+                  runSafe(parseCaseClassMIO[F[String, Int]]("F[String, Int]")(using FCtor.apply[String, Int]))
+                val ccIntString =
+                  runSafe(parseCaseClassMIO[F[Int, String]]("F[Int, String]")(using FCtor.apply[Int, String]))
 
-              val fieldsP1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
-              val fieldsP2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
-              val fieldsP3 = ccIntString.primaryConstructor.totalParameters.flatten.toList
+                val fieldsP1 = ccIntInt.primaryConstructor.totalParameters.flatten.toList
+                val fieldsP2 = ccStringInt.primaryConstructor.totalParameters.flatten.toList
+                val fieldsP3 = ccIntString.primaryConstructor.totalParameters.flatten.toList
 
-              val leftFieldSet = scala.collection.mutable.Set.empty[String]
-              val rightFieldSet = scala.collection.mutable.Set.empty[String]
-              val covariantFieldOrder = scala.collection.mutable.ListBuffer.empty[(String, Boolean)]
+                val leftFieldSet = scala.collection.mutable.Set.empty[String]
+                val rightFieldSet = scala.collection.mutable.Set.empty[String]
+                val covariantFieldOrder = scala.collection.mutable.ListBuffer.empty[(String, Boolean)]
 
-              runSafe {
-                fieldsP1
-                  .zip(fieldsP2)
-                  .zip(fieldsP3)
-                  .traverse { case (((name, p1), (_, p2)), (_, p3)) =>
-                    val t1 = p1.tpe.Underlying
-                    val t2 = p2.tpe.Underlying
-                    val t3 = p3.tpe.Underlying
-                    val firstChanges = !(t1 =:= t2)
-                    val secondChanges = !(t1 =:= t3)
-                    if (firstChanges && !secondChanges) {
-                      leftFieldSet += name
-                      covariantFieldOrder += ((name, true))
-                      MIO.void
-                    } else if (!firstChanges && secondChanges) {
-                      rightFieldSet += name
-                      covariantFieldOrder += ((name, false))
-                      MIO.void
-                    } else if (firstChanges && secondChanges) {
-                      failDerivation[Unit](
-                        CatsDerivationError.UnsupportedFieldShape(
-                          "Bitraverse",
-                          name,
-                          "the field depends on both type parameters"
+                runSafe {
+                  fieldsP1
+                    .zip(fieldsP2)
+                    .zip(fieldsP3)
+                    .traverse { case (((name, p1), (_, p2)), (_, p3)) =>
+                      val t1 = p1.tpe.Underlying
+                      val t2 = p2.tpe.Underlying
+                      val t3 = p3.tpe.Underlying
+                      val firstChanges = !(t1 =:= t2)
+                      val secondChanges = !(t1 =:= t3)
+                      if (firstChanges && !secondChanges) {
+                        leftFieldSet += name
+                        covariantFieldOrder += ((name, true))
+                        MIO.void
+                      } else if (!firstChanges && secondChanges) {
+                        rightFieldSet += name
+                        covariantFieldOrder += ((name, false))
+                        MIO.void
+                      } else if (firstChanges && secondChanges) {
+                        failDerivation[Unit](
+                          CatsDerivationError.UnsupportedFieldShape(
+                            "Bitraverse",
+                            name,
+                            "the field depends on both type parameters"
+                          )
                         )
-                      )
-                    } else MIO.void
-                  }
-                  .void
-              }
-
-              val allCovariantFields: Set[String] = leftFieldSet.toSet ++ rightFieldSet.toSet
-              val isLeftFlagsList: List[Boolean] = covariantFieldOrder.map(_._2).toList
-
-              runSafe {
-                Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-              }
-
-              val extractDirect: Expr[Any => List[Any]] = runSafe {
-                deriveBitraverseExtract(caseClass, allCovariantFields)
-              }
-
-              val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
-                deriveBitraverseReconstruct(caseClass, allCovariantFields)
-              }
-
-              implicit val BooleanType: Type[Boolean] = BitraverseTypes.Boolean
-              implicit val ListBoolType: Type[List[Boolean]] = BitraverseTypes.ListBoolean
-              implicit val EvalAnyType: Type[cats.Eval[Any]] = BitraverseTypes.EvalAny
-              val flagsExpr: Expr[List[Boolean]] =
-                isLeftFlagsList.foldRight(Expr.quote(Nil: List[Boolean])) { (flag, acc) =>
-                  if (flag) Expr.quote(true :: Expr.splice(acc))
-                  else Expr.quote(false :: Expr.splice(acc))
+                      } else MIO.void
+                    }
+                    .void
                 }
 
-              val doBimap: (Expr[F[Any, Any]], Expr[Any => Any], Expr[Any => Any]) => Expr[F[Any, Any]] =
-                (fabExpr, fExpr, gExpr) =>
-                  runSafe {
-                    val fields = caseClass.caseFieldValuesAt(fabExpr).toList
-                    val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
-                      import fieldValue.Underlying as Field
-                      if (leftFieldSet.contains(fieldName)) {
-                        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
-                        (fieldName, Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr))).as_??)
-                      } else if (rightFieldSet.contains(fieldName)) {
-                        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
-                        (fieldName, Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr))).as_??)
-                      } else {
-                        (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
-                      }
-                    }
-                    constructInstanceFree(caseClass.primaryConstructor, "Constructor", "bimap result")(
-                      mappedFields.toMap
-                    ).map(expr => expr.value.asInstanceOf[Expr[F[Any, Any]]])
+                val allCovariantFields: Set[String] = leftFieldSet.toSet ++ rightFieldSet.toSet
+                val isLeftFlagsList: List[Boolean] = covariantFieldOrder.map(_._2).toList
+
+                runSafe {
+                  Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+                }
+
+                val extractDirect: Expr[Any => List[Any]] = runSafe {
+                  deriveBitraverseExtract(caseClass, allCovariantFields)
+                }
+
+                val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
+                  deriveBitraverseReconstruct(caseClass, allCovariantFields)
+                }
+
+                implicit val BooleanType: Type[Boolean] = BitraverseTypes.Boolean
+                implicit val ListBoolType: Type[List[Boolean]] = BitraverseTypes.ListBoolean
+                implicit val EvalAnyType: Type[cats.Eval[Any]] = BitraverseTypes.EvalAny
+                val flagsExpr: Expr[List[Boolean]] =
+                  isLeftFlagsList.foldRight(Expr.quote(Nil: List[Boolean])) { (flag, acc) =>
+                    if (flag) Expr.quote(true :: Expr.splice(acc))
+                    else Expr.quote(false :: Expr.splice(acc))
                   }
 
-              val doBifoldLeft
-                  : (Expr[F[Any, Any]], Expr[Any], Expr[(Any, Any) => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-                (fabExpr, cExpr, fExpr, gExpr) =>
-                  runSafe {
-                    val fields = caseClass.caseFieldValuesAt(fabExpr).toList
-                    var acc = cExpr
-                    fields.foreach { case (fieldName, fieldValue) =>
-                      import fieldValue.Underlying as Field
-                      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
-                      if (leftFieldSet.contains(fieldName))
-                        acc = Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
-                      else if (rightFieldSet.contains(fieldName))
-                        acc = Expr.quote(Expr.splice(gExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
-                    }
-                    MIO.pure(acc)
-                  }
-
-              val doBifoldRight: (
-                  Expr[F[Any, Any]],
-                  Expr[cats.Eval[Any]],
-                  Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]],
-                  Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]
-              ) => Expr[cats.Eval[Any]] =
-                (fabExpr, lcExpr, fExpr, gExpr) =>
-                  runSafe {
-                    val fields = caseClass.caseFieldValuesAt(fabExpr).toList
-                    val directFieldExprs: List[(String, Expr[Any])] = fields.collect {
-                      case (fieldName, fieldValue)
-                          if leftFieldSet.contains(fieldName) || rightFieldSet.contains(fieldName) =>
+                val doBimap: (Expr[F[Any, Any]], Expr[Any => Any], Expr[Any => Any]) => Expr[F[Any, Any]] =
+                  (fabExpr, fExpr, gExpr) =>
+                    runSafe {
+                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      val mappedFields: List[(String, Expr_??)] = fields.map { case (fieldName, fieldValue) =>
                         import fieldValue.Underlying as Field
-                        (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any])
-                    }
-                    val result = directFieldExprs.foldRight(lcExpr) { case ((fieldName, fieldExpr), acc) =>
-                      if (leftFieldSet.contains(fieldName))
-                        Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
-                      else
-                        Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
-                    }
-                    MIO.pure(result)
-                  }
-
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.bitraverseInstance[F](
-                  bitraverseFn = {
-                    (
-                        fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
-                        fAny: Any,
-                        gAny: Any,
-                        gApplicative: Any
-                    ) =>
-                      val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
-                      val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
-                      val g = gAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
-                      val G = gApplicative.asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
-                      val _ = anyFab
-                      val _ = f
-                      val _ = g
-                      val _ = G
-                      val extract: Any => List[Any] = Expr.splice(extractDirect)
-                      val _ = extract
-                      val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
-                      val _ = recon
-                      val flags: List[Boolean] = Expr.splice(flagsExpr)
-                      val covariantValues: List[Any] = extract(anyFab)
-                      val gList: CatsDerivationFactories.AnyF[List[Any]] =
-                        covariantValues.zip(flags).foldRight(G.pure(Nil: List[Any])) { case ((v, isLeft), gacc) =>
-                          val gv: CatsDerivationFactories.AnyF[Any] = if (isLeft) f(v) else g(v)
-                          G.map2[Any, List[Any], List[Any]](gv, gacc) { (a, acc) =>
-                            a :: acc
-                          }
+                        if (leftFieldSet.contains(fieldName)) {
+                          val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                          (fieldName, Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr))).as_??)
+                        } else if (rightFieldSet.contains(fieldName)) {
+                          val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                          (fieldName, Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr))).as_??)
+                        } else {
+                          (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].as_??)
                         }
-                      G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFab))
-                  },
-                  bimapFn = {
-                    (
-                        fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
-                        f: CatsDerivationFactories.W1 => CatsDerivationFactories.W3,
-                        g: CatsDerivationFactories.W2 => CatsDerivationFactories.W4
-                    ) =>
-                      val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
-                      val fAny: Any => Any = f.asInstanceOf[Any => Any]
-                      val gAny: Any => Any = g.asInstanceOf[Any => Any]
-                      val _ = anyFab
-                      val _ = fAny
-                      val _ = gAny
-                      Expr
-                        .splice(doBimap(Expr.quote(anyFab), Expr.quote(fAny), Expr.quote(gAny)))
-                        .asInstanceOf[F[CatsDerivationFactories.W3, CatsDerivationFactories.W4]]
-                  },
-                  bifoldLeftFn = {
-                    (
-                        fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
-                        cAny: Any,
-                        fAny: (Any, Any) => Any,
-                        gAny: (Any, Any) => Any
-                    ) =>
-                      val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
-                      val _ = anyFab
-                      val _ = cAny
-                      val _ = fAny
-                      val _ = gAny
-                      Expr
-                        .splice(doBifoldLeft(Expr.quote(anyFab), Expr.quote(cAny), Expr.quote(fAny), Expr.quote(gAny)))
-                        .asInstanceOf[Any]
-                  },
-                  bifoldRightFn = {
-                    (
-                        fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
-                        lcAny: cats.Eval[Any],
-                        fAny: (Any, cats.Eval[Any]) => cats.Eval[Any],
-                        gAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
-                    ) =>
-                      val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
-                      val _ = anyFab
-                      val _ = lcAny
-                      val _ = fAny
-                      val _ = gAny
-                      Expr
-                        .splice(
-                          doBifoldRight(Expr.quote(anyFab), Expr.quote(lcAny), Expr.quote(fAny), Expr.quote(gAny))
-                        )
-                        .asInstanceOf[cats.Eval[Any]]
-                  }
-                )
-              }
-            }
-          case Left(_) =>
-            Enum.parse[F[Any, Any]].toEither match {
-              case Left(reason2) =>
-                failDerivation(
-                  CatsDerivationError.CannotParseEnum(
-                    Type[F[Any, Any]].prettyPrint,
-                    s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
+                      }
+                      constructInstanceFree(caseClass.primaryConstructor, "Constructor", "bimap result")(
+                        mappedFields.toMap
+                      ).map(expr => expr.value.asInstanceOf[Expr[F[Any, Any]]])
+                    }
+
+                val doBifoldLeft
+                    : (Expr[F[Any, Any]], Expr[Any], Expr[(Any, Any) => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+                  (fabExpr, cExpr, fExpr, gExpr) =>
+                    runSafe {
+                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      var acc = cExpr
+                      fields.foreach { case (fieldName, fieldValue) =>
+                        import fieldValue.Underlying as Field
+                        val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                        if (leftFieldSet.contains(fieldName))
+                          acc = Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
+                        else if (rightFieldSet.contains(fieldName))
+                          acc = Expr.quote(Expr.splice(gExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
+                      }
+                      MIO.pure(acc)
+                    }
+
+                val doBifoldRight: (
+                    Expr[F[Any, Any]],
+                    Expr[cats.Eval[Any]],
+                    Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]],
+                    Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]
+                ) => Expr[cats.Eval[Any]] =
+                  (fabExpr, lcExpr, fExpr, gExpr) =>
+                    runSafe {
+                      val fields = caseClass.caseFieldValuesAt(fabExpr).toList
+                      val directFieldExprs: List[(String, Expr[Any])] = fields.collect {
+                        case (fieldName, fieldValue)
+                            if leftFieldSet.contains(fieldName) || rightFieldSet.contains(fieldName) =>
+                          import fieldValue.Underlying as Field
+                          (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any])
+                      }
+                      val result = directFieldExprs.foldRight(lcExpr) { case ((fieldName, fieldExpr), acc) =>
+                        if (leftFieldSet.contains(fieldName))
+                          Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                        else
+                          Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), Expr.splice(acc)))
+                      }
+                      MIO.pure(result)
+                    }
+
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.bitraverseInstance[F](
+                    bitraverseFn = {
+                      (
+                          fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                          fAny: Any,
+                          gAny: Any,
+                          gApplicative: Any
+                      ) =>
+                        val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+                        val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
+                        val g = gAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
+                        val G = gApplicative.asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                        val _ = anyFab
+                        val _ = f
+                        val _ = g
+                        val _ = G
+                        val extract: Any => List[Any] = Expr.splice(extractDirect)
+                        val _ = extract
+                        val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
+                        val _ = recon
+                        val flags: List[Boolean] = Expr.splice(flagsExpr)
+                        val covariantValues: List[Any] = extract(anyFab)
+                        val gList: CatsDerivationFactories.AnyF[List[Any]] =
+                          covariantValues.zip(flags).foldRight(G.pure(Nil: List[Any])) { case ((v, isLeft), gacc) =>
+                            val gv: CatsDerivationFactories.AnyF[Any] = if (isLeft) f(v) else g(v)
+                            G.map2[Any, List[Any], List[Any]](gv, gacc) { (a, acc) =>
+                              a :: acc
+                            }
+                          }
+                        G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFab))
+                    },
+                    bimapFn = {
+                      (
+                          fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                          f: CatsDerivationFactories.W1 => CatsDerivationFactories.W3,
+                          g: CatsDerivationFactories.W2 => CatsDerivationFactories.W4
+                      ) =>
+                        val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+                        val fAny: Any => Any = f.asInstanceOf[Any => Any]
+                        val gAny: Any => Any = g.asInstanceOf[Any => Any]
+                        val _ = anyFab
+                        val _ = fAny
+                        val _ = gAny
+                        Expr
+                          .splice(doBimap(Expr.quote(anyFab), Expr.quote(fAny), Expr.quote(gAny)))
+                          .asInstanceOf[F[CatsDerivationFactories.W3, CatsDerivationFactories.W4]]
+                    },
+                    bifoldLeftFn = {
+                      (
+                          fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                          cAny: Any,
+                          fAny: (Any, Any) => Any,
+                          gAny: (Any, Any) => Any
+                      ) =>
+                        val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+                        val _ = anyFab
+                        val _ = cAny
+                        val _ = fAny
+                        val _ = gAny
+                        Expr
+                          .splice(
+                            doBifoldLeft(Expr.quote(anyFab), Expr.quote(cAny), Expr.quote(fAny), Expr.quote(gAny))
+                          )
+                          .asInstanceOf[Any]
+                    },
+                    bifoldRightFn = {
+                      (
+                          fab: F[CatsDerivationFactories.W1, CatsDerivationFactories.W2],
+                          lcAny: cats.Eval[Any],
+                          fAny: (Any, cats.Eval[Any]) => cats.Eval[Any],
+                          gAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                      ) =>
+                        val anyFab: F[Any, Any] = fab.asInstanceOf[F[Any, Any]]
+                        val _ = anyFab
+                        val _ = lcAny
+                        val _ = fAny
+                        val _ = gAny
+                        Expr
+                          .splice(
+                            doBifoldRight(Expr.quote(anyFab), Expr.quote(lcAny), Expr.quote(fAny), Expr.quote(gAny))
+                          )
+                          .asInstanceOf[cats.Eval[Any]]
+                    }
                   )
-                )
-              case Right(enumm) =>
-                MIO.scoped { runSafe =>
-                  val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
-                  runSafe(deriveBitraverseForEnum[F](FCtor, enumm, runSafe))
                 }
-            }
+              }
+            case Left(_) =>
+              Enum.parse[F[Any, Any]].toEither match {
+                case Left(reason2) =>
+                  failDerivation(
+                    CatsDerivationError.CannotParseEnum(
+                      Type[F[Any, Any]].prettyPrint,
+                      s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
+                    )
+                  )
+                case Right(enumm) =>
+                  MIO.scoped { runSafe =>
+                    val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+                    runSafe(deriveBitraverseForEnum[F](FCtor, enumm, runSafe))
+                  }
+              }
+          }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

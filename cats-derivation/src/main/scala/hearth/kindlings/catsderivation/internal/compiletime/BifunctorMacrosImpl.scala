@@ -9,7 +9,8 @@ import hearth.kindlings.catsderivation.LogDerivation
 trait BifunctorMacrosImpl
     extends rules.BifunctorCaseClassRuleImpl
     with CatsDerivationTimeout
-    with CatsDerivationErrorSupport {
+    with CatsDerivationErrorSupport
+    with ErasedBiSupport {
   this: MacroCommons & StdExtensions =>
 
   final case class BifunctorCaseClassResult[F[_, _]](
@@ -134,22 +135,27 @@ trait BifunctorMacrosImpl
 
     Log
       .namedScope(s"Deriving Bifunctor at: ${Environment.currentPosition.prettyPrint}") {
-        implicit val AnyType: Type[Any] = BifunctorTypes.Any
-        val isCaseClass = CaseClass.parse(using FCtor.apply[Any, Any]).toEither.isRight
-        if (isCaseClass) MIO.scoped { runSafe =>
-          runSafe {
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveBifunctorRecursively[F]
-            } yield deriveBifunctorForCaseClass(result, runSafe)(FCtor)
+        // Fields nesting the type parameters (`List[B]`, `Either[A, B]`, ...) or recursive types: kittens' general rules.
+        if (!biFieldsAreDirect[F]) deriveErasedBiInstance[F, cats.Bifunctor[F]](ErasedBiTC.Bifunctor)
+        else {
+          implicit val AnyType: Type[Any] = BifunctorTypes.Any
+          val isCaseClass = CaseClass.parse(using FCtor.apply[Any, Any]).toEither.isRight
+          if (isCaseClass) MIO.scoped { runSafe =>
+            runSafe {
+              for {
+                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                result <- deriveBifunctorRecursively[F]
+              } yield deriveBifunctorForCaseClass(result, runSafe)(FCtor)
+            }
           }
+          else
+            MIO.scoped { runSafe =>
+              val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+              runSafe(deriveBifunctorForEnum[F](FCtor, runSafe))
+            }
         }
-        else
-          MIO.scoped { runSafe =>
-            val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
-            runSafe(deriveBifunctorForEnum[F](FCtor, runSafe))
-          }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,
