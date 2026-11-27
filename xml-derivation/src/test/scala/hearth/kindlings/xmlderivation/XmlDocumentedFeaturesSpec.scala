@@ -102,8 +102,18 @@ final class XmlDocumentedFeaturesSpec extends MacroSuite {
           case other                                => other
         })
       }
-      List("i" -> "Int", "l" -> "Long", "d" -> "Double", "f" -> "Float", "bool" -> "Boolean", "b" -> "Byte",
-        "sh" -> "Short", "c" -> "Char", "bd" -> "BigDecimal", "bi" -> "BigInt").foreach { case (field, tpe) =>
+      List(
+        "i" -> "Int",
+        "l" -> "Long",
+        "d" -> "Double",
+        "f" -> "Float",
+        "bool" -> "Boolean",
+        "b" -> "Byte",
+        "sh" -> "Short",
+        "c" -> "Char",
+        "bd" -> "BigDecimal",
+        "bi" -> "BigInt"
+      ).foreach { case (field, tpe) =>
         assertEquals(codec.decode(withField(field, "zz")), Left(XmlDecodingError.InvalidValue("zz", tpe, field)))
       }
     }
@@ -131,8 +141,10 @@ final class XmlDocumentedFeaturesSpec extends MacroSuite {
     test("user-provided instances are used for fields, items and Options") {
       val codec = KindlingsXmlCodec.derived[XmlWithUserInstance]
       assertEquals(
-        roundTripped(codec, XmlWithUserInstance(XmlVersion(1, 2), List(XmlVersion(3, 4)), Some(XmlVersion(5, 6))))
-          .toString,
+        roundTripped(
+          codec,
+          XmlWithUserInstance(XmlVersion(1, 2), List(XmlVersion(3, 4)), Some(XmlVersion(5, 6)))
+        ).toString,
         "<x><version>1.2</version><versions><item>3.4</item></versions><maybe>5.6</maybe></x>"
       )
     }
