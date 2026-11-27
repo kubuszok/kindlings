@@ -43,191 +43,193 @@ trait NonEmptyTraverseMacrosImpl
 
     Log
       .namedScope(s"Deriving NonEmptyTraverse at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              implicit val IntType: Type[Int] = NETTypes.Int
-              implicit val StringType: Type[String] = NETTypes.String
+        orErasedInstance[F, cats.NonEmptyTraverse[F]](ErasedTC.NonEmptyTraverse) {
+          CaseClass.parse[F[Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                implicit val IntType: Type[Int] = NETTypes.Int
+                implicit val StringType: Type[String] = NETTypes.String
 
-              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+                val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+                val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+                val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+                val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-              val directFields = scala.collection.mutable.Set.empty[String]
-              val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
+                val directFields = scala.collection.mutable.Set.empty[String]
+                val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
 
-              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= IntType && tString =:= StringType) {
-                  directFields += name
-                } else if (tInt =:= tString) {
-                  // Invariant
-                } else {
-                  nestedFields += name
+                fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+                  val tInt = pInt.tpe.Underlying
+                  val tString = pString.tpe.Underlying
+                  if (tInt =:= IntType && tString =:= StringType) {
+                    directFields += name
+                  } else if (tInt =:= tString) {
+                    // Invariant
+                  } else {
+                    nestedFields += name
+                  }
                 }
-              }
 
-              if (nestedFields.nonEmpty) {
-                runSafe {
-                  failDerivation[Unit](
-                    CatsDerivationError.UnsupportedFieldShape(
-                      "NonEmptyTraverse",
-                      nestedFields.mkString(", "),
-                      "the fields contain nested type constructors - " +
-                        "only direct type parameter fields (A) and invariant fields are supported"
+                if (nestedFields.nonEmpty) {
+                  runSafe {
+                    failDerivation[Unit](
+                      CatsDerivationError.UnsupportedFieldShape(
+                        "NonEmptyTraverse",
+                        nestedFields.mkString(", "),
+                        "the fields contain nested type constructors - " +
+                          "only direct type parameter fields (A) and invariant fields are supported"
+                      )
                     )
-                  )
+                  }
                 }
-              }
 
-              if (directFields.isEmpty) {
-                runSafe {
-                  failDerivation[Unit](
-                    CatsDerivationError.DerivationFailed(
-                      "NonEmptyTraverse",
-                      "no direct type parameter fields found - " +
-                        "NonEmptyTraverse requires at least one field of the type parameter"
+                if (directFields.isEmpty) {
+                  runSafe {
+                    failDerivation[Unit](
+                      CatsDerivationError.DerivationFailed(
+                        "NonEmptyTraverse",
+                        "no direct type parameter fields found - " +
+                          "NonEmptyTraverse requires at least one field of the type parameter"
+                      )
                     )
-                  )
+                  }
                 }
-              }
 
-              val directFieldSet: Set[String] = directFields.toSet
+                val directFieldSet: Set[String] = directFields.toSet
 
-              // Pre-load extensions eagerly
-              val _ = runSafe {
-                Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              }
+                // Pre-load extensions eagerly
+                val _ = runSafe {
+                  Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                }
 
-              // Extract direct fields: Any => List[Any]
-              val extractDirect: Expr[Any => List[Any]] = runSafe {
-                deriveNETExtractDirectFields[F](caseClass, directFieldSet)
-              }
+                // Extract direct fields: Any => List[Any]
+                val extractDirect: Expr[Any => List[Any]] = runSafe {
+                  deriveNETExtractDirectFields[F](caseClass, directFieldSet)
+                }
 
-              // Reconstruct: (List[Any], Any) => Any
-              val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
-                deriveNETReconstructFromList[F](caseClass, directFieldSet)
-              }
+                // Reconstruct: (List[Any], Any) => Any
+                val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
+                  deriveNETReconstructFromList[F](caseClass, directFieldSet)
+                }
 
-              // FoldLeft body
-              val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-                (faExpr, bExpr, fExpr) =>
-                  runSafe {
-                    deriveNETFoldLeftBody[F](caseClass, directFieldSet, faExpr, bExpr, fExpr)
-                  }
+                // FoldLeft body
+                val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+                  (faExpr, bExpr, fExpr) =>
+                    runSafe {
+                      deriveNETFoldLeftBody[F](caseClass, directFieldSet, faExpr, bExpr, fExpr)
+                    }
 
-              // FoldRight body
-              val doFoldRight
-                  : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-                    cats.Eval[Any]
-                  ] =
-                (faExpr, lbExpr, fExpr) =>
-                  runSafe {
-                    deriveNETFoldRightBody[F](caseClass, directFieldSet, faExpr, lbExpr, fExpr)
-                  }
+                // FoldRight body
+                val doFoldRight
+                    : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                      cats.Eval[Any]
+                    ] =
+                  (faExpr, lbExpr, fExpr) =>
+                    runSafe {
+                      deriveNETFoldRightBody[F](caseClass, directFieldSet, faExpr, lbExpr, fExpr)
+                    }
 
-              // ReduceLeftTo body
-              val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-                (faExpr, fExpr, gExpr) =>
-                  runSafe {
-                    deriveNETReduceLeftToBody[F](caseClass, directFieldSet, faExpr, fExpr, gExpr)
-                  }
+                // ReduceLeftTo body
+                val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+                  (faExpr, fExpr, gExpr) =>
+                    runSafe {
+                      deriveNETReduceLeftToBody[F](caseClass, directFieldSet, faExpr, fExpr, gExpr)
+                    }
 
-              // ReduceRightTo body
-              val doReduceRightTo
-                  : (Expr[F[Any]], Expr[Any => Any], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-                    cats.Eval[Any]
-                  ] =
-                (faExpr, fExpr, gExpr) =>
-                  runSafe {
-                    deriveNETReduceRightToBody[F](caseClass, directFieldSet, faExpr, fExpr, gExpr)
-                  }
+                // ReduceRightTo body
+                val doReduceRightTo
+                    : (Expr[F[Any]], Expr[Any => Any], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                      cats.Eval[Any]
+                    ] =
+                  (faExpr, fExpr, gExpr) =>
+                    runSafe {
+                      deriveNETReduceRightToBody[F](caseClass, directFieldSet, faExpr, fExpr, gExpr)
+                    }
 
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.nonEmptyTraverseInstance[F](
-                  nonEmptyTraverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
-                    val G = gAny.asInstanceOf[cats.Apply[CatsDerivationFactories.AnyF]]
-                    val _ = anyFa
-                    val _ = f
-                    val _ = G
-                    val extract: Any => List[Any] = Expr.splice(extractDirect)
-                    val _ = extract
-                    val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
-                    val _ = recon
-                    val directValues: List[Any] = extract(anyFa)
-                    // Non-empty: seed with first element mapped through f, combine rest with G.map2
-                    val gSeed: CatsDerivationFactories.AnyF[List[Any]] =
-                      G.map[Any, List[Any]](f(directValues.head))((a: Any) => List(a))
-                    val gList: CatsDerivationFactories.AnyF[List[Any]] =
-                      directValues.tail.foldLeft(gSeed) { (gacc, v) =>
-                        G.map2[List[Any], Any, List[Any]](gacc, f(v)) { (acc, a) =>
-                          acc :+ a
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.nonEmptyTraverseInstance[F](
+                    nonEmptyTraverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
+                      val G = gAny.asInstanceOf[cats.Apply[CatsDerivationFactories.AnyF]]
+                      val _ = anyFa
+                      val _ = f
+                      val _ = G
+                      val extract: Any => List[Any] = Expr.splice(extractDirect)
+                      val _ = extract
+                      val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
+                      val _ = recon
+                      val directValues: List[Any] = extract(anyFa)
+                      // Non-empty: seed with first element mapped through f, combine rest with G.map2
+                      val gSeed: CatsDerivationFactories.AnyF[List[Any]] =
+                        G.map[Any, List[Any]](f(directValues.head))((a: Any) => List(a))
+                      val gList: CatsDerivationFactories.AnyF[List[Any]] =
+                        directValues.tail.foldLeft(gSeed) { (gacc, v) =>
+                          G.map2[List[Any], Any, List[Any]](gacc, f(v)) { (acc, a) =>
+                            acc :+ a
+                          }
                         }
-                      }
-                    G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFa))
-                  },
-                  reduceLeftToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
-                    val anyG: (Any, Any) => Any = gAny.asInstanceOf[(Any, Any) => Any]
-                    val _ = anyFa
-                    val _ = anyF
-                    val _ = anyG
-                    Expr
-                      .splice(doReduceLeftTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
-                      .asInstanceOf[Any]
-                  },
-                  reduceRightToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
-                    val anyG: (Any, cats.Eval[Any]) => cats.Eval[Any] =
-                      gAny.asInstanceOf[(Any, cats.Eval[Any]) => cats.Eval[Any]]
-                    val _ = anyFa
-                    val _ = anyF
-                    val _ = anyG
-                    Expr
-                      .splice(doReduceRightTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
-                      .asInstanceOf[Any]
-                  },
-                  foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val _ = anyFa
-                    val _ = anyB
-                    val _ = anyF
-                    Expr
-                      .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF)))
-                      .asInstanceOf[Any]
-                  },
-                  foldRightFn = {
-                    (
-                        fa: F[CatsDerivationFactories.W1],
-                        anyLb: cats.Eval[Any],
-                        anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
-                    ) =>
+                      G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFa))
+                    },
+                    reduceLeftToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
+                      val anyG: (Any, Any) => Any = gAny.asInstanceOf[(Any, Any) => Any]
+                      val _ = anyFa
+                      val _ = anyF
+                      val _ = anyG
+                      Expr
+                        .splice(doReduceLeftTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
+                        .asInstanceOf[Any]
+                    },
+                    reduceRightToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
+                      val anyG: (Any, cats.Eval[Any]) => cats.Eval[Any] =
+                        gAny.asInstanceOf[(Any, cats.Eval[Any]) => cats.Eval[Any]]
+                      val _ = anyFa
+                      val _ = anyF
+                      val _ = anyG
+                      Expr
+                        .splice(doReduceRightTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
+                        .asInstanceOf[Any]
+                    },
+                    foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
                       val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
                       val _ = anyFa
-                      val _ = anyLb
+                      val _ = anyB
                       val _ = anyF
                       Expr
-                        .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
-                        .asInstanceOf[cats.Eval[Any]]
-                  }
-                )
+                        .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF)))
+                        .asInstanceOf[Any]
+                    },
+                    foldRightFn = {
+                      (
+                          fa: F[CatsDerivationFactories.W1],
+                          anyLb: cats.Eval[Any],
+                          anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                      ) =>
+                        val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                        val _ = anyFa
+                        val _ = anyLb
+                        val _ = anyF
+                        Expr
+                          .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
+                          .asInstanceOf[cats.Eval[Any]]
+                    }
+                  )
+                }
               }
-            }
-          case Left(reason) =>
-            failDerivation(
-              CatsDerivationError.CannotParseCaseClass(
-                Type[F[Any]].prettyPrint,
-                s"$reason. $macroName can only be derived for case classes."
+            case Left(reason) =>
+              failDerivation(
+                CatsDerivationError.CannotParseCaseClass(
+                  Type[F[Any]].prettyPrint,
+                  s"$reason. $macroName can only be derived for case classes."
+                )
               )
-            )
+          }
         }
       }
       .map(withInstanceScopedVals(_))

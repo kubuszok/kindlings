@@ -13,10 +13,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * Uses free type variables A and B directly in the generated code, relying on Hearth 0.2.0-264+ cross-quotes support
   * for method-level type parameters inside Expr.quote/Expr.splice.
   */
-trait FoldableMacrosImpl
-    extends CatsDerivationTimeout
-    with CatsDerivationErrorSupport
-    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
+trait FoldableMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -68,169 +65,173 @@ trait FoldableMacrosImpl
 
     Log
       .namedScope(s"Deriving Foldable at: ${Environment.currentPosition.prettyPrint}") {
-        implicit val AnyType: Type[Any] = FoldableTypes.Any
-        val isCaseClass = CaseClass.parse(using FCtor.apply[Any]).toEither.isRight
-        if (!isCaseClass) {
-          MIO.scoped { runSafe =>
-            val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
-            runSafe(deriveFoldableForEnum[F](FCtor, runSafe))
-          }
-        } else
-          MIO.scoped { runSafe =>
-            implicit val IntType: Type[Int] = FoldableTypes.Int
-            implicit val StringType: Type[String] = FoldableTypes.String
-
-            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
-
-            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
-
-            val directFields = scala.collection.mutable.Set.empty[String]
-            val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
-
-            fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-              val tInt = pInt.tpe.Underlying
-              val tString = pString.tpe.Underlying
-              if (tInt =:= IntType && tString =:= StringType) {
-                directFields += name
-              } else if (tInt =:= tString) {
-                // Invariant — skip in fold
-              } else {
-                nestedFieldNames += name
-              }
+        orErasedInstance[F, cats.Foldable[F]](ErasedTC.Foldable) {
+          implicit val AnyType: Type[Any] = FoldableTypes.Any
+          val isCaseClass = CaseClass.parse(using FCtor.apply[Any]).toEither.isRight
+          if (!isCaseClass) {
+            MIO.scoped { runSafe =>
+              val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+              runSafe(deriveFoldableForEnum[F](FCtor, runSafe))
             }
+          } else
+            MIO.scoped { runSafe =>
+              implicit val IntType: Type[Int] = FoldableTypes.Int
+              implicit val StringType: Type[String] = FoldableTypes.String
 
-            val nestedFieldFoldables = scala.collection.mutable.Map.empty[String, Expr[Any]]
-            if (nestedFieldNames.nonEmpty) {
-              val unsupported = scala.collection.mutable.ListBuffer.empty[String]
-              nestedFieldNames.foreach { name =>
-                val param = fieldsInt.find(_._1 == name).get._2
-                import param.tpe.Underlying as FieldType
-                summonFoldableForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
-                  case Some(foldableExpr) => nestedFieldFoldables += (name -> foldableExpr)
-                  case None               => unsupported += name
+              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+
+              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+
+              val directFields = scala.collection.mutable.Set.empty[String]
+              val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
+
+              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+                val tInt = pInt.tpe.Underlying
+                val tString = pString.tpe.Underlying
+                if (tInt =:= IntType && tString =:= StringType) {
+                  directFields += name
+                } else if (tInt =:= tString) {
+                  // Invariant — skip in fold
+                } else {
+                  nestedFieldNames += name
                 }
               }
-              if (unsupported.nonEmpty) {
-                runSafe {
-                  failDerivation[Unit](
-                    CatsDerivationError.UnsupportedFieldShape(
-                      "Foldable",
-                      unsupported.mkString(", "),
-                      "the fields contain nested type constructors without Foldable instances"
-                    )
-                  )
-                }
-              }
-            }
 
-            val directFieldSet: Set[String] = directFields.toSet
-            val nestedFieldMap: Map[String, Expr[Any]] = nestedFieldFoldables.toMap
-
-            // Pre-load extensions before entering the quote
-            runSafe {
-              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-            }
-
-            implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-            implicit val EvalAnyType: Type[cats.Eval[Any]] = FoldableTypes.EvalCtor.apply[Any]
-
-            val ccAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
-
-            val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-              (faExpr, bExpr, fExpr) =>
-                runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                  var result: Expr[Any] = bExpr
-                  fields.foreach { case (fieldName, fieldValue) =>
-                    import fieldValue.Underlying as Field
-                    val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
-                    if (directFieldSet.contains(fieldName)) {
-                      result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fieldExpr.upcast[Any])))
-                    } else if (nestedFieldMap.contains(fieldName)) {
-                      val foldableExpr = nestedFieldMap(fieldName)
-                      result = Expr.quote {
-                        hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                          .foldLeftNested(
-                            Expr.splice(foldableExpr),
-                            Expr.splice(fieldExpr.upcast[Any]),
-                            Expr.splice(result),
-                            Expr.splice(fExpr)
-                          )
-                      }
-                    }
+              val nestedFieldFoldables = scala.collection.mutable.Map.empty[String, Expr[Any]]
+              if (nestedFieldNames.nonEmpty) {
+                val unsupported = scala.collection.mutable.ListBuffer.empty[String]
+                nestedFieldNames.foreach { name =>
+                  val param = fieldsInt.find(_._1 == name).get._2
+                  import param.tpe.Underlying as FieldType
+                  summonFoldableForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
+                    case Some(foldableExpr) => nestedFieldFoldables += (name -> foldableExpr)
+                    case None               => unsupported += name
                   }
-                  MIO.pure(result)
                 }
-
-            val doFoldRight
-                : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-                  cats.Eval[Any]
-                ] =
-              (faExpr, lbExpr, fExpr) =>
-                runSafe {
-                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                  val foldableFields: List[(String, Expr[Any], Option[Expr[Any]])] = fields.collect {
-                    case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
-                      import fieldValue.Underlying as Field
-                      (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any], None)
-                    case (fieldName, fieldValue) if nestedFieldMap.contains(fieldName) =>
-                      import fieldValue.Underlying as Field
-                      (
-                        fieldName,
-                        fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any],
-                        Some(nestedFieldMap(fieldName))
+                if (unsupported.nonEmpty) {
+                  runSafe {
+                    failDerivation[Unit](
+                      CatsDerivationError.UnsupportedFieldShape(
+                        "Foldable",
+                        unsupported.mkString(", "),
+                        "the fields contain nested type constructors without Foldable instances"
                       )
+                    )
                   }
-                  val result = foldableFields.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
-                    foldableOpt match {
-                      case None =>
-                        Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
-                      case Some(foldableExpr) =>
-                        Expr.quote {
+                }
+              }
+
+              val directFieldSet: Set[String] = directFields.toSet
+              val nestedFieldMap: Map[String, Expr[Any]] = nestedFieldFoldables.toMap
+
+              // Pre-load extensions before entering the quote
+              runSafe {
+                Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+              }
+
+              implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+              implicit val EvalAnyType: Type[cats.Eval[Any]] = FoldableTypes.EvalCtor.apply[Any]
+
+              val ccAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
+
+              val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+                (faExpr, bExpr, fExpr) =>
+                  runSafe {
+                    val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                    var result: Expr[Any] = bExpr
+                    fields.foreach { case (fieldName, fieldValue) =>
+                      import fieldValue.Underlying as Field
+                      val fieldExpr = fieldValue.value.asInstanceOf[Expr[Field]]
+                      if (directFieldSet.contains(fieldName)) {
+                        result = Expr.quote(Expr.splice(fExpr)(Expr.splice(result), Expr.splice(fieldExpr.upcast[Any])))
+                      } else if (nestedFieldMap.contains(fieldName)) {
+                        val foldableExpr = nestedFieldMap(fieldName)
+                        result = Expr.quote {
                           hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
-                            .foldRightNested(
+                            .foldLeftNested(
                               Expr.splice(foldableExpr),
-                              Expr.splice(fieldExpr),
-                              _root_.cats.Eval.defer(Expr.splice(acc)),
+                              Expr.splice(fieldExpr.upcast[Any]),
+                              Expr.splice(result),
                               Expr.splice(fExpr)
                             )
                         }
+                      }
                     }
+                    MIO.pure(result)
                   }
-                  MIO.pure(result)
-                }
 
-            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-            Expr.quote {
-              CatsDerivationFactories.foldableInstance[F](
-                foldLeftFn = { (fa: F[CatsDerivationFactories.W1], bAny: Any, fAny: (Any, Any) => Any) =>
-                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                  val _ = anyFa
-                  val _ = bAny
-                  val _ = fAny
-                  Expr
-                    .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(bAny), Expr.quote(fAny)))
-                    .asInstanceOf[Any]
-                },
-                foldRightFn = {
-                  (
-                      fa: F[CatsDerivationFactories.W1],
-                      lbAny: cats.Eval[Any],
-                      fAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
-                  ) =>
+              val doFoldRight
+                  : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                    cats.Eval[Any]
+                  ] =
+                (faExpr, lbExpr, fExpr) =>
+                  runSafe {
+                    val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                    val foldableFields: List[(String, Expr[Any], Option[Expr[Any]])] = fields.collect {
+                      case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                        import fieldValue.Underlying as Field
+                        (fieldName, fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any], None)
+                      case (fieldName, fieldValue) if nestedFieldMap.contains(fieldName) =>
+                        import fieldValue.Underlying as Field
+                        (
+                          fieldName,
+                          fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any],
+                          Some(nestedFieldMap(fieldName))
+                        )
+                    }
+                    val result = foldableFields.foldRight(lbExpr) { case ((_, fieldExpr, foldableOpt), acc) =>
+                      foldableOpt match {
+                        case None =>
+                          Expr.quote(
+                            Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc)))
+                          )
+                        case Some(foldableExpr) =>
+                          Expr.quote {
+                            hearth.kindlings.catsderivation.internal.runtime.HktNestedRuntime
+                              .foldRightNested(
+                                Expr.splice(foldableExpr),
+                                Expr.splice(fieldExpr),
+                                _root_.cats.Eval.defer(Expr.splice(acc)),
+                                Expr.splice(fExpr)
+                              )
+                          }
+                      }
+                    }
+                    MIO.pure(result)
+                  }
+
+              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+              Expr.quote {
+                CatsDerivationFactories.foldableInstance[F](
+                  foldLeftFn = { (fa: F[CatsDerivationFactories.W1], bAny: Any, fAny: (Any, Any) => Any) =>
                     val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
                     val _ = anyFa
-                    val _ = lbAny
+                    val _ = bAny
                     val _ = fAny
                     Expr
-                      .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(lbAny), Expr.quote(fAny)))
-                      .asInstanceOf[cats.Eval[Any]]
-                }
-              )
+                      .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(bAny), Expr.quote(fAny)))
+                      .asInstanceOf[Any]
+                  },
+                  foldRightFn = {
+                    (
+                        fa: F[CatsDerivationFactories.W1],
+                        lbAny: cats.Eval[Any],
+                        fAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                    ) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val _ = anyFa
+                      val _ = lbAny
+                      val _ = fAny
+                      Expr
+                        .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(lbAny), Expr.quote(fAny)))
+                        .asInstanceOf[cats.Eval[Any]]
+                  }
+                )
+              }
             }
-          }
+        }
       }
       .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))

@@ -44,7 +44,7 @@ trait ApplicativeMacrosImpl
             else s" - ${rule.name}: ${rs.mkString(", ")}"
           }.toList
           val err = ApplicativeDerivationError.UnsupportedType(fName, reasonsStrings)
-          Log.error(err.message) >> MIO.fail(err)
+          logDerivationError(err.message) >> MIO.fail(err)
       }
     }
   }
@@ -114,12 +114,14 @@ trait ApplicativeMacrosImpl
 
     Log
       .namedScope(s"Deriving Applicative at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          runSafe {
-            for {
-              _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              result <- deriveApplicativeRecursively[F]
-            } yield deriveApplicativeForCaseClass(result, runSafe)(FCtor)
+        orErasedInstance[F, cats.Applicative[F]](ErasedTC.Applicative) {
+          MIO.scoped { runSafe =>
+            runSafe {
+              for {
+                _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                result <- deriveApplicativeRecursively[F]
+              } yield deriveApplicativeForCaseClass(result, runSafe)(FCtor)
+            }
           }
         }
       }

@@ -15,7 +15,23 @@ private[compiletime] trait CatsDerivationErrorSupport extends hearth.kindlings.d
 
   /** Logs the error and fails the MIO computation with it. */
   final protected def failDerivation[A](err: CatsDerivationError): MIO[A] =
-    Log.error(err.message) >> MIO.fail(err)
+    logDerivationError(err.message) >> MIO.fail(err)
+
+  private var derivationErrorsAreTentative: Boolean = false
+
+  /** Logs a derivation error - as information while [[tentatively]] runs an attempt that another derivation replaces
+    * when it fails (error logs of a successful expansion are reported as a warning).
+    */
+  final protected def logDerivationError(message: => String): MIO[Unit] =
+    if (derivationErrorsAreTentative) Log.info(message) else Log.error(message)
+
+  /** Runs `attempt` with its error logs demoted to information. */
+  final protected def tentatively[A](attempt: => MIO[A]): MIO[A] =
+    MIO.defer {
+      val before = derivationErrorsAreTentative
+      derivationErrorsAreTentative = true
+      MIO.defer(attempt).attemptTap(_ => derivationErrorsAreTentative = before)
+    }
 
   /** Parses `A` as a case class or fails the derivation with [[CatsDerivationError.CannotParseCaseClass]]. */
   final protected def parseCaseClassMIO[A: Type](label: => String): MIO[CaseClass[A]] =

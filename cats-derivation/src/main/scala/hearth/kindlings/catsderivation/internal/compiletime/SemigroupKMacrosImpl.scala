@@ -9,7 +9,11 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** SemigroupK derivation: combines F[A] values field-wise by summoning Semigroup for each field type in F[Any]. */
-trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
+trait SemigroupKMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with KernelFromKSupport
+    with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -26,38 +30,43 @@ trait SemigroupKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErro
 
     Log
       .namedScope(s"Deriving SemigroupK at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
-                runSafe {
-                  for {
-                    _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                    result <- deriveSemigroupKBody[F](caseClass, xExpr, yExpr)
-                  } yield result
-                }
+        orErasedInstance[F, cats.SemigroupK[F]](
+          ErasedTC.SemigroupK,
+          specialisedApplies = fieldsAreConstantOrApplied[F]
+        ) {
+          CaseClass.parse[F[Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
+                  runSafe {
+                    for {
+                      _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                      result <- deriveSemigroupKBody[F](caseClass, xExpr, yExpr)
+                    } yield result
+                  }
 
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.semigroupKInstance[F] {
-                  (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
-                    val anyX: F[Any] = x.asInstanceOf[F[Any]]
-                    val anyY: F[Any] = y.asInstanceOf[F[Any]]
-                    val _ = anyX
-                    val _ = anyY
-                    Expr
-                      .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
-                      .asInstanceOf[F[CatsDerivationFactories.W1]]
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.semigroupKInstance[F] {
+                    (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
+                      val anyX: F[Any] = x.asInstanceOf[F[Any]]
+                      val anyY: F[Any] = y.asInstanceOf[F[Any]]
+                      val _ = anyX
+                      val _ = anyY
+                      Expr
+                        .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
+                        .asInstanceOf[F[CatsDerivationFactories.W1]]
+                  }
                 }
               }
-            }
-          case Left(reason) =>
-            failDerivation(
-              CatsDerivationError.CannotParseCaseClass(
-                Type[F[Any]].prettyPrint,
-                s"$reason. $macroName can only be derived for case classes."
+            case Left(reason) =>
+              failDerivation(
+                CatsDerivationError.CannotParseCaseClass(
+                  Type[F[Any]].prettyPrint,
+                  s"$reason. $macroName can only be derived for case classes."
+                )
               )
-            )
+          }
         }
       }
       .map(withInstanceScopedVals(_))

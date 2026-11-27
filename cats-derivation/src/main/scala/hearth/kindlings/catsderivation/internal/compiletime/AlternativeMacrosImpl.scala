@@ -39,120 +39,125 @@ trait AlternativeMacrosImpl extends CatsDerivationTimeout with CatsDerivationErr
 
     Log
       .namedScope(s"Deriving Alternative at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = AltTypes.Int
-          implicit val StringType: Type[String] = AltTypes.String
+        orErasedInstance[F, cats.Alternative[F]](ErasedTC.Alternative) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = AltTypes.Int
+            implicit val StringType: Type[String] = AltTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          val directFields = scala.collection.mutable.Set.empty[String]
-          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
+            val directFields = scala.collection.mutable.Set.empty[String]
+            val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
 
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else if (tInt =:= tString) {
-              // Invariant
-            } else {
-              nestedFields += name
+            fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+              val tInt = pInt.tpe.Underlying
+              val tString = pString.tpe.Underlying
+              if (tInt =:= IntType && tString =:= StringType) {
+                directFields += name
+              } else if (tInt =:= tString) {
+                // Invariant
+              } else {
+                nestedFields += name
+              }
             }
-          }
 
-          if (nestedFields.nonEmpty) {
-            runSafe {
-              failDerivation[Unit](
-                CatsDerivationError.UnsupportedFieldShape(
-                  "Alternative",
-                  nestedFields.mkString(", "),
-                  "nested type constructors are not supported - " +
-                    "only direct type parameter fields (A) and invariant fields are supported"
+            if (nestedFields.nonEmpty) {
+              runSafe {
+                failDerivation[Unit](
+                  CatsDerivationError.UnsupportedFieldShape(
+                    "Alternative",
+                    nestedFields.mkString(", "),
+                    "nested type constructors are not supported - " +
+                      "only direct type parameter fields (A) and invariant fields are supported"
+                  )
                 )
+              }
+            }
+
+            val directFieldSet: Set[String] = directFields.toSet
+
+            // Pre-load extensions before entering the quote
+            runSafe {
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+            }
+
+            // Erased types needed by empty, ap, and combineK
+            implicit val AnyType: Type[Any] = AltTypes.Any
+            implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+
+            val caseClassAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
+
+            val doEmpty: Expr[F[Any]] = runSafe {
+              deriveAltEmptyBody[F](caseClassAny)
+            }
+
+            val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
+              runSafe {
+                deriveAltApBody[F](caseClassAny, directFieldSet, ffExpr, faExpr)
+              }
+
+            val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
+              runSafe {
+                deriveAltCombineKBody[F](caseClassAny, xExpr, yExpr)
+              }
+
+            val doPure: Expr[Any] => Expr[F[Any]] =
+              (aExpr: Expr[Any]) => runSafe(deriveAltPureBody[F, Any](FCtor, directFieldSet, aExpr)(AnyType))
+
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.alternativeInstance[F](
+                pureFn = { (aAny: Any) =>
+                  val _ = aAny
+                  Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
+                },
+                mapFn = {
+                  (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                    val _ = fa
+                    val _ = f
+                    Expr.splice {
+                      runSafe {
+                        deriveAltMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                          FCtor,
+                          directFieldSet,
+                          Expr.quote(fa),
+                          Expr.quote(f)
+                        )(
+                          Type.of[CatsDerivationFactories.W1],
+                          Type.of[CatsDerivationFactories.W2]
+                        )
+                      }
+                    }
+                },
+                apFn = {
+                  (
+                      ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2],
+                      fa: F[CatsDerivationFactories.W1]
+                  ) =>
+                    val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val _ = anyFf
+                    val _ = anyFa
+                    Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
+                },
+                emptyKFn = { () =>
+                  Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+                },
+                combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
+                  val anyX: F[Any] = x.asInstanceOf[F[Any]]
+                  val anyY: F[Any] = y.asInstanceOf[F[Any]]
+                  val _ = anyX
+                  val _ = anyY
+                  Expr
+                    .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
+                    .asInstanceOf[F[CatsDerivationFactories.W1]]
+                }
               )
             }
-          }
-
-          val directFieldSet: Set[String] = directFields.toSet
-
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          // Erased types needed by empty, ap, and combineK
-          implicit val AnyType: Type[Any] = AltTypes.Any
-          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-
-          val caseClassAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
-
-          val doEmpty: Expr[F[Any]] = runSafe {
-            deriveAltEmptyBody[F](caseClassAny)
-          }
-
-          val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
-            runSafe {
-              deriveAltApBody[F](caseClassAny, directFieldSet, ffExpr, faExpr)
-            }
-
-          val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
-            runSafe {
-              deriveAltCombineKBody[F](caseClassAny, xExpr, yExpr)
-            }
-
-          val doPure: Expr[Any] => Expr[F[Any]] =
-            (aExpr: Expr[Any]) => runSafe(deriveAltPureBody[F, Any](FCtor, directFieldSet, aExpr)(AnyType))
-
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.alternativeInstance[F](
-              pureFn = { (aAny: Any) =>
-                val _ = aAny
-                Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
-              },
-              mapFn = {
-                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
-                  val _ = fa
-                  val _ = f
-                  Expr.splice {
-                    runSafe {
-                      deriveAltMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
-                        FCtor,
-                        directFieldSet,
-                        Expr.quote(fa),
-                        Expr.quote(f)
-                      )(
-                        Type.of[CatsDerivationFactories.W1],
-                        Type.of[CatsDerivationFactories.W2]
-                      )
-                    }
-                  }
-              },
-              apFn = {
-                (ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2], fa: F[CatsDerivationFactories.W1]) =>
-                  val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                  val _ = anyFf
-                  val _ = anyFa
-                  Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
-              },
-              emptyKFn = { () =>
-                Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
-              },
-              combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
-                val anyX: F[Any] = x.asInstanceOf[F[Any]]
-                val anyY: F[Any] = y.asInstanceOf[F[Any]]
-                val _ = anyX
-                val _ = anyY
-                Expr
-                  .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
-                  .asInstanceOf[F[CatsDerivationFactories.W1]]
-              }
-            )
           }
         }
       }

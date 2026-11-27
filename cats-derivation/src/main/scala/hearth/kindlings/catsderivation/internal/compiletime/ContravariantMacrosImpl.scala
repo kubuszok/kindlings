@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * for method-level type parameters inside Expr.quote/Expr.splice. Supports Function1[A, R] fields where A is the type
   * parameter (contravariant position).
   */
-trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -29,115 +29,118 @@ trait ContravariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationE
 
     Log
       .namedScope(s"Deriving Contravariant at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = ContravariantTypes.Int
-          implicit val StringType: Type[String] = ContravariantTypes.String
+        orErasedInstance[F, cats.Contravariant[F]](ErasedTC.Contravariant) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = ContravariantTypes.Int
+            implicit val StringType: Type[String] = ContravariantTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          val contravariantFields = scala.collection.mutable.Set.empty[String]
+            val contravariantFields = scala.collection.mutable.Set.empty[String]
 
-          val Function1Ctor2 = Type.Ctor2.of[Function1]
+            val Function1Ctor2 = Type.Ctor2.of[Function1]
 
-          runSafe {
-            fieldsInt
-              .zip(fieldsString)
-              .traverse { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= tString) {
-                  // Invariant field — no transformation needed
-                  MIO.void
-                } else if (tInt =:= IntType && tString =:= StringType) {
-                  failDerivation[Unit](
-                    CatsDerivationError.UnsupportedFieldShape(
-                      "Contravariant",
-                      name,
-                      "the field uses the type parameter directly (covariant position) - " +
-                        "Contravariant requires the type parameter to appear only in contravariant positions"
-                    )
-                  )
-                } else {
-                  // Nested field — check if it's Function1 with A in contravariant position
-                  (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
-                    case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
-                      import arg1Int.Underlying as A1Int
-                      import arg2Int.Underlying as A2Int
-                      import arg1String.Underlying as A1String
-                      import arg2String.Underlying as A2String
-
-                      val firstArgChanges = !(A1Int =:= A1String)
-                      val secondArgChanges = !(A2Int =:= A2String)
-
-                      if (firstArgChanges && !secondArgChanges) {
-                        contravariantFields += name
-                        MIO.void
-                      } else if (!firstArgChanges && secondArgChanges) {
-                        failDerivation[Unit](
-                          CatsDerivationError.UnsupportedFieldShape(
-                            "Contravariant",
-                            name,
-                            "the field has the type parameter in covariant position (Function1 return type)"
-                          )
-                        )
-                      } else {
-                        failDerivation[Unit](
-                          CatsDerivationError.UnsupportedFieldShape(
-                            "Contravariant",
-                            name,
-                            "the field has the type parameter in both positions of Function1"
-                          )
-                        )
-                      }
-                    case _ =>
-                      failDerivation[Unit](
-                        CatsDerivationError.UnsupportedFieldShape(
-                          "Contravariant",
-                          name,
-                          "the field contains a nested type constructor that is not Function1 - " +
-                            "only Function1[A, R] fields and invariant fields are currently supported"
-                        )
+            runSafe {
+              fieldsInt
+                .zip(fieldsString)
+                .traverse { case ((name, pInt), (_, pString)) =>
+                  val tInt = pInt.tpe.Underlying
+                  val tString = pString.tpe.Underlying
+                  if (tInt =:= tString) {
+                    // Invariant field — no transformation needed
+                    MIO.void
+                  } else if (tInt =:= IntType && tString =:= StringType) {
+                    failDerivation[Unit](
+                      CatsDerivationError.UnsupportedFieldShape(
+                        "Contravariant",
+                        name,
+                        "the field uses the type parameter directly (covariant position) - " +
+                          "Contravariant requires the type parameter to appear only in contravariant positions"
                       )
-                  }
-                }
-              }
-              .void
-          }
-
-          val contravariantFieldSet: Set[String] = contravariantFields.toSet
-
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.contravariantInstance[F] {
-              (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W2 => CatsDerivationFactories.W1) =>
-                val _ = fa
-                val _ = f
-                Expr.splice {
-                  runSafe {
-                    deriveContramapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
-                      FCtor,
-                      contravariantFieldSet,
-                      Expr.quote(fa),
-                      Expr.quote(f)
-                    )(
-                      Type.of[CatsDerivationFactories.W1],
-                      Type.of[CatsDerivationFactories.W2]
                     )
+                  } else {
+                    // Nested field — check if it's Function1 with A in contravariant position
+                    (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
+                      case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
+                        import arg1Int.Underlying as A1Int
+                        import arg2Int.Underlying as A2Int
+                        import arg1String.Underlying as A1String
+                        import arg2String.Underlying as A2String
+
+                        val firstArgChanges = !(A1Int =:= A1String)
+                        val secondArgChanges = !(A2Int =:= A2String)
+
+                        if (firstArgChanges && !secondArgChanges) {
+                          contravariantFields += name
+                          MIO.void
+                        } else if (!firstArgChanges && secondArgChanges) {
+                          failDerivation[Unit](
+                            CatsDerivationError.UnsupportedFieldShape(
+                              "Contravariant",
+                              name,
+                              "the field has the type parameter in covariant position (Function1 return type)"
+                            )
+                          )
+                        } else {
+                          failDerivation[Unit](
+                            CatsDerivationError.UnsupportedFieldShape(
+                              "Contravariant",
+                              name,
+                              "the field has the type parameter in both positions of Function1"
+                            )
+                          )
+                        }
+                      case _ =>
+                        failDerivation[Unit](
+                          CatsDerivationError.UnsupportedFieldShape(
+                            "Contravariant",
+                            name,
+                            "the field contains a nested type constructor that is not Function1 - " +
+                              "only Function1[A, R] fields and invariant fields are currently supported"
+                          )
+                        )
+                    }
                   }
                 }
+                .void
+            }
+
+            val contravariantFieldSet: Set[String] = contravariantFields.toSet
+
+            // Pre-load extensions before entering the quote
+            runSafe {
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+            }
+
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.contravariantInstance[F] {
+                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W2 => CatsDerivationFactories.W1) =>
+                  val _ = fa
+                  val _ = f
+                  Expr.splice {
+                    runSafe {
+                      deriveContramapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                        FCtor,
+                        contravariantFieldSet,
+                        Expr.quote(fa),
+                        Expr.quote(f)
+                      )(
+                        Type.of[CatsDerivationFactories.W1],
+                        Type.of[CatsDerivationFactories.W2]
+                      )
+                    }
+                  }
+              }
             }
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

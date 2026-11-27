@@ -32,92 +32,97 @@ trait ApplyMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupp
 
     Log
       .namedScope(s"Deriving Apply at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = ApplyTypes.Int
-          implicit val StringType: Type[String] = ApplyTypes.String
+        orErasedInstance[F, cats.Apply[F]](ErasedTC.Apply) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = ApplyTypes.Int
+            implicit val StringType: Type[String] = ApplyTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          val directFields = scala.collection.mutable.Set.empty[String]
-          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
+            val directFields = scala.collection.mutable.Set.empty[String]
+            val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
 
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else if (tInt =:= tString) {
-              // Invariant
-            } else {
-              nestedFields += name
+            fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+              val tInt = pInt.tpe.Underlying
+              val tString = pString.tpe.Underlying
+              if (tInt =:= IntType && tString =:= StringType) {
+                directFields += name
+              } else if (tInt =:= tString) {
+                // Invariant
+              } else {
+                nestedFields += name
+              }
             }
-          }
 
-          if (nestedFields.nonEmpty) {
-            runSafe {
-              failDerivation[Unit](
-                CatsDerivationError.UnsupportedFieldShape(
-                  "Apply",
-                  nestedFields.mkString(", "),
-                  "nested type constructors are not supported - " +
-                    "only direct type parameter fields (A) and invariant fields are supported"
+            if (nestedFields.nonEmpty) {
+              runSafe {
+                failDerivation[Unit](
+                  CatsDerivationError.UnsupportedFieldShape(
+                    "Apply",
+                    nestedFields.mkString(", "),
+                    "nested type constructors are not supported - " +
+                      "only direct type parameter fields (A) and invariant fields are supported"
+                  )
                 )
+              }
+            }
+
+            val directFieldSet: Set[String] = directFields.toSet
+
+            // Pre-load extensions before entering the quote
+            runSafe {
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+            }
+
+            // ap still needs the erased approach: ff: F[A => B] and fa: F[A] both need F[Any] for field extraction
+            implicit val AnyType: Type[Any] = ApplyTypes.Any
+            implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+
+            val caseClass = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
+
+            val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
+              runSafe {
+                deriveApplyApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
+              }
+
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.applyInstance[F](
+                mapFn = {
+                  (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
+                    val _ = fa
+                    val _ = f
+                    Expr.splice {
+                      runSafe {
+                        deriveApplyMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                          FCtor,
+                          directFieldSet,
+                          Expr.quote(fa),
+                          Expr.quote(f)
+                        )(
+                          Type.of[CatsDerivationFactories.W1],
+                          Type.of[CatsDerivationFactories.W2]
+                        )
+                      }
+                    }
+                },
+                apFn = {
+                  (
+                      ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2],
+                      fa: F[CatsDerivationFactories.W1]
+                  ) =>
+                    val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val _ = anyFf
+                    val _ = anyFa
+                    Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
+                }
               )
             }
-          }
-
-          val directFieldSet: Set[String] = directFields.toSet
-
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          // ap still needs the erased approach: ff: F[A => B] and fa: F[A] both need F[Any] for field extraction
-          implicit val AnyType: Type[Any] = ApplyTypes.Any
-          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-
-          val caseClass = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
-
-          val doAp: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (ffExpr, faExpr) =>
-            runSafe {
-              deriveApplyApBody[F](caseClass, directFieldSet, ffExpr, faExpr)
-            }
-
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.applyInstance[F](
-              mapFn = {
-                (fa: F[CatsDerivationFactories.W1], f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2) =>
-                  val _ = fa
-                  val _ = f
-                  Expr.splice {
-                    runSafe {
-                      deriveApplyMapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
-                        FCtor,
-                        directFieldSet,
-                        Expr.quote(fa),
-                        Expr.quote(f)
-                      )(
-                        Type.of[CatsDerivationFactories.W1],
-                        Type.of[CatsDerivationFactories.W2]
-                      )
-                    }
-                  }
-              },
-              apFn = {
-                (ff: F[CatsDerivationFactories.W1 => CatsDerivationFactories.W2], fa: F[CatsDerivationFactories.W1]) =>
-                  val anyFf: F[Any] = ff.asInstanceOf[F[Any]]
-                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                  val _ = anyFf
-                  val _ = anyFa
-                  Expr.splice(doAp(Expr.quote(anyFf), Expr.quote(anyFa))).asInstanceOf[F[CatsDerivationFactories.W2]]
-              }
-            )
           }
         }
       }

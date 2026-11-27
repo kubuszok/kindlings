@@ -50,4 +50,17 @@ trait InstanceScopedVals { this: MacroCommons =>
   /** Emits the vals recorded by [[instanceScoped]] around `instance` (no-op when there are none). */
   protected def withInstanceScopedVals[T](instance: Expr[T]): Expr[T] =
     instanceScopedValsCache.fold(instance)(_.toValDefs.use(_ => instance))
+
+  /** The vals recorded so far, to be handed to [[restoreInstanceScopedVals]] when a derivation attempt is abandoned (so
+    * that the vals it recorded are not emitted around the result of the attempt that replaces it).
+    */
+  protected def instanceScopedValsSnapshot(): Any = (instanceScopedValsCache, instanceScopedValsCount)
+
+  /** Forgets the vals recorded since `snapshot` (a value returned by [[instanceScopedValsSnapshot]]). */
+  protected def restoreInstanceScopedVals(snapshot: Any): Unit = snapshot match {
+    case (cache: Option[?], count: Int) =>
+      instanceScopedValsCache = cache.asInstanceOf[Option[ValDefsCache]]
+      instanceScopedValsCount = count
+    case _ => ()
+  }
 }

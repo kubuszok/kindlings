@@ -116,7 +116,7 @@ trait EmptyMacrosImpl
             }
             .toList
           val err = EmptyDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
-          Log.error(err.message) >> MIO.fail(err)
+          logDerivationError(err.message) >> MIO.fail(err)
       }
     }
 

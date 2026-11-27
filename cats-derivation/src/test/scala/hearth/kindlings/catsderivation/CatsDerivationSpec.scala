@@ -1267,7 +1267,8 @@ final class CatsDerivationSpec extends MacroSuite {
         """
       ).check(
         "Macro derivation failed",
-        "Cannot find or derive Empty for field value",
+        "field value of",
+        "the type parameter itself has no EmptyK",
         "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
       )
     }
@@ -1280,7 +1281,8 @@ final class CatsDerivationSpec extends MacroSuite {
         """
       ).check(
         "Macro derivation failed",
-        "Cannot find or derive Semigroup for field value",
+        "field value of",
+        "the type parameter itself has no SemigroupK",
         "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
       )
     }
@@ -1293,7 +1295,8 @@ final class CatsDerivationSpec extends MacroSuite {
         """
       ).check(
         "Macro derivation failed",
-        "Cannot find or derive Monoid for field value",
+        "field value of",
+        "the type parameter itself has no MonoidK",
         "Enable debug logging with: import hearth.kindlings.catsderivation.debug.logDerivationForCatsDerivation"
       )
     }

@@ -17,7 +17,7 @@ trait FunctorMacrosImpl
     extends rules.FunctorCaseClassRuleImpl
     with CatsDerivationTimeout
     with CatsDerivationErrorSupport
-    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
+    with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   /** Summon `cats.Functor[G]` for the type constructor `G` of the applied type `G[X]`, using Hearth's `Type.decompose1`
@@ -112,7 +112,7 @@ trait FunctorMacrosImpl
             else s" - ${rule.name}: ${rs.mkString(", ")}"
           }.toList
           val err = FunctorDerivationError.UnsupportedType(fName, reasonsStrings)
-          Log.error(err.message) >> MIO.fail(err)
+          logDerivationError(err.message) >> MIO.fail(err)
       }
     }
   }
@@ -192,15 +192,17 @@ trait FunctorMacrosImpl
 
     Log
       .namedScope(s"Deriving Functor at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
-          implicit val AnyType: Type[Any] = FunctorTypes.Any
-          val isCaseClass = CaseClass.parse(using FCtor.apply[Any]).toEither.isRight
-          if (isCaseClass) {
-            val result = runSafe(deriveFunctorRecursively[F])
-            deriveFunctorForCaseClass(result, runSafe)(FCtor)
-          } else {
-            runSafe(deriveFunctorForEnum[F](FCtor, runSafe))
+        orErasedInstance[F, cats.Functor[F]](ErasedTC.Functor) {
+          MIO.scoped { runSafe =>
+            val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+            implicit val AnyType: Type[Any] = FunctorTypes.Any
+            val isCaseClass = CaseClass.parse(using FCtor.apply[Any]).toEither.isRight
+            if (isCaseClass) {
+              val result = runSafe(deriveFunctorRecursively[F])
+              deriveFunctorForCaseClass(result, runSafe)(FCtor)
+            } else {
+              runSafe(deriveFunctorForEnum[F](FCtor, runSafe))
+            }
           }
         }
       }

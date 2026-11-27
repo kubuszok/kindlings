@@ -9,7 +9,11 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** EmptyK derivation: constructs empty F[A] by summoning Empty for each field type in F[Any]. */
-trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
+trait EmptyKMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with KernelFromKSupport
+    with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -26,30 +30,32 @@ trait EmptyKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSup
 
     Log
       .namedScope(s"Deriving EmptyK at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              val doEmpty: Expr[F[Any]] = runSafe {
-                for {
-                  _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
-                  result <- deriveEmptyKBody[F](caseClass)
-                } yield result
-              }
+        orErasedInstance[F, alleycats.EmptyK[F]](ErasedTC.EmptyK, specialisedApplies = fieldsAreConstantOrApplied[F]) {
+          CaseClass.parse[F[Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                val doEmpty: Expr[F[Any]] = runSafe {
+                  for {
+                    _ <- Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                    result <- deriveEmptyKBody[F](caseClass)
+                  } yield result
+                }
 
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.emptyKInstance[F] { () =>
-                  Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.emptyKInstance[F] { () =>
+                    Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+                  }
                 }
               }
-            }
-          case Left(reason) =>
-            failDerivation(
-              CatsDerivationError.CannotParseCaseClass(
-                Type[F[Any]].prettyPrint,
-                s"$reason. $macroName can only be derived for case classes."
+            case Left(reason) =>
+              failDerivation(
+                CatsDerivationError.CannotParseCaseClass(
+                  Type[F[Any]].prettyPrint,
+                  s"$reason. $macroName can only be derived for case classes."
+                )
               )
-            )
+          }
         }
       }
       .map(withInstanceScopedVals(_))

@@ -184,9 +184,18 @@ trait PartialOrderMacrosImpl extends StrictDerivationSupport with InstanceScopeS
   object PartialOrderSingletonRule extends PartialOrderDerivationRule("PartialOrder as singleton") {
     def apply[A: PartialOrderCtx]: MIO[Rule.Applicability[Expr[Double]]] =
       SingletonValue.parse[A].toEither match {
-        case Right(_)     => MIO.pure(Rule.matched(Expr(0.0)))
-        case Left(reason) => MIO.pure(Rule.yielded(reason.toString))
+        case Right(_) => MIO.pure(Rule.matched(Expr(0.0)))
+        // A literal type (`str: "Scala"`) has a single value too.
+        case Left(_) if isLiteralType[A] => MIO.pure(Rule.matched(Expr(0.0)))
+        case Left(reason)                => MIO.pure(Rule.yielded(reason.toString))
       }
+
+    private def isLiteralType[A: Type]: Boolean =
+      Type.StringCodec.fromType(Type[A]).isDefined || Type.IntCodec.fromType(Type[A]).isDefined ||
+        Type.LongCodec.fromType(Type[A]).isDefined || Type.DoubleCodec.fromType(Type[A]).isDefined ||
+        Type.FloatCodec.fromType(Type[A]).isDefined || Type.BooleanCodec.fromType(Type[A]).isDefined ||
+        Type.CharCodec.fromType(Type[A]).isDefined || Type.ShortCodec.fromType(Type[A]).isDefined ||
+        Type.ByteCodec.fromType(Type[A]).isDefined
   }
 
   object PartialOrderCaseClassRule extends PartialOrderDerivationRule("PartialOrder as case class") {
