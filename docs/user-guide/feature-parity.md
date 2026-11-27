@@ -1326,8 +1326,8 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | `defaultFieldMode` | `XmlFieldMode.Element` | Default mapping for fields: `Element` (child elements) or `Attribute` (XML attributes, for single text values: primitives, `String`, `BigDecimal`, `BigInt`, value types over them and `Option`s of these; collections, maps, case classes and sealed traits stay child elements). Encoder and decoder follow the same rule |
 | `fieldNameMapper` | `identity` | Transform field names (supports snake_case, kebab-case, PascalCase, SCREAMING_SNAKE_CASE) |
 | `constructorNameMapper` | `identity` | Transform sealed trait subtype names for discriminator values |
-| `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None`: the subtype is an element named after it, inside the value's element) |
-| `enumAsStrings` | `false` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or - with `defaultFieldMode = Attribute` - an attribute. Sealed traits with case classes keep the discriminator |
+| `discriminatorAttribute` | `Some("type")` | Attribute name for sealed trait discrimination (`None`: the subtype is an element named after it, inside the value's element); `@xmlDiscriminator(name)` on a sealed type overrides it for that type |
+| `enumAsStrings` | `false` | Write enums whose cases are all singletons (case objects, parameterless Scala 3 enum cases, Java enums, `Enumeration`s) as the case name: the text of the element, or - with `@xmlAttribute` / `defaultFieldMode = Attribute` - an attribute. With it, a sealed trait with a case class is a compile-time error (as in circe-derivation; a runtime error when the configuration is only known at runtime) |
 | `useDefaults` | `false` | Use constructor default values for missing fields (child elements or attributes) during decoding |
 | `transientNone` | `false` | Omit `None` fields during encoding |
 | `transientEmpty` | `false` | Omit empty collections during encoding (empty strings are still written) |
@@ -1337,6 +1337,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | Annotation | Description |
 |---|---|
 | `@xmlName(name)` | Rename a field/subtype in the XML representation (not transformed by the name mappers) |
+| `@xmlDiscriminator(name)` | On a sealed trait / Scala 3 enum: the discriminator attribute of that type, whatever `discriminatorAttribute` is (also when it is `None`) |
 | `@transientField` | Exclude a field from encoding/decoding (requires default value) |
 | `@xmlAttribute` | Force a field to be encoded/decoded as an XML attribute. Needs a single text value (a text type, a value type over one, an enum of singletons, a type with a user-provided instance, or an `Option` of these); anything else is a compile-time error |
 | `@xmlElement` | Force a field to be encoded/decoded as a child XML element |
@@ -1357,7 +1358,7 @@ flow style `[]` / `{}`, which the opt-in `withEmptyCollectionsAsFlow` makes `toY
 | Case classes | Yes (fields as child elements or attributes) |
 | Value classes | Yes (automatic unwrapping) |
 | Sealed traits | Yes (discriminator attribute, or an element named after the subtype; nested sealed traits are flattened) |
-| Enums of singletons (case objects, Scala 3 enums, Java enums, `Enumeration`) | Yes (discriminator / element encoding, or the case name via `enumAsStrings`, `@xmlAttribute`, `@xmlContent`) |
+| Enums of singletons (case objects, Scala 3 enums, Java enums, `Enumeration`) | Yes (discriminator / element encoding; with `enumAsStrings` the case name, also as an attribute or as text content - `@xmlAttribute` / `@xmlContent` on an enum require `enumAsStrings`) |
 | Singletons (case objects) | Yes (an empty element) |
 | Generic types (`Box[A]`, `Pair[A, B]`) | Yes |
 | Nested structures (arbitrary depth) | Yes |
