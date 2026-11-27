@@ -198,7 +198,13 @@ trait EncoderHandleAsEnumRuleImpl {
               }
             }
             .map { matchCases =>
-              ectx.value.matchOn[Unit](matchCases.toNonEmptyVector)
+              val matched = ectx.value.matchOn[Unit](matchCases.toNonEmptyVector)
+              // As jsoniter-scala: a `null` Java enum value is a `NullPointerException` (not a `MatchError`).
+              if (isJavaEnum) Expr.quote {
+                if (Expr.splice(ectx.value) == null) throw new NullPointerException
+                Expr.splice(matched)
+              }
+              else matched
             }
       }
     }
