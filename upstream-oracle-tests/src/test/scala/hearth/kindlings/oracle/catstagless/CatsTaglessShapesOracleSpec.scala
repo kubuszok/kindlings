@@ -52,7 +52,13 @@ final class CatsTaglessShapesOracleSpec extends MacroSuite {
         compare("mapK transformers") { i =>
           val log = ListBuffer.empty[String]
           val mapped = i.functorKTransformers.mapK(transformers)(optionToList(log))
-          (mapped.either(1).value, mapped.either(-1).value, mapped.kleisli(2).run("ab"), mapped.option(3).value, log.toList)
+          (
+            mapped.either(1).value,
+            mapped.either(-1).value,
+            mapped.kleisli(2).run("ab"),
+            mapped.option(3).value,
+            log.toList
+          )
         } ++
         compare("mapK cokleisli param") { i =>
           val mapped = i.functorKCokleisliParam.mapK(cokleisliParam)(optionToList(ListBuffer.empty))
@@ -185,7 +191,8 @@ object CatsTaglessShapesOracleSpec {
     def sum(xs: Int*): Int = xs.sum
     def covariantSum(xs: Int*): Option[Int] = Some(xs.sum)
     def contravariantSum(xs: Option[Int]*): Int = xs.map(_.getOrElse(100)).sum
-    def invariantSum(xs: Option[Int]*): Option[Int] = xs.foldLeft(Option(0))((a, b) => for { x <- a; y <- b } yield x + y)
+    def invariantSum(xs: Option[Int]*): Option[Int] =
+      xs.foldLeft(Option(0))((a, b) => for { x <- a; y <- b } yield x + y)
   }
   val contra: TgContra[Option] = new TgContra[Option] {
     def sum(xs: Option[Int]): Int = xs.getOrElse(0)

@@ -27,6 +27,11 @@ trait TgBuilder[F[_]] {
   def withFoo(foo: String): TgBuilder[F]
 }
 
+trait TgSafe[F[_]] {
+  def parseInt(str: String): F[Int]
+  def divide(dividend: Float, divisor: Float): F[Float]
+}
+
 trait TgSafeInv[F[_]] {
   def parseInt(fs: F[String]): F[Int]
   def doubleParser(precision: Int): Kleisli[F, String, Double]

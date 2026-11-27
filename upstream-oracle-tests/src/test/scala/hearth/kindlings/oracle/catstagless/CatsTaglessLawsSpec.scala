@@ -6,14 +6,22 @@ import cats.data.{Cokleisli, EitherT, Kleisli, Tuple2K}
 import cats.laws.discipline.{ExhaustiveCheck, SerializableTests}
 import cats.laws.discipline.arbitrary.*
 import cats.laws.discipline.eq.*
-import cats.tagless.laws.discipline.{ApplyKTests, ContravariantKTests, InvariantKTests, SemigroupalKTests}
+import cats.tagless.laws.discipline.{
+  ApplyKTests,
+  ContravariantKTests,
+  FunctorKTests,
+  InstrumentTests,
+  InvariantKTests,
+  SemigroupalKTests
+}
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 
 import scala.util.Try
 
-/** cats-tagless' discipline laws (`cats-tagless-laws`) for instances derived by cats-tagless-derivation, on the algebras
-  * cats-tagless checks its own derivation with (`autoApplyKTests`, `autoInvariantKTests`, `autoSemigroupalKTests`,
-  * `autoContravariantKTests`, `TestAlgebras`), including the `SerializableTests` it runs on its instances.
+/** cats-tagless' discipline laws (`cats-tagless-laws`) for instances derived by cats-tagless-derivation, on the
+  * algebras cats-tagless checks its own derivation with (`autoApplyKTests`, `autoInvariantKTests`,
+  * `autoSemigroupalKTests`, `autoContravariantKTests`, `TestAlgebras`), including the `SerializableTests` it runs on
+  * its instances.
   */
 final class CatsTaglessLawsSpec extends munit.DisciplineSuite {
   import CatsTaglessLawsSpec.*
@@ -24,12 +32,26 @@ final class CatsTaglessLawsSpec extends munit.DisciplineSuite {
   implicit private val safeInvInvariantK: cats.tagless.InvariantK[TgSafeInv] = k.invariantKSafeInv
   implicit private val calculatorInvariantK0: cats.tagless.InvariantK[TgCalculator] = calculatorInvariantK
 
+  // autoFunctorKTests / autoSemigroupalKTests / autoInstrumentTests on cats-tagless' SafeAlg
+  implicit private val safeInvariantK: cats.tagless.InvariantK[TgSafe] = safeFunctorK
+  checkAll("FunctorK[TgSafe]", FunctorKTests[TgSafe](safeFunctorK).functorK[Try, Option, List, Int])
+  checkAll("FunctorK is Serializable", SerializableTests.serializable(safeFunctorK))
+  checkAll("SemigroupalK[TgSafe]", SemigroupalKTests[TgSafe](safeSemigroupalK).semigroupalK[Try, Option, List])
+  checkAll("Instrument[TgSafe]", InstrumentTests[TgSafe](safeInstrument).instrument[Try, Option, List, Int])
+  checkAll("Instrument is Serializable", SerializableTests.serializable(safeInstrument))
+
   checkAll("ApplyK[TgApplyKAlg]", ApplyKTests[TgApplyKAlg](k.applyKAlg).applyK[Try, Option, List, Int])
   checkAll("ApplyK is Serializable", SerializableTests.serializable(k.applyKAlg))
   checkAll("InvariantK[TgSafeInv]", InvariantKTests[TgSafeInv](k.invariantKSafeInv).invariantK[Try, Option, List])
-  checkAll("InvariantK[TgCalculator]", InvariantKTests[TgCalculator](calculatorInvariantK).invariantK[Try, Option, List])
+  checkAll(
+    "InvariantK[TgCalculator]",
+    InvariantKTests[TgCalculator](calculatorInvariantK).invariantK[Try, Option, List]
+  )
   checkAll("InvariantK is Serializable", SerializableTests.serializable(k.invariantKSafeInv))
-  checkAll("SemigroupalK[TgSafeInv]", SemigroupalKTests[TgSafeInv](k.semigroupalKSafeInv).semigroupalK[Try, Option, List])
+  checkAll(
+    "SemigroupalK[TgSafeInv]",
+    SemigroupalKTests[TgSafeInv](k.semigroupalKSafeInv).semigroupalK[Try, Option, List]
+  )
   checkAll(
     "SemigroupalK[TgCalculator]",
     SemigroupalKTests[TgCalculator](k.semigroupalKCalculator).semigroupalK[Try, Option, List]
@@ -45,6 +67,26 @@ object CatsTaglessLawsSpec {
   import hearth.kindlings.catstaglessderivation.KindlingsInvariantK
 
   val calculatorInvariantK: cats.tagless.InvariantK[TgCalculator] = KindlingsInvariantK.derived[TgCalculator]
+  val safeFunctorK: cats.tagless.FunctorK[TgSafe] =
+    hearth.kindlings.catstaglessderivation.KindlingsFunctorK.derived[TgSafe]
+  val safeSemigroupalK: cats.tagless.SemigroupalK[TgSafe] =
+    hearth.kindlings.catstaglessderivation.KindlingsSemigroupalK.derived[TgSafe]
+  val safeInstrument: cats.tagless.aop.Instrument[TgSafe] =
+    hearth.kindlings.catstaglessderivation.KindlingsInstrument.derived[TgSafe]
+
+  // --- TgSafe (cats-tagless' SafeAlg) ---
+
+  implicit def eqSafe[F[_]](implicit a: Eq[F[Int]], b: Eq[F[Float]]): Eq[TgSafe[F]] =
+    Eq.by(alg => (alg.parseInt _, (alg.divide _).tupled))
+
+  implicit def arbitrarySafe[F[_]](implicit a: Arbitrary[F[Int]], b: Arbitrary[F[Float]]): Arbitrary[TgSafe[F]] =
+    Arbitrary(for {
+      parseIntF <- Arbitrary.arbitrary[String => F[Int]]
+      divideF <- Arbitrary.arbitrary[((Float, Float)) => F[Float]]
+    } yield new TgSafe[F] {
+      def parseInt(str: String) = parseIntF(str)
+      def divide(dividend: Float, divisor: Float) = divideF((dividend, divisor))
+    })
 
   // --- cats-tagless' TestInstances ---
 
