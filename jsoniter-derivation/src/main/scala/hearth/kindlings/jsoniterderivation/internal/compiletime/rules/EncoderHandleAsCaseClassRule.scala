@@ -266,7 +266,18 @@ trait EncoderHandleAsCaseClassRuleImpl {
                         }
                     val fieldEncMIO: MIO[Expr[Unit]] = inlined match {
                       case Some(enc) => MIO.pure(enc)
-                      case None      => deriveEncoderRecursively[Field](using fieldCtx)
+                      // A `scala.Enumeration` value is written in place, as jsoniter-scala does, not by a helper
+                      // `def` (with the config known at compile time it is a write of the id, or a dispatch over
+                      // the stable values): a call to a small helper is not inlined as early by the JIT, and that
+                      // made writing such fields measurably slower.
+                      case None
+                          if Type[Field].isEnumeration && fieldCtx.evaluatedConfig.isDefined &&
+                            summonJsonValueCodecCached[Field].isLeft =>
+                        EncoderHandleAsScalaEnumerationRule[Field](using fieldCtx).flatMap {
+                          case Rule.Applicability.Matched(enc) => MIO.pure(enc)
+                          case _                               => deriveEncoderRecursively[Field](using fieldCtx)
+                        }
+                      case None => deriveEncoderRecursively[Field](using fieldCtx)
                     }
                     fieldEncMIO.map { fieldEnc =>
                       val nameOverride =

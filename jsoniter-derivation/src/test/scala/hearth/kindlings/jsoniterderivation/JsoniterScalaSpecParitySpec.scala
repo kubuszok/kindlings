@@ -22,6 +22,15 @@ object SpsTemperature extends Enumeration {
   val Cold = Value(-1)
   val Hot = Value(1)
 }
+object SpsPlanet extends Enumeration {
+  type Planet = Value
+  val Mercury, Venus, Earth, Mars, Jupiter: Planet = Value
+  val Ürănus: Planet = Value
+  val Renamed: Planet = Value("renamed")
+  val Quoted: Planet = Value("with \"quotes\"")
+}
+final case class SpsPlanets(main: SpsPlanet.Planet, all: List[SpsPlanet.Planet], byPlanet: Map[SpsPlanet.Planet, Int])
+
 final case class SpsBodies(main: SpsBody.Body, all: List[SpsBody.Body], byBody: Map[SpsBody.Body, Int])
 
 sealed trait SpsLeafBase
@@ -97,6 +106,22 @@ final class JsoniterScalaSpecParitySpec extends MacroSuite {
           decodeError(c, """{"main":1,"all":[],"byBody":{"1000":1}}""") ==>
             "illegal enum value \"1000\", offset: 0x00000023"
           decodeError(c, """{"main":null,"all":[],"byBody":{}}""") ==> "expected digit, offset: 0x00000008"
+        }
+      }
+
+      test("public vals (written with constant names) and values whose names are not the names of their vals") {
+        val all = SpsPlanet.values.toList
+        val value = SpsPlanets(SpsPlanet.Earth, all, all.zipWithIndex.toMap)
+        val names =
+          List("Mercury", "Venus", "Earth", "Mars", "Jupiter", "Ürănus", "renamed", """with \"quotes\"""")
+        val json = """{"main":"Earth","all":[""" + names.map(n => s""""$n"""").mkString(",") + """],"byPlanet":{""" +
+          value.byPlanet.toList.map { case (p, i) => s""""${names(all.indexOf(p))}":$i""" }.mkString(",") + "}}"
+        List[JsonValueCodec[SpsPlanets]](
+          KindlingsJsonValueCodec.derived[SpsPlanets],
+          runtime(SpsRuntimeConfigs.default)(implicit c => KindlingsJsonValueCodec.derived[SpsPlanets])
+        ).foreach { c =>
+          writeToString(value)(c) ==> json
+          readFromString[SpsPlanets](json)(c) ==> value
         }
       }
 

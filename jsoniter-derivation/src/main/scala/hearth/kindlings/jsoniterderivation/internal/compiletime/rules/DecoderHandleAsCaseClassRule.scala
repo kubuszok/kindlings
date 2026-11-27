@@ -538,7 +538,18 @@ trait DecoderHandleAsCaseClassRuleImpl {
                     }
                   else None
 
-                val deriveMIO: MIO[Expr[JsonReader] => Expr[Field]] = inlinedDecode match {
+                val fieldCtx = dctx.copy(stringified = Some(hasStringifiedAnnotation))
+                // A `scala.Enumeration` value is read in place (not by a call of a helper `def`), as it is written.
+                val enumerationMIO: MIO[Option[Expr[JsonReader] => Expr[Field]]] =
+                  if (inlinedDecode.isEmpty && Type[Field].isEnumeration && summonJsonValueCodecCached[Field].isLeft)
+                    scalaEnumerationFieldDecoder[Field](fieldCtx)
+                  else MIO.pure(None)
+
+                lazy val deriveMIO: MIO[Expr[JsonReader] => Expr[Field]] = enumerationMIO.flatMap {
+                  case Some(inPlace) => MIO.pure(inPlace)
+                  case None          => fieldDeriveMIO
+                }
+                lazy val fieldDeriveMIO: MIO[Expr[JsonReader] => Expr[Field]] = inlinedDecode match {
                   case Some(inlined) => MIO.pure(inlined)
                   case None          =>
                     // a direct call of the field's decoder (no function value applied per field per decode)

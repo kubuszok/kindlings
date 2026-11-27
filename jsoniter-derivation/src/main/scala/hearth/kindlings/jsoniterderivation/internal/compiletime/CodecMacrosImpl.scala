@@ -430,6 +430,74 @@ trait CodecMacrosImpl
 
   // Entrypoints
 
+  /** The encoder of the derived type itself: its cached helper `def` (`encode_A`, see [[deriveEncoderRecursively]]),
+    * called directly from the codec's method. (Not through another `def` forwarding to it: each cached `def` begins
+    * with re-bindings of its parameters, so even a forwarding one is too large for the JIT to inline it early, which
+    * cost writes up to a fifth of their speed.)
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private def topLevelEncoder[A: Type](
+      configExpr: Expr[JsoniterConfig],
+      cache: MLocal[ValDefsCache],
+      selfType: Option[??],
+      evConfig: Option[JsoniterConfig]
+  ): MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
+    implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
+    // the call built for these stubs is discarded: only the helper is used
+    val ctx = EncoderCtx.from[A](
+      Expr.quote(null.asInstanceOf[A]),
+      Expr.quote(null.asInstanceOf[JsonWriter]),
+      configExpr,
+      cache,
+      selfType,
+      evConfig
+    )
+    deriveEncoderRecursively[A](using ctx) >> ctx.getHelper[A].map(_.get)
+  }
+
+  /** As [[topLevelEncoder]], the decoder of the derived type itself (`decode_A`). */
+  @scala.annotation.nowarn("msg=is never used")
+  private def topLevelDecoder[A: Type](
+      configExpr: Expr[JsoniterConfig],
+      cache: MLocal[ValDefsCache],
+      selfType: Option[??],
+      evConfig: Option[JsoniterConfig]
+  ): MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
+    implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
+    val ctx = DecoderCtx.from[A](
+      Expr.quote(null.asInstanceOf[JsonReader]),
+      configExpr,
+      cache,
+      selfType,
+      evConfig,
+      Some(configExpr)
+    )
+    deriveDecoderRecursively[A](using ctx) >> ctx.getHelper[A].map(_.get)
+  }
+
+  /** `config.encodingOnly` / `config.decodingOnly` for the checks the entry points make on every call: the constant
+    * `false` when the config is known at compile time and the flag is off (a constant `true` would make the code after
+    * the check dead code, which Scala 2 warns about at the derivation site).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  private def encodingOnlyExpr(configExpr: Expr[JsoniterConfig]): Expr[Boolean] = {
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    semiEvalConfig(configExpr) match {
+      case Some(config) if !config.encodingOnly => Expr(false)
+      case _                                    => Expr.quote(Expr.splice(configExpr).encodingOnly)
+    }
+  }
+  @scala.annotation.nowarn("msg=is never used")
+  private def decodingOnlyExpr(configExpr: Expr[JsoniterConfig]): Expr[Boolean] = {
+    implicit val BooleanT: Type[Boolean] = CTypes.Boolean
+    implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
+    semiEvalConfig(configExpr) match {
+      case Some(config) if !config.decodingOnly => Expr(false)
+      case _                                    => Expr.quote(Expr.splice(configExpr).decodingOnly)
+    }
+  }
+
   /** Derive a combined JsonValueCodec for type A.
     *
     * To avoid Scala 3 cross-splice staging issues, all derivation (encode, decode, nullValue) is performed in a single
@@ -454,7 +522,7 @@ trait CodecMacrosImpl
           Expr.splice(nullValueExpr),
           (in: JsonReader, default: A) => {
             val _ = default
-            if (Expr.splice(configExpr).encodingOnly)
+            if (Expr.splice(encodingOnlyExpr(configExpr)))
               throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
             // as jsoniter-scala: a JSON `null` is the `default` argument (when it is not `null`)
             JsoniterDerivationUtils.readNullAsDefaultArgument[A](
@@ -464,7 +532,7 @@ trait CodecMacrosImpl
             )(r => Expr.splice(decodeFn(Expr.quote(r), configExpr)))
           },
           (x: A, out: JsonWriter) =>
-            if (Expr.splice(configExpr).decodingOnly)
+            if (Expr.splice(decodingOnlyExpr(configExpr)))
               throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
             else
               Expr.splice(encodeFn(Expr.quote(x), Expr.quote(out), configExpr))
@@ -690,41 +758,11 @@ trait CodecMacrosImpl
           validateConfigOrAbort(evConfig, "KindlingsJsonCodec.derived")
 
           // Value codec parts — same as deriveCodecTypeClass
-          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring json codec encode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
-                })
-              }
-              _ <- Log.info(s"Defined json codec encode body for ${Type[A].prettyPrint}")
-              fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
-            } yield fn.get
-          }
+          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] =
+            topLevelEncoder[A](configExpr, cache, selfType, evConfig)
 
-          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring json codec decode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(
-                    deriveDecoderRecursively[A](using
-                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
-                    )
-                  )
-                })
-              }
-              _ <- Log.info(s"Defined json codec decode body for ${Type[A].prettyPrint}")
-              fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
-            } yield fn.get
-          }
+          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] =
+            topLevelDecoder[A](configExpr, cache, selfType, evConfig)
 
           val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
@@ -773,7 +811,7 @@ trait CodecMacrosImpl
               Expr.splice(nullVal),
               (in: JsonReader, default: A) => {
                 val _ = default
-                if (Expr.splice(configExpr).encodingOnly)
+                if (Expr.splice(encodingOnlyExpr(configExpr)))
                   throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
                 JsoniterDerivationUtils.readNullAsDefaultArgument[A](
                   in,
@@ -782,7 +820,7 @@ trait CodecMacrosImpl
                 )(r => Expr.splice(decFn(Expr.quote(r), configExpr)))
               },
               (x: A, out: JsonWriter) =>
-                if (Expr.splice(configExpr).decodingOnly)
+                if (Expr.splice(decodingOnlyExpr(configExpr)))
                   throw new NotImplementedError() // as jsoniter-scala (`???`): "an implementation is missing"
                 else Expr.splice(encFn(Expr.quote(x), Expr.quote(out), configExpr)),
               (in: JsonReader) => Expr.splice(keyDecFn).apply(Expr.splice(Expr.quote(in))),
@@ -824,30 +862,14 @@ trait CodecMacrosImpl
       .namedScope(
         s"Deriving encoder-only for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-        implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
-        implicit val UnitT: Type[Unit] = CTypes.Unit
 
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = None
           val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
-          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring encoder-only encode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
-                })
-              }
-              _ <- Log.info(s"Defined encoder-only encode body for ${Type[A].prettyPrint}")
-              fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
-            } yield fn.get
-          }
+          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] =
+            topLevelEncoder[A](configExpr, cache, selfType, evConfig)
 
           val encFn = runSafe {
             for {
@@ -891,33 +913,14 @@ trait CodecMacrosImpl
       .namedScope(
         s"Deriving decoder-only for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-        implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
 
         MIO.scoped { runSafe =>
           val cache = ValDefsCache.mlocal
           val selfType: Option[??] = None
           val evConfig: Option[JsoniterConfig] = semiEvalConfig(configExpr)
 
-          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring decoder-only decode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(
-                    deriveDecoderRecursively[A](using
-                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
-                    )
-                  )
-                })
-              }
-              _ <- Log.info(s"Defined decoder-only decode body for ${Type[A].prettyPrint}")
-              fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
-            } yield fn.get
-          }
+          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] =
+            topLevelDecoder[A](configExpr, cache, selfType, evConfig)
 
           val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)
 
@@ -964,10 +967,6 @@ trait CodecMacrosImpl
       .namedScope(
         s"Deriving codec for ${Type[A].prettyPrint} at: ${Environment.currentPosition.prettyPrint}"
       ) {
-        implicit val ConfigT: Type[JsoniterConfig] = CTypes.JsoniterConfig
-        implicit val JsonReaderT: Type[JsonReader] = CTypes.JsonReader
-        implicit val JsonWriterT: Type[JsonWriter] = CTypes.JsonWriter
-        implicit val UnitT: Type[Unit] = CTypes.Unit
 
         // Three separate MIO values for encoder, decoder and null value, combined with parTuple
         // for parallel error aggregation. Each derivation uses ValDefBuilder to cache its body
@@ -987,42 +986,12 @@ trait CodecMacrosImpl
           validateConfigOrAbort(evConfig, macroName)
 
           // Encoder: cache as def, derive body inside, extract function from cache
-          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef3[A, JsonWriter, JsoniterConfig, Unit](s"codec_encode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring codec encode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-encode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-encode-body", defBuilder) { case (_, (v, w, c)) =>
-                  rs(deriveEncoderRecursively[A](using EncoderCtx.from(v, w, c, cache, selfType, evConfig)))
-                })
-              }
-              _ <- Log.info(s"Defined codec encode body for ${Type[A].prettyPrint}")
-              fn <- cache.get3Ary[A, JsonWriter, JsoniterConfig, Unit]("codec-encode-body")
-            } yield fn.get
-          }
+          val encMIO: MIO[(Expr[A], Expr[JsonWriter], Expr[JsoniterConfig]) => Expr[Unit]] =
+            topLevelEncoder[A](configExpr, cache, selfType, evConfig)
 
           // Decoder: same pattern with ofDef2
-          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] = {
-            val defBuilder =
-              ValDefBuilder.ofDef2[JsonReader, JsoniterConfig, A](s"codec_decode_${Type[A].shortName}")
-            for {
-              _ <- Log.info(s"Forward-declaring codec decode body for ${Type[A].prettyPrint}")
-              _ <- cache.forwardDeclare("codec-decode-body", defBuilder)
-              _ <- MIO.scoped { rs =>
-                rs(cache.buildCachedWith("codec-decode-body", defBuilder) { case (_, (r, c)) =>
-                  rs(
-                    deriveDecoderRecursively[A](using
-                      DecoderCtx.from(r, c, cache, selfType, evConfig, Some(configExpr))
-                    )
-                  )
-                })
-              }
-              _ <- Log.info(s"Defined codec decode body for ${Type[A].prettyPrint}")
-              fn <- cache.get2Ary[JsonReader, JsoniterConfig, A]("codec-decode-body")
-            } yield fn.get
-          }
+          val decMIO: MIO[(Expr[JsonReader], Expr[JsoniterConfig]) => Expr[A]] =
+            topLevelDecoder[A](configExpr, cache, selfType, evConfig)
 
           // Null value
           val nullMIO: MIO[Expr[A]] = deriveNullValue[A](configExpr, evConfig)

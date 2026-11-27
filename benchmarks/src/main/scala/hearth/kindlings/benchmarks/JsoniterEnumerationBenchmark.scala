@@ -84,13 +84,8 @@ class JsoniterEnumerationBenchmark {
   def setup(): Unit = {
     byNameBytes = writeToArray(EnumerationBenchmarkData.value)(OriginalEnumerationCodecs.byName)
     byIdBytes = writeToArray(EnumerationBenchmarkData.value)(OriginalEnumerationCodecs.byId)
-    require(
-      java.util.Arrays
-        .equals(byNameBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byName))
-    )
-    require(
-      java.util.Arrays.equals(byIdBytes, writeToArray(EnumerationBenchmarkData.value)(KindlingsEnumerationCodecs.byId))
-    )
+    // (no Kindlings codec is called here: a call made during setup would add its lambda to the type profile of the
+    // call site all Kindlings codecs share, and the benchmarked one could not be inlined)
   }
 
   @Benchmark def kindlingsWriteByName(): Array[Byte] =
