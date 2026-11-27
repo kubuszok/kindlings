@@ -1,13 +1,11 @@
 package hearth.kindlings.oracle.avro
 
-import com.sksamuel.avro4s.{Decoder as UDecoder, Encoder as UEncoder, ScalePrecision, SchemaFor as USchemaFor}
-import hearth.MacroSuite
+import com.sksamuel.avro4s.ScalePrecision
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, TimestampPrecision}
-import hearth.kindlings.oracle.Oracle
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.generic.GenericData
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Try}
 
 /** Kindlings' avro-derivation vs avro4s (v4 on Scala 2.13, v5 on Scala 3 - each Scala version is compared with its own
   * avro4s line): the schemas (as JSON), the binary encoding of sample values, each side decoding the other's bytes
@@ -16,66 +14,7 @@ import scala.util.{Failure, Success, Try}
   * Each case lists the *exact* differences it expects; each one must be a documented, intentional difference (see the
   * avro section of `docs/user-guide/feature-parity.md`). A difference that appears or disappears fails the test.
   */
-final class AvroOracleSpec extends MacroSuite {
-
-  private val isAvro4s5 = AvroUpstream.majorVersion == 5
-
-  private def schemaDiff(k: AvroSide[?], u: AvroSide[?]): List[String] =
-    Oracle.diff(AvroOracle.schemaTree(k.schema), AvroOracle.schemaTree(u.schema)).map("schema " + _)
-
-  /** Encodes `value` with both sides, compares the bytes, and decodes each side's bytes with both sides. */
-  private def valueDiff[A](k: AvroSide[A], u: AvroSide[A], value: A, eq: (A, A) => Boolean): List[String] = {
-    val kb = AvroOracle.encodeBinary(k, value)
-    val ub = AvroOracle.encodeBinary(u, value)
-    val bytes = (kb, ub) match {
-      case (Success(a), Success(b)) =>
-        if (java.util.Arrays.equals(a, b)) Nil
-        else List(s"bytes: kindlings=${AvroOracle.hex(a)} upstream=${AvroOracle.hex(b)}")
-      case _ => List(s"bytes: kindlings=$kb upstream=$ub")
-    }
-    def check(label: String, decoded: Try[A]): List[String] = decoded match {
-      case Success(d) if eq(d, value) => Nil
-      case other                      => List(s"$label: $other")
-    }
-    val cross = (kb.toOption, ub.toOption) match {
-      case (Some(a), Some(b)) =>
-        check("kindlings decodes upstream bytes", AvroOracle.decodeBinary(k, u.schema, b)) ++
-          check("upstream decodes kindlings bytes", AvroOracle.decodeBinary(u, k.schema, a)) ++
-          check("kindlings round trip", AvroOracle.decodeBinary(k, k.schema, a)) ++
-          check("upstream round trip", AvroOracle.decodeBinary(u, u.schema, b))
-      case _ => Nil
-    }
-    bytes ++ cross
-  }
-
-  private def compareWith[A](k: AvroSide[A], u: AvroSide[A], values: List[A], eq: (A, A) => Boolean)(
-      expectedDifferences: String*
-  ): Unit = {
-    val differences = schemaDiff(k, u) ++ values.flatMap(valueDiff(k, u, _, eq)).distinct
-    assertEquals(
-      differences,
-      expectedDifferences.toList,
-      s"Kindlings vs avro4s ${AvroUpstream.majorVersion} differences:\n${differences.mkString("\n")}\n" +
-        s"kindlings schema: ${k.schema}\nupstream schema:  ${u.schema}"
-    )
-  }
-
-  private def compare[A](k: AvroSide[A], u: AvroSide[A], values: A*)(expectedDifferences: String*): Unit =
-    compareWith(k, u, values.toList, (a: A, b: A) => a == b)(expectedDifferences*)
-
-  /** For documented differences of the default config: only the schemas are compared (the encodings then differ by
-    * construction); the same fixture is compared in full under `AvroConfig.avro4sDefaults`.
-    */
-  private def compareSchemas(k: AvroSide[?], u: AvroSide[?])(expectedDifferences: String*): Unit = {
-    val differences = schemaDiff(k, u)
-    assertEquals(
-      differences,
-      expectedDifferences.toList,
-      s"Kindlings vs avro4s ${AvroUpstream.majorVersion} schema differences:\n${differences.mkString("\n")}"
-    )
-  }
-
-  private def u[A](implicit s: USchemaFor[A], e: UEncoder[A], d: UDecoder[A]): AvroSide[A] = AvroUpstream.side[A]
+final class AvroOracleSpec extends AvroOracleSuite {
 
   private object K {
     implicit val config: AvroConfig = AvroConfig.default
@@ -386,29 +325,6 @@ final class AvroOracleSpec extends MacroSuite {
     )
     test("@avroNoDefault")(compare(K.noDefault, U.noDefault, AvNoDefault(1, "b"))())
   }
-
-  /** Decodes the same Avro value with both decoders and compares the outcomes (the value, or a failure). */
-  private def assertDecodes[A](k: AvroSide[A], u: AvroSide[A], input: Any)(expectedDifferences: String*): Unit = {
-    val kd = Try(k.decode(input))
-    val ud = Try(u.decode(input))
-    val differences = (kd, ud) match {
-      case (Success(a), Success(b)) if a == b => Nil
-      case (Failure(_), Failure(_))           => Nil
-      case _                                  => List(s"decoded: kindlings=$kd upstream=$ud")
-    }
-    assertEquals(differences, expectedDifferences.toList, differences.mkString("\n"))
-  }
-
-  private def record(schemaJson: String)(fields: (String, Any)*): GenericRecord = {
-    val r = new GenericData.Record(new Schema.Parser().parse(schemaJson))
-    fields.foreach { case (n, v) => r.put(n, v) }
-    r
-  }
-
-  private def recordSchema(name: String, fields: String*): String =
-    s"""{"type":"record","name":"$name","namespace":"hearth.kindlings.oracle.avro","fields":[${fields.mkString(
-        ","
-      )}]}"""
 
   group("avro4s oracle: decoding") {
     test("integral widening: an int decodes as Long") {

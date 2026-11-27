@@ -569,17 +569,17 @@ final class AvroSchemaForSpec extends MacroSuite {
         dataField.schema().getType ==> Schema.Type.BYTES
       }
 
-      test("@avroFixed on non-Array[Byte] field is compile error") {
+      test("@avroFixed on a field that is neither Array[Byte] nor String is compile error") {
         compileErrors(
           """
           import hearth.kindlings.avroderivation.AvroSchemaFor
           import hearth.kindlings.avroderivation.annotations.avroFixed
-          case class BadFixed(@avroFixed(4) name: String)
+          case class BadFixed(@avroFixed(4) count: Int)
           AvroSchemaFor.schemaOf[BadFixed]
           """
         ).check(
-          "@avroFixed on field 'name'",
-          "requires Array[Byte]"
+          "@avroFixed on field 'count'",
+          "requires Array[Byte] or String"
         )
       }
     }

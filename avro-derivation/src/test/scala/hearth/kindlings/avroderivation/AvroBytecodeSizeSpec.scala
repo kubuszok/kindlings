@@ -20,6 +20,20 @@ object AvroWideInstances {
   }
 }
 
+/** Instances exercising the paths added for avro4s parity (see `AvroAvro4sParitySpec`): renamed ENUM symbols, fields
+  * moved to another namespace, FIXED strings and value classes, fields read through `Product`.
+  */
+object AvroParityInstances {
+  val shipEncoder: AvroEncoder[PaShip] = AvroEncoder.derived[PaShip]
+  val shipDecoder: AvroDecoder[PaShip] = AvroDecoder.derived[PaShip]
+  val namespacedEncoder: AvroEncoder[PaNamespaced] = AvroEncoder.derived[PaNamespaced]
+  val namespacedDecoder: AvroDecoder[PaNamespaced] = AvroDecoder.derived[PaNamespaced]
+  val fixedEncoder: AvroEncoder[PaFixedValues] = AvroEncoder.derived[PaFixedValues]
+  val fixedDecoder: AvroDecoder[PaFixedValues] = AvroDecoder.derived[PaFixedValues]
+  val privateEncoder: AvroEncoder[PaPrivate] = AvroEncoder.derived[PaPrivate]
+  val privateDecoder: AvroDecoder[PaPrivate] = AvroDecoder.derived[PaPrivate]
+}
+
 /** Guards against generated methods too large to be JIT-compiled (see `docs/research/generated-code-audit-2026-11.md`).
   */
 final class AvroBytecodeSizeSpec extends MacroSuite {
@@ -27,6 +41,13 @@ final class AvroBytecodeSizeSpec extends MacroSuite {
   test("no method of the instances derived for a 100-field record exceeds HotSpot's JIT limit") {
     val sizes = BytecodeSizes.methodSizes(AvroWideInstances.getClass)
     assert(sizes.map(_._3).sum > 10000, s"expected the derived instances' code, got: $sizes")
+    val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
+    assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
+  }
+
+  test("no method of the instances using the avro4s-parity paths exceeds HotSpot's JIT limit") {
+    val sizes = BytecodeSizes.methodSizes(AvroParityInstances.getClass)
+    assert(sizes.map(_._3).sum > 1000, s"expected the derived instances' code, got: $sizes")
     val huge = sizes.filter(_._3 > BytecodeSizes.HugeMethodLimit)
     assert(huge.isEmpty, s"methods larger than ${BytecodeSizes.HugeMethodLimit} B: ${huge.mkString(", ")}")
   }
