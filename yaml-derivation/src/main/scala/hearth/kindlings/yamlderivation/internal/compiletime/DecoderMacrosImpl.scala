@@ -450,6 +450,14 @@ trait DecoderMacrosImpl
         }
       }
 
+  /** The name of the runtime class of `A`, as the `ClassTag` of scala-yaml's `YamlDecoder { case ... }` instances gives
+    * it in their failures (`Could't construct scala.collection.immutable.List from ...`).
+    */
+  def runtimeClassName[A: Type]: String = Type[A].getRuntimeClass match {
+    case Some(runtimeClass) => runtimeClass.getName
+    case None               => Type[A].fqcn
+  }
+
   /** The decoder of a case class field: cached as a lazy val of the instance (created once, not on every decode, see
     * `DecoderCtx.getFieldDecoder`) and shared by all the fields of this type.
     */

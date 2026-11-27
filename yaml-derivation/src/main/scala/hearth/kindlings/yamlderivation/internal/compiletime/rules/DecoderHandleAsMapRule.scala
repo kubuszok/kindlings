@@ -8,7 +8,6 @@ import hearth.std.*
 
 import hearth.kindlings.yamlderivation.internal.runtime.YamlDerivationUtils
 import org.virtuslab.yaml.{ConstructError, LoadSettings, Node}
-import org.virtuslab.yaml.Node.{MappingNode, ScalarNode}
 
 trait DecoderHandleAsMapRuleImpl {
   this: DecoderMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -39,9 +38,22 @@ trait DecoderHandleAsMapRuleImpl {
       implicit val EitherCEValue: Type[Either[ConstructError, Value]] = DTypes.DecoderResult[Value]
       implicit val EitherCEA: Type[Either[ConstructError, A]] = DTypes.DecoderResult[A]
 
-      if (!(Key <:< Type[String]))
-        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
-      else {
+      implicit val EitherCEKey: Type[Either[ConstructError, Key]] = DTypes.DecoderResult[Key]
+      implicit val KeyFnT: Type[Node => Either[ConstructError, Key]] = Type.of[Node => Either[ConstructError, Key]]
+
+      // `String` keys are read as scala-yaml's `YamlDecoder.forString` reads them; keys of any other type are decoded
+      // with the decoder derived for them (as `YamlDecoder.forMap[K, V]` uses the key's instance).
+      val keyDecodeFnMIO: MIO[Option[Expr[Node => Either[ConstructError, Key]]]] =
+        if (Key <:< Type[String]) MIO.pure(None)
+        else
+          LambdaBuilder
+            .of1[Node]("keyNode")
+            .traverse { keyNodeExpr =>
+              deriveDecoderRecursively[Key](using dctx.nest[Key](keyNodeExpr))
+            }
+            .map(builder => Some(builder.build[Either[ConstructError, Key]]))
+
+      keyDecodeFnMIO.flatMap { keyDecodeFn =>
         LambdaBuilder
           .of1[Node]("valueNode")
           .traverse { valueNodeExpr =>
@@ -51,45 +63,44 @@ trait DecoderHandleAsMapRuleImpl {
             val decodeFn = builder.build[Either[ConstructError, Value]]
             val factoryExpr = isMap.factory
             val buildStep = isMap.build
+            val classNameExpr: Expr[String] = Expr(runtimeClassName[A])
 
-            val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
+            def readLoopWith(
+                keyOf: Expr[Node] => Expr[Key]
+            ): Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = Expr.quote {
               val mapBuilder = Expr.splice(factoryExpr).newBuilder
               val decoder = YamlDerivationUtils.decoderFromFn(Expr.splice(decodeFn))
-              Expr.splice(dctx.node) match {
-                case MappingNode(mappings, _) =>
-                  val iter = mappings.iterator
-                  while (iter.hasNext) {
-                    val entry = iter.next()
-                    val keyNode = entry._1
-                    val valueNode = entry._2
-                    val key = keyNode match {
-                      case ScalarNode(value, _) => value
-                      case other                =>
-                        throw new YamlDerivationUtils.CollectionBuildException(
-                          ConstructError.from(
-                            s"Expected scalar key but got ${other.getClass.getSimpleName}",
-                            other
-                          )
-                        )
-                    }
-                    decoder.construct(valueNode)(LoadSettings.empty) match {
-                      case Right(v) =>
-                        mapBuilder += Expr.splice(
-                          isMap.pair(Expr.quote(key.asInstanceOf[Key]), Expr.quote(v))
-                        )
-                      case Left(err) =>
-                        throw new YamlDerivationUtils.CollectionBuildException(err)
-                    }
-                  }
-                case other =>
-                  throw new YamlDerivationUtils.CollectionBuildException(
-                    ConstructError.from(
-                      s"Expected mapping node but got ${other.getClass.getSimpleName}",
-                      other
-                    )
-                  )
+              // anything but a mapping (a null included) fails as scala-yaml's `YamlDecoder.forMap`
+              val iter = YamlDerivationUtils
+                .mappingEntries(Expr.splice(dctx.node), Expr.splice(classNameExpr))
+                .iterator
+              while (iter.hasNext) {
+                val entry = iter.next()
+                val keyNode = entry._1
+                val valueNode = entry._2
+                val key = Expr.splice(keyOf(Expr.quote(keyNode)))
+                decoder.construct(valueNode)(LoadSettings.empty) match {
+                  case Right(v) =>
+                    mapBuilder += Expr.splice(isMap.pair(Expr.quote(key), Expr.quote(v)))
+                  case Left(err) =>
+                    throw new YamlDerivationUtils.CollectionBuildException(err)
+                }
               }
               mapBuilder
+            }
+            val readLoop: Expr[scala.collection.mutable.Builder[Pair, CtorResult]] = keyDecodeFn match {
+              case None =>
+                readLoopWith(keyNode =>
+                  Expr.quote(YamlDerivationUtils.stringKey(Expr.splice(keyNode)).asInstanceOf[Key])
+                )
+              case Some(fn) =>
+                ValDefs
+                  .createVal[Node => Either[ConstructError, Key]](fn, FreshName.FromPrefix("decodeKey"))
+                  .use { decodeKey =>
+                    readLoopWith(keyNode =>
+                      Expr.quote(YamlDerivationUtils.decodeKeyWith(Expr.splice(keyNode), Expr.splice(decodeKey)))
+                    )
+                  }
             }
             val buildResultExpr = buildStep.ctor(readLoop)
 

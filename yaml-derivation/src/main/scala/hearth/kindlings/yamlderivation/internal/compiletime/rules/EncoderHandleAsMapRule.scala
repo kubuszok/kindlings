@@ -35,31 +35,38 @@ trait EncoderHandleAsMapRuleImpl {
         isMap: IsMapOf[A, Pair]
     ): MIO[Rule.Applicability[Expr[Node]]] = {
       import isMap.{Key, Value}
-      if (!(Key <:< Type[String]))
-        MIO.pure(Rule.yielded(s"Map key type ${Key.prettyPrint} is not String"))
-      else {
-        LambdaBuilder
-          .of1[Pair]("pair")
-          .traverse { pairExpr =>
-            val keyExpr = isMap.key(pairExpr)
-            val valueExpr = isMap.value(pairExpr)
+      implicit val NodePairT: Type[(Node, Node)] = Type.of[(Node, Node)]
+      LambdaBuilder
+        .of1[Pair]("pair")
+        .traverse { pairExpr =>
+          val keyExpr = isMap.key(pairExpr)
+          val valueExpr = isMap.value(pairExpr)
+          // `String` keys are written as scala-yaml's `YamlEncoder.forString` writes them; keys of any other type with
+          // the encoder derived for them (as `YamlEncoder.forMap[K, V]` uses the key's instance).
+          val keyNodeMIO: MIO[Expr[Node]] =
+            if (Key <:< Type[String])
+              MIO.pure(Expr.quote {
+                YamlDerivationUtils.stringKeyNode(Expr.splice(keyExpr).asInstanceOf[String])
+              })
+            else deriveEncoderRecursively[Key](using ectx.nest(keyExpr))
+          keyNodeMIO.flatMap { keyNode =>
             deriveEncoderRecursively[Value](using ectx.nest(valueExpr)).map { valueNode =>
               Expr.quote {
-                (Expr.splice(keyExpr).asInstanceOf[String], Expr.splice(valueNode))
+                (Expr.splice(keyNode), Expr.splice(valueNode))
               }
             }
           }
-          .map { builder =>
-            val pairLambda = builder.build[(String, Node)]
-            val iterableExpr = isMap.asIterable(ectx.value)
-            Rule.matched(Expr.quote {
-              YamlDerivationUtils.encodeMappedPairs[Pair](
-                Expr.splice(iterableExpr),
-                Expr.splice(pairLambda)
-              )
-            })
-          }
-      }
+        }
+        .map { builder =>
+          val pairLambda = builder.build[(Node, Node)]
+          val iterableExpr = isMap.asIterable(ectx.value)
+          Rule.matched(Expr.quote {
+            YamlDerivationUtils.encodeMapEntries[Pair](
+              Expr.splice(iterableExpr),
+              Expr.splice(pairLambda)
+            )
+          })
+        }
     }
   }
 }

@@ -163,6 +163,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           )
                         }
 
+                    // As in scala-yaml, the default value is evaluated only when the field is absent (and on every such
+                    // decode): it may be an expression with side effects.
+                    def fieldOrDefaultExpr(
+                        fields: Expr[java.util.HashMap[String, Node]],
+                        defaultAnyExpr: Expr[Any]
+                    ): Expr[Either[ConstructError, Any]] =
+                      Expr.quote {
+                        val present = YamlDerivationUtils.decodePresentFieldOf(
+                          Expr.splice(fields),
+                          Expr.splice(fieldNameExpr),
+                          Expr.splice(decoderExpr)
+                        )
+                        if (present == null) (Right(Expr.splice(defaultAnyExpr)): Either[ConstructError, Any])
+                        else present
+                      }
                     def decodeExpr(fields: Expr[java.util.HashMap[String, Node]]): Expr[Either[ConstructError, Any]] =
                       defaultAsAnyOpt match {
                         case Some(defaultAnyExpr) if useDefaultsStaticallyFalse =>
@@ -172,25 +187,12 @@ trait DecoderHandleAsCaseClassRuleImpl {
                           dctx.evaluatedConfig match {
                             case Some(evConfig) if evConfig.useDefaults =>
                               // useDefaults is statically true: always use default path
-                              Expr.quote {
-                                YamlDerivationUtils.decodeFieldWithDefaultOf(
-                                  Expr.splice(fields),
-                                  Expr.splice(fieldNameExpr),
-                                  Expr.splice(decoderExpr),
-                                  Expr.splice(defaultAnyExpr)
-                                )
-                              }
+                              fieldOrDefaultExpr(fields, defaultAnyExpr)
                             case _ =>
                               // useDefaults not statically known: runtime check
                               Expr.quote {
                                 val config = Expr.splice(dctx.config)
-                                if (config.useDefaults)
-                                  YamlDerivationUtils.decodeFieldWithDefaultOf(
-                                    Expr.splice(fields),
-                                    Expr.splice(fieldNameExpr),
-                                    Expr.splice(decoderExpr),
-                                    Expr.splice(defaultAnyExpr)
-                                  )
+                                if (config.useDefaults) Expr.splice(fieldOrDefaultExpr(fields, defaultAnyExpr))
                                 else Expr.splice(requiredFieldExpr(fields))
                               }
                           }

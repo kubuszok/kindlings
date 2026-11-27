@@ -260,6 +260,13 @@ scalacOptions += "-Xmacro-settings:yamlDerivation.logDerivation=true"
 | Failure messages of derived products | `Key x doesn't exist in parsed document`, `Expected MappingNode, got ...` | Same |
 | Repeated key in a mapping decoded as a case class | Its last value | Same |
 | Key that is not a scalar in such a mapping | `Parameter of a class must be a scalar value` | Same |
+| Default value expressions | Evaluated only when the field is absent, on every such decode | Same |
+| `private val` constructor fields | Written and read | Same |
+| Collections, maps and `Option`s of derived types | Through the element's `given` instance | Derived in place, with the same results and failures (`Could't construct scala.collection.immutable.List from ...`) |
+| Map keys | Any type with an instance | `String` and any type with an instance or derivable (numbers, value classes, ...) |
+| After a failing field | Every field is decoded, the first failure is reported | The first failure is reported; later fields are not decoded (their defaults are not evaluated) |
+| Recursive types | `derives` / a `given` never finishes initializing | Yes |
+| Value classes | Not derivable (no `Mirror`) | Unwrapped |
 | Enum handling | Broken in some cases | Correct |
 | Option decoding | Broken in some cases | Correct |
 | Inline encoding/decoding | No | Yes (`toYamlString`, `fromYamlString`) |

@@ -94,6 +94,18 @@ object YamlDerivationUtils {
     MappingNode(mappings)
   }
 
+  /** A map's node: each entry's key and value nodes as `toPair` gives them (scala-yaml's `YamlEncoder.forMap`). */
+  def encodeMapEntries[P](pairs: Iterable[P], toPair: P => (Node, Node)): Node =
+    MappingNode(pairs.map(toPair).toMap)
+
+  /** A `String` map key, as scala-yaml's `YamlEncoder.forString` writes it (non-printable characters escaped). */
+  def stringKeyNode(key: String): Node = org.virtuslab.yaml.YamlEncoder.forString.asNode(key)
+
+  /** A case class field that is not accessible from the derived code (a `private val` constructor parameter): read by
+    * its position, as scala-yaml's derived encoders read every field (`productIterator`).
+    */
+  def productField(value: Any, index: Int): Any = value.asInstanceOf[Product].productElement(index)
+
   val nodeNull: Node = {
     import org.virtuslab.yaml.YamlEncoder
     YamlEncoder.forOption(YamlEncoder.forInt).asNode(None)
@@ -219,6 +231,61 @@ object YamlDerivationUtils {
     else decode(node).map(Some(_))
 
   class CollectionBuildException(val error: ConstructError) extends RuntimeException("yaml collection decoding error")
+
+  /** The failure of scala-yaml's `YamlDecoder { case ... }` instances (its collections, maps and scalars) for a node
+    * they are not defined at: a null, or a node of another kind. `className` is the name of the runtime class of the
+    * decoded type (scala-yaml's `ClassTag`).
+    */
+  def cannotConstruct(className: String, node: Node): ConstructError = {
+    val position = node.pos match {
+      case Some(range) => range.errorMsg
+      case None        => ""
+    }
+    if (node.tag == Tag.nullTag)
+      ConstructError.from(s"Could't construct $className from null (${node.tag.value})\n$position\n")
+    else ConstructError.from(s"Could't construct $className from ${node.tag.value}\n$position\n")
+  }
+
+  /** The item nodes of a sequence; fails as scala-yaml's collection decoders for anything else (a null included). */
+  def sequenceNodes(node: Node, className: String): Seq[Node] =
+    node match {
+      case SequenceNode(nodes, tag) if tag != Tag.nullTag => nodes
+      case other => throw new CollectionBuildException(cannotConstruct(className, other))
+    }
+
+  /** The entries of a mapping; fails as scala-yaml's `YamlDecoder.forMap` for anything else (a null included). */
+  def mappingEntries(node: Node, className: String): Map[Node, Node] =
+    node match {
+      case MappingNode(mappings, tag) if tag != Tag.nullTag => mappings
+      case other => throw new CollectionBuildException(cannotConstruct(className, other))
+    }
+
+  /** A `String` map key, as scala-yaml's `YamlDecoder.forString` reads it: a scalar that is not a null. */
+  def stringKey(keyNode: Node): String =
+    keyNode match {
+      case ScalarNode(value, tag) if tag != Tag.nullTag => value
+      case other => throw new CollectionBuildException(cannotConstruct("java.lang.String", other))
+    }
+
+  /** A map key decoded with the derived `decode`. */
+  def decodeKeyWith[K](keyNode: Node, decode: Node => Either[ConstructError, K]): K =
+    decode(keyNode) match {
+      case Right(key) => key
+      case Left(err)  => throw new CollectionBuildException(err)
+    }
+
+  /** A field's result, or `null` when the mapping has no such key (the generated code then evaluates the default value:
+    * as in scala-yaml, only when the field is absent, and on every such decode).
+    */
+  def decodePresentFieldOf(
+      fields: java.util.HashMap[String, Node],
+      fieldName: String,
+      decoder: YamlDecoder[?]
+  ): Either[ConstructError, Any] = {
+    val fieldNode = fields.get(fieldName)
+    if (fieldNode == null) null
+    else decoder.construct(fieldNode)(LoadSettings.empty).asInstanceOf[Either[ConstructError, Any]]
+  }
 
   def decodeCollectionWith[Item, Coll](
       node: Node,
