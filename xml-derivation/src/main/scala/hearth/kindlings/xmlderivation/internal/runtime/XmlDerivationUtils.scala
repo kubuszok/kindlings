@@ -71,6 +71,35 @@ object XmlDerivationUtils {
   ): scala.xml.Elem =
     elem % new scala.xml.UnprefixedAttribute(discriminatorAttribute, typeName, scala.xml.Null)
 
+  /** `enumAsStrings` enabled (only known at runtime) for a sealed type with cases that are not singletons. */
+  def enumAsStringsNotSupportedMessage(typeName: String): String =
+    s"enumAsStrings is enabled but $typeName has cases that are not singletons; only enums of case " +
+      "objects/parameterless enum cases (and Java enums, Enumerations) can be written as strings"
+
+  /** The encoder's failure for [[enumAsStringsNotSupportedMessage]] (an encoder has no error channel). */
+  def enumAsStringsNotSupported(typeName: String): Nothing =
+    throw new IllegalArgumentException(enumAsStringsNotSupportedMessage(typeName))
+
+  /** The decoder's failure for [[enumAsStringsNotSupportedMessage]]. */
+  def enumAsStringsNotSupportedResult[A](typeName: String): Either[XmlDecodingError, A] =
+    Left(XmlDecodingError.General(enumAsStringsNotSupportedMessage(typeName)))
+
+  /** An enum written as an attribute value / as text content (its case name) while `enumAsStrings`, only known at
+    * runtime, is not enabled.
+    */
+  def enumAsTextNeedsEnumAsStringsMessage(typeName: String): String =
+    s"enumAsStrings is not enabled but the enum $typeName is an attribute value or the text content of an element " +
+      "(@xmlAttribute / @xmlContent), which is its case name; enable withEnumAsStrings or remove the annotation"
+
+  /** The encoder's check for [[enumAsTextNeedsEnumAsStringsMessage]]: the name, when `enumAsStrings` is enabled. */
+  def enumNameAsText(enumAsStrings: Boolean, typeName: String, name: String): String =
+    if (enumAsStrings) name
+    else throw new IllegalArgumentException(enumAsTextNeedsEnumAsStringsMessage(typeName))
+
+  /** The decoder's failure for [[enumAsTextNeedsEnumAsStringsMessage]]. */
+  def enumAsTextNeedsEnumAsStringsResult[A](typeName: String): Either[XmlDecodingError, A] =
+    Left(XmlDecodingError.General(enumAsTextNeedsEnumAsStringsMessage(typeName)))
+
   def wrapWithTypeName(typeName: String, inner: scala.xml.Elem): scala.xml.Elem =
     scala.xml.Elem(null, typeName, scala.xml.Null, scala.xml.TopScope, false, inner)
 

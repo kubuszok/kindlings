@@ -101,8 +101,29 @@ trait EncoderHandleAsEnumRuleImpl {
         }
       }
 
+      // `enumAsStrings` is only for enums of singletons: with a case that is not one it is a compile-time error (when
+      // the config is only known at runtime: an exception when it turns out to be enabled)
+      def nonSingletons: List[String] = subtypes.collect {
+        case subtype if SingletonValue.unapply(subtype.tpe.Underlying).isEmpty => subtype.rawName
+      }
+
       // With a config known at compile time only the applicable encoding is generated.
-      (if (!isStringEnum) tagged
+      (if (!isStringEnum && subtypes.nonEmpty)
+         ectx.evaluatedConfig.map(_.enumAsStrings) match {
+           case Some(true) =>
+             val err = EncoderDerivationError.EnumAsStringsWithNonSingletonCases(Type[A].prettyPrint, nonSingletons)
+             Log.error(err.message) >> MIO.fail(err)
+           case Some(false) => tagged
+           case None        =>
+             tagged.map { element =>
+               Expr.quote {
+                 if (Expr.splice(ectx.config).enumAsStrings)
+                   XmlDerivationUtils.enumAsStringsNotSupported(Expr.splice(Expr(Type[A].plainPrint)))
+                 else Expr.splice(element)
+               }
+             }
+         }
+       else if (!isStringEnum) tagged
        else
          ectx.evaluatedConfig.map(_.enumAsStrings) match {
            case Some(true)  => asString

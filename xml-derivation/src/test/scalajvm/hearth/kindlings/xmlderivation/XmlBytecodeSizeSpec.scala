@@ -26,8 +26,9 @@ object XmlWideInstances {
   }
 }
 
-/** Instances for a 100-field case class with `@xmlWrapper` / `@xmlUnwrapped` fields and fields of a 100-case enum (as
-  * elements and as attributes), derived in a class of their own so their bytecode can be measured.
+/** Instances for a 100-field case class with `@xmlWrapper` / `@xmlUnwrapped` fields and fields of a 100-case enum
+  * (child elements by default, attributes with `withAttributesByDefault.withEnumAsStrings`), derived in a class of
+  * their own so their bytecode can be measured.
   */
 object XmlWideAnnotatedInstances {
   val default: KindlingsXmlCodec[XmlWideAnnotated] = KindlingsXmlCodec.derived[XmlWideAnnotated]
