@@ -12,24 +12,24 @@ import hearth.MacroSuite
   * As in `JsoniterOracleSpec`, each case lists the *exact* differences it expects, each a documented one
   * (`docs/user-guide/feature-parity.md`, "jsoniter-derivation").
   *
-  * Not ported: tests of user-written codecs (`JsoniterUpstreamSpecCustomCodecsOracleSpec` has those), of the name mapper
-  * functions (`JsoniterConfigNameMappersSpec` in jsoniter-derivation uses upstream's vectors), of compile-time errors
-  * (`CompileTimeValidationSpec` and the parity specs in jsoniter-derivation) and of `WriterConfig`/`ReaderConfig`
-  * (jsoniter-scala-core's, not the codecs').
+  * Not ported: tests of user-written codecs (`JsoniterUpstreamSpecCustomCodecsOracleSpec` has those), of the name
+  * mapper functions (`JsoniterConfigNameMappersSpec` in jsoniter-derivation uses upstream's vectors), of compile-time
+  * errors (`CompileTimeValidationSpec` and the parity specs in jsoniter-derivation) and of
+  * `WriterConfig`/`ReaderConfig` (jsoniter-scala-core's, not the codecs').
   */
 final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
 
   private def quoted(s: String): String =
     "\"" + s.flatMap {
-      case '"'           => "\\\""
-      case '\\'          => "\\\\"
-      case '\n'          => "\\n"
-      case '\r'          => "\\r"
-      case '\t'          => "\\t"
-      case '\b'          => "\\b"
-      case '\f'          => "\\f"
-      case c if c < ' '  => f"\\u${c.toInt}%04x"
-      case c             => c.toString
+      case '"'          => "\\\""
+      case '\\'         => "\\\\"
+      case '\n'         => "\\n"
+      case '\r'         => "\\r"
+      case '\t'         => "\\t"
+      case '\b'         => "\\b"
+      case '\f'         => "\\f"
+      case c if c < ' ' => f"\\u${c.toInt}%04x"
+      case c            => c.toString
     } + "\""
 
   /** A difference whose upstream side differs between jsoniter-scala's Scala 3 and Scala 2 macros. */
@@ -133,7 +133,9 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("operators")(check(JuCases.defaults.operators, JuSamples.operators)())
     test("defaults")(check(JuCases.defaults.defaults, JuSamples.defaults)())
     test("defaults2")(check(JuCases.defaults.defaults2, JuSamples.defaults2)())
-    test("sharedEmptyMutableDefaults")(check(JuCases.defaults.sharedEmptyMutableDefaults, JuSamples.sharedEmptyMutableDefaults)())
+    test("sharedEmptyMutableDefaults")(
+      check(JuCases.defaults.sharedEmptyMutableDefaults, JuSamples.sharedEmptyMutableDefaults)()
+    )
     test("polymorphicDefaults")(check(JuCases.defaults.polymorphicDefaults, JuSamples.polymorphicDefaults)())
     test("iterablesWithDefaults")(check(JuCases.defaults.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
     test("transient")(check(JuCases.defaults.transient, JuSamples.transient)())
@@ -272,11 +274,20 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("arrays")(check(JuCases.makeWithRequiredCollectionFields.arrays, JuSamples.arrays)())
     test("emptyIterables")(check(JuCases.makeWithRequiredCollectionFields.emptyIterables, JuSamples.emptyIterables)())
     test("emptyMaps")(check(JuCases.makeWithRequiredCollectionFields.emptyMaps, JuSamples.emptyMaps)())
-    test("iterablesWithDefaults")(check(JuCases.makeWithRequiredCollectionFields.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
+    test("iterablesWithDefaults")(
+      check(JuCases.makeWithRequiredCollectionFields.iterablesWithDefaults, JuSamples.iterablesWithDefaults)()
+    )
   }
   group("makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName") {
-    test("arrays")(check(JuCases.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.arrays, JuSamples.arrays)())
-    test("customNameList")(check(JuCases.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.customNameList, JuSamples.customNameList)())
+    test("arrays")(
+      check(JuCases.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.arrays, JuSamples.arrays)()
+    )
+    test("customNameList")(
+      check(
+        JuCases.makeWithRequiredCollectionFieldsAndNameAsDiscriminatorFieldName.customNameList,
+        JuSamples.customNameList
+      )()
+    )
   }
   group("nestedIterables") {
     test("nestedIterables")(check(JuCases.nestedIterables.nestedIterables, JuSamples.nestedIterables)())
@@ -285,20 +296,30 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("eitherTop")(check(JuCases.eitherValueMapper.eitherTop, JuSamples.eitherTop)())
   }
   group("requireCollectionsNoTransientEmpty") {
-    test("iterablesWithDefaults")(check(JuCases.requireCollectionsNoTransientEmpty.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
+    test("iterablesWithDefaults")(
+      check(JuCases.requireCollectionsNoTransientEmpty.iterablesWithDefaults, JuSamples.iterablesWithDefaults)()
+    )
   }
   group("makeWithRequiredDefaultFields") {
-    test("iterablesWithDefaults")(check(JuCases.makeWithRequiredDefaultFields.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
+    test("iterablesWithDefaults")(
+      check(JuCases.makeWithRequiredDefaultFields.iterablesWithDefaults, JuSamples.iterablesWithDefaults)()
+    )
     test("defaults")(check(JuCases.makeWithRequiredDefaultFields.defaults, JuSamples.defaults)())
-    test("multiListDefault")(check(JuCases.makeWithRequiredDefaultFields.multiListDefault, JuSamples.multiListDefault)())
+    test("multiListDefault")(
+      check(JuCases.makeWithRequiredDefaultFields.multiListDefault, JuSamples.multiListDefault)()
+    )
   }
   group("requireDefaultsNoTransientDefault") {
-    test("iterablesWithDefaults")(check(JuCases.requireDefaultsNoTransientDefault.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
+    test("iterablesWithDefaults")(
+      check(JuCases.requireDefaultsNoTransientDefault.iterablesWithDefaults, JuSamples.iterablesWithDefaults)()
+    )
     test("defaults")(check(JuCases.requireDefaultsNoTransientDefault.defaults, JuSamples.defaults)())
     test("transient")(check(JuCases.requireDefaultsNoTransientDefault.transient, JuSamples.transient)())
   }
   group("requireDefaultsAndCollections") {
-    test("iterablesWithDefaults")(check(JuCases.requireDefaultsAndCollections.iterablesWithDefaults, JuSamples.iterablesWithDefaults)())
+    test("iterablesWithDefaults")(
+      check(JuCases.requireDefaultsAndCollections.iterablesWithDefaults, JuSamples.iterablesWithDefaults)()
+    )
   }
   group("setLimit10") {
     test("set")(check(JuCases.setLimit10.set, JuSamples.set)())
@@ -330,8 +351,12 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("mutableLongMap")(check(JuCases.mapAsArray.mutableLongMap, JuSamples.mutableLongMap)())
     test("immutableLongMap")(check(JuCases.mapAsArray.immutableLongMap, JuSamples.immutableLongMap)())
     test("intMap")(check(JuCases.mapAsArray.intMap, JuSamples.intMap)())
-    test("stringifiedMutableLongMaps")(check(JuCases.mapAsArray.stringifiedMutableLongMaps, JuSamples.stringifiedMutableLongMaps)())
-    test("stringifiedImmutableIntLongMaps")(check(JuCases.mapAsArray.stringifiedImmutableIntLongMaps, JuSamples.stringifiedImmutableIntLongMaps)())
+    test("stringifiedMutableLongMaps")(
+      check(JuCases.mapAsArray.stringifiedMutableLongMaps, JuSamples.stringifiedMutableLongMaps)()
+    )
+    test("stringifiedImmutableIntLongMaps")(
+      check(JuCases.mapAsArray.stringifiedImmutableIntLongMaps, JuSamples.stringifiedImmutableIntLongMaps)()
+    )
   }
   group("mapAsArrayStringified") {
     test("genericMap")(check(JuCases.mapAsArrayStringified.genericMap, JuSamples.genericMap)())
@@ -339,8 +364,12 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("mutableLongMap")(check(JuCases.mapAsArrayStringified.mutableLongMap, JuSamples.mutableLongMap)())
     test("immutableLongMap")(check(JuCases.mapAsArrayStringified.immutableLongMap, JuSamples.immutableLongMap)())
     test("intMap")(check(JuCases.mapAsArrayStringified.intMap, JuSamples.intMap)())
-    test("mutableLongMapsList")(check(JuCases.mapAsArrayStringified.mutableLongMapsList, JuSamples.mutableLongMapsList)())
-    test("immutableIntLongMapsList")(check(JuCases.mapAsArrayStringified.immutableIntLongMapsList, JuSamples.immutableIntLongMapsList)())
+    test("mutableLongMapsList")(
+      check(JuCases.mapAsArrayStringified.mutableLongMapsList, JuSamples.mutableLongMapsList)()
+    )
+    test("immutableIntLongMapsList")(
+      check(JuCases.mapAsArrayStringified.immutableIntLongMapsList, JuSamples.immutableIntLongMapsList)()
+    )
   }
   group("bitSetLimit1000") {
     test("immutableBitSetTop")(check(JuCases.bitSetLimit1000.immutableBitSetTop, JuSamples.immutableBitSetTop)())
@@ -397,7 +426,9 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
   }
   group("inlineOneValueClasses") {
     test("oneValueClassTypes")(check(JuCases.inlineOneValueClasses.oneValueClassTypes, JuSamples.oneValueClassTypes)())
-    test("transientOneValueClassTypes")(check(JuCases.inlineOneValueClasses.transientOneValueClassTypes, JuSamples.transientOneValueClassTypes)())
+    test("transientOneValueClassTypes")(
+      check(JuCases.inlineOneValueClasses.transientOneValueClassTypes, JuSamples.transientOneValueClassTypes)()
+    )
     test("transientMap")(check(JuCases.inlineOneValueClasses.transientMap, JuSamples.transientMap)())
     test("dependentMap")(check(JuCases.inlineOneValueClasses.dependentMap, JuSamples.dependentMap)())
     test("oneUserIdTop")(check(JuCases.inlineOneValueClasses.oneUserIdTop, JuSamples.oneUserIdTop)())
@@ -495,8 +526,9 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
 
   // Cases the value/input comparison of `check` cannot express.
 
-  private def all[A](codecs: JoCodecs[A])(observe: com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec[A] => Any)
-      : Unit = {
+  private def all[A](
+      codecs: JoCodecs[A]
+  )(observe: com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec[A] => Any): Unit = {
     val upstream = observe(codecs.upstream)
     assertEquals(observe(codecs.optimized), upstream, "optimized vs upstream")
     assertEquals(observe(codecs.runtime), upstream, "runtime vs upstream")
@@ -568,7 +600,9 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     }
   }
 
-  group("enumerations with values added later (Spec: '... added after parsing of the stable ones', '... between ids')") {
+  group(
+    "enumerations with values added later (Spec: '... added after parsing of the stable ones', '... between ids')"
+  ) {
     def observations[A](codecs: JoCodecs[A])(values: Seq[A], inputs: Seq[String]): Unit = {
       values.foreach(value => all(codecs)(JsoniterOracle.encode(_, value)))
       inputs.foreach(input => all(codecs)(JsoniterOracle.decode(_, input)))
@@ -576,7 +610,10 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("names and ids, as values and as keys") {
       val stable = JUCelestialBody.values.toList
       // the stable values are parsed (and cached by the codecs) first
-      observations(JuCases.defaults.celestialList)(Seq(stable), Seq(stable.map(_.toString).mkString("[\"", "\",\"", "\"]")))
+      observations(JuCases.defaults.celestialList)(
+        Seq(stable),
+        Seq(stable.map(_.toString).mkString("[\"", "\",\"", "\"]"))
+      )
       observations(JuCases.enumId.celestialList)(Seq(stable), Seq(stable.map(_.id).mkString("[", ",", "]")))
       observations(JuCases.defaults.celestialMap)(Nil, Seq("""{"Earth":3}"""))
       observations(JuCases.enumId.celestialMap)(Nil, Seq(s"""{"${JUCelestialBody.Earth.id}":3}"""))
@@ -607,7 +644,10 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
         Seq(List(JUSpectralClass.O, b, JUSpectralClass.G)),
         Seq("""["O","B","G"]""", """["A"]""")
       )
-      observations(JuCases.enumId.spectralList)(Seq(List(JUSpectralClass.O, b, JUSpectralClass.G)), Seq("[0,2,5]", "[3]"))
+      observations(JuCases.enumId.spectralList)(
+        Seq(List(JUSpectralClass.O, b, JUSpectralClass.G)),
+        Seq("[0,2,5]", "[3]")
+      )
       observations(JuCases.defaults.spectralMap)(Seq(Map(b -> 2, JUSpectralClass.G -> 1)), Seq("""{"B":2,"G":1}"""))
       observations(JuCases.enumId.spectralMap)(Seq(Map(b -> 2, JUSpectralClass.G -> 1)), Seq("""{"2":2,"5":1}"""))
     }
@@ -636,7 +676,13 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
       all(JuCases.defaults.defaults2) { codec =>
         val first = com.github.plokhotnyuk.jsoniter_scala.core.readFromString("{}")(codec)
         val second = com.github.plokhotnyuk.jsoniter_scala.core.readFromString("{}")(codec)
-        (first.ab eq second.ab, first.mm eq second.mm, first.lm eq second.lm, first.ms eq second.ms, first.mbs eq second.mbs)
+        (
+          first.ab eq second.ab,
+          first.mm eq second.mm,
+          first.lm eq second.lm,
+          first.ms eq second.ms,
+          first.mbs eq second.mbs
+        )
       }
     }
   }
@@ -703,8 +749,14 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
         """{"l":[["1"]],"nl":[[1]],"q":[[4]],"is":[[7,6,5]],"s":[[9.9,8.9]],"v":[[10,11]]}"""
       all(JuCases.defaults.immutableIterables) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(json)(codec)
-        (read.l.head.getClass.getName, read.q.getClass.getName, read.is.head.getClass.getName, read.s.getClass.getName,
-          read.s.head.getClass.getName, read.v.getClass.getName)
+        (
+          read.l.head.getClass.getName,
+          read.q.getClass.getName,
+          read.is.head.getClass.getName,
+          read.s.getClass.getName,
+          read.s.head.getClass.getName,
+          read.v.getClass.getName
+        )
       }
     }
     test("mutable collections are rebuilt as the declared implementations") {
@@ -712,11 +764,22 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
         """{"ml":[["3","2","1"]],"ab":[[4]],"as":[[6,5]],"b":[[7.7]],"lb":[[10,9]],"is":[[1.5]],"ub":[[1]]}"""
       all(JuCases.defaults.mutableIterables) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(json)(codec)
-        (read.ml.getClass.getName, read.ml.head.getClass.getName, read.ab.getClass.getName,
-          read.ab.head.getClass.getName, read.as.getClass.getName, read.as.head.getClass.getName,
-          read.b.getClass.getName, read.b.head.getClass.getName, read.lb.getClass.getName,
-          read.lb.head.getClass.getName, read.is.getClass.getName, read.is.head.getClass.getName,
-          read.ub.getClass.getName, read.ub.head.getClass.getName)
+        (
+          read.ml.getClass.getName,
+          read.ml.head.getClass.getName,
+          read.ab.getClass.getName,
+          read.ab.head.getClass.getName,
+          read.as.getClass.getName,
+          read.as.head.getClass.getName,
+          read.b.getClass.getName,
+          read.b.head.getClass.getName,
+          read.lb.getClass.getName,
+          read.lb.head.getClass.getName,
+          read.is.getClass.getName,
+          read.is.head.getClass.getName,
+          read.ub.getClass.getName,
+          read.ub.head.getClass.getName
+        )
       }
     }
     test("maps are rebuilt as the declared implementations") {
@@ -724,15 +787,26 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(
           """{"hm":{"true":{"1.1":1}},"m":{"1.1":{"2":"2"}},"ohm":{"1.1":{"3":3.3},"2.2":{}}}"""
         )(codec)
-        (read.hm.getClass.getName, read.hm.head._2.getClass.getName, read.m.getClass.getName,
-          read.m.head._2.getClass.getName, read.ohm.getClass.getName, read.ohm.head._2.getClass.getName)
+        (
+          read.hm.getClass.getName,
+          read.hm.head._2.getClass.getName,
+          read.m.getClass.getName,
+          read.m.head._2.getClass.getName,
+          read.ohm.getClass.getName,
+          read.ohm.head._2.getClass.getName
+        )
       }
       all(JuCases.defaults.immutableMaps) { codec =>
         val read = com.github.plokhotnyuk.jsoniter_scala.core.readFromString(
           """{"m":{"1":1.1},"hm":{"2":{"V":2},"3":{"X":3}},"sm":{"4":{"4":4.4},"5":{}}}"""
         )(codec)
-        (read.m.getClass.getName, read.hm.getClass.getName, read.hm.head._2.getClass.getName,
-          read.sm.getClass.getName, read.sm.head._2.getClass.getName)
+        (
+          read.m.getClass.getName,
+          read.hm.getClass.getName,
+          read.hm.head._2.getClass.getName,
+          read.sm.getClass.getName,
+          read.sm.head._2.getClass.getName
+        )
       }
     }
   }

@@ -25,7 +25,7 @@ trait DecoderHandleAsOptionRuleImpl {
               Rule.matched(Expr.quote {
                 if (Expr.splice(dctx.reader).isNextToken('n'.toByte)) {
                   // (`readNullOrError` rejects a `null` default)
-                  val _ = Expr.splice(dctx.reader).readNullOrError[Boolean](true, "expected null")
+                  val _ = Expr.splice(dctx.reader).readNullOrError[Boolean](true, "expected value or null")
                   null.asInstanceOf[A]
                 } else {
                   Expr.splice(dctx.reader).rollbackToken()

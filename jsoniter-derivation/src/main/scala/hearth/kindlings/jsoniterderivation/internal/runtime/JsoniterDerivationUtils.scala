@@ -162,15 +162,34 @@ object JsoniterDerivationUtils {
     */
   def readNullAsDefaultArgument[A](in: JsonReader, default: A, applies: Boolean)(decode: JsonReader => A): A =
     if (!applies || (default.asInstanceOf[AnyRef] eq null)) decode(in)
-    else if (in.isNextToken('n'.toByte)) in.readNullOrError[A](default, "expected null")
-    else {
+    else if (in.isNextToken('n'.toByte)) {
+      // A token which starts like `null` but is not `null` is reported by the type's own decoder (its message says
+      // what was expected, e.g. jsoniter-scala's `expected value or null` for options).
+      in.rollbackToken()
+      in.setMark()
+      val isNull =
+        try {
+          val _ = in.nextToken()
+          val _ = in.readNullOrError[AnyRef](in, "expected null")
+          true
+        } catch {
+          case _: com.github.plokhotnyuk.jsoniter_scala.core.JsonReaderException => false
+        }
+      if (isNull) {
+        in.resetMark()
+        default
+      } else {
+        in.rollbackToMark()
+        decode(in)
+      }
+    } else {
       in.rollbackToken()
       decode(in)
     }
 
   def readOption[A](in: JsonReader)(decodeInner: JsonReader => A): Option[A] =
     if (in.isNextToken('n'.toByte)) {
-      in.readNullOrError[Option[A]](None, "expected null")
+      in.readNullOrError[Option[A]](None, "expected value or null")
     } else {
       in.rollbackToken()
       Some(decodeInner(in))
@@ -181,7 +200,10 @@ object JsoniterDerivationUtils {
     */
   def readNestedOption[A](in: JsonReader, skipNestedOptionValues: Boolean)(decodeInner: JsonReader => A): Option[A] =
     if (in.isNextToken('n'.toByte)) {
-      in.readNullOrError[Option[A]](if (skipNestedOptionValues) Some(None.asInstanceOf[A]) else None, "expected null")
+      in.readNullOrError[Option[A]](
+        if (skipNestedOptionValues) Some(None.asInstanceOf[A]) else None,
+        "expected value or null"
+      )
     } else {
       in.rollbackToken()
       Some(decodeInner(in))
@@ -260,7 +282,7 @@ object JsoniterDerivationUtils {
               if (!in.isNextToken('{'.toByte)) in.decodeError("expected '{'")
               Some(readValueField(in, valueKey, null, true, config)(decodeValue))
             } else if (name == noneName) {
-              readEmptyObject(in)
+              readSingletonObject(in)
               None
             } else in.discriminatorError()
           }
@@ -402,6 +424,17 @@ object JsoniterDerivationUtils {
     */
   def readEmptyObject(in: JsonReader): Unit =
     readObjectWithoutFields(in, skipUnexpected = true, null, alreadyOpened = false)
+
+  /** Reads the JSON value of a singleton (a case object, a parameterless enum case), as jsoniter-scala: an object is
+    * skipped whole whatever it contains, and a JSON `null` is the singleton too (its codec's `nullValue`).
+    */
+  def readSingletonObject(in: JsonReader): Unit =
+    if (in.isNextToken('{'.toByte)) {
+      in.rollbackToken()
+      in.skip()
+    } else {
+      val _ = in.readNullOrTokenError[AnyRef](in, '{'.toByte)
+    }
 
   /** `[key, value]` pairs of `mapAsArray`: `[` before the key, `,` between, `]` after the value. */
   def openPair(in: JsonReader): Unit = if (!in.isNextToken('['.toByte)) in.decodeError("expected '['")
