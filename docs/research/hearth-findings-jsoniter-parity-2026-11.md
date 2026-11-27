@@ -7,8 +7,11 @@ compiler - a fixture which could not be added; noted below).
 
 ## 1. The `Factory` summoned for an abstract collection type is the one of its element type's companion (Scala 2 + 3)
 
-**Status:** OPEN. Visible as the expected differences of `defaults / mutableIterables`, `defaults / mutableMaps` and the
-two "rebuilt as the declared implementations" tests.
+**Status:** NOT A HEARTH BUG - kept as a documented difference (maintainer decision). A plain
+`implicitly[scala.collection.Factory[...]]` gives the same result on 2.13.18 and 3.8.4: it is Scala's implicit search.
+Documented in `docs/user-guide/feature-parity.md` ("Collections typed as an abstract collection type"); visible as the
+expected differences of `defaults / mutableIterables`, `defaults / mutableMaps` and the two "rebuilt as the declared
+implementations" tests.
 
 `IsCollectionProviderForScalaCollection` summons `scala.collection.Factory[Item, A]`. `Factory[-A, +C]` is covariant in
 the collection, and the implicit scope of `Factory[Item, Coll[Item]]` includes the companion of `Item`. When `Item` is
@@ -26,9 +29,8 @@ So `mutable.Map[K, mutable.ListMap[..]]`, `Set[ListSet[A]]`, `collection.Seq[Vec
 decoded into the element type's implementation. Besides the observable class, this is a performance trap when the
 element type is a linear-time collection (`ListMap`, `ListSet`). jsoniter-scala builds the declared type's own default.
 
-Suggested fix in Hearth: do not rely on the implicit search for the standard library's abstract collection types -
-resolve the factory from the collection type's own companion (`Coll.iterableFactory[Item]` / `mapFactory`), and only
-summon a `Factory` for types without such a companion.
+(A possible change, not planned: resolve the factory of the standard library's abstract collection types from the
+collection type's own companion, `Coll.iterableFactory[Item]` / `mapFactory`, instead of the implicit search.)
 
 ## 2. Default values of a case class nested in a trait break the compilation after typer (Scala 2 + 3)
 
