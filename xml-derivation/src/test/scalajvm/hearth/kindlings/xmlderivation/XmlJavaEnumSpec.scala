@@ -5,6 +5,8 @@ import hearth.kindlings.xmlderivation.annotations.xmlAttribute
 
 case class XmlJavaPaint(color: XmlJavaColor, @xmlAttribute accent: XmlJavaColor, more: List[XmlJavaColor])
 
+case class XmlJavaPaintElements(color: XmlJavaColor, more: List[XmlJavaColor])
+
 object XmlJavaEnumRuntimeConfigs {
   @volatile var strings: XmlConfig = XmlConfig().withEnumAsStrings
 }
@@ -22,11 +24,15 @@ final class XmlJavaEnumSpec extends MacroSuite {
   private val paint = XmlJavaPaint(XmlJavaColor.RED, XmlJavaColor.BLUE, List(XmlJavaColor.GREEN))
 
   test("default: the value name in the discriminator attribute") {
-    val codec = KindlingsXmlCodec.derived[XmlJavaPaint]
+    val codec = KindlingsXmlCodec.derived[XmlJavaPaintElements]
     assertEquals(
-      roundTripped(codec, paint).toString,
-      """<x accent="BLUE"><color type="RED"/><more><item type="GREEN"/></more></x>"""
+      roundTripped(codec, XmlJavaPaintElements(XmlJavaColor.RED, List(XmlJavaColor.GREEN))).toString,
+      """<x><color type="RED"/><more><item type="GREEN"/></more></x>"""
     )
+    // as an attribute it needs withEnumAsStrings
+    compileErrors(
+      "hearth.kindlings.xmlderivation.KindlingsXmlCodec.derived[hearth.kindlings.xmlderivation.XmlJavaPaint]"
+    ).check("@xmlAttribute on the enum hearth.kindlings.xmlderivation.XmlJavaColor writes the case name")
   }
 
   test("withEnumAsStrings, known at compile time and only at runtime") {

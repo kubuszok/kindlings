@@ -253,6 +253,18 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
         isUnwrapped -> "@xmlUnwrapped",
         isWrapped -> "@xmlWrapper"
       ).collect { case (true, name) => name }
+      // an enum as an attribute value / as the text content is its case name: `enumAsStrings`. Known to be disabled:
+      // a compile-time error (only known at runtime: checked when the field is written/read)
+      def enumNeedsEnumAsStrings(shape: XmlAttrShape, what: String): Unit = shape.shape match {
+        case _: XmlTextShape.StringEnum if evaluatedConfig.exists(!_.enumAsStrings) =>
+          error(
+            fName,
+            s"$what on the enum ${Type[Field].prettyPrint} writes the case name, which needs withEnumAsStrings. Enable " +
+              s"withEnumAsStrings in the XmlConfig, or remove $what to write the enum as a child element with the " +
+              "discriminator attribute, e.g. <color type=\"Red\"/> (withDiscriminator(name) changes the attribute's name)"
+          )
+        case _ => ()
+      }
       def childElementNextToContent(): Unit =
         if (hasContent)
           error(
@@ -267,8 +279,10 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
         XmlFieldLayout.Element
       } else if (isContent)
         attrShape match {
-          case Some(shape) => XmlFieldLayout.Content(shape)
-          case None        =>
+          case Some(shape) =>
+            enumNeedsEnumAsStrings(shape, "@xmlContent")
+            XmlFieldLayout.Content(shape)
+          case None =>
             error(
               fName,
               s"@xmlContent needs a single text value, ${Type[Field].prettyPrint} is not one. Supported: $attributeTypes"
@@ -277,8 +291,10 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
         }
       else if (isAttr)
         attrShape match {
-          case Some(shape) => XmlFieldLayout.Attribute(shape)
-          case None        =>
+          case Some(shape) =>
+            enumNeedsEnumAsStrings(shape, "@xmlAttribute")
+            XmlFieldLayout.Attribute(shape)
+          case None =>
             error(
               fName,
               s"@xmlAttribute needs a single text value, ${Type[Field].prettyPrint} is not one (an XML attribute " +
@@ -320,8 +336,10 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
       } else if (hasContent)
         // next to the text content, a field can only be an attribute
         attrShape match {
-          case Some(shape) => XmlFieldLayout.Attribute(shape)
-          case None        =>
+          case Some(shape) =>
+            enumNeedsEnumAsStrings(shape, "an attribute next to @xmlContent")
+            XmlFieldLayout.Attribute(shape)
+          case None =>
             childElementNextToContent()
             XmlFieldLayout.Element
         }

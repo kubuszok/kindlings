@@ -211,8 +211,18 @@ trait DecoderHandleAsCaseClassRuleImpl {
       val configExpr = dctx.config
       shape match {
         case XmlTextShape.StringEnum(subtypes) =>
+          implicit val EitherT: Type[Either[XmlDecodingError, T]] = DTypes.DecoderResult[T]
           DecoderHandleAsEnumRule.enumFromName[T](subtypes)(using dctx.nest[T](dctx.elem)).map {
-            fromName => (text: Expr[String]) => fromName(Expr.quote(Expr.splice(text).trim), configExpr)
+            fromName => (text: Expr[String]) =>
+              // (with a config known at compile time `enumAsStrings` was checked then)
+              if (dctx.evaluatedConfig.isDefined) fromName(Expr.quote(Expr.splice(text).trim), configExpr)
+              else
+                Expr.quote {
+                  if (Expr.splice(configExpr).enumAsStrings)
+                    Expr.splice(fromName(Expr.quote(Expr.splice(text).trim), configExpr))
+                  else
+                    XmlDerivationUtils.enumAsTextNeedsEnumAsStringsResult[T](Expr.splice(Expr(Type[T].plainPrint)))
+                }
           }
         case XmlTextShape.BuiltIn if builtInAttributeDecoder[T].isDefined =>
           MIO.pure(builtInAttributeDecoder[T].get)
@@ -306,12 +316,21 @@ trait DecoderHandleAsCaseClassRuleImpl {
       implicit val EitherAnyT: Type[Either[XmlDecodingError, Any]] = DTypes.DecoderResultAny
       def contentOf[T: Type]: MIO[Expr[Either[XmlDecodingError, Any]]] = shape.shape match {
         case XmlTextShape.StringEnum(subtypes) =>
+          implicit val XmlConfigT: Type[XmlConfig] = DTypes.XmlConfig
           DecoderHandleAsEnumRule.enumFromName[T](subtypes)(using dctx.nest[T](dctx.elem)).map { fromName =>
-            Expr.quote {
+            val decoded: Expr[Either[XmlDecodingError, Any]] = Expr.quote {
               Expr
                 .splice(fromName(Expr.quote(Expr.splice(dctx.elem).text.trim), dctx.config))
                 .asInstanceOf[Either[XmlDecodingError, Any]]
             }
+            // (with a config known at compile time `enumAsStrings` was checked then)
+            if (dctx.evaluatedConfig.isDefined) decoded
+            else
+              Expr.quote {
+                if (Expr.splice(dctx.config).enumAsStrings) Expr.splice(decoded)
+                else
+                  XmlDerivationUtils.enumAsTextNeedsEnumAsStringsResult[Any](Expr.splice(Expr(Type[T].plainPrint)))
+              }
           }
         case _ =>
           deriveDecoderRecursively[T](using dctx.nest[T](dctx.elem)).map { decoded =>

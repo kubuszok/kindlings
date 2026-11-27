@@ -22,6 +22,8 @@ object XmlWeekday extends Enumeration {
 case class XmlPaint(name: String, color: XmlColor, accent: Option[XmlColor])
 case class XmlPaintAttr(@xmlAttribute color: XmlColor, @xmlAttribute accent: Option[XmlColor], name: String)
 case class XmlPaintContent(@xmlAttribute id: Int, @xmlContent color: XmlColor)
+case class XmlScheduleElements(day: XmlWeekday.Value, others: List[XmlWeekday.Value])
+case class XmlPetOwner(name: String, pet: MixedPet, mood: XmlColor)
 case class XmlPalette(colors: List[XmlColor], byName: Map[String, XmlColor], @xmlWrapper("extra") more: List[XmlColor])
 case class XmlSchedule(day: XmlWeekday.Value, @xmlAttribute first: XmlWeekday.Value, others: List[XmlWeekday.Value])
 

@@ -307,11 +307,24 @@ trait EncoderHandleAsCaseClassRuleImpl {
     @scala.annotation.nowarn("msg=is never used")
     private def textOf[A: EncoderCtx, T: Type](shape: XmlTextShape, value: Expr[T]): MIO[Expr[String]] = {
       implicit val StringT: Type[String] = Types.String
+      implicit val XmlConfigT: Type[XmlConfig] = Types.XmlConfig
       implicit val ElemT: Type[scala.xml.Elem] = Types.Elem
       shape match {
         case XmlTextShape.BuiltIn              => MIO.pure(xmlTextOf(Type[T], value))
         case XmlTextShape.StringEnum(subtypes) =>
-          EncoderHandleAsEnumRule.enumNameOf[T](subtypes)(using ectx.nest(value)).map(_(value, ectx.config))
+          EncoderHandleAsEnumRule.enumNameOf[T](subtypes)(using ectx.nest(value)).map { nameOf =>
+            val name = nameOf(value, ectx.config)
+            // (with a config known at compile time `enumAsStrings` was checked then)
+            if (ectx.evaluatedConfig.isDefined) name
+            else
+              Expr.quote {
+                XmlDerivationUtils.enumNameAsText(
+                  Expr.splice(ectx.config).enumAsStrings,
+                  Expr.splice(Expr(Type[T].plainPrint)),
+                  Expr.splice(name)
+                )
+              }
+          }
         case XmlTextShape.Custom =>
           deriveEncoderRecursively[T](using ectx.nest(value).copy(elementName = Expr("attr"))).map { elem =>
             Expr.quote(Expr.splice(elem).text)
