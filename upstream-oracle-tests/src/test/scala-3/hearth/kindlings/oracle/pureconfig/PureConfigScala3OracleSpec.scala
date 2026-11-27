@@ -104,7 +104,11 @@ final class PureConfigScala3OracleSpec extends MacroSuite with PureConfigOracleS
     }
 
     test("customizable name mapping") {
-      compareReads(SnakeEnumK.colorR, SnakeEnumU.colorR)(value("rainy_blue"), value("sunny_yellow"), value("rainy-blue"))()
+      compareReads(SnakeEnumK.colorR, SnakeEnumU.colorR)(
+        value("rainy_blue"),
+        value("sunny_yellow"),
+        value("rainy-blue")
+      )()
       compareWrites(SnakeEnumK.colorW, SnakeEnumU.colorW)(Pc3Color.RainyBlue, Pc3Color.SunnyYellow)()
     }
   }
@@ -130,13 +134,18 @@ final class PureConfigScala3OracleSpec extends MacroSuite with PureConfigOracleS
   group("upstream ValueClassSuite (Scala 3)") {
 
     test("a value class of an enum, and a case class of it") {
-      compareReads(K.wrapperR, U.wrapperR)(root("type = dog-config, age = 1"), root("value { type = dog-config, age = 1 }"))()
+      compareReads(K.wrapperR, U.wrapperR)(
+        root("type = dog-config, age = 1"),
+        root("value { type = dog-config, age = 1 }")
+      )()
       compareWrites(K.wrapperW, U.wrapperW)(Pc3AnimalWrapper(Pc3Animal.DogConfig(1)))()
       compareReads(K.doubleWrapperR, U.doubleWrapperR)(
         root("value { type = dog-config, age = 1 }"),
         root("type = dog-config, age = 1")
       )()
-      compareWrites(K.doubleWrapperW, U.doubleWrapperW)(Pc3AnimalDoubleWrapper(Pc3AnimalWrapper(Pc3Animal.DogConfig(1))))()
+      compareWrites(K.doubleWrapperW, U.doubleWrapperW)(
+        Pc3AnimalDoubleWrapper(Pc3AnimalWrapper(Pc3Animal.DogConfig(1)))
+      )()
     }
   }
 
