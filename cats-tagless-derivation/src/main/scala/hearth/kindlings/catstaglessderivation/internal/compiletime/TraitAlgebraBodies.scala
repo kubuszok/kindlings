@@ -236,6 +236,44 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
     }
   }
 
+  /** The `tc` instance for a field of a case-class algebra nesting `F` in a type with several type arguments
+    * (`Kleisli[F, A, B]`, `EitherT[F, E, A]`, `FunctionK[F, Option]`, ...): looked up for `[F[_]] =>> T[F]`, like the
+    * members of trait algebras (cats-tagless-data does the same for its case-class / enum algebras).
+    */
+  private[compiletime] def resolveNestedCaseField[Alg[_[_]]](
+      typeClass: String,
+      algCtorK1: Type.CtorK1[Alg],
+      fieldName: String,
+      tc: NestedTc
+  ): MIO[Expr[Any]] = {
+    val algProbe = algCtorK1.apply[CatsTaglessFactories.KProbe](using KProbeCtor).asInstanceOf[Type[Any]]
+    CaseClass
+      .parse(using algProbe)
+      .toOption
+      .flatMap(_.primaryConstructor.parameters.flatten.find(_._1 == fieldName)) match {
+      case Some((_, param)) =>
+        val fieldType: ?? = param.tpe
+        import fieldType.Underlying as FieldType
+        resolveNested(
+          typeClass,
+          fieldName,
+          "field",
+          tc,
+          Occ.Nested(Type[FieldType].asUntyped, Type[FieldType].prettyPrint),
+          (_, _) => None
+        )
+      case None =>
+        failCannotConstruct[Expr[Any]](typeClass, s"cannot find field $fieldName in ${algProbe.prettyPrint}")
+    }
+  }
+
+  /** An instance provided by cats-tagless itself (a companion `implicit def` of `cats.tagless`), not a user's. */
+  private def isCatsTaglessInstance(instance: Expr[Any]): Boolean = {
+    val printed = instance.plainPrint
+    val path = printed.stripPrefix("_root_.")
+    (path.startsWith("cats.tagless.") || path.startsWith("tagless.")) && !printed.contains("{")
+  }
+
   private def resolveNested(
       typeClass: String,
       methodName: String,
@@ -251,8 +289,14 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
         val lambda = eta.getOrElse(lambdaOverProbe(nested.probeType))
         val tcType = applyTypeClassToAlgebra[Any, Any](tc.anchor, lambda)
         tcType.summonExprIgnoring().toEither match {
-          case Right(instance) => MIO.pure(instanceScopedAny(instance.asInstanceOf[Expr[Any]]))
-          case Left(_)         =>
+          case Right(instance) =>
+            val expr = instance.asInstanceOf[Expr[Any]]
+            // cats-tagless' own instances (`InvariantK.catsTaglessApplyKForKleisli[A, B]`, ...) are casts of singletons:
+            // referenced at the call site, like cats-tagless does, the JIT inlines them and removes the intermediate
+            // EitherT / Kleisli. Cached in a (local) lazy val they were 10x slower on a Kleisli member (escape analysis
+            // stopped at the lazy val). Other instances (users' implicit defs) are still created once per instance.
+            if (isCatsTaglessInstance(expr)) MIO.pure(expr) else MIO.pure(instanceScopedAny(expr))
+          case Left(_) =>
             val err = CatsTaglessDerivationError.UnsupportedMethod(
               typeClass,
               methodName,
@@ -494,42 +538,109 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
     }
   }
 
-  // --- Generated calls (erased runtime helpers) ---
+  // --- Generated calls ---
+  //
+  // Single values are transformed with the instance's method called at the generated site (erased to `Any`), not
+  // through a shared runtime helper: each call site keeps its own type profile, so the JIT inlines the instance (one
+  // helper shared by every algebra member turned the calls megamorphic and stopped escape analysis - measured on a
+  // Kleisli member: 10x slower than cats-tagless). Varargs still go through the runtime helpers.
 
   private def callApplyFk(fk: Expr[Any], x: Expr[Any]): Expr[Any] = Expr.quote {
-    hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime.applyFk(Expr.splice(fk), Expr.splice(x))
+    Expr
+      .splice(fk)
+      .asInstanceOf[cats.arrow.FunctionK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+      ]]
+      .apply[Any](Expr.splice(x)): Any
   }
   private def callApplyFkAll(fk: Expr[Any], xs: Expr[Any]): Expr[Any] = Expr.quote {
     hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
       .applyFkAll(Expr.splice(fk), Expr.splice(xs).asInstanceOf[Seq[Any]])
   }
   private def callMapK(tc: Expr[Any], x: Expr[Any], fk: Expr[Any]): Expr[Any] = Expr.quote {
-    hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
-      .mapK(Expr.splice(tc), Expr.splice(x), Expr.splice(fk))
+    Expr
+      .splice(tc)
+      .asInstanceOf[cats.tagless.FunctorK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.DummyHKT
+      ]]
+      .mapK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+      ](Expr.splice(x))(
+        Expr
+          .splice(fk)
+          .asInstanceOf[cats.arrow.FunctionK[
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+          ]]
+      ): Any
   }
   private def callMapKAll(tc: Expr[Any], xs: Expr[Any], fk: Expr[Any]): Expr[Any] = Expr.quote {
     hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
       .mapKAll(Expr.splice(tc), Expr.splice(xs).asInstanceOf[Seq[Any]], Expr.splice(fk))
   }
   private def callContramapK(tc: Expr[Any], x: Expr[Any], fk: Expr[Any]): Expr[Any] = Expr.quote {
-    hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
-      .contramapK(Expr.splice(tc), Expr.splice(x), Expr.splice(fk))
+    Expr
+      .splice(tc)
+      .asInstanceOf[cats.tagless.ContravariantK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.DummyHKT
+      ]]
+      .contramapK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+      ](Expr.splice(x))(
+        Expr
+          .splice(fk)
+          .asInstanceOf[cats.arrow.FunctionK[
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2,
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1
+          ]]
+      ): Any
   }
   private def callContramapKAll(tc: Expr[Any], xs: Expr[Any], fk: Expr[Any]): Expr[Any] = Expr.quote {
     hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
       .contramapKAll(Expr.splice(tc), Expr.splice(xs).asInstanceOf[Seq[Any]], Expr.splice(fk))
   }
   private def callImapK(tc: Expr[Any], x: Expr[Any], fk: Expr[Any], gk: Expr[Any]): Expr[Any] = Expr.quote {
-    hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
-      .imapK(Expr.splice(tc), Expr.splice(x), Expr.splice(fk), Expr.splice(gk))
+    Expr
+      .splice(tc)
+      .asInstanceOf[cats.tagless.InvariantK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.DummyHKT
+      ]]
+      .imapK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+      ](Expr.splice(x))(
+        Expr
+          .splice(fk)
+          .asInstanceOf[cats.arrow.FunctionK[
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+          ]]
+      )(
+        Expr
+          .splice(gk)
+          .asInstanceOf[cats.arrow.FunctionK[
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2,
+            hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1
+          ]]
+      ): Any
   }
   private def callImapKAll(tc: Expr[Any], xs: Expr[Any], fk: Expr[Any], gk: Expr[Any]): Expr[Any] = Expr.quote {
     hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
       .imapKAll(Expr.splice(tc), Expr.splice(xs).asInstanceOf[Seq[Any]], Expr.splice(fk), Expr.splice(gk))
   }
   private def callProductK(tc: Expr[Any], x: Expr[Any], y: Expr[Any]): Expr[Any] = Expr.quote {
-    hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime
-      .productK(Expr.splice(tc), Expr.splice(x), Expr.splice(y))
+    Expr
+      .splice(tc)
+      .asInstanceOf[cats.tagless.SemigroupalK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.DummyHKT
+      ]]
+      .productK[
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor1,
+        hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories.WCtor2
+      ](Expr.splice(x), Expr.splice(y)): Any
   }
   private def callTuple2K(x: Expr[Any], y: Expr[Any]): Expr[Any] = Expr.quote {
     hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessRuntime.mkTuple2K(Expr.splice(x), Expr.splice(y))

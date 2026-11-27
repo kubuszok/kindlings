@@ -11,6 +11,8 @@ trait InvariantKMacrosImpl
     with rules.InvariantKUseImplicitRuleImpl
     with rules.InvariantKCaseClassRuleImpl
     with rules.InvariantKTraitRuleImpl
+    with rules.InvariantKEnumRuleImpl
+    with rules.EnumAlgebraSupport
     with TraitAlgebraBodies
     with CatsTaglessDerivationTimeout
     with hearth.kindlings.derivation.compiletime.MethodFolds
@@ -147,6 +149,7 @@ trait InvariantKMacrosImpl
         InvariantKUseCachedRule,
         InvariantKUseImplicitRule,
         InvariantKCaseClassRule,
+        InvariantKEnumRule,
         InvariantKTraitRule
       )(_[Alg]).flatMap {
         case Right(result) =>
@@ -309,14 +312,12 @@ trait InvariantKMacrosImpl
                         ()
                       }
                     case None =>
-                      failUnsupportedField(
-                        "InvariantK",
-                        name,
-                        "depends on the type constructor parameter " +
-                          "but is not a direct application of it (e.g. F[X]), and its outer type constructor " +
-                          "could not be extracted for recursive derivation. " +
-                          "Only direct F[X] fields, nested Alg[F] fields, and invariant fields are supported."
-                      )
+                      // F nested in a type with several arguments: looked up for `[F[_]] =>> T[F]` like trait algebras do.
+                      resolveNestedCaseField("InvariantK", ctx.algCtorK1, name, NestedTc.InvariantKTc).map {
+                        nestedExpr =>
+                          nestedFieldExprs += (name -> nestedExpr)
+                          ()
+                      }
                   })
                 }
               case _ =>

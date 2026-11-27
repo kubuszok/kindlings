@@ -9,6 +9,7 @@ trait ContravariantKMacrosImpl
     with rules.ContravariantKUseImplicitRuleImpl
     with rules.ContravariantKCaseClassRuleImpl
     with rules.ContravariantKTraitRuleImpl
+    with rules.ContravariantKEnumRuleImpl
     with InvariantKMacrosImpl { this: MacroCommons & StdExtensions =>
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
@@ -55,6 +56,7 @@ trait ContravariantKMacrosImpl
         ContravariantKUseCachedRule,
         ContravariantKUseImplicitRule,
         ContravariantKCaseClassRule,
+        ContravariantKEnumRule,
         ContravariantKTraitRule
       )(_[Alg]).flatMap {
         case Right(result) =>
@@ -160,9 +162,6 @@ trait ContravariantKMacrosImpl
         val contravariantKAnchor = Type
           .of[cats.tagless.ContravariantK[CatsTaglessFactories.DummyHKT]]
           .asInstanceOf[Type[Any]]
-        val invariantKAnchor = Type
-          .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
-          .asInstanceOf[Type[Any]]
 
         val nestedFieldDerivations: MIO[Unit] =
           fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
@@ -200,20 +199,12 @@ trait ContravariantKMacrosImpl
                           ()
                       }
                     case None =>
-                      val invariantKAvailable = constructTypeClassTypeForField(
-                        tOption.asInstanceOf[Type[Any]],
-                        invariantKAnchor
-                      ).exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
-                      val hint =
-                        if (invariantKAvailable)
-                          " An InvariantK instance exists for it — consider using InvariantK.derived instead."
-                        else ""
-                      failUnsupportedField(
-                        "ContravariantK",
-                        name,
-                        "depends on the type constructor parameter " +
-                          s"but no ContravariantK instance could be derived for its outer type constructor.$hint"
-                      )
+                      // F nested in a type with several arguments: looked up for `[F[_]] =>> T[F]` like trait algebras do.
+                      resolveNestedCaseField("ContravariantK", ctx.algCtorK1, name, NestedTc.ContravariantKTc).map {
+                        nestedExpr =>
+                          nestedFieldExprs += (name -> nestedExpr)
+                          ()
+                      }
                   })
                 }
               case _ =>

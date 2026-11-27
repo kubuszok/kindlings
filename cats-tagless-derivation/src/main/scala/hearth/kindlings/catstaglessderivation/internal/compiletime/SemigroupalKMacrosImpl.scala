@@ -213,13 +213,12 @@ trait SemigroupalKMacrosImpl
                         ()
                       }
                     case None =>
-                      failUnsupportedField(
-                        "SemigroupalK",
-                        name,
-                        "depends on the type constructor parameter " +
-                          "but is not a direct application of it (e.g. F[X]), and its outer type constructor " +
-                          "could not be extracted for recursive derivation."
-                      )
+                      // F nested in a type with several arguments: looked up for `[F[_]] =>> T[F]` like trait algebras do.
+                      resolveNestedCaseField("SemigroupalK", ctx.algCtorK1, name, NestedTc.SemigroupalKTc).map {
+                        nestedExpr =>
+                          nestedFieldExprs += (name -> nestedExpr)
+                          ()
+                      }
                   })
                 }
               case _ =>
