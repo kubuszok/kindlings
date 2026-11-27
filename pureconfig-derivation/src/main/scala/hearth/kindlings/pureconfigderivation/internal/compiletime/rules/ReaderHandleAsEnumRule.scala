@@ -395,22 +395,49 @@ trait ReaderHandleAsEnumRuleImpl {
         case Left(_) =>
           Expr.singletonOf[ChildType] match {
             case Some(singleton) =>
+              implicit val BooleanT: Type[Boolean] = RTypes.Boolean
+              val (staticAllowUnknownKeys, allowUnknownKeysExpr) =
+                ReaderHandleAsCaseClassRule.allowUnknownKeysOf[ChildType]
               Log.info(s"Using singleton for $childName") >>
                 MIO.pure(
-                  ChildReader[A](
-                    childName,
-                    transformedNameExpr,
-                    (_: Expr[ConfigCursor]) =>
-                      Expr.quote(Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigReaderFailures, A]),
-                    (innerCurExpr: Expr[ConfigCursor]) =>
-                      Expr.quote {
-                        PureConfigDerivationUtils.readObjectAs[A](
-                          Expr.splice(innerCurExpr),
-                          Expr.splice(singleton).asInstanceOf[A]
-                        )
-                      },
-                    needsDiscriminatorRemoved = false // `read` ignores the cursor
-                  )
+                  // A case object that does not allow unknown keys (upstream's `ProductHint[Obj.type](allowUnknownKeys =
+                  // false)`) reports every key of the object it is read from (without the discriminator).
+                  if (!staticAllowUnknownKeys.contains(true))
+                    ChildReader[A](
+                      childName,
+                      transformedNameExpr,
+                      (innerCurExpr: Expr[ConfigCursor]) =>
+                        Expr.quote {
+                          PureConfigDerivationUtils.checkNoKeys[A](
+                            Expr.splice(innerCurExpr),
+                            Expr.splice(singleton).asInstanceOf[A],
+                            Expr.splice(allowUnknownKeysExpr)
+                          )
+                        },
+                      (innerCurExpr: Expr[ConfigCursor]) =>
+                        Expr.quote {
+                          PureConfigDerivationUtils.readEmptyProduct[A](
+                            Expr.splice(innerCurExpr),
+                            Expr.splice(singleton).asInstanceOf[A],
+                            Expr.splice(allowUnknownKeysExpr)
+                          )
+                        }
+                    )
+                  else
+                    ChildReader[A](
+                      childName,
+                      transformedNameExpr,
+                      (_: Expr[ConfigCursor]) =>
+                        Expr.quote(Right(Expr.splice(singleton).asInstanceOf[A]): Either[ConfigReaderFailures, A]),
+                      (innerCurExpr: Expr[ConfigCursor]) =>
+                        Expr.quote {
+                          PureConfigDerivationUtils.readObjectAs[A](
+                            Expr.splice(innerCurExpr),
+                            Expr.splice(singleton).asInstanceOf[A]
+                          )
+                        },
+                      needsDiscriminatorRemoved = false // `read` ignores the cursor
+                    )
                 )
             case None =>
               deriveReaderRecursively[ChildType](using rctx.nest[ChildType](rctx.cursor)).flatMap { _ =>

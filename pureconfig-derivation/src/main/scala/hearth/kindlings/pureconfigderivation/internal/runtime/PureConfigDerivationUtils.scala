@@ -77,6 +77,58 @@ object PureConfigDerivationUtils {
     else obj.failed(KeyNotFound.forKeys(key, obj.keys))
   }
 
+  /** [[readField]] for a key whose cursor (`obj.atKeyOrUndefined(key)`) the caller already has. */
+  def readFieldAt[A](
+      obj: pureconfig.ConfigObjectCursor,
+      key: String,
+      keyCur: ConfigCursor,
+      reader: ConfigReader[A]
+  ): Result[A] =
+    if (!keyCur.isUndefined || reader.isInstanceOf[pureconfig.ReadsMissingKeys]) reader.from(keyCur)
+    else obj.failed(KeyNotFound.forKeys(key, obj.keys))
+
+  /** [[readerFromFn]] for a derived reader of an `Option`: like upstream's `Option` reader, it reads missing keys. */
+  def readerFromFnReadingMissingKeys[A](read: ConfigCursor => Result[A]): ConfigReader[A] =
+    new ConfigReader[A] with pureconfig.ReadsMissingKeys {
+      override def from(cur: ConfigCursor): Result[A] = read(cur)
+    }
+
+  /** Reads a type without fields (a case object, a case class without parameters) the way upstream's derived reader
+    * does: the value must be an object and, when unknown keys are not allowed (`ProductHint(allowUnknownKeys =
+    * false)`), every key of it is reported as an `UnknownKey`.
+    */
+  def readEmptyProduct[A](cursor: ConfigCursor, value: A, allowUnknownKeys: Boolean): Result[A] =
+    cursor.asObjectCursor match {
+      case Right(_) => checkNoKeys(cursor, value, allowUnknownKeys)
+      case Left(f)  => Left(f)
+    }
+
+  /** `value`, unless unknown keys are not allowed and `cursor` is an object with keys (each an `UnknownKey`). */
+  def checkNoKeys[A](cursor: ConfigCursor, value: A, allowUnknownKeys: Boolean): Result[A] =
+    if (allowUnknownKeys) Right(value)
+    else
+      unknownKeysFailures(cursor, Set.empty) match {
+        case Some(f) => Left(f)
+        case None    => Right(value)
+      }
+
+  /** The list a tuple of `size` elements is read from (upstream reads tuples from lists, which HOCON also builds from
+    * objects with numeric keys): `WrongType` when the value is not a list, `WrongSizeList` when its size differs.
+    */
+  def tupleListCursor(cursor: ConfigCursor, size: Int): Result[pureconfig.ConfigListCursor] =
+    cursor.asListCursor match {
+      case Right(list) =>
+        if (list.size == size) Right(list)
+        else cursor.failed(pureconfig.error.WrongSizeList(size, list.size))
+      case left => left
+    }
+
+  /** Whether a tuple is read from its object representation (`{ _1 = ..., _2 = ... }`): like upstream's Shapeless
+    * derivation, only when the value is not a list but is an object.
+    */
+  def isTupleAsObject(cursor: ConfigCursor): Boolean =
+    cursor.asListCursor.isLeft && cursor.asObjectCursor.isRight
+
   /** `value` when `cursor` is an object (how upstream's derived reader of a case object reads), its failure otherwise.
     */
   def readObjectAs[A](cursor: ConfigCursor, value: A): Result[A] = cursor.asObjectCursor.map(_ => value)
@@ -422,6 +474,32 @@ object PureConfigDerivationUtils {
   def putField(fields: java.util.LinkedHashMap[String, ConfigValue], key: String, value: ConfigValue): Unit = {
     val _ = fields.put(key, value)
   }
+
+  /** Puts a field written by a summoned `writer` (one statement per field in derived writers). Like upstream's derived
+    * writers, a `WritesMissingKeys` writer (e.g. upstream's `Option` writer) decides whether the key is written at all.
+    */
+  def putFieldWith[A](
+      fields: java.util.LinkedHashMap[String, ConfigValue],
+      key: String,
+      writer: ConfigWriter[A],
+      value: A
+  ): Unit = writer match {
+    case w: pureconfig.WritesMissingKeys[A @unchecked] =>
+      w.toOpt(value) match {
+        case Some(v) => val _ = fields.put(key, v)
+        case None    => ()
+      }
+    case w => val _ = fields.put(key, w.to(value))
+  }
+
+  /** Adds an element to the list a tuple is written as. */
+  def addElement(elements: java.util.ArrayList[ConfigValue], value: ConfigValue): Unit = {
+    val _ = elements.add(value)
+  }
+
+  /** The list of the elements added by [[addElement]] (upstream writes tuples as lists). */
+  def elementsToList(elements: java.util.ArrayList[ConfigValue]): ConfigValue =
+    ConfigValueFactory.fromIterable(elements)
 
   /** The object of the fields put by [[putField]]. */
   def fieldsToObject(fields: java.util.LinkedHashMap[String, ConfigValue]): ConfigValue =

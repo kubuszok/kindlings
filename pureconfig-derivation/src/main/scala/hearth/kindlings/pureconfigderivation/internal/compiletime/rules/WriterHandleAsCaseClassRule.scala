@@ -11,6 +11,7 @@ import com.typesafe.config.ConfigValue
 import hearth.kindlings.pureconfigderivation.KindlingsProductHint
 import hearth.kindlings.pureconfigderivation.annotations.{configKey, transientField}
 import hearth.kindlings.pureconfigderivation.internal.runtime.PureConfigDerivationUtils
+import pureconfig.ConfigWriter
 
 trait WriterHandleAsCaseClassRuleImpl {
   this: WriterMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
@@ -78,60 +79,32 @@ trait WriterHandleAsCaseClassRuleImpl {
                 .parTraverse { case (fName, fieldValue) =>
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   Log.namedScope(s"Writing field ${wctx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
-                    deriveWriterRecursively[Field](using wctx.nest(fieldExpr)).map { fieldValueExpr =>
-                      val nameOverride =
-                        paramsByName.get(fName).flatMap(p => getAnnotationStringArg[configKey](p))
-                      // Like upstream (`WritesMissingKeys`), an empty `Option` field is omitted, not written as null.
-                      val emptyOption: Option[Expr[Boolean]] = Type[Field] match {
-                        case IsOption(_) =>
-                          implicit val AnyT: Type[Any] = WTypes.Any
-                          Some(Expr.quote(Expr.splice(fieldExpr.upcast[Any]).asInstanceOf[Option[Any]].isEmpty))
-                        case _ => None
-                      }
-                      (fName, fieldValueExpr, nameOverride, emptyOption)
-                    }
+                    val nameOverride =
+                      paramsByName.get(fName).flatMap(p => getAnnotationStringArg[configKey](p))
+                    putFieldOf[Field](fieldExpr).map(put => (fName, nameOverride, put))
                   }
                 }
                 .map { fieldData =>
-                  // One statement per field putting it into the object's map (an empty `Option` is not put: like
-                  // upstream's `WritesMissingKeys`, it is omitted). Building `(key, value) :: ...` with an `if` inside
-                  // each element made the compiler keep every previous element on the stack and emit a stack map
-                  // frame per field listing all of them.
+                  // One statement per field putting it into the object's map. Building `(key, value) :: ...` with an
+                  // `if` inside each element made the compiler keep every previous element on the stack and emit a
+                  // stack map frame per field listing all of them.
                   val putFields: Expr[java.util.LinkedHashMap[String, ConfigValue]] => Expr[Unit] = { fieldsMap =>
-                    fieldData.toList.foldLeft(Expr.quote(()): Expr[Unit]) {
-                      case (acc, (fName, fieldValueExpr, nameOverride, emptyOption)) =>
-                        // When the config was evaluable at compile time, pre-compute the
-                        // mapped name as a constant string.
-                        val keyExpr: Expr[String] = nameOverride match {
-                          case Some(customName) => Expr(customName)
-                          case None             =>
-                            preComputedTransform match {
-                              case Some(transform) => Expr(transform(fName))
-                              case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
-                            }
-                        }
-                        emptyOption match {
-                          case Some(isEmpty) =>
-                            Expr.quote {
-                              Expr.splice(acc)
-                              if (Expr.splice(isEmpty)) ()
-                              else
-                                PureConfigDerivationUtils.putField(
-                                  Expr.splice(fieldsMap),
-                                  Expr.splice(keyExpr),
-                                  Expr.splice(fieldValueExpr)
-                                )
-                            }
-                          case None =>
-                            Expr.quote {
-                              Expr.splice(acc)
-                              PureConfigDerivationUtils.putField(
-                                Expr.splice(fieldsMap),
-                                Expr.splice(keyExpr),
-                                Expr.splice(fieldValueExpr)
-                              )
-                            }
-                        }
+                    fieldData.toList.foldLeft(Expr.quote(()): Expr[Unit]) { case (acc, (fName, nameOverride, put)) =>
+                      // When the config was evaluable at compile time, pre-compute the
+                      // mapped name as a constant string.
+                      val keyExpr: Expr[String] = nameOverride match {
+                        case Some(customName) => Expr(customName)
+                        case None             =>
+                          preComputedTransform match {
+                            case Some(transform) => Expr(transform(fName))
+                            case None            => Expr.quote(Expr.splice(transformExpr)(Expr.splice(Expr(fName))))
+                          }
+                      }
+                      val putField = put(fieldsMap, keyExpr)
+                      Expr.quote {
+                        Expr.splice(acc)
+                        Expr.splice(putField)
+                      }
                     }
                   }
                   Expr.quote {
@@ -144,6 +117,70 @@ trait WriterHandleAsCaseClassRuleImpl {
               MIO.pure(Expr.quote {
                 PureConfigDerivationUtils.writeFields(Nil)
               })
+          }
+      }
+    }
+
+    /** How a field's value is put into the map of the object being written, given the map and the key.
+      *
+      * Like upstream's derived writers: a field whose type has a `ConfigWriter` in scope is written with it, and when
+      * that writer is a `WritesMissingKeys` (upstream's `Option` writer, user-provided ones) it decides whether the key
+      * is written at all - so a user-provided plain writer of an `Option` type writes its empty values too. A field
+      * whose writer is derived here is written, except for an empty `Option`, which is omitted (as upstream's `Option`
+      * writer does).
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private def putFieldOf[Field: Type](fieldExpr: Expr[Field])(implicit
+        ctx: WriterCtx[?]
+    ): MIO[(Expr[java.util.LinkedHashMap[String, ConfigValue]], Expr[String]) => Expr[Unit]] = {
+      implicit val ConfigValueT: Type[ConfigValue] = WTypes.ConfigValue
+      implicit val StringT: Type[String] = WTypes.String
+      implicit val WriterField: Type[ConfigWriter[Field]] = WTypes.ConfigWriter[Field]
+      val summoned =
+        if (ctx.derivedType.exists(_.Underlying =:= Type[Field])) None
+        else
+          WTypes
+            .ConfigWriter[Field]
+            .summonExprIgnoring(WriterUseImplicitWhenAvailableRule.ignoredImplicits*)
+            .toEither
+            .toOption
+      summoned match {
+        case Some(writerExpr) =>
+          ctx.cachedInstance[Field](writerExpr).map { cached => (fieldsMap, keyExpr) =>
+            Expr.quote {
+              PureConfigDerivationUtils.putFieldWith[Field](
+                Expr.splice(fieldsMap),
+                Expr.splice(keyExpr),
+                Expr.splice(cached),
+                Expr.splice(fieldExpr)
+              )
+            }
+          }
+        case None =>
+          deriveWriterRecursively[Field](using ctx.nest(fieldExpr)).map { fieldValueExpr =>
+            Type[Field] match {
+              case IsOption(_) =>
+                implicit val AnyT: Type[Any] = WTypes.Any
+                (fieldsMap, keyExpr) =>
+                  Expr.quote {
+                    if (Expr.splice(fieldExpr.upcast[Any]).asInstanceOf[Option[Any]].isEmpty) ()
+                    else
+                      PureConfigDerivationUtils.putField(
+                        Expr.splice(fieldsMap),
+                        Expr.splice(keyExpr),
+                        Expr.splice(fieldValueExpr)
+                      )
+                  }
+              case _ =>
+                (fieldsMap, keyExpr) =>
+                  Expr.quote {
+                    PureConfigDerivationUtils.putField(
+                      Expr.splice(fieldsMap),
+                      Expr.splice(keyExpr),
+                      Expr.splice(fieldValueExpr)
+                    )
+                  }
+            }
           }
       }
     }

@@ -29,6 +29,7 @@ trait ReaderMacrosImpl
     with rules.ReaderHandleAsMapRuleImpl
     with rules.ReaderHandleAsCollectionRuleImpl
     with rules.ReaderHandleAsNamedTupleRuleImpl
+    with rules.ReaderHandleAsTupleRuleImpl
     with rules.ReaderHandleAsSingletonRuleImpl
     with rules.ReaderHandleAsCaseClassRuleImpl
     with rules.ReaderHandleAsEnumRuleImpl
@@ -289,6 +290,7 @@ trait ReaderMacrosImpl
           // proof is an `IsMapOf`, so we parse `IsCollection` once and dispatch via `.asMap`.
           ReaderHandleAsCollectionRule,
           ReaderHandleAsNamedTupleRule,
+          ReaderHandleAsTupleRule,
           ReaderHandleAsSingletonRule,
           ReaderHandleAsCaseClassRule,
           ReaderHandleAsEnumRule
