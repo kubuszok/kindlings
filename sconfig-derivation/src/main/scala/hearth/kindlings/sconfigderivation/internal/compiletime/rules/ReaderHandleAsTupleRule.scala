@@ -18,8 +18,8 @@ trait ReaderHandleAsTupleRuleImpl {
     * (`WrongSizeList` otherwise, `WrongType` when the value is neither a list nor an object), every element read with
     * the reader of its type and every failure reported under its index.
     *
-    * A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = ..., _2 =
-    * ... }`), as upstream's Scala 2 derivation does.
+    * A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = ..., _2 = ...
+    * }`), as upstream's Scala 2 derivation does.
     */
   object ReaderHandleAsTupleRule extends ReaderDerivationRule("handle as tuple when possible") {
 
@@ -95,8 +95,8 @@ trait ReaderHandleAsTupleRuleImpl {
               ConfigDecodingError,
               A
             ]](reads.map(_(list)))(
-              mergeErrors = (failure, r) =>
-                Expr.quote(SConfigDerivationUtils.mergeFailure(Expr.splice(failure), Expr.splice(r))),
+              mergeErrors =
+                (failure, r) => Expr.quote(SConfigDerivationUtils.mergeFailure(Expr.splice(failure), Expr.splice(r))),
               valueOf = r => Expr.quote(Expr.splice(r).asInstanceOf[Right[ConfigDecodingError, Any]].value),
               construct = construct,
               onSuccess = a => Expr.quote(Right(Expr.splice(a)): Either[ConfigDecodingError, A]),
