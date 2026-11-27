@@ -61,14 +61,12 @@ object CtKindlingsSide extends CtInstances {
   val applyTriple: Apply[CtTriple] = Apply.derived[CtTriple]
   val applicativeTriple: Applicative[CtTriple] = Applicative.derived[CtTriple]
   val pureTriple: Pure[CtTriple] = Pure.derived[CtTriple]
-  // A field wrapping the type parameter in another derived case class needs that class's instance in scope (kittens
-  // derives it) - documented in feature-parity.md.
-  implicit private val nonEmptyTraverseNelInScope: NonEmptyTraverse[CtNel] = NonEmptyTraverse.derived[CtNel]
+  // A field wrapping the type parameter in another case class (`middle: CtNel[A]`) is derived recursively, like kittens.
   val reducibleNel: Reducible[CtNel] = Reducible.derived[CtNel]
   val reducibleNelPlus: Reducible[CtNelPlus] = Reducible.derived[CtNelPlus]
   val reducibleRose: Reducible[CtRose] = Reducible.derived[CtRose]
   val reducibleDeep: Reducible[CtDeep] = Reducible.derived[CtDeep]
-  val nonEmptyTraverseNel: NonEmptyTraverse[CtNel] = nonEmptyTraverseNelInScope
+  val nonEmptyTraverseNel: NonEmptyTraverse[CtNel] = NonEmptyTraverse.derived[CtNel]
   val nonEmptyTraverseNelPlus: NonEmptyTraverse[CtNelPlus] = NonEmptyTraverse.derived[CtNelPlus]
   val nonEmptyTraverseRose: NonEmptyTraverse[CtRose] = NonEmptyTraverse.derived[CtRose]
   val nonEmptyTraverseDeep: NonEmptyTraverse[CtDeep] = NonEmptyTraverse.derived[CtDeep]
