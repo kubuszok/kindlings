@@ -104,7 +104,8 @@ implicit val config: AvroConfig = AvroConfig.default
 | `withKebabCaseFieldNames` | `fieldName` -> `field-name` |
 | `withPascalCaseFieldNames` | `fieldName` -> `FieldName` |
 | `withTransformConstructorNames(f)` | Custom constructor name transform for sealed traits |
-| `withDecimalConfig(precision, scale)` | Global `BigDecimal` precision and scale (BYTES + `decimal` logical type; without it `BigDecimal` is a STRING) |
+| `withDecimalConfig(precision, scale)` | Global `BigDecimal` precision and scale (BYTES + `decimal` logical type; without it `BigDecimal` is a STRING). A value with more decimal places than the scale, or more digits than the precision, is rejected |
+| `withDecimalConfig(precision, scale, roundingMode)` | The same, rounding values with more decimal places than the scale with a `java.math.RoundingMode` (as avro4s 4's implicit `RoundingMode`; the default is `UNNECESSARY`, i.e. rejecting them). Also applies to `@avroScalePrecision` fields |
 | `withInstantPrecision(p)` | `Instant` / `java.sql.Timestamp` precision: `TimestampPrecision.Millis` (default), `Micros` or `Nanos` |
 | `withLocalDateTimePrecision(p)` | `LocalDateTime` precision: `TimestampPrecision.Nanos` (default, as avro4s), `Micros` or `Millis` |
 | `withOffsetDateTimeAsIsoString` | Encode `OffsetDateTime` as avro4s does: an ISO-8601 string (default: a UTC `timestamp-millis` long) |
@@ -138,7 +139,7 @@ import hearth.kindlings.avroderivation.annotations._
 | `@avroDoc("text")` | Type, Field | Add documentation to the schema |
 | `@avroDoc("text")` on a value class | Type | Documents the fields of that type (a value class has no schema of its own), unless the field has its own `@avroDoc` |
 | `@avroNamespace("ns")` | Type, Field | Set the Avro namespace for a specific type. On a sealed trait it also applies to the subtypes that have no `@avroNamespace` of their own. On a field, it moves **every** named type (record, enum, fixed) below the field to that namespace — through unions, options, collections, maps and nested records — taking precedence over the types' own annotations, as avro4s does |
-| `@avroProp("key", "value")` | Type, Field | Add custom Avro properties (stackable). A value that looks like JSON (an object, an array, a number, `true`/`false`/`null`, a quoted string) is added as that JSON value |
+| `@avroProp("key", "value")` | Type, Field | Add custom Avro properties (stackable). The value is always a String, as in avro4s 4 |
 | `@avroAlias("alias")` | Type, Field | Add schema aliases for evolution (stackable) |
 
 ### Schema control
@@ -172,7 +173,7 @@ decodes to `None`).
 Decoders accept whatever holds a value, regardless of the schema (as avro4s' do): a `String` from a `CharSequence`
 (`Utf8`, `String`), UTF-8 bytes (an array or a `ByteBuffer`) or a FIXED value; bytes and decimals from a `ByteBuffer`,
 a byte array or a FIXED value; a collection from a Java collection, a Java array or a Scala collection; integral values
-with widening. Besides `String`, `org.apache.avro.util.Utf8` and `CharSequence` fields are Avro strings.
+with widening; a `null` Boolean is `false`. Besides `String`, `org.apache.avro.util.Utf8` and `CharSequence` fields are Avro strings.
 
 ## Usage examples
 

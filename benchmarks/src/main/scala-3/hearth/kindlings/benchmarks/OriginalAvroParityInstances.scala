@@ -9,4 +9,11 @@ object OriginalAvroParityInstances {
       summon[AvroEncoder[AvroVoyage]],
       summon[AvroDecoder[AvroVoyage]]
     )
+  // avro4s 5 always rounds HALF_UP
+  val priceFormat: Avro4sFormat[AvroPrice] =
+    new Avro4sFormat(
+      summon[SchemaFor[AvroPrice]].schema,
+      summon[AvroEncoder[AvroPrice]],
+      summon[AvroDecoder[AvroPrice]]
+    )
 }

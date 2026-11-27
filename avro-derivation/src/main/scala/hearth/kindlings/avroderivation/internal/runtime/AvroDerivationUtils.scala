@@ -70,26 +70,10 @@ object AvroDerivationUtils {
   }
 
   def addSchemaProp(schema: Schema, key: String, value: String): Unit =
-    schema.addProp(key, parseJsonPropValue(value))
+    schema.addProp(key, value)
 
   def addFieldProp(field: Schema.Field, key: String, value: String): Unit =
-    field.addProp(key, parseJsonPropValue(value))
-
-  private def parseJsonPropValue(value: String): AnyRef = {
-    val trimmed = value.trim
-    if (
-      trimmed.startsWith("{") || trimmed.startsWith("[") || trimmed.startsWith("\"") ||
-      trimmed == "true" || trimmed == "false" || trimmed == "null" ||
-      trimmed.headOption.exists(c => c.isDigit || c == '-')
-    ) {
-      try {
-        val mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-        mapper.readTree(trimmed)
-      } catch {
-        case _: Exception => value
-      }
-    } else value
-  }
+    field.addProp(key, value)
 
   def addSchemaAlias(schema: Schema, alias: String): Unit =
     schema.addAlias(alias)
@@ -368,6 +352,36 @@ object AvroDerivationUtils {
     val scaled = bd.bigDecimal.setScale(scale)
     ByteBuffer.wrap(scaled.unscaledValue.toByteArray)
   }
+
+  /** A decimal rounded to `scale` with `roundingMode` (`DecimalConfig.roundingMode`). */
+  def encodeBigDecimal(bd: BigDecimal, scale: Int, roundingMode: java.math.RoundingMode): ByteBuffer = {
+    val scaled = bd.bigDecimal.setScale(scale, roundingMode)
+    ByteBuffer.wrap(scaled.unscaledValue.toByteArray)
+  }
+
+  /** A decimal of `precision` and `scale`: rounded to the scale with `roundingMode`, and rejected when it then has more
+    * digits than the precision (as Avro's `DecimalConversion`, which avro4s uses).
+    */
+  def encodeBigDecimal(bd: BigDecimal, precision: Int, scale: Int, roundingMode: java.math.RoundingMode): ByteBuffer = {
+    val scaled = bd.bigDecimal.setScale(scale, roundingMode)
+    if (scaled.precision > precision)
+      throw new org.apache.avro.AvroTypeException(
+        s"Cannot encode decimal with precision ${scaled.precision} as max precision $precision"
+      )
+    ByteBuffer.wrap(scaled.unscaledValue.toByteArray)
+  }
+
+  private val roundingModes: Array[java.math.RoundingMode] = java.math.RoundingMode.values()
+
+  /** The rounding mode with this ordinal (a rounding mode known at compile time, in the generated code). */
+  def roundingModeOf(ordinal: Int): java.math.RoundingMode = roundingModes(ordinal)
+
+  /** The rounding mode of the config's decimals (`UNNECESSARY` without a `DecimalConfig`). */
+  def decimalRoundingMode(config: hearth.kindlings.avroderivation.AvroConfig): java.math.RoundingMode =
+    config.decimalConfig match {
+      case Some(decimalConfig) => decimalConfig.roundingMode
+      case None                => java.math.RoundingMode.UNNECESSARY
+    }
 
   def encodeEither[L, R](value: Either[L, R], encodeLeft: L => Any, encodeRight: R => Any): Any =
     value match {
@@ -674,7 +688,9 @@ object AvroDerivationUtils {
 
   def decodeBoolean(value: Any): Boolean = value match {
     case b: java.lang.Boolean => b.booleanValue
-    case other                => cannotDecode(other, "BOOLEAN")
+    // as avro4s (which unboxes the value): a `null` Boolean is `false`
+    case null  => false
+    case other => cannotDecode(other, "BOOLEAN")
   }
 
   def decodeInt(value: Any): Int = value match {

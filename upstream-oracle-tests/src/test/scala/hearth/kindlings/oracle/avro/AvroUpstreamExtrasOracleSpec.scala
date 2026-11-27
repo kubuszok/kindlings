@@ -51,6 +51,11 @@ final class AvroUpstreamExtrasOracleSpec extends AvroOracleSuite {
     implicit lazy val composerEncoder: AvroEncoder[AuComposer] = AvroEncoder.derived[AuComposer]
     implicit lazy val composerDecoder: AvroDecoder[AuComposer] = AvroDecoder.derived[AuComposer]
   }
+  private object KHalfUp {
+    implicit val config: AvroConfig =
+      AvroConfig.avro4sDefaults.withDecimalConfig(precision = 8, scale = 2, java.math.RoundingMode.HALF_UP)
+    lazy val decimal = k[AuDecimal]
+  }
   private object KPascal {
     implicit val config: AvroConfig = AvroConfig.avro4sDefaults.withPascalCaseFieldNames
     lazy val naming = k[AuNamingStrategy]
@@ -107,16 +112,14 @@ final class AvroUpstreamExtrasOracleSpec extends AvroOracleSuite {
       U.basket,
       AuBasket(AuApple, List(AuOrange, AuApple))
     )()
-    test("@AvroProp values that look like JSON") {
-      // Kindlings parses a property value that looks like JSON (so `@avroProp` can carry objects, arrays, numbers and
-      // booleans, for which avro4s 5 takes a JsonNode); avro4s keeps every String a String
-      // (feature-parity.md, "Custom properties").
+    test("@AvroProp values that look like JSON stay Strings") {
       def props(side: AvroSide[AuPropValues]): List[AnyRef] =
         List("a" -> "text", "b" -> "number", "c" -> "flag").map { case (field, key) =>
           side.schema.getField(field).getObjectProp(key)
         }
       assertEquals(props(U.propValues), List[AnyRef]("plain", "1", "true"))
-      assertEquals(props(K.propValues), List[AnyRef]("plain", Integer.valueOf(1), java.lang.Boolean.TRUE))
+      assertEquals(props(K.propValues), props(U.propValues))
+      compare(K.propValues, U.propValues, AuPropValues("a", "b", "c"))()
     }
   }
 
@@ -128,14 +131,29 @@ final class AvroUpstreamExtrasOracleSpec extends AvroOracleSuite {
       AuDecimal(BigDecimal("123.4")),
       AuDecimal(BigDecimal(12))
     )()
-    test("a larger scale is rejected (no rounding)") {
+    test("a larger scale is rejected by default (RoundingMode.UNNECESSARY, as avro4s 4)") {
       val value = AuDecimal(BigDecimal("12.345"))
       val kindlings = AvroOracle.encodeBinary(K.decimal, value).failed.toOption.map(_.getClass.getName)
       val upstream = AvroOracle.encodeBinary(U.decimal, value).failed.toOption.map(_.getClass.getName)
       assertEquals(kindlings, Some("java.lang.ArithmeticException"))
-      // avro4s 4 does not round either (its default RoundingMode.UNNECESSARY); avro4s 5 always rounds HALF_UP.
-      // Kindlings never rounds, on both Scala versions (feature-parity.md, "Decimal rounding").
+      // avro4s 5 differs from avro4s 4: it always rounds HALF_UP (feature-parity.md, "Decimal rounding")
       assertEquals(upstream, if (isAvro4s5) None else kindlings)
+    }
+    test("a larger scale is rounded with the configured rounding mode (avro4s 4's implicit RoundingMode)") {
+      val rounded =
+        (a: AuDecimal, b: AuDecimal) => a.decimal == b.decimal.setScale(2, scala.math.BigDecimal.RoundingMode.HALF_UP)
+      compareWith(
+        KHalfUp.decimal,
+        AvroUpstream.decimalHalfUp,
+        List(AuDecimal(BigDecimal("12.345")), AuDecimal(BigDecimal("-0.005")), AuDecimal(BigDecimal("1.5"))),
+        rounded
+      )()
+    }
+    test("a value with more digits than the precision is rejected") {
+      val value = AuDecimal(BigDecimal("12345678.90"))
+      val kindlings = AvroOracle.encodeBinary(K.decimal, value).failed.toOption.map(_.getClass.getName)
+      assertEquals(kindlings, Some("org.apache.avro.AvroTypeException"))
+      assertEquals(kindlings, AvroOracle.encodeBinary(U.decimal, value).failed.toOption.map(_.getClass.getName))
     }
   }
 

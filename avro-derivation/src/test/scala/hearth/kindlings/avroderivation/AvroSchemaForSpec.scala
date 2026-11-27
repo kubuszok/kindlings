@@ -655,13 +655,9 @@ final class AvroSchemaForSpec extends MacroSuite {
         schema.getProp("key2") ==> "val2"
       }
 
-      test("@avroProp with JSON object value") {
+      test("@avroProp value is a plain String, even when it looks like JSON (as avro4s)") {
         val schema = AvroSchemaFor.schemaOf[WithJsonProp]
-        val prop = schema.getObjectProp("metadata")
-        assert(prop != null, s"expected metadata prop, got null")
-        val map = prop.asInstanceOf[java.util.LinkedHashMap[String, Any]]
-        assertEquals(map.get("version"), 1: Any)
-        assertEquals(map.get("source"), "test": Any)
+        schema.getObjectProp("metadata") ==> """{"version": 1, "source": "test"}"""
       }
     }
 

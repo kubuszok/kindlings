@@ -49,6 +49,9 @@ object AvroUpstream {
   lazy val topJavaEnum: Option[AvroSide[AuWine]] = None
   lazy val annotatedJavaEnum: Option[AvroSide[AuWineWithAnnotations]] = None
 
+  /** Decimals rounded HALF_UP: what avro4s 5 always does (it has no rounding mode setting). */
+  lazy val decimalHalfUp: AvroSide[AuDecimal] = side[AuDecimal]
+
   // --- avro4s' streams (AvroOutputStream / AvroInputStream) ---
 
   import com.sksamuel.avro4s.{AvroInputStream, AvroOutputStream}
