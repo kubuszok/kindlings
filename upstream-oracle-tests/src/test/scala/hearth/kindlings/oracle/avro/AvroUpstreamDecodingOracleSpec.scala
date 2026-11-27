@@ -15,8 +15,8 @@ import scala.util.{Failure, Success, Try}
   * String as a `Utf8`, a `String`, bytes or a FIXED value; bytes as a ByteBuffer, an array or a FIXED value; an ARRAY
   * as a Java collection or an array; ...), regardless of the schema - and so do Kindlings'.
   *
-  * Each case lists the inputs for which the outcomes differ; everywhere Kindlings accepts more than avro4s (the inputs
-  * avro4s 4 and 5 accept differ too), except for one avro4s quirk (`null` decoded as `false`).
+  * Each case lists the inputs for which the outcomes differ: everywhere Kindlings accepts more than avro4s (the inputs
+  * avro4s 4 and 5 accept differ too).
   */
 final class AvroUpstreamDecodingOracleSpec extends AvroOracleSuite {
 
@@ -80,7 +80,6 @@ final class AvroUpstreamDecodingOracleSpec extends AvroOracleSuite {
   }
 
   private val KindlingsAcceptsMore = "kindlings accepts, avro4s rejects"
-  private val Avro4sAcceptsMore = "kindlings rejects, avro4s accepts"
   private val DifferentValues = "both accept, different values"
 
   private def byVersion[A](avro4s4: Seq[A], avro4s5: Seq[A]): Seq[A] = if (isAvro4s5) avro4s5 else avro4s4
@@ -114,7 +113,7 @@ final class AvroUpstreamDecodingOracleSpec extends AvroOracleSuite {
           case (Success(_), Success(_))             => Some(index -> DifferentValues)
           case (Failure(_), Failure(_))             => None
           case (Success(_), Failure(_))             => Some(index -> KindlingsAcceptsMore)
-          case (Failure(_), Success(_))             => Some(index -> Avro4sAcceptsMore)
+          case (Failure(_), Success(_))             => Some(index -> "kindlings rejects, avro4s accepts")
         }
       }
       assertEquals(differences, expectedDifferences.toList)
@@ -246,11 +245,7 @@ final class AvroUpstreamDecodingOracleSpec extends AvroOracleSuite {
       "true",
       Integer.valueOf(1),
       null
-    )(
-      // avro4s unboxes a `null` Boolean as `false`; Kindlings rejects `null` for every primitive
-      // (feature-parity.md, avro decoding)
-      3 -> Avro4sAcceptsMore
-    )
+    )()
   }
 
   group("avro4s decoder tests: logical types") {

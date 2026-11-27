@@ -1,6 +1,37 @@
 package hearth.kindlings.avroderivation
 
-final case class DecimalConfig(precision: Int, scale: Int)
+/** The `decimal` logical type `BigDecimal` is encoded as (BYTES).
+  *
+  * A value with more decimal places than `scale` is rounded with `roundingMode` (as avro4s 4's `RoundingMode`); the
+  * default, `UNNECESSARY`, rejects such a value with an `ArithmeticException` instead of rounding it.
+  */
+final case class DecimalConfig(precision: Int, scale: Int) {
+
+  // Not a constructor parameter: adding one would change the binary signatures of this case class (`apply`, `copy`,
+  // `unapply`) that code compiled against earlier versions links to.
+  private var rounding: java.math.RoundingMode = java.math.RoundingMode.UNNECESSARY
+
+  /** How a value with more decimal places than `scale` is rounded (default: `UNNECESSARY`, i.e. rejected). */
+  def roundingMode: java.math.RoundingMode = rounding
+
+  def withRoundingMode(roundingMode: java.math.RoundingMode): DecimalConfig = {
+    val updated = new DecimalConfig(precision, scale)
+    updated.rounding = roundingMode
+    updated
+  }
+
+  def copy(precision: Int = this.precision, scale: Int = this.scale): DecimalConfig =
+    new DecimalConfig(precision, scale).withRoundingMode(rounding)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: DecimalConfig => precision == that.precision && scale == that.scale && rounding == that.rounding
+    case _                   => false
+  }
+  override def hashCode: Int = (precision, scale, rounding).hashCode
+  override def toString: String =
+    if (rounding == java.math.RoundingMode.UNNECESSARY) s"DecimalConfig($precision,$scale)"
+    else s"DecimalConfig($precision,$scale,$rounding)"
+}
 
 /** The precision of a timestamp encoded as an Avro `long` (the `timestamp-millis`, `timestamp-micros` or
   * `timestamp-nanos` logical type).
@@ -48,6 +79,13 @@ final case class AvroConfig(
   def withPascalCaseFieldNames: AvroConfig = copy(transformFieldNames = AvroConfig.pascalCase)
   def withDecimalConfig(precision: Int, scale: Int): AvroConfig =
     copy(decimalConfig = Some(DecimalConfig(precision, scale)))
+
+  /** `BigDecimal` as a `decimal(precision, scale)`, rounding values with more decimal places than `scale` with
+    * `roundingMode` (as avro4s 4's implicit `RoundingMode`) instead of rejecting them. The rounding mode also applies
+    * to the fields annotated with `@avroScalePrecision`.
+    */
+  def withDecimalConfig(precision: Int, scale: Int, roundingMode: java.math.RoundingMode): AvroConfig =
+    copy(decimalConfig = Some(DecimalConfig(precision, scale).withRoundingMode(roundingMode)))
 
   /** Precision of `java.time.Instant` and `java.sql.Timestamp` (default: `Millis`, as avro4s). */
   def withInstantPrecision(precision: TimestampPrecision): AvroConfig = copy(instantPrecision = precision)

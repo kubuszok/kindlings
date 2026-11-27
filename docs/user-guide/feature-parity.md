@@ -33,13 +33,12 @@ The only differences are the ones documented below ("Design decisions" and "Defa
 | `@AvroEnumDefault` on avro4s 5 | Ignored (never implemented in 5.x) | `@avroEnumDefault` sets the ENUM default (as avro4s 4) on both Scala versions | Superset |
 | `@AvroScalePrecision` on avro4s 5 | Declared but ignored (the implicit `ScalePrecision` applies) | `@avroScalePrecision(precision, scale)` is honoured on both Scala versions | Superset |
 | avro4s 5 gaps | No recursive types, value classes, `scala.Enumeration`, working `FieldMapper` | All supported (compared with avro4s 4 on Scala 2.13) | Superset |
-| Custom properties | `@AvroProp` values are Strings (avro4s 5: a String or a `JsonNode`) | `@avroProp` values that look like JSON (`"1"`, `"true"`, `"[...]"`, `"{...}"`) are added as JSON values | Annotation arguments must be literals, so JSON is the only way to carry a non-String property |
+| `@AvroProp` with a `JsonNode` (avro4s 5) | avro4s 5's `@AvroProp` also takes a `JsonNode` value | `@avroProp` values are Strings, as avro4s 4's, on both Scala versions | Follows avro4s 4; annotation arguments must be literals |
 | Default of a decimal | The field default of a `BigDecimal` is written as its decimal string (`"964.55"`), which Avro reads as the bytes of those characters | The bytes of the unscaled value, as the Avro specification requires for a `bytes` default | avro4s' default is a different number for any Avro reader |
 | Record defaults (avro4s 4) | `None` fields are left out of a case class default (`{"name": "x"}`) | The complete record (`{"name": "x", "age": null}`), as avro4s 5 | Avro rejects the incomplete default when it is needed |
 | Sealed trait's `@AvroNamespace` (avro4s 4) | Applied to the subtypes only as members of the trait's union; a subtype derived on its own keeps its package | A subtype without its own `@avroNamespace` always takes its sealed parent's (as avro4s 5) | The encoder builds a subtype's record from the subtype's own schema: it must have the name it has in the union |
-| Sealed trait with one subtype (avro4s 5) | The subtype's record, without a union | A union of one (as avro4s 4), on both Scala versions | One wire format on both Scala versions; adding a second subtype stays a compatible change |
-| Decimal rounding (avro4s 5) | A value with more decimal places than the schema's scale is rounded `HALF_UP` (avro4s 4: rejected by default, `RoundingMode` configurable) | Rejected (`ArithmeticException`), on both Scala versions: round before encoding | No silent loss of precision; not configurable yet |
-| `null` for a `Boolean` | Decoded as `false` (unboxing) | Rejected, as for every primitive | A missing value is not `false` |
+| Sealed trait with one subtype (avro4s 5 differs) | avro4s 5: the subtype's record, without a union (avro4s 4: a union of one) | A union of one, as avro4s 4, on both Scala versions | Follows avro4s 4: one wire format on both Scala versions; adding a second subtype stays a compatible change |
+| Decimal rounding (avro4s 5 differs) | avro4s 5 always rounds a value with more decimal places than the scale `HALF_UP` (avro4s 4: an implicit `RoundingMode`, default `UNNECESSARY`, i.e. rejected) | `DecimalConfig.roundingMode` (`withDecimalConfig(precision, scale, roundingMode)`), default `UNNECESSARY`, as avro4s 4, on both Scala versions | Follows avro4s 4: no silent loss of precision by default |
 | avro4s bugs not reproduced | avro4s 4 cannot encode an `Option` below a field `@AvroNamespace`, decodes only the `Left` of `Either[A, Option[B]]`; avro4s 5 cannot encode a sealed trait below a field `@AvroNamespace`, `Either[A, Option[B]]` or a `None.type` field, ignores `@AvroName` on type arguments, decodes the `Right` of `Either[Long, Int]` as a `Left` | All work | Superset |
 
 ### Default value differences
@@ -63,6 +62,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | Field name transforms (`FieldMapper`) | Yes (`SnakeCase`, custom; broken on avro4s 5) | Yes (3 built-in strategies — snake, kebab, Pascal case — plus a custom function via `withTransformFieldNames`) | Parity |
 | Constructor name transforms | Not built-in | Yes | Improvement |
 | Decimal config (precision/scale) | `@AvroScalePrecision` or implicit `ScalePrecision` | `AvroConfig.decimalConfig`, `@avroScalePrecision` | Parity (different API) |
+| Decimal rounding mode | Implicit `RoundingMode` (v4; v5: always `HALF_UP`) | `withDecimalConfig(precision, scale, roundingMode)` | Parity with v4 (different API) |
 | Timestamp precision | A `SchemaFor` with the `timestamp-micros`/`-nanos` logical type | `withInstantPrecision`, `withLocalDateTimePrecision` | Parity (different API) |
 
 ### Type classes
@@ -82,7 +82,7 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | `@AvroName` of a type argument in a generic record's name | v4 only | Yes | Parity (superset on Scala 3) |
 | Documentation (`@AvroDoc` / `@avroDoc`) | Yes (a value class's doc documents the fields of that type: v4) | Yes (same) | Parity |
 | Namespace (`@AvroNamespace` / `@avroNamespace`) | Yes; on a field: every named type below the field | Same | Parity |
-| Custom properties (`@AvroProp` / `@avroProp`) | Yes | Yes (stackable) | Parity |
+| Custom properties (`@AvroProp` / `@avroProp`) | Yes (String values; avro4s 5 also `JsonNode`) | Yes (stackable, String values) | Parity |
 | Aliases (`@AvroAlias` / `@avroAlias`) | Yes | Yes (stackable) | Parity |
 | Fixed size (`@AvroFixed` / `@avroFixed`) | Fields of bytes or a `String` (padded with zeros); value classes (v4) | Same | Parity |
 | Error type (`@AvroError` / `@avroError`) | v5 only (no v4 equivalent), on a type or a field | Yes (both Scala 2+3), on a type or a field | Improvement (we add it on Scala 2) |
@@ -131,7 +131,8 @@ with a newer reader schema that adds fields with Scala defaults (`missing requir
 | Floating-point widening (`Float` → `Double`) | No | No | Parity |
 | Missing field with a Scala default | Decodes to the default | Decodes to the default | Parity |
 | Field with a Scala default that fails to decode | Decodes to the default | Decodes to the default | Parity |
-| Missing field without a default / `null` for a primitive | Rejected (except a `null` Boolean: `false`) | Rejected | Parity (see "`null` for a `Boolean`" above) |
+| Missing field without a default / `null` for a primitive | Rejected (except a `null` Boolean: `false`) | Rejected (except a `null` Boolean: `false`) | Parity |
+| A decimal with more digits than the precision | Rejected (`AvroTypeException`) | Rejected (`AvroTypeException`) | Parity |
 | Lenient inputs: a String from a `CharSequence`, bytes or a FIXED value; bytes / decimals from a `ByteBuffer`, an array or a FIXED value; an ARRAY from a Java collection or array | Yes (v4 and v5 each accept a different subset) | Yes (the union of both) | Parity (superset) |
 | A timestamp out of the range of a long (`Instant.MAX`) | `ArithmeticException` | `ArithmeticException` | Parity |
 | Streams: binary, JSON, data files (with a codec) | `AvroOutputStream` / `AvroInputStream` | `AvroIO` (`toBinary`, `toJson`, `toDataFile`, ...) | Parity (different API) |

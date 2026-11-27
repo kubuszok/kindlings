@@ -68,11 +68,12 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
             case Some(cfg) =>
               cfg.decimalConfig match {
                 case Some(dc) =>
-                  Expr.quote(
-                    AvroDerivationUtils.encodeBigDecimal(
-                      Expr.splice(value).asInstanceOf[BigDecimal],
-                      Expr.splice(Expr(dc.scale))
-                    ): Any
+                  encodeDecimalExpr(
+                    Expr.quote(Expr.splice(value).asInstanceOf[BigDecimal]),
+                    dc.precision,
+                    dc.scale,
+                    ectx.config,
+                    ectx.evaluatedConfig
                   )
                 case None => Expr.quote(Expr.splice(value).asInstanceOf[BigDecimal].toString: Any)
               }
@@ -80,7 +81,7 @@ trait AvroEncoderUseBuiltInSupportRuleImpl {
               Expr.quote {
                 val bd = Expr.splice(value).asInstanceOf[BigDecimal]
                 (Expr.splice(ectx.config).decimalConfig match {
-                  case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.scale)
+                  case Some(dc) => AvroDerivationUtils.encodeBigDecimal(bd, dc.precision, dc.scale, dc.roundingMode)
                   case None     => bd.toString
                 }): Any
               }

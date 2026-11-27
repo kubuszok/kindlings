@@ -125,13 +125,16 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                             Expr.splice(Expr(size))
                           ): Any
                         })
-                      case (_, Some((_, scale))) =>
-                        MIO.pure(Expr.quote {
-                          AvroDerivationUtils.encodeBigDecimal(
-                            Expr.splice(fieldExpr).asInstanceOf[BigDecimal],
-                            Expr.splice(Expr(scale))
-                          ): Any
-                        })
+                      case (_, Some((precision, scale))) =>
+                        MIO.pure(
+                          encodeDecimalExpr(
+                            Expr.quote(Expr.splice(fieldExpr).asInstanceOf[BigDecimal]),
+                            precision,
+                            scale,
+                            ectx.config,
+                            ectx.evaluatedConfig
+                          )
+                        )
                       case _ =>
                         inlineBuiltInAvroEncode[Field](fieldExpr) match {
                           case Some(enc) => MIO.pure(enc)

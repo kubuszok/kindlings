@@ -92,8 +92,13 @@ final class AvroScala3OracleSpec extends AvroOracleSuite {
     compare(kindlings, u[AuVeryCross], AuVeryCross(AuFlibble("a")))()
   }
 
-  test("JSON @avroProp (AvroPropSchemaTest)") {
-    compare(k[AuJsonProp], u[AuJsonProp], AuJsonProp("a"))()
+  test("JSON @avroProp (AvroPropSchemaTest): avro4s 5 only") {
+    // avro4s 5's @AvroProp also takes a JsonNode; Kindlings' @avroProp takes Strings, as avro4s 4's
+    // (feature-parity.md, "Custom properties")
+    val kindlings = k[AuJsonProp]
+    val upstream = u[AuJsonProp]
+    assertEquals(kindlings.schema.getField("str").getObjectProp("terms"), """["foo","bar"]""": AnyRef)
+    assertEquals(upstream.schema.getField("str").getObjectProp("terms"), java.util.Arrays.asList("foo", "bar"): AnyRef)
   }
 
   test("@avroScalePrecision vs @AvroScalePrecision") {

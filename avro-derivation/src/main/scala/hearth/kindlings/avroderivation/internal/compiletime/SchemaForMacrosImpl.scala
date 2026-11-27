@@ -476,6 +476,46 @@ trait SchemaForMacrosImpl
     }
   }
 
+  // Decimal rounding
+
+  /** `mode` as a constant in the generated code: read from a table by its ordinal (cross-quotes print a reference to a
+    * Java enum constant by its bare name on Scala 2, which does not compile).
+    */
+  protected def roundingModeConstant(mode: java.math.RoundingMode): Expr[java.math.RoundingMode] = {
+    implicit val RoundingModeT: Type[java.math.RoundingMode] = RoundingModeType
+    Expr.quote(AvroDerivationUtils.roundingModeOf(Expr.splice(Expr(mode.ordinal))))
+  }
+  private lazy val RoundingModeType: Type[java.math.RoundingMode] = Type.of[java.math.RoundingMode]
+
+  /** Encodes `value` as a decimal of `precision` and `scale`, with the rounding mode of the config (a constant when the
+    * config is known at compile time).
+    */
+  @scala.annotation.nowarn("msg=is never used")
+  protected def encodeDecimalExpr(
+      value: Expr[BigDecimal],
+      precision: Int,
+      scale: Int,
+      config: Expr[AvroConfig],
+      evaluatedConfig: Option[AvroConfig]
+  ): Expr[Any] = {
+    implicit val AnyT: Type[Any] = Type.of[Any]
+    implicit val AvroConfigT: Type[AvroConfig] = SfTypes.AvroConfig
+    implicit val RoundingModeT: Type[java.math.RoundingMode] = RoundingModeType
+    val roundingMode: Expr[java.math.RoundingMode] =
+      evaluatedConfig.map(AvroDerivationUtils.decimalRoundingMode) match {
+        case Some(mode) => roundingModeConstant(mode)
+        case None       => Expr.quote(AvroDerivationUtils.decimalRoundingMode(Expr.splice(config)))
+      }
+    Expr.quote {
+      AvroDerivationUtils.encodeBigDecimal(
+        Expr.splice(value),
+        Expr.splice(Expr(precision)),
+        Expr.splice(Expr(scale)),
+        Expr.splice(roundingMode)
+      ): Any
+    }
+  }
+
   // @avroFixed on a value class
 
   /** The size of the FIXED type a value class `A` wrapping `Inner` (bytes or a String) is annotated to be. */

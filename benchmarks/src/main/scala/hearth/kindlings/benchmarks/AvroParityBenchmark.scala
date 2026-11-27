@@ -1,7 +1,7 @@
 package hearth.kindlings.benchmarks
 
 import com.sksamuel.avro4s.{AvroFixed, AvroName, AvroNamespace}
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder}
+import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder}
 import hearth.kindlings.avroderivation.annotations.{avroFixed, avroName, avroNamespace}
 import org.apache.avro.generic.GenericRecord
 import org.openjdk.jmh.annotations.*
@@ -24,7 +24,11 @@ case class AvroVoyage(
     @AvroNamespace("harbour") @avroNamespace("harbour") port: AvroPort
 )
 
+// Decimals rounded to the schema's scale (avro4s 4: an implicit RoundingMode; avro4s 5: always HALF_UP).
+case class AvroPrice(gross: BigDecimal, net: BigDecimal)
+
 object AvroParityData {
+  val price: AvroPrice = AvroPrice(BigDecimal("1234.567"), BigDecimal("99.5"))
   val voyage: AvroVoyage =
     AvroVoyage(AvroPacific, List(AvroAtlantic, AvroPacific, AvroAtlantic), "VOY-0042", AvroPort("Gdansk", 12))
 }
@@ -32,6 +36,10 @@ object AvroParityData {
 object KindlingsAvroParityInstances {
   val voyageEncoder: AvroEncoder[AvroVoyage] = AvroEncoder.derived[AvroVoyage]
   val voyageDecoder: AvroDecoder[AvroVoyage] = AvroDecoder.derived[AvroVoyage]
+  val priceEncoder: AvroEncoder[AvroPrice] = {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.HALF_UP)
+    AvroEncoder.derived[AvroPrice]
+  }
 }
 
 @State(Scope.Benchmark)
@@ -47,6 +55,12 @@ class AvroParityEncodeBenchmark {
 
   @Benchmark def originalVoyage(): GenericRecord =
     OriginalAvroParityInstances.voyageFormat.to(AvroParityData.voyage)
+
+  @Benchmark def kindlingsRoundedDecimals(): Any =
+    KindlingsAvroParityInstances.priceEncoder.encode(AvroParityData.price)
+
+  @Benchmark def originalRoundedDecimals(): GenericRecord =
+    OriginalAvroParityInstances.priceFormat.to(AvroParityData.price)
 }
 
 @State(Scope.Benchmark)

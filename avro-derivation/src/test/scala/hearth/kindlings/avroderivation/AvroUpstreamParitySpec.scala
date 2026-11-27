@@ -137,7 +137,9 @@ final class AvroUpstreamParitySpec extends MacroSuite {
       val _ = intercept[org.apache.avro.AvroTypeException](AvroDecoder.decode[Long]("1": Any))
       val _ =
         intercept[org.apache.avro.AvroTypeException](AvroDecoder.decode[Double](java.lang.Float.valueOf(1.5f): Any))
-      val _ = intercept[org.apache.avro.AvroTypeException](AvroDecoder.decode[Boolean](null: Any))
+      // except a null Boolean: `false`, as avro4s decodes it
+      AvroDecoder.decode[Boolean](null: Any) ==> false
+      val _ = intercept[org.apache.avro.AvroTypeException](AvroDecoder.decode[Boolean]("true": Any))
       val record = AvroEncoder.encode(ParPrimitives(true, 1, 2L, 3f, 4d, 5, 6))
       AvroDecoder.decode[ParPrimitives](record) ==> ParPrimitives(true, 1, 2L, 3f, 4d, 5, 6)
     }

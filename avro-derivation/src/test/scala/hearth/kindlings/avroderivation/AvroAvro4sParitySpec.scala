@@ -69,6 +69,28 @@ case class PaItems(items: List[Int])
 case class PaTime(time: java.time.LocalTime, date: java.time.LocalDate)
 case class PaDecimal(@avroScalePrecision(8, 2) amount: BigDecimal)
 case class PaInstant(at: java.time.Instant)
+case class PaDecimalValue(amount: BigDecimal)
+case class PaFlags(flag: Boolean, count: Int)
+case class PaProps(@avroProp("number", "1") @avroProp("list", """["x"]""") a: String)
+
+object PaDecimalInstances {
+  object Strict {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2)
+    val encoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+  }
+  object HalfUp {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.HALF_UP)
+    val encoder: AvroEncoder[PaDecimalValue] = AvroEncoder.derived[PaDecimalValue]
+    val decoder: AvroDecoder[PaDecimalValue] = AvroDecoder.derived[PaDecimalValue]
+    val annotatedEncoder: AvroEncoder[PaDecimal] = AvroEncoder.derived[PaDecimal]
+    val annotatedDecoder: AvroDecoder[PaDecimal] = AvroDecoder.derived[PaDecimal]
+  }
+  // `config` is a parameter: the macro cannot evaluate it and reads the rounding mode at runtime
+  def encoderWith(config: AvroConfig): AvroEncoder[PaDecimalValue] = {
+    implicit val runtimeConfig: AvroConfig = config
+    AvroEncoder.derived[PaDecimalValue]
+  }
+}
 
 case class PaError(code: Int)
 case class PaVeryCross(@avroError error: PaError)
@@ -355,6 +377,50 @@ final class AvroAvro4sParitySpec extends MacroSuite {
         AvroEncoder.derived[PaInstant]
       }
       val _ = intercept[ArithmeticException](nanos.encode(PaInstant(java.time.Instant.parse("2300-01-01T00:00:00Z"))))
+    }
+  }
+
+  group("decisions following avro4s 4") {
+
+    test("decimal rounding: rejected by default, rounded with the DecimalConfig's rounding mode") {
+      import PaDecimalInstances.{HalfUp, Strict}
+      val _ = intercept[ArithmeticException](Strict.encoder.encode(PaDecimalValue(BigDecimal("12.345"))))
+      HalfUp.decoder.decode(HalfUp.encoder.encode(PaDecimalValue(BigDecimal("12.345")))) ==>
+        PaDecimalValue(BigDecimal("12.35"))
+      val runtime = PaDecimalInstances.encoderWith(HalfUp.config)
+      HalfUp.decoder.decode(runtime.encode(PaDecimalValue(BigDecimal("12.344")))) ==>
+        PaDecimalValue(BigDecimal("12.34"))
+      val strictAtRuntime = PaDecimalInstances.encoderWith(Strict.config)
+      val _ = intercept[ArithmeticException](strictAtRuntime.encode(PaDecimalValue(BigDecimal("12.345"))))
+      // @avroScalePrecision fields use the config's rounding mode too
+      HalfUp.annotatedDecoder.decode(HalfUp.annotatedEncoder.encode(PaDecimal(BigDecimal("1.005")))) ==>
+        PaDecimal(BigDecimal("1.01"))
+    }
+
+    test("DecimalConfig keeps its rounding mode through copy, and compares with it") {
+      val halfUp = DecimalConfig(8, 2).withRoundingMode(java.math.RoundingMode.HALF_UP)
+      DecimalConfig(8, 2).roundingMode ==> java.math.RoundingMode.UNNECESSARY
+      halfUp.copy(scale = 3).roundingMode ==> java.math.RoundingMode.HALF_UP
+      assert(halfUp != DecimalConfig(8, 2))
+      halfUp ==> DecimalConfig(8, 2).withRoundingMode(java.math.RoundingMode.HALF_UP)
+      AvroConfig.default.withDecimalConfig(8, 2, java.math.RoundingMode.DOWN).withNamespace("x").decimalConfig ==>
+        Some(DecimalConfig(8, 2).withRoundingMode(java.math.RoundingMode.DOWN))
+    }
+
+    test("a null Boolean decodes as false; null for other primitives is rejected") {
+      val decoder = AvroDecoder.derived[PaFlags]
+      val record = new GenericData.Record(decoder.schema)
+      record.put("count", Integer.valueOf(1))
+      decoder.decode(record) ==> PaFlags(flag = false, count = 1)
+      val noCount = new GenericData.Record(decoder.schema)
+      noCount.put("flag", java.lang.Boolean.TRUE)
+      val _ = intercept[org.apache.avro.AvroTypeException](decoder.decode(noCount))
+    }
+
+    test("@avroProp values are Strings, even when they look like JSON") {
+      val schema = AvroSchemaFor.schemaOf[PaProps]
+      schema.getField("a").getObjectProp("number") ==> "1"
+      schema.getField("a").getObjectProp("list") ==> """["x"]"""
     }
   }
 
