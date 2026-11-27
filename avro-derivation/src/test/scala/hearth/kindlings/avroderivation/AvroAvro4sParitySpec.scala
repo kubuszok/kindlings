@@ -70,6 +70,28 @@ case class PaTime(time: java.time.LocalTime, date: java.time.LocalDate)
 case class PaDecimal(@avroScalePrecision(8, 2) amount: BigDecimal)
 case class PaInstant(at: java.time.Instant)
 case class PaDecimalValue(amount: BigDecimal)
+case class PaDefaultsV1(name: String)
+case class PaDefaultsV2(
+    name: String,
+    price: BigDecimal = BigDecimal("964.55"),
+    nickname: Option[String] = None,
+    level: Option[Int] = Some(3),
+    inner: PaDefaultsInner = PaDefaultsInner("x", None)
+)
+case class PaDefaultsInner(label: String, note: Option[String])
+
+object PaDefaultsInstances {
+  object WithDefaults {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2).withScalaDefaultsInSchema(true)
+    val v1Encoder: AvroEncoder[PaDefaultsV1] = AvroEncoder.derived[PaDefaultsV1]
+    val v2Decoder: AvroDecoder[PaDefaultsV2] = AvroDecoder.derived[PaDefaultsV2]
+  }
+  object WithoutDefaults {
+    implicit val config: AvroConfig = AvroConfig.default.withDecimalConfig(8, 2).withScalaDefaultsInSchema(false)
+    val v1Encoder: AvroEncoder[PaDefaultsV1] = AvroEncoder.derived[PaDefaultsV1]
+    val v2Decoder: AvroDecoder[PaDefaultsV2] = AvroDecoder.derived[PaDefaultsV2]
+  }
+}
 case class PaFlags(flag: Boolean, count: Int)
 case class PaProps(@avroProp("number", "1") @avroProp("list", """["x"]""") a: String)
 
@@ -421,6 +443,55 @@ final class AvroAvro4sParitySpec extends MacroSuite {
       val schema = AvroSchemaFor.schemaOf[PaProps]
       schema.getField("a").getObjectProp("number") ==> "1"
       schema.getField("a").getObjectProp("list") ==> """["x"]"""
+    }
+  }
+
+  group("Scala default values as schema defaults (AvroConfig.scalaDefaultsInSchema)") {
+
+    // Avro schema resolution: `bytes` written with `writer`, read with the decoder's schema
+    def resolve[A](writer: Schema, bytes: Array[Byte])(implicit decoder: AvroDecoder[A]): A = {
+      val reader = new org.apache.avro.generic.GenericDatumReader[Any](writer, decoder.schema)
+      decoder.decode(reader.read(null, org.apache.avro.io.DecoderFactory.get().binaryDecoder(bytes, null)))
+    }
+
+    test("on (the default): defaults are written as the Avro specification requires") {
+      val schema = PaDefaultsInstances.WithDefaults.v2Decoder.schema
+      assert(!schema.getField("name").hasDefaultValue)
+      // a decimal (bytes): the bytes of the unscaled value, as a string of code points (avro4s writes "964.55")
+      new Schema.Parser().parse(schema.toString).getField("price").defaultVal() ==>
+        BigInt(96455).toByteArray
+      // None: null, with the null branch first
+      schema.getField("nickname").defaultVal() ==> org.apache.avro.JsonProperties.NULL_VALUE
+      schema.getField("nickname").schema.getTypes.get(0).getType ==> Schema.Type.NULL
+      // Some(3): the value, with its branch first
+      schema.getField("level").defaultVal() ==> 3
+      schema.getField("level").schema.getTypes.get(0).getType ==> Schema.Type.INT
+      // a record: every field, the None ones included (avro4s 4 leaves them out)
+      val inner = new java.util.LinkedHashMap[String, Any]()
+      inner.put("label", "x")
+      inner.put("note", org.apache.avro.JsonProperties.NULL_VALUE)
+      schema.getField("inner").defaultVal() ==> inner
+    }
+
+    test("on: old data is read with a reader schema that adds fields, which get their defaults") {
+      import PaDefaultsInstances.WithDefaults.*
+      val bytes = AvroIO.toBinary(PaDefaultsV1("a"))(v1Encoder)
+      resolve[PaDefaultsV2](v1Encoder.schema, bytes)(v2Decoder) ==> PaDefaultsV2("a")
+    }
+
+    test("off: no field gets a default from a Scala default value") {
+      import scala.jdk.CollectionConverters.*
+      val schema = PaDefaultsInstances.WithoutDefaults.v2Decoder.schema
+      schema.getFields.asScala.filter(_.hasDefaultValue).map(_.name).toList ==> Nil
+      // an Option without a schema default: null first
+      schema.getField("level").schema.getTypes.get(0).getType ==> Schema.Type.NULL
+    }
+
+    test("off: schema resolution rejects old data, decoding a record directly still uses the Scala defaults") {
+      import PaDefaultsInstances.WithoutDefaults.*
+      val bytes = AvroIO.toBinary(PaDefaultsV1("a"))(v1Encoder)
+      val _ = intercept[org.apache.avro.AvroTypeException](resolve[PaDefaultsV2](v1Encoder.schema, bytes)(v2Decoder))
+      v2Decoder.decode(v1Encoder.encode(PaDefaultsV1("a"))) ==> PaDefaultsV2("a")
     }
   }
 

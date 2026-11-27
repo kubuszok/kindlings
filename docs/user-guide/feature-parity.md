@@ -34,8 +34,8 @@ The only differences are the ones documented below ("Design decisions" and "Defa
 | `@AvroScalePrecision` on avro4s 5 | Declared but ignored (the implicit `ScalePrecision` applies) | `@avroScalePrecision(precision, scale)` is honoured on both Scala versions | Superset |
 | avro4s 5 gaps | No recursive types, value classes, `scala.Enumeration`, working `FieldMapper` | All supported (compared with avro4s 4 on Scala 2.13) | Superset |
 | `@AvroProp` with a `JsonNode` (avro4s 5) | avro4s 5's `@AvroProp` also takes a `JsonNode` value | `@avroProp` values are Strings, as avro4s 4's, on both Scala versions | Follows avro4s 4; annotation arguments must be literals |
-| Default of a decimal | The field default of a `BigDecimal` is written as its decimal string (`"964.55"`), which Avro reads as the bytes of those characters | The bytes of the unscaled value, as the Avro specification requires for a `bytes` default | avro4s' default is a different number for any Avro reader |
-| Record defaults (avro4s 4) | `None` fields are left out of a case class default (`{"name": "x"}`) | The complete record (`{"name": "x", "age": null}`), as avro4s 5 | Avro rejects the incomplete default when it is needed |
+| Default of a decimal (avro4s bug) | The schema default of a `BigDecimal` field is written as its decimal string (`"964.55"`), which Avro reads as the bytes of those characters, i.e. another number | The bytes of the unscaled value, as the Avro specification requires for a `bytes` default | avro4s' default is wrong for every Avro reader; Kindlings writes the spec's form (or no default: `withoutScalaDefaultsInSchema`) |
+| Record defaults (avro4s 4 bug) | `None` fields are left out of a case class default (`{"name": "x"}`) | The complete record (`{"name": "x", "age": null}`), as avro4s 5 | Avro rejects the incomplete default when it is needed |
 | Sealed trait's `@AvroNamespace` (avro4s 4) | Applied to the subtypes only as members of the trait's union; a subtype derived on its own keeps its package | A subtype without its own `@avroNamespace` always takes its sealed parent's (as avro4s 5) | The encoder builds a subtype's record from the subtype's own schema: it must have the name it has in the union |
 | Sealed trait with one subtype (avro4s 5 differs) | avro4s 5: the subtype's record, without a union (avro4s 4: a union of one) | A union of one, as avro4s 4, on both Scala versions | Follows avro4s 4: one wire format on both Scala versions; adding a second subtype stays a compatible change |
 | Decimal rounding (avro4s 5 differs) | avro4s 5 always rounds a value with more decimal places than the scale `HALF_UP` (avro4s 4: an implicit `RoundingMode`, default `UNNECESSARY`, i.e. rejected) | `DecimalConfig.roundingMode` (`withDecimalConfig(precision, scale, roundingMode)`), default `UNNECESSARY`, as avro4s 4, on both Scala versions | Follows avro4s 4: no silent loss of precision by default |
@@ -48,8 +48,10 @@ The only differences are the ones documented below ("Design decisions" and "Defa
 | `BigDecimal` | BYTES + `decimal(precision = 8, scale = 2)` | STRING | `withDecimalConfig(8, 2)` or `avro4sDefaults` |
 | `OffsetDateTime` | ISO-8601 STRING with the `datetime-with-offset` logical type | `timestamp-millis` LONG (UTC; the offset is dropped) | `withOffsetDateTimeAsIsoString` or `avro4sDefaults` |
 
-Scala default values become schema defaults, as in avro4s (the default's union branch moved first). The opt-out
-`withoutScalaDefaultsInSchema` keeps only `@avroDefault` defaults; Avro's schema resolution then rejects old data read
+Scala default values become schema defaults, as in avro4s (the default's union branch moved first), written as the
+Avro specification requires (a `None` as `null` with the null branch first, a decimal as the bytes of its unscaled
+value). The opt-out `withoutScalaDefaultsInSchema` (or `withScalaDefaultsInSchema(false)`) keeps only `@avroDefault`
+defaults; Avro's schema resolution then rejects old data read
 with a newer reader schema that adds fields with Scala defaults (`missing required field`), while decoding a
 `GenericRecord` directly still falls back to the Scala defaults.
 
