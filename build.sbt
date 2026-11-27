@@ -1155,6 +1155,11 @@ lazy val upstreamOracleTests = projectMatrix
       "org.typelevel" %% "cats-tagless-core" % versions.catsTagless % Test,
       "org.scalacheck" %% "scalacheck" % versions.scalacheck % Test
     ),
+    // cats-tagless' discipline laws for the instances cats-tagless-derivation derives
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-tagless-laws" % versions.catsTagless % Test,
+      "org.typelevel" %% "discipline-munit" % versions.catsTaglessDisciplineMunit % Test
+    ),
     libraryDependencies ++= foldVersion(scalaVersion.value)(
       for3 = Seq("io.github.martinhh" %% "scalacheck-derived" % versions.scalacheckDerived % Test),
       for2_13 = Seq(
