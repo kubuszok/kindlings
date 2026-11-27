@@ -218,13 +218,58 @@ object TapirSchemaUtils {
     Schema[T](
       SchemaType.SCoproduct[T](enrichedSubtypes, disc) { (value: T) =>
         val cn = value.getClass.getName
+        // nested classes and objects: `pkg.Outer$Inner` / `pkg.Outer$Inner$` for `pkg.Outer.Inner`
+        val dotted = cn.replace('$', '.')
         matchable.collectFirst {
-          case (childName, s) if childName.exists(sn => cn == sn.fullName || cn == (sn.fullName + "$")) =>
+          case (childName, s)
+              if childName.exists(sn =>
+                cn == sn.fullName || cn == (sn.fullName + "$") || dotted == sn.fullName || dotted == (sn.fullName + ".")
+              ) =>
             SchemaType.SchemaWithValue(s.asInstanceOf[Schema[Any]], value)
         }
       },
       Some(name)
     )
+  }
+
+  /** As [[coproductSchemaWithEncoding]], choosing the subtype of a value (`SCoproduct.subtypeSchema`, used e.g. by
+    * `Schema.applyValidation`) by its index in `subtypes`, computed by `subtypeIndex` (generated with a pattern match
+    * on the subtypes; `-1` for none) instead of by the subtypes' names, which neither identify Scala 3 enum cases nor
+    * subtypes renamed with `@encodedName`.
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def coproductSchemaWithSubtypeIndex[T](
+      name: SName,
+      subtypes: List[Schema[Any]],
+      discriminator: Option[String],
+      resolvedNames: List[String],
+      singletons: List[Boolean],
+      singletonsAsStrings: Boolean,
+      wrapped: Boolean,
+      wrapNonObjects: Boolean,
+      subtypeIndex: T => Int
+  ): Schema[T] = {
+    val base = coproductSchemaWithEncoding[T](
+      name,
+      subtypes,
+      discriminator,
+      resolvedNames,
+      singletons,
+      singletonsAsStrings,
+      wrapped,
+      wrapNonObjects
+    )
+    base.schemaType match {
+      case c: SchemaType.SCoproduct[T @unchecked] =>
+        val chosen = c.subtypes.toVector
+        base.copy(schemaType = SchemaType.SCoproduct[T](c.subtypes, c.discriminator) { (value: T) =>
+          val index = subtypeIndex(value)
+          if (index >= 0 && index < chosen.size)
+            Some(SchemaType.SchemaWithValue(chosen(index).asInstanceOf[Schema[Any]], value))
+          else None
+        })
+      case _ => base
+    }
   }
 
   /** A singleton subtype encoded as a JSON string: its resolved name. */
@@ -235,9 +280,21 @@ object TapirSchemaUtils {
 
   /** A `scala.Enumeration` whose values are encoded as their (integer) `id`s. */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  def enumerationIdSchema[T](name: SName, values: List[T]): Schema[T] =
+  def enumerationIdSchema[T](name: SName, values: List[T]): Schema[T] = enumerationIdSchemaNamed[T](name, name, values)
+
+  /** As [[enumerationIdSchema]], with the name of the enumeration in the validator (as tapir's
+    * `Schema.derivedEnumerationValueCustomise`), which may differ from the schema's (`@encodedName`).
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  def enumerationIdSchemaNamed[T](name: SName, validatorName: SName, values: List[T]): Schema[T] =
     Schema[T](SchemaType.SInteger[T](), Some(name), format = Some("int32"))
-      .copy(validator = Validator.enumeration(values, (v: T) => Some(v.asInstanceOf[scala.Enumeration#Value].id)))
+      .copy(validator =
+        Validator.enumeration(
+          inEnumerationOrder(values),
+          (v: T) => Some(v.asInstanceOf[scala.Enumeration#Value].id),
+          Some(validatorName)
+        )
+      )
 
   /** A tuple encoded as a JSON array of its elements (positional `_1`, `_2`, ... fields, marked as a tuple, which
     * OpenAPI renders as an array with `prefixItems`).
@@ -297,13 +354,41 @@ object TapirSchemaUtils {
       name: SName,
       values: List[T],
       encodedNames: List[String]
+  ): Schema[T] = stringEnumSchemaNamed[T](name, name, values, encodedNames)
+
+  /** As [[stringEnumSchema]], with the name of the enumerated type in the validator (as tapir's
+    * `Validator.derivedEnumeration` / `Schema.derivedEnumerationValue`), which may differ from the schema's
+    * (`@encodedName`).
+    */
+  def stringEnumSchemaNamed[T](
+      name: SName,
+      validatorName: SName,
+      values: List[T],
+      encodedNames: List[String]
   ): Schema[T] = {
     val valMap = values.zip(encodedNames).toMap
     Schema
       .string[T]
       .name(name)
-      .copy(validator = sttp.tapir.Validator.enumeration(values, v => valMap.get(v)))
+      .copy(validator =
+        sttp.tapir.Validator.enumeration(inEnumerationOrder(values), (v: T) => valMap.get(v), Some(validatorName))
+      )
   }
+
+  /** `scala.Enumeration` values in the order of their ids (as `Enumeration#values`, which tapir lists), whatever the
+    * order the compiler reports them in; other values unchanged.
+    */
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.IsInstanceOf"))
+  private def inEnumerationOrder[T](values: List[T]): List[T] =
+    if (values.nonEmpty && values.forall(_.isInstanceOf[scala.Enumeration#Value]))
+      values.sortBy(_.asInstanceOf[scala.Enumeration#Value].id)
+    else values
+
+  /** The name of a schema: `SName(encodedName)` when the type is annotated with `@encodedName` (as in tapir's
+    * derivation, the type parameters are then not part of the name), otherwise `name`.
+    */
+  def sNameWithEncodedName(name: SName, typeAnnotations: List[Any]): SName =
+    typeAnnotations.collectFirst { case ann: Schema.annotations.encodedName => SName(ann.name) }.getOrElse(name)
 
   /** Create a Schema with SRef schema type for recursive references. */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
@@ -350,12 +435,13 @@ object TapirSchemaUtils {
   def setSchema[E](elementSchema: Schema[E]): Schema[Any] =
     collectionSchema[E](elementSchema).attribute(Schema.UniqueItems.Attribute, Schema.UniqueItems(true))
 
-  /** Wrap a value schema as a Map[String, V], named like tapir's `Schema.schemaForMap` (`Map_V`). */
+  /** Wrap a value schema as a Map[String, V], named like tapir's `Schema.schemaForMap` (`Map_V`); not optional, as
+    * tapir's (fields set their optionality from the JSON config).
+    */
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
   def mapSchema[V](valueSchema: Schema[V], name: SName): Schema[Any] =
     Schema[Any](
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(_.asInstanceOf[Map[String, V]]),
-      isOptional = true,
       name = Some(name)
     )
 
@@ -368,7 +454,6 @@ object TapirSchemaUtils {
       SchemaType.SOpenProduct[Any, V](Nil, valueSchema)(
         _.asInstanceOf[Map[K, V]].map { case (k, v) => keyToString(k) -> v }
       ),
-      isOptional = true,
       name = Some(name)
     )
 
