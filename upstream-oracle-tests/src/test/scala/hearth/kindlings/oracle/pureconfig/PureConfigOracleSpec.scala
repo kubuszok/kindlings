@@ -1,8 +1,6 @@
 package hearth.kindlings.oracle.pureconfig
 
-import com.typesafe.config.{ConfigFactory, ConfigList, ConfigObject, ConfigRenderOptions, ConfigValue}
 import hearth.MacroSuite
-import hearth.kindlings.oracle.Oracle
 import hearth.kindlings.pureconfigderivation.{
   KindlingsConfigReader,
   KindlingsConfigWriter,
@@ -10,11 +8,8 @@ import hearth.kindlings.pureconfigderivation.{
   KindlingsProductHint,
   PureConfig
 }
-import pureconfig.{CamelCase, ConfigCursor, ConfigFieldMapping, ConfigReader, ConfigWriter, PascalCase, SnakeCase}
-import pureconfig.error.{ConfigReaderFailures, ConvertFailure}
+import pureconfig.{CamelCase, ConfigFieldMapping, ConfigReader, ConfigWriter, PascalCase, SnakeCase}
 import pureconfig.generic.{FieldCoproductHint, FirstSuccessCoproductHint, ProductHint}
-
-import scala.jdk.CollectionConverters.*
 
 /** Kindlings' derived `ConfigReader`s / `ConfigWriter`s vs pureconfig's own derivation (`pureconfig.generic.semiauto`
   * with the equivalent `ProductHint` / `CoproductHint`), compared on the values read from HOCON (including every
@@ -23,69 +18,7 @@ import scala.jdk.CollectionConverters.*
   * Each case lists the *exact* differences it expects; each one must be a documented, intentional difference (see
   * `docs/user-guide/feature-parity.md`). A difference that appears or disappears fails the test.
   */
-final class PureConfigOracleSpec extends MacroSuite {
-
-  // --- helpers -------------------------------------------------------------------------------------------------------
-
-  /** A cursor at the root of a HOCON document (an object). */
-  private def root(hocon: String): ConfigCursor = ConfigCursor(ConfigFactory.parseString(hocon).root(), Nil)
-
-  /** A cursor at `v` of `v = <hocon>`, to read scalars and lists. */
-  private def value(hocon: String): ConfigCursor =
-    root(s"v = $hocon").asObjectCursor.flatMap(_.atKey("v")).fold(f => sys.error(f.prettyPrint()), identity)
-
-  private def failures(f: ConfigReaderFailures): List[String] = f.toList.map {
-    case ConvertFailure(reason, _, path) => s"at '$path': ${reason.getClass.getSimpleName}: ${reason.description}"
-    case other                           => other.description
-  }
-
-  private def show(result: Either[ConfigReaderFailures, Any]): String =
-    result.fold(f => failures(f).mkString("Left(", " | ", ")"), v => s"Right($v)")
-
-  /** Reads every input with both readers; returns `input: kindlings=... upstream=...` for each one they disagree on. */
-  private def compareReads[A](kindlings: ConfigReader[A], upstream: ConfigReader[A])(
-      inputs: ConfigCursor*
-  )(expectedDifferences: String*): Unit = {
-    val differences = inputs.toList.flatMap { cur =>
-      val k = show(kindlings.from(cur))
-      val u = show(upstream.from(cur))
-      if (k == u) Nil
-      else
-        List(s"${cur.valueOpt.fold("<undefined>")(_.render(ConfigRenderOptions.concise()))}: kindlings=$k upstream=$u")
-    }
-    assertEquals(
-      differences,
-      expectedDifferences.toList,
-      s"Kindlings vs pureconfig reads:\n${differences.mkString("\n")}"
-    )
-  }
-
-  /** Every input with every result each library produced, for assertions on the results themselves. */
-  private def read[A](reader: ConfigReader[A], cur: ConfigCursor): String = show(reader.from(cur))
-
-  private def toScala(v: ConfigValue): Any = v match {
-    case o: ConfigObject => scala.collection.immutable.TreeMap(o.asScala.toSeq.map { case (k, x) => k -> toScala(x) }*)
-    case l: ConfigList   => l.asScala.toList.map(toScala)
-    case other           => other.unwrapped()
-  }
-
-  private def write[A](writer: ConfigWriter[A], a: A): Either[String, Any] =
-    try Right(toScala(writer.to(a)))
-    catch { case e: Exception => Left(s"${e.getClass.getSimpleName}: ${e.getMessage}") }
-
-  /** Writes every value with both writers; returns the paths at which the written config values differ. */
-  private def compareWrites[A](kindlings: ConfigWriter[A], upstream: ConfigWriter[A])(values: A*)(
-      expectedDifferences: String*
-  ): Unit = {
-    val differences = values.toList.flatMap { a =>
-      Oracle.diff(write(kindlings, a), write(upstream, a)).map(d => s"$a: $d")
-    }
-    assertEquals(
-      differences,
-      expectedDifferences.toList,
-      s"Kindlings vs pureconfig writes:\n${differences.mkString("\n")}"
-    )
-  }
+final class PureConfigOracleSpec extends MacroSuite with PureConfigOracleSupport {
 
   // --- derivations ---------------------------------------------------------------------------------------------------
 

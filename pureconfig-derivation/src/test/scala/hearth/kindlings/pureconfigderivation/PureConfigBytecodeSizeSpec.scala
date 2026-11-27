@@ -11,6 +11,34 @@ object PureConfigWideInstances {
   val reader: KindlingsConfigReader[WideDefaults] = KindlingsConfigReader.derived[WideDefaults]
   val writer: KindlingsConfigWriter[WideDefaults] = KindlingsConfigWriter.derived[WideDefaults]
 
+  // the widest tuple (read from / written as a list, like upstream)
+  type WideTuple = (
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String,
+      Int,
+      String
+  )
+  val tupleReader: KindlingsConfigReader[WideTuple] = KindlingsConfigReader.derived[WideTuple]
+  val tupleWriter: KindlingsConfigWriter[WideTuple] = KindlingsConfigWriter.derived[WideTuple]
+
   // `config` is a parameter: the macros cannot evaluate it and read it at runtime
   def readerWith(config: PureConfig): KindlingsConfigReader[WideDefaults] = {
     implicit val runtimeConfig: PureConfig = config
@@ -46,5 +74,9 @@ final class PureConfigBytecodeSizeSpec extends MacroSuite {
       ConfigCursor(ConfigFactory.parseString("{ f-1 = x, f-3 = y }").root(), Nil)
     )
     assert(failures.left.toOption.exists(_.toList.size == 2), failures.toString)
+    val tuple: PureConfigWideInstances.WideTuple =
+      (0, "s0", 1, "s1", 2, "s2", 3, "s3", 4, "s4", 5, "s5", 6, "s6", 7, "s7", 8, "s8", 9, "s9", 10, "s10")
+    PureConfigWideInstances.tupleReader.from(ConfigCursor(PureConfigWideInstances.tupleWriter.to(tuple), Nil)) ==>
+      Right(tuple)
   }
 }
