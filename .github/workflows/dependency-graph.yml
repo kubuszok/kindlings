@@ -10,5 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # Cache sbt and its dependencies so every master push does not download them from Maven Central again (HTTP 429).
+      - uses: coursier/cache-action@v9
       - uses: sbt/setup-sbt@v1.5.14
       - uses: scalacenter/sbt-dependency-submission@v3
