@@ -9,6 +9,7 @@ trait FunctorKMacrosImpl
     with rules.FunctorKUseImplicitRuleImpl
     with rules.FunctorKCaseClassRuleImpl
     with rules.FunctorKTraitRuleImpl
+    with rules.FunctorKEnumRuleImpl
     with InvariantKMacrosImpl { this: MacroCommons & StdExtensions =>
 
   import hearth.kindlings.catstaglessderivation.internal.runtime.CatsTaglessFactories
@@ -50,6 +51,7 @@ trait FunctorKMacrosImpl
         FunctorKUseCachedRule,
         FunctorKUseImplicitRule,
         FunctorKCaseClassRule,
+        FunctorKEnumRule,
         FunctorKTraitRule
       )(_[Alg]).flatMap {
         case Right(result) =>
@@ -156,9 +158,6 @@ trait FunctorKMacrosImpl
         val functorKAnchor = Type
           .of[cats.tagless.FunctorK[CatsTaglessFactories.DummyHKT]]
           .asInstanceOf[Type[Any]]
-        val invariantKAnchor = Type
-          .of[cats.tagless.InvariantK[CatsTaglessFactories.DummyHKT]]
-          .asInstanceOf[Type[Any]]
 
         val nestedFieldDerivations: MIO[Unit] =
           fieldsOption.zip(fieldsList).foldLeft(MIO.pure(())) { case (acc, ((name, pOption), (_, pList))) =>
@@ -199,19 +198,11 @@ trait FunctorKMacrosImpl
                         ()
                       }
                     case None =>
-                      val invariantKAvailable =
-                        constructTypeClassTypeForField(tOption.asInstanceOf[Type[Any]], invariantKAnchor)
-                          .exists(info => info.typeClassType.summonExprIgnoring().toEither.isRight)
-                      val hint =
-                        if (invariantKAvailable)
-                          " An InvariantK instance exists for it — consider using InvariantK.derived instead."
-                        else ""
-                      failUnsupportedField(
-                        "FunctorK",
-                        name,
-                        "depends on the type constructor parameter " +
-                          s"but no FunctorK instance could be derived for its outer type constructor.$hint"
-                      )
+                      // F nested in a type with several arguments: looked up for `[F[_]] =>> T[F]` like trait algebras do.
+                      resolveNestedCaseField("FunctorK", ctx.algCtorK1, name, NestedTc.FunctorKTc).map { nestedExpr =>
+                        nestedFieldExprs += (name -> nestedExpr)
+                        ()
+                      }
                   })
                 }
               case _ =>
