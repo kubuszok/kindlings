@@ -84,6 +84,14 @@ Each entry point is an `inline def derived` on Scala 3 and a `def derived` macro
 | Nested algebras (`inner: InnerAlg[F]`) | Yes |
 | Recursive / nested algebra without an explicit instance for the inner type | Yes (the inner instance is derived recursively) |
 | Algebras with no `F[_]` members at all | Yes via `ContravariantK` / `InvariantK` (all members preserved verbatim) |
+| `sealed trait Alg[F[_]]` / Scala 3 `enum Alg[F[_]]` whose cases are case-class algebras (recursive ones too: `Branch(left: Tree[F], right: Tree[F])`) | Yes for `FunctorK` / `ContravariantK` / `InvariantK` (like cats-tagless-data) |
+| `F` nested in a type with several arguments — trait members (`def either(i: Int): EitherT[F, String, Int]`) and case-class fields (`errors: EitherT[F, String, Int]`, `f: Kleisli[F, A, B]`, `Tuple2K[F, Option, A]`) | Yes, through cats-tagless' `FunctorK` / `ContravariantK` / `InvariantK` / `SemigroupalK` of `[F[_]] =>> T[F]` (or yours); a type without one (e.g. `List[F[A]]`) is a compile error, like cats-tagless |
+| Algebras with extra type parameters (`trait Alg[F[_], T]`) | Scala 3: derive for the type lambda `[F[_]] =>> Alg[F, String]`; Scala 2: not yet (Hearth gap) |
+
+Not supported yet (Hearth gaps, see [feature parity](feature-parity.md#cats-tagless-derivation)): algebras refined with
+type members (`Alg[F] { type T = String }`), dependent method types, and on Scala 3 a by-name parameter of a method's own
+type parameter in `SemigroupalK` / `ApplyK`. Not ported: cats-tagless' `Derive.functor` & co. for kind `* -> *` algebras,
+`Derive.const` / `void` / `readerT`, and `Aspect`.
 
 ## Debugging
 
@@ -104,3 +112,15 @@ The macro timeout (default 5 seconds) can be raised per module:
 ```
 -Xmacro-settings:catsTaglessDerivation.timeout=30s
 ```
+
+## Benchmarks
+
+Scala 2.13 (cats-tagless' `Derive.*` macros; on Scala 3 they are `@experimental`), `CatsTaglessBenchmark`: a trait algebra
+with `F[Int]`, `EitherT[F, String, Int]`, `Kleisli[F, String, Int]` and plain members, transformed with
+`FunctionK[Option, List]`. 3 forks / 5 warmup / 10 measurement iterations, other benchmarks running on the same machine.
+
+| Operation | Kindlings | cats-tagless |
+|-----------|-----------|--------------|
+| `mapK` once, then calling the four members | 144M ops/s (56 B/op) | 119M ops/s (56 B/op) |
+| `mapK` and calling the four members | 124M ops/s (80 B/op) | 125M ops/s (80 B/op) |
+| `productK` once, then calling the four members | 33M ops/s (264 B/op) | 32M ops/s (264 B/op) |
