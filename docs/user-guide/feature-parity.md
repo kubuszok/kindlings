@@ -639,6 +639,29 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
 
 ---
 
+## di
+
+**Replaces:** [macwire](https://github.com/softwaremill/macwire) 2.6.x (`wire`, `wireRec`, `wireWith`, `wireSet`,
+`wireList`, `autowire`, `autowireMembersOf`, `@Module`, tagging, `wiredInModule`). macwire's own test cases (2.6.7) run
+against kindlings-di (`di/src/test/scala*/hearth/kindlings/di/upstream/`).
+
+| Feature | macwire | Kindlings | Status |
+|---|---|---|---|
+| `wire` / `wireRec` / `wireWith` / `wireSet` / `wireList` | Yes | Yes | Parity |
+| `autowire` (instances, factory functions, `autowireMembersOf`) | Yes (Scala 3 only) | Yes, on Scala 2.13 and 3 | Improvement |
+| `autowire` with `classOf[Impl]` | Yes | Yes | Parity |
+| `@javax.inject.Inject` / `@jakarta.inject.Inject` constructors | Yes | Yes | Parity |
+| Candidates: members of enclosing classes/objects (declared and inherited), `@Module` members, parameters of the enclosing method | Yes | Yes | Parity |
+| Candidates: parameters of outer methods and of enclosing lambdas, non-`val` constructor parameters, pattern-bound values, imported members | Yes | No | Difference (see `di.md`) |
+| Candidates: local `val`s | Yes | Scala 2 only (top level of the method body) | Difference |
+| Declared members preferred over inherited ones | Yes | No (ambiguity) | Difference |
+| Untyped `val x = wire[X]` on Scala 2 | Yes | No (needs `: X`) | Difference (Hearth, `docs/research/hearth-bug-scala2-untyped-val-enclosing-scope.md`) |
+| Request/session scopes (JVM proxies) | Yes | No | Not ported (cross-platform module) |
+| `DI.plan` (storage strategies, construction overrides, wiring graph) | No | Yes | Improvement |
+| Scala.js / Scala Native | No | Yes | Improvement |
+
+---
+
 ## optics
 
 **Replaces:** [SoftwareMill quicklens](https://github.com/softwaremill/quicklens) (`modify`/`modifyAll`/`modifyLens`
