@@ -347,6 +347,13 @@ of values (subtype ordering included), hash consistency with `eqv`, `combine`/`e
 |---|---|---|---|
 | `trait Alg[F[_]]` algebras | Yes | Yes | Parity |
 | `case class Alg[F[_]]` algebras | Scala 3 only (separate `cats-tagless-data` module via `derives`; core `Derive.*` is trait-only) | Yes (Scala 2 + 3, same `.derived`) | Improvement |
+| Sealed trait / enum algebras (`enum Tree[F[_]] { case Leaf(values: F[String]); case Branch(size: Int, left: Tree[F], right: Tree[F]) }`) for FunctorK / ContravariantK / InvariantK, recursive ones included | Scala 3 only (`cats-tagless-data`) | Yes (Scala 2 + 3) | Parity (Improvement on Scala 2) |
+| Case-class algebra fields nesting `F` in a type with several arguments (`Kleisli[F, A, B]`, `EitherT[F, E, A]`, `OptionT[F, A]`, `Tuple2K[F, Option, A]`, `EitherK[List, F, A]`, `FunctionK[F, Option]`, `Cokleisli[F, A, B]`) | Yes (`cats-tagless-data`, through the `FunctorK` & co. of `[F[_]] =>> T[F]`) | Yes | Parity (was rejected) |
+| `F` nested in trait algebra members (`EitherT[F, E, A]` results, `Cokleisli[F, A, B]` parameters, other algebras, builder-style self references), varargs element by element | Yes | Yes | Parity |
+| Algebras with extra type parameters (`AlgWithExtraTP[F, T]`) | Yes | Scala 3 (type lambda `[F[_]] =>> Alg[F, T]`); Scala 2: Gap (Hearth, `docs/research/hearth-gap-cats-tagless-trait-algebras.md` item 5) | Parity on Scala 3 / Gap on Scala 2 |
+| Refined algebras with type members (`AlgWithTypeMember.Aux[F, String]`, `AlgWithTypeBound`, `AlgWithAbstractTypeClass`) | Yes | No (Hearth: anonymous instances of refined types, item 4) | Gap |
+| Dependent method types (`def dependent[A](f: DepFn[A])(out: f.Out)`) | Yes | No (Hearth, item 3) | Gap |
+| By-name parameter of a method type parameter (`def defer[A](x: => A): F[A]`) in SemigroupalK | Yes | Scala 2: Yes; Scala 3: No (Hearth, item 2) | Gap on Scala 3 |
 | Mixed members (`F[_]` + plain) | Yes | Yes | Parity |
 | `F[_]` in argument position (`InvariantK`) | Yes | Yes | Parity |
 | Nested algebras | Yes | Yes | Parity |
@@ -373,6 +380,7 @@ of values (subtype ordering included), hash consistency with `eqv`, `combine`/`e
 | `aop.Aspect` (general AOP) beyond `Instrument` | Only `Instrument` is derived; the more general `Aspect[Alg, Dom, Cod]` is not ported |
 | `Derive.const` / `Derive.void` / `Derive.readerT` algebra constructors | Not ported — out of scope (constant / `Unit` / `ReaderT`-forwarding algebra implementations) |
 | `Derive.semigroupK` / `Derive.monoidK` | Out of scope — these derive plain cats `SemigroupK`/`MonoidK` for `F[_]`, not `(* -> *) -> *` algebra type classes |
+| `Derive.functor` / `contravariant` / `invariant` / `semigroupal` / `apply` / `flatMap` / `bifunctor` / `profunctor` | cats-tagless also derives cats' kind `* -> *` / `* -> * -> *` type classes for algebras whose type parameter is the *result* type (`trait SafeAlg[T] { def parseInt(s: String): T }`, cats-tagless' `autoFunctorTests` … `autoProfunctorTests`): not ported (Gap). For data types, `kindlings-cats-derivation` derives these type classes |
 
 ### Upstream oracle
 
@@ -381,8 +389,14 @@ Instrument with Kindlings and with cats-tagless' `Derive.*` (Scala 2 macros / Sc
 algebras with one method shape each (plain, nullary, multiple parameter lists, by-name, polymorphic, default arguments,
 varargs, `F` in parameter position, members without `F`) and compares the results of every method of the transformed
 algebra, when the natural transformation runs, how often by-name arguments are evaluated, and `Instrument`'s algebra and
-method names. No differences. Case-class algebras are not compared (cats-tagless' `Derive.*` is trait-only); for them
-Kindlings' SemigroupalK/ApplyK still keep the first algebra's members without `F`.
+method names. No differences. `CatsTaglessShapesOracleSpec` does the same for the shapes of cats-tagless' own tests (`F`
+nested in `EitherT` / `Kleisli` / `OptionT` / `Cokleisli`, builder-style algebras, concrete members, `F` varargs), and
+`CatsTaglessLawsSpec` runs cats-tagless-laws' FunctorK, InvariantK, ContravariantK, SemigroupalK, ApplyK and Instrument
+rule sets (and `SerializableTests`) on Kindlings-derived instances for cats-tagless' test algebras (`SafeAlg`,
+`SafeInvAlg`, `CalculatorAlg`, `AutoApplyKTestAlg`, `autoContravariantKTests.TestAlgebra`). Case-class and sealed
+algebras are not compared (cats-tagless' `Derive.*` is trait-only, `cats-tagless-data` is Scala 3 only); they are
+covered by `DataAlgebrasSpec` (cats-tagless-data's suite algebras). For case-class algebras Kindlings' SemigroupalK/ApplyK
+still keep the first algebra's members without `F`. The shapes blocked by Hearth gaps are asserted by `KnownGapsSpec`.
 
 ---
 
