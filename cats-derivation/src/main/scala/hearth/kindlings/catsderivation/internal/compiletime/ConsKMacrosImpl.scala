@@ -17,10 +17,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   *
   * Uses erased approach: builds body for F[Any] with Any, wraps with asInstanceOf.
   */
-trait ConsKMacrosImpl
-    extends CatsDerivationTimeout
-    with CatsDerivationErrorSupport
-    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
+trait ConsKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -126,12 +123,17 @@ trait ConsKMacrosImpl
               }
             }
           case Left(reason) =>
-            failDerivation(
-              CatsDerivationError.CannotParseCaseClass(
-                Type[F[Any]].prettyPrint,
-                s"$reason. $macroName can only be derived for case classes."
+            deriveConsKForSealedTrait[F].handleErrorWith { sealedErrors =>
+              val details = sealedErrors.toVector
+                .map(hearth.kindlings.derivation.compiletime.DerivationErrorRendering.messageOf)
+                .mkString("; ")
+              failDerivation(
+                CatsDerivationError.CannotParseCaseClass(
+                  Type[F[Any]].prettyPrint,
+                  s"$reason. $macroName can be derived for case classes and for list-like sealed traits ($details)."
+                )
               )
-            )
+            }
         }
       }
       .map(withInstanceScopedVals(_))
@@ -150,6 +152,92 @@ trait ConsKMacrosImpl
           s"Macro derivation failed:\n$errorsRendered\nlogs:\n${hearth.kindlings.derivation.compiletime.DerivationErrorRendering.withoutAnsiCodes(errorLogs)}\n$hint"
         else s"Macro derivation failed:\n$errorsRendered\n$hint"
       }
+  }
+
+  /** Like kittens (Scala 2): a sealed trait with a subtype `Cons(head: A, tail: F[A])` - or `(init: F[A], last: A)` -
+    * conses by building that subtype. With several such subtypes the first one in alphabetical order is used (the order
+    * of kittens' Shapeless coproduct).
+    */
+  @scala.annotation.nowarn("msg=is never used|unused implicit parameter|unused explicit parameter")
+  private def deriveConsKForSealedTrait[F[_]](implicit
+      FCtor: Type.Ctor1[F],
+      ConsKFT: Type[alleycats.ConsK[F]],
+      FAnyType: Type[F[Any]],
+      AnyType: Type[Any]
+  ): MIO[Expr[alleycats.ConsK[F]]] = {
+    implicit val IntType: Type[Int] = ConsKTypes.Int
+    implicit val StringType: Type[String] = ConsKTypes.String
+    val FIntType: Type[F[Int]] = FCtor.apply[Int]
+    val FStringType: Type[F[String]] = FCtor.apply[String]
+    for {
+      enumAny <- parseEnumMIO[F[Any]]("F[Any]")
+      enumInt <- parseEnumMIO[F[Int]]("F[Int]")(using FIntType)
+      enumString <- parseEnumMIO[F[String]]("F[String]")(using FStringType)
+      result <- {
+        // (subtype at Any, name of the head field, name of the tail field)
+        val candidates = enumAny.directChildren.toList
+          .zip(enumInt.directChildren.toList)
+          .zip(enumString.directChildren.toList)
+          .sortBy(_._1._1._1)
+          .flatMap { case (((_, childAny), (_, childInt)), (_, childString)) =>
+            import childInt.Underlying as ChildInt
+            import childString.Underlying as ChildString
+            (CaseClass.parse[ChildInt].toOption, CaseClass.parse[ChildString].toOption) match {
+              case (Some(ccInt), Some(ccString)) =>
+                val fields = ccInt.primaryConstructor.totalParameters.flatten.toList
+                  .zip(ccString.primaryConstructor.totalParameters.flatten.toList)
+                  .map { case ((name, pInt), (_, pString)) =>
+                    val tInt = pInt.tpe.Underlying
+                    val tString = pString.tpe.Underlying
+                    val isHead = tInt =:= IntType && tString =:= StringType
+                    val isTail = tInt =:= FIntType && tString =:= FStringType
+                    (name, isHead, isTail)
+                  }
+                fields match {
+                  case (head, true, _) :: (tail, _, true) :: Nil => List((childAny, head, tail))
+                  case (tail, _, true) :: (head, true, _) :: Nil => List((childAny, head, tail))
+                  case _                                         => Nil
+                }
+              case _ => Nil
+            }
+          }
+        candidates.headOption match {
+          case None =>
+            failDerivation[Expr[alleycats.ConsK[F]]](
+              CatsDerivationError.DerivationFailed(
+                "ConsK",
+                s"no subtype of ${Type[F[Any]].prettyPrint} has exactly the fields (head: A, tail: F[A]) or " +
+                  "(init: F[A], last: A)"
+              )
+            )
+          case Some((child, headName, tailName)) =>
+            import child.Underlying as Child
+            parseCaseClassMIO[Child](Type[Child].prettyPrint).flatMap { cc =>
+              MIO.scoped { runSafe =>
+                val params = cc.primaryConstructor.totalParameters.flatten.toMap
+                def cast(value: Expr[Any], name: String): Expr_?? = {
+                  val target = params(name).tpe
+                  import target.Underlying as Target
+                  Expr.quote(Expr.splice(value).asInstanceOf[Target]).as_??
+                }
+                val doCons: (Expr[Any], Expr[Any]) => Expr[Any] = (hd, tl) =>
+                  runSafe(
+                    constructInstanceFree(cc.primaryConstructor, "Constructor", Type[Child].prettyPrint)(
+                      Map(headName -> cast(hd, headName), tailName -> cast(tl, tailName))
+                    )
+                  ).value.asInstanceOf[Expr[Any]]
+                Expr.quote {
+                  hearth.kindlings.catsderivation.internal.runtime.HktGenericRuntime
+                    .consK { (hd: Any, tl: Any) =>
+                      Expr.splice(doCons(Expr.quote(hd), Expr.quote(tl)))
+                    }
+                    .asInstanceOf[alleycats.ConsK[F]]
+                }
+              }
+            }
+        }
+      }
+    } yield result
   }
 
   @scala.annotation.nowarn("msg=is never used|unused implicit parameter")

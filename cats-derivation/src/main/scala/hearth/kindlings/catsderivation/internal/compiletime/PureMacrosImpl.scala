@@ -32,81 +32,83 @@ trait PureMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSuppo
 
     Log
       .namedScope(s"Deriving Pure at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = PureTypes.Int
-          implicit val StringType: Type[String] = PureTypes.String
+        orErasedInstance[F, alleycats.Pure[F]](ErasedTC.Pure) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = PureTypes.Int
+            implicit val StringType: Type[String] = PureTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          val directFields = scala.collection.mutable.Set.empty[String]
+            val directFields = scala.collection.mutable.Set.empty[String]
 
-          runSafe {
-            fieldsInt
-              .zip(fieldsString)
-              .traverse { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= tString) {
-                  // Invariant field — no value to fill
-                  MIO.void
-                } else if (tInt =:= IntType && tString =:= StringType) {
-                  directFields += name
-                  MIO.void
-                } else {
-                  failDerivation[Unit](
-                    CatsDerivationError.UnsupportedFieldShape(
-                      "Pure",
-                      name,
-                      "the field contains a nested type constructor - " +
-                        "only direct type parameter fields (A) and invariant fields are supported, " +
-                        "but invariant fields also require default values which are not yet supported"
+            runSafe {
+              fieldsInt
+                .zip(fieldsString)
+                .traverse { case ((name, pInt), (_, pString)) =>
+                  val tInt = pInt.tpe.Underlying
+                  val tString = pString.tpe.Underlying
+                  if (tInt =:= tString) {
+                    // Invariant field — no value to fill
+                    MIO.void
+                  } else if (tInt =:= IntType && tString =:= StringType) {
+                    directFields += name
+                    MIO.void
+                  } else {
+                    failDerivation[Unit](
+                      CatsDerivationError.UnsupportedFieldShape(
+                        "Pure",
+                        name,
+                        "the field contains a nested type constructor - " +
+                          "only direct type parameter fields (A) and invariant fields are supported, " +
+                          "but invariant fields also require default values which are not yet supported"
+                      )
                     )
-                  )
+                  }
                 }
-              }
-              .void
-          }
+                .void
+            }
 
-          // Check if there are any non-direct fields (invariant) — these need defaults we can't provide
-          val allFieldNames = fieldsInt.map(_._1).toSet
-          val invariantFields = allFieldNames -- directFields.toSet
-          if (invariantFields.nonEmpty) {
-            runSafe {
-              failDerivation[Unit](
-                CatsDerivationError.UnsupportedFieldShape(
-                  "Pure",
-                  invariantFields.mkString(", "),
-                  "the fields are not of the type parameter type - " +
-                    "Pure can only be derived when all fields use the type parameter directly"
+            // Check if there are any non-direct fields (invariant) — these need defaults we can't provide
+            val allFieldNames = fieldsInt.map(_._1).toSet
+            val invariantFields = allFieldNames -- directFields.toSet
+            if (invariantFields.nonEmpty) {
+              runSafe {
+                failDerivation[Unit](
+                  CatsDerivationError.UnsupportedFieldShape(
+                    "Pure",
+                    invariantFields.mkString(", "),
+                    "the fields are not of the type parameter type - " +
+                      "Pure can only be derived when all fields use the type parameter directly"
+                  )
                 )
-              )
+              }
             }
-          }
 
-          val directFieldSet: Set[String] = directFields.toSet
+            val directFieldSet: Set[String] = directFields.toSet
 
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          implicit val AnyType: Type[Any] = PureTypes.Any
-          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-
-          val doPure: Expr[Any] => Expr[F[Any]] = (aExpr: Expr[Any]) =>
+            // Pre-load extensions before entering the quote
             runSafe {
-              derivePureBody[F, Any](FCtor, directFieldSet, aExpr)(Type.of[Any])
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
             }
 
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.pureInstance[F] { (aAny: Any) =>
-              val _ = aAny
-              Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
+            implicit val AnyType: Type[Any] = PureTypes.Any
+            implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+
+            val doPure: Expr[Any] => Expr[F[Any]] = (aExpr: Expr[Any]) =>
+              runSafe {
+                derivePureBody[F, Any](FCtor, directFieldSet, aExpr)(Type.of[Any])
+              }
+
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.pureInstance[F] { (aAny: Any) =>
+                val _ = aAny
+                Expr.splice(doPure(Expr.quote(aAny))).asInstanceOf[F[CatsDerivationFactories.W1]]
+              }
             }
           }
         }

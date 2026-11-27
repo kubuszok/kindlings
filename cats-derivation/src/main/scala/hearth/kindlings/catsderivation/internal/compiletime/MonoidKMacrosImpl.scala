@@ -9,7 +9,11 @@ import hearth.std.*
 import hearth.kindlings.catsderivation.LogDerivation
 
 /** MonoidK derivation: combines EmptyK + SemigroupK by summoning Monoid for each field type in F[Any]. */
-trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with KernelFromKSupport {
+trait MonoidKMacrosImpl
+    extends CatsDerivationTimeout
+    with CatsDerivationErrorSupport
+    with KernelFromKSupport
+    with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -26,49 +30,51 @@ trait MonoidKMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSu
 
     Log
       .namedScope(s"Deriving MonoidK at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              // Load standard extensions exactly once for this derivation, before deriving
-              // either the empty or the combineK body (issue kubuszok/kindlings#65).
-              val _ = runSafe {
-                Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              }
-
-              val doEmpty: Expr[F[Any]] = runSafe {
-                deriveMonoidKEmptyBody[F](caseClass)
-              }
-
-              val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
-                runSafe {
-                  deriveMonoidKCombineBody[F](caseClass, xExpr, yExpr)
+        orErasedInstance[F, cats.MonoidK[F]](ErasedTC.MonoidK, specialisedApplies = fieldsAreConstantOrApplied[F]) {
+          CaseClass.parse[F[Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                // Load standard extensions exactly once for this derivation, before deriving
+                // either the empty or the combineK body (issue kubuszok/kindlings#65).
+                val _ = runSafe {
+                  Environment.loadStandardExtensions().toMIO(allowFailures = false)
                 }
 
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.monoidKInstance[F](
-                  emptyKFn = { () =>
-                    Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
-                  },
-                  combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
-                    val anyX: F[Any] = x.asInstanceOf[F[Any]]
-                    val anyY: F[Any] = y.asInstanceOf[F[Any]]
-                    val _ = anyX
-                    val _ = anyY
-                    Expr
-                      .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
-                      .asInstanceOf[F[CatsDerivationFactories.W1]]
+                val doEmpty: Expr[F[Any]] = runSafe {
+                  deriveMonoidKEmptyBody[F](caseClass)
+                }
+
+                val doCombineK: (Expr[F[Any]], Expr[F[Any]]) => Expr[F[Any]] = (xExpr, yExpr) =>
+                  runSafe {
+                    deriveMonoidKCombineBody[F](caseClass, xExpr, yExpr)
                   }
-                )
+
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.monoidKInstance[F](
+                    emptyKFn = { () =>
+                      Expr.splice(doEmpty).asInstanceOf[F[CatsDerivationFactories.W1]]
+                    },
+                    combineKFn = { (x: F[CatsDerivationFactories.W1], y: F[CatsDerivationFactories.W1]) =>
+                      val anyX: F[Any] = x.asInstanceOf[F[Any]]
+                      val anyY: F[Any] = y.asInstanceOf[F[Any]]
+                      val _ = anyX
+                      val _ = anyY
+                      Expr
+                        .splice(doCombineK(Expr.quote(anyX), Expr.quote(anyY)))
+                        .asInstanceOf[F[CatsDerivationFactories.W1]]
+                    }
+                  )
+                }
               }
-            }
-          case Left(reason) =>
-            failDerivation(
-              CatsDerivationError.CannotParseCaseClass(
-                Type[F[Any]].prettyPrint,
-                s"$reason. $macroName can only be derived for case classes."
+            case Left(reason) =>
+              failDerivation(
+                CatsDerivationError.CannotParseCaseClass(
+                  Type[F[Any]].prettyPrint,
+                  s"$reason. $macroName can only be derived for case classes."
+                )
               )
-            )
+          }
         }
       }
       .map(withInstanceScopedVals(_))

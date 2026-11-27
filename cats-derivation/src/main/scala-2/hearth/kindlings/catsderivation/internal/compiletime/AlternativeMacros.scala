@@ -6,9 +6,10 @@ import scala.reflect.macros.blackbox
 
 final private[catsderivation] class AlternativeMacros(val c: blackbox.Context)
     extends MacroCommonsScala2
+    with AliasAwareCtor1
     with AlternativeMacrosImpl {
 
   // Entry-point glue only: `of[F]` reads the statically-known `F` from the implicit `WeakTypeTag[F[Any]]`.
   def deriveAlternativeImpl[F[_]](implicit ft: c.WeakTypeTag[F[Any]]): c.Expr[cats.Alternative[F]] =
-    deriveAlternative[F](Type.Ctor1.of[F])
+    deriveAlternative[F](aliasAwareCtor1[F](ft)(Type.Ctor1.of[F]))
 }

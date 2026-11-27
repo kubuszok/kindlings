@@ -12,6 +12,7 @@ trait MonoidMacrosImpl
     with rules.MonoidUseCachedRuleImpl
     with rules.MonoidUseImplicitRuleImpl
     with rules.MonoidBuiltInRuleImpl
+    with rules.MonoidOptionRuleImpl
     with rules.MonoidCaseClassRuleImpl
     with CatsDerivationTimeout { this: MacroCommons & StdExtensions =>
 
@@ -45,6 +46,7 @@ trait MonoidMacrosImpl
         MonoidUseImplicitRule,
         MonoidDerivationPolicyRule,
         MonoidBuiltInRule,
+        MonoidOptionRule,
         MonoidCaseClassRule
       )(_[A]).flatMap {
         case Right(result) =>
@@ -59,7 +61,7 @@ trait MonoidMacrosImpl
             }
             .toList
           val err = MonoidDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
-          Log.error(err.message) >> MIO.fail(err)
+          logDerivationError(err.message) >> MIO.fail(err)
       }
     }
 

@@ -14,7 +14,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * for method-level type parameters inside Expr.quote/Expr.splice. Supports direct A fields (covariant), Function1[A,
   * R] fields (contravariant), Function1[R, A] fields (covariant), and Function1[A, A] fields (both).
   */
-trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport {
+trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
@@ -29,113 +29,116 @@ trait InvariantMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
 
     Log
       .namedScope(s"Deriving Invariant at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = InvariantTypes.Int
-          implicit val StringType: Type[String] = InvariantTypes.String
+        orErasedInstance[F, cats.Invariant[F]](ErasedTC.Invariant) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = InvariantTypes.Int
+            implicit val StringType: Type[String] = InvariantTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          // Field classification using string tags
-          val fieldKinds = scala.collection.mutable.Map.empty[String, String]
+            // Field classification using string tags
+            val fieldKinds = scala.collection.mutable.Map.empty[String, String]
 
-          val Function1Ctor2 = Type.Ctor2.of[Function1]
+            val Function1Ctor2 = Type.Ctor2.of[Function1]
 
-          runSafe {
-            fieldsInt
-              .zip(fieldsString)
-              .traverse { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= tString) {
-                  fieldKinds(name) = "invariant"
-                  MIO.void
-                } else if (tInt =:= IntType && tString =:= StringType) {
-                  fieldKinds(name) = "direct"
-                  MIO.void
-                } else {
-                  (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
-                    case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
-                      import arg1Int.Underlying as A1Int
-                      import arg2Int.Underlying as A2Int
-                      import arg1String.Underlying as A1String
-                      import arg2String.Underlying as A2String
+            runSafe {
+              fieldsInt
+                .zip(fieldsString)
+                .traverse { case ((name, pInt), (_, pString)) =>
+                  val tInt = pInt.tpe.Underlying
+                  val tString = pString.tpe.Underlying
+                  if (tInt =:= tString) {
+                    fieldKinds(name) = "invariant"
+                    MIO.void
+                  } else if (tInt =:= IntType && tString =:= StringType) {
+                    fieldKinds(name) = "direct"
+                    MIO.void
+                  } else {
+                    (Function1Ctor2.unapply(tInt), Function1Ctor2.unapply(tString)) match {
+                      case (Some((arg1Int, arg2Int)), Some((arg1String, arg2String))) =>
+                        import arg1Int.Underlying as A1Int
+                        import arg2Int.Underlying as A2Int
+                        import arg1String.Underlying as A1String
+                        import arg2String.Underlying as A2String
 
-                      val firstArgChanges = !(A1Int =:= A1String)
-                      val secondArgChanges = !(A2Int =:= A2String)
+                        val firstArgChanges = !(A1Int =:= A1String)
+                        val secondArgChanges = !(A2Int =:= A2String)
 
-                      if (firstArgChanges && !secondArgChanges) {
-                        fieldKinds(name) = "fn1Contra"
-                        MIO.void
-                      } else if (!firstArgChanges && secondArgChanges) {
-                        fieldKinds(name) = "fn1Covar"
-                        MIO.void
-                      } else if (firstArgChanges && secondArgChanges) {
-                        fieldKinds(name) = "fn1Both"
-                        MIO.void
-                      } else {
+                        if (firstArgChanges && !secondArgChanges) {
+                          fieldKinds(name) = "fn1Contra"
+                          MIO.void
+                        } else if (!firstArgChanges && secondArgChanges) {
+                          fieldKinds(name) = "fn1Covar"
+                          MIO.void
+                        } else if (firstArgChanges && secondArgChanges) {
+                          fieldKinds(name) = "fn1Both"
+                          MIO.void
+                        } else {
+                          failDerivation[Unit](
+                            CatsDerivationError.UnsupportedFieldShape(
+                              "Invariant",
+                              name,
+                              "the field has inconsistent Function1 decomposition"
+                            )
+                          )
+                        }
+                      case _ =>
                         failDerivation[Unit](
                           CatsDerivationError.UnsupportedFieldShape(
                             "Invariant",
                             name,
-                            "the field has inconsistent Function1 decomposition"
+                            "the field contains a nested type constructor that is not Function1 - " +
+                              "only direct A fields, Function1[A, R] fields, and invariant fields are currently supported"
                           )
                         )
-                      }
-                    case _ =>
-                      failDerivation[Unit](
-                        CatsDerivationError.UnsupportedFieldShape(
-                          "Invariant",
-                          name,
-                          "the field contains a nested type constructor that is not Function1 - " +
-                            "only direct A fields, Function1[A, R] fields, and invariant fields are currently supported"
-                        )
+                    }
+                  }
+                }
+                .void
+            }
+
+            val fieldKindsMap: Map[String, String] = fieldKinds.toMap
+
+            // Pre-load extensions before entering the quote
+            runSafe {
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+            }
+
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.invariantInstance[F] {
+                (
+                    fa: F[CatsDerivationFactories.W1],
+                    f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2,
+                    g: CatsDerivationFactories.W2 => CatsDerivationFactories.W1
+                ) =>
+                  val _ = fa
+                  val _ = f
+                  val _ = g
+                  Expr.splice {
+                    runSafe {
+                      deriveImapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
+                        FCtor,
+                        fieldKindsMap,
+                        Expr.quote(fa),
+                        Expr.quote(f),
+                        Expr.quote(g)
+                      )(
+                        Type.of[CatsDerivationFactories.W1],
+                        Type.of[CatsDerivationFactories.W2]
                       )
+                    }
                   }
-                }
               }
-              .void
-          }
-
-          val fieldKindsMap: Map[String, String] = fieldKinds.toMap
-
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
-
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.invariantInstance[F] {
-              (
-                  fa: F[CatsDerivationFactories.W1],
-                  f: CatsDerivationFactories.W1 => CatsDerivationFactories.W2,
-                  g: CatsDerivationFactories.W2 => CatsDerivationFactories.W1
-              ) =>
-                val _ = fa
-                val _ = f
-                val _ = g
-                Expr.splice {
-                  runSafe {
-                    deriveImapBody[F, CatsDerivationFactories.W1, CatsDerivationFactories.W2](
-                      FCtor,
-                      fieldKindsMap,
-                      Expr.quote(fa),
-                      Expr.quote(f),
-                      Expr.quote(g)
-                    )(
-                      Type.of[CatsDerivationFactories.W1],
-                      Type.of[CatsDerivationFactories.W2]
-                    )
-                  }
-                }
             }
           }
         }
       }
+      .map(withInstanceScopedVals(_))
       .flatTap(result => Log.info(s"Derived final result: ${result.prettyPrint}"))
       .runToExprOrFail(
         macroName,

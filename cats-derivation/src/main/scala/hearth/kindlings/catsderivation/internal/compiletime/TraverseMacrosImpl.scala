@@ -16,10 +16,7 @@ import hearth.kindlings.catsderivation.LogDerivation
   * (apply f) and nested fields (delegate to Traverse[G].traverse). A LambdaBuilder-built reconstruction lambda rebuilds
   * the case class from the resulting List[Any] + original invariant field values.
   */
-trait TraverseMacrosImpl
-    extends CatsDerivationTimeout
-    with CatsDerivationErrorSupport
-    with hearth.kindlings.derivation.compiletime.InstanceScopedVals {
+trait TraverseMacrosImpl extends CatsDerivationTimeout with CatsDerivationErrorSupport with ErasedHktSupport {
   this: MacroCommons & StdExtensions =>
 
   protected type AnyK[X] = Any
@@ -75,170 +72,172 @@ trait TraverseMacrosImpl
 
     Log
       .namedScope(s"Deriving Traverse at: ${Environment.currentPosition.prettyPrint}") {
-        CaseClass.parse[F[Any]].toEither match {
-          case Right(caseClass) =>
-            MIO.scoped { runSafe =>
-              implicit val IntType: Type[Int] = TraverseTypes.Int
-              implicit val StringType: Type[String] = TraverseTypes.String
+        orErasedInstance[F, cats.Traverse[F]](ErasedTC.Traverse) {
+          CaseClass.parse[F[Any]].toEither match {
+            case Right(caseClass) =>
+              MIO.scoped { runSafe =>
+                implicit val IntType: Type[Int] = TraverseTypes.Int
+                implicit val StringType: Type[String] = TraverseTypes.String
 
-              val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-              val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+                val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+                val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-              val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-              val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+                val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+                val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-              val directFields = scala.collection.mutable.Set.empty[String]
-              val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
+                val directFields = scala.collection.mutable.Set.empty[String]
+                val nestedFieldNames = scala.collection.mutable.ListBuffer.empty[String]
 
-              fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-                val tInt = pInt.tpe.Underlying
-                val tString = pString.tpe.Underlying
-                if (tInt =:= IntType && tString =:= StringType) {
-                  directFields += name
-                } else if (tInt =:= tString) {
-                  // Invariant — skip in traverse
-                } else {
-                  nestedFieldNames += name
-                }
-              }
-
-              val nestedFieldTraverses = scala.collection.mutable.Map.empty[String, Expr[Any]]
-              if (nestedFieldNames.nonEmpty) {
-                val unsupported = scala.collection.mutable.ListBuffer.empty[String]
-                nestedFieldNames.foreach { name =>
-                  val param = fieldsInt.find(_._1 == name).get._2
-                  import param.tpe.Underlying as FieldType
-                  summonTraverseForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
-                    case Some(traverseExpr) => nestedFieldTraverses += (name -> traverseExpr)
-                    case None               => unsupported += name
+                fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+                  val tInt = pInt.tpe.Underlying
+                  val tString = pString.tpe.Underlying
+                  if (tInt =:= IntType && tString =:= StringType) {
+                    directFields += name
+                  } else if (tInt =:= tString) {
+                    // Invariant — skip in traverse
+                  } else {
+                    nestedFieldNames += name
                   }
                 }
-                if (unsupported.nonEmpty) {
-                  runSafe {
-                    failDerivation[Unit](
-                      CatsDerivationError.UnsupportedFieldShape(
-                        "Traverse",
-                        unsupported.mkString(", "),
-                        "the fields contain nested type constructors without Traverse instances"
+
+                val nestedFieldTraverses = scala.collection.mutable.Map.empty[String, Expr[Any]]
+                if (nestedFieldNames.nonEmpty) {
+                  val unsupported = scala.collection.mutable.ListBuffer.empty[String]
+                  nestedFieldNames.foreach { name =>
+                    val param = fieldsInt.find(_._1 == name).get._2
+                    import param.tpe.Underlying as FieldType
+                    summonTraverseForFieldType(Type[FieldType].asInstanceOf[Type[Any]]).map(instanceScopedAny) match {
+                      case Some(traverseExpr) => nestedFieldTraverses += (name -> traverseExpr)
+                      case None               => unsupported += name
+                    }
+                  }
+                  if (unsupported.nonEmpty) {
+                    runSafe {
+                      failDerivation[Unit](
+                        CatsDerivationError.UnsupportedFieldShape(
+                          "Traverse",
+                          unsupported.mkString(", "),
+                          "the fields contain nested type constructors without Traverse instances"
+                        )
                       )
-                    )
+                    }
                   }
                 }
-              }
 
-              val directFieldSet: Set[String] = directFields.toSet
-              val nestedFieldMap: Map[String, Expr[Any]] = nestedFieldTraverses.toMap
+                val directFieldSet: Set[String] = directFields.toSet
+                val nestedFieldMap: Map[String, Expr[Any]] = nestedFieldTraverses.toMap
 
-              // Pre-load extensions eagerly to avoid Scala 3 sibling splice isolation issues
-              val _ = runSafe {
-                Environment.loadStandardExtensions().toMIO(allowFailures = false)
-              }
+                // Pre-load extensions eagerly to avoid Scala 3 sibling splice isolation issues
+                val _ = runSafe {
+                  Environment.loadStandardExtensions().toMIO(allowFailures = false)
+                }
 
-              val traversableFieldSet: Set[String] = directFieldSet ++ nestedFieldMap.keySet
+                val traversableFieldSet: Set[String] = directFieldSet ++ nestedFieldMap.keySet
 
-              // Build reconstruction lambda: (List[Any], Any) => Any
-              // Uses Any instead of F[Any] to avoid F references inside lambdas on Scala 2
-              val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
-                deriveReconstructFromList[F](caseClass, traversableFieldSet)
-              }
+                // Build reconstruction lambda: (List[Any], Any) => Any
+                // Uses Any instead of F[Any] to avoid F references inside lambdas on Scala 2
+                val reconstructFn: Expr[(List[Any], Any) => Any] = runSafe {
+                  deriveReconstructFromList[F](caseClass, traversableFieldSet)
+                }
 
-              // Traverse body: generates the G[List[Any]] fold chain at macro time
-              val doTraverse: (Expr[F[Any]], Expr[Any], Expr[Any]) => Expr[Any] =
-                (faExprM, fExprM, gExprM) =>
-                  runSafe {
-                    deriveTraverseBody[F](
-                      caseClass,
-                      directFieldSet,
-                      nestedFieldMap,
-                      faExprM,
-                      fExprM,
-                      gExprM
-                    )
-                  }
+                // Traverse body: generates the G[List[Any]] fold chain at macro time
+                val doTraverse: (Expr[F[Any]], Expr[Any], Expr[Any]) => Expr[Any] =
+                  (faExprM, fExprM, gExprM) =>
+                    runSafe {
+                      deriveTraverseBody[F](
+                        caseClass,
+                        directFieldSet,
+                        nestedFieldMap,
+                        faExprM,
+                        fExprM,
+                        gExprM
+                      )
+                    }
 
-              // FoldLeft body (same as Foldable, with nested support)
-              val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-                (faExpr, bExpr, fExpr) =>
-                  runSafe {
-                    deriveTraverseFoldLeftBody[F](caseClass, directFieldSet, nestedFieldMap, faExpr, bExpr, fExpr)
-                  }
+                // FoldLeft body (same as Foldable, with nested support)
+                val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+                  (faExpr, bExpr, fExpr) =>
+                    runSafe {
+                      deriveTraverseFoldLeftBody[F](caseClass, directFieldSet, nestedFieldMap, faExpr, bExpr, fExpr)
+                    }
 
-              // FoldRight body (same as Foldable, with nested support)
-              val doFoldRight
-                  : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-                    cats.Eval[Any]
-                  ] =
-                (faExpr, lbExpr, fExpr) =>
-                  runSafe {
-                    deriveTraverseFoldRightBody[F](
-                      caseClass,
-                      directFieldSet,
-                      nestedFieldMap,
-                      faExpr,
-                      lbExpr,
-                      fExpr
-                    )
-                  }
+                // FoldRight body (same as Foldable, with nested support)
+                val doFoldRight
+                    : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                      cats.Eval[Any]
+                    ] =
+                  (faExpr, lbExpr, fExpr) =>
+                    runSafe {
+                      deriveTraverseFoldRightBody[F](
+                        caseClass,
+                        directFieldSet,
+                        nestedFieldMap,
+                        faExpr,
+                        lbExpr,
+                        fExpr
+                      )
+                    }
 
-              import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-              Expr.quote {
-                CatsDerivationFactories.traverseInstance[F](
-                  traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
-                    val G = gAny.asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
-                    val _ = anyFa
-                    val _ = f
-                    val _ = G
-                    val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
-                    val _ = recon
-                    val gList: CatsDerivationFactories.AnyF[List[Any]] =
-                      Expr
-                        .splice(doTraverse(Expr.quote(anyFa), Expr.quote(f: Any), Expr.quote(G: Any)))
-                        .asInstanceOf[CatsDerivationFactories.AnyF[List[Any]]]
-                    G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFa))
-                  },
-                  foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
-                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                    val _ = anyFa
-                    val _ = anyB
-                    val _ = anyF
-                    Expr
-                      .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF)))
-                      .asInstanceOf[Any]
-                  },
-                  foldRightFn = {
-                    (
-                        fa: F[CatsDerivationFactories.W1],
-                        anyLb: cats.Eval[Any],
-                        anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
-                    ) =>
+                import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+                Expr.quote {
+                  CatsDerivationFactories.traverseInstance[F](
+                    traverseFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                      val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                      val f = fAny.asInstanceOf[Any => CatsDerivationFactories.AnyF[Any]]
+                      val G = gAny.asInstanceOf[cats.Applicative[CatsDerivationFactories.AnyF]]
+                      val _ = anyFa
+                      val _ = f
+                      val _ = G
+                      val recon: (List[Any], Any) => Any = Expr.splice(reconstructFn)
+                      val _ = recon
+                      val gList: CatsDerivationFactories.AnyF[List[Any]] =
+                        Expr
+                          .splice(doTraverse(Expr.quote(anyFa), Expr.quote(f: Any), Expr.quote(G: Any)))
+                          .asInstanceOf[CatsDerivationFactories.AnyF[List[Any]]]
+                      G.map[List[Any], Any](gList)(newVals => recon(newVals, anyFa))
+                    },
+                    foldLeftFn = { (fa: F[CatsDerivationFactories.W1], anyB: Any, anyF: (Any, Any) => Any) =>
                       val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
                       val _ = anyFa
-                      val _ = anyLb
+                      val _ = anyB
                       val _ = anyF
                       Expr
-                        .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
-                        .asInstanceOf[cats.Eval[Any]]
-                  }
-                )
-              }
-            }
-          case Left(_) =>
-            Enum.parse[F[Any]].toEither match {
-              case Left(reason2) =>
-                failDerivation(
-                  CatsDerivationError.CannotParseEnum(
-                    Type[F[Any]].prettyPrint,
-                    s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
+                        .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(anyB), Expr.quote(anyF)))
+                        .asInstanceOf[Any]
+                    },
+                    foldRightFn = {
+                      (
+                          fa: F[CatsDerivationFactories.W1],
+                          anyLb: cats.Eval[Any],
+                          anyF: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                      ) =>
+                        val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                        val _ = anyFa
+                        val _ = anyLb
+                        val _ = anyF
+                        Expr
+                          .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(anyLb), Expr.quote(anyF)))
+                          .asInstanceOf[cats.Eval[Any]]
+                    }
                   )
-                )
-              case Right(enumm) =>
-                MIO.scoped { runSafe =>
-                  val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
-                  runSafe(deriveTraverseForEnum[F](FCtor, enumm, runSafe))
                 }
-            }
+              }
+            case Left(_) =>
+              Enum.parse[F[Any]].toEither match {
+                case Left(reason2) =>
+                  failDerivation(
+                    CatsDerivationError.CannotParseEnum(
+                      Type[F[Any]].prettyPrint,
+                      s"not a case class and not a sealed trait ($reason2). $macroName cannot derive for this type."
+                    )
+                  )
+                case Right(enumm) =>
+                  MIO.scoped { runSafe =>
+                    val _ = runSafe(Environment.loadStandardExtensions().toMIO(allowFailures = false))
+                    runSafe(deriveTraverseForEnum[F](FCtor, enumm, runSafe))
+                  }
+              }
+          }
         }
       }
       .map(withInstanceScopedVals(_))

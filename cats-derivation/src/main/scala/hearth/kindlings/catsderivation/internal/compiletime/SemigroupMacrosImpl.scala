@@ -13,6 +13,7 @@ trait SemigroupMacrosImpl
     with rules.SemigroupUseCachedRuleImpl
     with rules.SemigroupUseImplicitRuleImpl
     with rules.SemigroupBuiltInRuleImpl
+    with rules.SemigroupOptionRuleImpl
     with rules.SemigroupCaseClassRuleImpl
     with InstanceScopeSupport
     with CatsDerivationTimeout
@@ -68,6 +69,7 @@ trait SemigroupMacrosImpl
         SemigroupUseImplicitRule,
         SemigroupDerivationPolicyRule,
         SemigroupBuiltInRule,
+        SemigroupOptionRule,
         SemigroupCaseClassRule
       )(_[A]).flatMap {
         case Right(result) =>
@@ -82,7 +84,7 @@ trait SemigroupMacrosImpl
             }
             .toList
           val err = SemigroupDerivationError.UnsupportedType(Type[A].prettyPrint, reasonsStrings)
-          Log.error(err.message) >> MIO.fail(err)
+          logDerivationError(err.message) >> MIO.fail(err)
       }
     }
 

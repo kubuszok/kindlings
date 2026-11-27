@@ -35,190 +35,194 @@ trait ReducibleMacrosImpl extends CatsDerivationTimeout with CatsDerivationError
 
     Log
       .namedScope(s"Deriving Reducible at: ${Environment.currentPosition.prettyPrint}") {
-        MIO.scoped { runSafe =>
-          implicit val IntType: Type[Int] = ReducibleTypes.Int
-          implicit val StringType: Type[String] = ReducibleTypes.String
+        orErasedInstance[F, cats.Reducible[F]](ErasedTC.Reducible) {
+          MIO.scoped { runSafe =>
+            implicit val IntType: Type[Int] = ReducibleTypes.Int
+            implicit val StringType: Type[String] = ReducibleTypes.String
 
-          val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
-          val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
+            val ccInt = runSafe(parseCaseClassMIO[F[Int]]("F[Int]")(using FCtor.apply[Int]))
+            val ccString = runSafe(parseCaseClassMIO[F[String]]("F[String]")(using FCtor.apply[String]))
 
-          val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
-          val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
+            val fieldsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
+            val fieldsString = ccString.primaryConstructor.totalParameters.flatten.toList
 
-          val directFields = scala.collection.mutable.Set.empty[String]
-          val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
+            val directFields = scala.collection.mutable.Set.empty[String]
+            val nestedFields = scala.collection.mutable.ListBuffer.empty[String]
 
-          fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
-            val tInt = pInt.tpe.Underlying
-            val tString = pString.tpe.Underlying
-            if (tInt =:= IntType && tString =:= StringType) {
-              directFields += name
-            } else if (tInt =:= tString) {
-              // Invariant — skip in reduce
-            } else {
-              nestedFields += name
+            fieldsInt.zip(fieldsString).foreach { case ((name, pInt), (_, pString)) =>
+              val tInt = pInt.tpe.Underlying
+              val tString = pString.tpe.Underlying
+              if (tInt =:= IntType && tString =:= StringType) {
+                directFields += name
+              } else if (tInt =:= tString) {
+                // Invariant — skip in reduce
+              } else {
+                nestedFields += name
+              }
             }
-          }
 
-          if (nestedFields.nonEmpty) {
-            runSafe {
-              failDerivation[Unit](
-                CatsDerivationError.UnsupportedFieldShape(
-                  "Reducible",
-                  nestedFields.mkString(", "),
-                  "the fields contain nested type constructors - " +
-                    "only direct type parameter fields (A) and invariant fields are supported"
+            if (nestedFields.nonEmpty) {
+              runSafe {
+                failDerivation[Unit](
+                  CatsDerivationError.UnsupportedFieldShape(
+                    "Reducible",
+                    nestedFields.mkString(", "),
+                    "the fields contain nested type constructors - " +
+                      "only direct type parameter fields (A) and invariant fields are supported"
+                  )
                 )
-              )
+              }
             }
-          }
 
-          if (directFields.isEmpty) {
-            runSafe {
-              failDerivation[Unit](
-                CatsDerivationError.DerivationFailed(
-                  "Reducible",
-                  "no direct type parameter fields found - " +
-                    "Reducible requires at least one field of the type parameter"
+            if (directFields.isEmpty) {
+              runSafe {
+                failDerivation[Unit](
+                  CatsDerivationError.DerivationFailed(
+                    "Reducible",
+                    "no direct type parameter fields found - " +
+                      "Reducible requires at least one field of the type parameter"
+                  )
                 )
-              )
+              }
             }
-          }
 
-          val directFieldSet: Set[String] = directFields.toSet
+            val directFieldSet: Set[String] = directFields.toSet
 
-          // Pre-load extensions before entering the quote
-          runSafe {
-            Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
-          }
+            // Pre-load extensions before entering the quote
+            runSafe {
+              Environment.loadStandardExtensions().toMIO(allowFailures = false).map(_ => ())
+            }
 
-          implicit val AnyType: Type[Any] = ReducibleTypes.Any
-          implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
-          implicit val EvalAnyType: Type[cats.Eval[Any]] = ReducibleTypes.EvalCtor.apply[Any]
+            implicit val AnyType: Type[Any] = ReducibleTypes.Any
+            implicit val FAnyType: Type[F[Any]] = FCtor.apply[Any]
+            implicit val EvalAnyType: Type[cats.Eval[Any]] = ReducibleTypes.EvalCtor.apply[Any]
 
-          val ccAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
+            val ccAny = runSafe(parseCaseClassMIO[F[Any]]("F[Any]"))
 
-          val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-            (faExpr, fExpr, gExpr) =>
-              runSafe {
-                val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                val directFieldExprs: List[Expr[Any]] = fields.collect {
-                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
-                    import fieldValue.Underlying as Field
-                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+            val doReduceLeftTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+              (faExpr, fExpr, gExpr) =>
+                runSafe {
+                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val directFieldExprs: List[Expr[Any]] = fields.collect {
+                    case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                      import fieldValue.Underlying as Field
+                      fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                  }
+                  val head = directFieldExprs.head
+                  val tail = directFieldExprs.tail
+                  val seed: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(head)))
+                  val result = tail.foldLeft(seed) { (acc, fieldExpr) =>
+                    Expr.quote(Expr.splice(gExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
+                  }
+                  MIO.pure(result)
                 }
-                val head = directFieldExprs.head
-                val tail = directFieldExprs.tail
-                val seed: Expr[Any] = Expr.quote(Expr.splice(fExpr)(Expr.splice(head)))
-                val result = tail.foldLeft(seed) { (acc, fieldExpr) =>
-                  Expr.quote(Expr.splice(gExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
-                }
-                MIO.pure(result)
-              }
 
-          val doReduceRightTo: (Expr[F[Any]], Expr[Any => Any], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-            cats.Eval[Any]
-          ] =
-            (faExpr, fExpr, gExpr) =>
-              runSafe {
-                val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                val directFieldExprs: List[Expr[Any]] = fields.collect {
-                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
-                    import fieldValue.Underlying as Field
-                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+            val doReduceRightTo
+                : (Expr[F[Any]], Expr[Any => Any], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                  cats.Eval[Any]
+                ] =
+              (faExpr, fExpr, gExpr) =>
+                runSafe {
+                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val directFieldExprs: List[Expr[Any]] = fields.collect {
+                    case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                      import fieldValue.Underlying as Field
+                      fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                  }
+                  val last = directFieldExprs.last
+                  val init = directFieldExprs.init
+                  val seed: Expr[cats.Eval[Any]] =
+                    Expr.quote(cats.Eval.later(Expr.splice(fExpr)(Expr.splice(last)): Any))
+                  val result = init.foldRight(seed) { (fieldExpr, acc) =>
+                    Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
+                  }
+                  MIO.pure(result)
                 }
-                val last = directFieldExprs.last
-                val init = directFieldExprs.init
-                val seed: Expr[cats.Eval[Any]] =
-                  Expr.quote(cats.Eval.later(Expr.splice(fExpr)(Expr.splice(last)): Any))
-                val result = init.foldRight(seed) { (fieldExpr, acc) =>
-                  Expr.quote(Expr.splice(gExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
-                }
-                MIO.pure(result)
-              }
 
-          val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
-            (faExpr, bExpr, fExpr) =>
-              runSafe {
-                val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                val directFieldExprs: List[Expr[Any]] = fields.collect {
-                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
-                    import fieldValue.Underlying as Field
-                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+            val doFoldLeft: (Expr[F[Any]], Expr[Any], Expr[(Any, Any) => Any]) => Expr[Any] =
+              (faExpr, bExpr, fExpr) =>
+                runSafe {
+                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val directFieldExprs: List[Expr[Any]] = fields.collect {
+                    case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                      import fieldValue.Underlying as Field
+                      fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                  }
+                  val result = directFieldExprs.foldLeft(bExpr) { (acc, fieldExpr) =>
+                    Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
+                  }
+                  MIO.pure(result)
                 }
-                val result = directFieldExprs.foldLeft(bExpr) { (acc, fieldExpr) =>
-                  Expr.quote(Expr.splice(fExpr)(Expr.splice(acc), Expr.splice(fieldExpr)))
-                }
-                MIO.pure(result)
-              }
 
-          val doFoldRight: (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
-            cats.Eval[Any]
-          ] =
-            (faExpr, lbExpr, fExpr) =>
-              runSafe {
-                val fields = ccAny.caseFieldValuesAt(faExpr).toList
-                val directFieldExprs: List[Expr[Any]] = fields.collect {
-                  case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
-                    import fieldValue.Underlying as Field
-                    fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+            val doFoldRight
+                : (Expr[F[Any]], Expr[cats.Eval[Any]], Expr[(Any, cats.Eval[Any]) => cats.Eval[Any]]) => Expr[
+                  cats.Eval[Any]
+                ] =
+              (faExpr, lbExpr, fExpr) =>
+                runSafe {
+                  val fields = ccAny.caseFieldValuesAt(faExpr).toList
+                  val directFieldExprs: List[Expr[Any]] = fields.collect {
+                    case (fieldName, fieldValue) if directFieldSet.contains(fieldName) =>
+                      import fieldValue.Underlying as Field
+                      fieldValue.value.asInstanceOf[Expr[Field]].upcast[Any]
+                  }
+                  val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
+                    Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
+                  }
+                  MIO.pure(result)
                 }
-                val result = directFieldExprs.foldRight(lbExpr) { (fieldExpr, acc) =>
-                  Expr.quote(Expr.splice(fExpr)(Expr.splice(fieldExpr), _root_.cats.Eval.defer(Expr.splice(acc))))
-                }
-                MIO.pure(result)
-              }
 
-          import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
-          Expr.quote {
-            CatsDerivationFactories.reducibleInstance[F](
-              reduceLeftToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
-                val anyG: (Any, Any) => Any = gAny.asInstanceOf[(Any, Any) => Any]
-                val _ = anyFa
-                val _ = anyF
-                val _ = anyG
-                Expr
-                  .splice(doReduceLeftTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
-                  .asInstanceOf[Any]
-              },
-              reduceRightToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
-                val anyG: (Any, cats.Eval[Any]) => cats.Eval[Any] =
-                  gAny.asInstanceOf[(Any, cats.Eval[Any]) => cats.Eval[Any]]
-                val _ = anyFa
-                val _ = anyF
-                val _ = anyG
-                Expr
-                  .splice(doReduceRightTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
-                  .asInstanceOf[Any]
-              },
-              foldLeftFn = { (fa: F[CatsDerivationFactories.W1], bAny: Any, fAny: (Any, Any) => Any) =>
-                val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
-                val _ = anyFa
-                val _ = bAny
-                val _ = fAny
-                Expr
-                  .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(bAny), Expr.quote(fAny)))
-                  .asInstanceOf[Any]
-              },
-              foldRightFn = {
-                (
-                    fa: F[CatsDerivationFactories.W1],
-                    lbAny: cats.Eval[Any],
-                    fAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
-                ) =>
+            import hearth.kindlings.catsderivation.internal.runtime.CatsDerivationFactories
+            Expr.quote {
+              CatsDerivationFactories.reducibleInstance[F](
+                reduceLeftToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
+                  val anyG: (Any, Any) => Any = gAny.asInstanceOf[(Any, Any) => Any]
+                  val _ = anyFa
+                  val _ = anyF
+                  val _ = anyG
+                  Expr
+                    .splice(doReduceLeftTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
+                    .asInstanceOf[Any]
+                },
+                reduceRightToFn = { (fa: F[CatsDerivationFactories.W1], fAny: Any, gAny: Any) =>
+                  val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                  val anyF: Any => Any = fAny.asInstanceOf[Any => Any]
+                  val anyG: (Any, cats.Eval[Any]) => cats.Eval[Any] =
+                    gAny.asInstanceOf[(Any, cats.Eval[Any]) => cats.Eval[Any]]
+                  val _ = anyFa
+                  val _ = anyF
+                  val _ = anyG
+                  Expr
+                    .splice(doReduceRightTo(Expr.quote(anyFa), Expr.quote(anyF), Expr.quote(anyG)))
+                    .asInstanceOf[Any]
+                },
+                foldLeftFn = { (fa: F[CatsDerivationFactories.W1], bAny: Any, fAny: (Any, Any) => Any) =>
                   val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
                   val _ = anyFa
-                  val _ = lbAny
+                  val _ = bAny
                   val _ = fAny
                   Expr
-                    .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(lbAny), Expr.quote(fAny)))
-                    .asInstanceOf[cats.Eval[Any]]
-              }
-            )
+                    .splice(doFoldLeft(Expr.quote(anyFa), Expr.quote(bAny), Expr.quote(fAny)))
+                    .asInstanceOf[Any]
+                },
+                foldRightFn = {
+                  (
+                      fa: F[CatsDerivationFactories.W1],
+                      lbAny: cats.Eval[Any],
+                      fAny: (Any, cats.Eval[Any]) => cats.Eval[Any]
+                  ) =>
+                    val anyFa: F[Any] = fa.asInstanceOf[F[Any]]
+                    val _ = anyFa
+                    val _ = lbAny
+                    val _ = fAny
+                    Expr
+                      .splice(doFoldRight(Expr.quote(anyFa), Expr.quote(lbAny), Expr.quote(fAny)))
+                      .asInstanceOf[cats.Eval[Any]]
+                }
+              )
+            }
           }
         }
       }
