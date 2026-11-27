@@ -646,22 +646,50 @@ paths). An independent reimplementation with the same DSL names, for Scala 2.13 
 
 | Feature | quicklens | Kindlings | Status |
 |---|---|---|---|
-| `modify(_.a.b)` with `using`/`apply`/`setTo`/`setToIfDefined`/`setToIf`/`usingIf` | Yes | Yes | Parity |
-| `.each` / `.eachWhere` over `Seq`s, `Option`, `Map` values | Yes (`Map.eachWhere` only on Scala 3) | Yes, on every container an `IsCollection`/`IsMap`/`IsOption` provider supports (`Set`, `Array`, java and cats collections, ...) | Improvement |
-| `.at(i)` / `.index(i)` / `.atOrElse(i, d)` over `Seq`s | `.at` throws `IndexOutOfBoundsException`, `.atOrElse` appends `f(d)` when absent | Same | Parity |
-| `.at(k)` / `.index(k)` / `.atOrElse(k, d)` over `Map`s, `.at` / `.index` / `.atOrElse(d)` over `Option` | `.at` throws `NoSuchElementException` | Same | Parity |
+| `obj.modify(_.a.b)` and `modify(obj)(_.a.b)` with `using`/`apply`/`setTo`/`setToIfDefined`/`setToIf`/`usingIf` | Yes | Yes | Parity |
+| `.each` / `.eachWhere` over `Seq`s, `Array`, `Option`, `Map` values | Yes (`Map.eachWhere` only on Scala 3) | Yes, on every container an `IsCollection`/`IsMap`/`IsOption` provider supports (`Set`, java and cats collections, ...) | Improvement |
+| `.eachWhere(p)` with a predicate capturing local values | Yes | Yes | Parity |
+| `.at(i)` / `.index(i)` / `.atOrElse(i, d)` over `Seq`s (immutable or not) and `Array` | `.at` throws `IndexOutOfBoundsException` (`ArrayIndexOutOfBoundsException` for an `Array`), `.atOrElse` appends `f(d)` when absent | Same | Parity |
+| `.at(k)` / `.index(k)` / `.atOrElse(k, d)` over `Map`s, `.at` / `.index` / `.atOrElse(d)` over `Option` | `.at` throws `NoSuchElementException`; the default is by-name | Same | Parity |
 | `.eachLeft` / `.eachRight` | Yes | Yes | Parity |
 | `.when[Subtype]`, common fields of sealed hierarchies | Yes | Yes (also Scala 3 `enum`s) | Parity |
-| `modifyAll`, `modifyLens`, `modifyAllLens`, `andThenModify` | Yes | Yes (shared prefixes rebuilt with one `copy`) | Parity |
+| `modifyAll`, `modifyLens`, `modifyAllLens` | Yes | Yes | Parity |
+| `modifyAll`: shared prefixes rebuilt once, shared `.each`/`.eachLeft`/`.eachRight`/`.when[T]` traversed once, overlapping paths applied in the order written | Yes (Scala 3; one modification after another on Scala 2) | Yes, on Scala 2 and 3 | Parity |
+| `andThenModify` on `PathLazyModify` and on `T => PathModify[T, U]` (`modify(_: T)(_.a)`) | Yes | Yes | Parity |
+| Classes with a hand-written `copy` (also a case class' own `copy` replacement) | Yes | Yes | Parity |
+| Case class with a second, implicit parameter list | Yes (a non-implicit one is an error) | Same | Parity |
+| Intersection types and self types (`A & B`, `this.modify` with a self type) | Yes (Scala 3) | Yes, on Scala 2 (`A with B`) and 3 | Parity |
+| Tuples, type aliases, type-parameterised case classes | Yes | Yes | Parity |
 
-### Checked against upstream (oracle)
+### Differences
 
-`upstream-oracle-tests` (`OpticsOracleSpec`) applies the same paths and terminal operations with Kindlings and with
-quicklens to the same values — including missing indices/keys, empty options, `Left`s, sealed hierarchies — and
-compares the results and the exceptions thrown. The one expected difference:
+| Feature | quicklens | Kindlings | Notes |
+|---|---|---|---|
+| Support for a custom container | User-defined `QuicklensFunctor` / `QuicklensIndexedFunctor` / `QuicklensEitherFunctor` (Scala 3), `QuicklensFunctor` / `QuicklensAtFunctor` / `QuicklensMapAtFunctor` (Scala 2) instances | Hearth's `IsCollection`/`IsMap`/`IsOption` providers, the extension point shared with all derivation modules | Design decision: no optics-specific type classes |
+| Rebuilding a plain case class | `copy(field = ...)` | Constructor call (what the generated `copy` does); a hand-written `copy` is called | Same result, no default-argument accessors |
 
-- `.index(i)` with a **negative** index is a no-op, as in quicklens for Scala 3; quicklens for Scala 2 throws
-  `IndexOutOfBoundsException` there (it only checks `i < size`), so on Scala 2.13 this differs.
+### Not ported
+
+| Feature | Notes |
+|---|---|
+| `copy` / field accessors defined as Scala 3 extension methods (also on opaque types) | quicklens for Scala 3 only; Hearth cannot call an extension method's default arguments yet (`docs/research/hearth-bug-case-field-overloaded-by-method.md`) |
+| A focus with a literal type (`modify["foo"](_.f)`) | quicklens for Scala 3 only; the compiler constant-folds the path before the macro sees it |
+
+### Checked against upstream
+
+Two regression nets:
+
+- **quicklens' own test suite** (1.9.15, the shared and the Scala 3 suites) is ported into the module's tests
+  (`optics/src/test/scala*/hearth/kindlings/optics/upstream/`): only the import and the test framework differ. It runs
+  on Scala 2.13 and 3 (the Scala 3-only suites on Scala 3). The suites of the features listed above as different or
+  not ported are the only ones left out.
+- `upstream-oracle-tests` (`OpticsOracleSpec`) applies the same paths and terminal operations with Kindlings and with
+  quicklens to the same values — including missing indices/keys, empty options, `Left`s, sealed hierarchies, arrays,
+  captured local values, `modifyAll` ordering, hand-written `copy` — and compares the results and the exceptions
+  thrown. The one expected difference:
+
+    - `.index(i)` with a **negative** index is a no-op, as in quicklens for Scala 3; quicklens for Scala 2 throws
+      `IndexOutOfBoundsException` there (it only checks `i < size`), so on Scala 2.13 this differs.
 
 ---
 

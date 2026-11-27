@@ -22,6 +22,22 @@ private[optics] trait OpticsSyntax {
       macro internal.compiletime.ModifyMacros.modifyAllImpl[S, A]
   }
 
+  /** `modify(obj)(_.a.b)` — the function spelling of `obj.modify(_.a.b)` (as in quicklens); eta-expanded it is a "lens
+    * as a function": `modify(_: T)(_.a.b)`.
+    */
+  def modify[S, A](obj: S)(path: S => A): PathModify[S, A] = macro internal.compiletime.ModifyMacros.modifyFnImpl[S, A]
+
+  /** `modifyAll(obj)(_.a, _.b)` — the function spelling of `obj.modifyAll(_.a, _.b)`. */
+  def modifyAll[S, A](obj: S)(path: S => A, paths: (S => A)*): PathModify[S, A] =
+    macro internal.compiletime.ModifyMacros.modifyAllFnImpl[S, A]
+
+  /** `modify(_: T)(_.a) andThenModify modify(_: U)(_.b)` — compose two "lenses as functions" (quicklens'
+    * `andThenModify` on `T => PathModify[T, U]`).
+    */
+  implicit final class AndThenModifyOps[T, U](private val f1: T => PathModify[T, U]) {
+    def andThenModify[V](f2: U => PathModify[U, V]): T => PathModify[T, V] = PathModify.andThen(f1, f2)
+  }
+
   /** `modifyLens[T](_.a.b)` — a reusable lens NOT bound to an object; its terminals return a `T => T`. */
   def modifyLens[T]: ModifyLensFactory[T] = new ModifyLensFactory[T]
 

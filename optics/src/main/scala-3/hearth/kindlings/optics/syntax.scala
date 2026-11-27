@@ -26,6 +26,13 @@ private[optics] trait OpticsSyntax {
       ${ internal.compiletime.ModifyMacros.modifyAllImpl[S, A]('obj, 'path, 'paths) }
   }
 
+  /** `modify(_: T)(_.a) andThenModify modify(_: U)(_.b)` — compose two "lenses as functions" (quicklens'
+    * `andThenModify` on `T => PathModify[T, U]`).
+    */
+  extension [T, U](f1: T => PathModify[T, U]) {
+    def andThenModify[V](f2: U => PathModify[U, V]): T => PathModify[T, V] = PathModify.andThen(f1, f2)
+  }
+
   /** `modifyLens[T](_.a.b)` — a reusable lens NOT bound to an object; its terminals return a `T => T`. */
   inline def modifyLens[T]: ModifyLensFactory[T] = new ModifyLensFactory[T]
 
