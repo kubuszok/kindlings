@@ -99,6 +99,11 @@ final case class AvroConfig(
   /** Turn Scala default values of case class fields into Avro schema defaults, as avro4s does. */
   def withScalaDefaultsInSchema: AvroConfig = copy(scalaDefaultsInSchema = true)
 
+  /** Whether Scala default values of case class fields become Avro schema defaults (default: `true`, as avro4s):
+    * `withScalaDefaultsInSchema(false)` is [[withoutScalaDefaultsInSchema]].
+    */
+  def withScalaDefaultsInSchema(enabled: Boolean): AvroConfig = copy(scalaDefaultsInSchema = enabled)
+
   /** Only `@avroDefault` becomes a schema default; Scala default values are used only when decoding. */
   def withoutScalaDefaultsInSchema: AvroConfig = copy(scalaDefaultsInSchema = false)
 }

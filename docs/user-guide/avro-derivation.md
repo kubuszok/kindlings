@@ -109,7 +109,7 @@ implicit val config: AvroConfig = AvroConfig.default
 | `withInstantPrecision(p)` | `Instant` / `java.sql.Timestamp` precision: `TimestampPrecision.Millis` (default), `Micros` or `Nanos` |
 | `withLocalDateTimePrecision(p)` | `LocalDateTime` precision: `TimestampPrecision.Nanos` (default, as avro4s), `Micros` or `Millis` |
 | `withOffsetDateTimeAsIsoString` | Encode `OffsetDateTime` as avro4s does: an ISO-8601 string (default: a UTC `timestamp-millis` long) |
-| `withoutScalaDefaultsInSchema` | Only `@avroDefault` becomes a schema default (by default Scala default values do, as in avro4s) |
+| `withoutScalaDefaultsInSchema` / `withScalaDefaultsInSchema(enabled)` | Whether Scala default values become schema defaults (default: yes, as in avro4s). When off, only `@avroDefault` becomes a schema default |
 
 `AvroConfig.avro4sDefaults` is a preset with avro4s' behaviour where Kindlings' defaults differ: `BigDecimal` as
 `decimal(8, 2)` and `OffsetDateTime` as an ISO-8601 string (see
