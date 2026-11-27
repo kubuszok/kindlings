@@ -109,7 +109,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("arrays")(check(JuCases.defaults.arrays, JuSamples.arrays)())
     test("arrayArrayTop")(check(JuCases.defaults.arrayArrayTop, JuSamples.arrayArrayTop)())
     test("iterables")(check(JuCases.defaults.iterables, JuSamples.iterables)())
-    // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): the `Factory` Hearth summons for an
+    // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): the `Factory` Hearth summons for an
     // abstract collection type is the one of its *element* type's companion when that is a subtype of it
     // (`mutable.IndexedSeq[mutable.ArrayStack[Float]]` is built as a `mutable.Stack`, jsoniter-scala: an `ArrayBuffer`).
     test("mutableIterables")(
@@ -126,7 +126,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     test("emptyIterables2")(check(JuCases.defaults.emptyIterables2, JuSamples.emptyIterables2)())
     test("mutableSetTop")(check(JuCases.defaults.mutableSetTop, JuSamples.mutableSetTop)())
     test("genericMaps")(check(JuCases.defaults.genericMaps, JuSamples.genericMaps)())
-    // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): the `Factory` Hearth summons for an
+    // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): the `Factory` Hearth summons for an
     // abstract collection type is the one of its *element* type's companion when that is a subtype of it
     // (`mutable.Map[Float, mutable.ListMap[BigInt, String]]` is built as a `mutable.ListMap`, jsoniter-scala: a `HashMap`).
     test("mutableMaps")(
@@ -816,6 +816,27 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
     }
   }
 
+  group("gaps") {
+    // Hearth (Scala 2) reports the case field of a back-quoted name which starts or ends with a space (upstream's
+    // `Operators` fixture: \` =<>!#%^&|*/\\~+-:$ \`) under another name than its constructor parameter, so the
+    // field is not found. See docs/research/hearth-findings-jsoniter-parity-2026-11.md (6).
+    test("a field name which starts or ends with a space is not derivable on Scala 2") {
+      val errors =
+        compileErrors("hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[JUSpacedName]")
+      assertEquals(errors.contains("should be defined as 'val' or 'var'"), !JoScalaVersion.isScala3, errors)
+    }
+  }
+
+  group("gaps (continued)") {
+    // Hearth (Scala 3) fails on a Java enum nested in a Java class (upstream's `Levels.InnerLevel` fixture). See
+    // docs/research/hearth-findings-jsoniter-parity-2026-11.md (3).
+    test("a Java enum nested in a Java class is not derivable on Scala 3") {
+      val errors =
+        compileErrors("hearth.kindlings.jsoniterderivation.KindlingsJsonValueCodec.derived[java.lang.Thread.State]")
+      assertEquals(errors.contains("expected a term symbol"), JoScalaVersion.isScala3, errors)
+    }
+  }
+
   group("collections keep their implementation and ordering") {
     test("sorted collections are rebuilt as sorted ones") {
       val json =
@@ -854,7 +875,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ub.head.getClass.getName
         )
       }
-      // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): `mutable.IndexedSeq[ArrayStack[_]]`
+      // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): `mutable.IndexedSeq[ArrayStack[_]]`
       // is built with the `Factory` of its element type's companion (`mutable.Stack`).
       assertEquals(
         differences,
@@ -875,7 +896,7 @@ final class JsoniterUpstreamSpecOracleSpec extends MacroSuite {
           read.ohm.head._2.getClass.getName
         )
       }
-      // Hearth bug (docs/research/hearth-bug-collection-factory-of-element-type.md): `mutable.Map[_, mutable.ListMap[_, _]]`
+      // Hearth bug (docs/research/hearth-findings-jsoniter-parity-2026-11.md, 1): `mutable.Map[_, mutable.ListMap[_, _]]`
       // is built with the `Factory` of its value type's companion (`mutable.ListMap`).
       assertEquals(
         differences,

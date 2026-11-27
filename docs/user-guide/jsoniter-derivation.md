@@ -203,7 +203,13 @@ As in jsoniter-scala:
 | named tuple `(i = 1, s = "a")` | `{"i":1,"s":"a"}` | `{"i":1,"s":"a"}` |
 
 Decoding also accepts `{"Leaf":{}}` for a case object without a discriminator (a Kindlings superset). The same names
-are used for enum map keys. `@named("X")` on a leaf class, case object or Scala 3 enum case overrides its name (not
+are used for enum map keys.
+
+As in jsoniter-scala, the values of a `scala.Enumeration` are looked up among the values the enumeration has at
+runtime (by name or by id), so they do not have to be public `val`s: private, lazy and mutable ones, values created by
+a method (`def extra(name: String) = Value(nextId, name)`) and values added after the codec was created are written
+and read too. A codec derived for a case object itself (`derived[Leaf.type]`) reads any JSON object - and `null` - as
+the object, which is also its `nullValue`. `@named("X")` on a leaf class, case object or Scala 3 enum case overrides its name (not
 mapped).
 
 As in jsoniter-scala, ADT leaves may also be plain (non-case) classes and objects, and a non-abstract sealed class is

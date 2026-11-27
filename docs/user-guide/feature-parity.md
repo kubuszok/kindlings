@@ -562,6 +562,13 @@ option with an upstream counterpart (field/leaf/Java-enum name mappers, discrimi
 keys), `::`, ADTs, Scala 3 enums, Java enums, `Enumeration`s, value classes, tuples (generic, named, recursive),
 recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Either`.
 
+`JsoniterUpstreamSpecOracleSpec` does the same with jsoniter-scala's **own test suite**: the fixtures, values and inputs
+of its `JsonCodecMakerSpec` (v2.42.3; about 330 cases: primitives and their boxes at the top level, stringified and as
+map keys, `Enumeration`s with private/lazy/later-added values, arrays, iterators, mutable/immutable/sorted
+collections and maps, `IntMap`/`LongMap`/bit sets, all `java.time` types as values and keys, value classes and
+one-value classes, defaults, transient fields, name mappers, required fields, ADT shapes and generic/higher-kinded
+types).
+
 ### Configuration
 
 | Feature | jsoniter-scala | Kindlings | Status |
@@ -590,6 +597,7 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
 | Compile-time config validations (flag conflicts, key and discriminator collisions) | Yes | Yes (compile-time configs; flag conflicts of runtime configs throw `IllegalArgumentException` when the codec is created) | Parity |
 | `mapMaxInsertNumber` / `setMaxInsertNumber` | Yes (DoS protection) | Yes (`setMaxInsertNumber` limits only sets, as upstream) | Parity |
 | `useScalaEnumValueId` | Yes | Yes | Parity |
+| `Enumeration` values which are not public `val`s (private, lazy, `var`, created by a method, added after the codec was created) | Yes (looked up at runtime) | Yes (same) | Parity |
 | `javaEnumValueNameMapper` | Yes | Yes (`withJavaEnumValueNameMapper`) | Parity |
 | `inlineOneValueClasses` | Yes (also map keys) | Yes (`withInlineOneValueClasses`, also map keys and transient parameters) | Parity |
 | `bitSetValueLimit` (DoS protection) | Yes | Yes | Parity |
@@ -635,6 +643,10 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
 | Plain (non-case) classes, plain-class/object ADT leaves, non-abstract sealed classes as leaves | Yes | Yes | Parity |
 | Multiple parameter lists (with dependent defaults) | Yes | Yes | Parity |
 | User-provided codecs of ADT leaves with a discriminator | Yes (encode/decode the whole leaf object) | Yes (same) | Parity |
+| Codecs of case objects (`derived[Leaf.type]`) | Yes (any JSON object or `null` is the object, which is its `nullValue`) | Yes (same) | Parity |
+| Field names and ADT leaf names with operators (`kebab-case`, `US/Alaska`) | Yes | Yes (a field name which *starts or ends with a space* is not derivable on Scala 2) | Parity (gap: spaces, Scala 2) |
+| Case classes nested in a trait, with default values (`trait T { case class U(a: Int = 1) }; object T extends T`) | Yes | No: the compiler fails after the macro expansion (Hearth bug; without default values such classes work) | Gap |
+| Java enums nested in a Java class (`Thread.State`) | Yes | Scala 2: yes. Scala 3: derivation fails (Hearth bug) | Gap (Scala 3) |
 | `nullValue` / `default` semantics (`None`, empty collections, `null` and `[]`/`{}` of a collection field → field default, user-provided field codecs receive the field default) | Yes | Yes (except: with `checkFieldDuplication = false`, a repeated key's decoder gets the field default, not the value read for the earlier occurrence) | Parity |
 
 ### Cross-compilation
@@ -654,6 +666,11 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
   the earlier occurrence).
 - Error messages for a value of another JSON type in a field with a default value do not say `or null`
   (`expected '{'`; upstream: `expected '{' or null`).
+- Collections are built with the `Factory` the compiler finds for the field's type; for an abstract collection type
+  whose *element* type is a collection which is a subtype of it (`mutable.Map[K, mutable.ListMap[..]]`,
+  `mutable.IndexedSeq[mutable.Stack[A]]`) that is the element type's implementation, where jsoniter-scala builds the
+  declared type's default one (a Hearth issue, see `docs/research/hearth-findings-jsoniter-parity-2026-11.md`).
+- A `null` Java enum value fails with a `MatchError` when written (upstream: `NullPointerException`).
 - Where upstream's Scala 2 and Scala 3 macros report different errors (ADTs without case objects, or with
   `circeLikeObjectEncoding`, given something else than an object: `expected '{'` / `expected '"' or '{'`), Kindlings
   reports what upstream reports on the same Scala version.

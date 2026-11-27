@@ -220,7 +220,7 @@ trait CodecMacrosImpl
 
   /** Scala 3 only sees the values of a Java enum read from a class file once the infos of its constants were completed:
     * an enum none of whose constants is referred to by the code being compiled would have no children (and would not be
-    * an enum for Hearth). See docs/research/hearth-bug-java-enum-children-not-completed.md.
+    * an enum for Hearth). See docs/research/hearth-findings-jsoniter-parity-2026-11.md (4).
     */
   protected def completeJavaEnum[A: Type]: Unit = ()
 
@@ -281,8 +281,11 @@ trait CodecMacrosImpl
       noArgs.stripSuffix(".type").stripSuffix("$")
     }
     val printed = clean(Type.plainPrint[Child])
-    if (printed == childName || printed.endsWith("." + childName)) printed
-    else clean(Type.plainPrint[A]) + "." + childName
+    val fullName =
+      if (printed == childName || printed.endsWith("." + childName)) printed
+      else clean(Type.plainPrint[A]) + "." + childName
+    // Scala 2 prints the encoded names of symbolic identifiers (`US$divAlaska` for `US/Alaska`).
+    if (Environment.isScala3) fullName else scala.reflect.NameTransformer.decode(fullName)
   }
 
   /** The leaves of an ADT / enum (nested sealed hierarchies flattened), and as in jsoniter-scala the type itself (last,
