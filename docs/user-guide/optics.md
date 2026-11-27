@@ -47,6 +47,10 @@ println(updated.address.street.name)
 // MAIN
 ```
 
+`modify(obj)(_.a.b.c)` is the same thing spelled as a function (quicklens offers both): handy when the object is an
+expression, or to make a "lens as a function" with `modify(_: Person)(_.address.street.name)` (see
+[Reusable lenses](#reusable-lenses-modifylens-modifyalllens-andthenmodify)). `modifyAll(obj)(_.a, _.b)` exists too.
+
 ### Terminal operations
 
 `PathModify[S, A]` (the result of `obj.modify(_…)`) offers:
@@ -120,7 +124,8 @@ println(team.modify(_.members.each).using(_.toUpperCase).members.toList.mkString
 
 ## Indexed access — `.at`, `.index`, `.atOrElse`
 
-`.at(i)` focuses the element at index `i` (throwing `IndexOutOfBoundsException` if absent); `.index(i)` is a no-op when
+`.at(i)` focuses the element at index `i` of a `Seq` (immutable or not) or an `Array` (throwing
+`IndexOutOfBoundsException` if absent); `.index(i)` is a no-op when
 absent; `.atOrElse(i, d)` appends `f(d)` at the end when `i` is absent (whatever `i` is), as quicklens does. The same
 three names also work on a `Map` (keyed by the map key: `.at` throws `NoSuchElementException`, `.atOrElse` inserts
 `key -> f(d)`) and on an `Option` (with no index argument: `.at` / `.index` / `.atOrElse(default)`; `.at` on `None`
@@ -220,6 +225,11 @@ println(n.modifyAll(_.first, _.third).using(_.toUpperCase))
 // Names(ANN,bob,CID)
 ```
 
+Paths starting with the same traversal (`.each`, `.eachLeft`/`.eachRight`, `.when[T]`) share it as well:
+`modifyAll(_.xs.each.a, _.xs.each.b)` goes through `xs` once and rebuilds each element once. When one path focuses a
+part of what another one focuses, the modifications are applied in the order the paths are written
+(`modifyAll(_.a.each, _.a)` modifies the elements first, then the collection made of the modified elements).
+
 A `.each` path can be mixed with a plain field path; the modification is applied to every focus:
 
 ```scala
@@ -280,6 +290,56 @@ println(toCityOfPerson.setTo("Berlin")(Person("ann", Address("old", "main"))))
 // Person(ann,Address(Berlin,main))
 ```
 
+The function spelling of `modify` gives a third kind of lens, as in quicklens: `modify(_: T)(_.a)` is a
+`T => PathModify[T, A]`, and two of them compose with `andThenModify` too:
+
+```scala
+//> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+
+import hearth.kindlings.optics._
+
+final case class Address(city: String, street: String)
+final case class Person(name: String, address: Address)
+
+val toAddress = modify(_: Person)(_.address)
+val toCity    = modify(_: Address)(_.city)
+
+println((toAddress andThenModify toCity)(Person("ann", Address("old", "main"))).setTo("Berlin"))
+// expected output:
+// Person(ann,Address(Berlin,main))
+```
+
+## Classes with a `copy` method
+
+A `_.field` step is not limited to case classes: any class with a `copy` method that has a parameter named like the
+field (and default values for the other ones) works, as in quicklens. The field is read with the member of that name
+and the value is rebuilt with `value.copy(field = ...)`:
+
+```scala
+//> using dep com.kubuszok::kindlings-optics:{{ kindlings_version() }}
+
+import hearth.kindlings.optics._
+
+final class Vec(val x: Int, val y: Int) {
+  def copy(x: Int = x, y: Int = y): Vec = new Vec(x, y)
+  override def toString: String = s"Vec($x, $y)"
+}
+
+println(new Vec(1, 2).modify(_.x).using(_ + 10))
+// expected output:
+// Vec(11, 2)
+```
+
+The same mechanism covers:
+
+- a case class with a hand-written `copy` (it replaces the generated one, and is the one called);
+- a case class with a second, **implicit** parameter list (`case class State(on: Boolean)(implicit d: Scale)`): the
+  implicit is resolved where `modify` is called. A second non-implicit parameter list is a compilation error;
+- intersection types and self types (`val ab: A & B`, or `this.modify(...)` inside a class with a self type), when one
+  of the components has the `copy`.
+
+A plain case class is rebuilt by calling its constructor, which is what its generated `copy` does.
+
 ## Errors
 
 The `.each`/`.at`/`.when`/... markers are `@compileTimeOnly` — using one outside a `modify`/`modifyLens` path is a
@@ -288,17 +348,22 @@ message naming the unsupported step.
 
 ## Notes & limitations
 
-- **What you can descend into.** A `_.field` step works on **case classes** and on **sealed hierarchies / Scala 3
+- **What you can descend into.** A `_.field` step works on **case classes**, on **sealed hierarchies / Scala 3
   `enum`s** — if a field is declared on the trait/enum (and present on every case), `modify(_.field)` generates the
-  match over subtypes for you, no `.when[Sub]` needed. **Collections, `Option`, `Either` and `Map`s** are traversed
-  with their combinators (`.each`, `.at`/`.index`/`.atOrElse`, `.eachLeft`/`.eachRight`), not by field descent — so all
-  of those work out of the box. The remaining gap is a **product-like class with a hand-written `copy`** that is neither
-  a case class nor a sealed hierarchy — that is **not** supported yet.
+  match over subtypes for you, no `.when[Sub]` needed — and on any **class with a `copy` method** taking that field
+  (see [Classes with a `copy` method](#classes-with-a-copy-method)). **Collections, `Option`, `Either` and `Map`s** are
+  traversed with their combinators (`.each`, `.at`/`.index`/`.atOrElse`, `.eachLeft`/`.eachRight`), not by field
+  descent.
+- **Not supported** (quicklens for Scala 3 has them): a `copy` or a field accessor defined as an **extension method**
+  (e.g. on an opaque type), and a focus with a **literal type** (`modify["foo"](_.f)`).
+- **Custom containers** are plugged in with Hearth's `IsCollection`/`IsMap`/`IsOption` providers (shared with every
+  derivation module), not with quicklens' `QuicklensFunctor`-style type classes.
 - Documentation snippets here mirror the module's passing test suite (`ModifyFieldSpec`, `EachSpec`, `AtIndexSpec`,
   `EitherSpec`, `WhenSpec`, `SealedFieldSpec`, `ModifyAllSpec`, `LensCompositionSpec`); their full snippet-test
   execution runs in CI.
-- Behaviour is checked against quicklens itself by `OpticsOracleSpec` in `upstream-oracle-tests` (see
-  [Feature parity](feature-parity.md#optics)).
+- Behaviour is checked against quicklens twice: quicklens' own test suite runs against Kindlings (the
+  `hearth.kindlings.optics.upstream` tests), and `OpticsOracleSpec` in `upstream-oracle-tests` applies the same paths
+  with both libraries and compares the results (see [Feature parity](feature-parity.md#optics)).
 
 ## Debugging
 

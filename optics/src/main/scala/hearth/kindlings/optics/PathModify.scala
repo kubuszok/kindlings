@@ -29,6 +29,15 @@ final case class PathModify[S, A](private val obj: S, private val doModify: (S, 
   def usingIf(cond: Boolean)(mod: A => A): S = if (cond) using(mod) else obj
 }
 
+object PathModify {
+
+  /** Compose two "lenses as functions" (`modify(_: T)(_.a)` and `modify(_: U)(_.b)`), as quicklens' `andThenModify` on
+    * `T => PathModify[T, U]`: the result focuses through the first, then through the second.
+    */
+  def andThen[T, U, V](f1: T => PathModify[T, U], f2: U => PathModify[U, V]): T => PathModify[T, V] =
+    (t: T) => PathModify[T, V](t, (t0: T, mod: V => V) => f1(t0).using(u => f2(u).using(mod)))
+}
+
 /** A *reusable* lens, the result of `modifyLens[T](_.a.b)` / `modifyAllLens[T](_.a, _.b)`: a focused view on a
   * (possibly deeply nested) field `U` of `T` that is NOT bound to a specific object. Carries only the
   * compiler-generated copy-with-modification function `doModify`; its terminal operations (`using`/`setTo`/...) return

@@ -66,6 +66,52 @@ final class OpticsOracleSpec extends MacroSuite {
       )
     )
 
+    // quicklens for Scala 2 reaches `.at`/`.index`/`.atOrElse` on an `Array` through a deprecated implicit conversion
+    @scala.annotation.nowarn("cat=deprecation")
+    def extras(p: OpPerson, v: OpVec, items: Array[OpStreet]): List[(String, Either[String, Any])] = {
+      val prefix = "a"
+      implicit val scale: OpScale = OpScale(2)
+      val scaled = OpScaled(1)
+      val streetName = modify(_: OpPerson)(_.address.street.name)
+      val address = modify(_: OpPerson)(_.address)
+      val streetNumber = modify(_: OpAddress)(_.street.number)
+      List(
+        "modify(obj)(path)" -> outcome(modify(p)(_.address.city).using(_.toUpperCase)),
+        "modifyAll(obj)(paths)" -> outcome(modifyAll(p)(_.name, _.address.city).using(_.toUpperCase)),
+        "lens as a function" -> outcome(streetName(p).setTo("z")),
+        "andThenModify on functions" -> outcome((address andThenModify streetNumber)(p).using(_ + 1)),
+        "eachWhere capturing a local val" -> outcome(
+          p.modify(_.nicknames.eachWhere(_.startsWith(prefix))).using(_.toUpperCase)
+        ),
+        "Seq.eachWhere.field capturing a local val" -> outcome(
+          p.modify(_.seq.eachWhere(_.name != prefix).number).using(_ + 1)
+        ),
+        "Array.each" -> outcome(modify(items)(_.each.number).using(_ + 1).toList),
+        "Array.at(1)" -> outcome(modify(items)(_.at(1).name).setTo("z").toList),
+        "Array.at(5) (missing)" -> outcome(modify(items)(_.at(5).name).setTo("z").toList),
+        "Array.index(1)" -> outcome(modify(items)(_.index(1).name).setTo("z").toList),
+        "Array.index(5) (missing)" -> outcome(modify(items)(_.index(5).name).setTo("z").toList),
+        "Array.atOrElse(1, d)" -> outcome(modify(items)(_.atOrElse(1, OpStreet("d", 0)).name).setTo("z").toList),
+        "Array.atOrElse(5, d) (missing)" -> outcome(
+          modify(items)(_.atOrElse(5, OpStreet("d", 0)).name).setTo("z").toList
+        ),
+        "modifyAll: the same path twice" -> outcome(p.modifyAll(_.age, _.age).using(_ + 1)),
+        "modifyAll: child, parent, child" -> outcome(
+          OpFixtures.nodes.modifyAll(_.next.each.next.each, _.next.each, _.next.each.next.each).using {
+            case OpNode(value, next) if value >= 3    => OpNode(value + 1, next)
+            case OpNode(value, Some(OpNode(4, next))) => OpNode(value + 1, Some(OpNode(4, next)))
+            case other                                => other
+          }
+        ),
+        "modifyAll: paths sharing an each" -> outcome(
+          p.modifyAll(_.seq.each.name, _.maybeAddress.each.city, _.maybeAddress.each.street.name).using(_.toUpperCase)
+        ),
+        "class with a hand-written copy" -> outcome(v.modify(_.x).using(_ + 1).show),
+        "class with a hand-written copy: modifyAll" -> outcome(v.modifyAll(_.x, _.y).using(_ + 1).show),
+        "case class with an implicit parameter list" -> outcome(scaled.modify(_.value).using(_ + 1).scaledValue)
+      )
+    }
+
     def zoo(z: OpZoo): List[(String, Either[String, Any])] = List(
       "when[Dog].field" -> outcome(z.modify(_.main.when[OpDog].age).using(_ + 1)),
       "when[Cat].field" -> outcome(z.modify(_.main.when[OpCat].indoor).setTo(true)),
@@ -129,6 +175,52 @@ final class OpticsOracleSpec extends MacroSuite {
       )
     )
 
+    // quicklens for Scala 2 reaches `.at`/`.index`/`.atOrElse` on an `Array` through a deprecated implicit conversion
+    @scala.annotation.nowarn("cat=deprecation")
+    def extras(p: OpPerson, v: OpVec, items: Array[OpStreet]): List[(String, Either[String, Any])] = {
+      val prefix = "a"
+      implicit val scale: OpScale = OpScale(2)
+      val scaled = OpScaled(1)
+      val streetName = modify(_: OpPerson)(_.address.street.name)
+      val address = modify(_: OpPerson)(_.address)
+      val streetNumber = modify(_: OpAddress)(_.street.number)
+      List(
+        "modify(obj)(path)" -> outcome(modify(p)(_.address.city).using(_.toUpperCase)),
+        "modifyAll(obj)(paths)" -> outcome(modifyAll(p)(_.name, _.address.city).using(_.toUpperCase)),
+        "lens as a function" -> outcome(streetName(p).setTo("z")),
+        "andThenModify on functions" -> outcome((address andThenModify streetNumber)(p).using(_ + 1)),
+        "eachWhere capturing a local val" -> outcome(
+          p.modify(_.nicknames.eachWhere(_.startsWith(prefix))).using(_.toUpperCase)
+        ),
+        "Seq.eachWhere.field capturing a local val" -> outcome(
+          p.modify(_.seq.eachWhere(_.name != prefix).number).using(_ + 1)
+        ),
+        "Array.each" -> outcome(modify(items)(_.each.number).using(_ + 1).toList),
+        "Array.at(1)" -> outcome(modify(items)(_.at(1).name).setTo("z").toList),
+        "Array.at(5) (missing)" -> outcome(modify(items)(_.at(5).name).setTo("z").toList),
+        "Array.index(1)" -> outcome(modify(items)(_.index(1).name).setTo("z").toList),
+        "Array.index(5) (missing)" -> outcome(modify(items)(_.index(5).name).setTo("z").toList),
+        "Array.atOrElse(1, d)" -> outcome(modify(items)(_.atOrElse(1, OpStreet("d", 0)).name).setTo("z").toList),
+        "Array.atOrElse(5, d) (missing)" -> outcome(
+          modify(items)(_.atOrElse(5, OpStreet("d", 0)).name).setTo("z").toList
+        ),
+        "modifyAll: the same path twice" -> outcome(p.modifyAll(_.age, _.age).using(_ + 1)),
+        "modifyAll: child, parent, child" -> outcome(
+          OpFixtures.nodes.modifyAll(_.next.each.next.each, _.next.each, _.next.each.next.each).using {
+            case OpNode(value, next) if value >= 3    => OpNode(value + 1, next)
+            case OpNode(value, Some(OpNode(4, next))) => OpNode(value + 1, Some(OpNode(4, next)))
+            case other                                => other
+          }
+        ),
+        "modifyAll: paths sharing an each" -> outcome(
+          p.modifyAll(_.seq.each.name, _.maybeAddress.each.city, _.maybeAddress.each.street.name).using(_.toUpperCase)
+        ),
+        "class with a hand-written copy" -> outcome(v.modify(_.x).using(_ + 1).show),
+        "class with a hand-written copy: modifyAll" -> outcome(v.modifyAll(_.x, _.y).using(_ + 1).show),
+        "case class with an implicit parameter list" -> outcome(scaled.modify(_.value).using(_ + 1).scaledValue)
+      )
+    }
+
     def zoo(z: OpZoo): List[(String, Either[String, Any])] = List(
       "when[Dog].field" -> outcome(z.modify(_.main.when[OpDog].age).using(_ + 1)),
       "when[Cat].field" -> outcome(z.modify(_.main.when[OpCat].indoor).setTo(true)),
@@ -169,6 +261,15 @@ final class OpticsOracleSpec extends MacroSuite {
       compare(Kindlings.person(OpFixtures.personWithoutOptions), Quicklens.person(OpFixtures.personWithoutOptions))(
         negativeIndex*
       )
+    }
+
+    // quicklens' own suite is the checklist: LensTest, ModifyArray*Test, ModifyEachWhereTest, ModifyAllOrderTest,
+    // ModifyAllOptimizedTest, ExplicitCopyTest, SecondParamListTest.
+    test("function spellings, arrays, captured locals, modifyAll order, hand-written copy, implicit parameters") {
+      compare(
+        Kindlings.extras(OpFixtures.person, OpFixtures.vec, OpFixtures.items),
+        Quicklens.extras(OpFixtures.person, OpFixtures.vec, OpFixtures.items)
+      )()
     }
 
     test("sealed hierarchies: when[Subtype] and common fields") {

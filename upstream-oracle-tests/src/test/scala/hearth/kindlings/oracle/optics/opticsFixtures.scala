@@ -23,7 +23,28 @@ final case class OpCat(name: String, indoor: Boolean) extends OpAnimal
 
 final case class OpZoo(main: OpAnimal, animals: List[OpAnimal], keeper: Option[OpPerson])
 
+/** Not a case class: modified through its hand-written `copy`. */
+final class OpVec(val x: Int, val y: Int) {
+  def copy(x: Int = x, y: Int = y): OpVec = new OpVec(x, y)
+  def show: String = s"OpVec($x, $y)"
+}
+
+final case class OpScale(factor: Int)
+
+/** A case class with a second, implicit parameter list: `copy` resolves it at the call site. */
+final case class OpScaled(value: Int)(implicit val scale: OpScale) {
+  def scaledValue: Int = value * scale.factor
+}
+
+final case class OpNode(value: Int, next: Option[OpNode])
+
 object OpFixtures {
+
+  val nodes: OpNode = OpNode(1, Some(OpNode(2, Some(OpNode(3, None)))))
+
+  val vec: OpVec = new OpVec(1, 2)
+
+  def items: Array[OpStreet] = Array(OpStreet("x", 1), OpStreet("y", 2), OpStreet("z", 3))
 
   val person: OpPerson = OpPerson(
     name = "ann",

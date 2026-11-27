@@ -143,16 +143,20 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     // focus is exactly `mod(<leaf>)`. The lambda parameters `s`/`mod` are quote-bound; their `Expr` handles are
     // recovered for the macro-side `buildModify` via `Expr.quote(s)` / `Expr.quote(mod)` (the standard Hearth cross-quote
     // idiom — see cats-derivation `FunctorMacrosImpl`).
-    val doModify: Expr[(S, A => A) => S] =
-      Expr.quote { (s: S, mod: A => A) =>
-        Expr.splice {
-          buildModify[S](Expr.quote(s), steps) { leaf =>
-            applyLeaf[S, A](Expr.quote(mod), leaf)
+    implicit val resultType: Type[PathModify[S, A]] = Type.of[PathModify[S, A]]
+    val result = withHoistedPredicates[PathModify[S, A]](List(steps)) { hoisted =>
+      val steps = hoisted.head
+      val doModify: Expr[(S, A => A) => S] =
+        Expr.quote { (s: S, mod: A => A) =>
+          Expr.splice {
+            buildModify[S](Expr.quote(s), steps) { leaf =>
+              applyLeaf[S, A](Expr.quote(mod), leaf)
+            }
           }
         }
-      }
 
-    val result = Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+      Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    }
     emitGenerationLog("modify", trace, result.prettyPrint)
     result
   }
@@ -233,8 +237,8 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   }
 
   /** Materialize the indexed `.at`/`.index`/`.atOrElse` evidence `IsIndexedElementOf.Aux[C, Idx, Elem]` from the SPI: a
-    * `Map` is keyed by its key type (`IsMap`), a `Seq` is positional (`Int`, element from `IsCollection`). Restricted
-    * to `immutable.Seq` so positional `.at` is not offered on unordered collections (e.g. `Set`).
+    * `Map` is keyed by its key type (`IsMap`), a `Seq` or an `Array` is positional (`Int`, element from
+    * `IsCollection`). Restricted to those so positional `.at` is not offered on unordered collections (e.g. `Set`).
     */
   def deriveIsIndexedElementOf[C: Type]: Expr[IsIndexedElementOf[C]] = {
     ensureStdExtensionsLoaded()
@@ -242,7 +246,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       case IsMap(m) =>
         import m.Underlying as Pair
         isIndexedWitnessForMap[C, Pair](m.value)
-      case IsCollection(coll) if isImmutableSeq[C] =>
+      case IsCollection(coll) if isSeqOrArray[C] =>
         import coll.Underlying as Item
         Expr.quote(IsIndexedElementOf.witness[C, Int, Item]).asInstanceOf[Expr[IsIndexedElementOf[C]]]
       case _ =>
@@ -259,9 +263,10 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     Expr.quote(IsIndexedElementOf.witness[C, Key, Value]).asInstanceOf[Expr[IsIndexedElementOf[C]]]
   }
 
-  private def isImmutableSeq[C: Type]: Boolean = {
-    implicit val seqAny: Type[scala.collection.immutable.Seq[Any]] = Type.of[scala.collection.immutable.Seq[Any]]
-    Type.isSubtypeOf[C, scala.collection.immutable.Seq[Any]]
+  // As quicklens: any `Seq` (immutable or not) and `Array`; not the unordered collections (e.g. `Set`).
+  private def isSeqOrArray[C: Type]: Boolean = {
+    implicit val seqAny: Type[scala.collection.Seq[Any]] = Type.of[scala.collection.Seq[Any]]
+    Type.isSubtypeOf[C, scala.collection.Seq[Any]] || Type.Ctor1.of[Array].unapply(Type[C]).isDefined
   }
 
   /** `obj.modifyAll(_.a, _.b.each, _.c)` → `PathModify[S, A]`. Parses each path into its own list of [[PathStep]]s,
@@ -280,15 +285,18 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAll[${Type.prettyPrint[S]} => ${Type.prettyPrint[A]}] over ${pathSteps.size} path(s)")
     pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
-    val doModify: Expr[(S, A => A) => S] =
-      Expr.quote { (s: S, mod: A => A) =>
-        Expr.splice {
-          buildModifyMulti[S](Expr.quote(s), pathSteps) { leaf =>
-            applyLeaf[S, A](Expr.quote(mod), leaf)
+    implicit val resultType: Type[PathModify[S, A]] = Type.of[PathModify[S, A]]
+    val result = withHoistedPredicates[PathModify[S, A]](pathSteps) { pathSteps =>
+      val doModify: Expr[(S, A => A) => S] =
+        Expr.quote { (s: S, mod: A => A) =>
+          Expr.splice {
+            buildModifyMulti[S](Expr.quote(s), pathSteps) { leaf =>
+              applyLeaf[S, A](Expr.quote(mod), leaf)
+            }
           }
         }
-      }
-    val result = Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+      Expr.quote(PathModify[S, A](Expr.splice(obj), Expr.splice(doModify)))
+    }
     emitGenerationLog("modifyAll", trace, result.prettyPrint)
     result
   }
@@ -302,15 +310,19 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     val steps: List[PathStep] = parsePath[P](path)
     trace.step(s"modifyLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}]")
     trace.step(s"parsed path: ${describeSteps(steps)}")
-    val doModify: Expr[(T, Foc => Foc) => T] =
-      Expr.quote { (t: T, mod: Foc => Foc) =>
-        Expr.splice {
-          buildModify[T](Expr.quote(t), steps) { leaf =>
-            applyLeaf[T, Foc](Expr.quote(mod), leaf)
+    implicit val resultType: Type[PathLazyModify[T, Foc]] = Type.of[PathLazyModify[T, Foc]]
+    val result = withHoistedPredicates[PathLazyModify[T, Foc]](List(steps)) { hoisted =>
+      val steps = hoisted.head
+      val doModify: Expr[(T, Foc => Foc) => T] =
+        Expr.quote { (t: T, mod: Foc => Foc) =>
+          Expr.splice {
+            buildModify[T](Expr.quote(t), steps) { leaf =>
+              applyLeaf[T, Foc](Expr.quote(mod), leaf)
+            }
           }
         }
-      }
-    val result = Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+      Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    }
     emitGenerationLog("modifyLens", trace, result.prettyPrint)
     result
   }
@@ -325,17 +337,45 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     val pathSteps: List[List[PathStep]] = paths.map(parsePath[P])
     trace.step(s"modifyAllLens[${Type.prettyPrint[T]} => ${Type.prettyPrint[Foc]}] over ${pathSteps.size} path(s)")
     pathSteps.foreach(steps => trace.step(s"  parsed path: ${describeSteps(steps)}"))
-    val doModify: Expr[(T, Foc => Foc) => T] =
-      Expr.quote { (t: T, mod: Foc => Foc) =>
-        Expr.splice {
-          buildModifyMulti[T](Expr.quote(t), pathSteps) { leaf =>
-            applyLeaf[T, Foc](Expr.quote(mod), leaf)
+    implicit val resultType: Type[PathLazyModify[T, Foc]] = Type.of[PathLazyModify[T, Foc]]
+    val result = withHoistedPredicates[PathLazyModify[T, Foc]](pathSteps) { pathSteps =>
+      val doModify: Expr[(T, Foc => Foc) => T] =
+        Expr.quote { (t: T, mod: Foc => Foc) =>
+          Expr.splice {
+            buildModifyMulti[T](Expr.quote(t), pathSteps) { leaf =>
+              applyLeaf[T, Foc](Expr.quote(mod), leaf)
+            }
           }
         }
-      }
-    val result = Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+      Expr.quote(PathLazyModify[T, Foc](Expr.splice(doModify)))
+    }
     emitGenerationLog("modifyAllLens", trace, result.prettyPrint)
     result
+  }
+
+  /** Bind every `.eachWhere` predicate to a `val` in front of the generated `PathModify`/`PathLazyModify` and make the
+    * steps refer to it, so the predicate — a lambda written inside the path lambda — is evaluated once and stays at the
+    * call site. Moved into the generated modification function instead, a predicate capturing a local `val` crashes the
+    * Scala 2 compiler (its closure is owned by the call site, but would be nested in the generated function).
+    */
+  private def withHoistedPredicates[R: Type](paths: List[List[PathStep]])(
+      use: List[List[PathStep]] => Expr[R]
+  ): Expr[R] = {
+    def hoistPath(todo: List[PathStep], done: List[PathStep])(continue: List[PathStep] => Expr[R]): Expr[R] =
+      todo match {
+        case Nil                                                      => continue(done.reverse)
+        case (each @ PathStep.Each(_, _, Some(predicate), _)) :: rest =>
+          import predicate.Underlying as P
+          ValDefs.createVal[P](predicate.value, FreshName.FromPrefix("predicate")).use { ref =>
+            hoistPath(rest, each.copy(predicate = Some(ref.as_??)) :: done)(continue)
+          }
+        case step :: rest => hoistPath(rest, step :: done)(continue)
+      }
+    def hoistPaths(todo: List[List[PathStep]], done: List[List[PathStep]]): Expr[R] = todo match {
+      case Nil          => use(done.reverse)
+      case path :: rest => hoistPath(path, Nil)(hoisted => hoistPaths(rest, hoisted :: done))
+    }
+    hoistPaths(paths, Nil)
   }
 
   /** The extra paths of `modifyAll`/`modifyAllLens`, which must be written out at the call site: a splatted,
@@ -352,90 +392,169 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       )
       .toList
 
-  /** Rebuild `sExpr: S` applying `transformLeaf` at the focus of EVERY path in `paths`, sharing common `Field` prefixes
-    * so a field on the shared prefix is copied only once. Strategy:
+  /** The paths of one `modify`/`modifyAll`, merged into a tree as quicklens does (its `PathTree`): each node lists its
+    * steps in the order they first occur, and every step has a sequence of sub-trees, applied one after another.
     *
-    *   - paths that bottom out here (empty) apply `transformLeaf` to the whole `S` (fold each on top);
-    *   - `Field`-headed paths are grouped by field name; for each group we descend once, recurse on the group's tails,
-    *     and rebuild the case class with all touched fields replaced together (one `.copy`);
-    *   - non-field-headed paths (`.each`/`.at`/`.when`/...) cannot share a copy node, so each is applied independently
-    *     via the single-path [[buildModify]] folded on top of the result.
-    *
-    * Folding the independent transforms is observably identical to quicklens: disjoint paths touch disjoint parts, so
-    * order does not matter; overlapping field prefixes go through the shared `.copy`.
+    * A path is merged into the LAST sub-tree of an equivalent step, unless that sub-tree is a leaf (the modification is
+    * applied there): then it starts a new sub-tree, applied after it. So `modifyAll(_.a.x, _.a.y)` rebuilds `a` once
+    * with both fields, `modifyAll(_.xs.each.a, _.xs.each.b)` traverses `xs` once, while
+    * `modifyAll(_.a.each, _.a, _.a.each)` applies the three modifications in that order.
     */
+  sealed private trait PathTree
+  private object PathTree {
+    case object Empty extends PathTree
+    final case class Node(children: Vector[(PathStep, Vector[PathTree])]) extends PathTree
+
+    def of(steps: List[PathStep]): PathTree = steps match {
+      case Nil          => Empty
+      case head :: tail => Node(Vector(head -> Vector(of(tail))))
+    }
+
+    def of(paths: Iterable[List[PathStep]]): PathTree = paths.foldLeft(Empty: PathTree)(add)
+
+    def add(tree: PathTree, steps: List[PathStep]): PathTree = (tree, steps) match {
+      case (Empty, _)                     => of(steps)
+      case (node: Node, Nil)              => node
+      case (Node(children), step :: tail) =>
+        if (!children.exists(child => equivalent(child._1, step))) Node(children :+ (step -> Vector(of(tail))))
+        else
+          Node(children.map {
+            case (existing, trees) if equivalent(existing, step) =>
+              existing -> (trees.last match {
+                case Empty             => trees :+ of(tail)
+                case _ if tail.isEmpty => trees :+ Empty
+                case last              => trees.init :+ add(last, tail)
+              })
+            case other => other
+          })
+    }
+
+    /** Steps that can share one rebuild/traversal. The steps carrying expressions (`.eachWhere(p)`, `.at(i)`, ...) are
+      * not compared, so each of them is applied on its own (in order).
+      */
+    private def equivalent(a: PathStep, b: PathStep): Boolean = (a, b) match {
+      case (PathStep.Field(n1), PathStep.Field(n2))                       => n1 == n2
+      case (PathStep.Each(_, _, None, _), PathStep.Each(_, _, None, _))   => true
+      case (PathStep.EachEither(_, _, l1), PathStep.EachEither(_, _, l2)) => l1 == l2
+      case (PathStep.When(t1), PathStep.When(t2))                         =>
+        import t1.Underlying as T1
+        import t2.Underlying as T2
+        Type[T1] =:= Type[T2]
+      case _ => false
+    }
+  }
+
+  /** Rebuild `sExpr: S` applying `transformLeaf` at the focus of EVERY path in `paths` (see [[PathTree]]). */
   private def buildModifyMulti[S: Type](sExpr: Expr[S], paths: List[List[PathStep]])(
       transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] = {
-    val leafHere = paths.filter(_.isEmpty)
-    val fieldHeaded = paths.collect { case (f: PathStep.Field) :: rest => (f.name, rest) }
-    val otherHeaded = paths.filter(p => p.nonEmpty && !p.head.isInstanceOf[PathStep.Field])
+  ): Expr[S] = applyTree[S](sExpr, PathTree.of(paths))(transformLeaf)
 
-    // 1. Rebuild the shared `.copy` for all field-headed paths (grouped by field name), if any.
-    val afterFields: Expr[S] =
-      if (fieldHeaded.isEmpty) sExpr
-      else
-        CaseClass.parse[S] match {
-          case ClassViewResult.Compatible(caseClass) =>
-            val fieldValues = caseClass.caseFieldValuesAt(sExpr)
-            val grouped: Map[String, List[List[PathStep]]] =
-              fieldHeaded.groupBy(_._1).map { case (name, group) => name -> group.map(_._2) }
-            val updated = grouped.foldLeft(fieldValues) { case (acc, (field, subPaths)) =>
+  /** Rebuild a value `sExpr: S` with the focus reached by `steps` transformed by `transformLeaf`. */
+  private def buildModify[S: Type](sExpr: Expr[S], steps: List[PathStep])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr[S] = applyTree[S](sExpr, PathTree.of(steps))(transformLeaf)
+
+  /** Rebuild `sExpr: S` according to `tree`: at a leaf `sExpr` is the focus, so `transformLeaf` is applied; otherwise
+    * the node's steps are applied in order — consecutive fields with ONE rebuild of `S`, every traversal step (`.each`,
+    * `.at`, `.eachLeft`, `.when`, ...) once per sub-tree.
+    */
+  private def applyTree[S: Type](sExpr: Expr[S], tree: PathTree)(transformLeaf: Expr[S] => Expr[S]): Expr[S] =
+    tree match {
+      case PathTree.Empty          => transformLeaf(sExpr)
+      case PathTree.Node(children) => applyChildren[S](sExpr, children.toList, first = true)(transformLeaf)
+    }
+
+  private def applyChildren[S: Type](
+      sExpr: Expr[S],
+      children: List[(PathStep, Vector[PathTree])],
+      first: Boolean
+  )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = children match {
+    case Nil                         => sExpr
+    case (_: PathStep.Field, _) :: _ =>
+      val (fieldChildren, others) = children.span(_._1.isInstanceOf[PathStep.Field])
+      val fields = fieldChildren.collect { case (PathStep.Field(name), trees) => name -> trees }
+      // the fields are read from the value several times: an intermediate result is bound to a `val` first
+      val rebuilt = bindUnless[S](first, sExpr)(buildFields[S](_, fields)(transformLeaf))
+      applyChildren[S](rebuilt, others, first = false)(transformLeaf)
+    case (step, trees) :: others =>
+      val rebuilt = trees.foldLeft(sExpr) { (acc, tree) =>
+        step match {
+          case each: PathStep.Each    => buildEachStep[S](acc, each, tree)(transformLeaf)
+          case at: PathStep.At        => buildAtStep[S](acc, at, tree)(transformLeaf)
+          case e: PathStep.EachEither => buildEitherStep[S](acc, e, tree)(transformLeaf)
+          case w: PathStep.When       => buildWhenStep[S](acc, w, tree)(transformLeaf)
+          case PathStep.Field(name)   => abort(s"`modify`: unexpected field step `$name`")
+        }
+      }
+      applyChildren[S](rebuilt, others, first = false)(transformLeaf)
+  }
+
+  /** `use(e)`, with `e` bound to a local `val` unless it is known to be a plain reference (`asIs`). */
+  private def bindUnless[S: Type](asIs: Boolean, e: Expr[S])(use: Expr[S] => Expr[S]): Expr[S] =
+    if (asIs) use(e)
+    else ValDefs.createVal[S](e, FreshName.FromPrefix("intermediate")).use(use)
+
+  /** Apply the sub-trees of one field, one after another, to its value. */
+  private def applyFieldTrees[S: Type](focused: Expr_??, trees: Vector[PathTree])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr_?? = {
+    import focused.Underlying as F
+    applyFieldTreesTyped[S, F](focused.value, trees)(transformLeaf).as_??
+  }
+  private def applyFieldTreesTyped[S: Type, F: Type](focused: Expr[F], trees: Vector[PathTree])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr[F] =
+    trees.tail.foldLeft(descend[S, F](focused, trees.head)(transformLeaf)) { (acc, tree) =>
+      bindUnless[F](asIs = false, acc)(descend[S, F](_, tree)(transformLeaf))
+    }
+
+  /** Apply `rest` to a part `e` of `S` (a field, an element of a traversed container); the leaf transform (over `S`) is
+    * re-typed at the part's type, which is sound as it only fires where the remaining steps bottom out at the focus.
+    */
+  private def descend[S: Type, E: Type](e: Expr[E], rest: PathTree)(transformLeaf: Expr[S] => Expr[S]): Expr[E] =
+    applyTree[E](e, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[E]])
+
+  /** Descend the `fields` (each with its sub-trees) into `sExpr: S` and rebuild it ONCE:
+    *
+    *   - a case class is rebuilt with its constructor (what the generated `copy` does);
+    *   - a sealed hierarchy / `enum` is matched over its subtypes, each of which must have the fields (quicklens-style
+    *     common-field modification, no `.when[Sub]` per case needed);
+    *   - anything else goes through its `copy` method, see [[buildFieldsViaCopy]].
+    */
+  private def buildFields[S: Type](sExpr: Expr[S], fields: List[(String, Vector[PathTree])])(
+      transformLeaf: Expr[S] => Expr[S]
+  ): Expr[S] =
+    CaseClass.parse[S] match {
+      case ClassViewResult.Compatible(caseClass) =>
+        caseFieldValuesOf[S](caseClass, sExpr).filter(_ => rebuildsWithConstructor(caseClass)) match {
+          case Some(fieldValues) =>
+            val updated = fields.foldLeft(fieldValues) { case (acc, (field, trees)) =>
               val focused = acc.getOrElse(
                 field,
                 abort(s"`modify`: no accessible field `$field` on [${Type.prettyPrint[S]}]")
               )
-              val rebuiltFocused = recurseIntoMulti(focused, subPaths, transformLeaf)
-              acc.updated(field, rebuiltFocused)
+              acc.updated(field, applyFieldTrees[S](focused, trees)(transformLeaf))
             }
             reconstruct[S](caseClass, updated)
-          // Sealed hierarchy / enum: match over the subtypes and apply the field-headed paths within each case.
-          case ClassViewResult.Incompatible(ccReason) =>
-            Enum.parse[S] match {
-              case ClassViewResult.Compatible(enm) =>
-                enm
-                  .matchOn[Id, S](sExpr) { childExpr =>
-                    import childExpr.Underlying as Child
-                    val childPaths: List[List[PathStep]] =
-                      fieldHeaded.map { case (name, tail) => (PathStep.Field(name): PathStep) :: tail }
-                    val rebuilt: Expr[Child] =
-                      buildModifyMulti[Child](childExpr.value, childPaths)(leaf =>
-                        transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Child]]
-                      )
-                    whenUpcast[Child, S](rebuilt)
-                  }
-                  .getOrElse(abort(s"`modify`: [${Type.prettyPrint[S]}] is a sealed hierarchy with no cases"))
-              case ClassViewResult.Incompatible(_) =>
-                abort(
-                  s"`modify` can only descend a field into a case class or a sealed hierarchy/enum, but " +
-                    s"[${Type.prettyPrint[S]}] is neither: $ccReason"
-                )
-            }
+          case None =>
+            buildFieldsViaCopy[S](sExpr, fields, "its fields cannot be rebuilt positionally")(transformLeaf)
         }
-
-    // 2. Apply each non-field-headed path independently, folded on top.
-    val afterOthers: Expr[S] = otherHeaded.foldLeft(afterFields) { (acc, path) =>
-      buildModify[S](acc, path)(transformLeaf)
+      case ClassViewResult.Incompatible(ccReason) =>
+        Enum.parse[S] match {
+          case ClassViewResult.Compatible(enm) =>
+            enm
+              .matchOn[Id, S](sExpr) { childExpr =>
+                import childExpr.Underlying as Child
+                val rebuilt: Expr[Child] =
+                  buildFields[Child](childExpr.value, fields)(leaf =>
+                    transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Child]]
+                  )
+                whenUpcast[Child, S](rebuilt)
+              }
+              .getOrElse(abort(s"`modify`: [${Type.prettyPrint[S]}] is a sealed hierarchy with no cases"))
+          case ClassViewResult.Incompatible(_) => buildFieldsViaCopy[S](sExpr, fields, ccReason)(transformLeaf)
+        }
     }
-
-    // 3. Apply each leaf-here transform on top.
-    leafHere.foldLeft(afterOthers)((acc, _) => transformLeaf(acc))
-  }
-
-  /** Multi-path counterpart of [[recurseInto]]: descend into a focused field carrying its existential type, applying
-    * all `subPaths` (which share this field) via [[buildModifyMulti]], without leaking the path-dependent `Underlying`
-    * into an `Expr.quote`.
-    */
-  private def recurseIntoMulti[S: Type](
-      focused: Expr_??,
-      subPaths: List[List[PathStep]],
-      transformLeaf: Expr[S] => Expr[S]
-  ): Expr_?? = {
-    import focused.Underlying as F
-    buildModifyMulti[F](focused.value, subPaths)(leaf =>
-      transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[F]]
-    ).as_??
-  }
 
   /** Parse the path lambda `_.a.each.b` into an ordered list of [[PathStep]]s (root → leaf).
     *
@@ -596,11 +715,14 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   }
 
   private lazy val PathStepEvidenceType: Type[PathStepEvidence] = Type.of[PathStepEvidence]
+  private lazy val NothingType: Type[Nothing] = Type.of[Nothing]
 
   private def isEvidenceTyped(d: DestructuredExpr): Boolean = {
     import d.tpe.Underlying as T
     implicit val ev: Type[PathStepEvidence] = PathStepEvidenceType
-    Type.isSubtypeOf[T, PathStepEvidence]
+    implicit val nothing: Type[Nothing] = NothingType
+    // `???` (a default of `.atOrElse`) is typed `Nothing`, a subtype of everything: it is not the evidence.
+    Type.isSubtypeOf[T, PathStepEvidence] && !Type.isSubtypeOf[T, Nothing]
   }
 
   private def exprOf(d: DestructuredExpr): Expr_?? = d.toUntypedExpr.as_??
@@ -736,74 +858,109 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   private def applyLeaf[S: Type, A: Type](mod: Expr[A => A], leaf: Expr[S]): Expr[S] =
     Expr.quote(Expr.splice(mod).apply(Expr.splice(leaf.asInstanceOf[Expr[A]]))).asInstanceOf[Expr[S]]
 
-  /** Rebuild a value `sExpr: S` with the focus reached by `steps` transformed by `transformLeaf`. When `steps` is
-    * empty, `sExpr` itself is the focus, so `transformLeaf` is applied directly. A [[PathStep.Field]] head names a case
-    * field to descend into (read all fields, recurse into the focused one, reconstruct). A [[PathStep.Each]] head maps
-    * the remaining path over every element of the container via the summoned functor.
+  /** Field values of a case class, or `None` when Hearth cannot read them (a case class declaring a method that
+    * overloads a field's name trips an assertion in `caseFieldValuesAt` — see
+    * `docs/research/hearth-bug-case-field-overloaded-by-method.md`); the caller then goes through `copy`.
     */
-  private def buildModify[S: Type](sExpr: Expr[S], steps: List[PathStep])(
-      transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] =
-    steps match {
-      case Nil                              => transformLeaf(sExpr)
-      case PathStep.Field(field) :: rest    => buildFieldStep[S](sExpr, field, rest)(transformLeaf)
-      case (each: PathStep.Each) :: rest    => buildEachStep[S](sExpr, each, rest)(transformLeaf)
-      case (at: PathStep.At) :: rest        => buildAtStep[S](sExpr, at, rest)(transformLeaf)
-      case (e: PathStep.EachEither) :: rest => buildEitherStep[S](sExpr, e, rest)(transformLeaf)
-      case (w: PathStep.When) :: rest       => buildWhenStep[S](sExpr, w, rest)(transformLeaf)
-    }
+  private def caseFieldValuesOf[S: Type](caseClass: CaseClass[S], sExpr: Expr[S]): Option[Map[String, Expr_??]] =
+    try Some(caseClass.caseFieldValuesAt(sExpr))
+    catch { case _: AssertionError => None }
 
-  private def buildFieldStep[S: Type](sExpr: Expr[S], field: String, rest: List[PathStep])(
-      transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] =
-    CaseClass.parse[S] match {
-      case ClassViewResult.Compatible(caseClass) =>
-        val fieldValues = caseClass.caseFieldValuesAt(sExpr)
-        val focused = fieldValues.getOrElse(
-          field,
-          abort(s"`modify`: no accessible field `$field` on [${Type.prettyPrint[S]}]")
-        )
-        val rebuiltFocused = recurseInto(focused, rest, transformLeaf)
-        reconstruct[S](caseClass, fieldValues.updated(field, rebuiltFocused))
-      // Not a case class — if it is a sealed hierarchy / `enum`, descend the field into EVERY subtype (each must have
-      // the field) by generating an exhaustive match. This is quicklens-style common-field modification, so a field
-      // shared by all cases can be modified directly without writing `.when[Sub]` per case.
-      case ClassViewResult.Incompatible(ccReason) =>
-        Enum.parse[S] match {
-          case ClassViewResult.Compatible(enm) => buildFieldStepEnum[S](enm, sExpr, field, rest)(transformLeaf)
-          case ClassViewResult.Incompatible(_) =>
-            abort(
-              s"`modify` can only descend a field into a case class or a sealed hierarchy/enum (whose every case has " +
-                s"that field), but [${Type.prettyPrint[S]}] is neither: $ccReason"
-            )
-        }
-    }
-
-  /** Descend field `field` (and `rest`) into every subtype of a sealed hierarchy / `enum`, generating an exhaustive
-    * `s match { case c: Child => <field path on c> }`. Each subtype is recursed through [[buildFieldStep]] (so a
-    * subtype must itself be a case class with `field`, or a nested sealed hierarchy), and its rebuilt value is widened
-    * back to `S` in-tree (sound: `Child <: S`).
+  /** Whether a case class is rebuilt by calling its constructor (equivalent to the generated `copy`, without its
+    * default-argument accessors): every parameter is in the first parameter list and `copy` is the generated one. A
+    * case class with further parameter lists or a hand-written `copy` goes through `copy`.
     */
-  private def buildFieldStepEnum[S: Type](enm: Enum[S], sExpr: Expr[S], field: String, rest: List[PathStep])(
+  private def rebuildsWithConstructor[S: Type](caseClass: CaseClass[S]): Boolean =
+    caseClass.primaryConstructor.totalParameters.count(_.nonEmpty) <= 1 &&
+      // a hand-written `copy` replaces the generated one: it is what quicklens calls, so we call it too
+      Method.unsortedMethodsNamed[S]("copy").forall(_.isSynthetic)
+
+  /** Descend `fields` into a type that is neither a (plain) case class nor a sealed hierarchy, as quicklens does: read
+    * each field with its accessor and rebuild the value with ONE `s.copy(field1 = ..., field2 = ...)`. This covers
+    * classes with a hand-written `copy`, intersection types and self types (`A & B`, `this` of a class with a self
+    * type), and case classes with a second, implicit parameter list (its implicits are resolved at the call site).
+    *
+    * Among several `copy` overloads having these parameters, the compiler-generated one is preferred, then the one with
+    * most parameters (all the other parameters need default values).
+    */
+  private def buildFieldsViaCopy[S: Type](sExpr: Expr[S], fields: List[(String, Vector[PathTree])], reason: String)(
       transformLeaf: Expr[S] => Expr[S]
-  ): Expr[S] =
-    enm
-      .matchOn[Id, S](sExpr) { childExpr =>
-        import childExpr.Underlying as Child
-        val rebuilt: Expr[Child] =
-          buildFieldStep[Child](childExpr.value, field, rest)(leaf =>
-            transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Child]]
-          )
-        whenUpcast[Child, S](rebuilt)
-      }
-      .getOrElse(
-        abort(s"`modify`: [${Type.prettyPrint[S]}] is a sealed hierarchy with no cases to descend `$field` into")
+  ): Expr[S] = {
+    def notSupported(details: String): Nothing = abort(
+      s"`modify` can only descend a field into a case class, a sealed hierarchy/enum (whose every case has that " +
+        s"field) or a class with a `copy` method taking that field, but [${Type.prettyPrint[S]}] is none of them: " +
+        s"$details ($reason)"
+    )
+    val names = fields.map(_._1)
+    val rebuilt: Map[String, Expr_??] = fields.map { case (field, trees) =>
+      val focused: Expr_?? = Method
+        .unsortedMethodsNamed[S](field)
+        .iterator
+        .filter(_.isNullary)
+        .flatMap(callOrError(_)(_ => sExpr.as_??, _ => Map.empty, _ => Map.empty).toOption)
+        .take(1)
+        .toList
+        .headOption
+        .getOrElse(notSupported(s"it has no accessible member `$field`"))
+      field -> applyFieldTrees[S](focused, trees)(transformLeaf)
+    }.toMap
+    val copies = Method
+      .unsortedMethodsNamed[S]("copy")
+      .filter(m => m.isAvailable(AtCallSite) && m.totalParameters.headOption.exists(ps => names.forall(ps.contains)))
+      .sortBy(m => (!m.isSynthetic, -m.arity))
+    if (copies.isEmpty)
+      notSupported(s"it has no `copy` method with ${names.map(n => s"`$n`").mkString("parameter(s) ", ", ", "")}")
+    val attempts: List[Either[String, Expr_??]] = copies.map { copy =>
+      callOrError(copy)(
+        _ => sExpr.as_??,
+        _ => Map.empty,
+        av =>
+          av.parameters.flatten.flatMap { case (name, parameter) =>
+            rebuilt.get(name) match {
+              case Some(value)                  => List(name -> value)
+              case None if parameter.isImplicit => summonParameter(parameter).map(name -> _).toList
+              case None                         => Nil
+            }
+          }.toMap
       )
+    }
+    attempts.collectFirst { case Right(result) => result } match {
+      case Some(result) =>
+        import result.{Underlying as R, value as copied}
+        castTo[R, S](copied)
+      case None =>
+        notSupported(
+          s"calling `copy(${names.map(n => s"$n = ...").mkString(", ")})` failed: " +
+            attempts.collect { case Left(e) => e }.mkString("; ")
+        )
+    }
+  }
+
+  // Hearth reports some unsupported shapes (e.g. a default argument of a Scala 3 extension `copy`, which refers to
+  // the extension's receiver) with an exception rather than a `Left`.
+  private def callOrError(method: Method)(
+      onInstance: Method.OnInstance => Expr_??,
+      onTypes: Method.ApplyTypes => UntypedTypeArguments,
+      onValues: Method.ApplyValues => Arguments
+  ): Either[String, Expr_??] =
+    try method.fold(onInstance, onTypes, onValues)
+    catch { case scala.util.control.NonFatal(e) => Left(e.getMessage.linesIterator.mkString(" ").trim) }
+
+  private def summonParameter(parameter: Parameter): Option[Expr_??] = {
+    import parameter.tpe.Underlying as P
+    Expr.summonImplicit[P].toOption.map(_.as_??)
+  }
+
+  /** `copy` of an intersection type (`A & B`) returns only the case class (`A`): cast back to the static type, as
+    * quicklens does.
+    */
+  private def castTo[R: Type, S: Type](e: Expr[R]): Expr[S] =
+    if (Type.isSubtypeOf[R, S]) e.upcast[S] else Expr.quote(Expr.splice(e).asInstanceOf[S])
 
   /** Emit the `.each` step over `sExpr: S` (where `S` IS the container type `F[A]`/`M[K,A]`). Summon the relevant
     * functor, build the element lambda `a => <rest of path on a>` via `LambdaBuilder`, and call the runtime helper.
     */
-  private def buildEachStep[S: Type](sExpr: Expr[S], each: PathStep.Each, rest: List[PathStep])(
+  private def buildEachStep[S: Type](sExpr: Expr[S], each: PathStep.Each, rest: PathTree)(
       transformLeaf: Expr[S] => Expr[S]
   ): Expr[S] =
     // Dispatch the `.each` traversal on Hearth's std SPI: `IsMap` (checked first — `Map <: Iterable`), then
@@ -835,11 +992,11 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     */
   private def transformElementExpr[S: Type, Elem: Type](
       elemExpr: Expr[Elem],
-      rest: List[PathStep],
+      rest: PathTree,
       predicate: Option[Expr_??]
   )(transformLeaf: Expr[S] => Expr[S]): Expr[Elem] = {
     val transformed: Expr[Elem] =
-      buildModify[Elem](elemExpr, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Elem]])
+      descend[S, Elem](elemExpr, rest)(transformLeaf)
     predicate match {
       case None    => transformed
       case Some(p) =>
@@ -858,7 +1015,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isColl: IsCollectionOf[S, Item],
       predicate: Option[Expr_??],
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import isColl.CtorResult
     val factoryExpr = isColl.factory
@@ -883,7 +1040,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isMap: IsMapOf[S, Pair],
       predicate: Option[Expr_??],
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import isMap.{Value, CtorResult}
     val factoryExpr = isMap.factory
@@ -910,7 +1067,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isOpt: IsOptionOf[S, Inner],
       predicate: Option[Expr_??],
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] =
     isOpt.fold[S](sExpr)(
       isOpt.empty,
@@ -960,7 +1117,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * at one position/key, so it goes through the same SPI as `.each`: `IsCollection` (positional, with an index
     * counter), `IsMap` (by key), `IsOption` (the single value). No positional-update SPI or bespoke functor is needed.
     */
-  private def buildAtStep[S: Type](sExpr: Expr[S], at: PathStep.At, rest: List[PathStep])(
+  private def buildAtStep[S: Type](sExpr: Expr[S], at: PathStep.At, rest: PathTree)(
       transformLeaf: Expr[S] => Expr[S]
   ): Expr[S] =
     Type[S] match {
@@ -988,7 +1145,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isColl: IsCollectionOf[S, Item],
       at: PathStep.At,
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import isColl.CtorResult
     import PathStep.AtKind
@@ -999,6 +1156,21 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       .value
       .asInstanceOf[Expr[Int]]
     def tx(itemExpr: Expr[Item]): Expr[Item] = transformElementExpr[S, Item](itemExpr, rest, None)(transformLeaf)
+    // What reading a missing index throws: an `Array` (`array(i)`) throws the more specific exception.
+    val isArray = Type.Ctor1.of[Array].unapply(Type[S]).isDefined
+    def outOfBounds(target: Expr[Int], size: Expr[Int]): Expr[IndexOutOfBoundsException] =
+      if (isArray)
+        Expr.quote {
+          new ArrayIndexOutOfBoundsException(
+            "Index " + Expr.splice(target) + " out of bounds for length " + Expr.splice(size)
+          ): IndexOutOfBoundsException
+        }
+      else
+        Expr.quote {
+          new IndexOutOfBoundsException(
+            Expr.splice(target).toString + " is out of bounds (min 0, max " + (Expr.splice(size) - 1) + ")"
+          )
+        }
     val builderExpr: Expr[scala.collection.mutable.Builder[Item, CtorResult]] = at.kind match {
       case AtKind.Index =>
         Expr.quote {
@@ -1027,13 +1199,12 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
             i += 1
           }
           // As quicklens (`Seq#apply`): a missing index is an `IndexOutOfBoundsException`.
-          if (!found)
-            throw new IndexOutOfBoundsException(target.toString + " is out of bounds (min 0, max " + (i - 1) + ")")
+          if (!found) throw Expr.splice(outOfBounds(Expr.quote(target), Expr.quote(i)))
           builder
         }
       case AtKind.AtOrElse =>
         val defaultExpr =
-          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Item]]
+          defaultAs[Item](at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")))
         Expr.quote {
           val builder = Expr.splice(factoryExpr).newBuilder
           val target = Expr.splice(idxExpr)
@@ -1062,7 +1233,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isMap: IsMapOf[S, Pair],
       at: PathStep.At,
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import isMap.{Key, Value, CtorResult}
     import PathStep.AtKind
@@ -1104,7 +1275,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
         }
       case AtKind.AtOrElse =>
         val defaultExpr =
-          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Value]]
+          defaultAs[Value](at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")))
         val newEntry = isMap.pair(keyExpr, transformElementExpr[S, Value](defaultExpr, rest, None)(transformLeaf))
         Expr.quote {
           val builder = Expr.splice(factoryExpr).newBuilder
@@ -1131,7 +1302,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       sExpr: Expr[S],
       isOpt: IsOptionOf[S, Inner],
       at: PathStep.At,
-      rest: List[PathStep]
+      rest: PathTree
   )(transformLeaf: Expr[S] => Expr[S]): Expr[S] = {
     import PathStep.AtKind
     def tx(v: Expr[Inner]): Expr[Inner] = transformElementExpr[S, Inner](v, rest, None)(transformLeaf)
@@ -1142,9 +1313,21 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
         isOpt.fold[S](sExpr)(throwAsS[S]("None.at"), (v: Expr[Inner]) => isOpt.of(tx(v)))
       case AtKind.AtOrElse =>
         val defaultExpr =
-          at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")).value.asInstanceOf[Expr[Inner]]
+          defaultAs[Inner](at.default.getOrElse(abort("`modify`: `.atOrElse` needs a default")))
         isOpt.of(tx(isOpt.getOrElse(sExpr)(defaultExpr)))
     }
+  }
+
+  /** The default of `.atOrElse`, typed as the element: an expression of a narrower type (`???`, typed `Nothing`) is
+    * ascribed, so the rest of the path sees the element type.
+    */
+  private def defaultAs[T: Type](default: Expr_??): Expr[T] = {
+    import default.Underlying as D
+    if (Type[D] =:= Type[T]) default.value.asInstanceOf[Expr[T]] else ascribe[D, T](default.value)
+  }
+  private def ascribe[D: Type, T: Type](e: Expr[D]): Expr[T] = {
+    val widened = e.asInstanceOf[Expr[T]]
+    Expr.quote { val default: T = Expr.splice(widened); default }
   }
 
   /** A `throw new NoSuchElementException(msg)` expression ascribed to `S` (for the `None`-branch of Option `.at`). */
@@ -1156,7 +1339,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
   /** Emit a `.eachLeft` / `.eachRight` step over `sExpr: S` (an `Either[L, R]`) via Hearth's `IsEither` SPI: fold the
     * either, transform the targeted branch, and rebuild with `left`/`right`. The other branch is left untouched.
     */
-  private def buildEitherStep[S: Type](sExpr: Expr[S], step: PathStep.EachEither, rest: List[PathStep])(
+  private def buildEitherStep[S: Type](sExpr: Expr[S], step: PathStep.EachEither, rest: PathTree)(
       transformLeaf: Expr[S] => Expr[S]
   ): Expr[S] =
     Type[S] match {
@@ -1184,7 +1367,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     * unchanged). On Scala 3 `matchOn` annotates the scrutinee `@unchecked`, so the non-exhaustive match compiles
     * cleanly on both platforms.
     */
-  private def buildWhenStep[S: Type](sExpr: Expr[S], step: PathStep.When, rest: List[PathStep])(
+  private def buildWhenStep[S: Type](sExpr: Expr[S], step: PathStep.When, rest: PathTree)(
       transformLeaf: Expr[S] => Expr[S]
   ): Expr[S] = {
     import step.subtype.Underlying as Sub
@@ -1194,7 +1377,7 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
       // Recurse into the narrowed subtype; the leaf transform re-types `transformLeaf` (over `S`) at the
       // structurally-coincident `Sub`, then the rebuilt `Sub` is widened back to `S` (sound: `Sub <: S`).
       val rebuilt: Expr[Sub] =
-        buildModify[Sub](sub, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[Sub]])
+        descend[S, Sub](sub, rest)(transformLeaf)
       whenUpcast[Sub, S](rebuilt)
     }
     val fallthrough = MatchCase.typeMatch[S]().map((other: Expr[S]) => other)
@@ -1208,20 +1391,6 @@ private[optics] trait ModifyMacrosImpl extends hearth.kindlings.macros.compileti
     */
   private def whenUpcast[Sub: Type, S: Type](e: Expr[Sub]): Expr[S] =
     Expr.quote(Expr.splice(e).asInstanceOf[S])
-
-  /** Recurse into a focused field expression carrying its existential type, so the path-dependent `Underlying` never
-    * leaks into an `Expr.quote` (the di/mock Scala 2 pitfall). The `transformLeaf` is over `S`, but at the leaf the
-    * field type and `S`/`A` coincide structurally — `transformLeaf` is only ever invoked when the remaining steps
-    * bottom out at the focus and the field type IS the focused `A`, so the cast is sound.
-    */
-  private def recurseInto[S: Type](
-      focused: Expr_??,
-      rest: List[PathStep],
-      transformLeaf: Expr[S] => Expr[S]
-  ): Expr_?? = {
-    import focused.Underlying as F
-    buildModify[F](focused.value, rest)(leaf => transformLeaf(leaf.asInstanceOf[Expr[S]]).asInstanceOf[Expr[F]]).as_??
-  }
 
   /** Reconstruct a case-class value from its (possibly modified) field expressions, by name. */
   private def reconstruct[S: Type](caseClass: CaseClass[S], fieldValues: Map[String, Expr_??]): Expr[S] =
