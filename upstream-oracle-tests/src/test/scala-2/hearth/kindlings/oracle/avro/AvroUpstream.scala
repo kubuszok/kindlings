@@ -34,4 +34,54 @@ object AvroUpstream {
     implicit val timestampDecoder: Decoder[java.sql.Timestamp] = Decoder.TimestampDecoder.withSchema(micros.forType)
     side[AvInstants]
   }
+
+  // --- avro4s' own tests that only avro4s 4 can derive (value classes, scala.Enumeration, a working FieldMapper) ---
+
+  lazy val docValueType: Option[AvroSide[AuDocUsesValueType]] = Some(side[AuDocUsesValueType])
+  lazy val fixedMessage: Option[AvroSide[AuFixedMessage]] = Some(side[AuFixedMessage])
+  lazy val optionOfFixed: Option[AvroSide[AuOptionOfFixed]] = Some(side[AuOptionOfFixed])
+  lazy val genOuter: Option[AvroSide[AuGenOuter[String, Int]]] = Some(side[AuGenOuter[String, Int]])
+  lazy val scalaEnums: Option[AvroSide[AuScalaEnums]] = Some(side[AuScalaEnums])
+  lazy val topScalaEnum: Option[AvroSide[AuColours.Value]] = Some(side[AuColours.Value])
+  lazy val pascalCase: Option[AvroSide[AuNamingStrategy]] = {
+    implicit val fieldMapper: com.sksamuel.avro4s.FieldMapper = com.sksamuel.avro4s.PascalCase
+    Some(side[AuNamingStrategy])
+  }
+  lazy val snakeCase: Option[AvroSide[AuNamingStrategy]] = {
+    implicit val fieldMapper: com.sksamuel.avro4s.FieldMapper = com.sksamuel.avro4s.SnakeCase
+    Some(side[AuNamingStrategy])
+  }
+  lazy val mapperWithName: Option[AvroSide[AuMapperWithName]] = {
+    implicit val fieldMapper: com.sksamuel.avro4s.FieldMapper = com.sksamuel.avro4s.SnakeCase
+    Some(side[AuMapperWithName])
+  }
+  lazy val javaEnums: Option[AvroSide[AuJavaEnums]] = Some(side[AuJavaEnums])
+  lazy val topJavaEnum: Option[AvroSide[AuWine]] = Some(side[AuWine])
+  lazy val annotatedJavaEnum: Option[AvroSide[AuWineWithAnnotations]] = Some(side[AuWineWithAnnotations])
+
+  // --- avro4s' streams (AvroOutputStream / AvroInputStream) ---
+
+  import com.sksamuel.avro4s.{AvroInputStream, AvroOutputStream}
+
+  private def write[A](stream: java.io.ByteArrayOutputStream => AvroOutputStream[A], values: Seq[A]): Array[Byte] = {
+    val out = new java.io.ByteArrayOutputStream()
+    val avro = stream(out)
+    values.foreach(avro.write)
+    avro.close()
+    out.toByteArray
+  }
+
+  def writeData[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.data[A].to(_).build(), values)
+  def writeBinary[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.binary[A].to(_).build(), values)
+  def writeJson[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.json[A].to(_).build(), values)
+
+  def readData[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.data[A].from(bytes).build(s.schema).iterator.toList
+  def readBinary[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.binary[A].from(bytes).build(s.schema).iterator.toList
+  def readJson[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.json[A].from(bytes).build(s.schema).iterator.toList
 }

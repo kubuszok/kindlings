@@ -426,12 +426,18 @@ final class AvroEncoderSpec extends MacroSuite {
         fixed.bytes().toList ==> List[Byte](1, 2, 3, 4)
       }
 
-      test("encode Array[Byte] of wrong length throws AvroRuntimeException") {
+      test("encode Array[Byte] shorter than the fixed size is padded with zeros (as avro4s)") {
+        val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
+        val record = encoder.encode(WithFixedBytes(Array[Byte](1, 2))).asInstanceOf[GenericRecord]
+        record.get("id").asInstanceOf[GenericData.Fixed].bytes().toList ==> List[Byte](1, 2, 0, 0)
+      }
+
+      test("encode Array[Byte] longer than the fixed size throws AvroRuntimeException") {
         val encoder: AvroEncoder[WithFixedBytes] = AvroEncoder.derived[WithFixedBytes]
         val ex = intercept[org.apache.avro.AvroRuntimeException] {
-          encoder.encode(WithFixedBytes(Array[Byte](1, 2)))
+          encoder.encode(WithFixedBytes(Array[Byte](1, 2, 3, 4, 5)))
         }
-        assert(ex.getMessage.contains("expected 4 bytes but got 2"))
+        assert(ex.getMessage.contains("expected at most 4 bytes but got 5"))
       }
     }
 

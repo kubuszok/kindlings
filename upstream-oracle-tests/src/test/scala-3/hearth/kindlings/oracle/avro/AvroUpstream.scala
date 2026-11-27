@@ -33,4 +33,45 @@ object AvroUpstream {
     given SchemaFor[java.sql.Timestamp] = micros.forType
     side[AvInstants]
   }
+
+  // --- avro4s' own tests that only avro4s 4 can derive (value classes, scala.Enumeration, a working FieldMapper) ---
+
+  lazy val docValueType: Option[AvroSide[AuDocUsesValueType]] = None
+  lazy val fixedMessage: Option[AvroSide[AuFixedMessage]] = None
+  lazy val optionOfFixed: Option[AvroSide[AuOptionOfFixed]] = None
+  lazy val genOuter: Option[AvroSide[AuGenOuter[String, Int]]] = None
+  lazy val scalaEnums: Option[AvroSide[AuScalaEnums]] = None
+  lazy val topScalaEnum: Option[AvroSide[AuColours.Value]] = None
+  lazy val pascalCase: Option[AvroSide[AuNamingStrategy]] = None
+  lazy val snakeCase: Option[AvroSide[AuNamingStrategy]] = None
+  lazy val mapperWithName: Option[AvroSide[AuMapperWithName]] = None
+  lazy val javaEnums: Option[AvroSide[AuJavaEnums]] = None
+  lazy val topJavaEnum: Option[AvroSide[AuWine]] = None
+  lazy val annotatedJavaEnum: Option[AvroSide[AuWineWithAnnotations]] = None
+
+  // --- avro4s' streams (AvroOutputStream / AvroInputStream) ---
+
+  import com.sksamuel.avro4s.{AvroInputStream, AvroOutputStream}
+
+  private def write[A](stream: java.io.ByteArrayOutputStream => AvroOutputStream[A], values: Seq[A]): Array[Byte] = {
+    val out = new java.io.ByteArrayOutputStream()
+    val avro = stream(out)
+    values.foreach(avro.write)
+    avro.close()
+    out.toByteArray
+  }
+
+  def writeData[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.data[A].to(_).build(), values)
+  def writeBinary[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.binary[A].to(_).build(), values)
+  def writeJson[A](values: Seq[A])(implicit s: SchemaFor[A], e: Encoder[A]): Array[Byte] =
+    write[A](AvroOutputStream.json[A].to(_).build(), values)
+
+  def readData[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.data[A].from(bytes).build(s.schema).iterator.toList
+  def readBinary[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.binary[A].from(bytes).build(s.schema).iterator.toList
+  def readJson[A](bytes: Array[Byte])(implicit s: SchemaFor[A], d: Decoder[A]): List[A] =
+    AvroInputStream.json[A].from(bytes).build(s.schema).iterator.toList
 }
