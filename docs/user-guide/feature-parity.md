@@ -1082,7 +1082,12 @@ The two modules are deliberately built to be drop-in equivalents at the API surf
 Checked against Tapir's own derivation, tapir-cats, tapir-iron, tapir-refined, neotype-tapir and tapir-newtype by the
 `upstream-oracle-tests` module (the JSON Schemas rendered by Tapir's docs interpreter are compared on Scala 2.13 and 3;
 also field descriptions on shared named map schemas, which Tapir's docs interpreter moves next to each `$ref` for both).
-The only differences:
+`TapirParityOracleSpec` (and `TapirParityScala3OracleSpec`) also runs the cases of Tapir's own tests
+(`SchemaGenericAutoTest`, `SchemaMacroTest`, `SchemaAnnotationsTest`, `SchemaApplyValidationTest`,
+`LegacySchemaGenericAutoTest`, `EnumsCodecDerivationTest`, `SchemaSerialisationTest`, `SchemaMacroScala3Test`,
+`ValidatorScala3EnumTest`, v1.13.33) through both derivations and compares everything a `Schema` contains (names with
+type parameters, field names, attributes, `hidden`, defaults, examples, validators with their names), field getters,
+the subtype chosen for a value and `applyValidation`. The only differences:
 
 | Difference | Tapir | Kindlings | Status |
 |---|---|---|---|
@@ -1092,6 +1097,13 @@ The only differences:
 | neotype `validate` | neotype-tapir adds a custom validator (not rendered in JSON Schema) | The underlying type's schema; neotype-tapir's schemas are used when imported | Parity with neotype-tapir imported |
 | Names of maps keyed by scala-newtype types (Scala 2.13) | `Schema.schemaForMap[K, V]` names the key after the type member (`Name.Type`: `Map_Type_Int` for every newtype) | Named after the companion (`Map_Name_Int`), as Iron `RefinedType` and neotype keys are on both sides | Improvement (tapir guide, "Maps, collections and other built-in types") |
 | Type aliases among type arguments of names (e.g. refined's `NonEmpty`) | The alias' name | Dealiased (`Not[Empty]`) | Documented (tapir guide) |
+| Discriminator values | Derived from the subtype's schema name (so an `@encodedName` on the subtype changes it), transformed by `Configuration.toDiscriminatorValue` | The value the JSON codec writes (circe: `transformConstructorNames` of the constructor name; jsoniter-scala: `adtLeafClassNameMapper` / `@named`) | Design decision (schema follows the codec) |
+| `@hidden` on a field | Ignored by `Schema.derived` (read only for enumerations and endpoint inputs) | The field's schema is hidden (Tapir's docs interpreter leaves it out) | Improvement |
+| Annotations of a sealed trait | Applied to each subtype's schema only | Applied to each subtype's schema and to the sealed trait's own (coproduct) schema | Improvement |
+| Order of subtypes of a sealed hierarchy | Sorted by name | Declaration order on Scala 3; by name on Scala 2.13 (class files keep no declaration order) | Design decision |
+| Name of a parameterless case of a Scala 3 `enum` (as a subtype) | Without the enum (`pkg.Dot`) | With it (`pkg.Shape.Dot`), like the parametrised cases | Design decision |
+| Scala 3 union types | Need `Schema.derivedUnion`; the members' own schemas | Derived; named like `derivedUnion` (`A_or_B`), the members described the way the JSON codec writes them (circe-derivation: each wrapped in an object keyed by its type name) | Design decision (schema follows the codec) |
+| `Either` | `Schema.schemaForEither`: `oneOf` the two schemas | Described the way the JSON codec writes it (circe: `{"Left": ...}` / `{"Right": ...}`), so validation errors have the wrapper in their path (`Left.value`) | Design decision (schema follows the codec) |
 
 ### Annotations
 
@@ -1099,7 +1111,11 @@ The only differences:
 |---|---|---|---|
 | `@description` | Yes | Yes | Parity |
 | `@title` | Yes | Yes | Parity |
-| `@encodedName` | Yes | Yes | Parity |
+| `@encodedName` on a field | Yes | Yes | Parity |
+| `@encodedName` on a type (names its schema, without type parameters; not inherited by subtypes) | Yes | Yes | Parity |
+| Annotations inherited from the parent type and from the parent's members of the same name (`def name: String` of a sealed trait), unless the element has its own | Yes | Yes | Parity |
+| Several `@customise` on one element, applied in declaration order (after the metadata annotations) | Yes | Yes | Parity |
+| Annotations of a `scala.Enumeration` object on its values' schema (named after the object) | Yes | Yes | Parity |
 | `@format` | Yes | Yes | Parity |
 | `@hidden` | Yes | Yes | Parity |
 | `@deprecated` | Yes | Yes | Parity |
@@ -1125,6 +1141,9 @@ Discriminator metadata is fully propagated to child schemas:
 - Each child `SProduct` gets a discriminator field with single-value `Validator.Enumeration`
 - `encodedDiscriminatorValue` attribute is set on each child schema
 - Matches upstream Tapir's `addDiscriminatorField` behavior
+- The subtype of a value (`SCoproduct.subtypeSchema`, used by `Schema.applyValidation`) is chosen by a pattern match
+  on the subtypes, so validation reaches the fields of nested subtypes, subtypes renamed with `@encodedName` and
+  Scala 3 enum cases, as with Tapir
 
 With a jsoniter `JsoniterConfig` the schemas also describe the jsoniter codecs' wrapper-style ADTs (leaves wrapped in a
 single-field object, case objects as strings), flattened nested hierarchies, `@named` leaves and fields, the
@@ -1135,9 +1154,9 @@ arrays (`prefixItems`) and `Option[Option[A]]` as an ADT — see the Tapir Schem
 
 | Feature | Notes |
 |---|---|
-| `Schema.oneOfWrapped` | Manual union schema builder |
-| `.modify(_.path)` post-derivation | Tapir core feature, not a derivation concern |
-| `Schema.derivedEnumeration` builder | Upstream's full enumeration-schema builder (`.defaultStringBased`, custom encode, …); Kindlings supports case-object-only sealed traits |
+| `Schema.oneOfWrapped`, `Schema.oneOfUsingField` | Tapir's builders, not derivation; schemas built with them (and with `Schema.derivedEnumeration`, `Schema.string`, ...) are used for fields, like by Tapir's derivation (checked by the oracle) |
+| `.modify(_.path)` post-derivation | Tapir core feature, works on derived schemas (field getters and validation checked by the oracle) |
+| `Schema.derivedEnumeration` builder | Upstream's full enumeration-schema builder (`.defaultStringBased`, custom encode, …); `KindlingsSchema.derivedEnumeration` is the same as `.defaultStringBased` for case-object-only sealed traits and Scala 3 enums (checked by the oracle) |
 
 ---
 

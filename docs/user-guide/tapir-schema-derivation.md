@@ -152,16 +152,29 @@ implicit val preferCirce: PreferSchemaConfig[Configuration] = PreferSchemaConfig
 | Annotation | Target | Description |
 |-----------|--------|-------------|
 | `@description("text")` | Type, Field | Add OpenAPI description |
-| `@title("text")` | Type | Set the schema title |
-| `@encodedName("name")` | Field | Override the encoded field name |
-| `@format("fmt")` | Field | Set the schema format (e.g. `"int32"`, `"email"`) |
-| `@validate(validator)` | Field | Add a field validator |
-| `@default(value)` | Field | Set the default value |
-| `@deprecated` | Type | Mark schema as deprecated |
-| `@hidden` | Field | Hide field from the schema |
+| `@title("text")` | Type, Field | Set the schema title |
+| `@encodedName("name")` | Type, Field | On a field: override the encoded field name. On a type: name its schema (without type parameters) |
+| `@format("fmt")` | Type, Field | Set the schema format (e.g. `"int32"`, `"email"`) |
+| `@validate(validator)` | Type, Field | Add a validator |
+| `@default(value)` | Type, Field | Set the default value |
+| `@deprecated` | Type, Field | Mark schema as deprecated |
+| `@hidden` | Field | Hide field from the schema (Tapir's `Schema.derived` ignores it on fields) |
 | `@encodedExample(value)` | Type, Field | Add an OpenAPI encoded example |
 | `@validateEach(validator)` | Field | Validate the elements of a collection/`Option` field |
 | `@customise(schema => schema)` | Type, Field | Apply an arbitrary transform to the derived schema |
+
+As in Tapir's derivation:
+
+- annotations are applied in declaration order, so several `@customise` on one element run one after another, after
+  the metadata annotations listed before them;
+- a subtype of a sealed trait inherits the trait's annotations (except `@encodedName`), and a field inherits the
+  annotations of the parent's member with the same name (e.g. `@description` on `def name: String` of the sealed
+  trait), unless it has an annotation of the same kind itself;
+- the values of a `scala.Enumeration` are described by a schema named after the enumeration object, carrying the
+  object's annotations.
+
+Unlike Tapir's derivation, the annotations of a sealed trait are also applied to the trait's own schema, and the
+discriminator value of a subtype is the one the JSON codec writes, whatever its `@encodedName`.
 
 ```scala
 import sttp.tapir.Schema.annotations._
@@ -300,7 +313,8 @@ configuration, e.g. jsoniter's `mapAsArray`) instead of using Tapir's built-in `
 
 - `Set`s are marked with unique items (as Tapir does),
 - `Map`s with `String` keys are named like Tapir's `Schema.schemaForMap` (`Map_V`, e.g. a `Map_Double` component in
-  OpenAPI), and those with other keys like `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`),
+  OpenAPI), and those with other keys like `Schema.schemaForMap[K, V](keyToString)` (`Map_K_V`); as Tapir's, a map's
+  own schema is not optional (as a field it is optional exactly when the decoder accepts it missing),
 - collections and maps that cannot be empty (cats' `NonEmptyList`, `NonEmptyVector`, `NonEmptyChain`, `NonEmptySet`,
   `NonEmptyMap`, ... with `kindlings-cats-integration`) are required and validated with `Validator.minSize(1)`
   (`minItems: 1` in OpenAPI / JSON Schema), as in tapir-cats,
@@ -404,6 +418,13 @@ fields follow the decoder (see "Required and optional fields" above; e.g. with c
 Tapir marks every collection optional), refined/Iron constraints become validators only with the library's Tapir
 integration imported (see "Validators for refined, Iron, neotype and scala-newtype types" above), and maps keyed by type
 members of objects are named after the object (see "Maps, collections and other built-in types").
+
+It also runs the cases of Tapir's own derivation tests through both derivations and compares everything a `Schema`
+contains, the subtype chosen for a value and `applyValidation`. The differences found there are documented ones too:
+discriminator values, union types and `Either` follow the JSON codec; `@hidden` on fields and the annotations of a
+sealed trait on its own schema are applied (Tapir's derivation ignores them); subtypes are listed in declaration order
+on Scala 3 (Tapir sorts them by name); and a parameterless case of a Scala 3 `enum` is named with its enum
+(`pkg.Shape.Dot`, Tapir: `pkg.Dot`). See the tapir-schema-derivation section of the feature parity page.
 
 ### Benchmarks
 
