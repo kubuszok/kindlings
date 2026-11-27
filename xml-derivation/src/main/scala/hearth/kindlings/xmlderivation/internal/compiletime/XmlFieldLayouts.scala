@@ -120,6 +120,33 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
       }
   }
 
+  /** [[xmlAttrShapeOf]] for a field without an annotation, which `defaultFieldMode` may make an attribute: only text
+    * values and enums of singletons (a type with a user-provided instance stays a child element). Looks for a
+    * user-provided instance only for those, so that the other fields (case classes, collections...) cost no implicit
+    * search here.
+    */
+  def xmlDefaultAttrShapeOf[A](tpe: Type[A], hasUserInstance: ?? => Boolean): Option[XmlAttrShape] = {
+    def textLike[T](inner: Type[T]): Option[XmlTextShape] = {
+      implicit val T: Type[T] = inner
+      if (isBuiltInText(inner)) Some(XmlTextShape.BuiltIn)
+      else {
+        val candidate: Option[XmlTextShape] =
+          if (isXmlTextValue(inner)) Some(XmlTextShape.BuiltIn)
+          else xmlStringEnumOf(inner, hasUserInstance).map(XmlTextShape.StringEnum(_))
+        candidate.filterNot(_ => hasUserInstance(Type[T].as_??))
+      }
+    }
+    implicit val A: Type[A] = tpe
+    if (isBuiltInText(tpe)) Some(XmlAttrShape(XmlTextShape.BuiltIn, optional = false))
+    else
+      Type[A] match {
+        case IsOption(isOption) =>
+          import isOption.Underlying as Inner
+          textLike(Type[Inner]).map(XmlAttrShape(_, optional = true))
+        case _ => textLike(tpe).map(XmlAttrShape(_, optional = false))
+      }
+  }
+
   // --- Fields of case classes ---
 
   sealed trait XmlFieldLayout
@@ -298,10 +325,13 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
             childElementNextToContent()
             XmlFieldLayout.Element
         }
+      else if (evaluatedConfig.exists(_.defaultFieldMode == XmlFieldMode.Element))
+        // (the default configuration: every field without an annotation is a child element)
+        XmlFieldLayout.Element
       else
         // `defaultFieldMode` decides for text values (and for enums of singletons written as strings); a type with a
         // user-provided instance stays a child element (as do collections, maps, case classes, other sealed traits)
-        attrShape match {
+        xmlDefaultAttrShapeOf(Type[Field], hasUserInstance) match {
           case Some(shape @ XmlAttrShape(XmlTextShape.BuiltIn, _)) =>
             evaluatedConfig.map(_.defaultFieldMode == XmlFieldMode.Attribute) match {
               case Some(true)  => XmlFieldLayout.Attribute(shape)
