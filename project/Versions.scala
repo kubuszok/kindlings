@@ -32,7 +32,7 @@ object versions {
   // circe-refined (upstream oracle only): versioned separately from circe.
   val circeRefined = "0.15.1"
   val iron = "3.3.2"
-  val jsoniterScala = "2.42.3"
+  val jsoniterScala = "2.43.0"
   val kittens = "3.5.0"
   val neotype = "0.7.2"
   val newtypeCompat = "0.1.1"
