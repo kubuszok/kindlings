@@ -13,15 +13,15 @@ import hearth.std.*
   *   - `F[A]` itself - with the natural transformation (`fk(fa)`), or a `Tuple2K` projection / constructor,
   *   - `T[F]` where `F` is nested in another type (`EitherT[F, E, A]`, `Kleisli[F, A, B]`, `Cokleisli[F, A, B]`,
   *     another algebra `Alg2[F]`, ...) - with the `FunctorK` / `ContravariantK` / `InvariantK` / `SemigroupalK` of
-  *     `[F[_]] =>> T[F]`, summoned (cats-tagless' companion instances, user instances) or, for another algebra,
-  *     derived recursively,
+  *     `[F[_]] =>> T[F]`, summoned (cats-tagless' companion instances, user instances) or, for another algebra, derived
+  *     recursively,
   *   - vararg parameters element by element.
   *
   * Members whose signature does not mention `F` are forwarded unchanged (`productK` combines their results with their
   * `Semigroup` when there is one). Where `F` occurs is found by comparing the member's signature in three applications
   * of the algebra: `Alg[Option]` and `Alg[List]` (does it depend on `F`? is it `F[A]`?) and `Alg[KProbe]` (to build the
-  * type lambda). A shape cats-tagless rejects (`F` in a parameter of a `FunctorK`, `List[F[A]]` with no `FunctorK`)
-  * is a compile error here too.
+  * type lambda). A shape cats-tagless rejects (`F` in a parameter of a `FunctorK`, `List[F[A]]` with no `FunctorK`) is
+  * a compile error here too.
   */
 trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtensions =>
 
@@ -86,7 +86,8 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
     * substituted, so the wrapper is removed from the latter.
     */
   private def paramType(p: Parameter): ?? =
-    if (p.isByName) TypeLambdaOverProbe.byNameUnderlying(this)(p.tpe.Underlying.asUntyped).asInstanceOf[UntypedType].as_??
+    if (p.isByName)
+      TypeLambdaOverProbe.byNameUnderlying(this)(p.tpe.Underlying.asUntyped).asInstanceOf[UntypedType].as_??
     else p.tpe
 
   private lazy val KProbeCtor: Type.Ctor1[CatsTaglessFactories.KProbe] = Type.Ctor1.of[CatsTaglessFactories.KProbe]
@@ -162,13 +163,12 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
   private def sameType(a: ??, b: ??): Boolean =
     a.Underlying =:= b.Underlying || a.Underlying.plainPrint == b.Underlying.plainPrint
 
-  private def elementOf(t: ??, isVararg: Boolean): ??
-    = if (!isVararg) t
-    else
-      UntypedType.typeArguments(t.Underlying.asUntyped) match {
-        case elem :: Nil => elem.as_??
-        case _           => t
-      }
+  private def elementOf(t: ??, isVararg: Boolean): ?? = if (!isVararg) t
+  else
+    UntypedType.typeArguments(t.Underlying.asUntyped) match {
+      case elem :: Nil => elem.as_??
+      case _           => t
+    }
 
   private def classify(opt: ??, list: ??, probe: ??): Occ =
     if (sameType(opt, list)) Occ.Absent
@@ -283,32 +283,32 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
 
     // Which instance a nested occurrence needs (None: the shape is not supported by this transformation).
     def paramTc(occ: Occ): Either[String, Option[NestedTc]] = (op, occ) match {
-      case (_, Occ.Absent)                         => Right(None)
-      case (_: TraitOp.MapK, Occ.Direct)           =>
+      case (_, Occ.Absent)               => Right(None)
+      case (_: TraitOp.MapK, Occ.Direct) =>
         Left("has F in parameter position: FunctorK needs F only in results (use InvariantK)")
-      case (_: TraitOp.MapK, _: Occ.Nested)        => Right(Some(ContravariantKTc))
-      case (_: TraitOp.ContramapK, Occ.Direct)     => Right(None)
-      case (_: TraitOp.ContramapK, _: Occ.Nested)  => Right(Some(FunctorKTc))
-      case (_: TraitOp.ImapK, Occ.Direct)          => Right(None)
-      case (_: TraitOp.ImapK, _: Occ.Nested)       => Right(Some(InvariantKTc))
-      case (_: TraitOp.ProductK, Occ.Direct)       => Right(None)
-      case (_: TraitOp.ProductK, _: Occ.Nested)    => Right(Some(FunctorKTc))
-      case (_: TraitOp.Instrument, _)              =>
+      case (_: TraitOp.MapK, _: Occ.Nested)       => Right(Some(ContravariantKTc))
+      case (_: TraitOp.ContramapK, Occ.Direct)    => Right(None)
+      case (_: TraitOp.ContramapK, _: Occ.Nested) => Right(Some(FunctorKTc))
+      case (_: TraitOp.ImapK, Occ.Direct)         => Right(None)
+      case (_: TraitOp.ImapK, _: Occ.Nested)      => Right(Some(InvariantKTc))
+      case (_: TraitOp.ProductK, Occ.Direct)      => Right(None)
+      case (_: TraitOp.ProductK, _: Occ.Nested)   => Right(Some(FunctorKTc))
+      case (_: TraitOp.Instrument, _)             =>
         Left("has F in parameter position: Instrument needs F only in results")
     }
     def resultTc(occ: Occ): Either[String, Option[NestedTc]] = (op, occ) match {
-      case (_, Occ.Absent)                         => Right(None)
-      case (_: TraitOp.MapK, Occ.Direct)           => Right(None)
-      case (_: TraitOp.MapK, _: Occ.Nested)        => Right(Some(FunctorKTc))
-      case (_: TraitOp.ContramapK, Occ.Direct)     =>
+      case (_, Occ.Absent)                     => Right(None)
+      case (_: TraitOp.MapK, Occ.Direct)       => Right(None)
+      case (_: TraitOp.MapK, _: Occ.Nested)    => Right(Some(FunctorKTc))
+      case (_: TraitOp.ContramapK, Occ.Direct) =>
         Left("returns F[A] (F in covariant position): ContravariantK needs F only in parameters (use InvariantK)")
-      case (_: TraitOp.ContramapK, _: Occ.Nested)  => Right(Some(ContravariantKTc))
-      case (_: TraitOp.ImapK, Occ.Direct)          => Right(None)
-      case (_: TraitOp.ImapK, _: Occ.Nested)       => Right(Some(InvariantKTc))
-      case (_: TraitOp.ProductK, Occ.Direct)       => Right(None)
-      case (_: TraitOp.ProductK, _: Occ.Nested)    => Right(Some(SemigroupalKTc))
-      case (_: TraitOp.Instrument, Occ.Direct)     => Right(None)
-      case (_: TraitOp.Instrument, n: Occ.Nested)  =>
+      case (_: TraitOp.ContramapK, _: Occ.Nested) => Right(Some(ContravariantKTc))
+      case (_: TraitOp.ImapK, Occ.Direct)         => Right(None)
+      case (_: TraitOp.ImapK, _: Occ.Nested)      => Right(Some(InvariantKTc))
+      case (_: TraitOp.ProductK, Occ.Direct)      => Right(None)
+      case (_: TraitOp.ProductK, _: Occ.Nested)   => Right(Some(SemigroupalKTc))
+      case (_: TraitOp.Instrument, Occ.Direct)    => Right(None)
+      case (_: TraitOp.Instrument, n: Occ.Nested) =>
         Left(s"returns ${n.printed.replace("KProbe", "F")}: Instrument needs results of type F[A]")
     }
 
@@ -355,7 +355,7 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
               }.toMap
               // Typed errors thrown from the synchronous OverrideBody callbacks are routed into the error channel.
               MIO(target.construct(None, Map.empty, overrides)).flatMap {
-                case Right(expr) => MIO.pure(expr.asInstanceOf[Expr[Any]])
+                case Right(expr)  => MIO.pure(expr.asInstanceOf[Expr[Any]])
                 case Left(errors) =>
                   failCannotConstruct(typeClass, s"trait instance: ${errors.toVector.mkString(", ")}")
               }
@@ -460,16 +460,16 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
       lazy val inst = instances((shape.key, -1))
       def cast(e: Expr[Any]): Expr_?? = Expr.quote(Expr.splice(e).asInstanceOf[R]).as_??
       (op, shape.result) match {
-        case (TraitOp.MapK(af, _), Occ.Absent)          => cast(sourceCall(0, af))
-        case (TraitOp.MapK(af, fk), Occ.Direct)         => cast(callApplyFk(fk, sourceCall(0, af)))
-        case (TraitOp.MapK(af, fk), _: Occ.Nested)      => cast(callMapK(inst, sourceCall(0, af), fk))
-        case (TraitOp.ContramapK(af, _), Occ.Absent)    => cast(sourceCall(0, af))
+        case (TraitOp.MapK(af, _), Occ.Absent)           => cast(sourceCall(0, af))
+        case (TraitOp.MapK(af, fk), Occ.Direct)          => cast(callApplyFk(fk, sourceCall(0, af)))
+        case (TraitOp.MapK(af, fk), _: Occ.Nested)       => cast(callMapK(inst, sourceCall(0, af), fk))
+        case (TraitOp.ContramapK(af, _), Occ.Absent)     => cast(sourceCall(0, af))
         case (TraitOp.ContramapK(af, fk), _: Occ.Nested) => cast(callContramapK(inst, sourceCall(0, af), fk))
-        case (TraitOp.ImapK(af, _, _), Occ.Absent)      => cast(sourceCall(0, af))
-        case (TraitOp.ImapK(af, fk, _), Occ.Direct)     => cast(callApplyFk(fk, sourceCall(0, af)))
-        case (TraitOp.ImapK(af, fk, gk), _: Occ.Nested) => cast(callImapK(inst, sourceCall(0, af), fk, gk))
-        case (TraitOp.ProductK(af, ag), Occ.Direct)     => cast(callTuple2K(sourceCall(0, af), sourceCall(1, ag)))
-        case (TraitOp.ProductK(af, ag), _: Occ.Nested)  =>
+        case (TraitOp.ImapK(af, _, _), Occ.Absent)       => cast(sourceCall(0, af))
+        case (TraitOp.ImapK(af, fk, _), Occ.Direct)      => cast(callApplyFk(fk, sourceCall(0, af)))
+        case (TraitOp.ImapK(af, fk, gk), _: Occ.Nested)  => cast(callImapK(inst, sourceCall(0, af), fk, gk))
+        case (TraitOp.ProductK(af, ag), Occ.Direct)      => cast(callTuple2K(sourceCall(0, af), sourceCall(1, ag)))
+        case (TraitOp.ProductK(af, ag), _: Occ.Nested)   =>
           cast(callProductK(inst, sourceCall(0, af), sourceCall(1, ag)))
         case (TraitOp.ProductK(af, ag), Occ.Absent) =>
           // Like cats-tagless: combine both results with the result type's `Semigroup` when there is one, otherwise
@@ -484,8 +484,8 @@ trait TraitAlgebraBodies { this: InvariantKMacrosImpl & MacroCommons & StdExtens
               Expr.quote(Expr.splice(semigroup).combine(Expr.splice(callF), Expr.splice(callG))).as_??
             case None => callF.as_??
           }
-        case (TraitOp.Instrument(af, _), Occ.Absent)               => cast(sourceCall(0, af))
-        case (TraitOp.Instrument(af, algebraName), Occ.Direct)     =>
+        case (TraitOp.Instrument(af, _), Occ.Absent)           => cast(sourceCall(0, af))
+        case (TraitOp.Instrument(af, algebraName), Occ.Direct) =>
           cast(callInstrumentation(sourceCall(0, af), algebraName, shape.name))
         case _ =>
           // Unreachable: rejected by resultTc before the instance is built.

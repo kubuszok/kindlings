@@ -3,8 +3,8 @@ package hearth.kindlings.catstaglessderivation
 import cats.Show
 import cats.data.{Cokleisli, EitherT, Kleisli, OptionT}
 
-/** Algebras from cats-tagless' own test suites (`tests/src/test/scala-{2,3}/cats/tagless/tests`, v0.16.6), each
-  * shape in its own algebra. Shared by the in-module parity specs.
+/** Algebras from cats-tagless' own test suites (`tests/src/test/scala-{2,3}/cats/tagless/tests`, v0.16.6), each shape
+  * in its own algebra. Shared by the in-module parity specs.
   */
 object UpstreamAlgebras {
 
