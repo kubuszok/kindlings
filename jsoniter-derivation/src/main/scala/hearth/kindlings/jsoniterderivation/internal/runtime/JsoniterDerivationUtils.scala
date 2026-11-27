@@ -980,8 +980,9 @@ object JsoniterDerivationUtils {
 
   private def readBitSetMask(in: JsonReader, limit: Int, stringified: Boolean): Array[Long] = {
     var mask = new Array[Long](2)
-    if (!in.isNextToken('['.toByte)) in.decodeError("expected '[' or null")
-    if (!in.isNextToken(']'.toByte)) {
+    // as jsoniter-scala: a JSON `null` is an empty bit set (the codec's `nullValue`)
+    if (!in.isNextToken('['.toByte)) mask = in.readNullOrTokenError(mask, '['.toByte)
+    else if (!in.isNextToken(']'.toByte)) {
       in.rollbackToken()
       var first = true
       while (first || in.isNextToken(','.toByte)) {
