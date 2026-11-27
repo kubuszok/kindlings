@@ -77,7 +77,8 @@ final class DataAlgebrasSpec extends MacroSuite {
         assertEquals(f(Try(1)), Some(1))
       case other => fail(s"unexpected $other")
     }
-    val switch: FunK[Option] = SwitchK[Option]("s", Cokleisli[Option, Boolean, String]((o: Option[Boolean]) => o.fold("none")(_.toString)))
+    val switch: FunK[Option] =
+      SwitchK[Option]("s", Cokleisli[Option, Boolean, String]((o: Option[Boolean]) => o.fold("none")(_.toString)))
     contravariantK.contramapK(switch)(tryToOption) match {
       case SwitchK(name, f) =>
         assertEquals(name, "s")
@@ -95,7 +96,8 @@ final class DataAlgebrasSpec extends MacroSuite {
         assertEquals(f.run(5), Some("5"))
       case other => fail(s"unexpected $other")
     }
-    val encoder: CodecK[Try] = EncoderK[Try](2, Cokleisli[Try, Int, String]((t: Try[Int]) => t.fold(_ => "error", _.toString)))
+    val encoder: CodecK[Try] =
+      EncoderK[Try](2, Cokleisli[Try, Int, String]((t: Try[Int]) => t.fold(_ => "error", _.toString)))
     invariantK.imapK(encoder)(tryToOption)(optionToTry) match {
       case EncoderK(id, f) =>
         assertEquals(id, 2)
@@ -106,7 +108,12 @@ final class DataAlgebrasSpec extends MacroSuite {
 
   test("ApplyK for a case-class algebra with F nested in Tuple2K / EitherK (cats-tagless-data ApplyKSuite.Spec)") {
     val applyK: ApplyK[SpecK] = KindlingsApplyK.derived[SpecK]
-    val spec = SpecK[Try](3, Try("l"), Tuple2K[Try, Option, Long](Try(1L), Some(2L)), EitherK.rightc[List, Try, String](Try("s")))
+    val spec = SpecK[Try](
+      3,
+      Try("l"),
+      Tuple2K[Try, Option, Long](Try(1L), Some(2L)),
+      EitherK.rightc[List, Try, String](Try("s"))
+    )
     val mapped = applyK.mapK(spec)(tryToOption)
     assertEquals(mapped.replicas, 3)
     assertEquals(mapped.labels, Some("l"))
@@ -118,7 +125,9 @@ final class DataAlgebrasSpec extends MacroSuite {
     assertEquals(product.labels.second, Some("l"))
   }
 
-  test("SemigroupalK and InvariantK for a case-class algebra with OptionT / EitherT fields (SemigroupalKSuite.Parsed)") {
+  test(
+    "SemigroupalK and InvariantK for a case-class algebra with OptionT / EitherT fields (SemigroupalKSuite.Parsed)"
+  ) {
     val semigroupalK: SemigroupalK[ParsedK] = KindlingsSemigroupalK.derived[ParsedK]
     val invariantK: InvariantK[ParsedK] = KindlingsInvariantK.derived[ParsedK]
     val parsed = ParsedK[Option](1, Some("a"), OptionT.some[Option]("m"), EitherT.rightT[Option, String](2))
