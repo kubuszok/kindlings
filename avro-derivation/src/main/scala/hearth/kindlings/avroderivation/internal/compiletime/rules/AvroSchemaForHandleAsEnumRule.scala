@@ -16,7 +16,7 @@ import hearth.kindlings.derivation.compiletime.StableChildrenOrder
 trait AvroSchemaForHandleAsEnumRuleImpl {
   this: SchemaForMacrosImpl & MacroCommons & StdExtensions & AnnotationSupport =>
 
-  private lazy val EnumerationValueType: Type[Enumeration#Value] = Type.of[Enumeration#Value]
+  private lazy val AnyType: Type[Any] = Type.of[Any]
 
   object AvroSchemaForHandleAsEnumRule extends SchemaDerivationRule("handle as enum when possible") {
 
@@ -101,23 +101,28 @@ trait AvroSchemaForHandleAsEnumRuleImpl {
             ) { (symbol, acc) =>
               Expr.quote(Expr.splice(symbol) :: Expr.splice(acc))
             }
-            // scala.Enumeration: Hearth lists the values by name; avro4s (and the wire format) uses their ids
-            val enumerationValues: Option[List[Expr[Enumeration#Value]]] =
-              if (!Type[A].isEnumeration) None
+            // scala.Enumeration and Java enums: the symbols are put in the declaration order (ids / ordinals) at
+            // runtime, as the order Hearth lists the values in is by name for an enumeration and, for a Java enum
+            // on Scala 3, not the same in every compilation.
+            val declaredValues: Option[List[Expr[Any]]] =
+              if (!(Type[A].isEnumeration || Type[A].isJavaEnum)) None
               else {
                 val values = childrenInOrder.flatMap { case (_, child) =>
-                  SingletonValue.unapply(child.Underlying).map(_.singletonExpr.asInstanceOf[Expr[Enumeration#Value]])
+                  SingletonValue.unapply(child.Underlying).map(_.singletonExpr.asInstanceOf[Expr[Any]])
                 }
                 if (values.size == childrenInOrder.size) Some(values) else None
               }
-            val symbolsListExpr: Expr[List[String]] = enumerationValues match {
+            val symbolsListExpr: Expr[List[String]] = declaredValues match {
               case Some(values) =>
-                implicit val EnumerationValueT: Type[Enumeration#Value] = EnumerationValueType
-                val valuesExpr = values.foldRight(Expr.quote(List.empty[Enumeration#Value])) { (value, acc) =>
+                implicit val AnyT: Type[Any] = AnyType
+                val valuesExpr = values.foldRight(Expr.quote(List.empty[Any])) { (value, acc) =>
                   Expr.quote(Expr.splice(value) :: Expr.splice(acc))
                 }
                 Expr.quote {
-                  AvroDerivationUtils.symbolsInIdOrder(Expr.splice(valuesExpr), Expr.splice(unorderedSymbolsExpr))
+                  AvroDerivationUtils.symbolsInDeclarationOrder(
+                    Expr.splice(valuesExpr),
+                    Expr.splice(unorderedSymbolsExpr)
+                  )
                 }
               case None => unorderedSymbolsExpr
             }
