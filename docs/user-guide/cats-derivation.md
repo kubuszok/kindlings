@@ -95,7 +95,12 @@ and, for recursive types, fields mentioning the type itself (`children: List[Tre
   `Alternative` type (`G[H[A]]` needs `H: Applicative`);
 - SemigroupK / MonoidK / EmptyK use `G`'s instance for `G[A]` fields.
 
-A wrapping type constructor that is itself a case class to derive (e.g. `middle: Nel[A]`) needs its instance in scope.
+A wrapping type constructor that is itself a case class or sealed trait without an instance in scope (e.g. `middle:
+Nel[A]`, or the derived type itself behind another constructor: `rest: Option[AtLeastOne[A]]`) is derived recursively,
+like kittens.
+
+`ConsK` is derived for list-like sealed traits (a cons case `(head: A, tail: F[A])` and an empty case), like kittens 2,
+and for case classes prepending to a nested collection (`Nel[A](head: A, tail: List[A])`).
 
 | Type class | Package |
 |-----------|---------|
@@ -118,7 +123,10 @@ A wrapping type constructor that is itself a case class to derive (e.g. `middle:
 
 ### Bi-variant (kind `(*, *) → *`)
 
-Derived for type constructors with two type parameters (case classes and sealed traits).
+Derived for type constructors with two type parameters (case classes and sealed traits). Like kittens, fields may be
+`A`, `B`, constant, wrapped in a type constructor with an instance (`List[E]` with `Functor` / `Foldable` / `Traverse`,
+`Either[A, E]` with `Bifunctor` / `Bifoldable` / `Bitraverse`), or another data type (derived recursively); recursive
+types are supported.
 
 | Type class | Package |
 |-----------|---------|
@@ -364,7 +372,7 @@ scalacOptions += "-Xmacro-settings:catsDerivation.logDerivation=true"
 | Pure, EmptyK | Yes | Yes | Yes |
 | Bifunctor, Bifoldable, Bitraverse | No | Yes | Yes |
 | NonEmptyAlternative, Alternative | No | Yes | Yes |
-| ConsK | Yes | No | Yes |
+| ConsK | Yes (list-like sealed traits) | No | Yes (list-like sealed traits and case classes) |
 | Same API on Scala 2.13 and 3 | No | No | Yes |
 | Sanely-automatic derivation | No | No | Yes |
 
@@ -435,6 +443,21 @@ All values in ops/s (higher is better). Measured on macOS, JVM temurin 17, 2 for
 |-----------|-----------|-------------|-----------|
 | Foldable (foldLeft) | 1.6B | 109.6M | **14.6x faster** |
 | Traverse (traverse) | 164.2M | 18.7M | **8.8x faster** |
+
+#### General derivation: nested fields and recursion through another type constructor (Scala 3)
+
+kittens' `Result[A, E]` (fields `List[E]`, `Either[A, E]`) and `AtLeastOne[A]` (`rest: Option[AtLeastOne[A]]`),
+`CatsNestedBenchmark`, 3 forks / 5 warmup / 10 measurement iterations, ops/s and `gc.alloc.rate.norm`. Measured while
+other benchmarks ran on the same machine (±5–15%).
+
+| Operation | Kindlings | kittens | vs kittens |
+|-----------|-----------|---------|------------|
+| Bifunctor `bimap` (5 values) | 13.3M (280 B/op) | 10.6M (448 B/op) | **1.3x faster** |
+| Bifoldable `bifoldLeft` (5 values) | 23.0M (0 B/op) | 15.4M (96 B/op) | **1.5x faster** |
+| Bitraverse `bitraverse` (5 values) | 4.19M (1400 B/op) | 3.95M (1632 B/op) | on par |
+| Functor `map` (9-element AtLeastOne) | 7.41M (768 B/op) | 7.14M (800 B/op) | on par |
+| Foldable `foldLeft` (9-element AtLeastOne) | 9.88M (0 B/op) | 10.08M (267 B/op) | on par |
+| Traverse `traverse` (9-element AtLeastOne) | 5.92M (1315 B/op) | 3.50M (2600 B/op) | **1.7x faster** |
 
 #### Show vs ShowPretty vs FastShowPretty
 
