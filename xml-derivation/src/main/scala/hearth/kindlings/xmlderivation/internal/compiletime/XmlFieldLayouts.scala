@@ -8,6 +8,7 @@ import hearth.kindlings.xmlderivation.annotations.{
   transientField,
   xmlAttribute,
   xmlContent,
+  xmlDiscriminator,
   xmlElement,
   xmlName,
   xmlUnwrapped,
@@ -33,6 +34,28 @@ trait XmlFieldLayouts extends XmlTextValues { this: MacroCommons & StdExtensions
   }
 
   private lazy val XmlNameAnnotationType: Type[xmlName] = Type.of[xmlName]
+  private lazy val XmlDiscriminatorAnnotationType: Type[xmlDiscriminator] = Type.of[xmlDiscriminator]
+
+  /** How the subtype of a value of the sealed type `A` is told, as far as it is known during the expansion:
+    * `Some(Some(attribute))` - a discriminator attribute, `Some(None)` - an element named after the subtype, `None` -
+    * whatever the configuration, only known at runtime, says.
+    *
+    * `@xmlDiscriminator(name)` on `A` wins over the configuration (also over `withNoDiscriminator`). It is the
+    * annotation of the type the value is encoded/decoded as that counts, also for the leaves of nested sealed types:
+    * the decoder has to know which attribute to read before it knows the subtype.
+    */
+  def xmlStaticDiscriminatorOf[A: Type](evaluatedConfig: Option[XmlConfig]): Option[Option[String]] = {
+    implicit val xmlDiscriminatorT: Type[xmlDiscriminator] = XmlDiscriminatorAnnotationType
+    if (hasTypeAnnotation[xmlDiscriminator, A])
+      getTypeAnnotationStringArg[xmlDiscriminator, A] match {
+        case Some(name) => Some(Some(name))
+        case None       =>
+          Environment.reportErrorAndAbort(
+            s"@xmlDiscriminator on ${Type[A].prettyPrint}: the attribute name has to be a String literal"
+          )
+      }
+    else evaluatedConfig.map(_.discriminatorAttribute)
+  }
 
   /** Whether `C` is a subtype that has subtypes of its own to flatten: a sealed type that is not a singleton and has no
     * user-provided instance.
