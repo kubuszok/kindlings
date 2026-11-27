@@ -2,7 +2,8 @@ package hearth.kindlings.benchmarks
 
 import hearth.kindlings.tapirschemaderivation.{KindlingsSchema, PreferSchemaConfig}
 import hearth.kindlings.circederivation.Configuration
-import sttp.tapir.{Schema, SchemaType}
+import sttp.tapir.{Schema, SchemaType, Validator}
+import sttp.tapir.Schema.annotations.validate
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
@@ -72,4 +73,62 @@ class TapirSchemaBenchmark {
 
   @Benchmark def originalAutoEvent(): SchemaType[Event] =
     OriginalTapirAutoInstances.eventSchema.schemaType
+}
+
+/** A sealed hierarchy with validated fields (validation is skipped for schemas without validators). */
+sealed trait TapirValidatedShape
+object TapirValidatedShape {
+  final case class Circle(@validate[Double](Validator.min(0.0)) radius: Double) extends TapirValidatedShape
+  final case class Rect(@validate[Int](Validator.min(0)) width: Int, @validate[Int](Validator.min(0)) height: Int)
+      extends TapirValidatedShape
+  final case class Labelled(@validate[String](Validator.minLength(1)) label: String, rect: Rect)
+      extends TapirValidatedShape
+  case object Dot extends TapirValidatedShape
+}
+
+object KindlingsTapirValidatedInstances {
+  implicit val preferCirceConfig: PreferSchemaConfig[Configuration] = PreferSchemaConfig[Configuration]
+  val shapeSchema: Schema[TapirValidatedShape] = KindlingsSchema.derived[TapirValidatedShape].schema
+}
+
+object OriginalTapirValidatedInstances {
+  import sttp.tapir.generic.auto.*
+  val shapeSchema: Schema[TapirValidatedShape] = implicitly
+}
+
+/** `Schema.applyValidation` of sealed-trait values, which reaches the subtype's schema through
+  * `SCoproduct.subtypeSchema` (Kindlings: a generated pattern match on the subtypes; tapir: magnolia's `split` / the
+  * Mirror's ordinal, then a lookup of the subtype by its name).
+  */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.Throughput))
+@OutputTimeUnit(TimeUnit.SECONDS)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
+@Fork(2)
+class TapirValidationBenchmark {
+  import TapirValidatedShape.*
+
+  private val valid: Array[TapirValidatedShape] =
+    Array(Circle(1.0), Rect(1, 2), Labelled("x", Rect(3, 4)), Dot)
+  private val invalid: Array[TapirValidatedShape] =
+    Array(Circle(-1.0), Rect(-1, 2), Labelled("", Rect(3, -4)), Dot)
+
+  private def validateAll[A](schema: Schema[A], values: Array[A]): Int = {
+    var n = 0
+    var i = 0
+    while (i < values.length) {
+      n += schema.applyValidation(values(i)).size
+      i += 1
+    }
+    n
+  }
+
+  @Benchmark def kindlingsValidateValid(): Int = validateAll(KindlingsTapirValidatedInstances.shapeSchema, valid)
+
+  @Benchmark def originalValidateValid(): Int = validateAll(OriginalTapirValidatedInstances.shapeSchema, valid)
+
+  @Benchmark def kindlingsValidateInvalid(): Int = validateAll(KindlingsTapirValidatedInstances.shapeSchema, invalid)
+
+  @Benchmark def originalValidateInvalid(): Int = validateAll(OriginalTapirValidatedInstances.shapeSchema, invalid)
 }
