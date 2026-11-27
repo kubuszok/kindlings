@@ -19,6 +19,7 @@ trait WriterMacrosImpl
     with rules.WriterHandleAsMapRuleImpl
     with rules.WriterHandleAsCollectionRuleImpl
     with rules.WriterHandleAsNamedTupleRuleImpl
+    with rules.WriterHandleAsTupleRuleImpl
     with rules.WriterHandleAsSingletonRuleImpl
     with rules.WriterHandleAsCaseClassRuleImpl
     with rules.WriterHandleAsEnumRuleImpl
@@ -273,6 +274,7 @@ trait WriterMacrosImpl
           // proof is an `IsMapOf`, so we parse `IsCollection` once and dispatch via `.asMap`.
           WriterHandleAsCollectionRule,
           WriterHandleAsNamedTupleRule,
+          WriterHandleAsTupleRule,
           WriterHandleAsSingletonRule,
           WriterHandleAsCaseClassRule,
           WriterHandleAsEnumRule

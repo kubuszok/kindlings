@@ -166,7 +166,16 @@ sconfig has no derivation of its own; derived instances behave like upstream Pur
 
 - readers report **every** failure: each failing field of a case class (then each unknown key of a strict one), each failing item of a collection, each failing value of a map;
 - a missing key fails with `KeyNotFound`, which lists the object's keys that look like the expected key under a different naming (e.g. `firstName` for `first-name`); readers of missing keys (`Option` fields, readers extending `ReadsMissingKeys`, which are called with `null`) read it instead;
-- an empty `Option` field is omitted when writing, not written as `null`;
+- an empty `Option` field is omitted when writing, not written as `null`; more generally the instance in scope for a
+  field's type decides how a missing key is handled: a reader extending `ReadsMissingKeys` is given the missing key, a
+  writer extending `WritesMissingKeys[A]` decides with `toOpt` whether the key is written (so a custom plain
+  `ConfigWriter[Option[A]]` writes empty values too, and a custom plain `ConfigReader[Option[A]]` requires the key);
+- tuples are read from and written as **lists** (`(true, 5)` is `[true, 5]`): a list of another size fails with
+  `WrongSizeList`, each failing element is reported under its index; an object is read from the product representation
+  (`{ _1 = true, _2 = 5 }`);
+- a case object or a case class without parameters is read only from an object, and with `allowUnknownKeys = false`
+  every key of it is an `UnknownKey` (for a subtype of a sealed family: every key but the discriminator);
+- default values are evaluated only when the key is missing;
 - as in PureConfig, the implicit instances a derived reader/writer uses for its fields are resolved once, when it is
   created (an `implicit def` instance is called once per derived instance, not on every read/write), and so are the
   subtype names a config's `transformConstructorNames` gives, also for a config only known at runtime.
@@ -315,6 +324,7 @@ import hearth.kindlings.sconfigderivation.debug._
 | `ConfigDecodingError.KeyNotFound` | `KeyNotFound` | Required key is missing (with candidate keys) |
 | `ConfigDecodingError.WrongType` | `WrongType` | Value has unexpected HOCON type |
 | `ConfigDecodingError.CannotConvert` | `CannotConvert` | Value cannot be converted to target type |
+| `ConfigDecodingError.WrongSizeList` | `WrongSizeList` | A tuple read from a list of another size |
 | `ConfigDecodingError.UnknownKey` | `UnknownKey` | Unexpected key when `withStrictDecoding` is active |
 | `ConfigDecodingError.UnexpectedValueForFieldCoproductHint` | `UnexpectedValueForFieldCoproductHint` | The discriminator names no subtype |
 | `ConfigDecodingError.NoValidCoproductOptionFound` | `NoValidCoproductOptionFound` | No subtype of a `FirstSuccess` family could be read (lists every attempt) |
@@ -349,6 +359,8 @@ Writers throw `CoproductHintException` (with `ConfigDecodingError.CollidingKeys`
 | Default values | Yes | Yes (enabled by default) |
 | `@ConfiguredJsonCodec`-style annotation | No | No |
 | Recursive types | Needs workarounds | Just works |
+| Tuples as lists | Yes | Yes |
+| `ReadsMissingKeys` / `WritesMissingKeys` instances of field types | Yes | Yes (own traits of the same names) |
 | Named tuples | No | Yes |
 | Opaque types | No | Yes |
 | Scala 3 enums | Partial | Yes |

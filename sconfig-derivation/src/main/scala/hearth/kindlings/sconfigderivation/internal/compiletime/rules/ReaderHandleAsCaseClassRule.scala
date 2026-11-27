@@ -29,7 +29,7 @@ trait ReaderHandleAsCaseClassRuleImpl {
       }
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def decodeCaseClassFields[A: ReaderCtx](
+    private[rules] def decodeCaseClassFields[A: ReaderCtx](
         caseClass: CaseClass[A]
     ): MIO[Expr[Either[ConfigDecodingError, A]]] = {
       implicit val StringT: Type[String] = RTypes.String
@@ -159,10 +159,6 @@ trait ReaderHandleAsCaseClassRuleImpl {
                       .map { ee => import ee.Underlying; ee.value.upcast[Any] }
                   }
                 else None
-              val isOptionField: Boolean = Type[Field] match {
-                case IsOption(_) => true
-                case _           => false
-              }
               Log.namedScope(s"Deriving reader for field $fName: ${Type[Field].prettyPrint}") {
                 deriveFieldReader[Field].map { readerExpr =>
                   // Resolve the HOCON key for this field. `@configKey("custom")` always wins;
@@ -189,8 +185,10 @@ trait ReaderHandleAsCaseClassRuleImpl {
                   // Every field is read from the object (checked once, see below) like upstream PureConfig: a
                   // missing key uses the default (when enabled), goes to readers of missing keys (`Option` fields,
                   // `ReadsMissingKeys`), or fails with `KeyNotFound`; the value's failures are reported under the key.
-                  val readsMissingKeysExpr: Expr[Boolean] =
-                    if (isOptionField) Expr.quote(true) else Expr.quote(false)
+                  // (whether a reader reads missing keys is its own property, `ReadsMissingKeys`: the built-in
+                  // `Option` reader and the ones derived here for `Option`s do, a user-provided plain reader of an
+                  // `Option` type does not)
+                  val readsMissingKeysExpr: Expr[Boolean] = Expr.quote(false)
                   val decodeExpr: Expr[ConfigObject] => Expr[Either[ConfigDecodingError, Any]] = objExpr =>
                     effectiveDefault match {
                       case Some(defaultAnyExpr) if useDefaultsIsStaticallyTrue =>
@@ -331,10 +329,24 @@ trait ReaderHandleAsCaseClassRuleImpl {
     }
 
     /** `value.asInstanceOf[F]` (a method of its own so that `F` is a type parameter in the quote). */
-    private def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
+    /** Whether unknown keys are allowed when reading `T`: what its `ProductHint` says when there is one, the global
+      * config otherwise. The first element is the answer when it is known at compile time.
+      */
+    @scala.annotation.nowarn("msg=is never used")
+    private[rules] def allowUnknownKeysOf[T: Type](implicit ctx: ReaderCtx[?]): (Option[Boolean], Expr[Boolean]) = {
+      implicit val BooleanT: Type[Boolean] = RTypes.Boolean
+      implicit val ProductHintT: Type[ProductHint[T]] = RTypes.productHintType[T]
+      Expr.summonImplicit[ProductHint[T]].toOption match {
+        case Some(hint) => (None, Expr.quote(Expr.splice(hint).allowUnknownKeys))
+        case None       =>
+          (ctx.evaluatedConfig.map(_.allowUnknownKeys), Expr.quote(Expr.splice(ctx.config).allowUnknownKeys))
+      }
+    }
+
+    private[rules] def castTo[F: Type](value: Expr[Any]): Expr[F] = Expr.quote(Expr.splice(value).asInstanceOf[F])
 
     @scala.annotation.nowarn("msg=is never used|unused explicit parameter")
-    private def deriveFieldReader[Field: Type](implicit ctx: ReaderCtx[?]): MIO[Expr[ConfigReader[Field]]] = {
+    private[rules] def deriveFieldReader[Field: Type](implicit ctx: ReaderCtx[?]): MIO[Expr[ConfigReader[Field]]] = {
       implicit val ConfigValueT: Type[ConfigValue] = RTypes.ConfigValue
       implicit val ReaderResultField: Type[Either[ConfigDecodingError, Field]] = RTypes.ReaderResult[Field]
       implicit val ReaderField: Type[ConfigReader[Field]] = RTypes.ConfigReader[Field]
@@ -354,7 +366,12 @@ trait ReaderHandleAsCaseClassRuleImpl {
               }
               .map { builder =>
                 val readFn = builder.build[Either[ConfigDecodingError, Field]]
-                Expr.quote(SConfigDerivationUtils.readerFromFn(Expr.splice(readFn)))
+                // A derived reader of an `Option` reads a missing key as `None`, like the built-in `Option` reader.
+                Type[Field] match {
+                  case IsOption(_) =>
+                    Expr.quote(SConfigDerivationUtils.readerFromFnReadingMissingKeys(Expr.splice(readFn)))
+                  case _ => Expr.quote(SConfigDerivationUtils.readerFromFn(Expr.splice(readFn)))
+                }
               }
       }
     }

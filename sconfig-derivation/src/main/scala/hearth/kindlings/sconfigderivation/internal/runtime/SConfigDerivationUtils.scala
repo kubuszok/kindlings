@@ -282,6 +282,77 @@ object SConfigDerivationUtils {
     */
   def readObjectAs[A](config: ConfigValue, value: A): Either[ConfigDecodingError, A] = asObject(config).map(_ => value)
 
+  /** [[readerFromFn]] for a derived reader of an `Option`: like the built-in `Option` reader, it reads missing keys. */
+  def readerFromFnReadingMissingKeys[A](read: ConfigValue => Either[ConfigDecodingError, A]): ConfigReader[A] =
+    new ConfigReader[A] with hearth.kindlings.sconfigderivation.ReadsMissingKeys {
+      override def from(value: ConfigValue): Either[ConfigDecodingError, A] = read(value)
+    }
+
+  /** Reads a type without fields (a case object) the way upstream PureConfig's derived reader does: the value must be
+    * an object and, when unknown keys are not allowed, every key of it is reported as an `UnknownKey`.
+    */
+  def readEmptyProduct[A](config: ConfigValue, value: A, allowUnknownKeys: Boolean): Either[ConfigDecodingError, A] =
+    asObject(config) match {
+      case Right(obj) => if (allowUnknownKeys) Right(value) else withUnknownKeys[A](obj, Right(value), Set.empty)
+      case Left(e)    => Left(e)
+    }
+
+  /** `value`, unless unknown keys are not allowed and `config` is an object with keys (each an `UnknownKey`). */
+  def checkNoKeys[A](config: ConfigValue, value: A, allowUnknownKeys: Boolean): Either[ConfigDecodingError, A] =
+    if (allowUnknownKeys || config == null || config.valueType != ConfigValueType.OBJECT) Right(value)
+    else withUnknownKeys[A](config.asInstanceOf[ConfigObject], Right(value), Set.empty)
+
+  /** The list a tuple of `size` elements is read from (upstream PureConfig reads tuples from lists): `WrongType` when
+    * the value is not a list, `WrongSizeList` when its size differs.
+    */
+  def tupleList(config: ConfigValue, size: Int): Either[ConfigDecodingError, ConfigList] =
+    asList(config) match {
+      case Right(list) =>
+        if (list.size == size) Right(list)
+        else Left(ConfigDecodingError.WrongSizeList(Nil, size, list.size))
+      case left => left
+    }
+
+  /** Whether a tuple is read from its object representation (`{ _1 = ..., _2 = ... }`): like upstream PureConfig's
+    * Scala 2 derivation, when the value is not a list but is an object.
+    */
+  def isTupleAsObject(config: ConfigValue): Boolean =
+    config != null && config.valueType == ConfigValueType.OBJECT
+
+  /** Reads the element `index` of a tuple's list: its failures are reported under the index. */
+  def readElement[A](list: ConfigList, index: Int, reader: ConfigReader[A]): Either[ConfigDecodingError, A] =
+    reader.from(list.get(index)) match {
+      case Left(e) => Left(e.withParentPath(index.toString))
+      case right   => right
+    }
+
+  /** Puts a field written by a summoned `writer` (one statement per field in derived writers). Like upstream
+    * PureConfig's derived writers, a `WritesMissingKeys` writer (e.g. the built-in `Option` writer) decides whether the
+    * key is written at all.
+    */
+  def putFieldWith[A](
+      fields: java.util.LinkedHashMap[String, ConfigValue],
+      key: String,
+      writer: ConfigWriter[A],
+      value: A
+  ): Unit = writer match {
+    case w: hearth.kindlings.sconfigderivation.WritesMissingKeys[A @unchecked] =>
+      w.toOpt(value) match {
+        case Some(v) => val _ = fields.put(key, v)
+        case None    => ()
+      }
+    case w => val _ = fields.put(key, w.to(value))
+  }
+
+  /** Adds an element to the list a tuple is written as. */
+  def addElement(elements: java.util.ArrayList[ConfigValue], value: ConfigValue): Unit = {
+    val _ = elements.add(value)
+  }
+
+  /** The list of the elements added by [[addElement]] (upstream PureConfig writes tuples as lists). */
+  def elementsToList(elements: java.util.ArrayList[ConfigValue]): ConfigValue =
+    ConfigValueFactory.fromIterable(elements)
+
   /** The failure upstream `FirstSuccessCoproductHint` reports when no subtype could be read:
     * `NoValidCoproductOptionFound` with the failed results of every attempted subtype (in the order attempted).
     */

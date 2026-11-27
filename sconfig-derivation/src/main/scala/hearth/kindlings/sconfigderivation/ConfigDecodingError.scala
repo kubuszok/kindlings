@@ -76,6 +76,13 @@ object ConfigDecodingError {
     * `allowUnknownKeys = false` was active (matches PureConfig's `pureconfig.error.UnknownKey`). Derived readers report
     * it at the unknown key.
     */
+  /** A tuple read from a list of another size (matches PureConfig's `WrongSizeList`). */
+  final case class WrongSizeList(path: List[String], expected: Int, found: Int) extends ConfigDecodingError {
+    override def message: String =
+      s"List of wrong size found. Expected $expected elements. Found $found elements instead."
+    override def withParentPath(parent: String): ConfigDecodingError = copy(path = parent :: path)
+  }
+
   final case class UnknownKey(path: List[String], key: String) extends ConfigDecodingError {
     override def message: String = s"Unknown key '$key'."
     override def withParentPath(parent: String): ConfigDecodingError = copy(path = parent :: path)
