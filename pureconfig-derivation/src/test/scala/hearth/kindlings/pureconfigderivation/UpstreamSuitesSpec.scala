@@ -10,6 +10,7 @@ final case class UsTupled(values: (Boolean, Int))
 final case class UsNestedTupled(values: (Int, (Long, String), Boolean))
 final case class UsTwoInts(a: Int, b: Int)
 final case class UsOptString(a: Int, o: Option[String])
+final case class UsIntWithDefault(a: Int, b: Int = 7)
 final case class UsEmptyConf()
 case object UsObjConf
 
@@ -105,6 +106,16 @@ final class UpstreamSuitesSpec extends MacroSuite {
           cur.asConfigValue.fold(_ => Right(42), v => cur.scopeFailure(catchReadError(_.toInt).apply(render(v))))
       }
       KindlingsConfigReader.derived[UsTwoInts].from(cursor("a = 1")) ==> Right(UsTwoInts(1, 42))
+    }
+
+    test("a custom ReadsMissingKeys reader reads the missing key of a field whose default is not used") {
+      implicit val hint: KindlingsProductHint[UsIntWithDefault] =
+        KindlingsProductHint[UsIntWithDefault](useDefaults = false)
+      implicit val defaulting: ConfigReader[Int] = new ConfigReader[Int] with ReadsMissingKeys {
+        def from(cur: ConfigCursor): ConfigReader.Result[Int] =
+          cur.asConfigValue.fold(_ => Right(42), v => cur.scopeFailure(catchReadError(_.toInt).apply(render(v))))
+      }
+      KindlingsConfigReader.derived[UsIntWithDefault].from(cursor("a = 1")) ==> Right(UsIntWithDefault(1, 42))
     }
 
     test("a custom WritesMissingKeys writer decides whether a key is written") {

@@ -18,8 +18,8 @@ trait ReaderHandleAsTupleRuleImpl {
     * (`WrongSizeList` otherwise, `WrongType` when the value is neither a list nor an object), every element read with
     * the reader of its type and every failure reported.
     *
-    * A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = ..., _2 =
-    * ... }`), as upstream's Shapeless derivation (Scala 2) does; upstream's Scala 3 derivation reads only lists.
+    * A value that is not a list but is an object is read from the tuple's product representation (`{ _1 = ..., _2 = ...
+    * }`), as upstream's Shapeless derivation (Scala 2) does; upstream's Scala 3 derivation reads only lists.
     */
   object ReaderHandleAsTupleRule extends ReaderDerivationRule("handle as tuple when possible") {
 
@@ -85,7 +85,9 @@ trait ReaderHandleAsTupleRuleImpl {
               case Right(constructed) => constructed.value.asInstanceOf[Expr[A]]
               case Left(error)        =>
                 Environment.reportErrorAndAbort(
-                  ReaderDerivationError.CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error)).message
+                  ReaderDerivationError
+                    .CannotConstructType(Type[A].prettyPrint, isSingleton = false, Some(error))
+                    .message
                 )
             }
 
