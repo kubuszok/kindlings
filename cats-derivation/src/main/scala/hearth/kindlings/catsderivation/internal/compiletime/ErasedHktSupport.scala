@@ -566,7 +566,9 @@ trait ErasedHktSupport
           case Left(reason) => generic(tc, lam).left.map(_ => List(reason))
         }
       else
-        inProgress.collectFirst { case (have, enclosing, id) if provides(have, tc) && enclosing.sameAs(lam) => id } match {
+        inProgress.collectFirst {
+          case (have, enclosing, id) if provides(have, tc) && enclosing.sameAs(lam) => id
+        } match {
           case Some(id) => Right(Plan.Self(id))
           case None     =>
             val applied: Either[List[String], Plan] = outerAndInner(lam) match {
@@ -597,7 +599,7 @@ trait ErasedHktSupport
         for {
           outerPlan <- plan(outerTc, outerLam, isTop = false)
           result <- innerTc match {
-            case None        => Right(outerPlan)
+            case None       => Right(outerPlan)
             case Some(inTc) => plan(inTc, inner, isTop = false).map(Plan.Composed(compose, outerPlan, _))
           }
         } yield result
@@ -620,12 +622,12 @@ trait ErasedHktSupport
       try
         productParts(lam) match {
           case Some(Right((values, construct, fields))) => product(tc, lam, id, values, construct, fields)
-          case Some(Left(reason))                        => Left(List(reason))
-          case None                                      =>
+          case Some(Left(reason))                       => Left(List(reason))
+          case None                                     =>
             coproductParts(lam) match {
               case Some(Right((ordinal, variants))) => coproduct(tc, lam, id, ordinal, variants)
-              case Some(Left(reason))                => Left(List(reason))
-              case None                              =>
+              case Some(Left(reason))               => Left(List(reason))
+              case None                             =>
                 Left(List(s"${lam.show} is neither a case class nor a sealed trait, and has no ${tc.name}"))
             }
         }
@@ -692,7 +694,9 @@ trait ErasedHktSupport
           else Right(Plan.Coproduct(id, tc, ordinal, results.collect { case Right(found) => found }))
         case EmptyK =>
           // Like kittens: exactly one subtype forms an EmptyK.
-          variants.flatMap { case (name, variantLam) => plan(tc, variantLam, isTop = false).toOption.map(name -> _) } match {
+          variants.flatMap { case (name, variantLam) =>
+            plan(tc, variantLam, isTop = false).toOption.map(name -> _)
+          } match {
             case (_, only) :: Nil => Right(Plan.Alias(id, only))
             case Nil              => Left(List(s"no subtype of ${lam.show} forms an EmptyK (exactly one has to)"))
             case several          =>
@@ -740,7 +744,9 @@ trait ErasedHktSupport
               val paramsInt = ccInt.primaryConstructor.totalParameters.flatten.toList
               val paramsString = ccString.primaryConstructor.totalParameters.flatten.toList
               val accessible = ccAny.caseFieldValuesAt(Expr.quote(null.asInstanceOf[T])).size
-              if (accessible != paramsAny.size || paramsInt.size != paramsAny.size || paramsString.size != paramsAny.size)
+              if (
+                accessible != paramsAny.size || paramsInt.size != paramsAny.size || paramsString.size != paramsAny.size
+              )
                 Some(Left(s"${lam.show} has constructor parameters that are not accessible as fields"))
               else {
                 val valuesBody: Expr[Any] => Expr[Array[Any]] = { fa =>
@@ -754,20 +760,23 @@ trait ErasedHktSupport
                   val args: Map[String, Expr_??] = paramsAny.zipWithIndex.map { case ((name, param), index) =>
                     name -> erasedCastTo(Expr.quote(Expr.splice(values)(Expr.splice(Expr(index)))), param.tpe)
                   }.toMap
-                  runSafe(constructInstanceFree(ccAny.primaryConstructor, "Constructor", Type[T].prettyPrint)(args)).value
+                  runSafe(
+                    constructInstanceFree(ccAny.primaryConstructor, "Constructor", Type[T].prettyPrint)(args)
+                  ).value
                     .asInstanceOf[Expr[Any]]
                 }
                 val valuesFn: Expr[Any => Array[Any]] =
                   Expr.quote((fa: Any) => Expr.splice(valuesBody(Expr.quote(fa))))
                 val constructFn: Expr[Array[Any] => Any] =
                   Expr.quote((values: Array[Any]) => Expr.splice(constructBody(Expr.quote(values))))
-                val fields = paramsInt.zip(paramsString).zip(paramsAny).map { case (((name, pInt), (_, pString)), (_, pAny)) =>
-                  name -> Lam(
-                    pInt.tpe.Underlying.asInstanceOf[Type[Any]],
-                    pString.tpe.Underlying.asInstanceOf[Type[Any]],
-                    pAny.tpe.Underlying.asInstanceOf[Type[Any]]
-                  )
-                }
+                val fields =
+                  paramsInt.zip(paramsString).zip(paramsAny).map { case (((name, pInt), (_, pString)), (_, pAny)) =>
+                    name -> Lam(
+                      pInt.tpe.Underlying.asInstanceOf[Type[Any]],
+                      pString.tpe.Underlying.asInstanceOf[Type[Any]],
+                      pAny.tpe.Underlying.asInstanceOf[Type[Any]]
+                    )
+                  }
                 Some(Right((valuesFn, constructFn, fields)))
               }
             case _ => None
@@ -806,14 +815,14 @@ trait ErasedHktSupport
               }
             }
             val ordinalFn: Expr[Any => Int] = Expr.quote((fa: Any) => Expr.splice(ordinalBody(Expr.quote(fa))))
-            val variants = childrenInt.zip(childrenString).zip(childrenAny).map {
-              case (((name, cInt), (_, cString)), (_, cAny)) =>
+            val variants =
+              childrenInt.zip(childrenString).zip(childrenAny).map { case (((name, cInt), (_, cString)), (_, cAny)) =>
                 name -> Lam(
                   cInt.Underlying.asInstanceOf[Type[Any]],
                   cString.Underlying.asInstanceOf[Type[Any]],
                   cAny.Underlying.asInstanceOf[Type[Any]]
                 )
-            }
+              }
             Some(Right((ordinalFn, variants)))
           }
         case _ => None
@@ -850,8 +859,8 @@ trait ErasedHktSupport
     implicit val RegistryType: Type[hearth.kindlings.catsderivation.internal.runtime.HktGenericRuntime.Registry] =
       ErasedRegistryType
     plan match {
-      case Plan.Ready(instance) => instance
-      case Plan.Self(id)        => Expr.quote(Expr.splice(registry).get(Expr.splice(Expr(id))))
+      case Plan.Ready(instance)                 => instance
+      case Plan.Self(id)                        => Expr.quote(Expr.splice(registry).get(Expr.splice(Expr(id))))
       case Plan.Composed(compose, outer, inner) => compose(emitPlan(outer, registry), emitPlan(inner, registry))
       case Plan.Alias(id, underlying)           =>
         val instance = emitPlan(underlying, registry)
