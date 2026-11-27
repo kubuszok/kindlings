@@ -131,7 +131,7 @@ object JuRuntimeConfigs {
 }
 
 /** Kindlings codecs derived with the configs of `JuRuntimeConfigs` (the generic codegen). */
-@scala.annotation.nowarn("msg=deprecated|never used|unused")
+@scala.annotation.nowarn("msg=deprecated|never used|unused|dead code")
 object JuRuntime {
   object defaults {
     implicit def config: JsoniterConfig = JuRuntimeConfigs.defaults

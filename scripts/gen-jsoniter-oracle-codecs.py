@@ -81,7 +81,7 @@ groups = [
 ]
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-jsoniter-oracle-spec-table.py")).read())
 
-NOWARN = '@scala.annotation.nowarn("msg=deprecated|never used|unused")'
+NOWARN = '@scala.annotation.nowarn("msg=deprecated|never used|unused|dead code")'
 
 def ident(g, c): return g + c[0].upper() + c[1:]
 

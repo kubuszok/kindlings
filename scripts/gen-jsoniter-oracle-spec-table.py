@@ -240,7 +240,8 @@ spec_groups = [
   (lambda T: f'JsonCodecMaker.makeOpenapiLike[{T}]("hint")'), [("enumeration", "JUOpenapi.Enum")]),
  ("makeOpenapiLikeHintMapper",
   'JsoniterConfig.makeOpenapiLike("hint", { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" })',
-  (lambda T: f'JsonCodecMaker.makeOpenapiLike[{T}]("hint", {{ case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" }})'),
+  # (the source of the upstream side differs per Scala version: hand-written in JuUpstreamVersioned)
+  (lambda T: "JuUpstreamVersioned.openapiHintMapper"),
   [("enumeration", "JUOpenapi.Enum")]),
  preset("makeOpenapiLikeWithoutDiscriminator", [("enumeration", "JUOpenapi.Enum")]),
  preset("makeCirceLike", [("base", "JUCirce.Base")]),

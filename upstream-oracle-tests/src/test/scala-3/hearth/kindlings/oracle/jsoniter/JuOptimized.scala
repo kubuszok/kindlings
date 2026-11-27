@@ -8,7 +8,7 @@ import hearth.kindlings.jsoniterderivation.{JsoniterConfig, KindlingsJsonValueCo
   * `JsoniterUpstreamSpecOracleSpec`. Kept in sync with the Scala 2.13 version of this file and with
   * `JuRuntime`/`JuUpstream`: the only difference between the versions is the syntax of passing the config explicitly.
   */
-@scala.annotation.nowarn("msg=deprecated|never used|unused")
+@scala.annotation.nowarn("msg=deprecated|never used|unused|dead code")
 object JuOptimized {
   // defaults
   lazy val defaultsPrimitives: JsonValueCodec[JUPrimitives] =

@@ -8,7 +8,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodec
   * the `makeXxx` entry point equivalent to each preset). Recursive types need `allowRecursiveTypes` upstream.
   */
 // jsoniter-scala's Scala 2 macro leaves unused local vars in some ADT decoders.
-@scala.annotation.nowarn("msg=deprecated|never used|unused")
+@scala.annotation.nowarn("msg=deprecated|never used|unused|dead code")
 object JuUpstream {
   object defaults {
     lazy val primitives: JsonValueCodec[JUPrimitives] = JsonCodecMaker.make[JUPrimitives](CodecMakerConfig)
@@ -668,10 +668,7 @@ object JuUpstream {
     lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum]("hint")
   }
   object makeOpenapiLikeHintMapper {
-    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JsonCodecMaker.makeOpenapiLike[JUOpenapi.Enum](
-      "hint",
-      { case "EnumValue1" => "enum_value_1"; case "EnumValue2" => "enum_value_2" }
-    )
+    lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] = JuUpstreamVersioned.openapiHintMapper
   }
   object makeOpenapiLikeWithoutDiscriminator {
     lazy val enumeration: JsonValueCodec[JUOpenapi.Enum] =

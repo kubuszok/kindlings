@@ -22,8 +22,8 @@ trait HandleAsScalaEnumerationRulesImpl {
     */
   protected def enumerationObjectOf[A: Type]: Option[Expr[Enumeration]]
 
-  /** The per-codec-instance [[JsoniterScalaEnumeration]] of `A` (a cached `lazy val`), if `A` is an enumeration value
-    * type whose enumeration object is known.
+  /** The per-codec-instance [[JsoniterScalaEnumeration]] of `A` (a cached `lazy val`: a plain `val` among the cached
+    * defs would be a forward reference), if `A` is an enumeration value type whose enumeration object is known.
     */
   private[compiletime] def scalaEnumerationOf[A: Type](
       cache: MLocal[ValDefsCache]
@@ -62,10 +62,24 @@ trait HandleAsScalaEnumerationRulesImpl {
             def byName: Expr[Unit] = Expr.quote {
               Expr.splice(support).writeVal(Expr.splice(ectx.value), Expr.splice(ectx.writer))
             }
-            def byId: Expr[Unit] = Expr.quote {
-              Expr
-                .splice(support)
-                .writeIdVal(Expr.splice(ectx.value), Expr.splice(ectx.writer), Expr.splice(ectx.stringifiedExpr))
+            // ids need no lookup: written inline
+            def byId: Expr[Unit] = ectx.stringifiedMode match {
+              case Some(true) =>
+                Expr.quote {
+                  Expr
+                    .splice(ectx.writer)
+                    .writeValAsString(Expr.splice(ectx.value).asInstanceOf[Enumeration#Value].id)
+                }
+              case Some(false) =>
+                Expr.quote {
+                  Expr.splice(ectx.writer).writeVal(Expr.splice(ectx.value).asInstanceOf[Enumeration#Value].id)
+                }
+              case None =>
+                Expr.quote {
+                  Expr
+                    .splice(support)
+                    .writeIdVal(Expr.splice(ectx.value), Expr.splice(ectx.writer), Expr.splice(ectx.stringifiedExpr))
+                }
             }
             Rule.matched(ectx.evaluatedConfig.map(_.useScalaEnumValueId) match {
               case Some(true)  => byId
@@ -125,7 +139,7 @@ trait HandleAsScalaEnumerationRulesImpl {
               Expr.splice(support).writeKey(Expr.splice(keyExpr), Expr.splice(writerExpr))
             }
             def byId: Expr[Unit] = Expr.quote {
-              Expr.splice(support).writeIdKey(Expr.splice(keyExpr), Expr.splice(writerExpr))
+              Expr.splice(writerExpr).writeKey(Expr.splice(keyExpr).asInstanceOf[Enumeration#Value].id)
             }
             MIO.pure(ctx.evaluatedConfig.map(_.useScalaEnumValueId) match {
               case Some(true)  => byId

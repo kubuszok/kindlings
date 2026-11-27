@@ -360,7 +360,10 @@ final case class JUTupleAliases(t1: (JUAlias.S, JUAlias.I), t2: (JUAlias.I, JUAl
 
 final case class JUUTF8KeysAndValues(გასაღები: String)
 
-final case class JUOperators(` =<>!#%^&|*/\\~+-:$ `: Int)
+// (upstream's field name also starts and ends with a space: see `JUSpacedName`)
+final case class JUOperators(`=<>!#%^&|*/\\~+-:$`: Int)
+
+final case class JUSpacedName(` x `: Int)
 
 final case class JUOptionInner(a: Int, b: Boolean, c: String)
 

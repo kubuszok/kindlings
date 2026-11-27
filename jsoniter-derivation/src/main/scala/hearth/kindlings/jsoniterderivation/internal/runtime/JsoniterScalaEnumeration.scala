@@ -16,7 +16,9 @@ final class JsoniterScalaEnumeration[E](enumeration: => Enumeration) {
 
   private lazy val enumObject: Enumeration = enumeration
 
-  @volatile private var snapshot: Snapshot = emptySnapshot
+  // Not volatile: a `Snapshot` is immutable (final fields), so a racy read sees either the previous one or the new
+  // one, and a miss rebuilds it.
+  private var snapshot: Snapshot = emptySnapshot
 
   private def rebuild(): Snapshot = synchronized {
     val values = enumObject.values.toArray[Enumeration#Value]
