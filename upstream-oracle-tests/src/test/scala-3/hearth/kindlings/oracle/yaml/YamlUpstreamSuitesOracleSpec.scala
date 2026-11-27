@@ -11,7 +11,15 @@ import org.virtuslab.yaml.*
 // so both sides derive the same types.
 
 // DecoderSuite "numbers"
-final case class YuValueTypes(double: Double, float: Float, long: Long, int: Int, short: Short, byte: Byte, boolean: Boolean)
+final case class YuValueTypes(
+    double: Double,
+    float: Float,
+    long: Long,
+    int: Int,
+    short: Short,
+    byte: Byte,
+    boolean: Boolean
+)
 // DecoderSuite "option"
 final case class YuOptionTypes(double: Option[Double], float: Option[Float], int: Option[Int], short: Option[Short])
 // DecoderSuite "sequence"
@@ -280,7 +288,15 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
         "double: 1\nfloat: 1\nlong: 1\nint: {a: 1}\nshort: 1\nbyte: 1\nboolean: false"
       )()
       compareEncoded(K.valueTypes, U.valueTypes)(
-        YuValueTypes(Double.MaxValue, Float.MinValue, Long.MaxValue, Int.MinValue, Short.MaxValue, Byte.MinValue, false),
+        YuValueTypes(
+          Double.MaxValue,
+          Float.MinValue,
+          Long.MaxValue,
+          Int.MinValue,
+          Short.MaxValue,
+          Byte.MinValue,
+          false
+        ),
         YuValueTypes(Double.NaN, Float.PositiveInfinity, 0L, 0, 0, 0, true)
       )()
     }
@@ -378,7 +394,9 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
         "addresses: [x]",
         "addresses: [null]"
       )()
-      compareEncoded(K.addresses, U.addresses)(YuAddresses(List(YuLocal("localhost", 80), YuNetwork("127.0.0.1", 81))))()
+      compareEncoded(K.addresses, U.addresses)(
+        YuAddresses(List(YuLocal("localhost", 80), YuNetwork("127.0.0.1", 81)))
+      )()
     }
 
     test("codec mapping: a user-provided codec is used") {
@@ -447,7 +465,10 @@ final class YamlUpstreamSuitesOracleSpec extends MacroSuite {
     test("default parameters for case classes can be used when decoding") {
       assertDecodes(K.defaultParams, "d: 1.0", YuDefaultParams(1, "test", None, 1.0))
       compareDecoded(K.defaultParams, U.defaultParams)("d: 1.0", "a: 2\nd: 1.0", "a: x\nd: 1.0", "{}", "c: 1\nd: 2")()
-      compareEncoded(K.defaultParams, U.defaultParams)(YuDefaultParams(d = 1.0), YuDefaultParams(2, "b", Some(3), 4.0))()
+      compareEncoded(K.defaultParams, U.defaultParams)(
+        YuDefaultParams(d = 1.0),
+        YuDefaultParams(2, "b", Some(3), 4.0)
+      )()
     }
 
     test("default parameters are evaluated lazily, on every use, and not when the field is provided") {
