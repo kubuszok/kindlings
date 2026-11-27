@@ -62,7 +62,9 @@ final class KittensShowSpec extends KittensLawsSuite {
     val value: EnumK0 = EnumK0.LeafI(3)
     assertEquals(Show.derived[EnumK0].show(value), "LeafI(value = 3)")
   }
-  test("Show respects existing instances")(assertEquals(Show.derived[Box[Bogus]].show(Box(Bogus(42))), "Box(content = Blah)"))
+  test("Show respects existing instances")(
+    assertEquals(Show.derived[Box[Bogus]].show(Box(Bogus(42))), "Box(content = Blah)")
+  )
 }
 
 object KittensShowSpec {
