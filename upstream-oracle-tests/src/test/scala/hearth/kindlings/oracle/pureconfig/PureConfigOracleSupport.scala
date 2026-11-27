@@ -27,7 +27,7 @@ trait PureConfigOracleSupport { this: MacroSuite =>
       // (the origin too: upstream's suites assert it, and it tells at which cursor a failure was reported)
       val at = origin.fold("")(o => s" (${o.description})")
       s"at '$path'$at: ${reason.getClass.getSimpleName}: ${reason.description}"
-    case other                           => other.description
+    case other => other.description
   }
 
   protected def show(result: Either[ConfigReaderFailures, Any]): String =

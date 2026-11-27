@@ -87,7 +87,8 @@ object PcCompanionHinted {
     hearth.kindlings.pureconfigderivation
       .KindlingsProductHint[PcCompanionHinted](ConfigFieldMapping(CamelCase, SnakeCase), allowUnknownKeys = false)
   implicit val upstreamHint: pureconfig.generic.ProductHint[PcCompanionHinted] =
-    pureconfig.generic.ProductHint[PcCompanionHinted](ConfigFieldMapping(CamelCase, SnakeCase), allowUnknownKeys = false)
+    pureconfig.generic
+      .ProductHint[PcCompanionHinted](ConfigFieldMapping(CamelCase, SnakeCase), allowUnknownKeys = false)
 }
 
 sealed trait PcCompanionFamily

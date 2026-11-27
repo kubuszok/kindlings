@@ -190,7 +190,8 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
   // --- derivations: hints --------------------------------------------------------------------------------------------
 
   private object HintsK {
-    implicit val emptyHint: KindlingsProductHint[PcEmptyConf] = KindlingsProductHint[PcEmptyConf](allowUnknownKeys = false)
+    implicit val emptyHint: KindlingsProductHint[PcEmptyConf] =
+      KindlingsProductHint[PcEmptyConf](allowUnknownKeys = false)
     implicit val objHint: KindlingsProductHint[PcObjConf.type] =
       KindlingsProductHint[PcObjConf.type](allowUnknownKeys = false)
     implicit val noDefaultsHint: KindlingsProductHint[PcManyDefaults] =
@@ -223,9 +224,10 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
     implicit val upperHint: ProductHint[PcTwoInts] = ProductHint[PcTwoInts](upperCase)
     implicit val outerOnlyHint: ProductHint[PcCamelOuter] =
       ProductHint[PcCamelOuter](ConfigFieldMapping(CamelCase, CamelCase))
-    implicit val animalHint: FieldCoproductHint[PcAnimalConfig] = new FieldCoproductHint[PcAnimalConfig]("which-animal") {
-      override def fieldValue(name: String): String = animalName(name)
-    }
+    implicit val animalHint: FieldCoproductHint[PcAnimalConfig] =
+      new FieldCoproductHint[PcAnimalConfig]("which-animal") {
+        override def fieldValue(name: String): String = animalName(name)
+      }
     implicit val ambiguousHint: FieldCoproductHint[PcAmbiguous] = new FieldCoproductHint[PcAmbiguous]("typ")
     lazy val emptyR: ConfigReader[PcEmptyConf] = deriveReader[PcEmptyConf]
     lazy val objR: ConfigReader[PcObjConf.type] = deriveReader[PcObjConf.type]
@@ -336,7 +338,9 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
 
     test("read / write kebab case config keys from camel case fields by default") {
       compareReads(K.camelR, U.camelR)(
-        root("camel-case-int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }"),
+        root(
+          "camel-case-int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }"
+        ),
         root("camelCaseInt = 1, camelCaseString = bar, camelCaseConf { thisIsAnInt = 3, thisIsAnotherInt = 10 }")
       )()
       compareWrites(K.camelW, U.camelW)(PcCamelOuter(1, "foobar", PcCamelInner(2, 3)))()
@@ -351,7 +355,9 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
     test("read / write pascal case config keys when configured to do so (for every type)") {
       compareReads(PascalK.camelR, PascalU.camelR)(
         root("CamelCaseInt = 1, CamelCaseString = bar, CamelCaseConf { ThisIsAnInt = 3, ThisIsAnotherInt = 10 }"),
-        root("camel-case-int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }")
+        root(
+          "camel-case-int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }"
+        )
       )()
       compareWrites(PascalK.camelW, PascalU.camelW)(PcCamelOuter(1, "foobar", PcCamelInner(2, 3)))()
     }
@@ -383,8 +389,12 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
 
     test("include candidate keys in failure reasons in case of a suspected misconfigured ProductHint") {
       compareReads(K.camelR, U.camelR)(
-        root("camel-case-int = 1, camel-case-string = bar, camel-case-conf { thisIsAnInt = 3, this_is_another_int = 10 }"),
-        root("camel_case_int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }")
+        root(
+          "camel-case-int = 1, camel-case-string = bar, camel-case-conf { thisIsAnInt = 3, this_is_another_int = 10 }"
+        ),
+        root(
+          "camel_case_int = 1, camel-case-string = bar, camel-case-conf { this-is-an-int = 3, this-is-another-int = 10 }"
+        )
       )()
     }
   }
@@ -441,12 +451,21 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
     }
 
     test("return a KeyNotFound when a custom convert is used and when a key is not in the configuration") {
-      compareReads(OverridesK.manyDefaultsR, OverridesU.manyDefaultsR)(root("a = 1"), root("a = 1, d = whatever"), root(""))()
+      compareReads(OverridesK.manyDefaultsR, OverridesU.manyDefaultsR)(
+        root("a = 1"),
+        root("a = 1, d = whatever"),
+        root("")
+      )()
     }
 
     test("allow custom ConfigReaders to handle missing keys") {
       compareReads(K.twoIntsR, U.twoIntsR)(root("a = 1"))()
-      compareReads(MissingKeysK.twoIntsR, MissingKeysU.twoIntsR)(root("a = 1"), root("a = 1, b = 2"), root("b = x"), root(""))()
+      compareReads(MissingKeysK.twoIntsR, MissingKeysU.twoIntsR)(
+        root("a = 1"),
+        root("a = 1, b = 2"),
+        root("b = x"),
+        root("")
+      )()
     }
 
     test("allow custom ConfigWriters to handle missing keys") {
@@ -486,7 +505,9 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
 
     test("use existing reader and writer instances when they exist (DerivationModesSuite)") {
       compareReads(K.customR, U.customR)(
-        root("""custom-object = eaaxacaca, map-custom-object { a = eaaxacaca, b = a }, map-list-custom-object { x = [a, eaaxacaca, cvbc] }""")
+        root(
+          """custom-object = eaaxacaca, map-custom-object { a = eaaxacaca, b = a }, map-list-custom-object { x = [a, eaaxacaca, cvbc] }"""
+        )
       )()
       compareWrites(K.customW, U.customW)(
         PcCustomCaseClass(
@@ -643,7 +664,10 @@ final class PureConfigUpstreamSuitesOracleSpec extends MacroSuite with PureConfi
     }
 
     test("a value class of a sealed family, and a case class of it") {
-      compareReads(K.shapeWrapperR, U.shapeWrapperR)(root("type = pc-circle, radius = 1"), root("value { type = pc-circle, radius = 1 }"))()
+      compareReads(K.shapeWrapperR, U.shapeWrapperR)(
+        root("type = pc-circle, radius = 1"),
+        root("value { type = pc-circle, radius = 1 }")
+      )()
       compareWrites(K.shapeWrapperW, U.shapeWrapperW)(PcShapeWrapper(PcCircle(1)))()
       compareReads(K.doubleWrapperR, U.doubleWrapperR)(
         root("value { type = pc-circle, radius = 1 }"),
