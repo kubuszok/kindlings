@@ -660,6 +660,25 @@ recursive types, annotations, `BigDecimal`/`BigInt`, `java.time`, `UUID` and `Ei
 
 ---
 
+## mock
+
+**Modelled on:** [ScalaMock](https://github.com/ScalaMock/ScalaMock) (classic `mock`/`stub` API; checked against the
+cases of ScalaMock 7.6.3's own suite in `mock/src/test/scala/hearth/kindlings/mock/ScalaMockParitySpec.scala` and
+`MockSpec`). An independent reimplementation, not a drop-in replacement.
+
+| Feature | ScalaMock | Kindlings | Status |
+|---|---|---|---|
+| `mock[T]` / `stub[T]`, `expects`/`returning`/`throwing`/`onCall`, `when`/`verify` | Yes | Yes (faithful and name-keyed DSLs) | Parity |
+| Call counts, `inSequence`/`inAnyOrder` (nested), argument matchers (`*`, `~`, `where`, captures) | Yes | Yes | Parity |
+| Overloads, polymorphic/curried methods, bounds, `ClassTag`, varargs, by-name/implicit/default parameters, operators | Yes | Yes | Parity |
+| Abstract `val`s (default value, no expectation) | Yes | Yes | Parity (fixed: a strict mock used to throw on construction) |
+| Concrete members mocked | Yes | No (keep their implementation) | Difference (by design) |
+| Members typed with an inner type of the mocked trait | Yes | No | Gap (Hearth, `docs/research/hearth-gap-anonymous-instance-inner-types.md`) |
+| `mockFunction` / `stubFunction`, call log, new `stubs` API, ZIO/cats-effect integrations, Java proxy mocks | Yes | No | Not ported |
+| Scala.js / Scala Native | JS (macro backend) | Yes | Improvement |
+
+---
+
 ## optics
 
 **Replaces:** [SoftwareMill quicklens](https://github.com/softwaremill/quicklens) (`modify`/`modifyAll`/`modifyLens`

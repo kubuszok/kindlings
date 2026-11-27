@@ -179,6 +179,10 @@ private[mock] trait MockMacrosImpl extends hearth.kindlings.macros.compiletime.G
       // (it widens to the parent). So we still route through the context (recording + strict expectation match) but
       // return `octx.self` (the mock itself), WITHOUT casting it to the widened `returnType`.
       if (octx.returnsThisType) selfReturnBody(ctx, methodName, args, octx.self)
+      // An abstract (eager) `val` is initialized while the mock is constructed, before any expectation can be set:
+      // routing it through the strict context made every mock of a type with an abstract `val` throw "Unexpected
+      // call". Like ScalaMock (`cope with a val`), it is not mocked and holds the default.
+      else if (cm.method.isVal && !cm.method.isLazy) summonDefault[R].as_??
       else forwardCall[R](ctx, methodName, args, summonDefault[R]).as_??
     }
   }
