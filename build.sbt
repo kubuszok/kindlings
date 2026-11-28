@@ -1254,6 +1254,17 @@ lazy val derivationPolicyTests = projectMatrix
     )
   )
 
+// JMH JDK pin: `Jmh/run` forks a runner JVM and JMH forks the benchmark JVMs from the runner's `java.home`, so pointing
+// the runner's `javaHome` at a fixed JDK pins every measurement. The maintained choice is Temurin 25 (HotSpot C2):
+// GraalVM CE's JIT inlines Kindlings' factory+lambda instances differently (~20% slower on some benchmarks), so
+// numbers taken on it are not comparable with what users run. Get it with:
+//   export KINDLINGS_BENCH_JAVA_HOME="$(cs java-home --jvm temurin:25)"
+// The sbt server reads the variable when it starts: set it before the first `sbt --client` (or `sbt --client shutdown`
+// and start again). Without it the benchmarks run on the sbt server's JDK and `Jmh/run` prints a warning.
+val benchJavaHomeEnv = "KINDLINGS_BENCH_JAVA_HOME"
+val benchJavaHome: Option[File] = sys.env.get(benchJavaHomeEnv).map(_.trim).filter(_.nonEmpty).map(file)
+val benchJdkWarning = taskKey[Unit]("Warns when the JMH JDK is not pinned with KINDLINGS_BENCH_JAVA_HOME")
+
 lazy val benchmarks = projectMatrix
   .in(file("benchmarks"))
   .someVariations(versions.scalas, List(VirtualAxis.jvm))(dev.only1VersionInIDE *)
@@ -1283,6 +1294,24 @@ lazy val benchmarks = projectMatrix
     name := "kindlings-benchmarks",
     description := "JMH benchmarks comparing Kindlings derivation against original library derivation",
     scalacOptions --= Seq("-Werror", "-Xfatal-warnings", "-Xcheck-macros"),
+    // see `benchJavaHome` above
+    Jmh / run / javaHome := benchJavaHome,
+    benchJdkWarning := Def.uncached {
+      val log = streams.value.log
+      benchJavaHome match {
+        case Some(home) if !(home / "bin" / "java").exists() =>
+          sys.error(s"$benchJavaHomeEnv=$home does not contain bin/java")
+        case Some(home) =>
+          log.info(s"JMH runs on the pinned JDK $home ($benchJavaHomeEnv)")
+        case None =>
+          log.warn(
+            s"$benchJavaHomeEnv is not set: JMH runs on the sbt server's JDK (${sys.props("java.home")}), so results are " +
+              "not comparable with the published ones. Pin Temurin 25: `sbt --client shutdown; " +
+              s"""export $benchJavaHomeEnv="$$(cs java-home --jvm temurin:25)"` and run again."""
+          )
+      }
+    },
+    Jmh / run := (Jmh / run).dependsOn(benchJdkWarning).evaluated,
     resolvers += Resolver.mavenLocal,
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-parser" % versions.circe,

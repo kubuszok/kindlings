@@ -269,12 +269,20 @@ When optimizing the runtime performance of generated codecs/encoders/decoders. K
 
 Reference analysis: `docs/research/jsoniter-codegen-techniques.md`, `docs/research/perf-regression-analysis.md`
 
+### Running benchmarks — pin the JDK
+
+JMH forks run on `$KINDLINGS_BENCH_JAVA_HOME` (Temurin 25, HotSpot C2; GraalVM CE's JIT skews Kindlings' factory+lambda
+instances by ~20%). Start the sbt server with it set: `sbt --client shutdown; export
+KINDLINGS_BENCH_JAVA_HOME="$(cs java-home --jvm temurin:25)"`, then `sbt --client 'benchmarks/Jmh/run ...'`. Unset, `Jmh/run`
+warns and uses the server's JDK. Check `# VM version` / `# VM invoker` in JMH's header. Details:
+`docs/contributing/kindlings-jfr-profiling/SKILL.md` § "Pin the benchmark JDK".
+
 ### Profiling benchmarks (JFR) — follow `docs/contributing/kindlings-jfr-profiling/SKILL.md`
 
 When profiling JMH benchmarks to find the hot spot before applying a runtime-perf optimization.
 Covers JFR execution **sampling** (any JDK, the current workflow) and deterministic **method
 timing/tracing** (`jdk.MethodTiming` / `jdk.MethodTrace`, JEP 520, JDK 25+ — available on the
-GraalVM CE 25 dev machine, falls back to sampling on Temurin 17/CI). Exact `-prof jfr` commands,
+pinned Temurin 25, falls back to sampling on Temurin 17/CI). Exact `-prof jfr` commands,
 custom `.jfc` filters, discovering synthetic generated-codec method FQCNs, and `jfr view` analysis.
 Distinct from Hearth's MIO `.speedscope.json` flame graphs, which profile compile-time expansion.
 
