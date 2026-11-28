@@ -11,7 +11,10 @@ final class MacwireAutowireTestCasesSpec extends hearth.MacroSuite {
   // macwire's cases declare their classes in a block, so its messages show simple names: drop the prefix of the
   // classes declared in this suite (and `java.lang.`) before looking for macwire's fragments
   private def simpleNames(errors: String): String =
-    errors.replaceAll("\u001b\\[[0-9;]*m", "").replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "").replace("java.lang.", "")
+    errors
+      .replaceAll("\u001b\\[[0-9;]*m", "")
+      .replaceAll("hearth\\.kindlings\\.di\\.upstream\\.[A-Za-z0-9_]+\\.", "")
+      .replace("java.lang.", "")
 
   test("autowire/autowireMembersOf") {
     MacwireAutowireTestCasesSpec.case_autowire_autowireMembersOf()
@@ -86,7 +89,12 @@ final class MacwireAutowireTestCasesSpec extends hearth.MacroSuite {
       autowire[B]()
     """)
     assert(errors.nonEmpty, "expected a compilation error")
-    assert(simpleNames(errors).contains("cannot find a provided dependency, public constructor or public apply method for: A;"), errors)
+    assert(
+      simpleNames(errors).contains(
+        "cannot find a provided dependency, public constructor or public apply method for: A;"
+      ),
+      errors
+    )
     assert(simpleNames(errors).contains("wiring path: B -> A"), errors)
   }
 
@@ -108,7 +116,12 @@ final class MacwireAutowireTestCasesSpec extends hearth.MacroSuite {
       autowire[A]()
     """)
     assert(errors.nonEmpty, "expected a compilation error")
-    assert(simpleNames(errors).contains("cannot find a provided dependency, public constructor or public apply method for: A;"), errors)
+    assert(
+      simpleNames(errors).contains(
+        "cannot find a provided dependency, public constructor or public apply method for: A;"
+      ),
+      errors
+    )
     assert(simpleNames(errors).contains("wiring path: A"), errors)
   }
 
@@ -310,8 +323,8 @@ object MacwireAutowireTestCasesSpec {
     val b = B()
     val d = autowire[D](a, b)
 
-    require (d.c.a eq a)
-    require (d.c.b eq b)
+    require(d.c.a eq a)
+    require(d.c.b eq b)
     ()
   }
 
