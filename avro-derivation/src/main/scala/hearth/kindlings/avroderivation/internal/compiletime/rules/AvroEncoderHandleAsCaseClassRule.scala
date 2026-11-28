@@ -108,7 +108,7 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                   import fieldValue.{Underlying as Field, value as fieldExpr}
                   val param = paramsByName.get(fName)
                   val avroFixedSize = param.flatMap(p => getAnnotationIntArg[avroFixed](p))
-                  val decimalOverride = param.flatMap(p => getAnnotationTwoIntArgs[avroScalePrecision](p))
+                  val decimalOverride = param.flatMap(p => getScalePrecision(p))
                   Log.namedScope(s"Encoding field ${ectx.value.prettyPrint}.$fName: ${Type[Field].prettyPrint}") {
                     val encodeMIO: MIO[Expr[Any]] = (avroFixedSize, decimalOverride) match {
                       case (Some(size), _) if Type[Field] =:= Type.of[String] =>
@@ -125,14 +125,15 @@ trait AvroEncoderHandleAsCaseClassRuleImpl {
                             Expr.splice(Expr(size))
                           ): Any
                         })
-                      case (_, Some((precision, scale))) =>
+                      case (_, Some(ScalePrecision(precision, scale, roundingMode))) =>
                         MIO.pure(
                           encodeDecimalExpr(
                             Expr.quote(Expr.splice(fieldExpr).asInstanceOf[BigDecimal]),
                             precision,
                             scale,
                             ectx.config,
-                            ectx.evaluatedConfig
+                            ectx.evaluatedConfig,
+                            roundingMode
                           )
                         )
                       case _ =>
